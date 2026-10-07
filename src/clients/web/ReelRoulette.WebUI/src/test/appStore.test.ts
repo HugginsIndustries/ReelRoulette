@@ -187,4 +187,49 @@ describe("createAppStore", () => {
     expect(store.presetMenu.value).toEqual({ entries: [{ label: "Error loading presets", value: "" }], selectedValue: "" });
     expect(store.selectedPresetValue()).toBe("");
   });
+
+  it("adds a played item to history after the playing one, dropping the rest, with its last-seen favorite and blacklist", () => {
+    const { store } = setup();
+    const item = (itemId: string): PlayingItem => ({
+      id: `/media/${itemId}.mp4`,
+      itemId,
+      displayName: `${itemId}.mp4`,
+      mediaType: "video",
+      mediaUrl: `/api/media/${itemId}`,
+      isFavorite: false,
+      isBlacklisted: false
+    });
+    store.itemStates.remember("c", { isFavorite: true, isBlacklisted: false });
+
+    store.pushHistory(item("a"));
+    store.pushHistory(item("b"));
+    expect(store.stepHistory(1)).toBe(false);
+    expect(store.stepHistory(-1)).toBe(true);
+    expect(store.current.value?.itemId).toBe("a");
+    expect(store.stepHistory(-1)).toBe(false);
+
+    store.pushHistory(item("c"));
+    expect(store.history.value.map((entry) => entry.itemId)).toEqual(["a", "c"]);
+    expect(store.historyIndex.value).toBe(1);
+    expect(store.current.value?.isFavorite).toBe(true);
+    expect(store.stepHistory(-1)).toBe(true);
+    expect(store.stepHistory(1)).toBe(true);
+    expect(store.current.value?.itemId).toBe("c");
+  });
+
+  it("does not step through history before anything plays", () => {
+    const { store } = setup();
+    expect(store.stepHistory(1)).toBe(false);
+    expect(store.stepHistory(-1)).toBe(false);
+    expect(store.current.value).toBeNull();
+  });
+
+  it("passes overlay requests on to listeners", () => {
+    const { store } = setup();
+    const requested = vi.fn();
+    store.on("overlayRequested", requested);
+    store.openOverlay("library");
+    store.openOverlay("tagEditor");
+    expect(requested.mock.calls).toEqual([["library"], ["tagEditor"]]);
+  });
 });

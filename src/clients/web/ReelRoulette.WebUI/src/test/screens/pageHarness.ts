@@ -138,6 +138,61 @@ export class FakeEventSource {
 let createdSources: FakeEventSource[] = [];
 /** Unmounts the page the last test mounted, so its connection stops before the next test. */
 let mounted: (() => void) | null = null;
+/** Undoes what tests stubbed on shared prototypes and the document, newest first. */
+let restores: Array<() => void> = [];
+
+function stubProperty(target: object, name: string, descriptor: PropertyDescriptor): void {
+  const original = Object.getOwnPropertyDescriptor(target, name);
+  Object.defineProperty(target, name, { configurable: true, ...descriptor });
+  restores.push(() => {
+    if (original) {
+      Object.defineProperty(target, name, original);
+    } else {
+      delete (target as Record<string, unknown>)[name];
+    }
+  });
+}
+
+export interface FakeFullscreen {
+  /** The elements the page asked to show in fullscreen, oldest first. */
+  readonly requests: Element[];
+  exits(): number;
+}
+
+/**
+ * Gives the page a Fullscreen API, which happy-dom lacks. With `refuse`, each request is rejected, as a browser
+ * rejects one it does not allow.
+ */
+export function stubFullscreenApi(options: { refuse?: boolean } = {}): FakeFullscreen {
+  let fullscreenElement: Element | null = null;
+  let exits = 0;
+  const requests: Element[] = [];
+  stubProperty(HTMLElement.prototype, "requestFullscreen", {
+    value(this: Element) {
+      requests.push(this);
+      if (options.refuse) {
+        return Promise.reject(new TypeError("Fullscreen request denied"));
+      }
+      fullscreenElement = this;
+      return Promise.resolve();
+    }
+  });
+  stubProperty(document, "fullscreenElement", { get: () => fullscreenElement });
+  stubProperty(document, "exitFullscreen", {
+    value() {
+      exits += 1;
+      fullscreenElement = null;
+      return Promise.resolve();
+    }
+  });
+  return { requests, exits: () => exits };
+}
+
+/** Gives every element a layout size, which happy-dom does not compute, so the library grid renders its tiles. */
+export function stubLayoutSize(width = 800, height = 600): void {
+  stubProperty(HTMLElement.prototype, "clientWidth", { get: () => width });
+  stubProperty(HTMLElement.prototype, "clientHeight", { get: () => height });
+}
 
 export interface MountedPage {
   root: HTMLElement;
@@ -157,13 +212,18 @@ export interface MountOptions {
 }
 
 /**
- * Clears what an earlier test left: storage, the page, the user agent, and stubbed globals. The app's own
+ * Clears what an earlier test left: storage, the page, the user agent, stubbed globals, and the stubbed
+ * Fullscreen API and layout size. The app's own
  * listeners on `document` and `window` outlive a test, so tests look only at the event streams that carry
  * their own page's client id, and storage is cleared so each page gets a new one.
  */
 export function resetPage(userAgent = DESKTOP_USER_AGENT): void {
   mounted?.();
   mounted = null;
+  for (const restore of restores.reverse()) {
+    restore();
+  }
+  restores = [];
   vi.useRealTimers();
   vi.unstubAllGlobals();
   localStorage.clear();

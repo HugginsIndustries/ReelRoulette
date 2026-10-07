@@ -3,13 +3,13 @@ import { startApp } from "../app";
 import type { AppServices } from "../state/appServices";
 import { AppContext } from "./appContext";
 import { Header } from "./Header";
-import { LegacyStage } from "./LegacyStage";
 import { ScreenBoundary } from "./ScreenBoundary";
+import { Stage } from "./Stage";
 import { MobileDiagnostics, StatusLine } from "./StatusLine";
 
 /**
- * The page. `app.js` runs the screens in the legacy stage: it starts right after the first render, before the
- * server connection, so its handlers are registered before any server reply arrives.
+ * The page. `app.js` runs the overlays in the stage: it starts right after the first render, once the player has
+ * its elements and before the server connection, so its handlers are registered before any server reply arrives.
  */
 export function App({ services }: { services: AppServices }) {
   useLayoutEffect(() => {
@@ -24,7 +24,7 @@ export function App({ services }: { services: AppServices }) {
       <ScreenBoundary screen="header" relay={relay}>
         <Header />
       </ScreenBoundary>
-      <LegacyStage />
+      <Stage />
       <ScreenBoundary screen="status" relay={relay}>
         <StatusLine />
       </ScreenBoundary>

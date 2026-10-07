@@ -4,6 +4,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ScreenBoundary } from "../../ui/ScreenBoundary";
 import { FakeServer, json, mountPage, resetPage } from "./pageHarness";
 
+const failing = vi.hoisted(() => ({ player: false }));
+
+// The player throws on its first render when a test asks it to, as a render bug in the player would.
+vi.mock("../../playback/mediaGestures", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../playback/mediaGestures")>();
+  return {
+    ...actual,
+    createMediaGestures(...args: Parameters<typeof actual.createMediaGestures>) {
+      if (failing.player) {
+        throw new RangeError("Cannot read C:\\media\\holiday clip.mp4");
+      }
+      return actual.createMediaGestures(...args);
+    }
+  };
+});
+
 // The now-playing line throws once an item plays, as a render bug in the header would.
 vi.mock("../../playback/nowPlaying", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../playback/nowPlaying")>();
@@ -28,6 +44,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  failing.player = false;
 });
 
 describe("ScreenBoundary", () => {
@@ -78,5 +95,25 @@ describe("ScreenBoundary", () => {
     await screen.findByText("SSE connected");
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() => expect(server.requests("POST", "/api/random")).toHaveLength(2));
+  });
+
+  it("keeps the header, status line, overlays, and connection working when the player fails to render", async () => {
+    failing.player = true;
+    const server = new FakeServer();
+    server.on("GET", "/api/presets", () => json([{ id: "preset-1", name: "Favorites", filterState: { favoritesOnly: true } }]));
+    const page = mountPage({ server });
+
+    await screen.findByText("Ready (API 1)");
+    await waitFor(() => expect(server.logLines()).toContain("ui-error screen=player error=RangeError"));
+    expect(server.logLines().filter((line) => line.startsWith("ui-error"))).toEqual(["ui-error screen=player error=RangeError"]);
+    expect(server.logLines().some((line) => line.includes("holiday"))).toBe(false);
+    expect(page.root.querySelector("video")).toBeNull();
+    expect(page.root.querySelector("#fullscreen-stage #library-overlay")).not.toBeNull();
+
+    await waitFor(() => expect(screen.getAllByRole("option").map((option) => option.textContent)).toContain("Favorites"));
+    fireEvent.change(screen.getByRole("combobox", { name: "Choose preset" }), { target: { value: "preset-1" } });
+    await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(2));
+    page.stream().open();
+    await screen.findByText("SSE connected");
   });
 });

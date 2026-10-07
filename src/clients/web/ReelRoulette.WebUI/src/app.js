@@ -9,12 +9,10 @@ import {
   filterStateFromApiObject,
   filterStatesEqualForPresetMatch,
   formatDurationForDisplay,
-  headerPresetPick,
   parseDurationInputToSeconds,
   presetAnchorForDisplay,
   presetHeading,
-  presetsToPostBody,
-  serializeFilterStateForApi
+  presetsToPostBody
 } from "./filter/filterStateModel.ts";
 import {
   createDefaultBrowseControls,
@@ -24,7 +22,6 @@ import {
 import { parseLibraryQueryPage } from "./library/libraryProjectionModel.ts";
 import { createLibraryGridController } from "./library/libraryGridController.ts";
 import { mapPlayItemErrorToStatus } from "./library/libraryPlayModel.ts";
-import { applyItemStateToCurrent, createItemStateCache } from "./library/currentItemState.ts";
 import { compareTagNames } from "./library/tagNameOrder.ts";
 import {
   LIBRARY_OVERLAY_FETCH_ERROR,
@@ -44,8 +41,6 @@ import {
   runTagEditorSave
 } from "./library/tagSave.ts";
 import { requestPlayItem } from "./api/coreApi.ts";
-import { createRandomPicker } from "./playback/randomPick.ts";
-import { basenameFromPath, formatPlaybackTime as fmtTime } from "./playback/nowPlaying.ts";
 import { playbackTraceLine } from "./logging/relayLogLines.ts";
 
 const TAG_EDITOR_COLLAPSED_KEY = "rr_tagEditorCollapsed";
@@ -54,30 +49,15 @@ const FILTER_DIALOG_COLLAPSED_KEY = "rr_filterDialogCollapsedCategories";
 /** Session key for filter Tags tab "Uncategorized" orphan row collapse state. */
 const FILTER_DIALOG_UNCATEGORIZED_COLLAPSE_KEY = "__filter_uncategorized__";
 const UNCATEGORIZED_CATEGORY_ID = "uncategorized";
-const SWIPE_THRESHOLD = 50;
-const TAP_THRESHOLD = 10;
-
-function absolutizeMediaUrl(apiBaseUrl, mediaUrl) {
-  if (!mediaUrl) {
-    return "";
-  }
-
-  try {
-    return new URL(mediaUrl, `${apiBaseUrl}/`).toString();
-  } catch {
-    return mediaUrl;
-  }
-}
 
 function getElement(id) {
   return document.getElementById(id);
 }
 
-export function startApp({ config, store, api, connection }) {
+export function startApp({ config, store, api, connection, player, fullscreen }) {
   const apiBaseUrl = String(config.apiBaseUrl || "").replace(/\/+$/, "");
   const sseUrl = config.sseUrl;
   const setStatus = store.setStatus;
-  const buildApiUrl = api.url;
   const apiPost = api.post;
   const fetchJson = api.getJson;
   const relayClientLog = api.relayLog;
@@ -89,20 +69,12 @@ export function startApp({ config, store, api, connection }) {
     get presets() { return store.presets.peek(); },
     set presets(value) { store.presets.value = value; },
     get current() { return store.current.peek(); },
-    set current(value) { store.current.value = value; },
     get playAttemptId() { return store.playAttemptId.peek(); },
-    set playAttemptId(value) { store.playAttemptId.value = value; },
-    get randomizationMode() { return store.randomizationMode.peek(); },
-    get photoDurationSeconds() { return store.photoDurationSeconds.peek(); },
     get compatibilityBlocked() { return store.compatibilityBlocked.peek(); },
     get appliedFilterState() { return store.appliedFilter.peek(); },
     set appliedFilterState(value) { store.appliedFilter.value = value; },
     get activePresetName() { return store.activePresetName.peek(); },
     set activePresetName(value) { store.activePresetName.value = value; },
-    history: [],
-    historyIndex: -1,
-    loop: false,
-    autoplay: false,
     tagEditorModel: null,
     tagEditorOpen: false,
     tagEditorCategoryOrder: [],
@@ -112,27 +84,14 @@ export function startApp({ config, store, api, connection }) {
     tagEditorItemIds: [],
     tagEditorCategoryOrderDirty: false,
     tagEditContext: null,
-    tagEditorWasPlaying: false,
-    tagEditorPhotoTimerRunning: false,
     tagEditorActiveTab: "edit",
     autoTagScanInFlight: false,
     autoTagRows: [],
     autoTagScanHasRun: false,
-    videoMuted: false,
     filterDialogOpen: false,
     libraryOverlayOpen: false
   };
 
-  const itemStateCache = createItemStateCache();
-  const randomPicker = createRandomPicker((body, signal) =>
-    fetch(buildApiUrl("/api/random"), {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body,
-      signal
-    })
-  );
   let libraryBrowseControls = createDefaultBrowseControls();
   const tagSaveSession = createTagSaveSession();
   let libraryGridController = null;
@@ -153,24 +112,6 @@ export function startApp({ config, store, api, connection }) {
     }
   }
 
-  const video = getElement("video");
-  const photo = getElement("photo");
-  const mediaContainer = getElement("media-container");
-  const fullscreenStage = getElement("fullscreen-stage");
-  const overlayControls = getElement("overlay-controls");
-  const seekRow = getElement("seek-row");
-  const seekSlider = getElement("seek-slider");
-  const timeDisplay = getElement("time-display");
-  const favoriteBtn = getElement("favorite-btn");
-  const blacklistBtn = getElement("blacklist-btn");
-  const prevBtn = getElement("prev-btn");
-  const playBtn = getElement("play-btn");
-  const nextBtn = getElement("next-btn");
-  const loopBtn = getElement("loop-btn");
-  const autoplayBtn = getElement("autoplay-btn");
-  const fullscreenBtn = getElement("fullscreen-btn");
-  const muteBtn = getElement("mute-btn");
-  const tagEditBtn = getElement("tag-edit-btn");
   const tagEditor = getElement("tag-editor");
   const tagEditorBody = getElement("tag-editor-body");
   const tagEditorCloseBtn = getElement("tag-editor-close-btn");
@@ -195,8 +136,6 @@ export function startApp({ config, store, api, connection }) {
   const tagEditCategory = getElement("tag-edit-category");
   const tagEditCancelBtn = getElement("tag-edit-cancel-btn");
   const tagEditSaveBtn = getElement("tag-edit-save-btn");
-  const emptyState = getElement("empty-state");
-  const filterEditBtn = getElement("filter-edit-btn");
   const filterDialog = getElement("filter-dialog");
   const filterDialogHeading = getElement("filter-dialog-heading");
   const filterDialogRefreshBtn = getElement("filter-dialog-refresh-btn");
@@ -207,7 +146,6 @@ export function startApp({ config, store, api, connection }) {
   const filterClearAllBtn = getElement("filter-clear-all-btn");
   const filterCancelBtn = getElement("filter-cancel-btn");
   const filterApplyBtn = getElement("filter-apply-btn");
-  const libraryOpenBtn = getElement("library-open-btn");
   const libraryOverlay = getElement("library-overlay");
   const libraryOverlayToolbar = getElement("library-overlay-toolbar");
   const librarySearchInput = getElement("library-search-input");
@@ -218,90 +156,19 @@ export function startApp({ config, store, api, connection }) {
   const libraryOverlayCloseBtn = getElement("library-overlay-close-btn");
 
   if (
-    !video || !photo ||
-    !mediaContainer || !fullscreenStage || !seekRow || !seekSlider || !timeDisplay ||
-    !favoriteBtn || !blacklistBtn || !prevBtn || !playBtn || !nextBtn ||
-    !loopBtn || !autoplayBtn || !fullscreenBtn || !muteBtn || !filterEditBtn || !tagEditBtn || !tagEditor || !tagEditorBody ||
+    !tagEditor || !tagEditorBody ||
     !tagEditorCloseBtn || !tagEditorRefreshBtn || !tagEditorAddCategoryBtn || !tagEditorCategorySelect ||
     !tagEditorNewTag || !tagEditorAddTagBtn || !tagEditorApplyBtn || !tagEditorPanelEdit || !tagEditorPanelAutotag ||
     !tagAutotagScanFull || !tagAutotagViewAll || !tagAutotagSelectAll || !tagAutotagDeselectAll || !tagAutotagScanBtn ||
     !tagAutotagProgress || !tagAutotagStatus || !tagAutotagResults || !tagEditModal || !tagEditName ||
-    !tagEditCategory || !tagEditCancelBtn || !tagEditSaveBtn || !emptyState ||
+    !tagEditCategory || !tagEditCancelBtn || !tagEditSaveBtn ||
     !filterDialog || !filterDialogHeading || !filterDialogRefreshBtn || !filterDialogCloseBtn ||
     !filterPanelGeneral || !filterPanelTags || !filterPanelPresets || !filterClearAllBtn ||
-    !filterCancelBtn || !filterApplyBtn || !libraryOpenBtn || !libraryOverlay ||
+    !filterCancelBtn || !filterApplyBtn || !libraryOverlay ||
     !libraryOverlayToolbar || !librarySearchInput || !librarySortSelect || !librarySortDirectionBtn ||
     !libraryOverlayBody || !libraryOverlaySummary || !libraryOverlayCloseBtn
   ) {
     throw new Error("Legacy WebUI bootstrap failed: missing required DOM elements.");
-  }
-
-  function isIosTouchWebKit() {
-    const ua = navigator.userAgent || "";
-    if (/iPad|iPhone|iPod/i.test(ua)) return true;
-    return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
-  }
-
-  function getFullscreenElement() {
-    return document.fullscreenElement || document.webkitFullscreenElement || null;
-  }
-
-  let pseudoFullscreen = false;
-
-  function isStageFullscreenActive() {
-    if (pseudoFullscreen) return true;
-    return getFullscreenElement() === fullscreenStage;
-  }
-
-  function exitPseudoFullscreen() {
-    if (!pseudoFullscreen) return;
-    pseudoFullscreen = false;
-    fullscreenStage.classList.remove("fullscreen-pseudo");
-  }
-
-  function enterPseudoFullscreen() {
-    pseudoFullscreen = true;
-    fullscreenStage.classList.add("fullscreen-pseudo");
-  }
-
-  function exitApiFullscreen() {
-    const exit = document.exitFullscreen || document.webkitExitFullscreen;
-    if (getFullscreenElement()) {
-      void exit?.call(document)?.catch?.(() => {});
-    }
-  }
-
-  function enterStageFullscreen() {
-    if (isIosTouchWebKit()) {
-      enterPseudoFullscreen();
-      return;
-    }
-    const req = fullscreenStage.requestFullscreen || fullscreenStage.webkitRequestFullscreen;
-    if (!req) {
-      enterPseudoFullscreen();
-      return;
-    }
-    void req.call(fullscreenStage).catch(() => {
-      enterPseudoFullscreen();
-    });
-  }
-
-  function exitStageFullscreen() {
-    if (pseudoFullscreen) {
-      exitPseudoFullscreen();
-      return;
-    }
-    if (getFullscreenElement() === fullscreenStage) {
-      exitApiFullscreen();
-    }
-  }
-
-  function toggleStageFullscreen() {
-    if (isStageFullscreenActive()) {
-      exitStageFullscreen();
-    } else {
-      enterStageFullscreen();
-    }
   }
 
   document.addEventListener("keydown", (event) => {
@@ -310,8 +177,7 @@ export function startApp({ config, store, api, connection }) {
       closeLibraryOverlay();
       return;
     }
-    if (!pseudoFullscreen) return;
-    exitPseudoFullscreen();
+    fullscreen.exitPseudo();
   });
 
   let filterWorkingPresets = [];
@@ -1236,14 +1102,10 @@ export function startApp({ config, store, api, connection }) {
         return;
       }
 
-      state.current = data;
-      applyCachedState(state.current);
-      state.history = state.history.slice(0, state.historyIndex + 1);
-      state.history.push(state.current);
-      state.historyIndex = state.history.length - 1;
+      store.pushHistory(data);
       closeLibraryOverlay();
       tracePlayback("info", "library-play-success");
-      playCurrent({ skipRecordPlayback: true });
+      player.playCurrent({ recordPlayback: false });
     } catch (error) {
       tracePlayback("warn", "library-play-error", {
         message: error?.message || String(error)
@@ -1323,45 +1185,8 @@ export function startApp({ config, store, api, connection }) {
     updateFilterApplyButtonPending();
   }
 
-  let photoTimerId = null;
-  let touchStartX = 0;
-  let touchStartY = 0;
-  let touchWasSwipe = false;
-  let touchHandledTap = false;
-  let ignoreSwipeTouch = false;
   function tracePlayback(level, message, context = {}) {
     relayClientLog(level, playbackTraceLine(message, state.current, state.playAttemptId, context));
-  }
-
-  /** Matches desktop: record on play start so /api/random weights and filters use fresh library stats. */
-  function notifyPlaybackStarted(item) {
-    if (!item?.itemId || state.compatibilityBlocked) return;
-    void fetch(buildApiUrl("/api/record-playback"), {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        path: item.itemId,
-        clientId: state.clientId,
-        sessionId: state.sessionId
-      })
-    }).catch(() => {});
-  }
-
-  function cacheItemState(itemId, isFavorite, isBlacklisted) {
-    itemStateCache.remember(itemId, { isFavorite: !!isFavorite, isBlacklisted: !!isBlacklisted });
-  }
-
-  function applyCachedState(item) {
-    itemStateCache.applyTo(item);
-  }
-
-  function updateToggleButtons() {
-    loopBtn.classList.toggle("active", state.loop);
-    autoplayBtn.classList.toggle("active", state.autoplay);
-    favoriteBtn.classList.toggle("active", state.current?.isFavorite === true);
-    blacklistBtn.classList.toggle("active", state.current?.isBlacklisted === true);
-    updatePlayButtonGlyph();
   }
 
   function setButtonSymbol(button, symbolName) {
@@ -1380,301 +1205,6 @@ export function startApp({ config, store, api, connection }) {
     icon.className = "material-symbol-icon";
     icon.textContent = symbolName;
     return icon;
-  }
-
-  function updatePlayButtonGlyph() {
-    const shouldShowPause =
-      !!state.current &&
-      video.style.display !== "none" &&
-      !video.paused;
-    setButtonSymbol(playBtn, shouldShowPause ? "pause" : "play_arrow");
-  }
-
-  function updateMuteUi() {
-    const videoActive = video.style.display !== "none" && !!video.src;
-    if (videoActive) {
-      video.muted = state.videoMuted;
-      muteBtn.disabled = false;
-      muteBtn.classList.toggle("active", state.videoMuted);
-      setButtonSymbol(muteBtn, state.videoMuted ? "volume_off" : "volume_up");
-    } else {
-      muteBtn.disabled = true;
-      muteBtn.classList.remove("active");
-      setButtonSymbol(muteBtn, "volume_up");
-    }
-  }
-
-  function clearPhotoTimer() {
-    if (photoTimerId) {
-      clearTimeout(photoTimerId);
-      photoTimerId = null;
-    }
-  }
-
-  function pauseForTagEditor() {
-    state.tagEditorWasPlaying = false;
-    state.tagEditorPhotoTimerRunning = false;
-    if (state.current?.mediaType === "photo") {
-      state.tagEditorPhotoTimerRunning = !!photoTimerId;
-      clearPhotoTimer();
-      return;
-    }
-
-    if (video && video.style.display !== "none") {
-      state.tagEditorWasPlaying = !video.paused;
-      video.pause();
-    }
-  }
-
-  function resumeAfterTagEditor() {
-    if (!state.current) return;
-    if (state.current.mediaType === "photo") {
-      if (state.tagEditorPhotoTimerRunning && (state.autoplay || state.loop)) {
-        playCurrent();
-      }
-      return;
-    }
-
-    if (state.tagEditorWasPlaying && video && video.style.display !== "none") {
-      void video.play().catch(() => {});
-    }
-  }
-
-  function updateTimeDisplay() {
-    if (!video.duration) return;
-    timeDisplay.textContent = `${fmtTime(video.currentTime)} / ${fmtTime(video.duration)}`;
-    seekSlider.value = String(Math.floor(video.currentTime));
-  }
-
-  function setupVideoEvents() {
-    video.loop = state.loop;
-    video.onloadedmetadata = () => {
-      seekSlider.max = String(Math.floor(video.duration) || 100);
-      updateTimeDisplay();
-    };
-    video.ontimeupdate = () => updateTimeDisplay();
-    video.onended = () => {
-      if (!state.autoplay || state.loop) return;
-      goNext();
-    };
-    video.onplay = () => updatePlayButtonGlyph();
-    video.onpause = () => updatePlayButtonGlyph();
-  }
-
-  async function playCurrent(options = {}) {
-    const item = state.current;
-    if (!item) return;
-    state.playAttemptId += 1;
-    const expectedPlayAttemptId = state.playAttemptId;
-    tracePlayback("info", "start", { mediaType: item.mediaType });
-    if (!options.skipRecordPlayback) {
-      notifyPlaybackStarted(item);
-    }
-
-    applyCachedState(item);
-    clearPhotoTimer();
-    video.onplaying = null;
-    video.onerror = null;
-    video.onloadedmetadata = null;
-    video.ontimeupdate = null;
-    video.onended = null;
-    photo.onload = null;
-    photo.onerror = null;
-    video.pause();
-    video.src = "";
-    photo.src = "";
-    video.style.display = "none";
-    photo.style.display = "none";
-    seekRow.style.display = "none";
-    emptyState.style.display = "none";
-    const expectedItemId = item.id;
-
-    if (item.mediaType === "photo") {
-      const mediaUrl = absolutizeMediaUrl(apiBaseUrl, item.mediaUrl);
-      if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
-        tracePlayback("info", "photo-preload-stale", { expectedPlayAttemptId });
-        return;
-      }
-
-      photo.onload = () => {
-        if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
-          tracePlayback("info", "photo-onload-stale", { expectedPlayAttemptId });
-          return;
-        }
-        tracePlayback("info", "photo-onload");
-        setStatus("Playing");
-      };
-      photo.onerror = () => {
-        if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
-          tracePlayback("info", "photo-onerror-stale", { expectedPlayAttemptId });
-          return;
-        }
-        tracePlayback("warn", "photo-onerror");
-        setStatus("Photo file not found.");
-      };
-      photo.src = mediaUrl;
-      photo.style.display = "block";
-      if (state.loop || state.autoplay) {
-        const timeoutMs = Math.max(1, Math.min(300, state.photoDurationSeconds)) * 1000;
-        photoTimerId = setTimeout(() => {
-          if (state.loop) {
-            playCurrent();
-            return;
-          }
-          goNext();
-        }, timeoutMs);
-      }
-    } else {
-      const mediaUrl = absolutizeMediaUrl(apiBaseUrl, item.mediaUrl);
-      if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
-        tracePlayback("info", "video-preload-stale", { expectedPlayAttemptId });
-        return;
-      }
-
-      video.src = mediaUrl;
-      video.style.display = "block";
-      seekRow.style.display = "flex";
-      setupVideoEvents();
-      video.onplaying = () => {
-        if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
-          tracePlayback("info", "video-onplaying-stale", { expectedPlayAttemptId });
-          return;
-        }
-        tracePlayback("info", "video-onplaying");
-        setStatus("Playing");
-      };
-      video.onerror = () => {
-        if (!state.current || state.current.id !== expectedItemId || state.playAttemptId !== expectedPlayAttemptId) {
-          tracePlayback("info", "video-onerror-stale", { expectedPlayAttemptId });
-          return;
-        }
-        tracePlayback("warn", "video-onerror");
-        setStatus("Video file not found.");
-      };
-      video.muted = state.videoMuted;
-      void video.play().catch(() => {});
-    }
-
-    updateToggleButtons();
-    updatePlayButtonGlyph();
-    updateMuteUi();
-  }
-
-  async function getRandom() {
-    if (state.compatibilityBlocked) {
-      setStatus("Cannot play: server compatibility check failed.");
-      return;
-    }
-
-    const selectedPresetValue = store.selectedPresetValue();
-    const presetPick = headerPresetPick(selectedPresetValue);
-    const selectedPreset = presetPick === "named" ? state.presets.find((preset) => preset.id === selectedPresetValue) : null;
-    const presetStillMatches = selectedPreset
-      ? filterStatesEqualForPresetMatch(filterStateFromApiObject(selectedPreset.filterState), state.appliedFilterState)
-      : false;
-    const presetId = presetStillMatches ? String(selectedPreset.id || "").trim() : "";
-    const filterState = serializeFilterStateForApi(state.appliedFilterState);
-    const body = {
-      clientId: state.clientId,
-      sessionId: state.sessionId,
-      includeVideos: true,
-      includePhotos: true,
-      randomizationMode: state.randomizationMode,
-      filterState
-    };
-    if (presetId) {
-      body.presetId = presetId;
-    }
-
-    setStatus("Loading...");
-    // A press while a pick is waiting sends nothing; the status above shows it is still loading.
-    const outcome = await randomPicker.pick(body);
-    switch (outcome.kind) {
-      case "busy":
-        return;
-      case "timedOut":
-        tracePlayback("warn", "random-pick-timeout", { timeoutMs: outcome.timeoutMs });
-        setStatus("No response from the server. Try again.");
-        return;
-      case "unauthorized":
-        store.pairingRequired.value = true;
-        setStatus("Unauthorized. Pair first.");
-        return;
-      case "failed":
-        setStatus(`Random selection failed (${outcome.statusCode}).`);
-        return;
-      case "error":
-        setStatus(`Random selection failed: ${outcome.message}`);
-        return;
-      case "none":
-        setStatus("No eligible media for current filters.");
-        return;
-    }
-
-    state.current = outcome.item;
-    applyCachedState(state.current);
-    state.history = state.history.slice(0, state.historyIndex + 1);
-    state.history.push(state.current);
-    state.historyIndex = state.history.length - 1;
-    playCurrent();
-  }
-
-  function goPrevious() {
-    if (state.historyIndex <= 0) return;
-    state.historyIndex -= 1;
-    state.current = state.history[state.historyIndex];
-    playCurrent();
-  }
-
-  function goNext() {
-    if (state.historyIndex >= 0 && state.historyIndex < state.history.length - 1) {
-      state.historyIndex += 1;
-      state.current = state.history[state.historyIndex];
-      playCurrent();
-      return;
-    }
-
-    void getRandom();
-  }
-
-  async function toggleFavorite() {
-    if (!state.current?.itemId) return;
-    const nextValue = !state.current.isFavorite;
-    const response = await fetch(buildApiUrl("/api/favorite"), {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: state.current.itemId, isFavorite: nextValue })
-    });
-    if (!response.ok) {
-      setStatus(`Favorite update failed (${response.status}).`);
-      return;
-    }
-    state.current.isFavorite = nextValue;
-    if (nextValue) state.current.isBlacklisted = false;
-    cacheItemState(state.current.itemId, state.current.isFavorite, state.current.isBlacklisted);
-    updateToggleButtons();
-    setStatus(nextValue ? "Added to favorites" : "Removed from favorites");
-  }
-
-  async function toggleBlacklist() {
-    if (!state.current?.itemId) return;
-    const nextValue = !state.current.isBlacklisted;
-    const response = await fetch(buildApiUrl("/api/blacklist"), {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: state.current.itemId, isBlacklisted: nextValue })
-    });
-    if (!response.ok) {
-      setStatus(`Blacklist update failed (${response.status}).`);
-      return;
-    }
-    state.current.isBlacklisted = nextValue;
-    if (nextValue) state.current.isFavorite = false;
-    cacheItemState(state.current.itemId, state.current.isFavorite, state.current.isBlacklisted);
-    updateToggleButtons();
-    setStatus(nextValue ? "Blacklisted" : "Removed from blacklist");
   }
 
   function createTagEditorPending() {
@@ -2696,7 +2226,7 @@ export function startApp({ config, store, api, connection }) {
     if (tagAutotagScanFull) tagAutotagScanFull.checked = loadPersistedAutoTagScanFull();
     if (tagAutotagViewAll) tagAutotagViewAll.checked = false;
     switchTagEditorTab("edit", true);
-    pauseForTagEditor();
+    player.pauseForTagEditor();
     tagEditor.style.display = "flex";
     refreshTagEditorModel().catch((error) => {
       setStatus(`Tag editor unavailable: ${error?.message || error}`);
@@ -2713,25 +2243,7 @@ export function startApp({ config, store, api, connection }) {
     resetAutoTagState();
     resetTagEditorPending();
     tagEditor.style.display = "none";
-    resumeAfterTagEditor();
-  }
-
-  function applyItemStateEvent(payload) {
-    const itemId = payload?.itemId;
-    if (!itemId) return;
-    cacheItemState(itemId, payload.isFavorite, payload.isBlacklisted);
-    if (applyItemStateToCurrent(state.current, payload)) {
-      updateToggleButtons();
-    }
-    void librarySession.applyFavorite(payload);
-    const fileName = basenameFromPath(payload.path || "");
-    if (payload.isBlacklisted) {
-      setStatus(`Synced: Blacklisted: ${fileName}`, "Synced: Blacklisted");
-    } else if (payload.isFavorite) {
-      setStatus(`Synced: Added to favorites: ${fileName}`, "Synced: Added to favorites");
-    } else {
-      setStatus(`Synced: Removed from favorites: ${fileName}`, "Synced: Removed from favorites");
-    }
+    player.resumeAfterTagEditor();
   }
 
   function applyItemTagsEvent(payload) {
@@ -2775,12 +2287,6 @@ export function startApp({ config, store, api, connection }) {
     });
   }
 
-  store.on("photoDurationChanged", () => {
-    if (state.current && state.current.mediaType === "photo" && (state.autoplay || state.loop)) {
-      playCurrent();
-    }
-  });
-
   store.on("headerFilterChanged", () => {
     if (state.filterDialogOpen) {
       filterWorking = cloneFilterState(state.appliedFilterState);
@@ -2797,7 +2303,11 @@ export function startApp({ config, store, api, connection }) {
   connection.on("serverReady", () => {
     void librarySession.ensureLoaded(state.appliedFilterState, libraryBrowseControls);
   });
-  connection.on("itemStateChanged", applyItemStateEvent);
+  // The player updates the playing item and the status line first.
+  connection.on("itemStateChanged", (payload) => {
+    if (!payload?.itemId) return;
+    void librarySession.applyFavorite(payload);
+  });
   connection.on("playbackRecorded", (payload) => {
     void librarySession.applyPlayback(payload);
   });
@@ -2809,149 +2319,6 @@ export function startApp({ config, store, api, connection }) {
   connection.on("resyncRequired", () => {
     void librarySession.resync();
   });
-
-  playBtn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    if (!state.current) {
-      void getRandom();
-      return;
-    }
-    if (video.style.display !== "none") {
-      if (video.paused) {
-        void video.play().catch(() => {});
-      } else {
-        video.pause();
-      }
-      updatePlayButtonGlyph();
-    }
-  });
-  prevBtn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    goPrevious();
-  });
-  nextBtn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    goNext();
-  });
-  muteBtn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    if (muteBtn.disabled) return;
-    state.videoMuted = !state.videoMuted;
-    updateMuteUi();
-  });
-  favoriteBtn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    void toggleFavorite();
-  });
-  blacklistBtn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    void toggleBlacklist();
-  });
-  loopBtn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    state.loop = !state.loop;
-    if (video.src) {
-      video.loop = state.loop;
-    }
-    if (state.current && state.current.mediaType === "photo") {
-      if (state.loop || state.autoplay) {
-        playCurrent();
-      } else {
-        clearPhotoTimer();
-      }
-    }
-    updateToggleButtons();
-  });
-  autoplayBtn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    state.autoplay = !state.autoplay;
-    if (state.current && state.current.mediaType === "photo") {
-      if (state.loop || state.autoplay) {
-        playCurrent();
-      } else {
-        clearPhotoTimer();
-      }
-    }
-    updateToggleButtons();
-  });
-  fullscreenBtn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    toggleStageFullscreen();
-  });
-  seekSlider.addEventListener("input", () => {
-    if (!video.duration) return;
-    video.currentTime = Number(seekSlider.value);
-  });
-  mediaContainer.addEventListener("click", (event) => {
-    if (touchWasSwipe) {
-      touchWasSwipe = false;
-      return;
-    }
-
-    if (touchHandledTap) {
-      touchHandledTap = false;
-      return;
-    }
-
-    event.stopPropagation();
-    if (!state.current) {
-      void getRandom();
-      return;
-    }
-
-    mediaContainer.classList.toggle("controls-visible");
-  });
-  if (overlayControls) {
-    overlayControls.addEventListener("touchstart", (event) => event.stopPropagation());
-    overlayControls.addEventListener("touchmove", (event) => event.stopPropagation());
-    overlayControls.addEventListener("touchend", (event) => event.stopPropagation());
-    overlayControls.addEventListener("click", (event) => event.stopPropagation());
-  }
-
-  mediaContainer.addEventListener("touchstart", (event) => {
-    if (event.target && event.target.closest && event.target.closest("#overlay-controls")) {
-      ignoreSwipeTouch = true;
-      return;
-    }
-
-    ignoreSwipeTouch = false;
-    if (event.touches && event.touches[0]) {
-      touchStartX = event.touches[0].clientX;
-      touchStartY = event.touches[0].clientY;
-      touchWasSwipe = false;
-    }
-  }, { passive: true });
-
-  mediaContainer.addEventListener("touchend", (event) => {
-    if (ignoreSwipeTouch) {
-      ignoreSwipeTouch = false;
-      return;
-    }
-
-    if (!event.changedTouches || !event.changedTouches[0]) {
-      return;
-    }
-
-    const touchX = event.changedTouches[0].clientX;
-    const touchY = event.changedTouches[0].clientY;
-    const deltaX = touchX - touchStartX;
-    const deltaY = touchY - touchStartY;
-    if (Math.abs(deltaX) > SWIPE_THRESHOLD && Math.abs(deltaX) > Math.abs(deltaY)) {
-      touchWasSwipe = true;
-      if (deltaX > 0) {
-        goPrevious();
-      } else {
-        goNext();
-      }
-    } else if (Math.abs(deltaX) < TAP_THRESHOLD && Math.abs(deltaY) < TAP_THRESHOLD) {
-      if (state.current) {
-        touchHandledTap = true;
-        mediaContainer.classList.toggle("controls-visible");
-      }
-    }
-  }, { passive: true });
-
-  mediaContainer.classList.add("controls-visible");
 
   filterDialog.querySelector(".filter-dialog-tabstrip")?.addEventListener("click", (event) => {
     const btn = event.target && event.target.closest ? event.target.closest("[data-filter-tab]") : null;
@@ -3040,13 +2407,14 @@ export function startApp({ config, store, api, connection }) {
     }
   });
 
-  filterEditBtn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    void openFilterDialog();
-  });
-  libraryOpenBtn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    void openLibraryOverlay();
+  store.on("overlayRequested", (overlay) => {
+    if (overlay === "library") {
+      void openLibraryOverlay();
+    } else if (overlay === "filter") {
+      void openFilterDialog();
+    } else if (overlay === "tagEditor") {
+      openTagEditor();
+    }
   });
   libraryOverlayCloseBtn.addEventListener("click", () => {
     closeLibraryOverlay();
@@ -3124,10 +2492,6 @@ export function startApp({ config, store, api, connection }) {
     })();
   });
 
-  tagEditBtn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    openTagEditor();
-  });
   tagEditorCloseBtn.addEventListener("click", () => {
     if (state.autoTagScanInFlight) return;
     closeTagEditor(false);
@@ -3222,6 +2586,4 @@ export function startApp({ config, store, api, connection }) {
       closeTagEditModal();
     }
   });
-
-  updateToggleButtons();
 }

@@ -1,6 +1,51 @@
+import {
+  filterStateFromApiObject,
+  filterStatesEqualForPresetMatch,
+  headerPresetPick,
+  serializeFilterStateForApi,
+  type FilterState
+} from "../filter/filterStateModel";
 import type { components } from "../types/openapi.generated";
 
 type RandomResponse = components["schemas"]["RandomResponse"];
+export type RandomPickRequest = components["schemas"]["RandomRequest"];
+
+export interface RandomPickInputs {
+  clientId: string;
+  sessionId: string;
+  randomizationMode: string;
+  appliedFilter: FilterState;
+  presets: readonly { id: string; filterState?: unknown }[];
+  /** The header preset dropdown's value: a preset id, empty for None, or the starred row. */
+  selectedPresetValue: string;
+}
+
+/**
+ * The body of `POST /api/random`. It names the header's preset only while that preset's filter still equals the
+ * applied filter.
+ */
+export function randomPickRequest(inputs: RandomPickInputs): RandomPickRequest {
+  const selectedPreset =
+    headerPresetPick(inputs.selectedPresetValue) === "named"
+      ? inputs.presets.find((preset) => preset.id === inputs.selectedPresetValue)
+      : undefined;
+  const presetStillMatches = selectedPreset
+    ? filterStatesEqualForPresetMatch(filterStateFromApiObject(selectedPreset.filterState), inputs.appliedFilter)
+    : false;
+  const presetId = presetStillMatches ? String(selectedPreset?.id || "").trim() : "";
+  const body: RandomPickRequest = {
+    clientId: inputs.clientId,
+    sessionId: inputs.sessionId,
+    includeVideos: true,
+    includePhotos: true,
+    randomizationMode: inputs.randomizationMode,
+    filterState: serializeFilterStateForApi(inputs.appliedFilter)
+  };
+  if (presetId) {
+    body.presetId = presetId;
+  }
+  return body;
+}
 
 /** How long a random pick may wait for the server before the WebUI cancels it. */
 export const RANDOM_PICK_TIMEOUT_MS = 10_000;

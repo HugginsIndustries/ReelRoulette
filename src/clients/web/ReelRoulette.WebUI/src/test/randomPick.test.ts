@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { HEADER_PRESET_STARRED_VALUE, createDefaultFilterState } from "../filter/filterStateModel";
 import {
   RANDOM_PICK_TIMEOUT_MS,
   createRandomPicker,
+  randomPickRequest,
+  type RandomPickInputs,
   type RandomPickOutcome,
   type RandomPickSend
 } from "../playback/randomPick";
@@ -135,5 +138,40 @@ describe("randomPick", () => {
     await expect(picker.pick({})).resolves.toEqual({ kind: "error", message: "Failed to fetch" });
     await expect(picker.pick({})).resolves.toMatchObject({ kind: "error" });
     await expect(picker.pick({})).resolves.toEqual({ kind: "picked", item: randomItem("a") });
+  });
+});
+
+describe("randomPickRequest", () => {
+  const favorites = { id: " preset-favorites ", name: "Favorites", filterState: { ...createDefaultFilterState(), favoritesOnly: true } };
+  const inputs: RandomPickInputs = {
+    clientId: "client-1",
+    sessionId: "session-1",
+    randomizationMode: "WeightedRandom",
+    appliedFilter: { ...createDefaultFilterState(), favoritesOnly: true },
+    presets: [favorites],
+    selectedPresetValue: " preset-favorites "
+  };
+
+  it("names the header's preset while its filter equals the applied filter", () => {
+    const body = randomPickRequest(inputs);
+    expect(body).toMatchObject({
+      clientId: "client-1",
+      sessionId: "session-1",
+      includeVideos: true,
+      includePhotos: true,
+      randomizationMode: "WeightedRandom",
+      presetId: "preset-favorites"
+    });
+    expect(body.filterState?.favoritesOnly).toBe(true);
+    expect(Object.keys(body)).toEqual(["clientId", "sessionId", "includeVideos", "includePhotos", "randomizationMode", "filterState", "presetId"]);
+  });
+
+  it("leaves the preset out for None, the starred row, and a preset whose filter no longer matches", () => {
+    for (const selectedPresetValue of ["", HEADER_PRESET_STARRED_VALUE]) {
+      expect(randomPickRequest({ ...inputs, selectedPresetValue }).presetId).toBeUndefined();
+    }
+    const changed = randomPickRequest({ ...inputs, appliedFilter: { ...createDefaultFilterState(), favoritesOnly: true, onlyNeverPlayed: true } });
+    expect(changed.presetId).toBeUndefined();
+    expect(changed.filterState?.onlyNeverPlayed).toBe(true);
   });
 });

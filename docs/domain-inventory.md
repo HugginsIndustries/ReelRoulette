@@ -155,27 +155,37 @@ Boundary:
 WebUI is runtime-config-driven API/SSE client orchestration. Its screens are moving from `app.js` to Preact components over `@preact/signals` shared state.
 
 - `src/clients/web/ReelRoulette.WebUI/src/app.js`
-  - the screens not yet moved to components: player and overlay controls, filter dialog, library overlay browse + SSE live sync + click-to-play, header counts from the current query window, and the tag overlay with **Edit Tags** + **Auto Tag** API flows. Reads and writes shared state through the store and acts on store and server connection events.
+  - the screens not yet moved to components: filter dialog, library overlay browse + SSE live sync + click-to-play, header counts from the current query window, and the tag overlay with **Edit Tags** + **Auto Tag** API flows. Reads and writes shared state through the store, acts on store and server connection events, and calls the player to play a library item and to pause and resume for the tag editor. Escape closes the library overlay when it is open and otherwise leaves pseudo-fullscreen.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/App.tsx`
-  - page root: header, the legacy stage, status line, and mobile diagnostics, each screen in an error boundary; starts `app.js` right after the first render, then the server connection. Also the startup error page, which shows its message as text.
+  - page root: header, the stage, status line, and mobile diagnostics, each screen in an error boundary; starts `app.js` right after the first render, then the server connection. Also the startup error page, which shows its message as text.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/Header.tsx`
   - pairing prompt, header preset dropdown, randomization mode, photo duration, and now playing.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/StatusLine.tsx`
   - status line and the mobile diagnostics line.
-- `src/clients/web/ReelRoulette.WebUI/src/ui/LegacyStage.tsx`
-  - the fullscreen stage markup `app.js` still owns, rendered once and never updated.
+- `src/clients/web/ReelRoulette.WebUI/src/ui/Stage.tsx`
+  - the fullscreen stage and its pseudo-fullscreen class, holding the player in its error boundary and the overlays, which stay inside the stage so they show in fullscreen.
+- `src/clients/web/ReelRoulette.WebUI/src/ui/Player.tsx`
+  - the media area: video, photo, empty state, and the controls over them; swipe and tap listeners (passive, added through a ref). The player sets the media elements' sources and `display` and the seek slider's value, so the component renders those once and never replaces the video element.
+- `src/clients/web/ReelRoulette.WebUI/src/ui/LegacyOverlays.tsx`
+  - the tag editor, filter dialog, and library overlay markup `app.js` still owns, rendered once and never updated.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/ScreenBoundary.tsx`
   - per-screen error boundary: a screen that fails to render stops showing and relays `ui-error screen=<name> error=<type>` to `last.log`.
 - `src/clients/web/ReelRoulette.WebUI/src/state/appStore.ts`
-  - shared state as signals (status line, playing item, presets and the header preset menu, applied filter, active preset, randomization mode, photo duration, compatibility block, pairing prompt) and the actions that cross screens; status changes relay to `last.log`, a repeat at most once a second.
+  - shared state as signals (status line, playing item and history, loop and autoplay, presets and the header preset menu, applied filter, active preset, randomization mode, photo duration, compatibility block, pairing prompt), the item-state cache, and the actions and events that cross screens, including the player buttons' requests to open a screen still in `app.js`; status changes relay to `last.log`, a repeat at most once a second.
 - `src/clients/web/ReelRoulette.WebUI/src/state/serverConnection.ts`
-  - version and capability check, pairing, preset loading, the event stream, and reconnecting on focus, visibility, page show, and coming online; passes server events to `app.js`.
+  - version and capability check, pairing, preset loading, the event stream, and reconnecting on focus, visibility, page show, and coming online; passes server events to the player and `app.js`.
 - `src/clients/web/ReelRoulette.WebUI/src/state/serverCompatibility.ts`
   - the supported server API versions and required capabilities, and the status message for a server that fails them.
 - `src/clients/web/ReelRoulette.WebUI/src/state/appApi.ts`
   - API URLs, JSON posts and reads (a 401 shows the pairing prompt), and the client log relay.
 - `src/clients/web/ReelRoulette.WebUI/src/state/appServices.ts`
-  - builds one page's store, API, and server connection from the runtime config.
+  - builds one page's store, API, server connection, player, and fullscreen from the runtime config.
+- `src/clients/web/ReelRoulette.WebUI/src/playback/player.ts`
+  - playback: plays the current item (sets the source and shows the element, then loop and mute, then `play()`), random pick, Previous and Next through history, play/pause, mute, loop, autoplay and the photo timer, favorite and blacklist, seek and the time display, the tag editor's pause and resume, and item-state events with their status line. Records a play on start unless the server already did, and relays playback steps to `last.log` without file names.
+- `src/clients/web/ReelRoulette.WebUI/src/playback/stageFullscreen.ts`
+  - fullscreen for the stage through the Fullscreen API, and pseudo-fullscreen on iPhone and iPad or when the browser has no API or refuses.
+- `src/clients/web/ReelRoulette.WebUI/src/playback/mediaGestures.ts`
+  - swipe left and right for Next and Previous, a tap to show or hide the controls, and ignoring the click that follows either.
 - `src/clients/web/ReelRoulette.WebUI/src/playback/nowPlaying.ts`
   - now-playing name, tooltip, and duration, and the m:ss time format.
 - `src/clients/web/ReelRoulette.WebUI/src/filter/filterStateModel.ts`
@@ -205,7 +215,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are mov
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryPlayModel.ts`
   - play-item error status mapping and request identity helpers for library tile activation.
 - `src/clients/web/ReelRoulette.WebUI/src/playback/randomPick.ts`
-  - random pick requests, one at a time, cancelled after 10 seconds without an answer; an answer that arrives after that is not used.
+  - the random pick request body, which names the header's preset only while its filter still equals the applied filter, and random pick requests, one at a time, cancelled after 10 seconds without an answer; an answer that arrives after that is not used.
 - `src/clients/web/ReelRoulette.WebUI/src/library/currentItemState.ts`
   - the playing item's favorite and blacklist from item-state events, and the per-item cache applied when an item plays again, both by item id.
 - `src/clients/web/ReelRoulette.WebUI/src/shell.tsx`

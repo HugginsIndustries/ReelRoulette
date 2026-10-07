@@ -1,52 +1,17 @@
 import { Component } from "preact";
 
-/** The video's boolean attributes, present and empty as in the page's HTML. */
-const VIDEO_FLAGS: Record<string, string> = {
-  playsinline: "",
-  "webkit-playsinline": "",
-  disablepictureinpicture: "",
-  disableremoteplayback: ""
-};
-
 /**
- * The player, tag editor, filter dialog, and library overlay markup that `app.js` still owns. It renders once
- * and never updates, so Preact never resets what `app.js` changes, such as the seek slider or a hidden overlay.
+ * The tag editor, filter dialog, and library overlay markup that `app.js` still owns. It renders once and never
+ * updates, so Preact never resets what `app.js` changes, such as a hidden overlay or the library's scroll position.
  */
-export class LegacyStage extends Component {
+export class LegacyOverlays extends Component {
   shouldComponentUpdate(): boolean {
     return false;
   }
 
   render() {
     return (
-      <div id="fullscreen-stage" class="fullscreen-stage">
-        <main>
-          <div id="media-container" class="media-container">
-            <video id="video" {...VIDEO_FLAGS} preload="auto" style="display:none"></video>
-            <img id="photo" alt="Photo" style="display:none" />
-            <div id="empty-state" class="empty-state">Click here to play (choose a preset or open Filter…)</div>
-            <div id="overlay-controls" class="overlay-controls">
-              <button id="library-open-btn" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn" aria-label="Library" title="Library"><span class="material-symbol-icon">browse</span></button>
-              <button id="filter-edit-btn" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn" aria-label="Select filters" title="Select filters…"><span class="material-symbol-icon">filter_alt</span></button>
-              <button id="tag-edit-btn" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn" aria-label="Edit Tags" title="Edit Tags"><span class="material-symbol-icon">tag</span></button>
-              <button id="favorite-btn" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" aria-label="Favorite" title="Favorite"><span class="material-symbol-icon">favorite</span></button>
-              <button id="blacklist-btn" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" aria-label="Blacklist" title="Blacklist"><span class="material-symbol-icon">thumb_down</span></button>
-              <div class="overlay-controls-row overlay-controls-transport">
-                <button id="prev-btn" class="overlay-btn icon-glyph-base icon-glyph-button" aria-label="Previous" title="Previous"><span class="material-symbol-icon">skip_previous</span></button>
-                <button id="play-btn" class="overlay-btn icon-glyph-base icon-glyph-button overlay-btn-play" aria-label="Play/Pause" title="Play/Pause"><span class="material-symbol-icon">play_arrow</span></button>
-                <button id="next-btn" class="overlay-btn icon-glyph-base icon-glyph-button" aria-label="Next" title="Next"><span class="material-symbol-icon">skip_next</span></button>
-                <button id="mute-btn" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle" aria-label="Mute" title="Mute"><span class="material-symbol-icon">volume_up</span></button>
-                <button id="loop-btn" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle" aria-label="Loop" title="Loop"><span class="material-symbol-icon">repeat_one</span></button>
-                <button id="autoplay-btn" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle" aria-label="Autoplay" title="Autoplay"><span class="material-symbol-icon">autoplay</span></button>
-                <button id="fullscreen-btn" class="overlay-btn icon-glyph-base icon-glyph-button" aria-label="Fullscreen" title="Fullscreen"><span class="material-symbol-icon">fullscreen</span></button>
-              </div>
-              <div id="seek-row" class="overlay-seek-row" style="display:none">
-                <input type="range" id="seek-slider" min="0" max="100" defaultValue="0" aria-label="Seek" />
-                <span id="time-display">0:00 / 0:00</span>
-              </div>
-            </div>
-          </div>
-        </main>
+      <>
         <div id="tag-editor" class="tag-editor" style="display:none">
           <div class="tag-editor-header">
             <h2>Tag Editor</h2>
@@ -149,7 +114,7 @@ export class LegacyStage extends Component {
           </div>
           <div id="library-overlay-body" class="library-overlay-body"></div>
         </div>
-      </div>
+      </>
     );
   }
 }

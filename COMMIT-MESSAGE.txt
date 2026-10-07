@@ -19,12 +19,11 @@ Instructions:
 
 Commit Message:
 
-M12b: Move the WebUI header, status line, and server connection to Preact
+M12b: Move the WebUI player and its controls to Preact
 
-- Mount the WebUI as a Preact root with `@preact/signals` shared state; `app.js` still runs the player, library overlay, filter dialog, and tag overlay inside it, and reads and writes the shared fields through the store.
-- Move the header (pairing prompt, preset dropdown, randomization mode, photo duration, now playing), the status line, and the mobile diagnostics line to components, with no visible change.
-- Move the version check, pairing, preset loading, event stream, reconnect listeners, status relay, and API helpers out of `app.js` into typed modules with node tests.
-- Give each screen an error boundary that relays `ui-error screen=<name> error=<type>` to `last.log` and leaves the other screens working; show a startup error's message as text.
-- Add `happy-dom` screen tests written against `app.js` before the move, including a markup snapshot and video node identity, and run them in `npm run verify`.
-- Remove the unused `authBootstrap.ts`, the `coreApi.ts` version, pairing, and refresh status helpers, their tests, and the release-version step that updated the bootstrap test.
-- Update the milestone, domain inventory, `CONTEXT.md`, the WebUI README, and the Release Specific phone check.
+- Move the media area, its controls, fullscreen and iOS pseudo-fullscreen, swipe and tap gestures, and the empty state to components, with no visible change.
+- Move playback, random pick, history, mute, loop, autoplay and the photo timer, favorite and blacklist, seek, and the tag editor's pause and resume into a typed `player` service with node tests; the store holds history, loop, autoplay, and the item-state cache.
+- Keep setting which media element shows, its source, and mute directly on the elements before `play()`, so the video is never hidden when it starts.
+- The player's Library, Select filters, and Edit Tags buttons open the screens still in `app.js` through a store event, and a library play hands off to the player in the same order as before.
+- Add `happy-dom` behavior tests written against `app.js` before the move, a player error boundary test, and harness stubs for the Fullscreen API and layout size.
+- Update the milestone, domain inventory, and `CONTEXT.md`, and record in Client Robustness Findings that a favorite or blacklist answer arriving after Next lands on the new item.

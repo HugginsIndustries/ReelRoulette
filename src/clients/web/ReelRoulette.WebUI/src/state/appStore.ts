@@ -9,6 +9,7 @@ import {
   type HeaderPresetList,
   type PresetListEntry
 } from "../filter/filterStateModel";
+import { createItemStateCache, type ItemStateCache } from "../library/currentItemState";
 import { statusLogLine } from "../logging/relayLogLines";
 import type { components } from "../types/openapi.generated";
 
@@ -58,12 +59,17 @@ export interface ClientIdentity {
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
-/** Changes one screen makes that a screen still in `app.js` acts on. */
+/** The screens still in `app.js` that the player's buttons open. */
+export type OverlayName = "library" | "filter" | "tagEditor";
+
+/** Changes one screen makes that another screen acts on. */
 export interface AppStoreEvents {
   /** A header preset pick changed the applied filter. */
   headerFilterChanged: () => void;
   /** The photo duration changed from the header. */
   photoDurationChanged: () => void;
+  /** A player button asked to open a screen still in `app.js`. */
+  overlayRequested: (overlay: OverlayName) => void;
 }
 
 /**
@@ -77,6 +83,14 @@ export interface AppStore {
   readonly current: Signal<PlayingItem | null>;
   /** Counts playback attempts, so relayed lines from one attempt can be told apart. */
   readonly playAttemptId: Signal<number>;
+  /** The items played, oldest first. Previous and Next move through it. */
+  readonly history: Signal<PlayingItem[]>;
+  /** The playing item's place in `history`, or -1 before anything plays. */
+  readonly historyIndex: Signal<number>;
+  readonly loop: Signal<boolean>;
+  readonly autoplay: Signal<boolean>;
+  /** Each item's favorite and blacklist as last seen, applied when an item plays again. */
+  readonly itemStates: ItemStateCache;
   readonly presets: Signal<ApiPreset[]>;
   readonly presetMenu: Signal<PresetMenu>;
   readonly appliedFilter: Signal<FilterState>;
@@ -102,6 +116,14 @@ export interface AppStore {
   setRandomizationMode(mode: string): void;
   /** Takes the text of the photo duration field. A value outside 1 to 300 seconds is ignored. */
   setPhotoDuration(text: string): void;
+  /**
+   * Makes `item` the playing item, with its last-seen favorite and blacklist, and the newest history entry. The
+   * entries after the playing one are dropped.
+   */
+  pushHistory(item: PlayingItem): void;
+  /** Makes the previous or next history entry the playing item. Returns false at either end of history. */
+  stepHistory(step: -1 | 1): boolean;
+  openOverlay(overlay: OverlayName): void;
   on<K extends keyof AppStoreEvents>(event: K, listener: AppStoreEvents[K]): void;
 }
 
@@ -132,7 +154,8 @@ export function createAppStore(options: AppStoreOptions): AppStore {
   const now = options.now ?? (() => Date.now());
   const listeners: { [K in keyof AppStoreEvents]: AppStoreEvents[K][] } = {
     headerFilterChanged: [],
-    photoDurationChanged: []
+    photoDurationChanged: [],
+    overlayRequested: []
   };
   let lastRelayedStatus = "";
   let lastRelayedStatusAtMs = 0;
@@ -142,6 +165,11 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     status: signal(""),
     current: signal<PlayingItem | null>(null),
     playAttemptId: signal(0),
+    history: signal<PlayingItem[]>([]),
+    historyIndex: signal(-1),
+    loop: signal(false),
+    autoplay: signal(false),
+    itemStates: createItemStateCache(),
     presets: signal<ApiPreset[]>([]),
     presetMenu: signal<PresetMenu>({ entries: [{ label: PRESET_MENU_LOADING, value: "" }], selectedValue: "" }),
     appliedFilter: signal(createDefaultFilterState()),
@@ -221,6 +249,30 @@ export function createAppStore(options: AppStoreOptions): AppStore {
       emit("photoDurationChanged");
     },
 
+    pushHistory(item) {
+      store.itemStates.applyTo(item);
+      store.current.value = item;
+      const history = store.history.peek().slice(0, store.historyIndex.peek() + 1);
+      history.push(item);
+      store.history.value = history;
+      store.historyIndex.value = history.length - 1;
+    },
+
+    stepHistory(step) {
+      const history = store.history.peek();
+      const index = store.historyIndex.peek() + step;
+      if (store.historyIndex.peek() < 0 || index < 0 || index >= history.length) {
+        return false;
+      }
+      store.historyIndex.value = index;
+      store.current.value = history[index]!;
+      return true;
+    },
+
+    openOverlay(overlay) {
+      emit("overlayRequested", overlay);
+    },
+
     on(event, listener) {
       listeners[event].push(listener);
     }
@@ -231,9 +283,9 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     store.presetMenu.value = { entries: list.entries, selectedValue: list.selectedValue };
   }
 
-  function emit(event: keyof AppStoreEvents): void {
+  function emit<K extends keyof AppStoreEvents>(event: K, ...args: Parameters<AppStoreEvents[K]>): void {
     for (const listener of listeners[event]) {
-      listener();
+      (listener as (...values: unknown[]) => void)(...args);
     }
   }
 
