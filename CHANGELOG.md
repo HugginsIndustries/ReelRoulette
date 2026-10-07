@@ -11,6 +11,20 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Changed
 
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+---
+
+## [0.14.1] — Safe & Snappy (2026-10-06)
+
+### Changed
+
 - **Faster library browsing:** Scrolling deep into the library is as quick as the first page in every sort order. On a 49,000-item library, a deep page loads in about 40 ms instead of up to 320 ms, the WebUI reloads 5,000 loaded tiles in one request in about 0.1 s instead of 2.7 s, and library totals load about three times faster. Favoriting a file outside the loaded part of the WebUI library no longer reloads it. The library file grows by about a third to make this possible.
 - **Faster random playback:** On a 49,000-item library, a random pick takes about 60 ms instead of about 230 ms in every randomization mode, and uses a fifth of the memory. The odds, shuffle order, and folder spread are unchanged.
 - **Smoother library scrolling:** The WebUI library keeps a full page of tiles loaded below the screen, so scrolling quickly no longer stops to wait for the next page.
@@ -18,18 +32,12 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 - **Library upgrade:** The first start of this version upgrades the library in place in about a second, and an interrupted upgrade leaves it as it was. After upgrading, don't go back to v0.14.0 or earlier, since those versions would set the upgraded library aside. Libraries exported from v0.14.0 still import.
 - **Updated components:** The desktop app, server, and WebUI build on updated libraries, the Windows installer is now 64-bit, and the Windows server ships a fixed, checked FFmpeg build instead of the latest daily one.
 
-### Deprecated
-
-### Removed
-
 ### Fixed
 
 - **Library from a newer version:** A library saved by a newer version of ReelRoulette is no longer moved aside and replaced with an empty one, which also cost its backups. The server leaves the library and its backups untouched, runs without a library, shows why on the Operator page, and can still update in-app. Desktop import refuses to replace such a library.
 - **Damaged or locked library:** A damaged library is still moved aside, but the server keeps running without a library instead of stopping, and doesn't start an empty one while the moved file or a backup is there, so a later refresh no longer deletes every thumbnail. A library another program has open at startup is left unchanged until the server restarts. The setup guide explains how to restore a backup by hand.
 - **Library backups:** Backup rotation deletes only its own backups beyond the backup count, and leaves backups from other versions and other files in the backups folder alone.
 - **Desktop tag edits in the WebUI library:** Tag edits made on the desktop now reach the WebUI library, so under a WebUI tag filter, removing that tag on the desktop takes the file out of the WebUI tiles.
-
-### Security
 
 ---
 
@@ -1079,7 +1087,8 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ---
 
-[Unreleased]: https://github.com/HugginsIndustries/ReelRoulette/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/HugginsIndustries/ReelRoulette/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/HugginsIndustries/ReelRoulette/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/HugginsIndustries/ReelRoulette/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/HugginsIndustries/ReelRoulette/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/HugginsIndustries/ReelRoulette/compare/v0.11.0...v0.12.0

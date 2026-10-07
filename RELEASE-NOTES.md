@@ -28,7 +28,7 @@ v0.14.1 makes browsing, random play, and thumbnails fast no matter how big your 
 
 ## What's New
 
-**Scroll as deep as you like.** Browsing used to slow down the further you scrolled. Now every page loads about as fast as the first, in every sort order. On a 49,000-item library, a deep page takes about 40 ms instead of up to 320 ms, and the WebUI reloads thousands of loaded tiles in a tenth of a second instead of nearly three.
+**Scroll as deep as you like.** Browsing used to slow down the further you scrolled. Now every page loads about as fast as the first, in every sort order. On a 49,000-item library, a deep page takes about 40 ms instead of up to 320 ms, and the WebUI reloads thousands of loaded tiles in a tenth of a second instead of nearly three. The WebUI also keeps a full page of tiles loaded ahead of you, so fast scrolling doesn't stall waiting for the next one.
 
 **Random play, faster.** Picking a random video takes about a quarter of the time it did and a fifth of the memory. Same odds, same shuffle, same spread across folders.
 
@@ -51,7 +51,14 @@ v0.14.1 makes browsing, random play, and thumbnails fast no matter how big your 
 
 ## Verification
 
-<!-- TODO: manual validation -->
+Full build, test, and WebUI verify passed, along with the packaged server smoke test. Manual testing covered the desktop app, server, and WebUI in Firefox on CachyOS; the WebUI in Firefox on a second CachyOS machine over the home network; a Pixel 8 Pro in Firefox and an iPad Pro with the WebUI installed from Safari, both over Tailscale; and a Windows 11 VM, including a fresh `Setup.exe` install and an in-app update from v0.14.0. Upgrading a copy of a v0.14.0 library and opening one saved by a newer version were checked on Linux and Windows, and a v0.14.0 export imports cleanly.
+
+A few known issues are still open:
+
+- On an iPad with the WebUI installed as an app, the library grid flickers dark now and then while you scroll. Desktop browsers and Firefox on Android are fine.
+- Installing the WebUI on Android still adds a shortcut that opens in the browser instead of a standalone app. It works as a standalone app on iOS.
+- On desktop, keyboard shortcuts stop working while the pointer is over the video, so player view combined with fullscreen can't be left from the keyboard. Move the pointer to the thin line at the top of the screen to get them back.
+- The WebUI status line can flip between messages when the server is stopped or unavailable.
 
 ## Notes
 

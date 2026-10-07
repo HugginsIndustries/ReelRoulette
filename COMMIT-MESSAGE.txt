@@ -19,10 +19,10 @@ Instructions:
 
 Commit Message:
 
-Chore: Split the testing checklist's release-specific checks into agent and manual checks
+Docs: Release v0.14.1 Safe & Snappy
 
-- The Release Specific section now has Agent checks, which an agent verifies from the repo, its docs, or the release workflow's runs, and Manual checks, which need a person, real devices, or the Windows VM. This release's items are sorted into them, with the release notes warning and the bundled ffprobe check under Agent checks.
-- The release run and delta update item is removed, since the Release Flow in-app update checks cover it; the dependency milestone's references to it now point to those checks.
-- The pre-release skill verifies and ticks agent checks in Part 1, leaves a `Pending:` note on one that can't be verified yet, and verifies those in Part 2. `reset-checklist.ps1` clears `Pending:` notes too.
-- AGENTS.md and the implement skill say which group a new check goes in, and promote-milestones clears both groups.
-- Includes the v0.14.1 pass's checks ticked so far.
+- Set the release version to v0.14.1.
+- Cut the changelog into the v0.14.1 Safe & Snappy section with a fresh `[Unreleased]`.
+- Release notes add the smoother library scrolling and fill in Verification from the manual pass, including the iPad grid flicker found during testing and the known issues still open.
+- Tick the release notes and bundled ffprobe agent checks, verified from the release notes and the v0.14.1-dev.1 release run's Windows server log.
+- Remove v0.14.1 from Planned Releases and tick the Release Flow checklist items.

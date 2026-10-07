@@ -59,8 +59,8 @@ A quick pass over the basics no automated test covers end to end.
 
 An agent verifies these from the repo, its docs, or the release workflow's runs during the pass, and ticks them.
 
-- [ ] The release notes warn not to go back to v0.14.0 or earlier after upgrading, since those versions would set the upgraded library aside.
-- [ ] The Windows server release's bundled `ffprobe -version`, printed in the release log, names the pinned FFmpeg build.
+- [x] The release notes warn not to go back to v0.14.0 or earlier after upgrading, since those versions would set the upgraded library aside.
+- [x] The Windows server release's bundled `ffprobe -version`, printed in the release log, names the pinned FFmpeg build.
 
 ### Manual checks
 
@@ -89,10 +89,10 @@ During the pass, on the release's dev build:
 
 When finishing the release, an agent ticks these:
 
-- [ ] Version set with `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION}`, and `.version` matches the tag you will push.
-- [ ] `CHANGELOG.md` `[Unreleased]` is cut into the new release section titled with the release name, and a fresh `[Unreleased]` with empty headings is above it.
-- [ ] `CHANGELOG.md` footer links: `[Unreleased]` compares the new version with `HEAD`, and a new line for this version compares the previous version with it.
-- [ ] `RELEASE-NOTES.md` has the new release entry, it follows the style guide at the top of that file, and its Verification section is filled in from this pass.
+- [x] Version set with `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION}`, and `.version` matches the tag you will push.
+- [x] `CHANGELOG.md` `[Unreleased]` is cut into the new release section titled with the release name, and a fresh `[Unreleased]` with empty headings is above it.
+- [x] `CHANGELOG.md` footer links: `[Unreleased]` compares the new version with `HEAD`, and a new line for this version compares the previous version with it.
+- [x] `RELEASE-NOTES.md` has the new release entry, it follows the style guide at the top of that file, and its Verification section is filled in from this pass.
 
 After committing the release, before tagging:
 
@@ -107,7 +107,7 @@ After tagging, keep an eye on:
 ## Sign-Off
 
 - Overall result:
-  - [ ] PASS
+  - [x] PASS
   - [ ] FAIL
-- [ ] All failures and skipped checks documented.
-- [ ] Ready to tag.
+- [x] All failures and skipped checks documented.
+- [x] Ready to tag.
