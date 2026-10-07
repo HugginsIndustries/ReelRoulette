@@ -211,7 +211,7 @@ GitHub / B2 release flow:
 - Create/publish the GitHub release notes for the tag.
 - Push the **`v*`** tag matching `.version`. **`release.yml`** builds all matrix legs and publishes to B2 (stable also uploads to GitHub).
 
-Reset testing checklist state, including `Failed:` and `Skipped:` notes, for a fresh run:
+Reset testing checklist state, including `Failed:` and `Skipped:` notes, for a fresh run. Release version is filled from `.version` without its `-dev.N` suffix:
 
 - `pwsh ./tools/scripts/reset-checklist.ps1`
 - `pwsh ./tools/scripts/reset-checklist.ps1 -KeepMetadata`
@@ -222,7 +222,7 @@ Check `MILESTONES.md` and `MILESTONES-COMPLETED.md` against their maintenance ru
 - `pwsh ./tools/scripts/check-milestones.ps1` checks that milestone IDs appear only in section headers, the tracker line, and the Planned Releases outline; that the outline and the sections agree; and that every `Depends on`, and every milestone a `Not included` line names after "which is", is an existing milestone title.
 - `-BaseRef HEAD` also checks that `MILESTONES-COMPLETED.md` only grew by entries moved in from Active or Planned, newest on top. `-Staged` checks the staged files instead of the working tree.
 - `-BaseRef <previous release tag> -Release` does the same across a release, allowing completed entries that were planned after the tag. A base without `MILESTONES-COMPLETED.md` is refused.
-- `pwsh ./tools/scripts/tests/test-scripts.ps1` runs both scripts against the fixtures in `tools/scripts/tests/fixtures/`.
+- `pwsh ./tools/scripts/tests/test-scripts.ps1` runs the milestones checker, changelog cut script, and checklist reset script against the fixtures in `tools/scripts/tests/fixtures/`.
 
 ## Troubleshooting
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env pwsh
-# Runs check-milestones.ps1 and cut-changelog.ps1 against the fixtures in tests/fixtures.
+# Runs check-milestones.ps1, cut-changelog.ps1, and reset-checklist.ps1 against the fixtures in tests/fixtures.
 # Each case works on a copy in a temporary folder that is removed afterward.
 $ErrorActionPreference = "Stop"
 
@@ -7,12 +7,14 @@ $scriptsDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $fixturesDir = Join-Path $PSScriptRoot "fixtures"
 $checker = Join-Path $scriptsDir "check-milestones.ps1"
 $cutter = Join-Path $scriptsDir "cut-changelog.ps1"
+$resetter = Join-Path $scriptsDir "reset-checklist.ps1"
 $validMilestones = Join-Path $fixturesDir "milestones" "valid.md"
 $movedMilestones = Join-Path $fixturesDir "milestones" "moved.md"
 $validCompleted = Join-Path $fixturesDir "milestones" "valid-completed.md"
 $movedCompleted = Join-Path $fixturesDir "milestones" "moved-completed.md"
 $changelogInput = Join-Path $fixturesDir "changelog" "input.md"
 $changelogExpected = Join-Path $fixturesDir "changelog" "expected.md"
+$checklistInput = Join-Path $fixturesDir "checklist" "input.md"
 
 $workDir = Join-Path ([System.IO.Path]::GetTempPath()) "reelroulette-script-tests-$([guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Path $workDir | Out-Null
@@ -306,6 +308,53 @@ try {
             if ($reason) { return $reason }
             if ((Get-Content -Path $path -Raw) -cne $before) { return "the changelog was modified" }
         }
+    }
+
+    Write-Host ""
+    Write-Host "reset-checklist.ps1"
+
+    # Resets a copy of the checklist fixture with the given .version text and returns its release version line.
+    function Get-ResetReleaseLine {
+        param([string]$Name, [string]$Version)
+
+        $path = New-FixtureCopy $checklistInput "$Name.md"
+        $versionPath = Join-Path $workDir "$Name.version"
+        Set-Content -Path $versionPath -Value $Version -NoNewline
+        $result = Invoke-Tool $resetter @{ Path = $path; VersionPath = $versionPath }
+        if ($result.Code -ne 0) { throw "exit $($result.Code): $($result.Output)" }
+        return (Get-Content -Path $path | Where-Object { $_ -match '^- Release version:' })
+    }
+
+    Test-Case "a dev version fills the release it is building" {
+        $line = Get-ResetReleaseLine "reset-dev" "v0.3.0-dev.12`n"
+        if ($line -cne "- Release version: v0.3.0") { return "got '$line'" }
+    }
+
+    Test-Case "a release version fills as it is" {
+        $line = Get-ResetReleaseLine "reset-release" "v0.3.0"
+        if ($line -cne "- Release version: v0.3.0") { return "got '$line'" }
+    }
+
+    Test-Case "a reset clears checks and notes and keeps waived checks" {
+        $path = New-FixtureCopy $checklistInput "reset-checks.md"
+        $versionPath = Join-Path $workDir "reset-checks.version"
+        Set-Content -Path $versionPath -Value "v0.3.0" -NoNewline
+        $result = Invoke-Tool $resetter @{ Path = $path; VersionPath = $versionPath }
+        if ($result.Code -ne 0) { return "exit $($result.Code): $($result.Output)" }
+        $text = Get-Content -Path $path -Raw
+        if ($text -match '\[x\] (?!.*\(waived\))') { return "a ticked check that is not waived remains:`n$text" }
+        if ($text -notmatch '\[x\] A waived check\. \(waived\)') { return "the waived check was not kept:`n$text" }
+        if ($text -match '(Failed|Skipped):') { return "a Failed: or Skipped: note remains:`n$text" }
+    }
+
+    Test-Case "a version that is neither a release nor a dev build is refused, and the file is unchanged" {
+        $path = New-FixtureCopy $checklistInput "reset-invalid.md"
+        $before = Get-Content -Path $path -Raw
+        $versionPath = Join-Path $workDir "reset-invalid.version"
+        Set-Content -Path $versionPath -Value "v0.3.0-preview.1" -NoNewline
+        $reason = Assert-Check (Invoke-Tool $resetter @{ Path = $path; VersionPath = $versionPath }) 1 @("Invalid version 'v0.3.0-preview.1'")
+        if ($reason) { return $reason }
+        if ((Get-Content -Path $path -Raw) -cne $before) { return "the checklist was modified" }
     }
 }
 finally {

@@ -1,29 +1,38 @@
 #!/usr/bin/env pwsh
+# Clears check states and Failed: and Skipped: notes in the testing checklist, and fills in the
+# test date and the release version from .version without any -dev.N suffix.
+#   -Path         checklist to reset (default: the repo's docs/checklists/testing-checklist.md)
+#   -VersionPath  version file to read (default: the repo's .version)
 param(
     [switch]$KeepMetadata,
-    [switch]$RemoveWaived
+    [switch]$RemoveWaived,
+    [string]$Path,
+    [string]$VersionPath
 )
 
 $ErrorActionPreference = "Stop"
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$checklistPath = Join-Path $repoRoot "docs" "checklists" "testing-checklist.md"
-$serverAppProjectPath = Join-Path $repoRoot "src" "core" "ReelRoulette.ServerApp" "ReelRoulette.ServerApp.csproj"
+$checklistPath = if ($Path) { $Path } else { Join-Path $repoRoot "docs" "checklists" "testing-checklist.md" }
+if (-not $VersionPath) {
+    $VersionPath = Join-Path $repoRoot ".version"
+}
 
 if (-not (Test-Path $checklistPath)) {
     throw "Checklist file not found: $checklistPath"
 }
-if (-not (Test-Path $serverAppProjectPath)) {
-    throw "Server app project file not found: $serverAppProjectPath"
-}
 
-function Get-CanonicalVersion {
-    [xml]$projectXml = Get-Content -Path $serverAppProjectPath -Raw
-    $version = $projectXml.Project.PropertyGroup.Version | Select-Object -First 1
-    if ([string]::IsNullOrWhiteSpace($version)) {
-        throw "Could not resolve <Version> from $serverAppProjectPath"
+# The checklist names the release being prepared, not the dev build it is tested on.
+function Get-ReleaseVersion {
+    if (-not (Test-Path $VersionPath)) {
+        throw "Version file not found: $VersionPath"
     }
-    return [string]$version
+    $version = (Get-Content -Path $VersionPath -Raw).Trim()
+    $bare = $version.TrimStart("v") -replace '-dev\.\d+$', ''
+    if ($bare -notmatch '^\d+\.\d+\.\d+$') {
+        throw "Invalid version '$version' in ${VersionPath}. Expected a version such as v0.14.0 or v0.14.0-dev.3."
+    }
+    return "v$bare"
 }
 
 function Update-MetadataLine {
@@ -40,9 +49,8 @@ function Update-MetadataLine {
     return $Line
 }
 
-$version = Get-CanonicalVersion
+$releaseVersion = if ($KeepMetadata.IsPresent) { $null } else { Get-ReleaseVersion }
 $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-$releaseVersion = "v$version"
 
 $raw = Get-Content -Path $checklistPath -Raw
 $lines = $raw -split "\r?\n"

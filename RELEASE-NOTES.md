@@ -20,6 +20,46 @@ Use this document for public GitHub releases. Rules:
 
 ---
 
+## v0.14.1 — Safe & Snappy
+
+Big libraries just got a lot quicker, and your library is a lot harder to lose.
+
+v0.14.1 makes browsing, random play, and thumbnails fast no matter how big your collection gets, and stops the server from throwing away a library it doesn't understand.
+
+## What's New
+
+**Scroll as deep as you like.** Browsing used to slow down the further you scrolled. Now every page loads about as fast as the first, in every sort order. On a 49,000-item library, a deep page takes about 40 ms instead of up to 320 ms, and the WebUI reloads thousands of loaded tiles in a tenth of a second instead of nearly three.
+
+**Random play, faster.** Picking a random video takes about a quarter of the time it did and a fifth of the memory. Same odds, same shuffle, same spread across folders.
+
+**Thumbnails load once.** The WebUI keeps each thumbnail until it actually changes, so scrolling back or reopening the library doesn't download them all again. When a refresh finishes, new videos and new thumbnails just show up, no page reload needed.
+
+**Your library stays put.** Before, a library saved by a newer version of ReelRoulette got swapped for an empty one, taking your backups with it. Now the server leaves the library and its backups alone, keeps running without a library, tells you why on the Operator page, and can still update in-app to catch up. A damaged library no longer stops the server or gets replaced with an empty one that would wipe your thumbnails on the next refresh, and the setup guide walks you through restoring a backup. Backup cleanup also only removes its own old backups, never anything else in the folder.
+
+## Also in This Release
+
+- Removing a tag on the desktop now takes the file out of a WebUI library filtered by that tag, right away.
+- The Windows installer is now 64-bit, and the Windows server ships a fixed, checked FFmpeg build.
+- Updated libraries under the hood for the desktop app, server, and WebUI.
+
+## What's Coming
+
+- A rebuilt WebUI that installs as a real app, with side panels on big screens, keyboard shortcuts, stats, settings, and an admin section that replaces the Operator page.
+- Everything the desktop app does, in the WebUI, so one client works on every device.
+- Accounts and a PIN, with control over who sees which sources.
+- Playback that picks the right format for each device.
+
+## Verification
+
+<!-- TODO: manual validation -->
+
+## Notes
+
+- **Upgrading is one way.** The first start upgrades your library in about a second. After that, don't go back to v0.14.0 or earlier, since those versions would set the upgraded library aside. Libraries exported from v0.14.0 still import fine.
+- **The library file grows by about a third.** That's the price of the speedup.
+
+---
+
 ## v0.14.0 — Loose Ends
 
 Nothing flashy this time, just a long list of things that should have worked all along and now do.

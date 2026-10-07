@@ -19,8 +19,10 @@ Instructions:
 
 Commit Message:
 
-Chore: Clear the released version's checklist items when promoting the next release
+Docs: Prepare v0.14.1 — Safe & Snappy for its testing pass
 
-- `promote-milestones` removes the released version's Release Specific items from the testing checklist before promoting, and lists any unticked item and asks before removing it.
-- Pre-release Part 1 no longer removes the previous release's items; it checks that Release Specific holds only this release's and asks about any that don't.
-- Remove v0.14.0's signed-off items from Release Specific, keeping those added for v0.14.1.
+- Consolidate `[Unreleased]` in the changelog into one outcome per bullet, adding the dependency updates and the 64-bit Windows installer.
+- Draft the v0.14.1 release notes, with Verification left for the manual pass.
+- Reset the testing checklist for v0.14.1, tick the automated checks, which all passed, and drop the migration and library query log lines from Release Specific.
+- `reset-checklist.ps1` fills Release version from `.version` without its `-dev.N` suffix, so the checklist names the release rather than the dev build, with fixture tests in `test-scripts.ps1`.
+- Pre-release Part 1 checks that `.version` is newer than the latest release before resetting the checklist, and asks for the dev version to be set if it isn't.

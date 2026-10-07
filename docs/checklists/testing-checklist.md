@@ -14,9 +14,9 @@ Run `pwsh ./tools/scripts/reset-checklist.ps1` to clear check states and `Failed
 
 ## Test Run Metadata
 
-- Test date/time: 2026-10-05 01:08:42
+- Test date/time: 2026-10-06 15:35:45
 - Tester: Christian Huggins
-- Release version: v0.14.0
+- Release version: v0.14.1
 - Environment (OS + device(s) + browser(s)): CachyOS desktop (desktop app, server, WebUI in Firefox); CachyOS laptop on home LAN (WebUI in Firefox via .local); Pixel 8 Pro (WebUI in Firefox over Tailscale); iPad Pro 13-inch M4 (WebUI installed from Safari, over Tailscale); Windows 11 VM (desktop and server, Setup.exe install and in-app update from the previous release)
 
 ---
@@ -55,9 +55,9 @@ A quick pass over the basics no automated test covers end to end.
 
 - [ ] With a copy of the data folder upgraded by a newer build, the installed build runs without a library, shows the message on the Operator page, leaves the library and backups byte-identical, and updates in-app, on Linux and Windows.
 - [ ] Without a library, a library route answers 503 with the message, the open routes answer, and an unpaired LAN caller gets 401.
-- [ ] A copy of a v0.14.0 data folder opens in this build with its items, tags, presets, and stats intact, `last.log` shows the migration and its time, and every sort order on desktop and WebUI lists files as v0.14.0 did, on Linux and Windows.
+- [ ] A copy of a v0.14.0 data folder opens in this build with its items, tags, presets, and stats intact, and every sort order on desktop and WebUI lists files as v0.14.0 did, on Linux and Windows.
 - [ ] Desktop import of a library exported from v0.14.0 is accepted and opens with its items after the server starts.
-- [ ] In the WebUI with a few thousand tiles loaded, a change that reloads the window sends one library query and writes one `Library query` line with `elapsedMs` to `last.log`, and scrolling deep in each sort order stays smooth.
+- [ ] In the WebUI with a few thousand tiles loaded, scrolling deep in each sort order stays smooth.
 - [ ] The release notes warn not to go back to v0.14.0 or earlier after upgrading, since those versions would set the upgraded library aside.
 - [ ] Desktop plays video after the Avalonia and LibVLC update, on Linux and Windows.
 - [ ] On Windows, the server tray menu still opens and its items work after the Avalonia update.
@@ -79,10 +79,10 @@ During the pass, on the release's dev build:
 
 When finishing the release, an agent ticks these:
 
-- [x] Version set with `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION}`, and `.version` matches the tag you will push.
-- [x] `CHANGELOG.md` `[Unreleased]` is cut into the new release section titled with the release name, and a fresh `[Unreleased]` with empty headings is above it.
-- [x] `CHANGELOG.md` footer links: `[Unreleased]` compares the new version with `HEAD`, and a new line for this version compares the previous version with it.
-- [x] `RELEASE-NOTES.md` has the new release entry, it follows the style guide at the top of that file, and its Verification section is filled in from this pass.
+- [ ] Version set with `pwsh ./tools/scripts/set-release-version.ps1 -Version {VERSION}`, and `.version` matches the tag you will push.
+- [ ] `CHANGELOG.md` `[Unreleased]` is cut into the new release section titled with the release name, and a fresh `[Unreleased]` with empty headings is above it.
+- [ ] `CHANGELOG.md` footer links: `[Unreleased]` compares the new version with `HEAD`, and a new line for this version compares the previous version with it.
+- [ ] `RELEASE-NOTES.md` has the new release entry, it follows the style guide at the top of that file, and its Verification section is filled in from this pass.
 
 After committing the release, before tagging:
 
@@ -97,7 +97,7 @@ After tagging, keep an eye on:
 ## Sign-Off
 
 - Overall result:
-  - [x] PASS
+  - [ ] PASS
   - [ ] FAIL
-- [x] All failures and skipped checks documented.
-- [x] Ready to tag.
+- [ ] All failures and skipped checks documented.
+- [ ] Ready to tag.
