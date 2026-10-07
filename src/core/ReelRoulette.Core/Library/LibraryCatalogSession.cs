@@ -70,18 +70,7 @@ public sealed class LibraryCatalogSession
         var limit = pageArgs.Add(request.Limit);
         var offset = pageArgs.Add(request.Offset);
         using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            SELECT items.id, items.source_id, items.full_path, items.full_path_fold, items.relative_path, items.relative_path_fold,
-                   items.file_name, items.file_name_fold, items.duration_ticks, items.has_audio, items.integrated_loudness, items.peak_db,
-                   items.is_favorite, items.is_blacklisted, items.play_count, items.last_played_utc, items.media_type, items.fingerprint,
-                   items.fingerprint_algorithm, items.fingerprint_version, items.file_size_bytes, items.last_write_time_utc,
-                   items.fingerprint_last_utc, items.fingerprint_status, items.loudness_error,
-                   items.thumbnail_revision, items.thumbnail_width, items.thumbnail_height
-            {LibraryCatalogListSql.FromClause}
-            {pageWhere}
-            {orderBy}
-            LIMIT {limit} OFFSET {offset};
-            """;
+        command.CommandText = ListPageSql(pageWhere, orderBy, limit, offset);
         pageArgs.Bind(command);
         var items = new List<LibraryCatalogItem>();
         using (var reader = command.ExecuteReader())
@@ -101,6 +90,30 @@ public sealed class LibraryCatalogSession
             SearchBaselineCount = searchBaselineCount
         };
     }
+
+    /// <summary>The browse page query; <see cref="ReadListedItem(SqliteDataReader)"/> reads its columns.</summary>
+    internal static string ListPageSql(string where, string orderBy, string limit, string offset) => $"""
+        SELECT items.id, items.source_id, items.full_path, items.full_path_fold, items.relative_path, items.relative_path_fold,
+               items.file_name, items.file_name_fold, items.duration_ticks, items.has_audio, items.integrated_loudness, items.peak_db,
+               items.is_favorite, items.is_blacklisted, items.play_count, items.last_played_utc, items.media_type, items.fingerprint,
+               items.fingerprint_algorithm, items.fingerprint_version, items.file_size_bytes, items.last_write_time_utc,
+               items.fingerprint_last_utc, items.fingerprint_status, items.loudness_error,
+               items.thumbnail_revision, items.thumbnail_width, items.thumbnail_height
+        {LibraryCatalogListSql.FromClause}
+        {where}
+        {orderBy}
+        LIMIT {limit} OFFSET {offset};
+        """;
+
+    /// <summary>The browse count query.</summary>
+    internal static string ListCountSql(string where) => $"SELECT COUNT(*) {LibraryCatalogListSql.FromClause} {where};";
+
+    /// <summary>The random candidates query.</summary>
+    internal static string RandomCandidatesSql(string where) => $"""
+        SELECT items.id, items.full_path, items.play_count, items.last_played_utc
+        {LibraryCatalogListSql.FromClause}
+        {where};
+        """;
 
     private int CachedListCount(SqliteConnection connection, long revision, string where, LibraryCatalogListSql.SqlArgs args)
     {
@@ -163,11 +176,7 @@ public sealed class LibraryCatalogSession
         }
 
         using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            SELECT items.id, items.full_path, items.play_count, items.last_played_utc
-            {LibraryCatalogListSql.FromClause}
-            {where};
-            """;
+        command.CommandText = RandomCandidatesSql(where);
         args.Bind(command);
         var items = new List<RandomizationItem>();
         using (var reader = command.ExecuteReader())
@@ -2280,7 +2289,7 @@ public sealed class LibraryCatalogSession
     private static int ScalarCount(SqliteConnection connection, string where, LibraryCatalogListSql.SqlArgs args)
     {
         using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT COUNT(*) {LibraryCatalogListSql.FromClause} {where};";
+        command.CommandText = ListCountSql(where);
         args.Bind(command);
         var value = command.ExecuteScalar();
         return value is long count ? (int)count : Convert.ToInt32(value, CultureInfo.InvariantCulture);

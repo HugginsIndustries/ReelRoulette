@@ -22,6 +22,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 ### Fixed
 
 - **Pairing a new device:** A phone or computer that is not paired yet now loads the WebUI and its pairing prompt instead of an "Unauthorized" error.
+- **Tag filters stay fast:** Browsing the library and random picks no longer slow down with each tag in the filter. On a 49,000-item library, a 27-tag preset picks in about 45 ms instead of 700 ms, and its first library page loads in about 90 ms instead of 1.5 seconds.
 
 ### Security
 

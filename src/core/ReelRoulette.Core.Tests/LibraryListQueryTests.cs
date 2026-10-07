@@ -422,7 +422,8 @@ public sealed class LibraryListQueryTests
             },
             "spare-ann");
 
-        // An item tag that is not in the tag table forms its own group.
+        // A tag first added by an item edit joins the tag table as Uncategorized, so Loose and Ann are two groups
+        // that the global mode combines.
         AssertBoth(
             session,
             new FilterStateModel { SelectedTags = ["Loose", "Ann"], GlobalMatchMode = false },
@@ -436,16 +437,306 @@ public sealed class LibraryListQueryTests
             Assert.True(LibraryListFilterParser.TryParse(sent.RootElement, out var parsed, out var error), error);
             AssertBoth(session, parsed!, "ann-bob");
         }
+    }
 
-        static void AssertBoth(LibraryCatalogSession session, FilterStateModel filter, params string[] expected)
+    [Fact]
+    public void TagFilter_MatchesTagsByFold_ForTrickyNamesAndEdgeCases()
+    {
+        using var dir = new TempDirectory();
+        var session = Open(dir);
+        session.InsertSource("on", "/media", "On", true);
+        session.UpsertCategory("people", "People", 1);
+        session.UpsertCategory("crowd", "Crowd", 2);
+        session.UpsertTag("Ann", "people");
+        session.UpsertTag("Bob", "people");
+        session.UpsertTag("Zed", "people");
+        var crowd = Enumerable.Range(1, 27).Select(i => $"Person{i:00}").ToList();
+        foreach (var name in crowd)
         {
-            var listed = session.QueryList(new LibraryListRequest { Filter = filter, Limit = 50 })
-                .Items.Select(item => item.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray();
-            var eligible = session.QueryRandomCandidates(filter)
-                .Select(item => item.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray();
-            Assert.Equal(expected, listed);
-            Assert.Equal(expected, eligible);
+            session.UpsertTag(name, "crowd");
         }
+
+        // Item tags keep the name they were written with, so an item can hold a catalog tag in another case.
+        Add(session, "ann", "on", "ann.mp4", "ann.mp4", tags: ["Ann"]);
+        Add(session, "ann-upper", "on", "ann-upper.mp4", "ann-upper.mp4", tags: ["ANN"]);
+        Add(session, "ann-bob", "on", "ann-bob.mp4", "ann-bob.mp4", tags: ["ann", "Bob"]);
+        Add(session, "kelvin", "on", "kelvin.mp4", "kelvin.mp4", tags: ["K"]);
+        Add(session, "k", "on", "k.mp4", "k.mp4", tags: ["k"]);
+        Add(session, "final-sigma", "on", "final-sigma.mp4", "final-sigma.mp4", tags: ["ς"]);
+        Add(session, "sigma", "on", "sigma.mp4", "sigma.mp4", tags: ["σ"]);
+        Add(session, "capital-sigma", "on", "capital-sigma.mp4", "capital-sigma.mp4", tags: ["Σ"]);
+        Add(session, "dz-title", "on", "dz-title.mp4", "dz-title.mp4", tags: ["ǅ"]);
+        Add(session, "dz-upper", "on", "dz-upper.mp4", "dz-upper.mp4", tags: ["Ǆ"]);
+        Add(session, "strasse-sharp", "on", "strasse-sharp.mp4", "strasse-sharp.mp4", tags: ["Straße"]);
+        Add(session, "strasse-upper", "on", "strasse-upper.mp4", "strasse-upper.mp4", tags: ["STRASSE"]);
+        Add(session, "crowd-all", "on", "crowd-all.mp4", "crowd-all.mp4", tags: crowd);
+        Add(session, "crowd-one", "on", "crowd-one.mp4", "crowd-one.mp4", tags: ["person07"]);
+        Add(session, "plain", "on", "plain.mp4", "plain.mp4");
+        string[] everything =
+        [
+            "ann", "ann-bob", "ann-upper", "capital-sigma", "crowd-all", "crowd-one", "dz-title", "dz-upper",
+            "final-sigma", "k", "kelvin", "plain", "sigma", "strasse-sharp", "strasse-upper"
+        ];
+        var peopleOr = new Dictionary<string, TagMatchModeValue>(StringComparer.OrdinalIgnoreCase) { ["people"] = TagMatchModeValue.Or };
+
+        // Tags match by the name fold the catalog identifies them by, whatever case each item holds.
+        AssertBoth(session, new FilterStateModel { SelectedTags = ["ann"] }, "ann", "ann-bob", "ann-upper");
+        AssertBoth(session, new FilterStateModel { SelectedTags = ["k"] }, "k", "kelvin");
+        AssertBoth(session, new FilterStateModel { SelectedTags = ["K"] }, "k", "kelvin");
+        AssertBoth(session, new FilterStateModel { SelectedTags = ["σ"] }, "capital-sigma", "sigma");
+        AssertBoth(session, new FilterStateModel { SelectedTags = ["ς"] }, "final-sigma");
+        AssertBoth(session, new FilterStateModel { SelectedTags = ["ǆ"] }, "dz-title", "dz-upper");
+        AssertBoth(session, new FilterStateModel { SelectedTags = ["STRASSE"] }, "strasse-upper");
+        AssertBoth(session, new FilterStateModel { SelectedTags = ["straße"] }, "strasse-sharp");
+
+        // Names that fold alike count once in an AND group.
+        AssertBoth(session, new FilterStateModel { SelectedTags = ["Ann", "ANN"] }, "ann", "ann-bob", "ann-upper");
+        AssertBoth(session, new FilterStateModel { SelectedTags = ["ann", "BOB"] }, "ann-bob");
+
+        // A tag no item holds empties an AND group and is ignored by an OR group and by exclusion.
+        AssertBoth(session, new FilterStateModel { SelectedTags = ["Ann", "Zed"] });
+        AssertBoth(session, new FilterStateModel { SelectedTags = ["Ann", "Zed"], CategoryLocalMatchModes = peopleOr }, "ann", "ann-bob", "ann-upper");
+        AssertBoth(session, new FilterStateModel { SelectedTags = ["Ann", "Nobody"], GlobalMatchMode = true });
+        AssertBoth(session, new FilterStateModel { SelectedTags = ["Ann", "Nobody"], GlobalMatchMode = false }, "ann", "ann-bob", "ann-upper");
+        AssertBoth(session, new FilterStateModel { ExcludedTags = ["Nobody"] }, everything);
+
+        // Exclusion matches by fold too.
+        AssertBoth(
+            session,
+            new FilterStateModel { ExcludedTags = ["ANN", "k"] },
+            everything.Except(["ann", "ann-bob", "ann-upper", "k", "kelvin"]).ToArray());
+
+        // 27 tags in one group.
+        var crowdOr = new Dictionary<string, TagMatchModeValue>(StringComparer.OrdinalIgnoreCase) { ["crowd"] = TagMatchModeValue.Or };
+        AssertBoth(session, new FilterStateModel { SelectedTags = crowd, CategoryLocalMatchModes = crowdOr }, "crowd-all", "crowd-one");
+        AssertBoth(session, new FilterStateModel { SelectedTags = crowd }, "crowd-all");
+        AssertBoth(session, new FilterStateModel { ExcludedTags = crowd }, everything.Except(["crowd-all", "crowd-one"]).ToArray());
+    }
+
+    [Fact]
+    public void TagFilter_MatchesReference_ForSeededRandomFilters()
+    {
+        using var dir = new TempDirectory();
+        var session = Open(dir);
+        session.InsertSource("on", "/media", "On", true);
+        session.UpsertCategory("people", "People", 1);
+        session.UpsertCategory("place", "Place", 2);
+        string[] people = ["Ann", "Bob", "Cy", "K", "σ"];
+        string[] places = ["Home", "Park", "Straße", "ǅ"];
+        foreach (var name in people)
+        {
+            session.UpsertTag(name, "people");
+        }
+
+        foreach (var name in places)
+        {
+            session.UpsertTag(name, "place");
+        }
+
+        // These become Uncategorized catalog tags when an item first gets them.
+        string[] pool = [.. people, .. places, "Misc", "ς", "STRASSE", "k"];
+        var random = new Random(20261007);
+        var ids = new List<string>();
+        for (var i = 0; i < 60; i++)
+        {
+            var id = $"item-{i:00}";
+            ids.Add(id);
+            var tags = Enumerable.Range(0, random.Next(0, 5)).Select(_ => VaryCase(pool[random.Next(pool.Length)], random)).ToList();
+            Add(session, id, "on", $"{id}.mp4", $"{id}.mp4", tags: tags);
+        }
+
+        var model = session.ReadTagEditor(ids);
+        var catalogTags = session.ReadTagEditor(null).Tags;
+        var itemTags = model.Items.ToDictionary(item => item.ItemId, item => item.Tags, StringComparer.Ordinal);
+        string[] modeKeys = ["people", "PLACE", "uncategorized", string.Empty, "missing"];
+        string[] extras = ["Nobody", " ", "ann", "PARK"];
+        for (var run = 0; run < 400; run++)
+        {
+            var modes = new Dictionary<string, TagMatchModeValue>(StringComparer.OrdinalIgnoreCase);
+            foreach (var key in modeKeys.Where(_ => random.Next(2) == 0))
+            {
+                modes[key] = random.Next(2) == 0 ? TagMatchModeValue.And : TagMatchModeValue.Or;
+            }
+
+            var filter = new FilterStateModel
+            {
+                ExcludeBlacklisted = false,
+                SelectedTags = Enumerable.Range(0, random.Next(0, 7)).Select(_ => RandomTag(random)).ToList(),
+                ExcludedTags = Enumerable.Range(0, random.Next(0, 3)).Select(_ => RandomTag(random)).ToList(),
+                CategoryLocalMatchModes = random.Next(4) == 0 ? null : modes,
+                GlobalMatchMode = random.Next(3) switch { 0 => null, 1 => true, _ => false }
+            };
+            var expected = ReferenceMatches(filter, catalogTags, itemTags).Order(StringComparer.Ordinal).ToArray();
+            var eligible = session.QueryRandomCandidates(filter).Select(item => item.Id).ToArray();
+            var listed = session.QueryList(new LibraryListRequest { Filter = filter, Limit = 100 });
+            var listedIds = listed.Items.Select(item => item.Id).Order(StringComparer.Ordinal).ToArray();
+            if (!expected.SequenceEqual(eligible) || !expected.SequenceEqual(listedIds) || listed.TotalCount != expected.Length)
+            {
+                Assert.Fail($"Run {run}, filter {JsonSerializer.Serialize(filter)}: expected [{string.Join(", ", expected)}], eligible [{string.Join(", ", eligible)}], listed [{string.Join(", ", listedIds)}] of {listed.TotalCount}.");
+            }
+        }
+
+        string RandomTag(Random random) => random.Next(6) == 0
+            ? extras[random.Next(extras.Length)]
+            : VaryCase(pool[random.Next(pool.Length)], random);
+
+        static string VaryCase(string name, Random random) => random.Next(3) switch
+        {
+            0 => name.ToUpperInvariant(),
+            1 => name.ToLowerInvariant(),
+            _ => name
+        };
+    }
+
+    [Fact]
+    public void TagFilter_QueryPlans_AreTheSameFor1And27Tags_WithNoCorrelatedSubqueries()
+    {
+        using var dir = new TempDirectory();
+        var session = Open(dir);
+        session.InsertSource("on", "/media", "On", true);
+        session.UpsertCategory("people", "People", 1);
+        session.UpsertCategory("place", "Place", 2);
+        var people = Enumerable.Range(1, 27).Select(i => $"Person{i:00}").ToList();
+        var places = Enumerable.Range(1, 27).Select(i => $"Place{i:00}").ToList();
+        foreach (var name in people)
+        {
+            session.UpsertTag(name, "people");
+        }
+
+        foreach (var name in places)
+        {
+            session.UpsertTag(name, "place");
+        }
+
+        for (var i = 0; i < 27; i++)
+        {
+            Add(session, $"item-{i:00}", "on", $"item-{i:00}.mp4", $"item-{i:00}.mp4", tags: [people[i], places[i]]);
+        }
+
+        var anyMode = new Dictionary<string, TagMatchModeValue>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["people"] = TagMatchModeValue.Or,
+            ["place"] = TagMatchModeValue.Or
+        };
+        // Two-group shapes take one tag from each group at the low end and 27 across both at the high end.
+        List<string> TwoGroups(int count) => count == 1 ? [people[0], places[0]] : [.. people.Take(14), .. places.Take(13)];
+        (string Shape, Func<int, FilterStateModel> Filter)[] shapes =
+        [
+            ("one group, local OR", count => new FilterStateModel { SelectedTags = people.Take(count).ToList(), CategoryLocalMatchModes = anyMode }),
+            ("one group, local AND", count => new FilterStateModel { SelectedTags = people.Take(count).ToList() }),
+            ("two groups, global AND", count => new FilterStateModel { SelectedTags = TwoGroups(count), CategoryLocalMatchModes = anyMode, GlobalMatchMode = true }),
+            ("two groups, global OR", count => new FilterStateModel { SelectedTags = TwoGroups(count), GlobalMatchMode = false }),
+            ("excluded", count => new FilterStateModel { ExcludedTags = people.Take(count).ToList() })
+        ];
+
+        foreach (var (shape, filter) in shapes)
+        {
+            var one = QueryPlans(session, filter(1));
+            var many = QueryPlans(session, filter(27));
+            Assert.True(one.SequenceEqual(many), $"{shape}: 1 tag [{string.Join(" | ", one)}] vs 27 tags [{string.Join(" | ", many)}]");
+            Assert.DoesNotContain(many, line => line.Contains("CORRELATED", StringComparison.Ordinal));
+            Assert.Contains(many, line => line.Contains("idx_item_tags_name_fold", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// The rule the tag filter applies, written out over each item's stored tags: each category group of
+    /// selected tags needs any (local OR) or all (local AND) of its tags, the groups combine by the global
+    /// mode, and an item with an excluded tag is left out. Tags compare by name fold.
+    /// </summary>
+    private static IEnumerable<string> ReferenceMatches(
+        FilterStateModel filter,
+        IReadOnlyList<LibraryCatalogTag> catalogTags,
+        IReadOnlyDictionary<string, List<string>> itemTags)
+    {
+        var groups = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var tag in filter.SelectedTags.Where(tag => !string.IsNullOrWhiteSpace(tag)))
+        {
+            var fold = LibraryCatalogStore.Fold(tag);
+            var category = catalogTags.FirstOrDefault(candidate => candidate.NameFold == fold)?.CategoryId ?? string.Empty;
+            if (!groups.TryGetValue(category, out var folds))
+            {
+                folds = new HashSet<string>(StringComparer.Ordinal);
+                groups[category] = folds;
+            }
+
+            folds.Add(fold);
+        }
+
+        var excluded = filter.ExcludedTags
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Select(LibraryCatalogStore.Fold)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var (itemId, tags) in itemTags)
+        {
+            var held = tags.Select(LibraryCatalogStore.Fold).ToHashSet(StringComparer.Ordinal);
+            if (held.Overlaps(excluded))
+            {
+                continue;
+            }
+
+            var passed = groups.Select(group => IsLocalOr(group.Key) ? group.Value.Overlaps(held) : group.Value.IsSubsetOf(held)).ToList();
+            if (passed.Count == 0 || (filter.GlobalMatchMode == false ? passed.Any(ok => ok) : passed.All(ok => ok)))
+            {
+                yield return itemId;
+            }
+        }
+
+        bool IsLocalOr(string category) =>
+            filter.CategoryLocalMatchModes != null &&
+            filter.CategoryLocalMatchModes.TryGetValue(category, out var mode) &&
+            mode == TagMatchModeValue.Or;
+    }
+
+    /// <summary>The plan details of the browse count, browse page, and random candidates queries for a filter.</summary>
+    private static List<string> QueryPlans(LibraryCatalogSession session, FilterStateModel filter)
+    {
+        using var connection = LibraryCatalogStore.OpenWrite(session.DatabasePath);
+        LibraryCatalogListSql.RegisterCollation(connection);
+        var catalogTags = session.ReadTagEditor(null).Tags;
+        var request = new LibraryListRequest { Filter = filter, Limit = 200 };
+        var lines = new List<string>();
+
+        var countArgs = new LibraryCatalogListSql.SqlArgs();
+        var countWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, countArgs);
+        lines.AddRange(Explain(LibraryCatalogSession.ListCountSql(countWhere), countArgs).Select(line => "count: " + line));
+
+        var pageArgs = new LibraryCatalogListSql.SqlArgs();
+        var pageWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, pageArgs);
+        var limit = pageArgs.Add(request.Limit);
+        var offset = pageArgs.Add(request.Offset);
+        var pageSql = LibraryCatalogSession.ListPageSql(pageWhere, LibraryCatalogListSql.BuildOrderBy(request), limit, offset);
+        lines.AddRange(Explain(pageSql, pageArgs).Select(line => "page: " + line));
+
+        var candidateArgs = new LibraryCatalogListSql.SqlArgs();
+        var candidateWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, candidateArgs);
+        lines.AddRange(Explain(LibraryCatalogSession.RandomCandidatesSql(candidateWhere), candidateArgs).Select(line => "candidates: " + line));
+        return lines;
+
+        List<string> Explain(string sql, LibraryCatalogListSql.SqlArgs args)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = "EXPLAIN QUERY PLAN " + sql;
+            args.Bind(command);
+            using var reader = command.ExecuteReader();
+            var details = new List<string>();
+            while (reader.Read())
+            {
+                details.Add(reader.GetString(3));
+            }
+
+            return details;
+        }
+    }
+
+    private static void AssertBoth(LibraryCatalogSession session, FilterStateModel filter, params string[] expected)
+    {
+        var listed = session.QueryList(new LibraryListRequest { Filter = filter, Limit = 50 })
+            .Items.Select(item => item.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray();
+        var eligible = session.QueryRandomCandidates(filter)
+            .Select(item => item.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray();
+        Assert.Equal(expected, listed);
+        Assert.Equal(expected, eligible);
     }
 
     [Fact]

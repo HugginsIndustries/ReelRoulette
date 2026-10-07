@@ -19,12 +19,10 @@ Instructions:
 
 Commit Message:
 
-M12a: Serve the WebUI and Operator behind an HTTPS reverse proxy on the server machine
+Bugfix: Keep tag filters fast at any tag count
 
-- Forwarded headers are applied only from loopback, one hop, so behind `tailscale serve` or another proxy on the server machine a request takes the client's address, scheme, and host: pairing and control cookies are `Secure` over HTTPS, and `/runtime-config.json` returns the proxy's `https://` URLs. Forwarded headers from other addresses are ignored and logged to `last.log` once per address.
-- One localhost check replaces the two copies: a direct connection from loopback or to the server's own address. A proxied request, even from the server machine, and one with no remote address are not local.
-- The Operator's Bind on LAN setting and the desktop Settings dialog's Allow LAN access label become Allow remote connections, with the `bindOnLan` field unchanged. Off refuses every request from another device with 403 on every path, CORS preflights included, directly or through a proxy, and the dev `run-server` scripts drop their `-BindOnLan` flag so the saved setting alone decides.
-- Pairing covers `/api` routes only, so a device that is not paired loads the WebUI, its manifest, and the pairing prompt, and `/runtime-config.json` includes the pairing token only for callers that pairing accepts.
-- A cookie that would be `SameSite=None` without `Secure` is sent as `Lax`. CORS accepts configured `https` origins and builds the server's own origins with the scheme it listens on, and the Operator's next-URL links use that scheme too.
-- The event stream sends `X-Accel-Buffering: no` so nginx passes events through.
-- README and dev-setup document Tailscale Serve, Caddy, and nginx at the host root on port 443, and Release Specific checks cover the proxy matrix and Android, iOS, and desktop installs.
+- The tag filter builds one set of item ids for the whole filter, each category group being the items with any or all of its tags and the groups intersected or united by the global mode, and checks each item against it once with `+items.id IN (…)`. Browse counts, pages, and random eligibility no longer run a correlated subquery per tag for every item, and excluded tags are one `NOT IN` set.
+- Tags match by name fold, as the catalog identifies them, instead of an OrdinalIgnoreCase collation, for items and for the category lookup. Results change only for names where the two disagree, such as the Kelvin sign and final sigma.
+- The browse count, page, and random candidates SQL come from shared builders, so tests check the query plans the server runs.
+- Tests cover tricky names and edge cases, 400 seeded random filters against an in-test reference, and identical query plans with no correlated subqueries at 1 and 27 tags.
+- Evidence on a scratch copy of a 49,055-item catalog: the old and new Core returned identical candidates, counts, and two pages for all 28 saved presets and 300 seeded random filters, 0 mismatches. The 27-tag preset's candidate query took 44 ms instead of 698 ms and its uncached first page 92 ms instead of 1,468 ms.

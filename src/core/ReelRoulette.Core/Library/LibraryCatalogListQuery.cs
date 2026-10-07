@@ -180,6 +180,13 @@ internal static class LibraryCatalogListSql
         }
     }
 
+    /// <summary>
+    /// Selected tags become one set of item ids for the whole filter. Each category group is the items that
+    /// hold any (local OR) or all (local AND) of its tags, and the groups intersect (global AND) or unite
+    /// (global OR). Each item is checked against the set once, so the cost does not grow with the number of
+    /// tags. The unary plus keeps SQLite from starting the query from the set, so a page can still walk the
+    /// sort index. Tags match by name fold, as the catalog identifies them.
+    /// </summary>
     private static void AppendSelectedTags(
         StringBuilder where,
         FilterStateModel filter,
@@ -192,64 +199,67 @@ internal static class LibraryCatalogListSql
             return;
         }
 
-        var tagsByCategory = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var foldsByCategory = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var selectedTag in selected)
         {
-            var tag = catalogTags.FirstOrDefault(candidate =>
-                string.Equals(candidate.Name, selectedTag, StringComparison.OrdinalIgnoreCase));
+            var fold = LibraryCatalogStore.Fold(selectedTag);
+            var tag = catalogTags.FirstOrDefault(candidate => string.Equals(candidate.NameFold, fold, StringComparison.Ordinal));
             var categoryId = tag == null ? string.Empty : tag.CategoryId;
-            if (!tagsByCategory.TryGetValue(categoryId, out var group))
+            if (!foldsByCategory.TryGetValue(categoryId, out var group))
             {
                 group = [];
-                tagsByCategory[categoryId] = group;
+                foldsByCategory[categoryId] = group;
             }
 
-            group.Add(selectedTag);
+            if (!group.Contains(fold, StringComparer.Ordinal))
+            {
+                group.Add(fold);
+            }
         }
 
-        if (tagsByCategory.Count == 0)
-        {
-            return;
-        }
-
-        var groups = new List<string>();
-        foreach (var pair in tagsByCategory)
+        var sets = new List<string>();
+        foreach (var pair in foldsByCategory)
         {
             var localOr = filter.CategoryLocalMatchModes != null &&
                           filter.CategoryLocalMatchModes.TryGetValue(pair.Key, out var mode) &&
                           mode == TagMatchModeValue.Or;
-            groups.Add(CombineTagExists(pair.Value, localOr, args));
+            sets.Add(localOr ? ItemsWithAnyTag(pair.Value, args) : ItemsWithAllTags(pair.Value, args));
         }
 
-        var joiner = filter.GlobalMatchMode == false ? " OR " : " AND ";
-        where.Append(" AND (");
-        where.Append(string.Join(joiner, groups));
+        var combine = filter.GlobalMatchMode == false ? " UNION " : " INTERSECT ";
+        where.Append(" AND +items.id IN (");
+        where.Append(string.Join(combine, sets));
         where.Append(')');
     }
 
     private static void AppendExcludedTags(StringBuilder where, FilterStateModel filter, SqlArgs args)
     {
-        var excluded = filter.ExcludedTags.Where(tag => !string.IsNullOrWhiteSpace(tag)).ToList();
+        var excluded = filter.ExcludedTags
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Select(LibraryCatalogStore.Fold)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
         if (excluded.Count == 0)
         {
             return;
         }
 
-        where.Append(" AND NOT ");
-        where.Append(CombineTagExists(excluded, useOr: true, args));
+        where.Append(" AND +items.id NOT IN (");
+        where.Append(ItemsWithAnyTag(excluded, args));
+        where.Append(')');
     }
 
-    private static string CombineTagExists(IReadOnlyList<string> tags, bool useOr, SqlArgs args)
+    private static string ItemsWithAnyTag(IReadOnlyList<string> folds, SqlArgs args)
     {
-        var parts = new string[tags.Count];
-        for (var i = 0; i < tags.Count; i++)
-        {
-            var name = args.Add(tags[i]);
-            parts[i] = $"EXISTS (SELECT 1 FROM item_tags WHERE item_tags.item_id = items.id AND item_tags.name = {name} COLLATE {CollationName})";
-        }
+        var names = string.Join(", ", folds.Select(fold => args.Add(fold)));
+        return $"SELECT item_id FROM item_tags WHERE name_fold IN ({names})";
+    }
 
-        var joiner = useOr ? " OR " : " AND ";
-        return "(" + string.Join(joiner, parts) + ")";
+    /// <summary>The items that hold every one of the folds: those whose matching tags cover as many distinct folds.</summary>
+    private static string ItemsWithAllTags(IReadOnlyList<string> folds, SqlArgs args)
+    {
+        return ItemsWithAnyTag(folds, args) +
+               string.Create(CultureInfo.InvariantCulture, $" GROUP BY item_id HAVING COUNT(DISTINCT name_fold) = {folds.Count}");
     }
 
     internal sealed class SqlArgs
