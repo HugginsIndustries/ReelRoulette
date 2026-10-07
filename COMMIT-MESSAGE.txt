@@ -19,10 +19,10 @@ Instructions:
 
 Commit Message:
 
-Docs: Move the WebUI library controls into the Library tab, remember per-device state, and place the desktop settings
+Docs: Record the confirmed Android install cause and the pairing check fix in the reverse proxy and HTTPS milestone
 
-- The preset dropdown and randomization mode move from the header into the Library tab, laid out like the desktop library panel above the grid, so the header holds only the app name, the current file name, and the settings and admin icons.
-- The WebUI remembers its per-device state across a page refresh by default: the active preset and filter, randomization mode, sort, the panel's side, width, and last tab, and every client setting, but not the search text. This replaces the planned option to remember filter settings. Loop, autoplay, and mute stay player buttons, remembered with no Settings tab entry.
-- Autoplay gets Normal and Timer modes in place of the desktop's Keep Playing, sharing one timer renamed from photo duration and widened to 1–3600 seconds.
-- Place each desktop Settings dialog entry: server backup and refresh settings in the admin section with the server's ranges, the duplicate default in duplicate review, and seek step, volume step, and loudness normalization settings in the Settings tab. Desktop Client Removal records the entries the WebUI drops as not useful.
-- From v0.15.0 the server always serves the WebUI, where the admin section lives, and ignores the Enable Web UI setting while still reporting it as on, so the last desktop build's Open Web UI keeps working. The admin section and the desktop Settings dialog drop the switch, and Desktop Client Removal drops the field.
+- The Android install problem is confirmed on a Pixel 8 Pro: over HTTPS on port 443 through `tailscale serve` the WebUI installs and opens standalone, while plain HTTP on port 45123 still opens with browser UI, even with Chrome's insecure-origin flag. Chrome no longer needs a service worker to install, and the manifest already meets its requirements.
+- The milestone now leaves the WebUI's files open to devices that are not paired, because browsers fetch the manifest without cookies, and serves `/runtime-config.json` to every caller with the pairing token only for accepted requests, so the pairing prompt is reachable through a proxy.
+- Record the headers `tailscale serve` sends, the runtime config's `http://` URLs behind it today, and docs requirements for the host root, port 443, a trusted certificate, and Tailscale's prerequisites, and fix the README and `CONTEXT.md` explanations at completion.
+- The Android checklist item says to choose Install and check Settings → Apps, and installing from a plain-HTTP LAN address is out of scope.
+- Auth Cutover for API and Admin keeps the WebUI's files and runtime config open so the login gate can load, and its note on the auth mode setting now says it takes effect at the next start.
