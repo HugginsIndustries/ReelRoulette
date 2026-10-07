@@ -19,12 +19,12 @@ Instructions:
 
 Commit Message:
 
-Docs: Detail the WebUI Preact migration and plan Auto-Pause for the side panel
+M12b: Move the WebUI header, status line, and server connection to Preact
 
-- M12b: re-measure `app.js` and the WebUI tests, record why Preact was chosen, and say how each slice runs next to `app.js`: the Preact root starts it after mount, shared state lives in `@preact/signals` with the cross-screen actions named, and logic that renders nothing moves into typed modules.
-- M12b: each slice first writes behavior tests against `app.js` in `happy-dom` and keeps them passing after it migrates; `styles.css` is frozen, and the markup keeps its classes and ids.
-- M12b: assign the header, mobile diagnostics, fullscreen, gestures, Escape, and reconnect listeners to slices, list the packages and test setup changes, and add an error boundary per screen that relays to `last.log`.
-- M12b: record traps (overlays stay mounted and inside the fullscreen stage, the grid controller's host, Preact's `onChange`, passive touch listeners, storage keys, and the video and photo elements staying in the page) and the files and docs that go or change with `app.js`.
-- M12b: replace the per-slice Smoke and phone checks with a desktop spot check per slice and one Release Specific pass on iOS Safari, Android, and the installed app, and correct the playback criterion, since the tag editor pauses playback by design.
-- M12c: Auto-Pause replaces the tag editor's pause. Opening the side panel or its overlay pauses playback under Never, Always, or Responsive (the default, which pauses only while the panel covers the player), and closing resumes only what Auto-Pause paused; M12e adds the setting, kept per device, and M12f pauses for the admin view.
-- M12d: in-app dialogs render inside the fullscreen stage so they show in fullscreen.
+- Mount the WebUI as a Preact root with `@preact/signals` shared state; `app.js` still runs the player, library overlay, filter dialog, and tag overlay inside it, and reads and writes the shared fields through the store.
+- Move the header (pairing prompt, preset dropdown, randomization mode, photo duration, now playing), the status line, and the mobile diagnostics line to components, with no visible change.
+- Move the version check, pairing, preset loading, event stream, reconnect listeners, status relay, and API helpers out of `app.js` into typed modules with node tests.
+- Give each screen an error boundary that relays `ui-error screen=<name> error=<type>` to `last.log` and leaves the other screens working; show a startup error's message as text.
+- Add `happy-dom` screen tests written against `app.js` before the move, including a markup snapshot and video node identity, and run them in `npm run verify`.
+- Remove the unused `authBootstrap.ts`, the `coreApi.ts` version, pairing, and refresh status helpers, their tests, and the release-version step that updated the bootstrap test.
+- Update the milestone, domain inventory, `CONTEXT.md`, the WebUI README, and the Release Specific phone check.

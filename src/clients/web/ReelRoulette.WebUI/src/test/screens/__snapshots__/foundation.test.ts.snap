@@ -1,0 +1,214 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`page structure > keeps the starting markup 1`] = `
+"<div id="app">
+  <header class="top-bar">
+    <div class="top-bar-title">
+      <h1>
+        "ReelRoulette"
+    <div class="pair-section" id="pair-section" style="display: none">
+      <label class="pair-section-label">
+        <span class="pair-section-label-hint">
+          "Pairing token:"
+        <input id="pair-token" placeholder="Enter token" type="text">
+      <button id="pair-btn">
+        "Pair"
+    <select aria-label="Choose preset" id="preset-select">
+      <option value="">
+        "None"
+    <select aria-label="Choose randomization mode" id="randomization-mode-select">
+      <option value="SmartShuffle">
+        "Smart Shuffle"
+      <option value="PureRandom">
+        "Pure Random"
+      <option value="WeightedRandom">
+        "Weighted Random"
+      <option value="SpreadMode">
+        "Spread Mode"
+      <option value="WeightedWithSpread">
+        "Weighted with Spread"
+    <div class="photo-duration-wrap">
+      <label>
+        "Photo Duration:"
+        <input aria-label="Photo duration in seconds" id="photo-duration" max="300" min="1" step="1" type="number" value="15">
+        <span class="unit">
+          "s"
+    <div class="now-playing" id="now-playing" style="display: none">
+      <span id="now-playing-name">
+      <span class="muted" id="now-playing-duration">
+  <div class="fullscreen-stage" id="fullscreen-stage">
+    <main>
+      <div class="media-container controls-visible" id="media-container">
+        <video disablepictureinpicture="" disableremoteplayback="" id="video" playsinline="" preload="auto" style="display: none" webkit-playsinline="">
+        <img alt="Photo" id="photo" style="display: none">
+        <div class="empty-state" id="empty-state">
+          "Click here to play (choose a preset or open Filter…)"
+        <div class="overlay-controls" id="overlay-controls">
+          <button aria-label="Library" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn" id="library-open-btn" title="Library">
+            <span class="material-symbol-icon">
+              "browse"
+          <button aria-label="Select filters" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn" id="filter-edit-btn" title="Select filters…">
+            <span class="material-symbol-icon">
+              "filter_alt"
+          <button aria-label="Edit Tags" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn" id="tag-edit-btn" title="Edit Tags">
+            <span class="material-symbol-icon">
+              "tag"
+          <button aria-label="Favorite" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" id="favorite-btn" title="Favorite">
+            <span class="material-symbol-icon">
+              "favorite"
+          <button aria-label="Blacklist" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" id="blacklist-btn" title="Blacklist">
+            <span class="material-symbol-icon">
+              "thumb_down"
+          <div class="overlay-controls-row overlay-controls-transport">
+            <button aria-label="Previous" class="overlay-btn icon-glyph-base icon-glyph-button" id="prev-btn" title="Previous">
+              <span class="material-symbol-icon">
+                "skip_previous"
+            <button aria-label="Play/Pause" class="overlay-btn icon-glyph-base icon-glyph-button overlay-btn-play" id="play-btn" title="Play/Pause">
+              <span class="material-symbol-icon">
+                "play_arrow"
+            <button aria-label="Next" class="overlay-btn icon-glyph-base icon-glyph-button" id="next-btn" title="Next">
+              <span class="material-symbol-icon">
+                "skip_next"
+            <button aria-label="Mute" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle" id="mute-btn" title="Mute">
+              <span class="material-symbol-icon">
+                "volume_up"
+            <button aria-label="Loop" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle" id="loop-btn" title="Loop">
+              <span class="material-symbol-icon">
+                "repeat_one"
+            <button aria-label="Autoplay" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle" id="autoplay-btn" title="Autoplay">
+              <span class="material-symbol-icon">
+                "autoplay"
+            <button aria-label="Fullscreen" class="overlay-btn icon-glyph-base icon-glyph-button" id="fullscreen-btn" title="Fullscreen">
+              <span class="material-symbol-icon">
+                "fullscreen"
+          <div class="overlay-seek-row" id="seek-row" style="display: none">
+            <input aria-label="Seek" id="seek-slider" max="100" min="0" type="range" value="0">
+            <span id="time-display">
+              "0:00 / 0:00"
+    <div class="tag-editor" id="tag-editor" style="display: none">
+      <div class="tag-editor-header">
+        <h2>
+          "Tag Editor"
+        <div class="tag-editor-actions">
+          <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="tag-editor-refresh-btn" title="Refresh">
+            <span class="material-symbol-icon">
+              "refresh"
+          <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="tag-editor-close-btn" title="Close">
+            <span class="material-symbol-icon">
+              "close"
+      <div class="filter-dialog-tabstrip tag-editor-tabstrip" role="tablist">
+        <button aria-selected="true" class="filter-tab is-active" data-tag-editor-tab="edit" role="tab" type="button">
+          "Edit Tags"
+        <button aria-selected="false" class="filter-tab" data-tag-editor-tab="autotag" role="tab" type="button">
+          "Auto Tag"
+      <div class="tag-editor-panel-stack">
+        <div class="tag-editor-panel" id="tag-editor-panel-edit">
+          <div class="tag-editor-body themed-scrollbar" id="tag-editor-body">
+        <div class="tag-editor-panel" id="tag-editor-panel-autotag" style="display: none">
+          <div class="tag-editor-body tag-autotag-body themed-scrollbar">
+            <div class="tag-autotag-toolbar">
+              <label class="tag-autotag-check-label">
+                <input id="tag-autotag-scan-full" type="checkbox">
+                "Scan full library"
+              <label class="tag-autotag-check-label">
+                <input id="tag-autotag-view-all" type="checkbox">
+                "View all matches"
+            <p class="tag-autotag-hint">
+              "Use Scan Files to find matching tags. File name matching ignores extension."
+            <div class="tag-autotag-actions-row">
+              <button class="tag-autotag-row-btn" id="tag-autotag-select-all" type="button">
+                "Select all"
+              <button class="tag-autotag-row-btn" id="tag-autotag-deselect-all" type="button">
+                "Deselect all"
+              <button class="tag-autotag-scan-btn" id="tag-autotag-scan-btn" type="button">
+                "Scan Files"
+            <div aria-label="Scan in progress" class="tag-autotag-progress" id="tag-autotag-progress" role="progressbar" style="display: none">
+            <div aria-live="polite" class="tag-autotag-status" id="tag-autotag-status">
+            <div class="tag-autotag-results themed-scrollbar" id="tag-autotag-results">
+      <div class="tag-editor-footer">
+        <button aria-label="Add category" class="icon-glyph-base icon-glyph-button" id="tag-editor-add-category-btn" title="Add category">
+          <span class="material-symbol-icon">
+            "add"
+        <select id="tag-editor-category-select">
+        <input id="tag-editor-new-tag" placeholder="New tag name" type="text">
+        <button aria-label="Add tag" class="icon-glyph-base icon-glyph-button" id="tag-editor-add-tag-btn" title="Add tag">
+          <span class="material-symbol-icon">
+            "add"
+        <button aria-label="Save" class="icon-glyph-base icon-glyph-button" id="tag-editor-apply-btn" title="Save">
+          <span class="material-symbol-icon">
+            "save"
+      <div class="tag-edit-modal" id="tag-edit-modal" style="display: none">
+        <div class="tag-edit-modal-card">
+          <h3>
+            "Edit Tag"
+          <label for="tag-edit-name">
+            "Tag Name"
+          <input autocomplete="off" id="tag-edit-name" type="text">
+          <label for="tag-edit-category">
+            "Category"
+          <select id="tag-edit-category">
+          <div class="tag-edit-modal-actions">
+            <button id="tag-edit-cancel-btn" type="button">
+              "Cancel"
+            <button id="tag-edit-save-btn" type="button">
+              "Save"
+    <div class="filter-dialog" id="filter-dialog" style="display: none">
+      <div class="filter-dialog-header">
+        <h2 id="filter-dialog-heading">
+          "Preset: None"
+        <div class="filter-dialog-actions">
+          <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="filter-dialog-refresh-btn" title="Refresh" type="button">
+            <span class="material-symbol-icon">
+              "refresh"
+          <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="filter-dialog-close-btn" title="Close" type="button">
+            <span class="material-symbol-icon">
+              "close"
+      <div class="filter-dialog-tabstrip" role="tablist">
+        <button aria-selected="true" class="filter-tab is-active" data-filter-tab="general" role="tab" type="button">
+          "General"
+        <button aria-selected="false" class="filter-tab" data-filter-tab="tags" role="tab" type="button">
+          "Tags"
+        <button aria-selected="false" class="filter-tab" data-filter-tab="presets" role="tab" type="button">
+          "Presets"
+      <div class="filter-dialog-body themed-scrollbar">
+        <div class="filter-panel" id="filter-panel-general">
+        <div class="filter-panel" id="filter-panel-tags" style="display: none">
+        <div class="filter-panel" id="filter-panel-presets" style="display: none">
+      <div class="filter-dialog-footer">
+        <button id="filter-clear-all-btn" type="button">
+          "Clear all filters"
+        <button id="filter-cancel-btn" type="button">
+          "Cancel"
+        <button id="filter-apply-btn" type="button">
+          "Apply"
+    <div class="library-overlay" id="library-overlay" style="display: none">
+      <div class="library-overlay-header">
+        <h2>
+          "Library"
+        <p aria-live="polite" class="library-overlay-summary" hidden="" id="library-overlay-summary">
+        <div class="library-overlay-actions">
+          <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="library-overlay-close-btn" title="Close" type="button">
+            <span class="material-symbol-icon">
+              "close"
+      <div class="library-overlay-toolbar" id="library-overlay-toolbar" style="display: none">
+        <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
+        <div class="library-overlay-sort-cluster">
+          <select aria-label="Sort library" class="library-overlay-sort-select" id="library-sort-select">
+            <option value="Name">
+              "Name"
+            <option value="LastPlayed">
+              "Last played"
+            <option value="PlayCount">
+              "Play count"
+            <option value="Duration">
+              "Duration"
+            <option value="DateAdded">
+              "Date added"
+          <button aria-label="Toggle sort direction" class="library-overlay-sort-direction" id="library-sort-direction-btn" type="button">
+            "A–Z"
+      <div class="library-overlay-body" id="library-overlay-body">
+  <div class="status status-bottom" id="status">
+    "Ready (API 1)"
+  <div class="status diagnostics-mobile" id="mobile-diagnostics" style="display: none">
+"
+`;

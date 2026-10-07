@@ -135,16 +135,6 @@ function Update-ContractTestsAssetsVersion {
     Set-FileContentIfChanged -Path $path -NewContent $next | Out-Null
 }
 
-function Update-WebAuthBootstrapTestAssetsVersion {
-    $path = Join-Path $repoRoot "src" "clients" "web" "ReelRoulette.WebUI" "src" "test" "authBootstrap.test.ts"
-    $raw = Get-Content -Path $path -Raw
-    if (-not [regex]::IsMatch($raw, 'assetsVersion:\s*"[^"]+"')) {
-        throw "Failed to find auth bootstrap test assetsVersion in $path"
-    }
-    $next = [regex]::Replace($raw, 'assetsVersion:\s*"[^"]+"', "assetsVersion: `"$bareVersion`"", 1)
-    Set-FileContentIfChanged -Path $path -NewContent $next | Out-Null
-}
-
 function Update-ReadmeVersionExamples {
     $path = Join-Path $repoRoot "README.md"
     $raw = Get-Content -Path $path -Raw
@@ -217,7 +207,6 @@ try {
     Update-OpenApiVersion
     Update-ServerAssetsVersion
     Update-ContractTestsAssetsVersion
-    Update-WebAuthBootstrapTestAssetsVersion
 
     Set-ProjectVersion -ProjectPath (Join-Path $repoRoot "src" "core" "ReelRoulette.ServerApp" "ReelRoulette.ServerApp.csproj")
     Set-ProjectVersion -ProjectPath (Join-Path $repoRoot "src" "clients" "desktop" "ReelRoulette.LibraryArchive" "ReelRoulette.LibraryArchive.csproj")

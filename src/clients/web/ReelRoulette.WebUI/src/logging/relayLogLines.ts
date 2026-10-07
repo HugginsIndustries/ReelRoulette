@@ -20,6 +20,15 @@ export function statusLogLine(
   return `status=${status} hasCurrent=${current != null} attempt=${attemptId}`;
 }
 
+/**
+ * Builds the line relayed to the server log when a screen fails to render. It names the error's type only, since
+ * an error message can hold a file name.
+ */
+export function screenErrorLine(screen: string, error: unknown): string {
+  const type = error instanceof Error ? error.name || "Error" : typeof error;
+  return `ui-error screen=${screen} error=${type}`;
+}
+
 /** Builds the line relayed to the server log for a playback step. */
 export function playbackTraceLine(
   event: string,

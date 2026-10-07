@@ -1,6 +1,6 @@
 # ReelRoulette.WebUI
 
-Canonical web client project (`Vite + TypeScript`).
+Canonical web client project (`Vite + TypeScript + Preact`). Screens are Preact components over shared `@preact/signals` state; the ones not yet moved still run in `src/app.js` inside the Preact root.
 
 This app is served by `ReelRoulette.ServerApp` as part of the consolidated runtime.
 
@@ -59,6 +59,6 @@ npm run verify
 1. contract freshness: `src/types/openapi.generated.ts` matches `shared/api/openapi.yaml`
 2. type-check: app code with browser types only (`tsconfig.app.json`), and `src/test` with Node types as well (`tsconfig.test.json`)
 3. undeclared names in `src/app.js` (`npm run verify:app-js-names`): `app.js` is untyped, so type-check skips it. This step runs TypeScript over it and fails only on "Cannot find name" errors, so an undeclared or misspelled variable fails here instead of at runtime. It goes away with `app.js` in the WebUI Preact migration.
-4. unit tests (Vitest)
+4. unit tests (Vitest): typed modules under node, and screen tests in `src/test/screens/`, which mount the page in `happy-dom` against a fake server and event stream (`pageHarness.ts`)
 5. production build
 6. build-output verification (`dist` artifacts + runtime-config presence)

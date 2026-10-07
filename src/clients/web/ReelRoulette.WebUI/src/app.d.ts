@@ -1,3 +1,3 @@
-import type { RuntimeConfig } from "./types/runtimeConfig";
+import type { AppServices } from "./state/appServices";
 
-export function startApp(config: RuntimeConfig): void;
+export function startApp(services: AppServices): void;

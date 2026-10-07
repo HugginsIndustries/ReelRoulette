@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { playbackTraceLine, statusLogLine } from "../logging/relayLogLines";
+import { playbackTraceLine, screenErrorLine, statusLogLine } from "../logging/relayLogLines";
 
 const itemPath = "/mnt/nas/multimedia/TV/Show/102 Reef Blower.avi";
 const mediaUrl = "/api/media/tok-3f9a2c71";
@@ -46,5 +46,13 @@ describe("relayLogLines", () => {
     expect(playbackTraceLine("random-pick-timeout", current, 4, { timeoutMs: 10000 })).toBe(
       "playback=random-pick-timeout attempt=4 hasCurrent=true timeoutMs=10000"
     );
+  });
+
+  it("names the screen and the error type, and never the error message", () => {
+    const line = screenErrorLine("header", new TypeError(`Cannot read ${itemPath}`));
+
+    expectNoItemDetails(line);
+    expect(line).toBe("ui-error screen=header error=TypeError");
+    expect(screenErrorLine("status", "thrown text")).toBe("ui-error screen=status error=string");
   });
 });

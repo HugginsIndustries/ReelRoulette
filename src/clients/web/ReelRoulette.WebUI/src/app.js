@@ -1,9 +1,4 @@
 import {
-  buildRefreshStatusMessage,
-  coerceRefreshSnapshot,
-  newRefreshCompletionRunId
-} from "./events/refreshStatusProjection";
-import {
   AUDIO_FILTER,
   MEDIA_TYPE_FILTER,
   TAG_MATCH_MODE,
@@ -14,8 +9,6 @@ import {
   filterStateFromApiObject,
   filterStatesEqualForPresetMatch,
   formatDurationForDisplay,
-  headerPresetListAfterPick,
-  headerPresetListForFilter,
   headerPresetPick,
   parseDurationInputToSeconds,
   presetAnchorForDisplay,
@@ -52,13 +45,9 @@ import {
 } from "./library/tagSave.ts";
 import { requestPlayItem } from "./api/coreApi.ts";
 import { createRandomPicker } from "./playback/randomPick.ts";
-import { createSseClient } from "./events/sseClient.ts";
-import { playbackTraceLine, statusLogLine } from "./logging/relayLogLines.ts";
+import { basenameFromPath, formatPlaybackTime as fmtTime } from "./playback/nowPlaying.ts";
+import { playbackTraceLine } from "./logging/relayLogLines.ts";
 
-const CLIENT_ID_KEY = "rr_clientId";
-const SESSION_ID_KEY = "rr_sessionId";
-const PHOTO_DURATION_KEY = "rr_photoDuration";
-const RANDOMIZATION_MODE_KEY = "rr_randomizationMode";
 const TAG_EDITOR_COLLAPSED_KEY = "rr_tagEditorCollapsed";
 const AUTO_TAG_SCAN_FULL_KEY = "rr_autoTagScanFullLibrary";
 const FILTER_DIALOG_COLLAPSED_KEY = "rr_filterDialogCollapsedCategories";
@@ -67,76 +56,6 @@ const FILTER_DIALOG_UNCATEGORIZED_COLLAPSE_KEY = "__filter_uncategorized__";
 const UNCATEGORIZED_CATEGORY_ID = "uncategorized";
 const SWIPE_THRESHOLD = 50;
 const TAP_THRESHOLD = 10;
-const WEBUI_API_VERSION = "1";
-const SUPPORTED_SERVER_API_VERSIONS = new Set(["1", "0"]);
-const REQUIRED_SERVER_CAPABILITIES = [
-  "auth.sessionCookie",
-  "identity.sessionId",
-  "events.refreshStatusChanged",
-  "events.resyncRequired",
-  "api.random.filterState",
-  "api.presets.match"
-];
-
-function getClientId() {
-  let id = localStorage.getItem(CLIENT_ID_KEY);
-  if (!id) {
-    id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-    localStorage.setItem(CLIENT_ID_KEY, id);
-  }
-
-  return id;
-}
-
-function getSessionId() {
-  let id = sessionStorage.getItem(SESSION_ID_KEY);
-  if (!id) {
-    id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-    sessionStorage.setItem(SESSION_ID_KEY, id);
-  }
-
-  return id;
-}
-
-function isMobileBrowser() {
-  const ua = typeof navigator === "undefined" ? "" : navigator.userAgent || "";
-  return /Android|iPhone|iPad|iPod|Mobi/i.test(ua);
-}
-
-function getClientType() {
-  return isMobileBrowser() ? "mobile-web" : "web";
-}
-
-function getDeviceName() {
-  const ua = typeof navigator === "undefined" ? "" : navigator.userAgent || "";
-  const platform = typeof navigator === "undefined" ? "unknown-platform" : navigator.platform || "unknown-platform";
-  const label = isMobileBrowser() ? "Mobile Browser" : "Web Browser";
-  return `${label} (${platform}${ua ? `; ${ua.slice(0, 40)}` : ""})`;
-}
-
-function fmtTime(seconds) {
-  if (!seconds || Number.isNaN(seconds)) {
-    return "0:00";
-  }
-
-  const whole = Math.floor(seconds);
-  const mins = Math.floor(whole / 60);
-  const secs = whole % 60;
-  return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
-}
-
-function basenameFromPath(path) {
-  const normalized = String(path || "").replace(/\//g, "\\");
-  const idx = normalized.lastIndexOf("\\");
-  return idx >= 0 ? normalized.slice(idx + 1) : normalized;
-}
-
-function truncateName(name, maxChars) {
-  const text = String(name || "");
-  const max = Number(maxChars || 45);
-  if (text.length <= max) return text;
-  return `${text.slice(0, Math.max(0, max - 3))}...`;
-}
 
 function absolutizeMediaUrl(apiBaseUrl, mediaUrl) {
   if (!mediaUrl) {
@@ -154,47 +73,36 @@ function getElement(id) {
   return document.getElementById(id);
 }
 
-function parseApiVersion(value) {
-  const parsed = Number.parseInt(String(value || "").trim(), 10);
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
-}
-
-function validateServerCompatibility(version) {
-  const apiVersion = String(version?.apiVersion || "").trim();
-  if (!SUPPORTED_SERVER_API_VERSIONS.has(apiVersion)) {
-    return `Unsupported server API version: ${apiVersion || "unknown"}.`;
-  }
-
-  const minimumCompatible = parseApiVersion(version?.minimumCompatibleApiVersion);
-  const webUiVersion = parseApiVersion(WEBUI_API_VERSION);
-  if (Number.isFinite(minimumCompatible) && Number.isFinite(webUiVersion) && webUiVersion < minimumCompatible) {
-    return `Server requires client API version ${version.minimumCompatibleApiVersion} or newer.`;
-  }
-
-  const capabilitySet = new Set(Array.isArray(version?.capabilities) ? version.capabilities.map((x) => String(x)) : []);
-  const missing = REQUIRED_SERVER_CAPABILITIES.filter((key) => !capabilitySet.has(key));
-  if (missing.length > 0) {
-    return `Server missing required capabilities: ${missing.join(", ")}.`;
-  }
-
-  return null;
-}
-
-export function startApp(config) {
+export function startApp({ config, store, api, connection }) {
   const apiBaseUrl = String(config.apiBaseUrl || "").replace(/\/+$/, "");
   const sseUrl = config.sseUrl;
+  const setStatus = store.setStatus;
+  const buildApiUrl = api.url;
+  const apiPost = api.post;
+  const fetchJson = api.getJson;
+  const relayClientLog = api.relayLog;
+  const loadPresets = connection.loadPresets;
   const state = {
-    clientId: getClientId(),
-    sessionId: getSessionId(),
-    presets: [],
-    currentPresetId: "",
+    // Shared with the Preact screens: these read and write the store's signals.
+    get clientId() { return store.identity.clientId; },
+    get sessionId() { return store.identity.sessionId; },
+    get presets() { return store.presets.peek(); },
+    set presets(value) { store.presets.value = value; },
+    get current() { return store.current.peek(); },
+    set current(value) { store.current.value = value; },
+    get playAttemptId() { return store.playAttemptId.peek(); },
+    set playAttemptId(value) { store.playAttemptId.value = value; },
+    get randomizationMode() { return store.randomizationMode.peek(); },
+    get photoDurationSeconds() { return store.photoDurationSeconds.peek(); },
+    get compatibilityBlocked() { return store.compatibilityBlocked.peek(); },
+    get appliedFilterState() { return store.appliedFilter.peek(); },
+    set appliedFilterState(value) { store.appliedFilter.value = value; },
+    get activePresetName() { return store.activePresetName.peek(); },
+    set activePresetName(value) { store.activePresetName.value = value; },
     history: [],
     historyIndex: -1,
-    current: null,
     loop: false,
     autoplay: false,
-    randomizationMode: "SmartShuffle",
-    photoDurationSeconds: 15,
     tagEditorModel: null,
     tagEditorOpen: false,
     tagEditorCategoryOrder: [],
@@ -210,11 +118,7 @@ export function startApp(config) {
     autoTagScanInFlight: false,
     autoTagRows: [],
     autoTagScanHasRun: false,
-    compatibilityBlocked: false,
-    playAttemptId: 0,
     videoMuted: false,
-    appliedFilterState: createDefaultFilterState(),
-    activePresetName: null,
     filterDialogOpen: false,
     libraryOverlayOpen: false
   };
@@ -251,15 +155,6 @@ export function startApp(config) {
 
   const video = getElement("video");
   const photo = getElement("photo");
-  const statusEl = getElement("status");
-  const presetSelect = getElement("preset-select");
-  const randomizationModeSelect = getElement("randomization-mode-select");
-  const pairSection = getElement("pair-section");
-  const pairToken = getElement("pair-token");
-  const pairBtn = getElement("pair-btn");
-  const nowPlaying = getElement("now-playing");
-  const nowPlayingName = getElement("now-playing-name");
-  const nowPlayingDuration = getElement("now-playing-duration");
   const mediaContainer = getElement("media-container");
   const fullscreenStage = getElement("fullscreen-stage");
   const overlayControls = getElement("overlay-controls");
@@ -300,9 +195,7 @@ export function startApp(config) {
   const tagEditCategory = getElement("tag-edit-category");
   const tagEditCancelBtn = getElement("tag-edit-cancel-btn");
   const tagEditSaveBtn = getElement("tag-edit-save-btn");
-  const photoDurationInput = getElement("photo-duration");
   const emptyState = getElement("empty-state");
-  const mobileDiagnosticsEl = getElement("mobile-diagnostics");
   const filterEditBtn = getElement("filter-edit-btn");
   const filterDialog = getElement("filter-dialog");
   const filterDialogHeading = getElement("filter-dialog-heading");
@@ -325,15 +218,15 @@ export function startApp(config) {
   const libraryOverlayCloseBtn = getElement("library-overlay-close-btn");
 
   if (
-    !video || !photo || !statusEl || !presetSelect || !pairSection || !pairToken || !pairBtn ||
-    !mediaContainer || !fullscreenStage || !seekRow || !seekSlider || !timeDisplay || !nowPlaying || !nowPlayingName ||
-    !nowPlayingDuration || !favoriteBtn || !blacklistBtn || !prevBtn || !playBtn || !nextBtn ||
+    !video || !photo ||
+    !mediaContainer || !fullscreenStage || !seekRow || !seekSlider || !timeDisplay ||
+    !favoriteBtn || !blacklistBtn || !prevBtn || !playBtn || !nextBtn ||
     !loopBtn || !autoplayBtn || !fullscreenBtn || !muteBtn || !filterEditBtn || !tagEditBtn || !tagEditor || !tagEditorBody ||
     !tagEditorCloseBtn || !tagEditorRefreshBtn || !tagEditorAddCategoryBtn || !tagEditorCategorySelect ||
     !tagEditorNewTag || !tagEditorAddTagBtn || !tagEditorApplyBtn || !tagEditorPanelEdit || !tagEditorPanelAutotag ||
     !tagAutotagScanFull || !tagAutotagViewAll || !tagAutotagSelectAll || !tagAutotagDeselectAll || !tagAutotagScanBtn ||
     !tagAutotagProgress || !tagAutotagStatus || !tagAutotagResults || !tagEditModal || !tagEditName ||
-    !tagEditCategory || !tagEditCancelBtn || !tagEditSaveBtn || !photoDurationInput || !emptyState ||
+    !tagEditCategory || !tagEditCancelBtn || !tagEditSaveBtn || !emptyState ||
     !filterDialog || !filterDialogHeading || !filterDialogRefreshBtn || !filterDialogCloseBtn ||
     !filterPanelGeneral || !filterPanelTags || !filterPanelPresets || !filterClearAllBtn ||
     !filterCancelBtn || !filterApplyBtn || !libraryOpenBtn || !libraryOverlay ||
@@ -421,8 +314,6 @@ export function startApp(config) {
     exitPseudoFullscreen();
   });
 
-  pairSection.style.display = "none";
-
   let filterWorkingPresets = [];
   let filterWorking = createDefaultFilterState();
   let filterSources = [];
@@ -432,10 +323,7 @@ export function startApp(config) {
   /** Preset name selected inside the filter dialog only (header combobox uses `state.activePresetName` after Apply). */
   let filterDialogActiveName = null;
   let suppressFilterDialogPresetSelect = false;
-  let suppressHeaderPresetChange = false;
-  /** Header None stays on None until the applied filter changes. */
-  let headerExplicitNone = false;
-  /** Copy of that hold for the open filter dialog. A named pick in the dialog clears it. */
+  /** Copy of the header's None hold for the open filter dialog. A named pick in the dialog clears it. */
   let filterDialogHoldNone = false;
   /** Category ids (and uncategorized sentinel) with collapsed tag grids in the filter dialog; persisted in sessionStorage. */
   let filterDialogCollapsedCategories = new Set();
@@ -524,19 +412,6 @@ export function startApp(config) {
     const anchor = presetAnchorForDisplay(filterWorking, filterWorkingPresets, filterDialogActiveName, holdNone);
     filterDialogHeading.textContent = presetHeading(anchor);
     syncFilterDialogPresetSelect();
-  }
-
-  function currentHeaderPresetList() {
-    const stillDefault = filterStatesEqualForPresetMatch(state.appliedFilterState, createDefaultFilterState());
-    if (headerExplicitNone && !stillDefault) {
-      headerExplicitNone = false;
-    }
-    return headerPresetListForFilter(
-      state.appliedFilterState,
-      state.presets,
-      state.activePresetName,
-      headerExplicitNone && stillDefault
-    );
   }
 
   function syncFilterDialogPresetSelect() {
@@ -1153,7 +1028,7 @@ export function startApp(config) {
     }
     filterWorking = cloneFilterState(state.appliedFilterState);
     filterDialogActiveName = state.activePresetName;
-    filterDialogHoldNone = headerExplicitNone;
+    filterDialogHoldNone = store.headerExplicitNone.peek();
     filterDialogOriginal = cloneFilterState(filterWorking);
     filterPresetCatalogDirty = false;
     filterDialogCollapsedCategories = loadFilterDialogCollapsedCategories();
@@ -1261,24 +1136,6 @@ export function startApp(config) {
     return librarySession.resetQuery(state.appliedFilterState, libraryBrowseControls);
   }
 
-  function renderHeaderPresetOptions(list) {
-    state.activePresetName = list.baseName;
-    state.currentPresetId = headerPresetPick(list.selectedValue) === "named" ? list.selectedValue : "";
-    suppressHeaderPresetChange = true;
-    try {
-      presetSelect.innerHTML = "";
-      for (const entry of list.entries) {
-        const option = document.createElement("option");
-        option.value = entry.value;
-        option.textContent = entry.label;
-        presetSelect.appendChild(option);
-      }
-      presetSelect.value = list.selectedValue;
-    } finally {
-      suppressHeaderPresetChange = false;
-    }
-  }
-
   function openLibraryOverlay() {
     if (state.compatibilityBlocked) {
       return;
@@ -1359,7 +1216,7 @@ export function startApp(config) {
       );
 
       if (result.statusCode === 401) {
-        pairSection.style.display = "flex";
+        store.pairingRequired.value = true;
         setStatus("Unauthorized. Pair first.");
         return;
       }
@@ -1438,8 +1295,8 @@ export function startApp(config) {
 
     readGeneralPanelIntoWorking();
     const appliedDefault = filterStatesEqualForPresetMatch(filterWorking, createDefaultFilterState());
-    headerExplicitNone = filterDialogHoldNone && appliedDefault;
-    state.activePresetName = headerExplicitNone
+    store.headerExplicitNone.value = filterDialogHoldNone && appliedDefault;
+    state.activePresetName = store.headerExplicitNone.peek()
       ? null
       : dialogPresetBase(filterWorking, filterWorkingPresets, filterDialogActiveName);
     filterDialogActiveName = state.activePresetName;
@@ -1467,76 +1324,13 @@ export function startApp(config) {
   }
 
   let photoTimerId = null;
-  let eventStream = null;
   let touchStartX = 0;
   let touchStartY = 0;
   let touchWasSwipe = false;
   let touchHandledTap = false;
   let ignoreSwipeTouch = false;
-  let lastLoggedStatusMessage = "";
-  let lastLoggedStatusAtMs = 0;
-  function apiPost(path, payload) {
-    return fetch(buildApiUrl(path), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(payload || {})
-    });
-  }
-
-  /** `logText` replaces `message` in the server log when `message` shows a file, preset, or server error text. */
-  function setStatus(message, logText = message) {
-    statusEl.textContent = message;
-    const now = Date.now();
-    const normalizedMessage = String(logText || "");
-    const shouldLog = normalizedMessage !== lastLoggedStatusMessage || now - lastLoggedStatusAtMs > 1000;
-    if (shouldLog) {
-      lastLoggedStatusMessage = normalizedMessage;
-      lastLoggedStatusAtMs = now;
-      relayClientLog("info", statusLogLine(normalizedMessage, state.current, state.playAttemptId));
-    }
-  }
-
-  async function relayClientLog(level, message) {
-    try {
-      await fetch(buildApiUrl("/api/logs/client"), {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          source: "webui",
-          level: level || "info",
-          message: String(message || "")
-        })
-      });
-    } catch {
-      // Client logging is best-effort and must never break UX flow.
-    }
-  }
-
   function tracePlayback(level, message, context = {}) {
     relayClientLog(level, playbackTraceLine(message, state.current, state.playAttemptId, context));
-  }
-
-  function renderMobileDiagnostics() {
-    if (!mobileDiagnosticsEl || !isMobileBrowser()) {
-      return;
-    }
-
-    mobileDiagnosticsEl.style.display = "block";
-    mobileDiagnosticsEl.textContent =
-      `Diagnostics: clientId=${state.clientId.slice(0, 10)}..., sessionId=${state.sessionId.slice(0, 10)}..., type=${getClientType()}`;
-  }
-
-  function blockForCompatibility(message) {
-    state.compatibilityBlocked = true;
-    eventStream?.stop();
-    setStatus(message);
-  }
-
-  function buildApiUrl(path) {
-    const normalized = path.startsWith("/") ? path.slice(1) : path;
-    return new URL(normalized, `${apiBaseUrl}/`).toString();
   }
 
   /** Matches desktop: record on play start so /api/random weights and filters use fresh library stats. */
@@ -1552,21 +1346,6 @@ export function startApp(config) {
         sessionId: state.sessionId
       })
     }).catch(() => {});
-  }
-
-  async function fetchJson(path, options = {}) {
-    const response = await fetch(buildApiUrl(path), {
-      credentials: "include",
-      ...options
-    });
-    if (response.status === 401) {
-      pairSection.style.display = "flex";
-      throw new Error("Unauthorized");
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    return response.json();
   }
 
   function cacheItemState(itemId, isFavorite, isBlacklisted) {
@@ -1708,11 +1487,6 @@ export function startApp(config) {
     photo.style.display = "none";
     seekRow.style.display = "none";
     emptyState.style.display = "none";
-    nowPlaying.style.display = "block";
-    const fullName = basenameFromPath(item.displayName || item.id || "");
-    nowPlayingName.textContent = truncateName(fullName, 45);
-    nowPlayingName.title = fullName;
-    nowPlayingDuration.textContent = item.durationSeconds != null ? fmtTime(item.durationSeconds) : "";
     const expectedItemId = item.id;
 
     if (item.mediaType === "photo") {
@@ -1786,49 +1560,15 @@ export function startApp(config) {
     updateMuteUi();
   }
 
-  async function loadPresets() {
-    if (state.compatibilityBlocked) {
-      presetSelect.innerHTML = "<option value=\"\">Server compatibility check failed</option>";
-      return;
-    }
-
-    try {
-      const presets = await fetchJson("/api/presets");
-      state.presets = Array.isArray(presets) ? presets : [];
-      renderHeaderPresetOptions(currentHeaderPresetList());
-    } catch (error) {
-      presetSelect.innerHTML = "<option value=\"\">Error loading presets</option>";
-      setStatus(`Error loading presets: ${error?.message || error}`);
-    }
-  }
-
-  async function loadVersion() {
-    try {
-      const version = await fetchJson("/api/version");
-      const compatibilityError = validateServerCompatibility(version);
-      if (compatibilityError) {
-        blockForCompatibility(compatibilityError);
-        return false;
-      }
-      state.compatibilityBlocked = false;
-      pairSection.style.display = "none";
-      setStatus(`Ready (API ${version.apiVersion || "unknown"})`);
-      void librarySession.ensureLoaded(state.appliedFilterState, libraryBrowseControls);
-      return true;
-    } catch {
-      setStatus("Ready (API offline)");
-      return false;
-    }
-  }
-
   async function getRandom() {
     if (state.compatibilityBlocked) {
       setStatus("Cannot play: server compatibility check failed.");
       return;
     }
 
-    const presetPick = headerPresetPick(presetSelect.value);
-    const selectedPreset = presetPick === "named" ? state.presets.find((preset) => preset.id === presetSelect.value) : null;
+    const selectedPresetValue = store.selectedPresetValue();
+    const presetPick = headerPresetPick(selectedPresetValue);
+    const selectedPreset = presetPick === "named" ? state.presets.find((preset) => preset.id === selectedPresetValue) : null;
     const presetStillMatches = selectedPreset
       ? filterStatesEqualForPresetMatch(filterStateFromApiObject(selectedPreset.filterState), state.appliedFilterState)
       : false;
@@ -1857,7 +1597,7 @@ export function startApp(config) {
         setStatus("No response from the server. Try again.");
         return;
       case "unauthorized":
-        pairSection.style.display = "flex";
+        store.pairingRequired.value = true;
         setStatus("Unauthorized. Pair first.");
         return;
       case "failed":
@@ -2497,7 +2237,7 @@ export function startApp(config) {
       retargetTagFilter(selected, excluded, step);
     });
     if (filterChanged || presetsChanged) {
-      renderHeaderPresetOptions(currentHeaderPresetList());
+      store.syncHeaderPresets();
     }
   }
 
@@ -2976,59 +2716,6 @@ export function startApp(config) {
     resumeAfterTagEditor();
   }
 
-  function connectEvents() {
-    if (state.compatibilityBlocked) {
-      return;
-    }
-
-    eventStream ??= createEventStream();
-    eventStream.connect();
-  }
-
-  function createEventStream() {
-    let lastAppliedRefreshRunId = null;
-    return createSseClient({
-      sseUrl,
-      identity: {
-        clientId: state.clientId,
-        sessionId: state.sessionId,
-        clientType: getClientType(),
-        deviceName: getDeviceName()
-      },
-      onOpen() {
-        setStatus("SSE connected");
-      },
-      onError() {
-        setStatus("SSE reconnecting...");
-      },
-      handlers: {
-        itemStateChanged: applyItemStateEvent,
-        playbackRecorded(payload) {
-          void librarySession.applyPlayback(payload);
-        },
-        itemTagsChanged: applyItemTagsEvent,
-        refreshStatusChanged(payload) {
-          const raw = payload?.snapshot || payload?.Snapshot;
-          if (!raw) return;
-          const snapshot = coerceRefreshSnapshot(raw);
-          const message = buildRefreshStatusMessage(snapshot);
-          // The server's refresh error text can name a file or folder, so the log leaves it out.
-          setStatus(message, message.startsWith("Core refresh failed:") ? "Core refresh failed" : message);
-          // A finished refresh can add items and rewrite thumbnails, so the loaded window reloads once per run.
-          const completedRunId = newRefreshCompletionRunId(snapshot, lastAppliedRefreshRunId);
-          if (completedRunId) {
-            lastAppliedRefreshRunId = completedRunId;
-            void librarySession.reloadLoaded();
-          }
-        },
-        resyncRequired() {
-          void loadPresets();
-          void librarySession.resync();
-        }
-      }
-    });
-  }
-
   function applyItemStateEvent(payload) {
     const itemId = payload?.itemId;
     if (!itemId) return;
@@ -3088,95 +2775,16 @@ export function startApp(config) {
     });
   }
 
-  async function pairAndConnect() {
-    if (state.compatibilityBlocked) {
-      setStatus("Pairing blocked by server compatibility check.");
-      return;
-    }
-
-    const token = String(pairToken.value || "").trim();
-    if (!token) {
-      setStatus("Pair token required.");
-      return;
-    }
-    const response = await fetch(buildApiUrl("/api/pair"), {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token })
-    });
-    if (!response.ok) {
-      setStatus("Pairing failed.");
-      return;
-    }
-    pairSection.style.display = "none";
-    setStatus("Paired.");
-    const versionOk = await loadVersion();
-    if (!versionOk) {
-      return;
-    }
-    await loadPresets();
-    connectEvents();
-  }
-
-  function reconnectFromLifecycle() {
-    connectEvents();
-  }
-
-  const savedDuration = parseInt(localStorage.getItem(PHOTO_DURATION_KEY) || "", 10);
-  if (!Number.isNaN(savedDuration) && savedDuration >= 1 && savedDuration <= 300) {
-    state.photoDurationSeconds = savedDuration;
-    photoDurationInput.value = String(savedDuration);
-  }
-  photoDurationInput.addEventListener("change", () => {
-    const next = parseInt(photoDurationInput.value || "", 10);
-    if (Number.isNaN(next) || next < 1 || next > 300) return;
-    state.photoDurationSeconds = next;
-    localStorage.setItem(PHOTO_DURATION_KEY, String(next));
+  store.on("photoDurationChanged", () => {
     if (state.current && state.current.mediaType === "photo" && (state.autoplay || state.loop)) {
       playCurrent();
     }
   });
 
-  const savedMode = localStorage.getItem(RANDOMIZATION_MODE_KEY);
-  if (savedMode && randomizationModeSelect && Array.from(randomizationModeSelect.options).some((x) => x.value === savedMode)) {
-    state.randomizationMode = savedMode;
-    randomizationModeSelect.value = savedMode;
-  }
-  if (randomizationModeSelect) {
-    randomizationModeSelect.addEventListener("change", () => {
-      state.randomizationMode = randomizationModeSelect.value || "SmartShuffle";
-      localStorage.setItem(RANDOMIZATION_MODE_KEY, state.randomizationMode);
-    });
-  }
-
-  presetSelect.addEventListener("change", () => {
-    if (suppressHeaderPresetChange) {
-      return;
-    }
-    const presetPick = headerPresetPick(presetSelect.value);
-    if (presetPick === "default") {
-      headerExplicitNone = true;
-    } else if (presetPick === "named") {
-      headerExplicitNone = false;
-    }
-    const list = headerPresetListAfterPick(
-      state.appliedFilterState,
-      state.presets,
-      state.activePresetName,
-      presetSelect.value
-    );
-    const changed = !filterStatesEqualForPresetMatch(list.filter, state.appliedFilterState);
-    if (changed) {
-      state.appliedFilterState = list.filter;
-    }
-    renderHeaderPresetOptions(list);
-    if (!changed) {
-      return;
-    }
+  store.on("headerFilterChanged", () => {
     if (state.filterDialogOpen) {
       filterWorking = cloneFilterState(state.appliedFilterState);
-      filterDialogHoldNone = headerExplicitNone;
+      filterDialogHoldNone = store.headerExplicitNone.peek();
       filterDialogActiveName = state.activePresetName;
       filterDialogOriginal = cloneFilterState(filterWorking);
       renderAllFilterPanels();
@@ -3185,6 +2793,23 @@ export function startApp(config) {
     }
     void commitLibraryQuery();
   });
+
+  connection.on("serverReady", () => {
+    void librarySession.ensureLoaded(state.appliedFilterState, libraryBrowseControls);
+  });
+  connection.on("itemStateChanged", applyItemStateEvent);
+  connection.on("playbackRecorded", (payload) => {
+    void librarySession.applyPlayback(payload);
+  });
+  connection.on("itemTagsChanged", applyItemTagsEvent);
+  // A finished refresh can add items and rewrite thumbnails, so the loaded window reloads once per run.
+  connection.on("refreshCompleted", () => {
+    void librarySession.reloadLoaded();
+  });
+  connection.on("resyncRequired", () => {
+    void librarySession.resync();
+  });
+
   playBtn.addEventListener("click", (event) => {
     event.stopPropagation();
     if (!state.current) {
@@ -3327,12 +2952,6 @@ export function startApp(config) {
   }, { passive: true });
 
   mediaContainer.classList.add("controls-visible");
-  pairBtn.addEventListener("click", () => {
-    void pairAndConnect();
-  });
-  if (config.pairToken) {
-    pairToken.value = config.pairToken;
-  }
 
   filterDialog.querySelector(".filter-dialog-tabstrip")?.addEventListener("click", (event) => {
     const btn = event.target && event.target.closest ? event.target.closest("[data-filter-tab]") : null;
@@ -3604,21 +3223,5 @@ export function startApp(config) {
     }
   });
 
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") reconnectFromLifecycle();
-  });
-  window.addEventListener("focus", reconnectFromLifecycle);
-  window.addEventListener("pageshow", reconnectFromLifecycle);
-  window.addEventListener("online", reconnectFromLifecycle);
-
-  void loadPresets();
-  void loadVersion();
   updateToggleButtons();
-  connectEvents();
-  setStatus("Ready");
-  renderMobileDiagnostics();
-
-  if (config.pairToken) {
-    void pairAndConnect();
-  }
 }

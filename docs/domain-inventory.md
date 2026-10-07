@@ -152,10 +152,32 @@ Boundary:
 
 ## WebUI Client Orchestration (`src/clients/web/ReelRoulette.WebUI`)
 
-WebUI is runtime-config-driven API/SSE client orchestration.
+WebUI is runtime-config-driven API/SSE client orchestration. Its screens are moving from `app.js` to Preact components over `@preact/signals` shared state.
 
 - `src/clients/web/ReelRoulette.WebUI/src/app.js`
-  - main client runtime behavior and orchestration (playback, filter dialog, library overlay browse + SSE live sync + click-to-play, header counts from the current query window, tag overlay with **Edit Tags** + **Auto Tag** API flows).
+  - the screens not yet moved to components: player and overlay controls, filter dialog, library overlay browse + SSE live sync + click-to-play, header counts from the current query window, and the tag overlay with **Edit Tags** + **Auto Tag** API flows. Reads and writes shared state through the store and acts on store and server connection events.
+- `src/clients/web/ReelRoulette.WebUI/src/ui/App.tsx`
+  - page root: header, the legacy stage, status line, and mobile diagnostics, each screen in an error boundary; starts `app.js` right after the first render, then the server connection. Also the startup error page, which shows its message as text.
+- `src/clients/web/ReelRoulette.WebUI/src/ui/Header.tsx`
+  - pairing prompt, header preset dropdown, randomization mode, photo duration, and now playing.
+- `src/clients/web/ReelRoulette.WebUI/src/ui/StatusLine.tsx`
+  - status line and the mobile diagnostics line.
+- `src/clients/web/ReelRoulette.WebUI/src/ui/LegacyStage.tsx`
+  - the fullscreen stage markup `app.js` still owns, rendered once and never updated.
+- `src/clients/web/ReelRoulette.WebUI/src/ui/ScreenBoundary.tsx`
+  - per-screen error boundary: a screen that fails to render stops showing and relays `ui-error screen=<name> error=<type>` to `last.log`.
+- `src/clients/web/ReelRoulette.WebUI/src/state/appStore.ts`
+  - shared state as signals (status line, playing item, presets and the header preset menu, applied filter, active preset, randomization mode, photo duration, compatibility block, pairing prompt) and the actions that cross screens; status changes relay to `last.log`, a repeat at most once a second.
+- `src/clients/web/ReelRoulette.WebUI/src/state/serverConnection.ts`
+  - version and capability check, pairing, preset loading, the event stream, and reconnecting on focus, visibility, page show, and coming online; passes server events to `app.js`.
+- `src/clients/web/ReelRoulette.WebUI/src/state/serverCompatibility.ts`
+  - the supported server API versions and required capabilities, and the status message for a server that fails them.
+- `src/clients/web/ReelRoulette.WebUI/src/state/appApi.ts`
+  - API URLs, JSON posts and reads (a 401 shows the pairing prompt), and the client log relay.
+- `src/clients/web/ReelRoulette.WebUI/src/state/appServices.ts`
+  - builds one page's store, API, and server connection from the runtime config.
+- `src/clients/web/ReelRoulette.WebUI/src/playback/nowPlaying.ts`
+  - now-playing name, tooltip, and duration, and the m:ss time format.
 - `src/clients/web/ReelRoulette.WebUI/src/filter/filterStateModel.ts`
   - filter JSON serialize/parse aligned with desktop/server `FilterState`.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryOverlayModel.ts`
@@ -186,14 +208,12 @@ WebUI is runtime-config-driven API/SSE client orchestration.
   - random pick requests, one at a time, cancelled after 10 seconds without an answer; an answer that arrives after that is not used.
 - `src/clients/web/ReelRoulette.WebUI/src/library/currentItemState.ts`
   - the playing item's favorite and blacklist from item-state events, and the per-item cache applied when an item plays again, both by item id.
-- `src/clients/web/ReelRoulette.WebUI/src/shell.ts`
-  - static layout including library overlay header browse count, toolbar (search/sort cluster), tabbed tag overlay, and filter overlay chrome.
+- `src/clients/web/ReelRoulette.WebUI/src/shell.tsx`
+  - mounts the page (`renderApp`, which returns an unmount function) and the startup error into `#app`.
 - `src/clients/web/ReelRoulette.WebUI/src/main.ts`
   - bootstrap entrypoint.
 - `src/clients/web/ReelRoulette.WebUI/src/api/coreApi.ts`
-  - API client calls, identity propagation, and `requestPlayItem` for library tile play.
-- `src/clients/web/ReelRoulette.WebUI/src/auth/authBootstrap.ts`
-  - startup auth/version/capability checks.
+  - client and session ids (`rr_clientId` in `localStorage`, `rr_sessionId` in `sessionStorage`), client type and device name, and `requestPlayItem` for library tile play.
 - `src/clients/web/ReelRoulette.WebUI/src/events/sseClient.ts`
   - the WebUI's one event stream: resume with the last event ID after an error, revision tracking, and handler dispatch for each event type.
 - `src/clients/web/ReelRoulette.WebUI/src/events/eventEnvelope.ts`
@@ -232,6 +252,7 @@ Boundary:
   - `src/core/ReelRoulette.Core.SystemChecks/*`
 - WebUI tests:
   - `src/clients/web/ReelRoulette.WebUI/src/test/*`
+  - screen tests under `src/test/screens/` mount the page in `happy-dom` against a fake server and event stream (`pageHarness.ts`).
 - Manual test guide/checklist:
   - `docs/checklists/testing-checklist.md`
 
