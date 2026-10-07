@@ -19,10 +19,12 @@ Instructions:
 
 Commit Message:
 
-Docs: Release v0.14.1 Safe & Snappy
+Docs: Promote the v0.15.0 WebUI overhaul release to active milestones
 
-- Set the release version to v0.14.1.
-- Cut the changelog into the v0.14.1 Safe & Snappy section with a fresh `[Unreleased]`.
-- Release notes add the smoother library scrolling and fill in Verification from the manual pass, including the iPad grid flicker found during testing and the known issues still open.
-- Tick the release notes and bundled ffprobe agent checks, verified from the release notes and the v0.14.1-dev.1 release run's Windows server log.
-- Remove v0.14.1 from Planned Releases and tick the Release Flow checklist items.
+- Promote Reverse Proxy and HTTPS Access, WebUI Preact Migration, WebUI Responsive Layout and Panels, WebUI In-App Dialogs, WebUI Settings Panel, Admin Section in WebUI Settings, Admin Refresh, Backup, and Duplicate Review, WebUI Stats Panel, WebUI Keyboard Shortcuts and Player Controls, Show in File Manager from the WebUI, WebUI Status Line Overhaul, Testing Suite Overhaul, and WebUI Grid Rendering as M12a through M12m, in the Planned Releases order.
+- Clear v0.14.1's agent and manual checks from the testing checklist's Release Specific section.
+- WebUI Grid Rendering no longer extends the layout for appended pages, since a full rebuild measured a few milliseconds per page even at 49,000 items. It takes over moving grid rows off `innerHTML`, which the Preact migration's library overlay keeps until then.
+- The responsive layout keeps randomization mode and photo duration in the top bar until the settings panel, which ships after it, moves them there.
+- Re-measured figures: `app.js` is 3,616 lines with 257 WebUI tests, and the Operator page is 842 lines, up from 779.
+- The status line overhaul covers all four no-library states, and notes that the WebUI drops the 503 body that carries the server's message.
+- Reverse proxy notes that the pairing cookie already follows the request scheme, and checks the Operator page, since the admin section comes later. Its server tests and the admin section's stay functions, with no HTTP test host.

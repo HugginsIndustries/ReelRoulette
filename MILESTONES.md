@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI becomes the only client on every device. The desktop client is frozen to bug fixes (crashes, data loss, broken playback, security) until the desktop removal release, and until then server contract changes only add fields, so the last desktop build keeps working. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, give it a responsive layout with side panels and phone overlays, and add keyboard shortcuts, stats, settings, an admin section that replaces the Operator page, duplicate review, and Show in File Manager. P28a, P38, P39, P34, P20, P26a, P40, P41, P42, P43, P44, P45, P31.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, give it a responsive layout with side panels and phone overlays, and add keyboard shortcuts, stats, settings, an admin section that replaces the Operator page, duplicate review, and Show in File Manager. M12a, M12b, M12c, M12d, M12e, M12f, M12g, M12h, M12i, M12j, M12k, M12l, M12m.
 - **v0.15.1 — Desktop parity**: Give the WebUI everything else the desktop does, including source management, catalog transfer, multi-select, and a browser-playable filter, while the desktop still ships as a fallback. P26b, P26c, P26d, P37, P46, P47.
 - **v0.16.0 — Desktop removal**: Remove the desktop client, its packaging, and its tests, then move preset writes to per-preset routes. P48, P25.
 - **v0.16.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
@@ -108,6 +108,298 @@ Do not use this file for detailed architecture explanation or current capability
 ## Active Milestones
 
 Last milestone completed: M11f
+
+### M12a - Reverse Proxy and HTTPS Access
+
+- **Status**: ⏳ Planned
+- **Goal**: The server works correctly behind an HTTPS reverse proxy, and the docs show how to set one up, including `tailscale serve`.
+- **Scope**:
+  - Ships in v0.15.0, first in the series, moved there from the accounts release: with the WebUI as the only client on phones, installing it as an app needs HTTPS, and the overhaul is designed and tested as an installed app. It still lands before PIN login, so LAN and remote logins do not send PINs in clear text, and behind a proxy today's pairing token stops crossing the LAN in clear text. The server does not serve HTTPS itself.
+  - Checked against the code at promotion: both `IsLocalRequest` copies are unchanged, CORS still builds `http://` origins only, `runtime-config.json` builds its URLs from the request's scheme and host, and the Android install problem is still a known issue in the v0.14.1 release notes.
+  - Document reverse proxy setup in `README.md` and `docs/dev-setup.md`: a general proxy example and `tailscale serve`, with the headers the server needs.
+  - Server fixes so it behaves correctly behind a proxy:
+    - Honor forwarded headers only from configured proxies. A request that came through a proxy is not a localhost request, even when the proxy runs on the server machine, so localhost trust applies only to direct loopback connections. Check during this milestone which forwarding headers `tailscale serve` sends; if a proxy sends none, document that it must, or how the server is told the proxy address.
+    - Treat a missing remote address as not local (found by the repository audit: `RemoteIpAddress == null` treated as local).
+    - Merge the two identical localhost checks into one helper that every localhost decision uses: `IsLocalRequest` in `src/core/ReelRoulette.Server/Auth/ServerPairingAuthMiddleware.cs` and in `src/core/ReelRoulette.Server/Hosting/ServerHostComposition.cs`. Both treat a missing remote address as local, and a request to the server's own LAN address as local. Treating a request to the server's own address as local is intended: it comes from the server machine. Show in File Manager from the WebUI uses the same helper.
+    - Mark cookies `Secure` when the original request was HTTPS, and never send `SameSite=None` without `Secure` (found by the repository audit: `SameSite=None` allowed without `Secure`). Checked at promotion: in its default `Request` mode, `PairingCookiePolicy.ResolveSecure` already marks the pairing cookie `Secure` when `context.Request.IsHttps`, so behind a proxy this needs the forwarded scheme; `SameSite=None` with the secure mode set to `Never` still sends no `Secure`.
+    - Accept `https` origins for CORS and build LAN origins with the scheme clients actually use (found by the repository audit: CORS hard-coded to HTTP only).
+    - Links the server builds (Operator links, runtime config) use the proxied scheme and host.
+  - Android PWA install, folded in from the backlog: found in the v0.12.0 manual regression pass on a Google Pixel 8 Pro, Add to Home Screen only creates a shortcut that opens in Chrome. Likely cause, not confirmed on a device: the WebUI registers its service worker only in a secure context, and a plain-HTTP LAN address is not one, so Chrome has no service worker and does not offer Install app. iOS installs from its home-screen meta tags without one. Over HTTPS through a proxy, Install app should open the WebUI standalone; check the manifest fields Chrome requires if it does not.
+  - Add Release Specific checklist items: "Behind `tailscale serve` and one other HTTPS proxy, the WebUI and its admin section connect, pair, browse, and play, and the server treats them as remote," and "On Android Chrome over HTTPS, Install app opens the WebUI standalone with its icon; iOS Add to Home Screen and desktop browser install still open standalone."
+- **Acceptance criteria**:
+  - Behind an HTTPS reverse proxy, the WebUI, the Operator page, the event stream, and media range requests work.
+  - A request through a proxy on the server machine is not treated as localhost.
+  - Cookies are `Secure` for HTTPS clients, and CORS accepts the HTTPS origin.
+  - A request with no remote address is not treated as local.
+  - Every localhost decision goes through one helper.
+  - On Android Chrome over HTTPS, Install app opens the WebUI as a standalone app, and iOS and desktop browser installs still do.
+  - The docs give working `tailscale serve` and general proxy setups.
+- **Verification evidence**:
+  - Completion evidence must include server tests for forwarded-header trust, proxied-localhost handling, missing remote address, the merged localhost helper, cookie flags, and HTTPS CORS origins, plus one quick spot check through `tailscale serve`. The proxy matrix and the Android and iOS install pass are the Release Specific checklist items above.
+  - Server tests call the middleware and helpers as functions over `DefaultHttpContext`, as the library route gate's tests do. No test project has an HTTP test host, and `Microsoft.AspNetCore.TestHost` is not added (decided at promotion).
+
+### M12b - WebUI Preact Migration
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI's screens are Preact components with tests, built on the existing typed modules, with no visible change.
+- **Scope**:
+  - Ships in v0.15.0, after the reverse proxy and HTTPS access milestone.
+  - Measured again at promotion: `src/app.js` is 3,616 lines. `startApp` runs from line 182 to the end as one untyped function with 139 nested functions, and no test imports it. It has 16 `innerHTML` assignments and 9 native dialog calls. The 257 WebUI tests in 22 files cover only the typed modules, and they run with `environment: "node"`, so there is no DOM to test screens against.
+  - Add Preact and `happy-dom` for component tests; installing the packages needs approval when this milestone starts. Model tests keep running as they do.
+  - Keep the typed modules (library query session, grid layout and virtualizer, tag save, filter state model, events, API) and call them from the components rather than rewriting them.
+  - Migrate screen by screen. Each slice ships with no visible change and removes its code from `app.js`:
+    - Foundation: the Preact root, one shared state store, connection, pairing, event stream, status line, and startup error. `renderStartupError` in `src/shell.ts` interpolates the error message into `innerHTML` (found by the repository audit, moved here from Client Robustness Findings); render it as text.
+    - Player and overlay controls.
+    - Library overlay. It keeps the grid controller, which writes each visible row through `innerHTML` with file names escaped (read from code at promotion). WebUI Grid Rendering replaces that row rendering.
+    - Filter dialog.
+    - Tag editor and Auto Tag.
+  - Delete `app.js` after the last slice, along with its undeclared-name check (`verify:app-js-names`) in `npm run verify`.
+  - Trap, inferred, not measured: moving a `<video>` element to another place in the page can interrupt or reload playback. The player component owns one video element that is never moved.
+  - Add a Release Specific checklist item: "After the Preact migration, the player, library overlay, filter dialog, presets, tag editor, and Auto Tag look and work as in the previous release, on a desktop browser and a phone."
+- **Acceptance criteria**:
+  - After each slice, the migrated screen looks and behaves as before, and the testing checklist's Smoke checks still pass.
+  - Component tests for each migrated screen run in `npm run verify` under `happy-dom`.
+  - `src/app.js` no longer exists.
+  - No screen renders server or config text through `innerHTML`, except the library grid rows until WebUI Grid Rendering.
+  - Playback continues uninterrupted while overlays open and close.
+- **Verification evidence**:
+  - Completion evidence must include component tests per slice, `npm run verify`, and one quick spot check per slice on a desktop browser and a phone.
+
+### M12c - WebUI Responsive Layout and Panels
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI layout adapts to the viewport: side panels on tablets and desktops keep the player playing in view while tagging, browsing, or viewing stats, and phones use overlays.
+- **Scope**:
+  - Ships in v0.15.0, after the WebUI Preact migration milestone. Depends on: WebUI Preact Migration.
+  - This changes user-facing UX: mockups for phone, tablet, and desktop widths are approved before code.
+  - Measured again at promotion: the tag editor, filter, and library overlays are each `position: fixed; inset: 0` with `z-index: 1000`, so they cover the player while it keeps playing underneath. The stylesheet has two `@media (max-width: 600px)` rules, and mobile browsers are detected by user agent (`isMobileBrowser` in `app.js`).
+  - A panel host: the player region plus a resizable side panel at tablet and desktop widths, and full-screen overlays at phone widths. Breakpoints use viewport width and pointer type, not the user agent.
+  - The library, filter, and tag editor become panels. Later panels (settings, stats, admin, duplicate review) use the same host.
+  - The top-bar preset control moves into a panel. Randomization mode and photo duration stay in the top bar until WebUI Settings Panel, which comes after this milestone, moves them into the settings panel.
+  - Panels stay inside the fullscreen stage, so they work in fullscreen as the overlays do today, including iOS pseudo-fullscreen.
+  - Phone layouts work in an installed app (standalone display, safe-area insets).
+  - Add a Release Specific checklist item: "On a phone, a tablet, and a desktop browser, and as an installed app on Android and iOS, panels open beside the player or as overlays by width, and playback keeps going while each is open."
+- **Acceptance criteria**:
+  - At tablet and desktop widths, the library, filter, and tag editor open beside the player, and the video stays visible and playing.
+  - At phone widths, they open as full-screen overlays, and closing one returns to the player without interrupting playback.
+  - Resizing the window across a breakpoint moves an open panel between side panel and overlay without losing its state.
+  - Panels work in fullscreen.
+  - The layout does not depend on the user agent.
+- **Verification evidence**:
+  - Completion evidence must include component tests for panel host breakpoints and panel state, `npm run verify`, and one quick spot check on a phone and a desktop browser.
+
+### M12d - WebUI In-App Dialogs
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI asks for names and confirmations in its own dialogs, styled like the rest of the WebUI, instead of the browser's `prompt`, `confirm`, and `alert`.
+- **Scope**:
+  - Ships in v0.15.0, after the WebUI responsive layout and panels milestone. Depends on: WebUI Preact Migration, so the dialog is a Preact component the migrated screens use.
+  - Found during the post-migration fixes desktop spot checks: preset rename in the WebUI opens the browser's native prompt, which does not match the WebUI's styling and does not suit the WebUI when it runs as an installed web app.
+  - Measured again at promotion: `app.js` uses native dialogs in nine places, and no other WebUI file uses any: preset delete and rename; tag editor category rename, duplicate-name alert, and category delete; tag delete; two **Discard changes?** confirmations; and new category name.
+  - One reusable in-app dialog for text input, confirmation, and notice, with keyboard support (Enter confirms, Escape cancels) and focus returning to where it was.
+  - Keep each dialog's wording and outcome as it is today; only how it is shown changes. Changes to user-facing UX need explicit approval.
+- **Acceptance criteria**:
+  - The WebUI calls no `prompt`, `confirm`, or `alert`.
+  - Each replaced dialog keeps its wording, and confirming or canceling does what it does today.
+  - The dialogs match the WebUI's theme and work in an installed web app on desktop and mobile.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for confirm and cancel on the shared dialog, a check that no native dialog calls remain, `npm run verify`, and a spot check in an installed web app.
+
+### M12e - WebUI Settings Panel
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI has a settings panel for per-device preferences and diagnostics.
+- **Scope**:
+  - Ships in v0.15.0, after the WebUI in-app dialogs milestone. Depends on: WebUI Responsive Layout and Panels.
+  - A settings panel in the panel layout. The admin section joins it in Admin Section in WebUI Settings.
+  - Checked against the code at promotion: the diagnostics panel is shown only when `isMobileBrowser()` is true. Photo duration and randomization mode are already kept per device in `localStorage`; autoplay and loop are not kept and start off.
+  - Move the diagnostics information to the settings panel and remove the diagnostics panel from below the main page's status line. That panel is currently shown only on mobile browsers by design; in the v0.13.0 manual regression pass it appeared only on the phone in Firefox.
+  - Per-device preferences: photo duration and randomization mode (in the top bar until this milestone moves them into the settings panel), autoplay and loop defaults, and an option to remember filter settings across sessions. The option is off by default, so the WebUI keeps opening with default filters unless the user turns it on.
+  - Changes to user-facing UX need explicit approval.
+- **Acceptance criteria**:
+  - The settings panel shows the diagnostics information on desktop and mobile browsers, and the main page no longer shows the diagnostics panel.
+  - With the remember option on, filter settings survive closing and reopening the WebUI on that device. With it off, the WebUI opens with default filter settings.
+  - Preferences are stored per device and do not change other devices.
+- **Verification evidence**:
+  - Completion evidence must include WebUI tests for preference storage and the remember option, `npm run verify`, and one quick spot check on a phone.
+  - A desktop browser and phone pass, with the remember option checked across a browser restart, is a Release Specific checklist item.
+
+### M12f - Admin Section in WebUI Settings
+
+- **Status**: ⏳ Planned
+- **Goal**: Everything the Operator page does moves into an admin section of the WebUI settings panel, and the server keeps a minimal recovery page for when the WebUI's files are broken.
+- **Scope**:
+  - Ships in v0.15.0, after the WebUI settings panel milestone. Depends on: WebUI Settings Panel, and Catalog Open and Backup Safety, whose library state and message the admin section shows.
+  - Measured again at promotion: the Operator page is 842 lines of HTML, CSS, and JavaScript inside a raw string in `src/core/ReelRoulette.ServerApp/Program.cs`, up from 779 when this entry was written, after the control token, shutdown, and no-library work. No test covers the page's content; the only test that names `/operator` checks that the library route gate leaves it open. The sections listed below match the page, and `verify-linux-packaged-server-smoke.sh` still requests `/operator`.
+  - Admin section slice:
+    - Move every Operator section into the admin section as Preact screens: server updates, runtime status with restart and stop (including the message when the server runs without a library), web runtime settings, control settings (control token, dev channel, Launch Server on Startup), the testing suite, connected clients, server logs, and incoming and outgoing API events. They call the same control routes, so there is no contract change.
+    - The Operator's update download needs two attempts every time: click Download and confirm, and nothing happens; click Download and confirm again, and it downloads. Find the cause before building the admin section's update controls, so they don't inherit it. No commit has fixed it (checked at promotion).
+    - Gating: localhost is trusted. From another machine, the admin section shows nothing until the control token is entered through `POST /control/pair`. The accounts release replaces the token with admin accounts.
+    - Later admin work lands here: refresh, backup, and duplicate review, source and item management, catalog transfer, the Log Viewer, and account administration.
+  - Recovery page slice:
+    - The server keeps a minimal built-in page with restart, stop, a log tail, and updates, at a fixed path such as `/recovery` (decided here). It does not load the WebUI's files, so it works when they are missing or broken, and it has the same control-token gating.
+    - It renders settings and status text without `innerHTML` interpolation (found by the repository audit: Operator HTML page interpolates user input via `innerHTML`).
+    - Retire the Operator page: `/operator` redirects to the admin section, the tray's Operator shortcut opens the admin section, `verify-linux-packaged-server-smoke.sh` checks the recovery page and the admin section entry instead of `/operator`, and the testing checklist's Smoke item checks the admin section instead of the Operator page.
+- **Acceptance criteria**:
+  - The admin section offers every action and setting the Operator page offers today and calls the same routes.
+  - In the admin section, one Download click and one confirmation start the update download.
+  - From another machine, nothing in the admin section is shown until a valid control token is entered; on localhost it opens without one.
+  - With the WebUI's files removed, the recovery page restarts, stops, shows logs, and checks, downloads, and applies updates.
+  - The recovery page renders settings, status, and log text without `innerHTML` interpolation.
+  - `/operator` reaches the admin section, and the packaged Linux server smoke passes against the recovery page.
+- **Verification evidence**:
+  - Completion evidence must include admin section UI tests for loading status and settings, saving settings, the testing panel, and control-token gating in `npm run verify`, server tests that the recovery page is served without WebUI assets and keeps control-token gating, `dotnet test ReelRoulette.sln`, and `./tools/scripts/verify-linux-packaged-server-smoke.sh`.
+  - Server tests call the handlers and gating as functions over `DefaultHttpContext`, as the library route gate's tests do. No test project has an HTTP test host, and `Microsoft.AspNetCore.TestHost` is not added (decided at promotion).
+  - Add a Release Specific checklist item: "From another machine, the admin section asks for the control token and works after it is entered; with the WebUI files removed, the recovery page restarts, stops, shows logs, and applies an update, on Linux and Windows."
+
+### M12g - Admin Refresh, Backup, and Duplicate Review
+
+- **Status**: ⏳ Planned
+- **Goal**: The admin section starts a refresh, edits refresh and backup settings, and reviews and applies duplicates, so none of these needs the desktop.
+- **Scope**:
+  - Ships in v0.15.0, after the admin section in WebUI settings milestone. Depends on: Admin Section in WebUI Settings.
+  - Measured again at promotion: only the desktop calls `POST /api/refresh/start`, `/api/refresh/settings`, `/api/backup/settings`, `/api/duplicates/scan`, and `/api/duplicates/apply`. The routes exist, so this needs no contract change. The tray can also start a refresh.
+  - Gated like the rest of the admin section.
+  - Refresh slice: Refresh Now with the refresh status, and the refresh settings the desktop Settings dialog shows: auto-refresh and its interval, forced loudness and duration rescans on the next refresh, and fingerprint scan parallelism.
+  - Backup slice: server backups on or off, the time between backups, the number kept, and the days of daily backups kept.
+  - Daily retention, in the backup slice: on top of the existing count limit, catalog backup rotation keeps one backup per date for a number of days set in the server's backup settings. It applies to current- and older-version backups alike, so older-version backups, which rotation keeps and does not count today, age out with their dates. Newer-version backups and files rotation does not recognize are never touched. The days setting adds a field to the backup settings, a contract change that only adds.
+  - Trap: the refresh and backup settings routes assign every field from the posted snapshot, so a partial post writes defaults (Server Robustness Findings; still the case at promotion). Until that is fixed, the admin section posts the full settings it read.
+  - Duplicate review slice: scan the whole library or one source, show each group with thumbnails and the comparison details the desktop shows (file name, plays, tags, favorite, blacklisted), choose Keep All or a file to keep per group, default to Keep All or Select Best from a per-device preference, and confirm counts before deleting. It uses the panel layout.
+  - Add a Release Specific checklist item: "From the admin section, start a refresh, change refresh and backup settings, and scan and apply duplicates with Keep All and with a chosen file, and the library updates."
+- **Acceptance criteria**:
+  - Refresh Now starts a refresh, and the status line shows its progress and result.
+  - Refresh and backup settings load and save, and saving one field leaves the others as they were on the server.
+  - With daily retention set to a number of days, rotation keeps the count limit's newest current-version backups plus the newest backup of each date in that window, current-version or older-version, and deletes older-version backups whose dates fall outside it.
+  - Newer-version backups and unrecognized files in `backups/` are byte-identical after rotation, with daily retention on or off.
+  - Duplicate apply deletes only the files not kept, after confirming counts, and Keep All deletes nothing in that group.
+  - The duplicate default is a per-device preference.
+- **Verification evidence**:
+  - Completion evidence must include admin section UI tests for each slice, `npm run verify`, and one quick spot check of a refresh and a duplicate scan.
+
+### M12h - WebUI Stats Panel
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI shows library and playback statistics and details of the current file, as the desktop stats panel does.
+- **Scope**:
+  - Ships in v0.15.0, after the admin refresh, backup, and duplicate review milestone. Depends on: WebUI Responsive Layout and Panels.
+  - Measured again at promotion: the WebUI never calls `GET /api/library/stats`, and its now-playing line shows only the file name and duration.
+  - Library stats: total videos, photos, and media, favorites, blacklisted, total plays, unique media played, never played, videos with and without audio, and baseline loudness.
+  - Current file: file name and full path, plays, last played (the time before this play, or Never), favorite, blacklisted, duration, has audio, loudness, adjustment, peak, and tags.
+  - Refresh after events and actions is coalesced as the desktop does it: a short wait gathers a burst, one request is in flight at a time, and requests during it get one more.
+  - No contract change. Inferred from code at promotion: loudness and peak already come with each list and single-item read as `integratedLoudness` and `peakDb`, but the OpenAPI item schema does not name them (it allows extra properties), so they are untyped in the generated WebUI types.
+  - Not included: playback history charts, which is Playback History and Analytics.
+- **Acceptance criteria**:
+  - The library stats match the library stats response.
+  - The current file section updates on play, favorite, blacklist, tag, and playback events.
+  - A burst of events causes one stats request, plus at most one more for events during it.
+- **Verification evidence**:
+  - Completion evidence must include component tests for both sections, coalescing tests, `npm run verify`, and one quick spot check.
+
+### M12i - WebUI Keyboard Shortcuts and Player Controls
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI has the desktop's keyboard shortcuts wherever a browser allows them, plus volume and seek-step controls.
+- **Scope**:
+  - Ships in v0.15.0, after the WebUI stats panel milestone. Depends on: WebUI Responsive Layout and Panels, and WebUI Settings Panel.
+  - Measured again at promotion: the WebUI handles only Escape, which closes overlays, and Enter or Space on a focused library tile. It has a mute button and no volume control. The desktop binds K play or pause, J and L seek, Left and Right previous and next, R random, F favorite, B blacklist, A autoplay, M mute, comma and period volume, T tags, P player view, S settings, O import folder, Q quit, F11 fullscreen, and 1 to 5 to show or hide parts of the window; it also swallows 6 to 8 and Space, which do nothing.
+  - Use the desktop keys. Keys the browser keeps (Ctrl+Q, Ctrl+O, and F11 for the browser's own fullscreen; inferred) are not bound, and Q quit and O import folder have no WebUI equivalent. Number keys toggle panels; which panel each opens, and which key enters fullscreen, are decided here.
+  - Shortcuts do nothing while focus is in a text field.
+  - A shortcut reference in the settings panel.
+  - A volume control where the browser lets a page set volume (not on iOS, where it is read-only; inferred), with comma and period stepping by a volume step preference.
+  - J and L seek by a seek step preference in seconds. Frame stepping, which the desktop offers through LibVLC, is only approximate in a browser (inferred); build or decline it here.
+  - Changes to user-facing UX need approval.
+  - Add a Release Specific checklist item: "In Chrome, Firefox, and Safari on a desktop, every listed shortcut works in normal view, with a panel open, and in fullscreen, and does nothing while typing in a text field."
+  - Not included: rebinding, which is Customizable Keyboard Shortcuts.
+- **Acceptance criteria**:
+  - Each bound shortcut does what the desktop's does.
+  - Shortcuts are ignored while a text field has focus.
+  - The volume control and seek step work and are saved per device.
+  - The shortcut reference matches the bindings.
+- **Verification evidence**:
+  - Completion evidence must include keyboard tests per binding under `happy-dom`, `npm run verify`, and one quick spot check.
+
+### M12j - Show in File Manager from the WebUI
+
+- **Status**: ⏳ Planned
+- **Goal**: A WebUI on the server machine opens the system file manager at the playing file, and elsewhere copies its path.
+- **Scope**:
+  - Ships in v0.15.0, after the WebUI keyboard shortcuts and player controls milestone. Depends on: Reverse Proxy and HTTPS Access, and WebUI Preact Migration.
+  - It uses the single localhost check that Reverse Proxy and HTTPS Access adds.
+  - The desktop's `OpenFileLocation` opens Explorer with the file selected on Windows and opens the folder with `xdg-open` on Linux. A browser cannot do this itself; the server can when the browser runs on the server machine, and the tray already launches programs (`AvaloniaTrayHostUi.cs`). Both checked against the code at promotion.
+  - Contract slice: a route that takes an item id, never a path, accepted only from the server machine, meaning a direct connection from loopback or from the server's own address as the merged localhost helper decides, and a capability the WebUI reads to decide whether to offer the action. A request through a reverse proxy is not localhost, so the action is not offered there, even on the server machine.
+  - Server slice: on Windows `explorer.exe /select,<path>`; on Linux the `org.freedesktop.FileManager1` `ShowItems` D-Bus call, which selects the file, falling back to `xdg-open` on its folder. Start processes with `ProcessStartInfo.ArgumentList` and no shell. A headless server with no desktop session reports the action as unavailable.
+  - WebUI slice: a Show in File Manager action for the current file where the server offers it, and Copy Path everywhere else.
+  - Add a Release Specific checklist item: "On the server machine at `http://localhost`, Show in File Manager opens the file manager at the playing file on Linux and Windows; from another device, Copy Path copies it."
+- **Acceptance criteria**:
+  - A direct request from loopback or from the server's own address opens the file manager with the file selected, or its folder where selection is not available.
+  - Requests from other addresses, proxied requests, and unknown ids are refused, and a headless server reports the action as unavailable.
+  - The WebUI shows the action only when the server offers it, and Copy Path otherwise.
+  - No process is started through a shell.
+- **Verification evidence**:
+  - Completion evidence must include server tests for loopback, the server's own address, another LAN address, proxied, unknown-id, and headless requests with the launcher faked, contract tests, `npm run verify`, and one quick Linux spot check.
+
+### M12k - WebUI Status Line Overhaul
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI status line shows one stable message per situation.
+- **Scope**:
+  - Ships in v0.15.0, after the Show in File Manager from the WebUI milestone. Depends on: WebUI Responsive Layout and Panels, and Catalog Open and Backup Safety, whose 503 message the status line shows.
+  - Moved here from v0.14.0 when the desktop was frozen. The desktop half and the shared fixture are dropped, and the status line moves with the panel layout.
+  - Observed in the v0.13.0 manual regression pass: with the server stopped, the WebUI shows "library load failed: HTTP 503" only briefly before "SSE reconnecting...". The desktop alternates between "core runtime unavailable" and "core runtime is required to browse the library", and stays as it is. Not re-run at promotion, since it needs a running server; the v0.14.1 release notes still list the WebUI status line flipping between messages as a known issue.
+  - Read from code at promotion: the WebUI's `fetchJson` throws `HTTP {status}` and drops the response body, so the server's library message in a 503 never reaches the status line.
+  - Define one precedence rule for which message wins when several apply, so the status line never alternates.
+  - Define the message for each event once: server stopped, API unavailable, the server running without a library (showing the server's message for each library state: newer, damaged, missing, or unreadable), version or capability mismatch, and refresh progress and results.
+  - Add a Release Specific checklist item: "With the server stopped, unavailable, or mismatched, and during a refresh, the WebUI settles on one status message."
+- **Acceptance criteria**:
+  - With the server stopped, unavailable, or mismatched, the status line settles on one message and does not alternate.
+  - With the server running without a library, the status line shows the server's message.
+  - Refresh status reads the same during and after each refresh.
+  - The precedence rule and the per-event messages are documented.
+- **Verification evidence**:
+  - Completion evidence must include WebUI tests of the precedence rule and the per-event messages, covering the server stopped, the API unavailable, a version or capability mismatch, and refresh progress and results, plus one quick spot check with the server stopped.
+
+### M12l - Testing Suite Overhaul
+
+- **Status**: ⏳ Planned
+- **Goal**: The testing suite produces clear results that match the WebUI's connection and status handling.
+- **Scope**:
+  - Ships in v0.15.0, after the WebUI status line overhaul milestone. Depends on: WebUI Status Line Overhaul, Server Shutdown Fixes, and Admin Section in WebUI Settings.
+  - The status line overhaul defines the messages these scenarios check, the shutdown fixes change how event streams close, and the suite runs from the admin section.
+  - Moved here from v0.14.0 when the desktop was frozen; the desktop's expected messages are dropped.
+  - The suite predates the current client connection and status handling and no longer produces clear results. Observed in the v0.13.0 manual regression pass: with the API unavailable, the WebUI shows "library load failed: HTTP 503" only briefly before settling on "SSE reconnecting...", and SSE disconnect behaves inconsistently and may need redesigning. Not re-run at promotion, since it needs a running server. The Operator testing suite still has five scenario flags: API version mismatch, capability mismatch, API unavailable, missing media, and SSE disconnect.
+  - Redesign the scenarios against current WebUI behavior, define the expected WebUI message for each, and verify the WebUI's behavior as part of the suite.
+  - Add a Release Specific checklist item: "Every testing suite scenario shows its expected WebUI message, and resetting it leaves the WebUI connected."
+- **Acceptance criteria**:
+  - Each scenario lists the expected WebUI message, and the WebUI shows it while the scenario is active.
+  - SSE disconnect behaves the same way on every run.
+  - Running and resetting each scenario leaves the WebUI connected and working.
+- **Verification evidence**:
+  - Completion evidence must include automated tests that each scenario sets and resets the server state it describes, and that SSE disconnect closes and reconnects the same way on repeated runs, plus one quick spot check of one scenario.
+
+### M12m - WebUI Grid Rendering
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI library grid updates only the rows and tiles that change, and dragging the scrollbar reaches any part of the results without loading every page before it.
+- **Scope**:
+  - Ships in v0.15.0, last in the series. Depends on: WebUI Responsive Layout and Panels, so it is built in the Preact library panel, which the side panel layout resizes often.
+  - Found by the efficiency and divergence report from code reading, and confirmed in the code at promotion: each change of visible rows replaces the rows' HTML through `innerHTML`, which recreates every tile image. Each patch and each appended page rebuilds the layout and virtualizer for every loaded item, so loading a window page by page costs time that grows with the square of its size.
+  - Measured at promotion, in Node 24 on the development machine with the layout and virtualizer modules alone (no DOM): one full rebuild takes 0.5 ms for 10,000 items at 1,400 px wide and 1.2 ms at 390 px, and 2.7 to 7.8 ms for 49,000. Loading 10,000 items in 200-item pages spends 13 to 32 ms in total on rebuilds, and 49,000 spends 355 to 953 ms over 245 pages, about 1.5 to 4 ms per page. The growth is real but small. Replacing the rows' HTML, the likely cause of the iPad flicker below, was not measured.
+  - Seen on an iPad with the WebUI installed as an app: the grid flickers dark each time it re-renders its visible rows while scrolling, about seven times for a screen-height drag in landscape with three to four rows on screen. Desktop browsers and Firefox on Android are fine. Each re-render rebuilds every visible row's HTML, including images that were already showing. Not re-measured at promotion, since it needs the device.
+  - Keep row elements that stay visible, add and remove only the rows that enter or leave, and update a patched tile in place. Grid rows stop going through `innerHTML`; the Preact migration's library overlay keeps the grid controller's row HTML until this milestone.
+  - Size the grid to the full result count with placeholder tiles, and load the page at the scroll position, so dragging the scrollbar far down works without scrolling through every page.
+  - Trap, inferred from code: the row layout depends on each item's thumbnail aspect ratio, so placeholder tiles for items not loaded yet use fallback ratios, and rows can change when their page arrives and shift what is on screen.
+  - Apart from placeholder tiles and loading the page at the scroll position, grid layout, scrolling, focus, and tile behavior stay as they are.
+  - Not included: extending the layout for appended pages instead of rebuilding it, dropped at promotion because a rebuild measured a few milliseconds per page.
+  - Add a Release Specific checklist item: "On an iPad with the WebUI installed as an app, scrolling the library grid a screen height in landscape shows no flicker."
+- **Acceptance criteria**:
+  - Scrolling keeps the image elements of rows that stay visible.
+  - A favorite, blacklist, playback, or tag patch updates only the affected tile.
+  - No grid row is rendered through `innerHTML`.
+  - Layout results match the current layout for the same items and width.
+  - Dragging the scrollbar far down loads the page at that position without loading the pages before it.
+  - Scrolling the grid on an iPad with the WebUI installed as an app shows no flicker.
+- **Verification evidence**:
+  - Completion evidence must include WebUI tests for row reuse, tile patching, and loading the page at a scrollbar position, before-and-after timings for rendering a large window in a browser, and `npm run verify`.
 
 ## Planned Milestones
 
@@ -390,24 +682,6 @@ Last milestone completed: M11f
   - Measured on Linux before this backlog item, for both v0.12.0 import and the current import: after `Clip.mp4` is renamed to `clip.mp4`, the stored full path stays `Clip.mp4` while the relative path and file name become `clip.mp4`. Refresh then reports 0 added, 0 removed, 0 renamed, and 0 moved. The thumbnail stage reports 1 missing source. An ignore-case set of a folder that contains both `clip.mp4` and `Clip.mp4` keeps one path; an ordinal set keeps both.
   - Completion evidence must include those Linux cases after the fix, schema migration tests, plus a Windows VM pass for the ignore-case compare.
 
-### P20 - WebUI Settings Panel
-
-- **Status**: ⏳ Planned
-- **Goal**: The WebUI has a settings panel for per-device preferences and diagnostics.
-- **Scope**:
-  - Planned for v0.15.0. Depends on: WebUI Responsive Layout and Panels.
-  - A settings panel in the panel layout. The admin section joins it in Admin Section in WebUI Settings.
-  - Move the diagnostics information to the settings panel and remove the diagnostics panel from below the main page's status line. That panel is currently shown only on mobile browsers by design; in the v0.13.0 manual regression pass it appeared only on the phone in Firefox.
-  - Per-device preferences: photo duration and randomization mode (in the top bar today), autoplay and loop defaults, and an option to remember filter settings across sessions. The option is off by default, so the WebUI keeps opening with default filters unless the user turns it on.
-  - Changes to user-facing UX need explicit approval.
-- **Acceptance criteria**:
-  - The settings panel shows the diagnostics information on desktop and mobile browsers, and the main page no longer shows the diagnostics panel.
-  - With the remember option on, filter settings survive closing and reopening the WebUI on that device. With it off, the WebUI opens with default filter settings.
-  - Preferences are stored per device and do not change other devices.
-- **Verification evidence**:
-  - Completion evidence must include WebUI tests for preference storage and the remember option, `npm run verify`, and one quick spot check on a phone.
-  - A desktop browser and phone pass, with the remember option checked across a browser restart, is a Release Specific checklist item.
-
 ### P25 - Per-Preset Preset Writes
 
 - **Status**: ⏳ Planned
@@ -425,33 +699,6 @@ Last milestone completed: M11f
   - The WebUI never posts the whole preset list, and the whole-list replace route is gone.
 - **Verification evidence**:
   - Completion evidence must include server tests for each write, a two-session test of concurrent saves, and `npm run verify`.
-
-### P26a - Admin Section in WebUI Settings
-
-- **Status**: ⏳ Planned
-- **Goal**: Everything the Operator page does moves into an admin section of the WebUI settings panel, and the server keeps a minimal recovery page for when the WebUI's files are broken.
-- **Scope**:
-  - Planned for v0.15.0. Depends on: WebUI Settings Panel, and Catalog Open and Backup Safety, whose library state and message the admin section shows.
-  - The Operator page is about 780 lines of HTML, CSS, and JavaScript inside a raw string in `src/core/ReelRoulette.ServerApp/Program.cs`, and no test covers `/operator`.
-  - Admin section slice:
-    - Move every Operator section into the admin section as Preact screens: server updates, runtime status with restart and stop (including the message when the server runs without a library), web runtime settings, control settings (control token, dev channel, Launch Server on Startup), the testing suite, connected clients, server logs, and incoming and outgoing API events. They call the same control routes, so there is no contract change.
-    - The Operator's update download needs two attempts every time: click Download and confirm, and nothing happens; click Download and confirm again, and it downloads. Find the cause before building the admin section's update controls, so they don't inherit it.
-    - Gating: localhost is trusted. From another machine, the admin section shows nothing until the control token is entered through `POST /control/pair`. The accounts release replaces the token with admin accounts.
-    - Later admin work lands here: refresh, backup, and duplicate review, source and item management, catalog transfer, the Log Viewer, and account administration.
-  - Recovery page slice:
-    - The server keeps a minimal built-in page with restart, stop, a log tail, and updates, at a fixed path such as `/recovery` (decided here). It does not load the WebUI's files, so it works when they are missing or broken, and it has the same control-token gating.
-    - It renders settings and status text without `innerHTML` interpolation (found by the repository audit: Operator HTML page interpolates user input via `innerHTML`).
-    - Retire the Operator page: `/operator` redirects to the admin section, the tray's Operator shortcut opens the admin section, `verify-linux-packaged-server-smoke.sh` checks the recovery page and the admin section entry instead of `/operator`, and the testing checklist's Smoke item checks the admin section instead of the Operator page.
-- **Acceptance criteria**:
-  - The admin section offers every action and setting the Operator page offers today and calls the same routes.
-  - In the admin section, one Download click and one confirmation start the update download.
-  - From another machine, nothing in the admin section is shown until a valid control token is entered; on localhost it opens without one.
-  - With the WebUI's files removed, the recovery page restarts, stops, shows logs, and checks, downloads, and applies updates.
-  - The recovery page renders settings, status, and log text without `innerHTML` interpolation.
-  - `/operator` reaches the admin section, and the packaged Linux server smoke passes against the recovery page.
-- **Verification evidence**:
-  - Completion evidence must include admin section UI tests for loading status and settings, saving settings, the testing panel, and control-token gating in `npm run verify`, server tests that the recovery page is served without WebUI assets and keeps control-token gating, `dotnet test ReelRoulette.sln`, and `./tools/scripts/verify-linux-packaged-server-smoke.sh`.
-  - Add a Release Specific checklist item: "From another machine, the admin section asks for the control token and works after it is entered; with the WebUI files removed, the recovery page restarts, stops, shows logs, and applies an update, on Linux and Windows."
 
 ### P26b - WebUI Source State Sync
 
@@ -676,33 +923,6 @@ Last milestone completed: M11f
 - **Verification evidence**:
   - Completion evidence must include relay tests with a failing and a slow endpoint in the WebUI, `dotnet test ReelRoulette.sln`, and `npm run verify`. The end-to-end trace and failure simulation are the Release Specific checklist items above.
 
-### P28a - Reverse Proxy and HTTPS Access
-
-- **Status**: ⏳ Planned
-- **Goal**: The server works correctly behind an HTTPS reverse proxy, and the docs show how to set one up, including `tailscale serve`.
-- **Scope**:
-  - First milestone of the WebUI overhaul release, planned for v0.15.0, moved there from the accounts release: with the WebUI as the only client on phones, installing it as an app needs HTTPS, and the overhaul is designed and tested as an installed app. It still lands before PIN login, so LAN and remote logins do not send PINs in clear text, and behind a proxy today's pairing token stops crossing the LAN in clear text. The server does not serve HTTPS itself.
-  - Document reverse proxy setup in `README.md` and `docs/dev-setup.md`: a general proxy example and `tailscale serve`, with the headers the server needs.
-  - Server fixes so it behaves correctly behind a proxy:
-    - Honor forwarded headers only from configured proxies. A request that came through a proxy is not a localhost request, even when the proxy runs on the server machine, so localhost trust applies only to direct loopback connections. Check during this milestone which forwarding headers `tailscale serve` sends; if a proxy sends none, document that it must, or how the server is told the proxy address.
-    - Treat a missing remote address as not local (found by the repository audit: `RemoteIpAddress == null` treated as local).
-    - Merge the two identical localhost checks into one helper that every localhost decision uses: `IsLocalRequest` in `src/core/ReelRoulette.Server/Auth/ServerPairingAuthMiddleware.cs` and in `src/core/ReelRoulette.Server/Hosting/ServerHostComposition.cs`. Both treat a missing remote address as local, and a request to the server's own LAN address as local. Treating a request to the server's own address as local is intended: it comes from the server machine. Show in File Manager from the WebUI uses the same helper.
-    - Mark cookies `Secure` when the original request was HTTPS, and never send `SameSite=None` without `Secure` (found by the repository audit: `SameSite=None` allowed without `Secure`).
-    - Accept `https` origins for CORS and build LAN origins with the scheme clients actually use (found by the repository audit: CORS hard-coded to HTTP only).
-    - Links the server builds (admin links, runtime config) use the proxied scheme and host.
-  - Android PWA install, folded in from the backlog: found in the v0.12.0 manual regression pass on a Google Pixel 8 Pro, Add to Home Screen only creates a shortcut that opens in Chrome. Likely cause, not confirmed on a device: the WebUI registers its service worker only in a secure context, and a plain-HTTP LAN address is not one, so Chrome has no service worker and does not offer Install app. iOS installs from its home-screen meta tags without one. Over HTTPS through a proxy, Install app should open the WebUI standalone; check the manifest fields Chrome requires if it does not.
-  - Add Release Specific checklist items: "Behind `tailscale serve` and one other HTTPS proxy, the WebUI and its admin pages connect, pair, browse, and play, and the server treats them as remote," and "On Android Chrome over HTTPS, Install app opens the WebUI standalone with its icon; iOS Add to Home Screen and desktop browser install still open standalone."
-- **Acceptance criteria**:
-  - Behind an HTTPS reverse proxy, the WebUI, its admin pages, the event stream, and media range requests work.
-  - A request through a proxy on the server machine is not treated as localhost.
-  - Cookies are `Secure` for HTTPS clients, and CORS accepts the HTTPS origin.
-  - A request with no remote address is not treated as local.
-  - Every localhost decision goes through one helper.
-  - On Android Chrome over HTTPS, Install app opens the WebUI as a standalone app, and iOS and desktop browser installs still do.
-  - The docs give working `tailscale serve` and general proxy setups.
-- **Verification evidence**:
-  - Completion evidence must include server tests for forwarded-header trust, proxied-localhost handling, missing remote address, the merged localhost helper, cookie flags, and HTTPS CORS origins, plus one quick spot check through `tailscale serve`. The proxy matrix and the Android and iOS install pass are the Release Specific checklist items above.
-
 ### P28b - Source Access Policy
 
 - **Status**: ⏳ Planned
@@ -924,28 +1144,6 @@ Last milestone completed: M11f
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for hidden sources, inaccessible items, and the admin section's visibility.
 
-### P31 - WebUI Grid Rendering
-
-- **Status**: ⏳ Planned
-- **Goal**: The WebUI library grid updates only the rows and tiles that change, and dragging the scrollbar reaches any part of the results without loading every page before it.
-- **Scope**:
-  - Planned for v0.15.0, last in the release. Depends on: WebUI Responsive Layout and Panels, so it is built in the Preact library panel, which the side panel layout resizes often.
-  - Found by the efficiency and divergence report from code reading, not measured: each change of visible rows replaces the rows' HTML, which recreates every tile image. Each patch and each appended page rebuilds the layout and virtualizer for every loaded item, so loading a window page by page costs time that grows with the square of its size.
-  - Seen on an iPad with the WebUI installed as an app: the grid flickers dark each time it re-renders its visible rows while scrolling, about seven times for a screen-height drag in landscape with three to four rows on screen. Desktop browsers and Firefox on Android are fine. Each re-render rebuilds every visible row's HTML, including images that were already showing.
-  - Keep row elements that stay visible, add and remove only the rows that enter or leave, update a patched tile in place, and extend the layout for appended items instead of rebuilding it.
-  - Size the grid to the full result count with placeholder tiles, and load the page at the scroll position, so dragging the scrollbar far down works without scrolling through every page.
-  - Apart from placeholder tiles and loading the page at the scroll position, grid layout, scrolling, focus, and tile behavior stay as they are.
-  - Add a Release Specific checklist item: "On an iPad with the WebUI installed as an app, scrolling the library grid a screen height in landscape shows no flicker."
-- **Acceptance criteria**:
-  - Scrolling keeps the image elements of rows that stay visible.
-  - A favorite, blacklist, playback, or tag patch updates only the affected tile.
-  - Appending a page does not lay out the already-loaded items again.
-  - Layout results match the current layout for the same items and width.
-  - Dragging the scrollbar far down loads the page at that position without loading the pages before it.
-  - Scrolling the grid on an iPad with the WebUI installed as an app shows no flicker.
-- **Verification evidence**:
-  - Completion evidence must include WebUI tests for row reuse, tile patching, append layout, and loading the page at a scrollbar position, before-and-after timings for rendering a large window in a browser, and `npm run verify`.
-
 ---
 
 ### P33 - Catalog Corruption Detection Off the Startup Path
@@ -963,25 +1161,6 @@ Last milestone completed: M11f
   - A corrupt catalog is not written over the last good backup.
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include a corrupt-item-page test and a startup timing comparison on a large catalog.
-
----
-
-### P34 - WebUI In-App Dialogs
-
-- **Status**: ⏳ Planned
-- **Goal**: The WebUI asks for names and confirmations in its own dialogs, styled like the rest of the WebUI, instead of the browser's `prompt`, `confirm`, and `alert`.
-- **Scope**:
-  - Planned for v0.15.0. Depends on: WebUI Preact Migration, so the dialog is a Preact component the migrated screens use.
-  - Found during the post-migration fixes desktop spot checks: preset rename in the WebUI opens the browser's native prompt, which does not match the WebUI's styling and does not suit the WebUI when it runs as an installed web app.
-  - `app.js` uses native dialogs in nine places today: preset delete and rename; tag editor category rename, duplicate-name alert, and category delete; tag delete; two **Discard changes?** confirmations; and new category name.
-  - One reusable in-app dialog for text input, confirmation, and notice, with keyboard support (Enter confirms, Escape cancels) and focus returning to where it was.
-  - Keep each dialog's wording and outcome as it is today; only how it is shown changes. Changes to user-facing UX need explicit approval.
-- **Acceptance criteria**:
-  - The WebUI calls no `prompt`, `confirm`, or `alert`.
-  - Each replaced dialog keeps its wording, and confirming or canceling does what it does today.
-  - The dialogs match the WebUI's theme and work in an installed web app on desktop and mobile.
-- **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for confirm and cancel on the shared dialog, a check that no native dialog calls remain, `npm run verify`, and a spot check in an installed web app.
 
 ---
 
@@ -1075,179 +1254,6 @@ Last milestone completed: M11f
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for selection and each bulk action, and `npm run verify`.
   - Add a Release Specific checklist item: "In the WebUI on a desktop browser and a phone, select several items, apply each bulk action, and the tiles update."
-
-### P38 - WebUI Preact Migration
-
-- **Status**: ⏳ Planned
-- **Goal**: The WebUI's screens are Preact components with tests, built on the existing typed modules, with no visible change.
-- **Scope**:
-  - Planned for v0.15.0.
-  - Measured: `src/app.js` is 3,619 lines. `startApp` runs from line 180 to the end as one untyped function with 139 nested functions, and no test imports it. It has 16 `innerHTML` assignments and 9 native dialog calls. The 143 WebUI tests cover only the typed modules, and they run with `environment: "node"`, so there is no DOM to test screens against.
-  - Add Preact and `happy-dom` for component tests; installing the packages needs approval when this milestone starts. Model tests keep running as they do.
-  - Keep the typed modules (library query session, grid layout and virtualizer, tag save, filter state model, events, API) and call them from the components rather than rewriting them.
-  - Migrate screen by screen. Each slice ships with no visible change and removes its code from `app.js`:
-    - Foundation: the Preact root, one shared state store, connection, pairing, event stream, status line, and startup error. `renderStartupError` in `src/shell.ts` interpolates the error message into `innerHTML` (found by the repository audit, moved here from Client Robustness Findings); render it as text.
-    - Player and overlay controls.
-    - Library overlay.
-    - Filter dialog.
-    - Tag editor and Auto Tag.
-  - Delete `app.js` after the last slice, along with its undeclared-name check (`verify:app-js-names`) in `npm run verify`.
-  - Trap, inferred, not measured: moving a `<video>` element to another place in the page can interrupt or reload playback. The player component owns one video element that is never moved.
-  - Add a Release Specific checklist item: "After the Preact migration, the player, library overlay, filter dialog, presets, tag editor, and Auto Tag look and work as in the previous release, on a desktop browser and a phone."
-- **Acceptance criteria**:
-  - After each slice, the migrated screen looks and behaves as before, and the testing checklist's Smoke checks still pass.
-  - Component tests for each migrated screen run in `npm run verify` under `happy-dom`.
-  - `src/app.js` no longer exists.
-  - No screen renders server or config text through `innerHTML`.
-  - Playback continues uninterrupted while overlays open and close.
-- **Verification evidence**:
-  - Completion evidence must include component tests per slice, `npm run verify`, and one quick spot check per slice on a desktop browser and a phone.
-
-### P39 - WebUI Responsive Layout and Panels
-
-- **Status**: ⏳ Planned
-- **Goal**: The WebUI layout adapts to the viewport: side panels on tablets and desktops keep the player playing in view while tagging, browsing, or viewing stats, and phones use overlays.
-- **Scope**:
-  - Planned for v0.15.0. Depends on: WebUI Preact Migration.
-  - This changes user-facing UX: mockups for phone, tablet, and desktop widths are approved before code.
-  - Measured today: the tag editor, filter, and library overlays are each `position: fixed; inset: 0` with `z-index: 1000`, so they cover the player while it keeps playing underneath. The stylesheet has two `@media (max-width: 600px)` rules, and mobile browsers are detected by user agent (`isMobileBrowser` in `app.js`).
-  - A panel host: the player region plus a resizable side panel at tablet and desktop widths, and full-screen overlays at phone widths. Breakpoints use viewport width and pointer type, not the user agent.
-  - The library, filter, and tag editor become panels. Later panels (settings, stats, admin, duplicate review) use the same host.
-  - The top-bar controls (preset, randomization mode, photo duration) move into panels or the settings panel.
-  - Panels stay inside the fullscreen stage, so they work in fullscreen as the overlays do today, including iOS pseudo-fullscreen.
-  - Phone layouts work in an installed app (standalone display, safe-area insets).
-  - Add a Release Specific checklist item: "On a phone, a tablet, and a desktop browser, and as an installed app on Android and iOS, panels open beside the player or as overlays by width, and playback keeps going while each is open."
-- **Acceptance criteria**:
-  - At tablet and desktop widths, the library, filter, and tag editor open beside the player, and the video stays visible and playing.
-  - At phone widths, they open as full-screen overlays, and closing one returns to the player without interrupting playback.
-  - Resizing the window across a breakpoint moves an open panel between side panel and overlay without losing its state.
-  - Panels work in fullscreen.
-  - The layout does not depend on the user agent.
-- **Verification evidence**:
-  - Completion evidence must include component tests for panel host breakpoints and panel state, `npm run verify`, and one quick spot check on a phone and a desktop browser.
-
-### P40 - Admin Refresh, Backup, and Duplicate Review
-
-- **Status**: ⏳ Planned
-- **Goal**: The admin section starts a refresh, edits refresh and backup settings, and reviews and applies duplicates, so none of these needs the desktop.
-- **Scope**:
-  - Planned for v0.15.0. Depends on: Admin Section in WebUI Settings.
-  - Measured: only the desktop calls `POST /api/refresh/start`, `/api/refresh/settings`, `/api/backup/settings`, `/api/duplicates/scan`, and `/api/duplicates/apply`. The routes exist, so this needs no contract change. The tray can also start a refresh.
-  - Gated like the rest of the admin section.
-  - Refresh slice: Refresh Now with the refresh status, and the refresh settings the desktop Settings dialog shows: auto-refresh and its interval, forced loudness and duration rescans on the next refresh, and fingerprint scan parallelism.
-  - Backup slice: server backups on or off, the time between backups, the number kept, and the days of daily backups kept.
-  - Daily retention, in the backup slice: on top of the existing count limit, catalog backup rotation keeps one backup per date for a number of days set in the server's backup settings. It applies to current- and older-version backups alike, so older-version backups, which rotation keeps and does not count today, age out with their dates. Newer-version backups and files rotation does not recognize are never touched. The days setting adds a field to the backup settings, a contract change that only adds.
-  - Trap: the refresh and backup settings routes assign every field from the posted snapshot, so a partial post writes defaults (Server Robustness Findings). Until that is fixed, the admin section posts the full settings it read.
-  - Duplicate review slice: scan the whole library or one source, show each group with thumbnails and the comparison details the desktop shows (file name, plays, tags, favorite, blacklisted), choose Keep All or a file to keep per group, default to Keep All or Select Best from a per-device preference, and confirm counts before deleting. It uses the panel layout.
-  - Add a Release Specific checklist item: "From the admin section, start a refresh, change refresh and backup settings, and scan and apply duplicates with Keep All and with a chosen file, and the library updates."
-- **Acceptance criteria**:
-  - Refresh Now starts a refresh, and the status line shows its progress and result.
-  - Refresh and backup settings load and save, and saving one field leaves the others as they were on the server.
-  - With daily retention set to a number of days, rotation keeps the count limit's newest current-version backups plus the newest backup of each date in that window, current-version or older-version, and deletes older-version backups whose dates fall outside it.
-  - Newer-version backups and unrecognized files in `backups/` are byte-identical after rotation, with daily retention on or off.
-  - Duplicate apply deletes only the files not kept, after confirming counts, and Keep All deletes nothing in that group.
-  - The duplicate default is a per-device preference.
-- **Verification evidence**:
-  - Completion evidence must include admin section UI tests for each slice, `npm run verify`, and one quick spot check of a refresh and a duplicate scan.
-
-### P41 - WebUI Stats Panel
-
-- **Status**: ⏳ Planned
-- **Goal**: The WebUI shows library and playback statistics and details of the current file, as the desktop stats panel does.
-- **Scope**:
-  - Planned for v0.15.0. Depends on: WebUI Responsive Layout and Panels.
-  - Measured: the WebUI never calls `GET /api/library/stats`, and its now-playing line shows only the file name and duration.
-  - Library stats: total videos, photos, and media, favorites, blacklisted, total plays, unique media played, never played, videos with and without audio, and baseline loudness.
-  - Current file: file name and full path, plays, last played (the time before this play, or Never), favorite, blacklisted, duration, has audio, loudness, adjustment, peak, and tags.
-  - Refresh after events and actions is coalesced as the desktop does it: a short wait gathers a burst, one request is in flight at a time, and requests during it get one more.
-  - No contract change.
-  - Not included: playback history charts, which is Playback History and Analytics.
-- **Acceptance criteria**:
-  - The library stats match the library stats response.
-  - The current file section updates on play, favorite, blacklist, tag, and playback events.
-  - A burst of events causes one stats request, plus at most one more for events during it.
-- **Verification evidence**:
-  - Completion evidence must include component tests for both sections, coalescing tests, `npm run verify`, and one quick spot check.
-
-### P42 - WebUI Keyboard Shortcuts and Player Controls
-
-- **Status**: ⏳ Planned
-- **Goal**: The WebUI has the desktop's keyboard shortcuts wherever a browser allows them, plus volume and seek-step controls.
-- **Scope**:
-  - Planned for v0.15.0. Depends on: WebUI Responsive Layout and Panels, and WebUI Settings Panel.
-  - Measured: the WebUI handles only Escape, which closes overlays, and Enter or Space on a focused library tile. The desktop binds K play or pause, J and L seek, Left and Right previous and next, R random, F favorite, B blacklist, A autoplay, M mute, comma and period volume, T tags, P player view, S settings, O import folder, Q quit, F11 fullscreen, and 1 to 5 to show or hide parts of the window.
-  - Use the desktop keys. Keys the browser keeps (Ctrl+Q, Ctrl+O, and F11 for the browser's own fullscreen; inferred) are not bound, and Q quit and O import folder have no WebUI equivalent. Number keys toggle panels; which panel each opens, and which key enters fullscreen, are decided here.
-  - Shortcuts do nothing while focus is in a text field.
-  - A shortcut reference in the settings panel.
-  - A volume control where the browser lets a page set volume (not on iOS, where it is read-only; inferred), with comma and period stepping by a volume step preference.
-  - J and L seek by a seek step preference in seconds. Frame stepping, which the desktop offers through LibVLC, is only approximate in a browser (inferred); build or decline it here.
-  - Changes to user-facing UX need approval.
-  - Add a Release Specific checklist item: "In Chrome, Firefox, and Safari on a desktop, every listed shortcut works in normal view, with a panel open, and in fullscreen, and does nothing while typing in a text field."
-  - Not included: rebinding, which is Customizable Keyboard Shortcuts.
-- **Acceptance criteria**:
-  - Each bound shortcut does what the desktop's does.
-  - Shortcuts are ignored while a text field has focus.
-  - The volume control and seek step work and are saved per device.
-  - The shortcut reference matches the bindings.
-- **Verification evidence**:
-  - Completion evidence must include keyboard tests per binding under `happy-dom`, `npm run verify`, and one quick spot check.
-
-### P43 - Show in File Manager from the WebUI
-
-- **Status**: ⏳ Planned
-- **Goal**: A WebUI on the server machine opens the system file manager at the playing file, and elsewhere copies its path.
-- **Scope**:
-  - Planned for v0.15.0. Depends on: Reverse Proxy and HTTPS Access, and WebUI Preact Migration.
-  - It uses the single localhost check that Reverse Proxy and HTTPS Access adds.
-  - The desktop's `OpenFileLocation` opens Explorer with the file selected on Windows and opens the folder with `xdg-open` on Linux. A browser cannot do this itself; the server can when the browser runs on the server machine, and the tray already launches programs (`AvaloniaTrayHostUi.cs`).
-  - Contract slice: a route that takes an item id, never a path, accepted only from the server machine, meaning a direct connection from loopback or from the server's own address as the merged localhost helper decides, and a capability the WebUI reads to decide whether to offer the action. A request through a reverse proxy is not localhost, so the action is not offered there, even on the server machine.
-  - Server slice: on Windows `explorer.exe /select,<path>`; on Linux the `org.freedesktop.FileManager1` `ShowItems` D-Bus call, which selects the file, falling back to `xdg-open` on its folder. Start processes with `ProcessStartInfo.ArgumentList` and no shell. A headless server with no desktop session reports the action as unavailable.
-  - WebUI slice: a Show in File Manager action for the current file where the server offers it, and Copy Path everywhere else.
-  - Add a Release Specific checklist item: "On the server machine at `http://localhost`, Show in File Manager opens the file manager at the playing file on Linux and Windows; from another device, Copy Path copies it."
-- **Acceptance criteria**:
-  - A direct request from loopback or from the server's own address opens the file manager with the file selected, or its folder where selection is not available.
-  - Requests from other addresses, proxied requests, and unknown ids are refused, and a headless server reports the action as unavailable.
-  - The WebUI shows the action only when the server offers it, and Copy Path otherwise.
-  - No process is started through a shell.
-- **Verification evidence**:
-  - Completion evidence must include server tests for loopback, the server's own address, another LAN address, proxied, unknown-id, and headless requests with the launcher faked, contract tests, `npm run verify`, and one quick Linux spot check.
-
-### P44 - WebUI Status Line Overhaul
-
-- **Status**: ⏳ Planned
-- **Goal**: The WebUI status line shows one stable message per situation.
-- **Scope**:
-  - Planned for v0.15.0. Depends on: WebUI Responsive Layout and Panels, and Catalog Open and Backup Safety, whose 503 message the status line shows.
-  - Moved here from v0.14.0 when the desktop was frozen. The desktop half and the shared fixture are dropped, and the status line moves with the panel layout.
-  - Observed in the v0.13.0 manual regression pass: with the server stopped, the WebUI shows "library load failed: HTTP 503" only briefly before "SSE reconnecting...". The desktop alternates between "core runtime unavailable" and "core runtime is required to browse the library", and stays as it is.
-  - Define one precedence rule for which message wins when several apply, so the status line never alternates.
-  - Define the message for each event once: server stopped, API unavailable, the server running without a library (showing the server's message, which says whether the library is from a newer version or damaged), version or capability mismatch, and refresh progress and results.
-  - Add a Release Specific checklist item: "With the server stopped, unavailable, or mismatched, and during a refresh, the WebUI settles on one status message."
-- **Acceptance criteria**:
-  - With the server stopped, unavailable, or mismatched, the status line settles on one message and does not alternate.
-  - With the server running without a library, the status line shows the server's message.
-  - Refresh status reads the same during and after each refresh.
-  - The precedence rule and the per-event messages are documented.
-- **Verification evidence**:
-  - Completion evidence must include WebUI tests of the precedence rule and the per-event messages, covering the server stopped, the API unavailable, a version or capability mismatch, and refresh progress and results, plus one quick spot check with the server stopped.
-
-### P45 - Testing Suite Overhaul
-
-- **Status**: ⏳ Planned
-- **Goal**: The testing suite produces clear results that match the WebUI's connection and status handling.
-- **Scope**:
-  - Planned for v0.15.0. Depends on: WebUI Status Line Overhaul, Server Shutdown Fixes, and Admin Section in WebUI Settings.
-  - The status line overhaul defines the messages these scenarios check, the shutdown fixes change how event streams close, and the suite runs from the admin section.
-  - Moved here from v0.14.0 when the desktop was frozen; the desktop's expected messages are dropped.
-  - The suite predates the current client connection and status handling and no longer produces clear results. Observed in the v0.13.0 manual regression pass: with the API unavailable, the WebUI shows "library load failed: HTTP 503" only briefly before settling on "SSE reconnecting...", and SSE disconnect behaves inconsistently and may need redesigning.
-  - Redesign the scenarios against current WebUI behavior, define the expected WebUI message for each, and verify the WebUI's behavior as part of the suite.
-  - Add a Release Specific checklist item: "Every testing suite scenario shows its expected WebUI message, and resetting it leaves the WebUI connected."
-- **Acceptance criteria**:
-  - Each scenario lists the expected WebUI message, and the WebUI shows it while the scenario is active.
-  - SSE disconnect behaves the same way on every run.
-  - Running and resetting each scenario leaves the WebUI connected and working.
-- **Verification evidence**:
-  - Completion evidence must include automated tests that each scenario sets and resets the server state it describes, and that SSE disconnect closes and reconnects the same way on repeated runs, plus one quick spot check of one scenario.
 
 ### P46 - Browser-Playable Filter
 

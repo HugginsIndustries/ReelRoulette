@@ -59,26 +59,9 @@ A quick pass over the basics no automated test covers end to end.
 
 An agent verifies these from the repo, its docs, or the release workflow's runs during the pass, and ticks them.
 
-- [x] The release notes warn not to go back to v0.14.0 or earlier after upgrading, since those versions would set the upgraded library aside.
-- [x] The Windows server release's bundled `ffprobe -version`, printed in the release log, names the pinned FFmpeg build.
-
 ### Manual checks
 
 These need a person, real devices, or the Windows VM.
-
-- [x] With a copy of the data folder upgraded by a newer build, the installed build runs without a library, shows the message on the Operator page, leaves the library and backups byte-identical, and updates in-app, on Linux and Windows.
-- [x] Without a library, a library route answers 503 with the message, the open routes answer, and an unpaired LAN caller gets 401.
-- [x] A copy of a v0.14.0 data folder opens in this build with its items, tags, presets, and stats intact, and every sort order on desktop and WebUI lists files as v0.14.0 did, on Linux and Windows.
-- [x] Desktop import of a library exported from v0.14.0 is accepted and opens with its items after the server starts.
-- [x] In the WebUI with a few thousand tiles loaded, scrolling deep in each sort order stays smooth.
-- [x] Desktop plays video after the Avalonia and LibVLC update, on Linux and Windows.
-- [x] On Windows, the server tray menu still opens and its items work after the Avalonia update.
-- [x] After the Vite 8 build change, the WebUI looks and works as before in a desktop browser and on a phone.
-- [x] In the WebUI library overlay, scrolling tiles away and back sends no new thumbnail requests in the browser network panel, and after a file changes and a refresh finishes, its tile shows the new thumbnail without reloading the page.
-- [x] Under a WebUI tag filter, removing that tag from a file on the desktop takes it out of the WebUI tiles.
-- [x] A favorite, a play, and a tag edit from the WebUI player show on the desktop's tiles and current file.
-- [x] With the WebUI library overlay open under the default filter, a desktop favorite on a file outside the loaded tiles sends no library query, and a desktop favorite on a blacklisted file reloads the tiles.
-- [x] Windows `Setup.exe` installs per user without elevation, and the server starts with its tray and no console window.
 
 ## Release Flow
 
