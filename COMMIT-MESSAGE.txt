@@ -19,12 +19,12 @@ Instructions:
 
 Commit Message:
 
-Docs: Promote the v0.15.0 WebUI overhaul release to active milestones
+Docs: Lay out the WebUI side panel and fold the desktop parity release into v0.15.0
 
-- Promote Reverse Proxy and HTTPS Access, WebUI Preact Migration, WebUI Responsive Layout and Panels, WebUI In-App Dialogs, WebUI Settings Panel, Admin Section in WebUI Settings, Admin Refresh, Backup, and Duplicate Review, WebUI Stats Panel, WebUI Keyboard Shortcuts and Player Controls, Show in File Manager from the WebUI, WebUI Status Line Overhaul, Testing Suite Overhaul, and WebUI Grid Rendering as M12a through M12m, in the Planned Releases order.
-- Clear v0.14.1's agent and manual checks from the testing checklist's Release Specific section.
-- WebUI Grid Rendering no longer extends the layout for appended pages, since a full rebuild measured a few milliseconds per page even at 49,000 items. It takes over moving grid rows off `innerHTML`, which the Preact migration's library overlay keeps until then.
-- The responsive layout keeps randomization mode and photo duration in the top bar until the settings panel, which ships after it, moves them there.
-- Re-measured figures: `app.js` is 3,616 lines with 257 WebUI tests, and the Operator page is 842 lines, up from 779.
-- The status line overhaul covers all four no-library states, and notes that the WebUI drops the 503 body that carries the server's message.
-- Reverse proxy notes that the pairing cookie already follows the request scheme, and checks the Operator page, since the admin section comes later. Its server tests and the admin section's stay functions, with no HTTP test host.
+- Record the WebUI layout in the milestones that build it: a header bar with the preset dropdown, current file name, and settings and admin icons, one side panel with icon tabs for Library, Filter, Tags, Stats, and Settings that sits on either side on wide screens and covers the screen on phones, Auto Tag as an overlay from the Tags tab, and a shortcut per tab.
+- Admin becomes a full-page view from an always-visible header icon instead of part of the settings panel, so its milestone is renamed WebUI Admin Section, and the accounts release shows the icon only to admins.
+- Fold v0.15.1 into v0.15.0 so the new WebUI ships as one release, and remove the v0.15.1 line from Planned Releases. Admin Source and Item Management (now including WebUI Source State Sync) and Admin Library Catalog Transfer become M12h and M12i, Browser-Playable Filter M12o, WebUI Multi-Select and Bulk Actions M12q, and Desktop Retirement Notice M12r, with the existing milestones renumbered around them.
+- Split the remaining desktop features: Keep Playing and loudness normalization move to the keyboard shortcuts and player controls milestone, the FFmpeg log is declined because its desktop window has been empty since the server took over refresh, and the features a browser cannot offer are recorded in Desktop Client Removal.
+- Source management notes that importing a source publishes no event today, and that per-source statistics already come from the library stats route.
+- Catalog transfer notes that export already uses the server's checkpoint route, which Desktop Client Removal now keeps, and re-measures `library.db` at 92.5 MB for 49,055 items.
+- The browser-playable filter re-measures the catalog's video containers and ships after the status line overhaul, since its message is a status line message. Multi-select notes that favorite and blacklist take one item per request.
