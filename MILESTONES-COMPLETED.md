@@ -87,7 +87,7 @@ Latest completions first:
     - Check `release.yml`'s `vpk` usage against the release notes first: `vpk download s3`, `vpk upload s3 --keepMaxReleases`, and `pack --noPortable true`. Version 1.2.158 moved argument validation into the command layer and renamed the MSI image flags.
     - Trap: 1.2.158 removes the bsdiff delta fallback, so zstd is the only delta patch format. Installed v0.14.x apps run the 1.2.0 updater.
     - Checked: the 1.2.158 change (velopack/velopack#1010) says the Rust updater that applies deltas only ever supported zstd patches, and bsdiff was a `vpk pack` fallback that produced deltas no client could apply. Installed v0.14.x apps therefore apply deltas from `vpk` 1.2.161, and `vpk pack` now fails instead of falling back.
-    - The Release Specific checklist item "The release run packs and uploads every leg, and an installed v0.14.x server and desktop take the in-app delta update to this release, on Linux and Windows." covers this.
+    - The Release Flow checks for the server and desktop in-app update from the previous release cover this, since an update applies only when every leg was packed and uploaded.
   - Slice 4, Vite 8 and Vitest 5:
     - Move them together, because Vitest 3 only supports Vite 7 and earlier.
     - Vite 8 replaces Rollup and esbuild with Rolldown. Vitest 5 needs Node ^22.12 or 24 and later.
@@ -107,12 +107,12 @@ Latest completions first:
 - **Acceptance criteria**:
   - Slice 1: Every project resolves Avalonia 12.1.3 and SkiaSharp 3.119.4. ServerApp's resolved packages hold one SkiaSharp version, no preview, and no `SkiaSharp.NativeAssets.Linux.NoDependencies` beside `SkiaSharp.NativeAssets.Linux`. The listed packages and Actions are at their target versions, and CI passes on Linux and Windows.
   - Slice 2: `dotnet --version` in the repo resolves through `global.json` locally and in CI. CI and release run Node 24. The bundled `ffprobe -version` in the Windows server release names the pinned build.
-  - Slice 3: The Velopack library and `vpk` are both 1.2.161. Every `vpk` command in `release.yml` has been checked against the 1.2.161 release notes and updated where they changed. The release run itself, packing and uploading all legs and the in-app delta update from v0.14.x, is covered by the Release Specific checklist item.
+  - Slice 3: The Velopack library and `vpk` are both 1.2.161. Every `vpk` command in `release.yml` has been checked against the 1.2.161 release notes and updated where they changed. The release run itself, packing and uploading all legs and the in-app delta update from v0.14.x, is covered by the Release Flow in-app update checks.
   - Slice 4: The WebUI builds and tests on Vite 8 and Vitest 5 with the same test count as before. `npm audit` reports no dev dependency findings that a fix within these limits can clear, and js-yaml stays on 4.x.
   - Slice 5: Every test project runs the same number of xUnit v2 tests on xunit.runner.visualstudio 4.0.0 as on 3.1.5.
 - **Verification evidence**:
   - Completion evidence must include, per slice, `dotnet test ReelRoulette.sln` and a green CI run. Add `npm run verify` for slices 1, 2, and 4, and `./tools/scripts/verify-linux-packaged-server-smoke.sh` for slices 1 and 3. Slice 1 also needs the resolved SkiaSharp packages from ServerApp's `project.assets.json`, and slice 4 the `npm audit` output before and after.
-  - Checks that need a release run are Release Specific checklist items: desktop playback and the Windows tray menu after the safe batch, the bundled `ffprobe -version` naming the pinned build for build reproducibility, and the release run packing and uploading every leg with the in-app delta update from v0.14.x for Velopack.
+  - Checks that need a release run are Release Specific checklist items: desktop playback and the Windows tray menu after the safe batch, and the bundled `ffprobe -version` naming the pinned build for build reproducibility. The release run packing and uploading every leg with the in-app delta update from v0.14.x for Velopack is covered by the Release Flow in-app update checks.
   - Slice 1:
     - Before and after, `dotnet test ReelRoulette.sln` ran 383 Core, 269 DesktopApp, and 3 ServerApp tests, all passing. `dotnet build ReelRoulette.sln` has no warnings.
     - Resolved from `project.assets.json`: ServerApp, ServerApp.Tests, Server, Core.Tests, DesktopApp, and DesktopApp.Tests all hold SkiaSharp 3.119.4 and its natives only, with `SkiaSharp.NativeAssets.Linux` and no `NoDependencies` or preview. Every Avalonia project resolves 12.1.3, Tmds.DBus.Protocol 0.94.1, and Microsoft.NET.Test.Sdk 18.10.1, and DesktopApp resolves VideoLAN.LibVLC.Windows 3.0.24.
@@ -133,7 +133,7 @@ Latest completions first:
     - The smoke script ignored its `VPK_VERSION`: its global install failed silently while 1.2.0 was installed, so it packed with whatever `vpk` was on the path. It now installs that version under `artifacts/velopack-smoke/tools/` and runs it, and a version that does not exist fails the run before publishing.
     - The Velopack library compiled unchanged. All three targets resolve Velopack 1.2.161. `dotnet build ReelRoulette.sln` has no warnings, and `dotnet test ReelRoulette.sln` ran 383, 269, and 3 tests, all passing.
     - `./tools/scripts/verify-linux-packaged-server-smoke.sh` passed, packing with `Velopack CLI 1.2.161`.
-    - Release run, upload, and the delta update from v0.14.x: the Release Specific checklist item "The release run packs and uploads every leg, and an installed v0.14.x server and desktop take the in-app delta update to this release, on Linux and Windows."
+    - Release run, upload, and the delta update from v0.14.x: the Release Flow checks for the server and desktop in-app update from the previous release, since an update applies only when every leg was packed and uploaded.
     - CI run 37518838688 passed on Linux, Windows, and WebUI verify, with the same 383, 269, and 3 tests on both OSes.
   - Slice 4:
     - Vite 8.3.3, the latest stable, and Vitest 5.0.3. The Vite 8 and Vitest 4 and 5 migration guides were read. The WebUI config sets none of the changed options, and its tests use none of the changed APIs. Vitest 5 clearing mock history before each test changed no result.

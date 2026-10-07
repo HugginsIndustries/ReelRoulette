@@ -13,7 +13,7 @@ The next planned release is the first line in the Planned Releases outline whose
 
 ## The released version's checks
 
-The Release Specific section of `docs/checklists/testing-checklist.md` still holds the released version's checks, and that release's pass is signed off, so they are cleared before promoting. If any item there is unticked, list it in the report and ask before removing it.
+Both groups of the Release Specific section of `docs/checklists/testing-checklist.md`, Agent checks and Manual checks, still hold the released version's checks, and that release's pass is signed off, so they are cleared before promoting. If any item there is unticked, list it in the report and ask before removing it.
 
 ## Check each milestone against the code
 
@@ -41,7 +41,7 @@ Then show the corrections you plan for each entry and the new IDs as a P-to-M ta
 
 ## After confirmation
 
-1. Remove the released version's items from the Release Specific section of the testing checklist, keeping the section's note. Remove an unticked item only if the user agreed.
+1. Remove the released version's items from both groups of the Release Specific section of the testing checklist, keeping the section's note and each group's heading and note. Remove an unticked item only if the user agreed.
 2. Correct the entries as agreed, following the template and the Writing entries rules in `.claude/skills/plan-from-report/SKILL.md`. Replace stale figures with the new measurements and say in the entry which figures were re-measured at promotion and which were not. Change each `Planned for v{VERSION}.` line to say where the milestone ships in the series, such as `Ships in v0.15.0, first in the series.`, `after the {title} milestone`, or `last in the series`.
 3. Assign IDs by the promotion rules in `MILESTONES.md`: the release becomes the next `M*` series after the highest one in Active Milestones and `MILESTONES-COMPLETED.md`, with lettered milestones in outline order.
 4. Move the entries from Planned Milestones to Active Milestones in outline order, below the `Last milestone completed` line and after any milestone already active. Status stays ⏳ Planned.

@@ -1,6 +1,6 @@
 ---
 name: pre-release
-description: Use only when the user explicitly asks to prepare a release, start the pre-release testing pass, or finish it after their manual checks. Consolidates the changelog, drafts release notes, resets the testing checklist and runs its automated checks; after the user's manual pass, sets the final version, cuts the changelog, removes the release from Planned Releases, and fills in the release notes' verification. Never commits or tags.
+description: Use only when the user explicitly asks to prepare a release, start the pre-release testing pass, or finish it after their manual checks. Consolidates the changelog, drafts release notes, resets the testing checklist and runs its automated and agent checks; after the user's manual pass, sets the final version, cuts the changelog, removes the release from Planned Releases, and fills in the release notes' verification. Never commits or tags.
 ---
 
 # Pre-release
@@ -45,27 +45,30 @@ Run each item in the Automated Checks section, in order. Tick a box only for a c
 
 ## 5. Release-specific coverage
 
-Check that the Release Specific section holds only this release's items; `promote-milestones` clears the previous release's when it promotes the next one. List any item from an earlier release and ask about it rather than removing it. Compare the section with the user-visible changes in `[Unreleased]`. For any user-visible change with no matching check, propose a one-line check and ask before adding it. Do not tick anything in this section, in Smoke, or in Release Flow's in-app update items.
+Check that the Release Specific section holds only this release's items; `promote-milestones` clears the previous release's when it promotes the next one. List any item from an earlier release and ask about it rather than removing it. Compare the section with the user-visible changes in `[Unreleased]`. For any user-visible change with no matching check, propose a one-line check in the group it belongs to and ask before adding it.
+
+Then verify each item under Agent checks as it describes, from the repo, its docs, or the release workflow's runs for this version's dev builds (`gh run list`, `gh run view`). Tick one only when you verified it and it passed. A failure gets a `Failed:` note as in step 4. One that can't be verified yet, for example because this version has no release run, stays unticked with a `Pending:` sub-bullet that says why; Part 2 verifies it. Do not tick anything under Manual checks, in Smoke, or in Release Flow's in-app update items.
 
 ## Part 1 summary
 
-End with: what changed (changelog consolidation, release notes draft), what passed, what failed, what was skipped and why, any release-specific gaps, and what is left for the user's manual pass. Remind the user that test builds go out as dev versions (`v{VERSION}-dev.N`) until Part 2. Write a `COMMIT-MESSAGE.txt` entry for the preparation, following `AGENTS.md`.
+End with: what changed (changelog consolidation, release notes draft), what passed, what failed, what was skipped and why, which agent checks are pending and why, any release-specific gaps, and what is left for the user's manual pass. Remind the user that test builds go out as dev versions (`v{VERSION}-dev.N`) until Part 2. Write a `COMMIT-MESSAGE.txt` entry for the preparation, following `AGENTS.md`.
 
 # Part 2: Finish
 
 Run this after the user says their manual pass is done.
 
-1. Read the checklist as the user left it. List any unticked item that has no `Failed:` or `Skipped:` note, other than the Release Flow items this part ticks, and ask about each before going on.
-2. Check that every failure and skip points to a backlog item in `MILESTONES.md`. List any that don't.
-3. Re-check `[Unreleased]` against the style note, since fixes made during testing may have added to it, and update the release notes draft to match.
-4. Set the final version with `pwsh ./tools/scripts/set-release-version.ps1 -Version v{VERSION} -NoRunVerify`, and show what it changed.
-5. Cut the changelog with `pwsh ./tools/scripts/cut-changelog.ps1 -Version {VERSION} -Name "{Release Name}"`. It moves `[Unreleased]` into `## [{VERSION}] — {Release Name} (YYYY-MM-DD)` with today's date, keeping only headings that have entries, leaves a fresh `[Unreleased]` with every heading empty, and updates the footer compare links. If it refuses, fix what it reports and run it again. Show what it changed.
-6. Remove the released version's line from the Planned Releases outline in `MILESTONES.md`, then run `pwsh ./tools/scripts/check-milestones.ps1 -BaseRef HEAD` and fix what it reports. If it reports one of this release's milestones missing from the outline, that milestone didn't finish: ask where it goes rather than choosing. Say what you ran and its result.
-7. Fill in the release notes' Verification section from the checklist: what was tested and where (from Environment), and any failures or skips users should know about, in plain language. Replace the TODO comment, and check the whole entry against the style guide once more.
-8. Tick the Release Flow items you verified: version, changelog cut and fresh headings, footer links, and release notes. Leave the in-app update items; they're the user's. CI is checked after the commit, so it is not a box in this list.
-9. Update the `COMMIT-MESSAGE.txt` entry for the final commit, following `AGENTS.md`.
-10. Tell the user: commit and push, then check CI passes on that commit on Linux and Windows (offer to check with `gh run list`). Then create the release on GitHub: tag `v{VERSION}` on that commit, title `v{VERSION} — {Release Name}`, and the new `RELEASE-NOTES.md` entry as the body. Creating it tags the commit, runs the release workflow, and attaches the installers. Print the release notes entry in a fenced code block so it can be pasted straight into GitHub.
-11. End by naming the next planned release, the first line now in the Planned Releases outline, and pointing to the `promote-milestones` skill to promote it to Active Milestones. If its milestones already have `M*` IDs, it was promoted during this pass: say so instead.
+1. Verify each Agent check that has a `Pending:` note, as in Part 1 step 5. When it passes, tick it and remove the note; when it fails, replace the note with `Failed:`. If one still can't be verified, keep the note and say why.
+2. Read the checklist as the user left it. List any unticked item that has no `Failed:` or `Skipped:` note, other than the Release Flow items this part ticks, and ask about each before going on.
+3. Check that every failure and skip points to a backlog item in `MILESTONES.md`. List any that don't.
+4. Re-check `[Unreleased]` against the style note, since fixes made during testing may have added to it, and update the release notes draft to match.
+5. Set the final version with `pwsh ./tools/scripts/set-release-version.ps1 -Version v{VERSION} -NoRunVerify`, and show what it changed.
+6. Cut the changelog with `pwsh ./tools/scripts/cut-changelog.ps1 -Version {VERSION} -Name "{Release Name}"`. It moves `[Unreleased]` into `## [{VERSION}] — {Release Name} (YYYY-MM-DD)` with today's date, keeping only headings that have entries, leaves a fresh `[Unreleased]` with every heading empty, and updates the footer compare links. If it refuses, fix what it reports and run it again. Show what it changed.
+7. Remove the released version's line from the Planned Releases outline in `MILESTONES.md`, then run `pwsh ./tools/scripts/check-milestones.ps1 -BaseRef HEAD` and fix what it reports. If it reports one of this release's milestones missing from the outline, that milestone didn't finish: ask where it goes rather than choosing. Say what you ran and its result.
+8. Fill in the release notes' Verification section from the checklist: what was tested and where (from Environment), and any failures or skips users should know about, in plain language. Replace the TODO comment, and check the whole entry against the style guide once more.
+9. Tick the Release Flow items you verified: version, changelog cut and fresh headings, footer links, and release notes. Leave the in-app update items; they're the user's. CI is checked after the commit, so it is not a box in this list.
+10. Update the `COMMIT-MESSAGE.txt` entry for the final commit, following `AGENTS.md`.
+11. Tell the user: commit and push, then check CI passes on that commit on Linux and Windows (offer to check with `gh run list`). Then create the release on GitHub: tag `v{VERSION}` on that commit, title `v{VERSION} — {Release Name}`, and the new `RELEASE-NOTES.md` entry as the body. Creating it tags the commit, runs the release workflow, and attaches the installers. Print the release notes entry in a fenced code block so it can be pasted straight into GitHub.
+12. End by naming the next planned release, the first line now in the Planned Releases outline, and pointing to the `promote-milestones` skill to promote it to Active Milestones. If its milestones already have `M*` IDs, it was promoted during this pass: say so instead.
 
 # Rules
 

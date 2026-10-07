@@ -17,6 +17,18 @@
 - [ ] A skipped check.
   - Skipped: not this time, tracked by P2.
 
+## Release Specific
+
+### Agent checks
+
+- [x] A verified agent check.
+- [ ] An agent check waiting for a release run.
+  - Pending: this version has no release run yet.
+
+### Manual checks
+
+- [x] A passed manual check.
+
 ## Sign-Off
 
 - Overall result:

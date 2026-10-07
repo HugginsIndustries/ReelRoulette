@@ -1,5 +1,5 @@
 #!/usr/bin/env pwsh
-# Clears check states and Failed: and Skipped: notes in the testing checklist, and fills in the
+# Clears check states and Failed:, Skipped:, and Pending: notes in the testing checklist, and fills in the
 # test date and the release version from .version without any -dev.N suffix.
 #   -Path         checklist to reset (default: the repo's docs/checklists/testing-checklist.md)
 #   -VersionPath  version file to read (default: the repo's .version)
@@ -58,8 +58,8 @@ $updatedLines = New-Object System.Collections.Generic.List[string]
 $removedNote = $false
 
 foreach ($line in $lines) {
-    # Failed: and Skipped: notes belong to the previous pass; the backlog item each names tracks the issue.
-    if ($line -match '^\s*-\s*(Failed|Skipped):') {
+    # Failed:, Skipped:, and Pending: notes belong to the previous pass; the backlog item a failure or skip names tracks the issue.
+    if ($line -match '^\s*-\s*(Failed|Skipped|Pending):') {
         $removedNote = $true
         continue
     }

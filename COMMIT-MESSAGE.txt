@@ -19,10 +19,10 @@ Instructions:
 
 Commit Message:
 
-Feature: Keep a full page of WebUI library tiles loaded ahead of scrolling
+Chore: Split the testing checklist's release-specific checks into agent and manual checks
 
-- The WebUI library grid requests the next page once less than one page of loaded tiles is left below the screen, and never later than the 900px rendered overscan, so fast scrolling does not reach the end of the loaded tiles. A new query now loads two pages.
-- Further pages are still requested one at a time. Tests cover the trigger point, the overscan minimum, one request in flight, and the last page's measured height.
-- The WebUI Grid Rendering milestone now also plans placeholder tiles for the full result count and loading the page at the scroll position, so dragging the scrollbar far down works, and records the grid flickering dark on an iPad with the WebUI installed as an app each time scrolling re-renders the visible rows, with no flicker on the iPad as an acceptance criterion.
-- Changelog, CONTEXT.md, and the domain inventory describe the new trigger.
-- Planned milestones are no longer marked as ones that can be cut if a release runs long, and the plan-from-report skill no longer asks for that mark.
+- The Release Specific section now has Agent checks, which an agent verifies from the repo, its docs, or the release workflow's runs, and Manual checks, which need a person, real devices, or the Windows VM. This release's items are sorted into them, with the release notes warning and the bundled ffprobe check under Agent checks.
+- The release run and delta update item is removed, since the Release Flow in-app update checks cover it; the dependency milestone's references to it now point to those checks.
+- The pre-release skill verifies and ticks agent checks in Part 1, leaves a `Pending:` note on one that can't be verified yet, and verifies those in Part 2. `reset-checklist.ps1` clears `Pending:` notes too.
+- AGENTS.md and the implement skill say which group a new check goes in, and promote-milestones clears both groups.
+- Includes the v0.14.1 pass's checks ticked so far.

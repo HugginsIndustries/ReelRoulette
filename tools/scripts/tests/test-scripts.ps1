@@ -335,7 +335,7 @@ try {
         if ($line -cne "- Release version: v0.3.0") { return "got '$line'" }
     }
 
-    Test-Case "a reset clears checks and notes and keeps waived checks" {
+    Test-Case "a reset clears checks and notes in every group and keeps waived checks and group headings" {
         $path = New-FixtureCopy $checklistInput "reset-checks.md"
         $versionPath = Join-Path $workDir "reset-checks.version"
         Set-Content -Path $versionPath -Value "v0.3.0" -NoNewline
@@ -344,7 +344,10 @@ try {
         $text = Get-Content -Path $path -Raw
         if ($text -match '\[x\] (?!.*\(waived\))') { return "a ticked check that is not waived remains:`n$text" }
         if ($text -notmatch '\[x\] A waived check\. \(waived\)') { return "the waived check was not kept:`n$text" }
-        if ($text -match '(Failed|Skipped):') { return "a Failed: or Skipped: note remains:`n$text" }
+        if ($text -match '(Failed|Skipped|Pending):') { return "a Failed:, Skipped:, or Pending: note remains:`n$text" }
+        foreach ($heading in @("### Agent checks", "### Manual checks")) {
+            if (-not $text.Contains($heading)) { return "the '$heading' heading was not kept:`n$text" }
+        }
     }
 
     Test-Case "a version that is neither a release nor a dev build is refused, and the file is unchanged" {

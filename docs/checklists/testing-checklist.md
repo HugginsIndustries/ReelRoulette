@@ -6,11 +6,13 @@ This checklist is the pre-release pass: automated checks, a short smoke test, ch
 
 **Rule:** One line per check. Do not repeat implementation details, file paths, or platform notes that other docs already cover.
 
-**Rule:** A manual item describes something a person can see or do in the apps. Behavior that is only visible in code, logs, or API responses belongs in automated tests, not in this list.
+**Rule:** A manual check describes something a person can see or do in the apps. An agent check is something an agent can confirm from the repo, its docs, or the release workflow's runs. Other behavior that is only visible in code, logs, or API responses belongs in automated tests, not in this list.
 
 **Rule:** A failed or skipped check stays unticked and gets a `Failed:` or `Skipped:` sub-bullet that says what happened and names the backlog item in `MILESTONES.md` that tracks it.
 
-Run `pwsh ./tools/scripts/reset-checklist.ps1` to clear check states and `Failed:` and `Skipped:` notes, and fill in the date and version, before a new pass.
+**Rule:** An agent check that can't be verified yet during the pass, for example because this version has no release run, stays unticked and gets a `Pending:` sub-bullet that says why. It is verified when finishing the release, and the note is removed.
+
+Run `pwsh ./tools/scripts/reset-checklist.ps1` to clear check states and `Failed:`, `Skipped:`, and `Pending:` notes, and fill in the date and version, before a new pass.
 
 ## Test Run Metadata
 
@@ -43,39 +45,47 @@ An agent runs these and ticks them.
 
 A quick pass over the basics no automated test covers end to end.
 
-- [ ] The WebUI loads, browses the library, and plays a video in a desktop browser.
-- [ ] The WebUI loads, browses the library, and plays a video on a phone.
-- [ ] The desktop app starts, connects to the server, and plays a video.
-- [ ] The server starts with its tray icon, and tray **Restart Server** and **Stop Server / Exit** work.
-- [ ] The Operator page loads.
+- [x] The WebUI loads, browses the library, and plays a video in a desktop browser.
+- [x] The WebUI loads, browses the library, and plays a video on a phone.
+- [x] The desktop app starts, connects to the server, and plays a video.
+- [x] The server starts with its tray icon, and tray **Restart Server** and **Stop Server / Exit** work.
+- [x] The Operator page loads.
 
 ## Release Specific
 
 > Add checks for features or changes in the current release. They are cleared when the next release is promoted. A check that should run every release becomes an automated test.
 
-- [ ] With a copy of the data folder upgraded by a newer build, the installed build runs without a library, shows the message on the Operator page, leaves the library and backups byte-identical, and updates in-app, on Linux and Windows.
-- [ ] Without a library, a library route answers 503 with the message, the open routes answer, and an unpaired LAN caller gets 401.
-- [ ] A copy of a v0.14.0 data folder opens in this build with its items, tags, presets, and stats intact, and every sort order on desktop and WebUI lists files as v0.14.0 did, on Linux and Windows.
-- [ ] Desktop import of a library exported from v0.14.0 is accepted and opens with its items after the server starts.
-- [ ] In the WebUI with a few thousand tiles loaded, scrolling deep in each sort order stays smooth.
+### Agent checks
+
+An agent verifies these from the repo, its docs, or the release workflow's runs during the pass, and ticks them.
+
 - [ ] The release notes warn not to go back to v0.14.0 or earlier after upgrading, since those versions would set the upgraded library aside.
-- [ ] Desktop plays video after the Avalonia and LibVLC update, on Linux and Windows.
-- [ ] On Windows, the server tray menu still opens and its items work after the Avalonia update.
 - [ ] The Windows server release's bundled `ffprobe -version`, printed in the release log, names the pinned FFmpeg build.
-- [ ] The release run packs and uploads every leg, and an installed v0.14.x server and desktop take the in-app delta update to this release, on Linux and Windows.
-- [ ] After the Vite 8 build change, the WebUI looks and works as before in a desktop browser and on a phone.
-- [ ] In the WebUI library overlay, scrolling tiles away and back sends no new thumbnail requests in the browser network panel, and after a file changes and a refresh finishes, its tile shows the new thumbnail without reloading the page.
-- [ ] Under a WebUI tag filter, removing that tag from a file on the desktop takes it out of the WebUI tiles.
-- [ ] A favorite, a play, and a tag edit from the WebUI player show on the desktop's tiles and current file.
-- [ ] With the WebUI library overlay open under the default filter, a desktop favorite on a file outside the loaded tiles sends no library query, and a desktop favorite on a blacklisted file reloads the tiles.
-- [ ] Windows `Setup.exe` installs per user without elevation, and the server starts with its tray and no console window.
+
+### Manual checks
+
+These need a person, real devices, or the Windows VM.
+
+- [x] With a copy of the data folder upgraded by a newer build, the installed build runs without a library, shows the message on the Operator page, leaves the library and backups byte-identical, and updates in-app, on Linux and Windows.
+- [x] Without a library, a library route answers 503 with the message, the open routes answer, and an unpaired LAN caller gets 401.
+- [x] A copy of a v0.14.0 data folder opens in this build with its items, tags, presets, and stats intact, and every sort order on desktop and WebUI lists files as v0.14.0 did, on Linux and Windows.
+- [x] Desktop import of a library exported from v0.14.0 is accepted and opens with its items after the server starts.
+- [x] In the WebUI with a few thousand tiles loaded, scrolling deep in each sort order stays smooth.
+- [x] Desktop plays video after the Avalonia and LibVLC update, on Linux and Windows.
+- [x] On Windows, the server tray menu still opens and its items work after the Avalonia update.
+- [x] After the Vite 8 build change, the WebUI looks and works as before in a desktop browser and on a phone.
+- [x] In the WebUI library overlay, scrolling tiles away and back sends no new thumbnail requests in the browser network panel, and after a file changes and a refresh finishes, its tile shows the new thumbnail without reloading the page.
+- [x] Under a WebUI tag filter, removing that tag from a file on the desktop takes it out of the WebUI tiles.
+- [x] A favorite, a play, and a tag edit from the WebUI player show on the desktop's tiles and current file.
+- [x] With the WebUI library overlay open under the default filter, a desktop favorite on a file outside the loaded tiles sends no library query, and a desktop favorite on a blacklisted file reloads the tiles.
+- [x] Windows `Setup.exe` installs per user without elevation, and the server starts with its tray and no console window.
 
 ## Release Flow
 
 During the pass, on the release's dev build:
 
-- [ ] Server in-app update from the previous release: the check finds the new version without downloading, Download reaches ready, and Apply & Restart relaunches on it, on Linux and Windows; on Linux, menu entries still launch the updated AppImage.
-- [ ] Desktop in-app update from the previous release: Settings finds the new version without downloading, Download reaches ready, and Apply & Restart relaunches on it, on Linux and Windows; on Linux, menu entries still launch the updated AppImage.
+- [x] Server in-app update from the previous release: the check finds the new version without downloading, Download reaches ready, and Apply & Restart relaunches on it, on Linux and Windows; on Linux, menu entries still launch the updated AppImage.
+- [x] Desktop in-app update from the previous release: Settings finds the new version without downloading, Download reaches ready, and Apply & Restart relaunches on it, on Linux and Windows; on Linux, menu entries still launch the updated AppImage.
 
 When finishing the release, an agent ticks these:
 

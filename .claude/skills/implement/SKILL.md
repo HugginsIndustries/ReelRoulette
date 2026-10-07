@@ -39,6 +39,8 @@ Do not edit `AGENTS.md` unless the user explicitly asks you to. If a rule there 
 
 Keep `MILESTONES.md` and docs in the state `AGENTS.md` (and any docs it points at) require — complete what this change finishes (a completed milestone moves to the top of `MILESTONES-COMPLETED.md`), record future work and scope boundaries as the maintenance rules in `MILESTONES.md` describe, and update current-state docs the project says to keep in sync. Do not invent extra docs.
 
+A check for the pre-release pass goes in the Release Specific section of the testing checklist: under Agent checks when an agent can verify it from the repo, its docs, or the release workflow's runs, and under Manual checks when it needs a person, real devices, or the Windows VM.
+
 ## Verification
 
 Run the checks the change touches: `dotnet build ReelRoulette.sln` and `dotnet test ReelRoulette.sln` for code, `npm run verify` for WebUI or contract changes, and SystemChecks for Core changes. Verify the actual behaviour rather than only that the code looks right. Where a change is meant to preserve something, prove it.

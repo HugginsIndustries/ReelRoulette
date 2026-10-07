@@ -245,7 +245,7 @@ Runtime scripts:
 - scripts select `net10.0-windows` framework on Windows and `net10.0` on non-Windows for ServerApp startup.
 - `tools/scripts/set-release-version.ps1` (release-aligned version fan-out for OpenAPI/runtime/tests/server+desktop project metadata, optional WebUI contract regen and verify gates, plus README/dev-setup release command examples; use `-NoDocUpdates` / `-NoUpdateDesktopVersion` / `-NoRegenerateContracts` / `-NoRunVerify` to skip pieces)
 - `tools/scripts/stage-webui-assets.ps1` (WebUI build + copy into server publish `wwwroot`; used by `release.yml` and packaged-server smoke)
-- `tools/scripts/reset-checklist.ps1` (resets `docs/checklists/testing-checklist.md` metadata/checklist state, fills Release version from `.version` without its `-dev.N` suffix, and removes `Failed:` and `Skipped:` notes; preserves waived checks by default, supports `-RemoveWaived`)
+- `tools/scripts/reset-checklist.ps1` (resets `docs/checklists/testing-checklist.md` metadata/checklist state, fills Release version from `.version` without its `-dev.N` suffix, and removes `Failed:`, `Skipped:`, and `Pending:` notes; preserves waived checks by default, supports `-RemoveWaived`)
 
 Web verification:
 
