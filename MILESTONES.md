@@ -114,26 +114,45 @@ Last milestone completed: M12a
 - **Goal**: The WebUI's screens are Preact components with tests, built on the existing typed modules, with no visible change.
 - **Scope**:
   - Ships in v0.15.0, after the reverse proxy and HTTPS access milestone.
-  - Measured again at promotion: `src/app.js` is 3,616 lines. `startApp` runs from line 182 to the end as one untyped function with 139 nested functions, and no test imports it. It has 16 `innerHTML` assignments and 9 native dialog calls. The 257 WebUI tests in 22 files cover only the typed modules, and they run with `environment: "node"`, so there is no DOM to test screens against.
-  - Add Preact and `happy-dom` for component tests; installing the packages needs approval when this milestone starts. Model tests keep running as they do.
-  - Keep the typed modules (library query session, grid layout and virtualizer, tag save, filter state model, events, API) and call them from the components rather than rewriting them.
-  - Migrate screen by screen. Each slice ships with no visible change and removes its code from `app.js`:
-    - Foundation: the Preact root, one shared state store, connection, pairing, event stream, status line, and startup error. `renderStartupError` in `src/shell.ts` interpolates the error message into `innerHTML` (found by the repository audit, moved here from Client Robustness Findings); render it as text.
-    - Player and overlay controls.
+  - Measured again at this edit: `src/app.js` is 3,624 lines. `startApp` runs from line 183 to the end as one untyped function with 139 nested functions, which share one `state` object of 33 fields and 27 top-level `let` variables. It looks up 74 elements by id and adds 67 event listeners, and no test imports it. It has 16 `innerHTML` assignments and 9 native dialog calls. The 263 WebUI tests in 23 files cover only the typed modules, and they run with `environment: "node"`, so there is no DOM to test screens against. The built bundle is 119 KB of JavaScript, 32.9 KB gzipped.
+  - Preact was chosen at this edit over React, Lit, Svelte, Solid, and plain TypeScript: it adds about 4–5 KB gzipped (published size, inferred), where React would add about 45 KB (inferred); TypeScript checks its JSX; and it adds listeners to each element as `app.js` does, so events behave the same while both run.
+  - Packages, installed with approval when this milestone starts: `preact`, `@preact/signals`, `happy-dom`, and `@testing-library/preact`, whose role, label, and text queries also work on the current markup (inferred). `@preact/preset-vite` is not needed: Vite compiles JSX from the tsconfig settings, and the preset only adds hot reload (inferred).
+  - Test setup, read from config at this edit: Vitest includes only `src/test/**/*.test.ts`, so `.test.tsx` files would not run, and neither tsconfig sets `jsx` or `jsxImportSource`. Screen tests opt into `happy-dom` per file or through a separate Vitest project, so the model tests keep running under node.
+  - Until the last slice, `app.js` runs inside the Preact root. The root renders the markup not yet migrated once and starts `app.js` after mount, and Preact never re-renders markup `app.js` owns. `app.js` and the components share state only through the store: `app.js` imports the store's actions, so its `setStatus` becomes a store write, and the event handlers `app.js` still owns subscribe through the store.
+  - The store is `@preact/signals` and holds only state several screens use: the current item and history, loop and autoplay, presets and the active preset, the applied filter, randomization mode, photo duration, the item-state cache, the compatibility block, and the status line, whose changes keep relaying to `last.log` as they do now. `app.js` reads and writes the same signals and updates the markup it still owns with `effect()`. Each screen keeps its own working state, such as the tag editor's pending edits, Auto Tag's rows, and the filter dialog's working copy.
+  - The store exposes the actions that cross screens today (read from code at this edit): the tag editor pauses the player when it opens and resumes it when it closes (`pauseForTagEditor`, `resumeAfterTagEditor`); a tag save retargets the applied filter and cached presets (`retargetLiveTagFilters`); playing from the library closes the overlay and starts the player; and applying a filter updates the header preset and reloads the library.
+  - Each slice moves its logic that renders nothing into typed `.ts` modules tested under node like the existing ones, such as the tag save steps, item-tags event handling, `playCurrent` and random pick, and preset matching. Components only render and wire.
+  - Keep the typed modules (library query session, grid layout and virtualizer, tag save, filter state model, events, API) and call them from the components rather than rewriting them. The exception is `renderLibraryOverlayBodyHtml` in `libraryOverlayModel.ts`, which writes the library overlay's loading, error, and empty messages through `innerHTML`; the library overlay slice replaces it.
+  - Each slice starts by writing behavior tests for its screen against the current `app.js` in `happy-dom`: the page mounted through `renderApp` with a fake `fetch` and a fake event source (`createSseClient` already takes `createEventSource`), queried by role, label, and text. The slice then migrates the screen and keeps those tests passing, changing only how the page is mounted, and they become its component tests. That `app.js` runs under `happy-dom` is inferred, not measured.
+  - `styles.css` is frozen for this milestone. Components keep the markup's class names and the nine element ids `styles.css` selects besides `#app` (such as `#favorite-btn`, `#filter-panel-presets`, and `#time-display`), so the stylesheet applies as it does today.
+  - Migrate screen by screen. Each slice ships with no visible change, removes its code from `app.js`, and ends with a quick desktop-browser spot check from a local dev run:
+    - Foundation: the Preact root, the store, connection, pairing, event stream, status line, the header (preset dropdown, randomization mode, photo duration, and now playing), the mobile diagnostics line, the reconnect listeners (`visibilitychange`, `focus`, `pageshow`, and `online`), and startup error. `renderStartupError` in `src/shell.ts` interpolates the error message into `innerHTML` (found by the repository audit, moved here from Client Robustness Findings); render it as text.
+    - Player and overlay controls, with fullscreen and iOS pseudo-fullscreen, swipe and tap gestures, and the empty state.
     - Library overlay. It keeps the grid controller, which writes each visible row through `innerHTML` with file names escaped (read from code at promotion). WebUI Grid Rendering replaces that row rendering.
     - Filter dialog.
     - Tag editor and Auto Tag.
-  - Delete `app.js` after the last slice, along with its undeclared-name check (`verify:app-js-names`) in `npm run verify`.
-  - Trap, inferred, not measured: moving a `<video>` element to another place in the page can interrupt or reload playback. The player component owns one video element that is never moved.
-  - Add a Release Specific checklist item: "After the Preact migration, the player, library overlay, filter dialog, presets, tag editor, and Auto Tag look and work as in the previous release, on a desktop browser and a phone."
+  - The document Escape listener closes the library overlay when it is open and otherwise leaves iOS pseudo-fullscreen (read from code at this edit). The player and library overlay slices keep that order when they move it.
+  - Overlays stay mounted and hide with `display: none` as today. The library overlay keeps its loaded window and scroll position while hidden and loads its first page before it is first opened, so rendering it only while open would lose both (read from code).
+  - Overlays render inside the fullscreen stage, not in a portal to `document.body`, since only the stage shows in fullscreen (read from code).
+  - Trap, inferred, not measured: moving a `<video>` element to another place in the page can interrupt or reload playback. The player component owns one video element that is never moved. Today the video and photo elements both stay in the page and are shown or hidden with `display` (read from code); the player keeps that rather than rendering either one only when it is needed.
+  - Trap, read from code: the grid controller calls `replaceChildren` on the element it is given, when it is created and when it is destroyed, and today the overlay's loading, error, and empty messages are written into that same element. The controller's host is an element Preact renders with no children, and the messages render in its place, not inside it, so the markup stays the same.
+  - Trap: Preact's `onChange` is the DOM `change` event, not React's per-keystroke one. Use `onInput` where `app.js` listens for `input`, such as the library search and the seek slider.
+  - The media area's swipe and tap listeners are passive, which JSX cannot set, so the player adds them through a ref.
+  - Keep the browser storage keys: `rr_clientId`, `rr_photoDuration`, `rr_randomizationMode`, and `rr_autoTagScanFullLibrary` in `localStorage`, and `rr_sessionId`, `rr_tagEditorCollapsed`, and `rr_filterDialogCollapsedCategories` in `sessionStorage`. A new client id key would make every device a new client to the server.
+  - Each screen has an error boundary that relays a line naming the screen to `last.log` through the client log relay and leaves the other screens working. Today an exception breaks one event handler; a render exception with no boundary can blank the whole page (inferred). WebUI Instrumentation later moves the line to a structured entry.
+  - Delete `app.js` and `app.d.ts` after the last slice, with the undeclared-name check: `scripts/verify-app-js-names.mjs`, its `verify:app-js-names` step in `npm run verify`, and the step's description in the WebUI README. Update `docs/domain-inventory.md`, which names `app.js` and `shell.ts`, and the WebUI section of `CONTEXT.md`.
+  - Not included: replacing the native dialogs, which is WebUI In-App Dialogs.
+  - Add a Release Specific manual checklist item, which is this milestone's phone check: "After the Preact migration, the player, library overlay, filter dialog, presets, tag editor, and Auto Tag look and work as in the previous release, in and out of fullscreen, on a desktop browser, an iPhone or iPad in Safari, an Android phone, and as an installed app."
 - **Acceptance criteria**:
-  - After each slice, the migrated screen looks and behaves as before, and the testing checklist's Smoke checks still pass.
-  - Component tests for each migrated screen run in `npm run verify` under `happy-dom`.
-  - `src/app.js` no longer exists.
-  - No screen renders server or config text through `innerHTML`, except the library grid rows until WebUI Grid Rendering.
-  - Playback continues uninterrupted while overlays open and close.
+  - Each slice's behavior tests, written against `app.js` before the slice, pass against the migrated screen and run in `npm run verify` under `happy-dom`.
+  - `styles.css` is unchanged from before this milestone's first slice.
+  - `src/app.js`, `src/app.d.ts`, and the undeclared-name check no longer exist, and `npm run verify` does not refer to them.
+  - Outside tests, no WebUI code uses `innerHTML` or `dangerouslySetInnerHTML` except the grid controller's row rendering, which WebUI Grid Rendering replaces.
+  - The video element is the same node before and after each overlay opens and closes and after switching between a photo and a video. Playback continues while the library overlay and filter dialog are open, and the tag editor pauses and resumes it as it does today.
+  - The WebUI reads and writes the same browser storage keys as before.
+  - A render error in one screen is relayed to `last.log` and leaves the other screens working.
 - **Verification evidence**:
-  - Completion evidence must include component tests per slice, `npm run verify`, and one quick spot check per slice on a desktop browser and a phone.
+  - Completion evidence must include, per slice, the behavior tests written before migrating and passing after, and a quick desktop-browser spot check from a local dev run; tests for video node identity, storage keys, and the error boundary; `npm run verify`; a check that `styles.css` is unchanged; and the updated docs. The phone check is the Release Specific item above, run in the pre-release pass.
 
 ### M12c - WebUI Responsive Layout and Panels
 
@@ -142,11 +161,18 @@ Last milestone completed: M12a
 - **Scope**:
   - Ships in v0.15.0, after the WebUI Preact migration milestone. Depends on: WebUI Preact Migration.
   - This changes user-facing UX: mockups for phone, tablet, and desktop widths are approved before code.
-  - Measured again at promotion: the tag editor, filter, and library overlays are each `position: fixed; inset: 0` with `z-index: 1000`, so they cover the player while it keeps playing underneath. The stylesheet has two `@media (max-width: 600px)` rules, and mobile browsers are detected by user agent (`isMobileBrowser` in `app.js`).
+  - Measured again at promotion: the tag editor, filter, and library overlays are each `position: fixed; inset: 0` with `z-index: 1000`, so they cover the player while it keeps playing underneath, except that the tag editor pauses playback when it opens and resumes it when it closes (`pauseForTagEditor` and `resumeAfterTagEditor`, read from code when Auto-Pause was planned). The stylesheet has two `@media (max-width: 600px)` rules, and mobile browsers are detected by user agent (`isMobileBrowser` in `app.js`).
   - The main page is a header bar, the player with its overlay controls as today, and the footer status line as today. The header holds the app name and the current file name, and at the right a settings icon and an admin icon. The settings icon arrives with the Settings tab in WebUI Settings Panel, and the admin icon with WebUI Admin Section. Photo duration stays in the header until WebUI Settings Panel moves it into the Settings tab, and the pairing token prompt keeps showing there when the server asks for pairing.
   - A panel host: at most one side panel is open at a time. At tablet and desktop widths it sits beside the player, on the left or right as a per-device setting, with a width the user adjusts between a minimum and a maximum set with the mockups and that is remembered per device. At phone widths it is a full-screen overlay with the same tabs. Breakpoints use viewport width and pointer type, not the user agent. The side is chosen in the Settings tab, which WebUI Settings Panel adds; until then the panel uses its default side.
   - The panel has a single row of icon-only tabs: Library, Filter, Tags, Stats, and Settings. Each tab uses the icon the WebUI already uses for it, such as the player's grid, filter, and tag icons, and has a tooltip and an accessible name. This milestone builds the Library, Filter, and Tags tabs from the library overlay, filter dialog, and tag editor; WebUI Stats Panel and WebUI Settings Panel add the Stats and Settings tabs.
   - The player's grid, filter, and tag buttons open the panel on the matching tab, and the panel remembers its last tab.
+  - Auto-Pause replaces the tag editor's pause and resume. Opening the panel on any tab, or as its full-screen overlay, pauses playback according to an Auto-Pause mode:
+    - **Never**: never pauses.
+    - **Always**: pauses whenever the panel opens, at any width.
+    - **Responsive**, the default: pauses only while the panel covers the player, as the full-screen overlay does on phones. An open panel that crosses a breakpoint pauses when it comes to cover the player and resumes, if Auto-Pause paused it, when it moves beside the player.
+    - The admin view, which WebUI Admin Section adds, always covers the player, so it pauses under Always and Responsive.
+    - Closing resumes playback only if Auto-Pause paused it; playback the user paused stays paused. Playing or pausing while the panel is open hands playback back to the user, so closing leaves it as it is. Pausing a photo holds its autoplay timer, as the tag editor does today.
+    - The mode is fixed at Responsive until WebUI Settings Panel adds the setting. WebUI Preact Migration keeps today's tag editor pause, since that milestone changes nothing visible.
   - The preset dropdown and randomization mode leave the header for the Library tab, laid out like the desktop library panel: above the grid, the preset, then randomization mode, then sort with its direction toggle, then search.
   - The Library tab fits its column count to the panel width, and choosing a tile plays it in the player beside the panel.
   - The WebUI remembers its per-device state across a page refresh, as the desktop remembers its own across restarts. This milestone adds one per-device store and remembers the active preset (including None) and applied filter, randomization mode, sort and direction, and the panel's width and last tab. WebUI Settings Panel and WebUI Keyboard Shortcuts and Player Controls remember the client settings they add the same way, and so does duplicate review in Admin Refresh, Backup, and Duplicate Review. The search text is not remembered. The randomization mode already stored per device carries over.
@@ -157,12 +183,17 @@ Last milestone completed: M12a
   - Not included: admin and duplicate review as panel tabs. They open in a full-page admin view, which is WebUI Admin Section.
   - The panel stays inside the fullscreen stage, so it works in fullscreen as the overlays do today, including iOS pseudo-fullscreen.
   - Phone layouts work in an installed app (standalone display, safe-area insets).
-  - Add a Release Specific checklist item: "On a phone, a tablet, and a desktop browser, and as an installed app on Android and iOS, the panel opens beside the player on either side or as an overlay by width, and playback keeps going on every tab."
+  - Add a Release Specific checklist item: "On a phone, a tablet, and a desktop browser, and as an installed app on Android and iOS, the panel opens beside the player on either side or as an overlay by width; with Auto-Pause on Responsive, playback keeps going on every tab beside the player, and the overlay pauses it and resumes it on close."
 - **Acceptance criteria**:
   - The main page shows the header bar with the app name and current file name, the player with its overlay controls, and the footer status line, and the header no longer shows the preset dropdown or randomization mode.
   - At most one panel is open at a time.
-  - At tablet and desktop widths, the panel opens beside the player on the side set for the device, its width adjusts only between its minimum and maximum and is remembered per device, and the video stays visible and playing.
-  - At phone widths, the panel opens as a full-screen overlay with the same tabs, and closing it returns to the player without interrupting playback.
+  - At tablet and desktop widths, the panel opens beside the player on the side set for the device, its width adjusts only between its minimum and maximum and is remembered per device, and with Auto-Pause on Responsive the video stays visible and playing.
+  - At phone widths, the panel opens as a full-screen overlay with the same tabs, and closing it returns to the player.
+  - With Auto-Pause on Responsive, opening the panel beside the player leaves playback going, opening it as a full-screen overlay pauses it, and an open panel that crosses a breakpoint pauses or resumes as it comes to cover the player or moves beside it.
+  - With Auto-Pause on Always, opening the panel pauses playback at every width; on Never, opening it never pauses.
+  - Closing the panel resumes playback only if Auto-Pause paused it, playback the user paused stays paused, and playing or pausing while the panel is open leaves playback as it is on close.
+  - Auto-Pause holds a photo's autoplay timer while it pauses.
+  - The tag editor has no pause of its own, and Auto-Pause is Responsive until the Settings tab can change it.
   - The tabs are one row of icons, each with a tooltip and an accessible name, and the Library, Filter, and Tags icons match the player's grid, filter, and tag icons.
   - The player's grid, filter, and tag buttons open the panel on the Library, Filter, and Tags tabs, and the panel reopens on its last tab.
   - The Library tab shows, above the grid and in this order, the preset dropdown, randomization mode, sort with its direction toggle, and search.
@@ -174,7 +205,7 @@ Last milestone completed: M12a
   - The panel works in fullscreen.
   - The layout does not depend on the user agent.
 - **Verification evidence**:
-  - Completion evidence must include component tests for panel host breakpoints, panel side, width limits and memory, tab selection and the last tab, the tabs' accessible names, the Library tab's control order and column fitting, and a page refresh keeping each remembered setting and clearing the search text, `npm run verify`, and one quick spot check on a phone and a desktop browser.
+  - Completion evidence must include component tests for panel host breakpoints, panel side, width limits and memory, tab selection and the last tab, the tabs' accessible names, the Library tab's control order and column fitting, a page refresh keeping each remembered setting and clearing the search text, and Auto-Pause in each mode at phone and desktop widths, across a breakpoint, with playback the user paused or resumed, and with a photo, `npm run verify`, and one quick spot check on a phone and a desktop browser.
 
 ### M12d - WebUI In-App Dialogs
 
@@ -185,13 +216,15 @@ Last milestone completed: M12a
   - Found during the post-migration fixes desktop spot checks: preset rename in the WebUI opens the browser's native prompt, which does not match the WebUI's styling and does not suit the WebUI when it runs as an installed web app.
   - Measured again at promotion: `app.js` uses native dialogs in nine places, and no other WebUI file uses any: preset delete and rename; tag editor category rename, duplicate-name alert, and category delete; tag delete; two **Discard changes?** confirmations; and new category name.
   - One reusable in-app dialog for text input, confirmation, and notice, with keyboard support (Enter confirms, Escape cancels) and focus returning to where it was.
+  - Dialogs render inside the fullscreen stage, not outside it, or they disappear in fullscreen: only the stage shows in fullscreen (read from code).
   - Keep each dialog's wording and outcome as it is today; only how it is shown changes. Changes to user-facing UX need explicit approval.
 - **Acceptance criteria**:
   - The WebUI calls no `prompt`, `confirm`, or `alert`.
   - Each replaced dialog keeps its wording, and confirming or canceling does what it does today.
   - The dialogs match the WebUI's theme and work in an installed web app on desktop and mobile.
+  - The dialogs render inside the fullscreen stage and show and work in fullscreen.
 - **Verification evidence**:
-  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for confirm and cancel on the shared dialog, a check that no native dialog calls remain, `npm run verify`, and a spot check in an installed web app.
+  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for confirm and cancel on the shared dialog and for the dialog rendering inside the fullscreen stage, a check that no native dialog calls remain, `npm run verify`, and a spot check in an installed web app.
 
 ### M12e - WebUI Settings Panel
 
@@ -203,16 +236,17 @@ Last milestone completed: M12a
   - Not included: admin. It opens as a full-page view from the header's admin icon, which is WebUI Admin Section.
   - Checked against the code at promotion: the diagnostics panel is shown only when `isMobileBrowser()` is true. Photo duration and randomization mode are already kept per device in `localStorage`; autoplay and loop are not kept and start off.
   - Move the diagnostics information to the Settings tab and remove the diagnostics panel from below the main page's status line. That panel is currently shown only on mobile browsers by design; in the v0.13.0 manual regression pass it appeared only on the phone in Firefox.
-  - Client settings live in the Settings tab, all per device: photo duration, which leaves the header, and the side the panel opens on. Randomization mode is in the Library tab, which WebUI Responsive Layout and Panels builds.
+  - Client settings live in the Settings tab, all per device: photo duration, which leaves the header, the side the panel opens on, and Auto-Pause (Never, Always, or Responsive, the default), which WebUI Responsive Layout and Panels describes and keeps at Responsive until this setting exists. Randomization mode is in the Library tab, which WebUI Responsive Layout and Panels builds.
   - Every client setting survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds. Remembering is the default, with no option to turn it off. The photo duration already stored per device carries over.
   - Loop, autoplay, and mute are only the player's buttons, with no entry in the Settings tab, and each button's state survives a page refresh. The autoplay mode and its timer are Settings tab entries, which WebUI Keyboard Shortcuts and Player Controls adds.
   - Changes to user-facing UX need explicit approval.
 - **Acceptance criteria**:
-  - The Settings tab holds the client settings, including photo duration and the panel's side, and the header no longer shows photo duration.
+  - The Settings tab holds the client settings, including photo duration, the panel's side, and Auto-Pause, and the header no longer shows photo duration.
+  - Auto-Pause offers Never, Always, and Responsive, starts at Responsive, and the panel pauses as the chosen mode says.
   - The Settings tab has no loop or autoplay entry.
   - The header's settings icon opens the panel on the Settings tab.
   - The Settings tab shows the diagnostics information on desktop and mobile browsers, and the main page no longer shows the diagnostics panel.
-  - After a page refresh, photo duration, the panel's side, and the autoplay, loop, and mute buttons' state are each as they were.
+  - After a page refresh, photo duration, the panel's side, Auto-Pause, and the autoplay, loop, and mute buttons' state are each as they were.
   - Preferences are stored per device and do not change other devices.
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for preference storage and for a page refresh keeping each setting this milestone adds, `npm run verify`, and one quick spot check on a phone.
@@ -227,6 +261,7 @@ Last milestone completed: M12a
   - Measured again at promotion: the Operator page is 842 lines of HTML, CSS, and JavaScript inside a raw string in `src/core/ReelRoulette.ServerApp/Program.cs`, up from 779 when this entry was written, after the control token, shutdown, and no-library work. No test covers the page's content; the only test that names `/operator` checks that the library route gate leaves it open. The sections listed below match the page, and `verify-linux-packaged-server-smoke.sh` still requests `/operator`.
   - Admin section slice:
     - Admin is a full-page view opened from the header's admin icon, not a panel tab. The icon is always visible. The view keeps the Operator page's responsive layout (a 12-column grid that changes at 620 and 980 px wide, read from code at this edit), restyled to match the rest of the WebUI.
+    - The admin view covers the player, so opening it pauses playback under the Always and Responsive Auto-Pause modes, and leaving it resumes playback only if Auto-Pause paused it, as WebUI Responsive Layout and Panels describes.
     - Move every Operator section into the admin section as Preact screens: server updates, runtime status with restart and stop (including the message when the server runs without a library), web runtime settings (port, Allow remote connections, mDNS advertising and LAN hostname, and auth mode and shared token, without Enable Web UI, which the always-on WebUI slice drops), control settings (control token, dev channel, Launch Server on Startup), the testing suite, connected clients, server logs, and incoming and outgoing API events. They call the same control routes, so there is no contract change.
     - The Operator's update download needs two attempts every time: click Download and confirm, and nothing happens; click Download and confirm again, and it downloads. Find the cause before building the admin section's update controls, so they don't inherit it. No commit has fixed it (checked at promotion).
     - Gating: opening admin from another machine asks for the control token first, through `POST /control/pair`, and shows nothing until it is accepted. On the server machine, which the merged localhost helper decides, it opens directly. The accounts release replaces the token with admin accounts.
@@ -241,6 +276,7 @@ Last milestone completed: M12a
     - The admin section has no Enable Web UI switch, and the frozen desktop's Settings dialog loses its Enable Web UI switch, which would no longer do anything (approved as a desktop change outside bug fixes). `docs/api.md` and `docs/dev-setup.md` stop describing the WebUI as optional.
 - **Acceptance criteria**:
   - The header's admin icon is always visible and opens the admin section as a full-page view, not a panel tab.
+  - Under Always and Responsive, opening the admin section pauses playback and leaving it resumes only playback Auto-Pause paused; under Never, playback keeps going.
   - The admin section keeps the Operator page's layout at phone and desktop widths and matches the rest of the WebUI's styling.
   - The admin section offers every action and setting the Operator page offers today and calls the same routes.
   - In the admin section, one Download click and one confirmation start the update download.
@@ -251,7 +287,7 @@ Last milestone completed: M12a
   - With the web runtime settings' `enabled` stored or posted as off, the server still serves the WebUI and `/runtime-config.json`, allows the WebUI's CORS origins, and, with remote connections and mDNS on, advertises over mDNS after a restart, and it reports `enabled` as on.
   - Neither the admin section nor the desktop Settings dialog shows an Enable Web UI switch, and `enabled` is still in OpenAPI.
 - **Verification evidence**:
-  - Completion evidence must include admin section UI tests for the admin icon opening the full-page view, loading status and settings, saving settings, the testing panel, and control-token gating in `npm run verify`, server tests that the recovery page is served without WebUI assets and keeps control-token gating, server tests that a stored or posted `enabled` of off is ignored and reported as on, a desktop test that the Settings dialog has no Enable Web UI switch, `dotnet test ReelRoulette.sln`, and `./tools/scripts/verify-linux-packaged-server-smoke.sh`.
+  - Completion evidence must include admin section UI tests for the admin icon opening the full-page view, Auto-Pause on opening and leaving it in each mode, loading status and settings, saving settings, the testing panel, and control-token gating in `npm run verify`, server tests that the recovery page is served without WebUI assets and keeps control-token gating, server tests that a stored or posted `enabled` of off is ignored and reported as on, a desktop test that the Settings dialog has no Enable Web UI switch, `dotnet test ReelRoulette.sln`, and `./tools/scripts/verify-linux-packaged-server-smoke.sh`.
   - Server tests call the handlers and gating as functions over `DefaultHttpContext`, as the library route gate's tests do. No test project has an HTTP test host, and `Microsoft.AspNetCore.TestHost` is not added (decided at promotion).
   - Add a Release Specific checklist item: "From another machine, the admin section asks for the control token and works after it is entered; with the WebUI files removed, the recovery page restarts, stops, shows logs, and applies an update, on Linux and Windows."
 

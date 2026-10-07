@@ -19,10 +19,12 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Allow one WebUI random pick at a time with a 10-second timeout
+Docs: Detail the WebUI Preact migration and plan Auto-Pause for the side panel
 
-- Random picks go through one picker per page: a press, swipe, or auto-advance while a pick is waiting sends nothing, so repeated presses on a slow or stalled connection can no longer play and record several items at once when the answers arrive.
-- A pick the server does not answer within 10 seconds is cancelled through its fetch signal, shows "No response from the server. Try again.", and relays a `playback=random-pick-timeout` line with `timeoutMs`; the next press starts a fresh request, and the cancelled pick's answer is never used even if it arrives after a newer pick was sent.
-- Every other answer keeps its status message: unauthorized, a failed request, no eligible media, and a network error.
-- Tests cover the one-at-a-time guard, the timeout and abort, a late answer after a newer pick, and the answer mapping, and each fails when its guard is removed.
-- WebUI Status Line Overhaul notes that the playing video's status can hide "Loading..." and the timeout message, and Release Specific has a manual check with the server paused.
+- M12b: re-measure `app.js` and the WebUI tests, record why Preact was chosen, and say how each slice runs next to `app.js`: the Preact root starts it after mount, shared state lives in `@preact/signals` with the cross-screen actions named, and logic that renders nothing moves into typed modules.
+- M12b: each slice first writes behavior tests against `app.js` in `happy-dom` and keeps them passing after it migrates; `styles.css` is frozen, and the markup keeps its classes and ids.
+- M12b: assign the header, mobile diagnostics, fullscreen, gestures, Escape, and reconnect listeners to slices, list the packages and test setup changes, and add an error boundary per screen that relays to `last.log`.
+- M12b: record traps (overlays stay mounted and inside the fullscreen stage, the grid controller's host, Preact's `onChange`, passive touch listeners, storage keys, and the video and photo elements staying in the page) and the files and docs that go or change with `app.js`.
+- M12b: replace the per-slice Smoke and phone checks with a desktop spot check per slice and one Release Specific pass on iOS Safari, Android, and the installed app, and correct the playback criterion, since the tag editor pauses playback by design.
+- M12c: Auto-Pause replaces the tag editor's pause. Opening the side panel or its overlay pauses playback under Never, Always, or Responsive (the default, which pauses only while the panel covers the player), and closing resumes only what Auto-Pause paused; M12e adds the setting, kept per device, and M12f pauses for the admin view.
+- M12d: in-app dialogs render inside the fullscreen stage so they show in fullscreen.
