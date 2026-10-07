@@ -2,13 +2,24 @@ namespace ReelRoulette.Server.Hosting;
 
 public static class PairingCookiePolicy
 {
+    /// <summary>
+    /// <paramref name="isHttps"/> is the scheme the client used, which behind a proxy on this machine is the proxy's.
+    /// </summary>
     public static CookieOptions BuildCookieOptions(ServerRuntimeOptions options, bool isHttps)
     {
+        var secure = ResolveSecure(options.PairingCookieSecureMode, isHttps);
+        var sameSite = ResolveSameSite(options.PairingCookieSameSite);
+        // Browsers reject SameSite=None without Secure, so such a cookie is sent as Lax instead.
+        if (sameSite == SameSiteMode.None && !secure)
+        {
+            sameSite = SameSiteMode.Lax;
+        }
+
         return new CookieOptions
         {
             HttpOnly = true,
-            SameSite = ResolveSameSite(options.PairingCookieSameSite),
-            Secure = ResolveSecure(options.PairingCookieSecureMode, isHttps),
+            SameSite = sameSite,
+            Secure = secure,
             Path = "/",
             MaxAge = TimeSpan.FromHours(options.PairingSessionDurationHours)
         };

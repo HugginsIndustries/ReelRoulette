@@ -111,11 +111,44 @@ For the pre-release pass, use `docs/checklists/testing-checklist.md` and `pwsh .
 
 ## Auth, CORS, and Runtime Settings Notes
 
-- Pairing/auth is server enforced via `/api/pair` and runtime policy.
+- Pairing/auth is server enforced via `/api/pair` and runtime policy. It covers `/api` routes only: the WebUI's files and `/runtime-config.json` load for every caller, and the runtime config includes the pairing token only for a caller that pairing already accepts.
+- **Allow remote connections** (`webRuntime.bindOnLan`) off: the server refuses every request from another device with `403`, directly or through a proxy, on every path, and listens only on localhost from its next start. On: it listens on the LAN from its next start, and other devices pair as usual.
+- Localhost means a direct connection from the server machine. A request through a reverse proxy is not localhost, even when the proxy runs on the server machine, and neither is one with no remote address.
 - Control routes trust localhost and need the control token from any other address; see the control-plane auth rules in `docs/api.md`. The token is `controlRuntime.adminSharedToken` in `core-settings.json` under the data folder below, generated on first start when none is set.
-- Browser-client CORS and cookie behavior is controlled by `CoreServer` settings.
+- Browser-client CORS and cookie behavior is controlled by `CoreServer` settings. Configured CORS origins can be `http` or `https`; the server's own localhost and LAN origins use the scheme it listens on.
 - Some settings changes require restart to fully apply (for example listen/auth/WebUI availability changes); use `/control/restart` or restart the process.
 - `FormOptions.MultipartBodyLengthLimit` is set to **512 MB** in `src/core/ReelRoulette.ServerApp/Program.cs` for any future multipart endpoints; **no shipped API route currently uses multipart uploads**, so this is host-level configuration only for now.
+
+## Reverse proxy and HTTPS
+
+The server serves only HTTP. For HTTPS, which Android needs to install the WebUI as an app, run a reverse proxy on the server machine; the README covers [Tailscale Serve and Caddy](../README.md#webui-over-https-install-as-an-app).
+
+- **Trusted proxies:** the server applies forwarded headers only from loopback (`127.0.0.0/8` and `::1`), one hop. Point the proxy at `http://127.0.0.1:<port>`. A proxy on another machine, or one that connects to the server's LAN address, is not supported; its forwarded headers are ignored, and the first request from each such address writes a warning to `last.log`.
+- **Headers:** `X-Forwarded-For` gives the client's address, used in logs and connected-client lists. `X-Forwarded-Proto` gives the scheme, which marks pairing and control cookies `Secure` over HTTPS and makes `/runtime-config.json` return `https://` URLs. `X-Forwarded-Host`, or the original `Host` passed through, gives the host those URLs use. Any forwarding header makes the request non-local, so a proxy on the server machine must send `X-Forwarded-For`; without any of them, its requests look like direct ones from the server machine.
+- **Allow remote connections** must be on, or every request through the proxy gets `403`. It also opens plain HTTP on the LAN at the server's port.
+- **Host root:** the WebUI's manifest, service worker, icons, and start URL use root paths, and the WebUI rejects an API base URL with a path.
+- **Event stream:** the server sends `X-Accel-Buffering: no` on `/api/events`, so nginx passes events through without buffering. An idle stream that a proxy times out reconnects with its last event ID.
+- **Media:** range requests pass through the proxy unchanged.
+
+An nginx server block, with your certificate paths and port:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name reel.example.com;
+    ssl_certificate     /etc/ssl/reel.example.com/fullchain.pem;
+    ssl_certificate_key /etc/ssl/reel.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:45123;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 1h;
+    }
+}
+```
 
 ## Logging and Diagnostics
 

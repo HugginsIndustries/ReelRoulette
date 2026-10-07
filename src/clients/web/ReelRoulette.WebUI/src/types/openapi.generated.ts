@@ -1087,6 +1087,7 @@ export interface components {
             serverTimeUtc: string;
             isHealthy: boolean;
             listenUrl: string;
+            /** @description Whether remote connections are allowed (the web runtime setting `bindOnLan`). */
             lanExposed: boolean;
             connectedClients: components["schemas"]["ConnectedClientsSnapshot"];
             incomingApiEvents?: components["schemas"]["ApiEventTelemetryEntry"][];
@@ -1491,6 +1492,7 @@ export interface components {
             enabled: boolean;
             /** Format: int32 */
             port: number;
+            /** @description Allow remote connections. Off serves only the server machine, and every request from another device, directly or through a proxy, returns 403. On also listens on the LAN. */
             bindOnLan: boolean;
             /** @description When false, the server does not advertise `{lanHostname}.local` on the network. */
             mdnsEnabled: boolean;
@@ -1885,7 +1887,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            /** @description Forbidden when the request is from another device and remote connections are off */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1932,7 +1934,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            /** @description Forbidden when the request is from another device and remote connections are off */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1979,7 +1981,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            /** @description Forbidden when the request is from another device and remote connections are off */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2017,7 +2019,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            /** @description Forbidden when the request is from another device and remote connections are off */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2055,7 +2057,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            /** @description Forbidden when the request is from another device and remote connections are off */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2093,7 +2095,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            /** @description Forbidden when the request is from another device and remote connections are off */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2131,7 +2133,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            /** @description Forbidden when the request is from another device and remote connections are off */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2169,7 +2171,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            /** @description Forbidden when the request is from another device and remote connections are off */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2211,7 +2213,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            /** @description Forbidden when the request is from another device and remote connections are off */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2249,7 +2251,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            /** @description Forbidden when the request is from another device and remote connections are off */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2291,7 +2293,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            /** @description Forbidden when the request is from another device and remote connections are off */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2345,7 +2347,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            /** @description Forbidden when the request is from another device and remote connections are off */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2383,7 +2385,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            /** @description Forbidden when the request is from another device and remote connections are off */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2425,7 +2427,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            /** @description Forbidden when the request is from another device and remote connections are off */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2472,7 +2474,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden when request is non-local and LAN control access is disabled */
+            /** @description Forbidden when the request is from another device and remote connections are off */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2514,7 +2516,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Control LAN access disabled */
+            /** @description Forbidden when the request is from another device and remote connections are off */
             403: {
                 headers: {
                     [name: string]: unknown;

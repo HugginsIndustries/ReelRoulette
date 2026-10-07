@@ -106,7 +106,9 @@ Reconnect and recovery:
 - Pairing and auth are enforced on the server boundary.
 - Session continuity is cookie-based for browser clients.
 - Runtime policy controls CORS and cookie behavior.
-- Localhost-friendly development access is supported by policy; LAN access remains explicitly policy-gated.
+- Localhost-friendly development access is supported by policy; other devices are served only with **Allow remote connections** on, and then need pairing.
+- One check decides what counts as localhost: a direct connection from the server machine. A request through a reverse proxy never counts, even from a proxy on the server machine, and the server takes the client's address, scheme, and host only from a proxy that connects from loopback.
+- Pairing covers `/api` routes only, so the WebUI's files and runtime config load before a device is paired.
 - The control plane trusts localhost and requires the control token from every other address. The token is generated on first start and kept in `core-settings.json`. A control session also authorizes API requests, so the Operator works from another machine once the token is entered.
 
 ## Control Plane and Operator Surface

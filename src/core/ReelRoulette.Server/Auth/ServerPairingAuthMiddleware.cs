@@ -1,4 +1,3 @@
-using System.Net;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
@@ -33,39 +32,12 @@ public sealed class ServerPairingAuthMiddleware
             return;
         }
 
-        if (!_options.RequireAuth || string.IsNullOrEmpty(_options.PairingToken))
-        {
-            await _next(context);
-            return;
-        }
-
-        if (context.Request.Path.StartsWithSegments("/health") ||
-            context.Request.Path.StartsWithSegments("/api/pair"))
-        {
-            await _next(context);
-            return;
-        }
-
-        if (HttpMethods.IsOptions(context.Request.Method))
-        {
-            await _next(context);
-            return;
-        }
-
-        if (_options.TrustLocalhost && IsLocalRequest(context))
-        {
-            await _next(context);
-            return;
-        }
-
-        if (IsAuthorized(context, _options.PairingCookieName, _options.PairingToken, ServerSessionStore.ApiScope, allowQueryToken: true))
-        {
-            await _next(context);
-            return;
-        }
-
-        // A control session also covers API requests, so the Operator can read them from another machine.
-        if (HasValidSession(context, _options.ControlAdminCookieName, ServerSessionStore.ControlScope))
+        // Only /api routes need pairing. The WebUI's files and runtime config load for every caller, so a device that
+        // is not paired reaches the pairing prompt, and the browser gets the manifest, which it fetches without cookies.
+        if (!context.Request.Path.StartsWithSegments("/api") ||
+            context.Request.Path.StartsWithSegments("/api/pair") ||
+            HttpMethods.IsOptions(context.Request.Method) ||
+            IsApiRequestAuthorized(context, _options, _sessions))
         {
             await _next(context);
             return;
@@ -73,6 +45,31 @@ public sealed class ServerPairingAuthMiddleware
 
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         await context.Response.WriteAsJsonAsync(new { error = "Unauthorized" });
+    }
+
+    /// <summary>
+    /// Whether a request may use <c>/api</c> routes: pairing is off, the request comes straight from this machine
+    /// with localhost trust on, or it carries a pairing session, the pairing token, or a control session.
+    /// </summary>
+    public static bool IsApiRequestAuthorized(HttpContext context, ServerRuntimeOptions options, ServerSessionStore sessions)
+    {
+        if (!options.RequireAuth || string.IsNullOrEmpty(options.PairingToken))
+        {
+            return true;
+        }
+
+        if (options.TrustLocalhost && LocalRequest.IsLocal(context))
+        {
+            return true;
+        }
+
+        if (IsAuthorized(context, options, sessions, options.PairingCookieName, options.PairingToken, ServerSessionStore.ApiScope, allowQueryToken: true))
+        {
+            return true;
+        }
+
+        // A control session also covers API requests, so the Operator can read them from another machine.
+        return HasValidSession(context, sessions, options.ControlAdminCookieName, ServerSessionStore.ControlScope);
     }
 
     private async Task AuthorizeControlPlaneAsync(HttpContext context)
@@ -89,23 +86,16 @@ public sealed class ServerPairingAuthMiddleware
             return;
         }
 
-        if (IsLocalRequest(context))
+        if (LocalRequest.IsLocal(context))
         {
             await _next(context);
             return;
         }
 
-        if (!_settings.GetWebRuntimeSettings().BindOnLan)
-        {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            await context.Response.WriteAsJsonAsync(new { error = "Forbidden. Control-plane LAN access is disabled." });
-            return;
-        }
-
-        // Every non-localhost control request needs the control token; there is no off switch for the LAN.
+        // Every non-localhost control request needs the control token; there is no off switch for other devices.
         var controlSettings = _settings.GetControlRuntimeSettings();
         // The control token is never accepted in a query, so it stays out of URLs and request logs.
-        if (IsAuthorized(context, _options.ControlAdminCookieName, controlSettings.AdminSharedToken, ServerSessionStore.ControlScope, allowQueryToken: false))
+        if (IsAuthorized(context, _options, _sessions, _options.ControlAdminCookieName, controlSettings.AdminSharedToken, ServerSessionStore.ControlScope, allowQueryToken: false))
         {
             await _next(context);
             return;
@@ -115,15 +105,22 @@ public sealed class ServerPairingAuthMiddleware
         await context.Response.WriteAsJsonAsync(new { error = "Unauthorized" });
     }
 
-    private bool HasValidSession(HttpContext context, string cookieName, string scope)
+    private static bool HasValidSession(HttpContext context, ServerSessionStore sessions, string cookieName, string scope)
     {
         return context.Request.Cookies.TryGetValue(cookieName, out var cookieValue) &&
-               _sessions.IsSessionValid(scope, cookieValue, DateTimeOffset.UtcNow);
+               sessions.IsSessionValid(scope, cookieValue, DateTimeOffset.UtcNow);
     }
 
-    private bool IsAuthorized(HttpContext context, string cookieName, string? expectedToken, string scope, bool allowQueryToken)
+    private static bool IsAuthorized(
+        HttpContext context,
+        ServerRuntimeOptions options,
+        ServerSessionStore sessions,
+        string cookieName,
+        string? expectedToken,
+        string scope,
+        bool allowQueryToken)
     {
-        if (HasValidSession(context, cookieName, scope))
+        if (HasValidSession(context, sessions, cookieName, scope))
         {
             return true;
         }
@@ -133,7 +130,7 @@ public sealed class ServerPairingAuthMiddleware
             return false;
         }
 
-        if (!_options.AllowLegacyTokenAuth)
+        if (!options.AllowLegacyTokenAuth)
         {
             return false;
         }
@@ -156,17 +153,5 @@ public sealed class ServerPairingAuthMiddleware
         var queryToken = context.Request.Query["token"].ToString();
         return !string.IsNullOrEmpty(queryToken) &&
                string.Equals(queryToken, expectedToken, StringComparison.Ordinal);
-    }
-
-    private static bool IsLocalRequest(HttpContext context)
-    {
-        var remote = context.Connection.RemoteIpAddress;
-        if (remote is null)
-        {
-            return true;
-        }
-
-        return IPAddress.IsLoopback(remote) ||
-               remote.Equals(context.Connection.LocalIpAddress);
     }
 }

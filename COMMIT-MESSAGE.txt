@@ -19,10 +19,12 @@ Instructions:
 
 Commit Message:
 
-Docs: Record the confirmed Android install cause and the pairing check fix in the reverse proxy and HTTPS milestone
+M12a: Serve the WebUI and Operator behind an HTTPS reverse proxy on the server machine
 
-- The Android install problem is confirmed on a Pixel 8 Pro: over HTTPS on port 443 through `tailscale serve` the WebUI installs and opens standalone, while plain HTTP on port 45123 still opens with browser UI, even with Chrome's insecure-origin flag. Chrome no longer needs a service worker to install, and the manifest already meets its requirements.
-- The milestone now leaves the WebUI's files open to devices that are not paired, because browsers fetch the manifest without cookies, and serves `/runtime-config.json` to every caller with the pairing token only for accepted requests, so the pairing prompt is reachable through a proxy.
-- Record the headers `tailscale serve` sends, the runtime config's `http://` URLs behind it today, and docs requirements for the host root, port 443, a trusted certificate, and Tailscale's prerequisites, and fix the README and `CONTEXT.md` explanations at completion.
-- The Android checklist item says to choose Install and check Settings → Apps, and installing from a plain-HTTP LAN address is out of scope.
-- Auth Cutover for API and Admin keeps the WebUI's files and runtime config open so the login gate can load, and its note on the auth mode setting now says it takes effect at the next start.
+- Forwarded headers are applied only from loopback, one hop, so behind `tailscale serve` or another proxy on the server machine a request takes the client's address, scheme, and host: pairing and control cookies are `Secure` over HTTPS, and `/runtime-config.json` returns the proxy's `https://` URLs. Forwarded headers from other addresses are ignored and logged to `last.log` once per address.
+- One localhost check replaces the two copies: a direct connection from loopback or to the server's own address. A proxied request, even from the server machine, and one with no remote address are not local.
+- The Operator's Bind on LAN setting and the desktop Settings dialog's Allow LAN access label become Allow remote connections, with the `bindOnLan` field unchanged. Off refuses every request from another device with 403 on every path, CORS preflights included, directly or through a proxy, and the dev `run-server` scripts drop their `-BindOnLan` flag so the saved setting alone decides.
+- Pairing covers `/api` routes only, so a device that is not paired loads the WebUI, its manifest, and the pairing prompt, and `/runtime-config.json` includes the pairing token only for callers that pairing accepts.
+- A cookie that would be `SameSite=None` without `Secure` is sent as `Lax`. CORS accepts configured `https` origins and builds the server's own origins with the scheme it listens on, and the Operator's next-URL links use that scheme too.
+- The event stream sends `X-Accel-Buffering: no` so nginx passes events through.
+- README and dev-setup document Tailscale Serve, Caddy, and nginx at the host root on port 443, and Release Specific checks cover the proxy matrix and Android, iOS, and desktop installs.

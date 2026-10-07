@@ -35,6 +35,7 @@ public sealed class ServerAuthRegressionTests
         var context = new DefaultHttpContext();
         context.Request.Method = HttpMethods.Options;
         context.Request.Path = "/api/version";
+        context.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("192.168.1.90");
 
         await middleware.InvokeAsync(context);
         Assert.True(nextCalled);
@@ -66,6 +67,7 @@ public sealed class ServerAuthRegressionTests
         var context = new DefaultHttpContext();
         context.Request.Path = "/api/version";
         context.Request.Headers.Cookie = $"{options.PairingCookieName}={sessionId}";
+        context.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("192.168.1.90");
 
         await middleware.InvokeAsync(context);
         Assert.True(nextCalled);
@@ -108,7 +110,7 @@ public sealed class ServerAuthRegressionTests
 
         await middleware.InvokeAsync(context);
         Assert.False(nextCalled);
-        Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
     }
 
     private static CoreSettingsService CreateSettingsService(ServerRuntimeOptions options)

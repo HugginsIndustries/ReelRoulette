@@ -30,6 +30,18 @@ public sealed class ServerRuntimeOptions
     public string? ControlAdminSharedToken { get; set; }
     public string ControlAdminCookieName { get; set; } = "rr_admin";
 
+    /// <summary>
+    /// The scheme the server itself listens on, which clients connecting to it directly use. Clients behind a proxy
+    /// use the proxy's scheme instead.
+    /// </summary>
+    public string GetListenScheme()
+    {
+        return Uri.TryCreate(ListenUrl, UriKind.Absolute, out var uri) &&
+               uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            ? Uri.UriSchemeHttps
+            : Uri.UriSchemeHttp;
+    }
+
     public static ServerRuntimeOptions FromConfiguration(IConfiguration configuration)
     {
         var options = new ServerRuntimeOptions();

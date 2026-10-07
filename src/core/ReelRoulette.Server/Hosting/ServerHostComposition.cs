@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Net;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Net.Http.Headers;
 using ReelRoulette.Server.Auth;
@@ -65,8 +64,31 @@ public static class ServerHostComposition
         services.AddHostedService(sp => sp.GetRequiredService<RefreshPipelineService>());
     }
 
-    public static void MapReelRouletteEndpoints(this WebApplication app, ServerRuntimeOptions options)
+    /// <summary>The steps every request passes before its endpoint, in order.</summary>
+    internal static void UseRequestPipeline(IApplicationBuilder app, ServerRuntimeOptions options)
     {
+        // First, so every later step sees the client's address, scheme, and host from a proxy on this machine.
+        var proxyForwarding = new ProxyForwarding(app.ApplicationServices.GetRequiredService<ServerLogService>());
+        app.Use((context, next) =>
+        {
+            proxyForwarding.WarnIfUntrusted(context);
+            return next(context);
+        });
+        app.UseForwardedHeaders(ProxyForwarding.CreateOptions());
+
+        // Next, ahead of telemetry and CORS, so nothing else answers a device that remote connections refuse.
+        app.Use(async (context, next) =>
+        {
+            var settings = context.RequestServices.GetRequiredService<CoreSettingsService>();
+            if (RemoteConnectionsGate.Refuses(context, settings))
+            {
+                await RemoteConnectionsGate.WriteRefusalAsync(context);
+                return;
+            }
+
+            await next();
+        });
+
         app.Use(async (context, next) =>
         {
             var path = context.Request.Path.Value ?? string.Empty;
@@ -140,6 +162,11 @@ public static class ServerHostComposition
             context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             await context.Response.WriteAsJsonAsync(new { error = refusal.Error, code = refusal.Code });
         });
+    }
+
+    public static void MapReelRouletteEndpoints(this WebApplication app, ServerRuntimeOptions options)
+    {
+        UseRequestPipeline(app, options);
 
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
@@ -918,6 +945,8 @@ public static class ServerHostComposition
         context.Response.Headers.Append("Content-Type", "text/event-stream");
         context.Response.Headers.Append("Cache-Control", "no-cache");
         context.Response.Headers.Append("Connection", "keep-alive");
+        // nginx buffers proxied responses by default, which would hold events back.
+        context.Response.Headers.Append("X-Accel-Buffering", "no");
 
         // Stopping the server waits for every open response, so the stream also ends when the server starts stopping.
         using var streamEnd = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, serverStopping);
@@ -1003,7 +1032,7 @@ public static class ServerHostComposition
         }
     }
 
-    private static IResult HandlePairRequest(
+    internal static IResult HandlePairRequest(
         HttpContext context,
         string? token,
         ServerRuntimeOptions options,
@@ -1041,11 +1070,6 @@ public static class ServerHostComposition
         ServerSessionStore sessions,
         ServerLogService logs)
     {
-        if (!IsLocalRequest(context) && !settings.GetWebRuntimeSettings().BindOnLan)
-        {
-            return Results.Json(new { error = "Forbidden. Control-plane LAN access is disabled." }, statusCode: StatusCodes.Status403Forbidden);
-        }
-
         var control = settings.GetControlRuntimeSettings();
         if (string.IsNullOrWhiteSpace(control.AdminSharedToken) ||
             string.IsNullOrWhiteSpace(token) ||
@@ -1086,17 +1110,6 @@ public static class ServerHostComposition
         await context.Response.WriteAsync($"event: {envelope.EventType}\n", cancellationToken);
         await context.Response.WriteAsync($"data: {json}\n\n", cancellationToken);
         await context.Response.Body.FlushAsync(cancellationToken);
-    }
-
-    private static bool IsLocalRequest(HttpContext context)
-    {
-        var remote = context.Connection.RemoteIpAddress;
-        if (remote is null)
-        {
-            return true;
-        }
-
-        return IPAddress.IsLoopback(remote) || remote.Equals(context.Connection.LocalIpAddress);
     }
 
     private static string? NormalizeOptionalIdentity(string? value)
@@ -1140,7 +1153,7 @@ public static class ServerHostComposition
                     $"Control token changed; ended {ended} control session(s).");
 
                 // A non-local caller gets a fresh session so the rest of its save still goes through.
-                if (!IsLocalRequest(context))
+                if (!LocalRequest.IsLocal(context))
                 {
                     IssueControlSession(context, options, sessions);
                 }

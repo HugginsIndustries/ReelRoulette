@@ -2,7 +2,6 @@
 param(
     [int]$Port = 45123,
     [switch]$RequireAuth,
-    [switch]$BindOnLan,
     [switch]$DisableLocalhostTrust,
     [string]$Framework = "",
     [string]$PairingToken = "reelroulette-dev-token"
@@ -15,8 +14,7 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-$listenHost = if ($BindOnLan.IsPresent) { "0.0.0.0" } else { "localhost" }
-$listenUrl = "http://$listenHost`:$Port"
+$listenUrl = "http://localhost:$Port"
 $healthUrl = "http://localhost:$Port/health"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot ".." "..")).Path
 $defaultWebUiDist = Join-Path $repoRoot "src" "clients" "web" "ReelRoulette.WebUI" "dist"
@@ -24,7 +22,8 @@ $serverAppProject = Join-Path $repoRoot "src" "core" "ReelRoulette.ServerApp" "R
 
 $env:CoreServer__ListenUrl = $listenUrl
 $env:CoreServer__RequireAuth = if ($RequireAuth.IsPresent) { "true" } else { "false" }
-$env:CoreServer__BindOnLan = if ($BindOnLan.IsPresent) { "true" } else { "false" }
+# Remote access follows the saved Allow remote connections setting; this clears a value left in the session.
+$env:CoreServer__BindOnLan = "false"
 $env:CoreServer__TrustLocalhost = if ($DisableLocalhostTrust.IsPresent) { "false" } else { "true" }
 $env:CoreServer__PairingToken = $PairingToken
 if (-not $env:ServerApp__WebUiStaticRootPath) {
@@ -36,7 +35,7 @@ Write-Host "  Listen URL: $listenUrl"
 Write-Host "  Health URL: $healthUrl"
 Write-Host "  WebUI static root: $($env:ServerApp__WebUiStaticRootPath)"
 Write-Host "  Require auth: $($RequireAuth.IsPresent)"
-Write-Host "  Bind on LAN: $($BindOnLan.IsPresent)"
+Write-Host "  Remote connections: the saved Allow remote connections setting"
 Write-Host "  Trust localhost: $(-not $DisableLocalhostTrust.IsPresent)"
 if ($RequireAuth.IsPresent) {
     Write-Host "  Pairing token: $PairingToken"

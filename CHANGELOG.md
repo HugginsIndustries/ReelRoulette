@@ -9,7 +9,11 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Added
 
+- **Install the WebUI as an app on Android:** The server now works behind an HTTPS reverse proxy on the server machine, such as Tailscale Serve or Caddy, so Chrome on Android can install the WebUI as an app that opens without browser bars. The README shows how to set one up.
+
 ### Changed
+
+- **Allow remote connections:** The Operator's **Bind on LAN** setting and the desktop's **Allow LAN access** setting are now **Allow remote connections**. Turned off, the server answers only the server machine and refuses other devices, including requests through a proxy. Turned on, other devices connect directly over the LAN or through a proxy.
 
 ### Deprecated
 
@@ -17,7 +21,11 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 ### Fixed
 
+- **Pairing a new device:** A phone or computer that is not paired yet now loads the WebUI and its pairing prompt instead of an "Unauthorized" error.
+
 ### Security
+
+- **Requests through a proxy:** A reverse proxy on the server machine, such as Tailscale Serve, no longer passes on the server machine's trust to every device that uses it. Through a proxy, each device pairs once with the default auth mode, the Operator asks for the control token, and sign-in cookies are marked secure.
 
 ---
 

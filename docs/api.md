@@ -45,20 +45,30 @@ Pairing endpoints:
 
 Protected-route behavior:
 
-- Unpaired requests return `401` when auth is required.
-- Localhost trust can be enabled for local development workflows.
-- LAN access requires valid pairing/session when auth is enabled.
+- Pairing covers `/api` routes only. Unpaired `/api` requests return `401` when auth is required. The WebUI's files, `/runtime-config.json`, `/operator`, and `/health` load without a session.
+- Localhost trust can be enabled for local development workflows. Localhost means a direct connection from the server machine: from loopback, or to the server's own LAN address from that address. A request through a reverse proxy is not localhost, even when the proxy runs on the server machine, and neither is a request with no remote address.
+- Requests from other devices require valid pairing/session when auth is enabled.
+
+Remote connections:
+
+- With **Allow remote connections** (`bindOnLan`) off, every request from another device returns `403` on every path, directly or through a proxy. API and control routes answer with an `ErrorResponse`, other paths with plain text.
+
+Reverse proxies:
+
+- Forwarded headers (`X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host`) are applied only from loopback, one hop. From such a proxy, the request takes the client's address, scheme, and host, so cookies and `/runtime-config.json` follow the proxy's HTTPS address. Forwarded headers from any other address are ignored, and the first such request from each address writes a warning to `last.log`.
+- Any forwarding header, including `Forwarded` and `X-Real-IP`, makes a request non-local, whether or not it was applied.
+- `GET /api/events` sends `X-Accel-Buffering: no` so nginx does not buffer events.
 
 Session/cookie behavior:
 
 - Server issues generated session-id cookies (not raw pairing token values).
-- Cookie policy is runtime-configurable (same-site, secure mode, session duration).
+- Cookie policy is runtime-configurable (same-site, secure mode, session duration). In the default `Request` secure mode, a cookie is `Secure` when the client used HTTPS, including through a proxy. A cookie that would be `SameSite=None` without `Secure` is sent as `Lax`, since browsers reject it.
 - Auth middleware validates session cookie first; optional legacy fallback paths can be enabled.
 
 Control-plane auth (`/control/*`):
 
-- Localhost requests are trusted on every control route, including the testing routes. A request to the server's own LAN address from the server machine counts as localhost, and so does a request forwarded by a reverse proxy on the server machine.
-- A non-localhost request returns `403` while LAN binding is off. Otherwise it needs a control session cookie (`rr_admin`) from `POST /control/pair`, or the control token as a `Bearer` header when legacy token auth is allowed, and returns `401` without one. A `token` query parameter is never accepted on control routes, so the control token stays out of URLs and request logs. There is no setting that turns this off.
+- Localhost requests are trusted on every control route, including the testing routes. A request to the server's own LAN address from the server machine counts as localhost. A request through a reverse proxy does not, even when the proxy runs on the server machine.
+- A non-localhost request returns `403` while remote connections are off. Otherwise it needs a control session cookie (`rr_admin`) from `POST /control/pair`, or the control token as a `Bearer` header when legacy token auth is allowed, and returns `401` without one. A `token` query parameter is never accepted on control routes, so the control token stays out of URLs and request logs. There is no setting that turns this off.
 - The server generates a control token on start when none is set and saves it as `controlRuntime.adminSharedToken` in `core-settings.json` in the server data folder. The Operator shows it under Control Settings.
 - `POST /control/pair` with the token in its JSON body returns `200` and sets the admin cookie; there is no `GET` form. A wrong or missing token returns `401` and logs a warning with the remote address to `last.log`, never the token.
 - Changing the token through `POST /control/settings` ends every control session. A non-localhost caller gets a fresh admin cookie in the same response, so the rest of its save goes through.
@@ -77,6 +87,7 @@ Recommended profiles:
 
 - Localhost dev: allow local web origins; relaxed cookie policy appropriate for local HTTP.
 - LAN/prod-style: HTTPS + explicit origins + credentials + secure cookie settings.
+- Configured origins can use `http` or `https`; an origin with its scheme's default port matches one without it. The server's own localhost and LAN origins use the scheme it listens on. The WebUI served through a proxy is same-origin and needs no CORS entry.
 
 ## Web Runtime Configuration (WebUI)
 
@@ -93,6 +104,8 @@ Required keys:
 Optional keys:
 
 - `pairToken` (dev/local bootstrap only)
+
+Served by the server, `/runtime-config.json` loads for every caller. `apiBaseUrl` and `sseUrl` use the scheme and host the caller used, which through a proxy on the server machine are the proxy's. `pairToken` is included only for a caller that `/api` pairing already accepts, so a device that is not paired gets the pairing prompt.
 
 Validation behavior:
 
@@ -172,7 +185,7 @@ Reconnect/resync behavior:
 
 - `GET /api/web-runtime/settings`
 - `POST /api/web-runtime/settings`
-- Web runtime snapshot fields include `enabled`, `port`, `bindOnLan`, `mdnsEnabled` (defaults to `true`; when `false`, LAN binding and CORS still apply but the server does not advertise `{lanHostname}.local` on the network), `lanHostname`, `authMode`, and `sharedToken`.
+- Web runtime snapshot fields include `enabled`, `port`, `bindOnLan` (shown as **Allow remote connections**), `mdnsEnabled` (defaults to `true`; when `false`, remote connections and CORS still apply but the server does not advertise `{lanHostname}.local` on the network), `lanHostname`, `authMode`, and `sharedToken`.
 
 ### Backup settings
 

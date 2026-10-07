@@ -12,7 +12,7 @@ ReelRoulette is a server-first media randomizer with thin desktop and web client
   - WebUI static assets
   - Operator UI (`/operator`)
 - Control-plane/admin operations are exposed under `/control/*` (status, settings, pair, restart, stop, testing, logs).
-- The Operator opens directly on the server machine. From another machine it first asks for the control token, which is shown under Control Settings in the Operator on the server machine. On a server with no browser, the token is `controlRuntime.adminSharedToken` in `core-settings.json` in the server data folder (see [docs/dev-setup.md](docs/dev-setup.md#user-data-locations)). Requests that a proxy on the server machine forwards, such as Tailscale Serve, arrive from localhost and do not ask for it.
+- The Operator opens directly on the server machine. From another machine it first asks for the control token, which is shown under Control Settings in the Operator on the server machine. On a server with no browser, the token is `controlRuntime.adminSharedToken` in `core-settings.json` in the server data folder (see [docs/dev-setup.md](docs/dev-setup.md#user-data-locations)). Requests through a reverse proxy count as another machine, even when the proxy runs on the server machine.
 - Desktop and WebUI act as API/SSE clients; server/core owns authoritative domain state.
 
 ## Prerequisites
@@ -96,8 +96,37 @@ npm run dev
 
 - app icon: `assets/HI.ico` -> `public/HI.ico`
 - PWA / home-screen icons: `assets/HI-256.png` and `assets/HI-512.png` are resized with **`sharp`** (devDependency) into `public/icons/icon-192.png` (**192×192**), `public/icons/icon-512.png` (**512×512**), and `public/icons/apple-touch-icon.png` (**180×180**) so `manifest.webmanifest` `sizes` matches the PNGs
-- PWA installability on **Chromium/Android**: `public/sw.js` is a minimal root-scoped service worker registered from the client in secure contexts so **Install app** can yield a standalone shell together with `manifest.webmanifest`. It intercepts document navigations only; API calls, the event stream, and media go straight to the server. The server serves `sw.js` with `Cache-Control: no-store` so updates are not stuck behind caching
+- PWA metadata: `manifest.webmanifest` and `public/sw.js`, a minimal root-scoped service worker registered from the client in secure contexts. Chrome installs from the manifest over HTTPS and does not need the worker (see [WebUI over HTTPS](#webui-over-https-install-as-an-app)). The worker intercepts document navigations only; API calls, the event stream, and media go straight to the server. The server serves `sw.js` with `Cache-Control: no-store` so updates are not stuck behind caching
 - Material Symbols font: `assets/fonts/MaterialSymbolsOutlined.var.ttf` -> `public/assets/fonts/MaterialSymbolsOutlined.var.ttf`
+
+## WebUI over HTTPS (install as an app)
+
+On Android, Chrome installs the WebUI as an app only over HTTPS on the default port 443, with a certificate the phone trusts. From the plain-HTTP LAN address it only adds a home-screen shortcut that opens in the browser. iOS **Add to Home Screen** works over plain HTTP. The server serves only HTTP, so put an HTTPS reverse proxy in front of it:
+
+- Run the proxy on the server machine and point it at `http://127.0.0.1:45123` (or your port). The server reads forwarded headers only from a proxy that connects from loopback. A proxy on another machine, or one that connects to the server's LAN address, is not supported: the WebUI it serves would call the server over `http://`, which the HTTPS page cannot do.
+- Serve the WebUI at the host root, such as `https://reel.example.com/`, not under a path.
+- The proxy must send `X-Forwarded-For` and `X-Forwarded-Proto`, and either pass the original `Host` or send `X-Forwarded-Host`. Tailscale Serve and Caddy do this by default. Without `X-Forwarded-For`, requests through the proxy look like they come from the server machine.
+- Turn on **Allow remote connections** in the Operator and restart the server when it asks. Off, the server answers only the server machine and refuses requests through the proxy. On, it also serves plain HTTP on the LAN at its port.
+- Requests through the proxy count as another device, even from the server machine. With the default auth mode, each device pairs once with the shared token, and the Operator asks for the control token.
+- A self-signed certificate that you click through is not expected to be enough for Chrome to offer Install.
+
+### Tailscale Serve
+
+1. In the Tailscale admin console, turn on **MagicDNS** and **HTTPS certificates** for your tailnet. Each phone needs the Tailscale app, connected to the tailnet.
+2. On the server machine, run `tailscale serve --bg 45123`. It serves `https://<machine>.<tailnet>.ts.net` on port 443 and proxies to `http://127.0.0.1:45123`. `tailscale serve status` shows it, and `tailscale serve reset` removes every Serve setting on the machine. Flags vary by Tailscale version; see [https://tailscale.com/kb/1312/serve](https://tailscale.com/kb/1312/serve).
+3. On the phone, open `https://<machine>.<tailnet>.ts.net/`, pair if asked, then choose **Install app** in Chrome's menu, not **Create shortcut**.
+
+### Another proxy
+
+With [Caddy](https://caddyserver.com/docs/quick-starts/reverse-proxy) on the server machine, this Caddyfile is enough; Caddy gets a trusted certificate for the name when it can prove it owns it:
+
+```text
+reel.example.com {
+    reverse_proxy 127.0.0.1:45123
+}
+```
+
+For nginx and the details of what the server reads, see [docs/dev-setup.md](docs/dev-setup.md#reverse-proxy-and-https).
 
 ## Helper Scripts
 
@@ -119,18 +148,6 @@ Linux runtime note:
 
 - Tray is used when a graphical session is available; otherwise the server runs headless.
 - Tray and Operator expose the same `Launch Server on Startup` toggle; it writes `reelroulette-server.desktop` under your XDG autostart directory with `Exec=` targeting the stable server binary (from **`APPIMAGE`** when you run a Velopack **AppImage**, otherwise the process path) and `Path=` set to that binary’s directory. If an older autostart entry still points at `/tmp/.mount_*`, toggle startup off and on once to refresh it.
-
-### WebUI HTTPS on Tailscale (PWA/Home Screen)
-
-If your devices already use Tailscale, the most reliable way to run the WebUI in a secure context is:
-
-1. Ensure the server can be reached from your tailnet (for example enable LAN binding in Control Settings or configure `CoreServer:ListenUrl` to a non-loopback bind such as `http://0.0.0.0:45123`).
-2. Use **Tailscale Serve** to terminate HTTPS on your tailnet domain and proxy to the local server URL (for example `http://127.0.0.1:45123`).
-3. Open the resulting HTTPS URL from another tailnet device (iPad/Android) and use browser install flow (**Add to Home Screen** / **Install app**). On **Android**, prefer **Chrome** (or another Chromium browser) for install so the service worker meets installability; **Firefox for Android** may keep browser chrome for home-screen shortcuts.
-
-ReelRoulette WebUI runtime config is generated from the incoming request host/scheme (`/runtime-config.json`), so loading via the Tailscale HTTPS origin keeps API and SSE on the same HTTPS origin automatically.
-
-Tailscale CLI flags can vary by version; use the current Tailscale docs for `serve` setup details: [https://tailscale.com/kb/1312/serve](https://tailscale.com/kb/1312/serve).
 
 Build WebUI and run server app:
 

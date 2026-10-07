@@ -2,7 +2,6 @@
 param(
     [int]$Port = 45123,
     [switch]$RequireAuth,
-    [switch]$BindOnLan,
     [switch]$DisableLocalhostTrust,
     [string]$PairingToken = "reelroulette-dev-token"
 )
@@ -60,7 +59,6 @@ try {
         "-PairingToken", $PairingToken
     )
     if ($RequireAuth.IsPresent) { $scriptArgs += "-RequireAuth" }
-    if ($BindOnLan.IsPresent) { $scriptArgs += "-BindOnLan" }
     if ($DisableLocalhostTrust.IsPresent) { $scriptArgs += "-DisableLocalhostTrust" }
 
     & $pwsh @scriptArgs

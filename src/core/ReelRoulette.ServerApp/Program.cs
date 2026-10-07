@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.FileProviders;
 using ReelRoulette.ServerApp;
 using ReelRoulette.ServerApp.Hosting;
+using ReelRoulette.Server.Auth;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
@@ -90,7 +91,7 @@ static async Task RunAsync(string[] args)
         var startupLaunchService = CreateStartupLaunchService(app);
 
         MapRuntimeConfig(app, runtimeOptions, startupWebRuntime);
-        MapOperatorUi(app, serverAppOptions, webUiEnabledAtStartup);
+        MapOperatorUi(app, serverAppOptions, webUiEnabledAtStartup, runtimeOptions.GetListenScheme());
         MapRestartEndpoints(app, serverAppOptions);
         MapUpdateControlEndpoints(app);
         MapStartupLaunchEndpoints(app, startupLaunchService);
@@ -314,25 +315,14 @@ static void MapRuntimeConfig(
     ServerRuntimeOptions runtimeOptions,
     WebRuntimeSettingsSnapshot startupWebRuntime)
 {
-    app.MapGet("/runtime-config.json", (HttpContext context) =>
+    app.MapGet("/runtime-config.json", (HttpContext context, ServerSessionStore sessions) =>
     {
         if (!startupWebRuntime.Enabled)
         {
             return Results.NotFound();
         }
 
-        var authModeOff = string.Equals(startupWebRuntime.AuthMode, "Off", StringComparison.OrdinalIgnoreCase);
-        var pairToken = !runtimeOptions.RequireAuth || authModeOff
-            ? null
-            : startupWebRuntime.SharedToken ?? runtimeOptions.PairingToken;
-
-        var root = $"{context.Request.Scheme}://{context.Request.Host.Value}";
-        var payload = new
-        {
-            apiBaseUrl = root,
-            sseUrl = $"{root}/api/events",
-            pairToken
-        };
+        var payload = WebRuntimeConfig.Build(context, runtimeOptions, startupWebRuntime, sessions);
 
         context.Response.Headers["Cache-Control"] = "no-store";
         return Results.Text(JsonSerializer.Serialize(payload, new JsonSerializerOptions
@@ -343,7 +333,7 @@ static void MapRuntimeConfig(
     });
 }
 
-static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool webUiEnabledAtStartup)
+static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool webUiEnabledAtStartup, string listenScheme)
 {
     app.MapGet(options.OperatorUiPath, () =>
     {
@@ -569,8 +559,9 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
       </div>
       <div class="inline">
         <input id="bindOnLan" type="checkbox" />
-        <label for="bindOnLan" style="margin-top:0;">Bind on LAN</label>
+        <label for="bindOnLan" style="margin-top:0;">Allow remote connections</label>
       </div>
+      <p class="muted">Off: only this machine. On: other devices, directly or through a proxy. On also serves plain HTTP on the LAN.</p>
       <div class="inline">
         <input id="mdnsEnabled" type="checkbox" />
         <label for="mdnsEnabled" style="margin-top:0;">Advertise on local network (mDNS)</label>
@@ -674,6 +665,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
     let lastLoadedControlSettings = null;
     let latestConnectedClients = null;
     const webUiEnabledAtStartup = __WEBUI_ENABLED_AT_STARTUP__;
+    const listenScheme = "__LISTEN_SCHEME__";
 
     let operatorStarted = false;
 
@@ -869,7 +861,8 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
     }
 
     function buildNextOperatorUrls(settings) {
-      const protocol = window.location.protocol;
+      // These are the server's own addresses, so they use its scheme, not that of a proxy this page may be open through.
+      const protocol = listenScheme + ":";
       const path = window.location.pathname || "/operator";
       const port = Number(settings.port || 45123);
       const local = `${protocol}//localhost:${port}${path}`;
@@ -1191,7 +1184,9 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
 </body>
 </html>
 """;
-        var html = htmlTemplate.Replace("__WEBUI_ENABLED_AT_STARTUP__", webUiEnabledAtStartup ? "true" : "false");
+        var html = htmlTemplate
+            .Replace("__WEBUI_ENABLED_AT_STARTUP__", webUiEnabledAtStartup ? "true" : "false")
+            .Replace("__LISTEN_SCHEME__", listenScheme);
         return Results.Text(html, "text/html");
     });
 }

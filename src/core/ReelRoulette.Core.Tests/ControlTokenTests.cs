@@ -433,11 +433,15 @@ public sealed class ControlTokenTests : IDisposable
         return context;
     }
 
+    // A caller on the server machine; a test of another device sets its own addresses.
     private DefaultHttpContext CreateServiceContext()
     {
         var services = new ServiceCollection();
         services.AddSingleton(new ServerLogService(_tempDir));
-        return new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
+        var context = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
+        context.Connection.RemoteIpAddress = IPAddress.Loopback;
+        context.Connection.LocalIpAddress = IPAddress.Loopback;
+        return context;
     }
 
     private static async Task<(bool NextCalled, DefaultHttpContext Context)> InvokeMiddleware(

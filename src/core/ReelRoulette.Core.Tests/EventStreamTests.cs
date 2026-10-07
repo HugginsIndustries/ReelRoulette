@@ -114,6 +114,20 @@ public sealed class EventStreamTests
     }
 
     [Fact]
+    public async Task TheStreamAsksAProxyNotToBufferIt()
+    {
+        using var aborted = new CancellationTokenSource();
+        using var stopping = new CancellationTokenSource();
+        stopping.Cancel();
+        var context = NewStreamContext(new FrameCapture(), aborted.Token);
+
+        await ServerHostComposition.StreamEventsAsync(context, new ServerStateService(), new ConnectedClientTracker(), new OperatorTestingService(), stopping.Token)
+            .WaitAsync(Wait);
+
+        Assert.Equal("no", context.Response.Headers["X-Accel-Buffering"].ToString());
+    }
+
+    [Fact]
     public async Task AStreamThatFailsOnWriteRemovesItsSubscription()
     {
         var state = new ServerStateService();

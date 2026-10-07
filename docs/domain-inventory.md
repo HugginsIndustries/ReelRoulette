@@ -48,7 +48,13 @@ Boundary:
 - `src/core/ReelRoulette.Server/Contracts/ApiContractMapper.cs`
   - contract shaping/mapping.
 - `src/core/ReelRoulette.Server/Auth/*`
-  - pairing/session/auth middleware and session store behavior.
+  - pairing/session/auth middleware and session store behavior, including the remote connections gate and pairing for `/api` routes only.
+- `src/core/ReelRoulette.Server/Hosting/LocalRequest.cs`
+  - the one localhost check: a direct connection from the server machine, never a proxied request or one with no remote address.
+- `src/core/ReelRoulette.Server/Hosting/ProxyForwarding.cs`
+  - forwarded headers applied from loopback only, and the `last.log` warning for forwarded headers from other addresses.
+- `src/core/ReelRoulette.Server/Hosting/WebRuntimeConfig.cs`
+  - `/runtime-config.json` payload: URLs from the caller's scheme and host, pairing token only for an accepted caller.
 - `shared/api/openapi.yaml`
   - API source of truth for endpoint and schema contracts.
 
@@ -88,7 +94,7 @@ Boundary:
 Includes:
 
 - control-plane surfaces (`/control/status`, `/control/settings`, `/control/pair`, `/control/restart`, `/control/stop`, `/control/update/*`, testing/log endpoints),
-- control-plane auth in `src/core/ReelRoulette.Server/Auth/ServerPairingAuthMiddleware.cs` (localhost trusted; every other address needs the control token) and control token generation in `CoreSettingsService`,
+- control-plane auth in `src/core/ReelRoulette.Server/Auth/ServerPairingAuthMiddleware.cs` (localhost trusted, as `LocalRequest` decides; every other address needs the control token) and control token generation in `CoreSettingsService`,
 - startup-launch control surface (`/control/startup`),
 - operator diagnostics and manual testing controls.
 

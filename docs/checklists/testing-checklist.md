@@ -63,6 +63,9 @@ An agent verifies these from the repo, its docs, or the release workflow's runs 
 
 These need a person, real devices, or the Windows VM.
 
+- [ ] Behind `tailscale serve` and one other HTTPS proxy, the WebUI and its admin section connect, pair, browse, and play, and the server treats them as remote.
+- [ ] On Android Chrome over HTTPS through each proxy, with the default auth mode, choosing Install (not Create shortcut) adds the WebUI to Settings → Apps and opens it standalone with its icon; iOS Add to Home Screen and desktop browser install still open standalone.
+
 ## Release Flow
 
 During the pass, on the release's dev build:

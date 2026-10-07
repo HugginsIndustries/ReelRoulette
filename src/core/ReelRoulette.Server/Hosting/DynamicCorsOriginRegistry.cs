@@ -10,6 +10,7 @@ public sealed class DynamicCorsOriginRegistry : IDisposable
     private readonly HashSet<string> _baseOrigins;
     private readonly HashSet<string> _allowedOrigins;
     private readonly ServerRuntimeOptions _runtimeOptions;
+    private readonly string _listenScheme;
     private CoreSettingsService? _settings;
     private ILogger? _logger;
     private bool _started;
@@ -18,6 +19,7 @@ public sealed class DynamicCorsOriginRegistry : IDisposable
     public DynamicCorsOriginRegistry(ServerRuntimeOptions runtimeOptions)
     {
         _runtimeOptions = runtimeOptions;
+        _listenScheme = runtimeOptions.GetListenScheme();
         _baseOrigins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var origin in runtimeOptions.CorsAllowedOrigins)
         {
@@ -151,9 +153,10 @@ public sealed class DynamicCorsOriginRegistry : IDisposable
             _allowedOrigins.Count);
     }
 
-    private static string BuildOrigin(string host, int port)
+    // These are the server's own addresses, which clients reach on the scheme it listens on.
+    private string BuildOrigin(string host, int port)
     {
-        return $"http://{host}:{port}";
+        return $"{_listenScheme}://{host}:{port}";
     }
 
     private static string NormalizeMdnsHostLabel(string? value)
@@ -187,12 +190,14 @@ public sealed class DynamicCorsOriginRegistry : IDisposable
             return false;
         }
 
-        if (!uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase))
+        var scheme = uri.Scheme.ToLowerInvariant();
+        if (scheme != Uri.UriSchemeHttp && scheme != Uri.UriSchemeHttps)
         {
             return false;
         }
 
-        normalized = $"{Uri.UriSchemeHttp}://{uri.Host.ToLowerInvariant()}:{uri.Port}";
+        // The port is explicit, so an origin with its scheme's default port matches one without it.
+        normalized = $"{scheme}://{uri.Host.ToLowerInvariant()}:{uri.Port}";
         return true;
     }
 }
