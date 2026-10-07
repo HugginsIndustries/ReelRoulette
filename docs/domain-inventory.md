@@ -182,6 +182,8 @@ WebUI is runtime-config-driven API/SSE client orchestration.
   - library overlay grid DOM lifecycle (mount, scroll, fill coverage with the last page's height, deferred layout while hidden, optional scroll reset on a new query, resize debounce, destroy).
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryPlayModel.ts`
   - play-item error status mapping and request identity helpers for library tile activation.
+- `src/clients/web/ReelRoulette.WebUI/src/playback/randomPick.ts`
+  - random pick requests, one at a time, cancelled after 10 seconds without an answer; an answer that arrives after that is not used.
 - `src/clients/web/ReelRoulette.WebUI/src/library/currentItemState.ts`
   - the playing item's favorite and blacklist from item-state events, and the per-item cache applied when an item plays again, both by item id.
 - `src/clients/web/ReelRoulette.WebUI/src/shell.ts`

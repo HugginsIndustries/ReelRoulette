@@ -67,6 +67,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
   - Runtime-config bootstrap, direct API/SSE integration, and startup compatibility/capability checks.
   - Session-aware identity propagation (`clientId`/`sessionId`) through API + SSE paths.
   - Core playback/control/tag workflows aligned with server-authoritative behavior.
+  - One random pick at a time: a press while one is waiting sends nothing, and a pick the server does not answer within 10 seconds is cancelled, shows "No response from the server. Try again.", and relays a `playback=random-pick-timeout` line to `last.log`.
   - Refresh status line uses the same stage parsing and consolidated completion summary as the desktop client (including Fingerprint segment); system light/dark follows `prefers-color-scheme` with themed shell and tag-editor surfaces.
   - Player overlay: **Library** (`browse` icon) and edit-tags top-right (left of favorite), mute in the bottom transport row for video (`HTMLVideoElement.muted`, Material `volume_up`/`volume_off`); corner/transport controls use drop-shadow chrome only (media area not dimmed); **Fullscreen** uses a DOM **stage** that includes the media region and the tag/filter/**library** overlays (so dialogs work in fullscreen on desktop); **iOS WebKit** uses in-page pseudo-fullscreen to avoid native video controls replacing the custom UI.
   - Tag editor: category reorder enables Save without other pending mutations; tag chips keep white glyphs/text and shadow treatment in both themes.

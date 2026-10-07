@@ -23,6 +23,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 - **Pairing a new device:** A phone or computer that is not paired yet now loads the WebUI and its pairing prompt instead of an "Unauthorized" error.
 - **Tag filters stay fast:** Browsing the library and random picks no longer slow down with each tag in the filter. On a 49,000-item library, a 27-tag preset picks in about 45 ms instead of 700 ms, and its first library page loads in about 90 ms instead of 1.5 seconds.
+- **One random pick at a time:** Pressing Next again in the WebUI while a random pick is loading no longer sends more picks that each play briefly and count as a play. A pick the server doesn't answer within 10 seconds is cancelled with "No response from the server. Try again.", and the next press starts a fresh one.
 
 ### Security
 

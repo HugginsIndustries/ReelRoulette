@@ -65,6 +65,7 @@ These need a person, real devices, or the Windows VM.
 
 - [ ] Behind `tailscale serve` and one other HTTPS proxy, the WebUI and its admin section connect, pair, browse, and play, and the server treats them as remote.
 - [ ] On Android Chrome over HTTPS through each proxy, with the default auth mode, choosing Install (not Create shortcut) adds the WebUI to Settings → Apps and opens it standalone with its icon; iOS Add to Home Screen and desktop browser install still open standalone.
+- [ ] With the server paused (`kill -STOP` on its process) while the WebUI plays, pressing Next several times shows "Loading..." and, about 10 seconds after the first press, "No response from the server. Try again."; after `kill -CONT`, `last.log` has one `playback=random-pick-timeout` line and no more than one random pick from those presses, and the next Next plays one item.
 
 ## Release Flow
 

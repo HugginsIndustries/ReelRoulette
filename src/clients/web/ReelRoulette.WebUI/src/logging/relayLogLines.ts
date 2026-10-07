@@ -9,7 +9,7 @@ export interface RelayLogCurrentItem {
 }
 
 /** Playback context keys whose values hold no item details. Any other key is left out of the line. */
-const SAFE_TRACE_CONTEXT_KEYS = new Set(["mediaType", "statusCode", "code", "expectedPlayAttemptId", "message"]);
+const SAFE_TRACE_CONTEXT_KEYS = new Set(["mediaType", "statusCode", "code", "expectedPlayAttemptId", "message", "timeoutMs"]);
 
 /** Builds the line relayed to the server log when the status text changes. */
 export function statusLogLine(

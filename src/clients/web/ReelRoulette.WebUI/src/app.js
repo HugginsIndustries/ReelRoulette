@@ -51,6 +51,7 @@ import {
   runTagEditorSave
 } from "./library/tagSave.ts";
 import { requestPlayItem } from "./api/coreApi.ts";
+import { createRandomPicker } from "./playback/randomPick.ts";
 import { createSseClient } from "./events/sseClient.ts";
 import { playbackTraceLine, statusLogLine } from "./logging/relayLogLines.ts";
 
@@ -219,6 +220,15 @@ export function startApp(config) {
   };
 
   const itemStateCache = createItemStateCache();
+  const randomPicker = createRandomPicker((body, signal) =>
+    fetch(buildApiUrl("/api/random"), {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body,
+      signal
+    })
+  );
   let libraryBrowseControls = createDefaultBrowseControls();
   const tagSaveSession = createTagSaveSession();
   let libraryGridController = null;
@@ -1837,38 +1847,36 @@ export function startApp(config) {
     }
 
     setStatus("Loading...");
-    try {
-      const response = await fetch(buildApiUrl("/api/random"), {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      if (response.status === 401) {
+    // A press while a pick is waiting sends nothing; the status above shows it is still loading.
+    const outcome = await randomPicker.pick(body);
+    switch (outcome.kind) {
+      case "busy":
+        return;
+      case "timedOut":
+        tracePlayback("warn", "random-pick-timeout", { timeoutMs: outcome.timeoutMs });
+        setStatus("No response from the server. Try again.");
+        return;
+      case "unauthorized":
         pairSection.style.display = "flex";
         setStatus("Unauthorized. Pair first.");
         return;
-      }
-      if (!response.ok) {
-        setStatus(`Random selection failed (${response.status}).`);
+      case "failed":
+        setStatus(`Random selection failed (${outcome.statusCode}).`);
         return;
-      }
-
-      const data = await response.json();
-      if (!data?.mediaUrl) {
+      case "error":
+        setStatus(`Random selection failed: ${outcome.message}`);
+        return;
+      case "none":
         setStatus("No eligible media for current filters.");
         return;
-      }
-
-      state.current = data;
-      applyCachedState(state.current);
-      state.history = state.history.slice(0, state.historyIndex + 1);
-      state.history.push(state.current);
-      state.historyIndex = state.history.length - 1;
-      playCurrent();
-    } catch (error) {
-      setStatus(`Random selection failed: ${error?.message || error}`);
     }
+
+    state.current = outcome.item;
+    applyCachedState(state.current);
+    state.history = state.history.slice(0, state.historyIndex + 1);
+    state.history.push(state.current);
+    state.historyIndex = state.history.length - 1;
+    playCurrent();
   }
 
   function goPrevious() {

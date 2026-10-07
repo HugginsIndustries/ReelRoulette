@@ -41,4 +41,10 @@ describe("relayLogLines", () => {
       "playback=library-play-failed attempt=3 hasCurrent=true mediaType=video statusCode=404 code=play_media_missing expectedPlayAttemptId=3"
     );
   });
+
+  it("keeps how long a timed-out random pick waited", () => {
+    expect(playbackTraceLine("random-pick-timeout", current, 4, { timeoutMs: 10000 })).toBe(
+      "playback=random-pick-timeout attempt=4 hasCurrent=true timeoutMs=10000"
+    );
+  });
 });
