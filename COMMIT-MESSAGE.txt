@@ -19,12 +19,11 @@ Instructions:
 
 Commit Message:
 
-M12b: Move the WebUI tag editor and Auto Tag to Preact and remove app.js
+Docs: Record the WebUI panel design and keep its mockups
 
-- Move the tag editor (Edit Tags, Auto Tag, the Edit Tag dialog, Refresh, Close, and Save) to a component that keeps its markup and behavior, which finishes the WebUI's move to Preact.
-- Its panels are no longer rebuilt on each change, so focus stays on the chip, category, expand, or row control the user just used.
-- Move the editor's state, held edits, Auto Tag scan and selection, background save, filter and preset retargeting, and item-tag events into a typed `tagEditor` service, with the display and Auto Tag logic in `tagEditorModel` and `autoTagModel`, and node tests; Edit Tags calls the service, and the store's overlay request is gone.
-- Add `happy-dom` behavior tests written against `app.js` before the move, with markup snapshots of each tab and the Edit Tag dialog, and a tag editor error boundary test.
-- Delete `app.js`, its declaration, the legacy overlay markup, and the undeclared-name check with its `npm run verify` step.
-- Record in WebUI Status Line Overhaul, with acceptance criteria, three messages kept as they were: a failed Auto Tag scan reads as no matches, a scan with nothing to change stays on "Scanning…", and a save that cannot reach the server shows an earlier save's error.
-- Complete the milestone with the slice's evidence and spot check and move it to `MILESTONES-COMPLETED.md`, and update the domain inventory, `CONTEXT.md`, the WebUI README, and the `app.js` paths named in later milestones.
+- Add interactive mockups of the WebUI's responsive layout and field validation in `docs/mockups/webui-panels/`, with their build scripts, a happy-dom check, and a README on rebuilding them and serving them to a phone. They stay as the design reference after the work ships.
+- Record in WebUI Responsive Layout and Panels the decisions settled with the mockups: the overlay and width breakpoints, the right side by default, smaller library tiles, one panel button on the player, a remembered open state, Auto Tag over the whole page, and a scrub bar on photos that shows the photo's timer.
+- Add to it a themed in-app dialog component that stacks a delete confirmation above its edit dialog, Edit Category and Edit Preset dialogs that hold Delete, drag-handle reordering, category headers that toggle, strict typed durations, a held photo resuming with its time left, and Refresh keeping unsaved preset changes, and split the milestone into five parts.
+- Record that the Tags tab follows the playing item unless it has unsaved changes to that item's tags, naming the item it stays on; that unsaved Filter and Tags changes survive closing the panel, marked by a dot on their tab and the panel button; and that a confirmation opens with Cancel focused so Enter never deletes.
+- Move the dialog component and six of the native dialogs from WebUI In-App Dialogs, and drop the tag editor's close confirmation; that milestone keeps the Refresh confirmation, new category name, and the notice.
+- Drop the header's settings icon from WebUI Settings Panel, since the panel's tab row reaches the Settings tab.

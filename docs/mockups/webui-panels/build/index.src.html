@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a1a1a">
+<title>Panel Mockups</title>
+<style>
+/*@COMMON_CSS@*/
+body {
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  line-height: 1.5;
+}
+.page { max-width: 760px; margin: 0 auto; }
+h1 { font-size: 1.4rem; margin: 0 0 4px; }
+.lede { color: var(--muted-fg); margin: 0 0 20px; }
+.card {
+  display: block;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+.card:hover { border-color: var(--huggins-orange); }
+.card h2 { margin: 0 0 4px; font-size: 1.1rem; display: flex; align-items: center; gap: 8px; }
+.card h2 .material-symbol-icon { font-size: 26px; color: var(--huggins-orange); }
+.card ul { margin: 6px 0 0; padding-left: 20px; }
+h3 { font-size: 1rem; margin: 22px 0 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--surface-border); vertical-align: top; }
+th { font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Responsive layout and panels: mockups</h1>
+  <p class="lede">For approval before code. Both pages work at desktop and phone widths and follow the system light or dark theme.</p>
+
+  <a class="card" href="layout.html">
+    <h2><span class="material-symbol-icon">dock_to_right</span>Panel layout</h2>
+    <ul>
+      <li>The player's one panel button opens the panel on its last tab, and closes it. Favorite and Blacklist stay on the player.</li>
+      <li>Drag the handle between the player and the panel, or focus it and use the arrow keys. Open or closed, side, width, and last tab survive a reload.</li>
+      <li>Below 800 px wide, or on a touch screen under 500 px tall, the panel is a full-screen overlay. The chip at the player's top left shows what Auto-Pause did.</li>
+      <li>Tags tab: tap a category's name to collapse it; categories reorder by their handle; chips and categories open an edit dialog that holds Delete.</li>
+      <li>Unsaved Filter and Tags changes survive closing the panel and switching tabs; an orange dot marks their tab, and the player's panel button, until they are applied, saved, canceled, or discarded.</li>
+      <li>The Tags tab shows the playing item's tags and follows it. Add or remove a tag, then press Next: the tab stays on its item with an “Editing tags for …” line until you Save, or Refresh and discard.</li>
+      <li>Filter tab, Presets: presets reorder by their handle, and Edit opens an Edit Preset dialog with the name and Delete.</li>
+      <li>Every dialog is an in-app dialog. Delete asks in a second dialog stacked above, with Cancel focused so Enter never deletes; Escape closes only the top one.</li>
+      <li>Every third item is a photo, so Next moves between photos and videos. On a photo the scrub bar stays, disabled, and fills as the photo's timer runs while Autoplay is on.</li>
+      <li>The <b>Mockup</b> tab on the left edge switches the side, Auto-Pause, theme, and what later milestones add.</li>
+    </ul>
+  </a>
+
+  <a class="card" href="validation.html">
+    <h2><span class="material-symbol-icon">error</span>Field validation pattern</h2>
+    <ul>
+      <li>Each state of the durations (parsed strictly), the new preset name, and the Edit Tag and Edit Category names, with what a screen reader gets.</li>
+      <li>Apply when the field that is not valid is out of view.</li>
+    </ul>
+  </a>
+
+  <h3>Numbers set with these mockups</h3>
+  <table>
+    <tr><th>Panel width</th><td>Minimum 360 px, default 420 px, maximum whatever leaves the player 400 px wide.</td></tr>
+    <tr><th>Full-screen overlay</th><td>Below 800 px wide (360 + handle + 400 + page padding), or on a touch screen under 500 px tall, which is a phone on its side.</td></tr>
+    <tr><th>Default side</th><td>Right, until the Settings tab lets each device choose.</td></tr>
+    <tr><th>Library tiles</th><td>Rows 100–240 px, aiming for 160.</td></tr>
+  </table>
+</div>
+<script>
+/*@COMMON_JS@*/
+hydrateIcons();
+</script>
+</body>
+</html>
