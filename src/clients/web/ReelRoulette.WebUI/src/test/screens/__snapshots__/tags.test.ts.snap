@@ -1,0 +1,602 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`opening and closing > keeps its markup on each tab and in the Edit Tag dialog > auto tag 1`] = `
+"<div class="tag-editor" id="tag-editor" style="display: flex">
+  <div class="tag-editor-header">
+    <h2>
+      "Tag Editor"
+    <div class="tag-editor-actions">
+      <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="tag-editor-refresh-btn" title="Refresh">
+        <span class="material-symbol-icon">
+          "refresh"
+      <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="tag-editor-close-btn" title="Close">
+        <span class="material-symbol-icon">
+          "close"
+  <div class="filter-dialog-tabstrip tag-editor-tabstrip" role="tablist">
+    <button aria-selected="false" class="filter-tab" data-tag-editor-tab="edit" role="tab" type="button">
+      "Edit Tags"
+    <button aria-selected="true" class="filter-tab is-active" data-tag-editor-tab="autotag" role="tab" type="button">
+      "Auto Tag"
+  <div class="tag-editor-panel-stack">
+    <div class="tag-editor-panel" id="tag-editor-panel-edit" style="display: none">
+      <div class="tag-editor-body themed-scrollbar" id="tag-editor-body">
+        <section class="tag-editor-category">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Collapse category">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_down"
+              <div class="tag-editor-category-title">
+                "Places"
+            <div class="tag-editor-category-controls">
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Move category up">
+                <span class="material-symbol-icon">
+                  "arrow_drop_up"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Move category down">
+                <span class="material-symbol-icon">
+                  "arrow_drop_down"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Rename category">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Delete category">
+                <span class="material-symbol-icon">
+                  "delete"
+          <div class="tag-editor-tag-grid">
+            <div class="tag-chip state-none">
+              <span class="tag-chip-label">
+                "alps"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle is-selected" title="Add tag">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
+                <span class="material-symbol-icon">
+                  "remove"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
+                <span class="material-symbol-icon">
+                  "delete"
+            <div class="tag-chip state-all">
+              <span class="tag-chip-label">
+                "Beach"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
+                <span class="material-symbol-icon">
+                  "remove"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
+                <span class="material-symbol-icon">
+                  "delete"
+        <section class="tag-editor-category">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Expand category">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_right"
+              <div class="tag-editor-category-title">
+                "Mood"
+            <div class="tag-editor-category-controls">
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Move category up">
+                <span class="material-symbol-icon">
+                  "arrow_drop_up"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Move category down">
+                <span class="material-symbol-icon">
+                  "arrow_drop_down"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Rename category">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Delete category">
+                <span class="material-symbol-icon">
+                  "delete"
+          <div class="tag-editor-tag-grid" style="display: none">
+            <div class="tag-chip state-none">
+              <span class="tag-chip-label">
+                "Calm"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
+                <span class="material-symbol-icon">
+                  "remove"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
+                <span class="material-symbol-icon">
+                  "delete"
+        <section class="tag-editor-category">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Collapse category">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_down"
+              <div class="tag-editor-category-title">
+                "People"
+            <div class="tag-editor-category-controls">
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Move category up">
+                <span class="material-symbol-icon">
+                  "arrow_drop_up"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Move category down">
+                <span class="material-symbol-icon">
+                  "arrow_drop_down"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Rename category">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Delete category">
+                <span class="material-symbol-icon">
+                  "delete"
+          <div class="tag-editor-tag-grid">
+            <div class="tag-chip state-none">
+              <span class="tag-chip-label">
+                "Alice"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
+                <span class="material-symbol-icon">
+                  "remove"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
+                <span class="material-symbol-icon">
+                  "delete"
+            <div class="tag-chip state-all">
+              <span class="tag-chip-label">
+                "Bob"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle is-selected" title="Remove tag">
+                <span class="material-symbol-icon">
+                  "remove"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
+                <span class="material-symbol-icon">
+                  "delete"
+        <section class="tag-editor-category">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Collapse category">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_down"
+              <div class="tag-editor-category-title">
+                "Uncategorized"
+            <div class="tag-editor-category-controls">
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Move category up">
+                <span class="material-symbol-icon">
+                  "arrow_drop_up"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Move category down">
+                <span class="material-symbol-icon">
+                  "arrow_drop_down"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Rename category">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Delete category">
+                <span class="material-symbol-icon">
+                  "delete"
+          <div class="tag-editor-tag-grid">
+            <div class="tag-chip state-none">
+              <span class="tag-chip-label">
+                "Loose"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
+                <span class="material-symbol-icon">
+                  "remove"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
+                <span class="material-symbol-icon">
+                  "delete"
+    <div class="tag-editor-panel" id="tag-editor-panel-autotag" style="display: flex">
+      <div class="tag-editor-body tag-autotag-body themed-scrollbar">
+        <div class="tag-autotag-toolbar">
+          <label class="tag-autotag-check-label">
+            <input checked="false" id="tag-autotag-scan-full" type="checkbox">
+            "Scan full library"
+          <label class="tag-autotag-check-label">
+            <input checked="false" id="tag-autotag-view-all" type="checkbox">
+            "View all matches"
+        <p class="tag-autotag-hint">
+          "Use Scan Files to find matching tags. File name matching ignores extension."
+        <div class="tag-autotag-actions-row">
+          <button class="tag-autotag-row-btn" id="tag-autotag-select-all" type="button">
+            "Select all"
+          <button class="tag-autotag-row-btn" id="tag-autotag-deselect-all" type="button">
+            "Deselect all"
+          <button class="tag-autotag-scan-btn" id="tag-autotag-scan-btn" type="button">
+            "Scan Files"
+        <div aria-label="Scan in progress" class="tag-autotag-progress" id="tag-autotag-progress" role="progressbar" style="display: none">
+        <div aria-live="polite" class="tag-autotag-status" id="tag-autotag-status">
+          "Scan complete: 3 matching tags, 6 matches, 1/3 selected changes."
+        <div class="tag-autotag-results themed-scrollbar" id="tag-autotag-results">
+          <div class="tag-autotag-table-head">
+            <span>
+            <span>
+              "Apply"
+            <span>
+              "Tag / File"
+            <span>
+              "Total matched"
+            <span>
+              "To be changed"
+          <div class="tag-autotag-row" data-autotag-row="1">
+            <div class="tag-autotag-row-main">
+              <button aria-label="Collapse" class="icon-glyph-base icon-glyph-button" data-autotag-expand="1" type="button">
+                <span class="material-symbol-icon">
+                  "expand_more"
+              <input checked="false" data-autotag-row-check="1" type="checkbox">
+              <span style="font-weight: 600">
+                "beach"
+              <span>
+                "3"
+              <span>
+                "2"
+            <div class="tag-autotag-row-files" style="display: block">
+              <div class="tag-autotag-file-row">
+                <label>
+                  <input checked="true" data-autotag-file="" data-item-id="item-1" data-row-id="1" type="checkbox">
+                <span class="tag-autotag-file-path" title="C:\\media\\beach a.mp4">
+                  "beach a.mp4"
+              <div class="tag-autotag-file-row">
+                <label>
+                  <input checked="false" data-autotag-file="" data-item-id="item-2" data-row-id="1" type="checkbox">
+                <span class="tag-autotag-file-path" title="C:\\media\\beach b.mp4">
+                  "beach b.mp4"
+          <div class="tag-autotag-row" data-autotag-row="0">
+            <div class="tag-autotag-row-main">
+              <button aria-label="Expand" class="icon-glyph-base icon-glyph-button" data-autotag-expand="0" type="button">
+                <span class="material-symbol-icon">
+                  "chevron_right"
+              <input checked="false" data-autotag-row-check="0" type="checkbox">
+              <span style="font-weight: 600">
+                "Sunset"
+              <span>
+                "2"
+              <span>
+                "1"
+            <div class="tag-autotag-row-files" style="display: none">
+              <div class="tag-autotag-file-row">
+                <label>
+                  <input checked="false" data-autotag-file="" data-item-id="item-3" data-row-id="0" type="checkbox">
+                <span class="tag-autotag-file-path" title="C:\\media\\sunset 1.mp4">
+                  "sunset 1.mp4"
+  <div class="tag-editor-footer">
+    <button aria-label="Add category" class="icon-glyph-base icon-glyph-button" id="tag-editor-add-category-btn" title="Add category">
+      <span class="material-symbol-icon">
+        "add"
+    <select id="tag-editor-category-select">
+      <option selected="true" value="cat-places">
+        "Places"
+      <option selected="false" value="cat-mood">
+        "Mood"
+      <option selected="false" value="cat-people">
+        "People"
+      <option selected="false" value="uncategorized">
+        "Uncategorized"
+    <input id="tag-editor-new-tag" placeholder="New tag name" type="text" value="">
+    <button aria-label="Add tag" class="icon-glyph-base icon-glyph-button" id="tag-editor-add-tag-btn" title="Add tag">
+      <span class="material-symbol-icon">
+        "add"
+    <button aria-label="Save" class="icon-glyph-base icon-glyph-button has-pending" id="tag-editor-apply-btn" title="Save">
+      <span class="material-symbol-icon">
+        "save"
+  <div class="tag-edit-modal" id="tag-edit-modal" style="display: none">
+    <div class="tag-edit-modal-card">
+      <h3>
+        "Edit Tag"
+      <label for="tag-edit-name">
+        "Tag Name"
+      <input autocomplete="off" id="tag-edit-name" type="text" value="Beach">
+      <label for="tag-edit-category">
+        "Category"
+      <select id="tag-edit-category">
+        <option selected="true" value="cat-places">
+          "Places"
+        <option selected="false" value="cat-mood">
+          "Mood"
+        <option selected="false" value="cat-people">
+          "People"
+        <option selected="false" value="uncategorized">
+          "Uncategorized"
+      <div class="tag-edit-modal-actions">
+        <button id="tag-edit-cancel-btn" type="button">
+          "Cancel"
+        <button id="tag-edit-save-btn" type="button">
+          "Save"
+"
+`;
+
+exports[`opening and closing > keeps its markup on each tab and in the Edit Tag dialog > edit tag dialog 1`] = `
+"<div class="tag-edit-modal" id="tag-edit-modal" style="display: flex">
+  <div class="tag-edit-modal-card">
+    <h3>
+      "Edit Tag"
+    <label for="tag-edit-name">
+      "Tag Name"
+    <input autocomplete="off" id="tag-edit-name" type="text" value="Beach">
+    <label for="tag-edit-category">
+      "Category"
+    <select id="tag-edit-category">
+      <option selected="true" value="cat-places">
+        "Places"
+      <option selected="false" value="cat-mood">
+        "Mood"
+      <option selected="false" value="cat-people">
+        "People"
+      <option selected="false" value="uncategorized">
+        "Uncategorized"
+    <div class="tag-edit-modal-actions">
+      <button id="tag-edit-cancel-btn" type="button">
+        "Cancel"
+      <button id="tag-edit-save-btn" type="button">
+        "Save"
+"
+`;
+
+exports[`opening and closing > keeps its markup on each tab and in the Edit Tag dialog > edit tags 1`] = `
+"<div class="tag-editor" id="tag-editor" style="display: flex">
+  <div class="tag-editor-header">
+    <h2>
+      "Tag Editor"
+    <div class="tag-editor-actions">
+      <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="tag-editor-refresh-btn" title="Refresh">
+        <span class="material-symbol-icon">
+          "refresh"
+      <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="tag-editor-close-btn" title="Close">
+        <span class="material-symbol-icon">
+          "close"
+  <div class="filter-dialog-tabstrip tag-editor-tabstrip" role="tablist">
+    <button aria-selected="true" class="filter-tab is-active" data-tag-editor-tab="edit" role="tab" type="button">
+      "Edit Tags"
+    <button aria-selected="false" class="filter-tab" data-tag-editor-tab="autotag" role="tab" type="button">
+      "Auto Tag"
+  <div class="tag-editor-panel-stack">
+    <div class="tag-editor-panel" id="tag-editor-panel-edit" style="display: flex">
+      <div class="tag-editor-body themed-scrollbar" id="tag-editor-body">
+        <section class="tag-editor-category">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Collapse category">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_down"
+              <div class="tag-editor-category-title">
+                "Places"
+            <div class="tag-editor-category-controls">
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Move category up">
+                <span class="material-symbol-icon">
+                  "arrow_drop_up"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Move category down">
+                <span class="material-symbol-icon">
+                  "arrow_drop_down"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Rename category">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Delete category">
+                <span class="material-symbol-icon">
+                  "delete"
+          <div class="tag-editor-tag-grid">
+            <div class="tag-chip state-none">
+              <span class="tag-chip-label">
+                "alps"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle is-selected" title="Add tag">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
+                <span class="material-symbol-icon">
+                  "remove"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
+                <span class="material-symbol-icon">
+                  "delete"
+            <div class="tag-chip state-all">
+              <span class="tag-chip-label">
+                "Beach"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
+                <span class="material-symbol-icon">
+                  "remove"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
+                <span class="material-symbol-icon">
+                  "delete"
+        <section class="tag-editor-category">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Expand category">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_right"
+              <div class="tag-editor-category-title">
+                "Mood"
+            <div class="tag-editor-category-controls">
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Move category up">
+                <span class="material-symbol-icon">
+                  "arrow_drop_up"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Move category down">
+                <span class="material-symbol-icon">
+                  "arrow_drop_down"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Rename category">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Delete category">
+                <span class="material-symbol-icon">
+                  "delete"
+          <div class="tag-editor-tag-grid" style="display: none">
+            <div class="tag-chip state-none">
+              <span class="tag-chip-label">
+                "Calm"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
+                <span class="material-symbol-icon">
+                  "remove"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
+                <span class="material-symbol-icon">
+                  "delete"
+        <section class="tag-editor-category">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Collapse category">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_down"
+              <div class="tag-editor-category-title">
+                "People"
+            <div class="tag-editor-category-controls">
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Move category up">
+                <span class="material-symbol-icon">
+                  "arrow_drop_up"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Move category down">
+                <span class="material-symbol-icon">
+                  "arrow_drop_down"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Rename category">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Delete category">
+                <span class="material-symbol-icon">
+                  "delete"
+          <div class="tag-editor-tag-grid">
+            <div class="tag-chip state-none">
+              <span class="tag-chip-label">
+                "Alice"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
+                <span class="material-symbol-icon">
+                  "remove"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
+                <span class="material-symbol-icon">
+                  "delete"
+            <div class="tag-chip state-all">
+              <span class="tag-chip-label">
+                "Bob"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle is-selected" title="Remove tag">
+                <span class="material-symbol-icon">
+                  "remove"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
+                <span class="material-symbol-icon">
+                  "delete"
+        <section class="tag-editor-category">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Collapse category">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_down"
+              <div class="tag-editor-category-title">
+                "Uncategorized"
+            <div class="tag-editor-category-controls">
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Move category up">
+                <span class="material-symbol-icon">
+                  "arrow_drop_up"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Move category down">
+                <span class="material-symbol-icon">
+                  "arrow_drop_down"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Rename category">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Delete category">
+                <span class="material-symbol-icon">
+                  "delete"
+          <div class="tag-editor-tag-grid">
+            <div class="tag-chip state-none">
+              <span class="tag-chip-label">
+                "Loose"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
+                <span class="material-symbol-icon">
+                  "remove"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
+                <span class="material-symbol-icon">
+                  "edit_note"
+              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
+                <span class="material-symbol-icon">
+                  "delete"
+    <div class="tag-editor-panel" id="tag-editor-panel-autotag" style="display: none">
+      <div class="tag-editor-body tag-autotag-body themed-scrollbar">
+        <div class="tag-autotag-toolbar">
+          <label class="tag-autotag-check-label">
+            <input checked="false" id="tag-autotag-scan-full" type="checkbox">
+            "Scan full library"
+          <label class="tag-autotag-check-label">
+            <input checked="false" id="tag-autotag-view-all" type="checkbox">
+            "View all matches"
+        <p class="tag-autotag-hint">
+          "Use Scan Files to find matching tags. File name matching ignores extension."
+        <div class="tag-autotag-actions-row">
+          <button class="tag-autotag-row-btn" id="tag-autotag-select-all" type="button">
+            "Select all"
+          <button class="tag-autotag-row-btn" id="tag-autotag-deselect-all" type="button">
+            "Deselect all"
+          <button class="tag-autotag-scan-btn" id="tag-autotag-scan-btn" type="button">
+            "Scan Files"
+        <div aria-label="Scan in progress" class="tag-autotag-progress" id="tag-autotag-progress" role="progressbar" style="display: none">
+        <div aria-live="polite" class="tag-autotag-status" id="tag-autotag-status">
+        <div class="tag-autotag-results themed-scrollbar" id="tag-autotag-results">
+  <div class="tag-editor-footer">
+    <button aria-label="Add category" class="icon-glyph-base icon-glyph-button" id="tag-editor-add-category-btn" title="Add category">
+      <span class="material-symbol-icon">
+        "add"
+    <select id="tag-editor-category-select">
+      <option selected="true" value="cat-places">
+        "Places"
+      <option selected="false" value="cat-mood">
+        "Mood"
+      <option selected="false" value="cat-people">
+        "People"
+      <option selected="false" value="uncategorized">
+        "Uncategorized"
+    <input id="tag-editor-new-tag" placeholder="New tag name" type="text" value="">
+    <button aria-label="Add tag" class="icon-glyph-base icon-glyph-button" id="tag-editor-add-tag-btn" title="Add tag">
+      <span class="material-symbol-icon">
+        "add"
+    <button aria-label="Save" class="icon-glyph-base icon-glyph-button has-pending" id="tag-editor-apply-btn" title="Save">
+      <span class="material-symbol-icon">
+        "save"
+  <div class="tag-edit-modal" id="tag-edit-modal" style="display: none">
+    <div class="tag-edit-modal-card">
+      <h3>
+        "Edit Tag"
+      <label for="tag-edit-name">
+        "Tag Name"
+      <input autocomplete="off" id="tag-edit-name" type="text" value="">
+      <label for="tag-edit-category">
+        "Category"
+      <select id="tag-edit-category">
+      <div class="tag-edit-modal-actions">
+        <button id="tag-edit-cancel-btn" type="button">
+          "Cancel"
+        <button id="tag-edit-save-btn" type="button">
+          "Save"
+"
+`;

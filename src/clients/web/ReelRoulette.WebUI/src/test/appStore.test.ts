@@ -223,12 +223,4 @@ describe("createAppStore", () => {
     expect(store.stepHistory(-1)).toBe(false);
     expect(store.current.value).toBeNull();
   });
-
-  it("passes overlay requests on to listeners", () => {
-    const { store } = setup();
-    const requested = vi.fn();
-    store.on("overlayRequested", requested);
-    store.openOverlay("tagEditor");
-    expect(requested.mock.calls).toEqual([["tagEditor"]]);
-  });
 });

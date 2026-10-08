@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ScreenBoundary } from "../../ui/ScreenBoundary";
 import { FakeServer, json, mountPage, resetPage, status } from "./pageHarness";
 
-const failing = vi.hoisted(() => ({ player: false, header: false, library: false, filter: false }));
+const failing = vi.hoisted(() => ({ player: false, header: false, library: false, filter: false, tags: false }));
 
 // The player throws on its first render when a test asks it to, as a render bug in the player would.
 vi.mock("../../playback/mediaGestures", async (importOriginal) => {
@@ -70,6 +70,31 @@ vi.mock("../../filter/filterDialogModel", async (importOriginal) => {
   };
 });
 
+// The tag editor's first category throws when its name renders, when a test asks it to, as a render bug in the tag
+// editor would.
+vi.mock("../../tags/tagEditorModel", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../tags/tagEditorModel")>();
+  return {
+    ...actual,
+    tagCategoryRows(...args: Parameters<typeof actual.tagCategoryRows>) {
+      const rows = actual.tagCategoryRows(...args);
+      if (!failing.tags || rows.length === 0) {
+        return rows;
+      }
+      const [first, ...rest] = rows;
+      return [
+        {
+          ...first!,
+          get name(): string {
+            throw new TypeError("Cannot read C:\\media\\holiday clip.mp4");
+          }
+        },
+        ...rest
+      ];
+    }
+  };
+});
+
 function Broken(): never {
   throw new RangeError("broken");
 }
@@ -84,6 +109,7 @@ afterEach(() => {
   failing.header = false;
   failing.library = false;
   failing.filter = false;
+  failing.tags = false;
 });
 
 describe("ScreenBoundary", () => {
@@ -228,6 +254,46 @@ describe("ScreenBoundary", () => {
     await waitFor(() => expect((page.root.querySelector("#library-overlay") as HTMLElement).style.display).toBe("flex"));
     fireEvent.click(screen.getByRole("button", { name: "Edit Tags" }));
     await waitFor(() => expect((page.root.querySelector("#tag-editor") as HTMLElement).style.display).toBe("flex"));
+    page.stream().open();
+    await screen.findByText("SSE connected");
+  });
+
+  it("keeps the player, header, status line, library overlay, filter dialog, and connection working when the tag editor fails", async () => {
+    failing.tags = true;
+    const server = new FakeServer();
+    server.on("POST", "/api/random", () =>
+      json({
+        id: "C:\\media\\holiday clip.mp4",
+        itemId: "item-video",
+        displayName: "holiday clip.mp4",
+        mediaType: "video",
+        durationSeconds: 65,
+        mediaUrl: "/api/media/item-video?token=t",
+        isFavorite: false,
+        isBlacklisted: false
+      })
+    );
+    server.on("GET", "/api/sources", () => json([]));
+    server.on("POST", "/api/tag-editor/model", () =>
+      json({ categories: [{ id: "cat-places", name: "Places", sortOrder: 0 }], tags: [{ name: "Beach", categoryId: "cat-places" }], items: [] })
+    );
+    const page = mountPage({ server });
+    await screen.findByText("Ready (API 1)");
+    expect(page.root.querySelector("#fullscreen-stage #tag-editor")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Tags" }));
+    await waitFor(() => expect(server.logLines()).toContain("ui-error screen=tags error=TypeError"));
+    expect(server.logLines().filter((line) => line.startsWith("ui-error"))).toEqual(["ui-error screen=tags error=TypeError"]);
+    expect(server.logLines().some((line) => line.includes("holiday"))).toBe(false);
+    expect(page.root.querySelector("#tag-editor")).toBeNull();
+
+    fireEvent.click(screen.getByText("Click here to play (choose a preset or open Filter…)"));
+    await waitFor(() => expect((page.root.querySelector("video") as HTMLVideoElement).src).toContain("/api/media/item-video"));
+    expect(screen.getByRole("combobox", { name: "Choose preset" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Library" }));
+    await waitFor(() => expect((page.root.querySelector("#library-overlay") as HTMLElement).style.display).toBe("flex"));
+    fireEvent.click(screen.getByRole("button", { name: "Select filters" }));
+    await waitFor(() => expect((page.root.querySelector("#filter-dialog") as HTMLElement).style.display).toBe("flex"));
     page.stream().open();
     await screen.findByText("SSE connected");
   });

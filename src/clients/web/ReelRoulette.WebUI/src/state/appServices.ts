@@ -3,14 +3,15 @@ import { createFilterDialog, type FilterDialog } from "../filter/filterDialog";
 import { createLibrary, type Library } from "../library/library";
 import { createPlayer, type Player } from "../playback/player";
 import { createStageFullscreen, type StageFullscreen } from "../playback/stageFullscreen";
+import { createTagEditor, type TagEditor } from "../tags/tagEditor";
 import type { RuntimeConfig } from "../types/runtimeConfig";
 import { createAppApi, type AppApi } from "./appApi";
 import { createAppStore, type AppStore } from "./appStore";
 import { createServerConnection, type ServerConnection } from "./serverConnection";
 
 /**
- * One page's runtime config, shared state, server requests, server connection, player, fullscreen, library, and
- * filter dialog.
+ * One page's runtime config, shared state, server requests, server connection, player, fullscreen, library, filter
+ * dialog, and tag editor.
  */
 export interface AppServices {
   config: RuntimeConfig;
@@ -21,6 +22,7 @@ export interface AppServices {
   fullscreen: StageFullscreen;
   library: Library;
   filterDialog: FilterDialog;
+  tagEditor: TagEditor;
 }
 
 export function createAppServices(config: RuntimeConfig): AppServices {
@@ -51,5 +53,6 @@ export function createAppServices(config: RuntimeConfig): AppServices {
   // After the player, so the player handles an item-state event before the library does.
   const library = createLibrary({ config, store, api, connection, player });
   const filterDialog = createFilterDialog({ store, api, connection, library, storage: sessionStorage });
-  return { config, store, api, connection, player, fullscreen: createStageFullscreen(), library, filterDialog };
+  const tagEditor = createTagEditor({ store, api, connection, library, player, sessionStorage, localStorage });
+  return { config, store, api, connection, player, fullscreen: createStageFullscreen(), library, filterDialog, tagEditor };
 }

@@ -59,23 +59,15 @@ export interface ClientIdentity {
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
-/** The screen still in `app.js` that a player button opens. */
-export type OverlayName = "tagEditor";
-
 /** Changes one screen makes that another screen acts on. */
 export interface AppStoreEvents {
   /** A header preset pick changed the applied filter. */
   headerFilterChanged: () => void;
   /** The photo duration changed from the header. */
   photoDurationChanged: () => void;
-  /** A player button asked to open the screen still in `app.js`. */
-  overlayRequested: (overlay: OverlayName) => void;
 }
 
-/**
- * State several screens use, and the actions that cross screens. `app.js` reads and writes these signals
- * through its `state` object until each screen it owns moves to a component.
- */
+/** State several screens use, and the actions that cross screens. */
 export interface AppStore {
   readonly identity: ClientIdentity;
   /** The status line. Write it through `setStatus`, which also relays it to the server log. */
@@ -123,7 +115,6 @@ export interface AppStore {
   pushHistory(item: PlayingItem): void;
   /** Makes the previous or next history entry the playing item. Returns false at either end of history. */
   stepHistory(step: -1 | 1): boolean;
-  openOverlay(overlay: OverlayName): void;
   on<K extends keyof AppStoreEvents>(event: K, listener: AppStoreEvents[K]): void;
 }
 
@@ -154,8 +145,7 @@ export function createAppStore(options: AppStoreOptions): AppStore {
   const now = options.now ?? (() => Date.now());
   const listeners: { [K in keyof AppStoreEvents]: AppStoreEvents[K][] } = {
     headerFilterChanged: [],
-    photoDurationChanged: [],
-    overlayRequested: []
+    photoDurationChanged: []
   };
   let lastRelayedStatus = "";
   let lastRelayedStatusAtMs = 0;
@@ -267,10 +257,6 @@ export function createAppStore(options: AppStoreOptions): AppStore {
       store.historyIndex.value = index;
       store.current.value = history[index]!;
       return true;
-    },
-
-    openOverlay(overlay) {
-      emit("overlayRequested", overlay);
     },
 
     on(event, listener) {

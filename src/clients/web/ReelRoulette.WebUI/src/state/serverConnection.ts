@@ -8,7 +8,7 @@ import type { AppApi } from "./appApi";
 import { PRESET_MENU_BLOCKED, PRESET_MENU_LOAD_FAILED, type AppStore } from "./appStore";
 import { serverCompatibilityError } from "./serverCompatibility";
 
-/** Server events and connection changes that screens still in `app.js` act on. */
+/** Server events and connection changes that the screens act on. */
 export interface ServerConnectionEvents {
   /** The server passed the version check, so the library can load. */
   serverReady: () => void;

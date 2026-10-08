@@ -1,5 +1,4 @@
 import { useLayoutEffect } from "preact/hooks";
-import { startApp } from "../app";
 import type { AppServices } from "../state/appServices";
 import { AppContext } from "./appContext";
 import { Header } from "./Header";
@@ -7,13 +6,9 @@ import { ScreenBoundary } from "./ScreenBoundary";
 import { Stage } from "./Stage";
 import { MobileDiagnostics, StatusLine } from "./StatusLine";
 
-/**
- * The page. `app.js` runs the overlays in the stage: it starts right after the first render, once the player has
- * its elements and before the server connection, so its handlers are registered before any server reply arrives.
- */
+/** The page. The server connection starts right after the first render, once the player has its elements. */
 export function App({ services }: { services: AppServices }) {
   useLayoutEffect(() => {
-    startApp(services);
     services.connection.start();
     return () => services.connection.stop();
   }, []);

@@ -1,10 +1,10 @@
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { useApp } from "./appContext";
 import { FilterDialog } from "./FilterDialog";
-import { LegacyOverlays } from "./LegacyOverlays";
 import { LibraryOverlay } from "./LibraryOverlay";
 import { Player } from "./Player";
 import { ScreenBoundary } from "./ScreenBoundary";
+import { TagEditor } from "./TagEditor";
 
 /**
  * The part of the page that goes fullscreen: the player and the overlays, which stay inside it so they show in
@@ -40,7 +40,9 @@ export function Stage() {
           <Player />
         </ScreenBoundary>
       </main>
-      <LegacyOverlays />
+      <ScreenBoundary screen="tags" relay={api.relayLog}>
+        <TagEditor />
+      </ScreenBoundary>
       <ScreenBoundary screen="filter" relay={api.relayLog}>
         <FilterDialog />
       </ScreenBoundary>

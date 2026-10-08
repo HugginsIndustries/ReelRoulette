@@ -19,12 +19,12 @@ Instructions:
 
 Commit Message:
 
-M12b: Move the WebUI filter dialog to Preact
+M12b: Move the WebUI tag editor and Auto Tag to Preact and remove app.js
 
-- Move the filter dialog (General, Tags, and Presets tabs, preset management, Refresh, Clear all, and Apply) to a component that keeps its markup and behavior.
-- Its panels are no longer rebuilt on each change, so focus on a tag chip or collapse toggle, the preset list's scroll position, a typed preset name, and the General tab's fields after a preset is deleted stay as the user left them.
-- Move the working copy, heading and Apply's star, preset edits and save, the header's None hold, collapsed categories, and header changes into a typed `filterDialog` service, and the General, Tags, and preset row logic into `filterDialogModel`, with node tests; Select filters calls the service, and the store's overlay request names only the tag editor.
-- Add `happy-dom` behavior tests written against `app.js` before the move, with a markup snapshot of each tab, a filter dialog error boundary test, and harness normalizations for live form state, zero lengths, and empty class attributes.
-- Update the milestone with the slice's spot check, the domain inventory, and `CONTEXT.md`, and record in WebUI Responsive Layout and Panels that the Filter tab's Refresh drops unsaved preset changes while Apply keeps its star.
-- Plan one WebUI field validation pattern in WebUI Responsive Layout and Panels (a red icon in the field with a tooltip, marked invalid for screen readers, and actions held while a field is invalid), first for the Filter tab's durations and new preset name and the Edit Tag dialog's tag name, and note it in the later milestones with fields.
-- Plan a WebUI-wide message rule: what the user must notice or act on shows in an in-app dialog (WebUI In-App Dialogs), field problems use the validation pattern, and the status line keeps only background information, with every current status message sorted in WebUI Status Line Overhaul.
+- Move the tag editor (Edit Tags, Auto Tag, the Edit Tag dialog, Refresh, Close, and Save) to a component that keeps its markup and behavior, which finishes the WebUI's move to Preact.
+- Its panels are no longer rebuilt on each change, so focus stays on the chip, category, expand, or row control the user just used.
+- Move the editor's state, held edits, Auto Tag scan and selection, background save, filter and preset retargeting, and item-tag events into a typed `tagEditor` service, with the display and Auto Tag logic in `tagEditorModel` and `autoTagModel`, and node tests; Edit Tags calls the service, and the store's overlay request is gone.
+- Add `happy-dom` behavior tests written against `app.js` before the move, with markup snapshots of each tab and the Edit Tag dialog, and a tag editor error boundary test.
+- Delete `app.js`, its declaration, the legacy overlay markup, and the undeclared-name check with its `npm run verify` step.
+- Record in WebUI Status Line Overhaul, with acceptance criteria, three messages kept as they were: a failed Auto Tag scan reads as no matches, a scan with nothing to change stays on "Scanning…", and a save that cannot reach the server shows an earlier save's error.
+- Complete the milestone with the slice's evidence and spot check and move it to `MILESTONES-COMPLETED.md`, and update the domain inventory, `CONTEXT.md`, the WebUI README, and the `app.js` paths named in later milestones.
