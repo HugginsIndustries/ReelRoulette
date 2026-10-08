@@ -90,6 +90,40 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: Next moves from videos to a photo (${$("np-name").textContent})`, $("np-name").textContent.endsWith(".jpg") && $("seek").disabled);
   $("next-btn").click();
   check(`layout@${width}: and back to a video`, $("np-name").textContent.endsWith(".mp4") && !$("seek").disabled);
+  $("next-btn").click();
+  check(`layout@${width}: Next skips a file this browser can't play, saying so on the status line (${$("np-name").textContent})`,
+    $("status").textContent === "Skipped a file this browser can't play." && $("np-name").textContent.endsWith(".jpg") && openDialogs().length === 0);
+  $("prev-btn").click();
+  check(`layout@${width}: Previous skips a file this browser can't play too (${$("np-name").textContent})`,
+    $("status").textContent === "Skipped a file this browser can't play." && $("np-name").textContent.endsWith(".mp4") && openDialogs().length === 0);
+  // A missing file is skipped too, with its own message.
+  const missing = window.mockup.items.find((item) => item.missing);
+  window.mockup.play(missing.id - 1);
+  $("next-btn").click();
+  check(`layout@${width}: Next skips a missing file, saying so on the status line`,
+    $("status").textContent === "Skipped a missing file." && $("np-name").textContent !== missing.name && openDialogs().length === 0);
+  window.mockup.play(missing.id);
+  check(`layout@${width}: choosing the missing file itself shows the notice`, topDialog()?.textContent.includes("Video file not found."));
+  dismissNotices();
+  window.mockup.play(3);
+  // Swipes on the media area: left plays the next item, and the click that follows a swipe is ignored.
+  const touch = (type, x) => $("media").dispatchEvent(Object.assign(new window.Event(type, { bubbles: true }), { touches: [{ clientX: x, clientY: 200 }], changedTouches: [{ clientX: x, clientY: 200 }] }));
+  const beforeSwipe = $("np-name").textContent;
+  const controlsBefore = $("media").classList.contains("controls-visible");
+  touch("touchstart", 400);
+  touch("touchend", 250);
+  $("media").click();
+  check(`layout@${width}: a swipe left plays the next item and swallows its click`, $("np-name").textContent !== beforeSwipe && $("media").classList.contains("controls-visible") === controlsBefore);
+  dismissNotices();
+  // Favorite and Blacklist clear each other.
+  $("favorite-btn").click();
+  $("blacklist-btn").click();
+  check(`layout@${width}: Blacklist clears Favorite`, $("blacklist-btn").classList.contains("active") && !$("favorite-btn").classList.contains("active"));
+  $("favorite-btn").click();
+  check(`layout@${width}: Favorite clears Blacklist`, $("favorite-btn").classList.contains("active") && !$("blacklist-btn").classList.contains("active"));
+  $("favorite-btn").click();
+  // The Auto-Pause checks below need a video playing.
+  while ($("np-name").textContent.endsWith(".jpg")) next();
   $("panel-btn").click();
   const overlay = $("stage").classList.contains("is-overlay");
   check(`layout@${width}: the panel button opens the panel on its last tab (Library) as ${overlay ? "overlay" : "side panel"}`,
@@ -106,9 +140,10 @@ for (const width of [1280, 390]) {
     min.getAttribute("aria-invalid") === "true" && apply.getAttribute("aria-disabled") === "true" && applyKids === "btn-label,btn-problem");
   check(`layout@${width}: the tooltip sits inside the field`, min.closest(".vfield").contains(document.getElementById(min.getAttribute("aria-describedby"))));
   document.querySelector('[data-sub="presets"]').click();
+  const statusBeforeApply = $("status").textContent;
   apply.click();
-  check(`layout@${width}: held Apply goes to the field and keeps the panel open`,
-    !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === min && !$("panel").hidden && $("status").textContent === "Ready");
+  check(`layout@${width}: held Apply goes to the field, keeps the panel open, and writes no status`,
+    !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === min && !$("panel").hidden && $("status").textContent === statusBeforeApply);
   input(min, "1:30");
   document.querySelector('[data-sub="presets"]').click();
   const presetNames = () => [...document.querySelectorAll(".filter-preset-row")].map((r) => r.dataset.key).join(",");
@@ -249,7 +284,15 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: Advance after flags 0 and keeps 5`, advance.getAttribute("aria-invalid") === "true" && window.localStorage.getItem("rr-mockup.advanceAfter") === null);
   input(advance, "8");
   check(`layout@${width}: Advance after keeps 8`, !advance.hasAttribute("aria-invalid") && window.localStorage.getItem("rr-mockup.advanceAfter") === "8");
-  check(`layout@${width}: the shortcut reference lists the bindings`, $("shortcut-list").querySelectorAll("dt").length === 15);
+  check(`layout@${width}: the shortcut reference lists the bindings`, $("shortcut-list").querySelectorAll("dt").length === 16);
+  check(`layout@${width}: v0.15.0 has no loudness normalization settings`, !$("settings-body").textContent.includes("Loudness"));
+  document.querySelector('input[name="set-theme"][value="light"]').click();
+  check(`layout@${width}: the Theme setting switches to Light`, document.documentElement.classList.contains("theme-light"));
+  document.querySelector('input[name="set-theme"][value="dark"]').click();
+  check(`layout@${width}: and to Dark`, document.documentElement.classList.contains("theme-dark"));
+  $("set-status").click();
+  check(`layout@${width}: the status line can be hidden`, $("status").hidden);
+  $("set-status").click();
 
   // Keyboard shortcuts, ignored while typing.
   const press = (k, target = document.body, extra = {}) =>
@@ -261,8 +304,17 @@ for (const width of [1280, 390]) {
   press("2");
   check(`layout@${width}: 2 again closes the panel`, $("panel").hidden);
   const volumeBefore = Number($("volume").value);
+  press("[");
+  check(`layout@${width}: [ lowers the volume by the step (${volumeBefore} to ${$("volume").value})`, Number($("volume").value) === volumeBefore - 5);
+  // Frame stepping on comma and period, only while a video is paused.
+  while ($("np-name").textContent.endsWith(".jpg") || $("play-chip").textContent.includes("Can't")) next();
+  if (!$("play-chip").textContent.includes("Paused")) $("play-btn").click();
+  const frameBefore = Number($("seek").value);
+  press(".");
+  check(`layout@${width}: . steps one frame while paused (${$("play-chip").textContent})`, $("play-chip").textContent.includes("stepped a frame forward") && Math.abs(Number($("seek").value) - frameBefore - 1 / 30) < 0.02);
+  $("play-btn").click();
   press(",");
-  check(`layout@${width}: comma lowers the volume by the step (${volumeBefore} to ${$("volume").value})`, Number($("volume").value) === volumeBefore - 5);
+  check(`layout@${width}: , does nothing while playing`, $("play-chip").textContent.includes("Playing"));
   $("panel-btn").click();
   $("tab-btn-library").click();
   const before = $("play-chip").textContent;
@@ -291,7 +343,12 @@ for (const width of [1280, 390]) {
   input(topDialog().querySelector("input"), "secret-token");
   topDialog().querySelector('button[type="submit"]').click();
   await new Promise((resolve) => setTimeout(resolve, 0));
-  check(`layout@${width}: then asks to remove, with the delete-from-disk option`, topDialog()?.textContent.includes("Remove 2 items from the library?") && topDialog().textContent.includes("Also delete the files from disk"));
+  check(`layout@${width}: then asks to remove, with deleting files off by default`, topDialog()?.textContent.includes("Remove 2 items from the library? Their files stay on disk.") && !topDialog().querySelector('input[type="checkbox"]').checked);
+  topDialog().querySelector('input[type="checkbox"]').click();
+  topDialog().querySelector('input[type="checkbox"]').dispatchEvent(new window.Event("change"));
+  check(`layout@${width}: turning deletion on says the files are deleted from disk`, topDialog().textContent.includes("permanently delete their 2 files from disk") && !!button(topDialog(), "Remove and Delete"));
+  topDialog().querySelector('input[type="checkbox"]').click();
+  topDialog().querySelector('input[type="checkbox"]').dispatchEvent(new window.Event("change"));
   button(topDialog(), "Remove").click();
   await new Promise((resolve) => setTimeout(resolve, 0));
   check(`layout@${width}: the items leave the grid (${$("status").textContent})`, !tiles().some((t) => t.getAttribute("aria-label") === removedName) && $("status").textContent === "Removed 2 items from the library.");
@@ -327,6 +384,18 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: Pair hides the prompt`, $("pair").hidden && $("status").textContent === "Paired.");
   $("mock-ios-volume").click();
   check(`layout@${width}: a read-only volume hides the slider`, $("volume-wrap").hidden);
+  // Library controls collapse, and the preset and randomization dropdowns share a row.
+  if ($("panel").hidden) $("panel-btn").click();
+  $("tab-btn-library").click();
+  check(`layout@${width}: preset and randomization sit in one row`, $("lib-preset").parentElement === $("lib-mode").parentElement && $("lib-preset").parentElement.classList.contains("lib-pair"));
+  $("lib-collapse").click();
+  check(`layout@${width}: the controls and the Filters line collapse, stay collapsed on this device, and say so (${$("lib-collapse").title})`,
+    $("lib-controls").classList.contains("is-collapsed") && $("lib-filters").classList.contains("is-collapsed") && window.localStorage.getItem("rr-mockup.libCollapsed") === "true" && $("lib-collapse").title === "Show controls & filters");
+  $("lib-collapse").click();
+  // A phone on its side: the header and status line hide and the panel opens as the overlay.
+  $("mock-short").click();
+  check(`layout@${width}: a short touch screen gets the full-screen player layout and the overlay`, document.body.classList.contains("short-screen") && $("stage").classList.contains("is-overlay"));
+  $("mock-short").click();
   check(`layout@${width}: no browser dialog was used anywhere (${nativeCalls.join(",")})`, nativeCalls.length === 0);
   check(`layout@${width}: no script errors anywhere ${errors.join("; ")}`, errors.length === 0);
 }
@@ -361,10 +430,35 @@ for (const width of [1280, 390]) {
   document.querySelector('#review-body .dup-file input[type="radio"]').dispatchEvent(new window.Event("change"));
   $("review-apply").click();
   await new Promise((resolve) => setTimeout(resolve, 0));
-  check(`admin@${width}: deleting asks with the counts (${topDialog()?.textContent.slice(0, 40)})`, topDialog()?.textContent.includes("Delete 1 files from 1 groups?"));
+  check(`admin@${width}: deleting asks, naming the counts (${topDialog()?.textContent.slice(0, 50)})`, topDialog()?.textContent.includes("permanently deletes") && topDialog().textContent.includes("Files to delete: 1") && !!button(topDialog(), "Delete 1 File"));
   button(topDialog(), "Delete").click();
   await new Promise((resolve) => setTimeout(resolve, 0));
   check(`admin@${width}: and review closes`, $("review").hidden && !$("admin").hidden);
+  check(`admin@${width}: one Refresh Sources button for the whole list`, !!$("sources-refresh") && !document.querySelector('#source-list [aria-label^="Refresh"]'));
+  check(`admin@${width}: Export Library is a plain download, with no ellipsis`, $("export").textContent.trim().endsWith("Export Library"));
+  check(`admin@${width}: no approved proposal still carries a Proposed or Open note`, !/Proposed|Open:/.test(document.body.textContent));
+  const clients = $("client-list").textContent;
+  check(`admin@${width}: clients show their id and OS`, ["web-3f9c2e81 · Windows", "web-a71d09c4 · iOS", "web-55be2f10 · Android", "desktop-0c9e7a22 · OS not reported"].every((text) => clients.includes(text)));
+  check(`admin@${width}: the Log Viewer is named so in its card and jump link`, document.querySelector("#logs h3").textContent.endsWith("Log Viewer") && document.querySelector('.admin-nav a[href="#logs"]').textContent === "Log Viewer" && !document.body.textContent.includes("Server Logs"));
+  check(`admin@${width}: it has no Tail lines field and shows the newest ${$("log-rows").querySelectorAll(".log-line").length} lines, loading older ones on scroll`,
+    !$("logs").textContent.includes("Tail") && $("log-rows").querySelectorAll(".log-line").length === 20 && $("log-rows").querySelector(".log-more").textContent.startsWith("Loading"));
+  const logRows = $("log-rows");
+  Object.defineProperty(logRows, "scrollHeight", { configurable: true, value: 1000 });
+  Object.defineProperty(logRows, "clientHeight", { configurable: true, value: 280 });
+  logRows.scrollTop = 700;
+  logRows.dispatchEvent(new window.Event("scroll"));
+  check(`admin@${width}: scrolling to the end loads older lines (${logRows.querySelectorAll(".log-line").length})`, logRows.querySelectorAll(".log-line").length === 40);
+  logRows.scrollTop = 0;
+  logRows.dispatchEvent(new window.Event("scroll"));
+  check(`admin@${width}: the Log Viewer's filters start collapsed, with chips, and no category filter`, $("log-filters").hidden && $("log-chips").textContent.includes("Levels: All") && !$("log-filters").textContent.includes("Category"));
+  check(`admin@${width}: the sources are the lines' second brackets (${$("log-svc").textContent})`, ["server", "webui", "desktop-main-window", "desktop-update"].every((source) => $("log-svc").textContent.includes(source)));
+  const rowCount = () => $("log-rows").querySelectorAll(".log-line").length;
+  const allRows = rowCount();
+  $("log-levels").querySelectorAll("input")[0].click();
+  $("log-levels").querySelectorAll("input")[0].dispatchEvent(new window.Event("change"));
+  check(`admin@${width}: unchecking info leaves only warn and error lines (${rowCount()} of ${allRows})`, rowCount() === 10);
+  $("log-rows").querySelector(".log-line").click();
+  check(`admin@${width}: a row expands to its full line in today's format`, /^\[2026-10-08 10:20:05\.214\] \[server\] \[error\] /.test($("log-rows").querySelector(".log-raw").textContent));
   $("mock-no-library").click();
   check(`admin@${width}: without a library the server card says why and Refresh is off`, !$("no-library").hidden && $("refresh-now").disabled);
   check(`admin@${width}: no script errors anywhere ${errors.join("; ")}`, errors.length === 0);

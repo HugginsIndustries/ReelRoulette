@@ -37,27 +37,28 @@ th { font-weight: 600; }
 <body>
 <div class="page">
   <h1>WebUI design mockup</h1>
-  <p class="lede">The whole visible UI of v0.15.0, for approval before each milestone builds it. Every page works at desktop and phone widths and follows the system light or dark theme. Magenta dashed boxes are mockup notes; notes that start with “Proposed” or “Open” still need a decision.</p>
+  <p class="lede">The whole visible UI of v0.15.0, for approval before each milestone builds it. Every page works at desktop and phone widths and follows the system light or dark theme. Magenta dashed boxes are mockup notes. What is still only proposed is listed in the WebUI Design Mockup milestone.</p>
 
   <a class="card" href="layout.html">
     <h2><span class="material-symbol-icon">dock_to_right</span>Main page</h2>
     <ul>
       <li>The player's one panel button opens the panel on its last tab, and closes it. Favorite and Blacklist stay on the player; the seek row ends with the volume control.</li>
       <li>Drag the handle between the player and the panel, or focus it and use the arrow keys. Open or closed, side, width, and last tab survive a reload.</li>
-      <li>Below 800 px wide, or on a touch screen under 500 px tall, the panel is a full-screen overlay. The chip at the player's top left shows what Auto-Pause did.</li>
-      <li>Library: the filter summary line, placeholder tiles while a page loads, and selection (the checklist button, Ctrl or Shift+click, or a long press) with bulk actions.</li>
-      <li>Filter, Tags, and their dialogs as approved so far, plus the browser-playable option. Play an .avi or .wmv file to see the format notice.</li>
+      <li>Below 800 px wide, or on a touch screen under 500 px tall, the panel is a full-screen overlay. On a phone on its side the header and status line also hide and the player fills the screen. The chip at the player's top left shows what Auto-Pause did.</li>
+      <li>Swipe left or right on the player for the next or previous item. Favorite and Blacklist clear each other.</li>
+      <li>Library: controls that collapse, the filter summary line, placeholder tiles while a page loads, and selection (the checklist button, Ctrl or Shift+click, or a long press) with bulk actions.</li>
+      <li>Filter, Tags, and their dialogs as approved so far, plus the browser-playable option. Pick an .avi or .wmv tile to see the format notice; Next and autoplay skip such files.</li>
       <li>Stats: the current file, with Show in File Manager or Copy Path, and the library. Click the file name in the header to open it.</li>
-      <li>Settings: autoplay mode, Advance after, seek and volume steps, loudness normalization, panel side, Auto-Pause, the shortcut reference, and diagnostics.</li>
-      <li>Keyboard shortcuts work: K, J, L, arrows, R, F, B, A, M, comma and period, 1 to 5, T, S, P, and Shift+F.</li>
-      <li>The <b>Mockup</b> tab on the left edge sets the situation: pairing asked for, the server machine, and a read-only volume.</li>
+      <li>Settings: autoplay mode, Advance after, seek and volume steps, theme, the status line, panel side, Auto-Pause, the shortcut reference, and diagnostics.</li>
+      <li>Keyboard shortcuts work: K, J, L, arrows, R, F, B, A, M, comma and period (one frame, while paused), [ and ] (volume), 1 to 5, T, S, P, and Shift+F.</li>
+      <li>The <b>Mockup</b> tab on the left edge sets the situation: pairing asked for, the server machine, a read-only volume, and a phone on its side.</li>
     </ul>
   </a>
 
   <a class="card" href="admin.html">
     <h2><span class="material-symbol-icon">admin_panel_settings</span>Admin view</h2>
     <ul>
-      <li>The full-page view the header's admin icon opens: server and updates, web access, control, refresh, library transfer, backups, sources, duplicates, the testing suite, clients, logs, and events.</li>
+      <li>The full-page view the header's admin icon opens: server and updates, web access, control, refresh, library transfer, backups, sources, duplicates, the testing suite, clients, the Log Viewer, and events.</li>
       <li>Duplicate review opens within it. The control token gate shows first from another machine.</li>
     </ul>
   </a>

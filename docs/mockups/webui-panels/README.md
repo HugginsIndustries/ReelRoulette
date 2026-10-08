@@ -13,7 +13,7 @@ An interactive mockup of the whole visible UI of v0.15.0, approved before the mi
 - `validation.html` shows each state of the field validation pattern, with what a screen reader is given.
 - `desktop-notice.html` shows the notice the last desktop build gives once.
 
-Magenta dashed boxes and the mockup controls are not part of the design. A note that starts with "Proposed" or "Open" marks something still to decide.
+Magenta dashed boxes and the mockup controls are not part of the design. What is still only proposed is listed in the WebUI Design Mockup milestone in `MILESTONES.md`.
 
 ## Opening them
 

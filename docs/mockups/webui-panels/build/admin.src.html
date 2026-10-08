@@ -97,6 +97,40 @@ a.icon-btn { text-decoration: none; }
 .gate p { margin: 0 0 12px; color: var(--muted-fg); font-size: 0.92rem; }
 .gate .vfield { width: 100%; margin-bottom: 10px; }
 
+.card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.card-head h3 { margin: 0; flex: 1 1 auto; }
+
+/* The Log Viewer, as Admin Log Viewer builds it. */
+.log-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--control-border); font-size: 0.8rem; white-space: nowrap; }
+.live { font-size: 0.82rem; display: inline-flex; align-items: center; gap: 4px; color: var(--muted-fg); }
+.live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--lime-green); }
+.live.is-paused::before { background: var(--muted-fg); }
+.log-filters { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: flex-start; padding: 10px; border: 1px solid var(--surface-border); border-radius: 8px; margin-bottom: 8px; }
+.log-filters fieldset { border: 0; margin: 0; padding: 0; }
+.log-filters legend { font-weight: 600; font-size: 0.85rem; padding: 0; margin-bottom: 2px; }
+.log-filters .opts { display: flex; flex-wrap: wrap; gap: 0 12px; }
+.log-filters .opts label { display: flex; align-items: center; gap: 6px; min-height: 32px; font-size: 0.9rem; }
+.multi { position: relative; }
+.multi summary { list-style: none; cursor: pointer; min-height: 40px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border: 1px solid var(--control-border); border-radius: 8px; background: var(--control-bg); font-size: 0.9rem; }
+.multi summary::-webkit-details-marker { display: none; }
+.multi-list { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; min-width: 200px; padding: 6px 10px; border: 1px solid var(--control-border); border-radius: 8px; background: var(--surface-raised); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
+.multi-list label { display: flex; align-items: center; gap: 8px; min-height: 34px; font-size: 0.9rem; }
+.log-rows { height: 280px; overflow: auto; border: 1px solid var(--surface-border); border-radius: 6px; background: var(--surface); }
+.log-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; width: 100%; padding: 5px 8px; border: 0; border-bottom: 1px solid var(--surface-border); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.log-line:hover { background: rgba(127, 127, 127, 0.1); }
+.log-line .ts { color: var(--muted-fg); }
+.log-line .meta { color: var(--muted-fg); }
+.log-line .msg { flex: 1 1 240px; min-width: 0; }
+.lvl { padding: 0 6px; border-radius: 4px; font-weight: 700; text-transform: uppercase; font-size: 0.72rem; }
+.lvl-error, .lvl-fatal { background: var(--error); color: #fff; }
+.lvl-warn { background: var(--huggins-orange); color: #1a1a1a; }
+.lvl-info { background: var(--control-bg); border: 1px solid var(--control-border); }
+.lvl-debug, .lvl-trace { opacity: 0.7; border: 1px dashed var(--control-border); }
+.log-more { padding: 8px; text-align: center; font-size: 0.82rem; color: var(--muted-fg); }
+.log-raw { margin: 0; padding: 6px 8px 8px 24px; white-space: pre-wrap; word-break: break-all; border-bottom: 1px solid var(--surface-border); background: var(--surface-raised); }
+
 .status { font-size: 0.9rem; color: var(--muted-fg); margin-top: 10px; min-height: 1.2em; flex-shrink: 0; }
 .mock-bar { padding: 6px 10px; margin: 0 0 10px; display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; flex: 0 0 auto; }
 .mock-bar label { display: flex; gap: 6px; align-items: center; }
@@ -134,7 +168,7 @@ a.icon-btn { text-decoration: none; }
     <nav class="admin-nav" aria-label="Admin sections">
       <a href="#server">Server</a><a href="#web">Web access</a><a href="#control">Control</a><a href="#library">Library</a>
       <a href="#transfer">Transfer</a><a href="#backups">Backups</a><a href="#sources">Sources</a><a href="#duplicates">Duplicates</a>
-      <a href="#testing">Testing</a><a href="#clients">Clients</a><a href="#logs">Logs</a><a href="#events">Events</a>
+      <a href="#testing">Testing</a><a href="#clients">Clients</a><a href="#logs">Log Viewer</a><a href="#events">Events</a>
     </nav>
 
     <div class="admin-body themed-scrollbar" id="admin-body">
@@ -226,7 +260,6 @@ a.icon-btn { text-decoration: none; }
             <div class="row"><span class="grow"></span><button class="btn" type="submit" id="refresh-save"><span class="btn-label">Save</span><span class="btn-problem material-symbol-icon">error</span></button></div>
           </form>
           <h4>Playback stats</h4>
-          <p class="mock-note mock-inline" style="margin:0 0 8px;padding:6px 8px">Proposed: clearing the whole library's playback stats is an admin action, here.</p>
           <button class="btn btn-danger" type="button" id="clear-all-stats"><span class="material-symbol-icon">history</span>Clear All Playback Stats…</button>
         </section>
 
@@ -255,8 +288,7 @@ a.icon-btn { text-decoration: none; }
             <div class="field">
               <label for="backup-days">Days of daily backups kept</label>
               <span class="vfield short"><input class="ctl" type="text" inputmode="numeric" id="backup-days" value="14" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
-              <p class="hint">One backup per day for this many days, on top of the count above.</p>
-              <p class="mock-note mock-inline" style="margin:4px 0 0;padding:6px 8px">Open: this field's range. Proposed 0 to 365, where 0 keeps none by date.</p>
+              <p class="hint">One backup per day for this many days, on top of the count above; 0 to 365, where 0 keeps none by date.</p>
             </div>
             <div class="row"><span class="grow"></span><button class="btn" type="submit" id="backup-save"><span class="btn-label">Save</span><span class="btn-problem material-symbol-icon">error</span></button></div>
           </form>
@@ -265,7 +297,10 @@ a.icon-btn { text-decoration: none; }
         </section>
 
         <section class="card" id="sources">
-          <h3><span class="material-symbol-icon">folder</span>Sources</h3>
+          <div class="card-head">
+            <h3><span class="material-symbol-icon">folder</span>Sources</h3>
+            <button class="btn" type="button" id="sources-refresh"><span class="material-symbol-icon">sync</span>Refresh Sources</button>
+          </div>
           <div class="list" id="source-list"></div>
           <form class="field" id="source-add" novalidate style="margin:12px 0 0">
             <label for="source-path">Add a folder on the server</label>
@@ -273,7 +308,7 @@ a.icon-btn { text-decoration: none; }
               <span class="vfield" style="flex:1 1 16rem;max-width:32rem"><input class="ctl" type="text" id="source-path" placeholder="/media/new-folder" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
               <button class="btn" type="submit" id="source-add-btn"><span class="btn-label">Add Source</span><span class="btn-problem material-symbol-icon">error</span></button>
             </div>
-            <p class="mock-note mock-inline" style="margin:4px 0 0;padding:6px 8px">Proposed: a typed server path that the server checks as it is typed, rather than a new route that browses the server's folders.</p>
+            <p class="hint">The server checks the path as you type: a folder on the server that isn't a source yet.</p>
           </form>
         </section>
 
@@ -290,7 +325,6 @@ a.icon-btn { text-decoration: none; }
               <label class="check"><input type="radio" name="dup-default" value="keep-all" checked> Keep All</label>
               <label class="check"><input type="radio" name="dup-default" value="best"> Select Best</label>
             </div>
-            <p class="hint">Kept on this device.</p>
           </div>
           <p class="hint" id="dup-state" style="margin:0"></p>
         </section>
@@ -309,15 +343,23 @@ a.icon-btn { text-decoration: none; }
         </section>
 
         <section class="card" id="logs">
-          <h3><span class="material-symbol-icon">article</span>Server logs</h3>
-          <div class="row" style="margin-bottom:8px">
-            <label for="log-tail">Lines</label><span class="vfield short" style="width:6rem"><input class="ctl" type="text" inputmode="numeric" id="log-tail" value="200" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
-            <label for="log-level">Level</label><select class="ctl" id="log-level"><option>All</option><option>info</option><option>warn</option><option>error</option></select>
-            <input class="ctl" type="search" id="log-contains" placeholder="Contains…" aria-label="Contains">
-            <button class="btn" type="button" id="logs-refresh"><span class="material-symbol-icon">refresh</span>Refresh</button>
+          <h3><span class="material-symbol-icon">article</span>Log Viewer</h3>
+          <div class="log-toolbar">
+            <button class="btn" type="button" id="log-filters-toggle" aria-expanded="false" aria-controls="log-filters"><span class="material-symbol-icon">tune</span>Filters</button>
+            <div class="chips" id="log-chips" aria-label="Active filters"></div>
+            <span class="grow"></span>
+            <span class="live" id="log-live">Live</span>
+            <button class="btn" type="button" id="log-resume" hidden>Resume</button>
             <button class="btn" type="button" id="logs-copy"><span class="material-symbol-icon">content_copy</span>Copy</button>
           </div>
-          <div class="logbox mono themed-scrollbar" id="logbox"></div>
+          <div class="log-filters" id="log-filters" hidden>
+            <fieldset><legend>Level</legend><div class="opts" id="log-levels"></div></fieldset>
+            <div><span class="field-label" style="display:block;font-size:.85rem;margin-bottom:2px">Source</span><details class="multi" id="log-svc"><summary></summary><div class="multi-list"></div></details></div>
+            <div><label class="field-label" for="log-text" style="display:block;font-size:.85rem;margin-bottom:2px">Message</label><input class="ctl" type="search" id="log-text" placeholder="Contains…"></div>
+            <div><label class="field-label" for="log-time" style="display:block;font-size:.85rem;margin-bottom:2px">Time</label><select class="ctl" id="log-time"><option>Last hour</option><option selected>Last 24 hours</option><option>Last 7 days</option><option>All</option></select></div>
+          </div>
+          <div class="log-rows mono themed-scrollbar" id="log-rows" role="list" aria-label="Log lines, newest first"></div>
+          <p class="mock-note mock-inline" style="margin:8px 0 0">Admin Log Viewer later moves this view to structured entries: it adds category and component filters, and rows expand to their raw JSON. The route keeps its name, <code>/control/logs/server</code>, until then.</p>
         </section>
 
         <section class="card" id="events">
@@ -426,7 +468,6 @@ form("backup-form", "backup-save", [
   ["backup-count", rangeCheck(1, 100, "")],
   ["backup-days", rangeCheck(0, 365, " days")]
 ], "Backup settings saved.");
-new ValidatedField($("log-tail"), rangeCheck(1, 5000, " lines"));
 $("control-show").addEventListener("click", () => {
   const input = $("control-token");
   input.type = input.type === "password" ? "text" : "password";
@@ -481,7 +522,8 @@ $("clear-all-stats").addEventListener("click", async () => {
 });
 
 // ---- Library transfer: import keeps the desktop's source folder remap ----
-$("export").addEventListener("click", () => status("Exported library-2026-10-07.db."));
+// A plain download in every browser, with no save picker.
+$("export").addEventListener("click", () => status("Downloaded library-2026-10-08.db."));
 $("import-file").addEventListener("change", () => {
   if ($("import-file").files.length) importLibrary($("import-file").files[0].name);
   $("import-file").value = "";
@@ -571,13 +613,6 @@ function renderSources() {
     info.children[0].textContent = source.name;
     info.children[1].textContent = source.path;
     info.children[2].textContent = `${source.media.toLocaleString()} media: ${source.videos.toLocaleString()} videos, ${source.photos.toLocaleString()} photos · ${source.hours.toLocaleString()} h · ${source.withAudio.toLocaleString()} with audio, ${(source.videos - source.withAudio).toLocaleString()} without`;
-    const refresh = document.createElement("button");
-    refresh.type = "button";
-    refresh.className = "icon-btn";
-    refresh.title = "Refresh (refreshes the whole library)";
-    refresh.setAttribute("aria-label", `Refresh ${source.name}`);
-    refresh.append(iconSpan("sync"));
-    refresh.addEventListener("click", () => $("refresh-now").click());
     const edit = document.createElement("button");
     edit.type = "button";
     edit.className = "icon-btn";
@@ -606,7 +641,7 @@ function renderSources() {
         status("Source removed. Open WebUIs update their library.");
       }
     }));
-    row.append(toggle, info, refresh, edit);
+    row.append(toggle, info, edit);
     list.append(row);
   });
   sourceField.update();
@@ -620,6 +655,7 @@ const sourceField = new ValidatedField($("source-path"), (value) => {
 });
 holdAction($("source-add-btn"), () => [sourceField], { reason: () => "Enter a folder path first." });
 renderSources();
+$("sources-refresh").addEventListener("click", () => $("refresh-now").click());
 $("source-add").addEventListener("submit", (event) => {
   event.preventDefault();
   if (sourceField.holds) return;
@@ -721,7 +757,11 @@ $("review-back").addEventListener("click", closeReview);
 $("review-cancel").addEventListener("click", closeReview);
 $("review-apply").addEventListener("click", async () => {
   const { files, groups: chosen } = reviewCounts();
-  if (!(await confirmDialog({ message: `Delete ${files} files from ${chosen} groups? They are deleted from disk and leave the library.`, confirmLabel: "Delete", danger: true }))) return;
+  if (!(await confirmDialog({
+    message: `This permanently deletes the duplicate files you didn't keep from disk.\n\nGroups to process: ${chosen}\nFiles to delete: ${files}`,
+    confirmLabel: `Delete ${files} ${files === 1 ? "File" : "Files"}`,
+    danger: true
+  }))) return;
   closeReview();
   $("dup-state").textContent = `Deleted ${files} files.`;
   status(`Deleted ${files} duplicate files.`);
@@ -742,29 +782,156 @@ $("testing-reset").addEventListener("click", () => {
 });
 
 // ---- Clients, logs, and events ----
-[["desktop-web", "192.168.1.20", "now"], ["mobile-web", "192.168.1.31", "4 s ago"], ["desktop", "127.0.0.1", "12 s ago"]].forEach(([type, address, seen]) => {
+// The server already keeps each event stream's client id and user agent; the OS is read from the user agent.
+function osFromUserAgent(ua) {
+  if (/Windows NT/.test(ua)) return "Windows";
+  if (/iPad/.test(ua)) return "iPadOS";
+  if (/iPhone|iPod/.test(ua)) return "iOS";
+  if (/Android/.test(ua)) return "Android";
+  if (/CrOS/.test(ua)) return "ChromeOS";
+  if (/Mac OS X/.test(ua)) return "macOS";
+  if (/Linux/.test(ua)) return "Linux";
+  return null;
+}
+const CLIENTS = [
+  ["web-3f9c2e81", "desktop-web", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36", "192.168.1.20", "now"],
+  ["web-a71d09c4", "mobile-web", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 Version/18.1 Mobile/15E148 Safari/604.1", "192.168.1.31", "4 s ago"],
+  ["web-55be2f10", "mobile-web", "Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36", "192.168.1.44", "9 s ago"],
+  ["desktop-0c9e7a22", "desktop", "ReelRoulette.Desktop/0.15.0", "127.0.0.1", "12 s ago"]
+];
+CLIENTS.forEach(([id, type, ua, address, seen]) => {
   const row = document.createElement("div");
   row.className = "list-row";
-  row.textContent = `${type}  ${address}  last seen ${seen}`;
+  row.innerHTML = '<div class="grow"><div class="name"></div><div class="sub"></div></div>';
+  row.querySelector(".name").textContent = `${id} · ${osFromUserAgent(ua) || "OS not reported"}`;
+  row.querySelector(".sub").textContent = `${type} · ${address} · last seen ${seen}`;
   $("client-list").append(row);
 });
 $("clients-copy").addEventListener("click", () => status("Client list copied."));
-const LOG = [
-  "10:02:11 info  server started, port 45123",
-  "10:02:12 info  catalog opened: 49055 items",
-  "10:15:40 info  refresh started",
-  "10:16:02 warn  thumbnail failed: unsupported codec",
-  "10:16:30 info  refresh complete: 2 added",
-  "10:20:05 error media read failed: file not found"
+// Today's last.log lines, "[timestamp] [source] [level] message", newest first; a row expands to the full line.
+const LOG_LINES = [
+  "[2026-10-08 10:20:05.214] [server] [error] Media read failed: file not found.",
+  "[2026-10-08 10:19:40.020] [webui] [warn] playback=failed reason=format",
+  "[2026-10-08 10:16:30.801] [server] [info] Core refresh complete | 2 added, 0 removed, 0 renamed",
+  "[2026-10-08 10:16:02.113] [server] [warn] Thumbnail failed: unsupported codec while generating the thumbnail for one item in the Videos source, which the next refresh retries.",
+  "[2026-10-08 10:15:40.002] [server] [info] Core refresh started",
+  "[2026-10-08 10:12:09.550] [desktop-main-window] [info] Favorite toggled from the player",
+  "[2026-10-08 10:05:31.020] [desktop-update] [info] Update check: up to date",
+  "[2026-10-08 10:02:12.300] [server] [info] Catalog opened: 49055 items",
+  "[2026-10-08 10:02:11.090] [server] [info] Server started on port 45123",
+  "[2026-10-08 10:01:58.400] [webui] [info] library=panel-updated total=38833 eligible=163",
+  ...Array.from({ length: 50 }, (_, i) => {
+    const minute = String(59 - i).padStart(2, "0");
+    return i % 7 === 3
+      ? `[2026-10-08 09:${minute}:12.000] [server] [warn] Event stream reconnect from a client after a dropped connection`
+      : `[2026-10-08 09:${minute}:04.000] [server] [info] Library query served: ${120 + i} items`;
+  })
 ];
-function renderLog() {
-  const level = $("log-level").value;
-  const contains = $("log-contains").value.toLowerCase();
-  $("logbox").textContent = LOG.filter((line) => (level === "All" || line.includes(` ${level} `)) && line.toLowerCase().includes(contains)).join("\n");
+// The newest matching lines first; older ones load as the list nears its end, up to the route's 5000 lines.
+const LOG_PAGE = 20;
+let logShown = LOG_PAGE;
+const LOG = LOG_LINES.map((raw) => {
+  const [, ts, svc, lvl, msg] = /^\[([^\]]+)\] \[([^\]]+)\] \[([^\]]+)\] (.*)$/.exec(raw);
+  return { raw, ts, svc, lvl, msg };
+});
+// One checkbox per level and one option per source found in the lines read.
+const LEVELS = [...new Set(["info", "warn", "error", ...LOG.map((e) => e.lvl)])];
+const SOURCES_SVC = [...new Set(LOG.map((e) => e.svc))];
+const logFilter = { levels: new Set(LEVELS), svcs: new Set(SOURCES_SVC) };
+function checkboxes(host, values, set, onChange) {
+  host.textContent = "";
+  values.forEach((value) => {
+    const label = document.createElement("label");
+    label.innerHTML = '<input type="checkbox"> ';
+    label.append(value);
+    const box = label.querySelector("input");
+    box.checked = set.has(value);
+    box.addEventListener("change", () => {
+      if (box.checked) set.add(value);
+      else set.delete(value);
+      onChange();
+    });
+    host.append(label);
+  });
 }
-$("log-level").addEventListener("change", renderLog);
-$("log-contains").addEventListener("input", renderLog);
-$("logs-refresh").addEventListener("click", renderLog);
+const allOr = (set, values) => (set.size === values.length ? "All" : set.size === 0 ? "None" : [...set].join(", "));
+function renderLog() {
+  $("log-svc").querySelector("summary").textContent = `${allOr(logFilter.svcs, SOURCES_SVC)} ▾`;
+  const chips = [`Levels: ${allOr(logFilter.levels, LEVELS)}`];
+  if (logFilter.svcs.size < SOURCES_SVC.length) chips.push(`Source: ${allOr(logFilter.svcs, SOURCES_SVC)}`);
+  if ($("log-text").value) chips.push(`Message: “${$("log-text").value}”`);
+  chips.push($("log-time").value);
+  $("log-chips").textContent = "";
+  chips.forEach((text) => {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = text;
+    $("log-chips").append(chip);
+  });
+  const text = $("log-text").value.toLowerCase();
+  const rows = $("log-rows");
+  const scrollTop = rows.scrollTop;
+  rows.textContent = "";
+  const matching = LOG.filter((e) => logFilter.levels.has(e.lvl) && logFilter.svcs.has(e.svc) && e.msg.toLowerCase().includes(text));
+  matching.slice(0, logShown).forEach((entry) => {
+    const row = document.createElement("div");
+    row.setAttribute("role", "listitem");
+    const line = document.createElement("button");
+    line.type = "button";
+    line.className = "log-line";
+    line.setAttribute("aria-expanded", "false");
+    line.innerHTML = '<span class="ts"></span><span class="lvl"></span><span class="meta"></span><span class="msg"></span>';
+    line.querySelector(".ts").textContent = entry.ts.slice(11);
+    line.querySelector(".lvl").textContent = entry.lvl;
+    line.querySelector(".lvl").classList.add(`lvl-${entry.lvl}`);
+    line.querySelector(".meta").textContent = entry.svc;
+    line.querySelector(".msg").textContent = entry.msg;
+    const raw = document.createElement("pre");
+    raw.className = "log-raw";
+    raw.textContent = entry.raw;
+    raw.hidden = true;
+    line.addEventListener("click", () => {
+      raw.hidden = !raw.hidden;
+      line.setAttribute("aria-expanded", String(!raw.hidden));
+    });
+    row.append(line, raw);
+    rows.append(row);
+  });
+  const end = document.createElement("div");
+  end.className = "log-more";
+  end.textContent = logShown < matching.length ? "Loading older lines…" : "No older lines. The server returns up to the newest 5000.";
+  rows.append(end);
+  rows.scrollTop = scrollTop;
+}
+function resetLogPaging() {
+  logShown = LOG_PAGE;
+  renderLog();
+}
+checkboxes($("log-levels"), LEVELS, logFilter.levels, resetLogPaging);
+checkboxes($("log-svc").querySelector(".multi-list"), SOURCES_SVC, logFilter.svcs, resetLogPaging);
+$("log-text").addEventListener("input", resetLogPaging);
+$("log-time").addEventListener("change", resetLogPaging);
+$("log-filters-toggle").addEventListener("click", () => {
+  const open = $("log-filters").hidden;
+  $("log-filters").hidden = !open;
+  $("log-filters-toggle").setAttribute("aria-expanded", String(open));
+});
+// The live indicator pauses while scrolled away from the newest lines, with a control to resume.
+$("log-rows").addEventListener("scroll", () => {
+  const rows = $("log-rows");
+  if (rows.scrollTop + rows.clientHeight >= rows.scrollHeight - 40 && rows.querySelector(".log-more")?.textContent.startsWith("Loading")) {
+    logShown += LOG_PAGE;
+    renderLog();
+  }
+  const away = $("log-rows").scrollTop > 24;
+  $("log-live").textContent = away ? "Paused" : "Live";
+  $("log-live").classList.toggle("is-paused", away);
+  $("log-resume").hidden = !away;
+});
+$("log-resume").addEventListener("click", () => {
+  $("log-rows").scrollTop = 0;
+  $("log-rows").dispatchEvent(new Event("scroll"));
+});
 $("logs-copy").addEventListener("click", () => status("Logs copied."));
 renderLog();
 $("events-in").textContent = "10:20:01 GET /api/library/stats 200\n10:20:03 POST /api/random 200\n10:20:05 GET /api/media/… 404";

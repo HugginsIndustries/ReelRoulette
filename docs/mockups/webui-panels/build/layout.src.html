@@ -505,6 +505,33 @@ kbd {
 }
 .is-off { opacity: 0.5; }
 
+/* Library controls and the filter line collapse to give the grid room. Preset and randomization share a row from a
+   panel about 440 px wide: the controls are 26 px narrower than the panel (its border and padding). */
+.lib-controls { container: lib-controls / inline-size; }
+.lib-pair { display: flex; flex-direction: column; gap: 8px; }
+@container lib-controls (min-width: 414px) {
+  .lib-pair { flex-direction: row; }
+  .lib-pair > .ctl { flex: 1 1 0; min-width: 0; }
+}
+.lib-controls.is-collapsed, .lib-filters.is-collapsed { display: none !important; }
+
+/* A phone on its side (a touch screen under 500 px tall): the header and status line hide and the player fills the
+   screen, like fullscreen without the browser's fullscreen mode. The panel and dialogs still open, compacted. */
+body.short-screen #app { padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); }
+body.short-screen .top-bar, body.short-screen .status { display: none; }
+body.short-screen .media-container { border-radius: 0; }
+body.short-screen .panel-tabs { padding: 2px 6px; }
+body.short-screen .panel-tab, body.short-screen #panel-close { width: 40px; height: 40px; min-width: 40px; }
+body.short-screen .panel-page { padding: 6px 10px; gap: 6px; }
+body.short-screen .panel-page-head { min-height: 36px; }
+body.short-screen .panel-page-head h2 { font-size: 1rem; }
+body.short-screen .lib-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+body.short-screen .lib-pair { display: contents; }
+body.short-screen .ctl, body.short-screen .btn { min-height: 38px; }
+body.short-screen .filter-tab { min-height: 38px; padding: 4px 12px; }
+body.short-screen .app-dialog { max-height: calc(100dvh - 12px); }
+body.short-screen .dialog-body { padding: 10px 12px; gap: 6px; }
+
 /* The status line. */
 .status { font-size: 0.9rem; color: var(--muted-fg); margin-top: 10px; min-height: 1.2em; flex-shrink: 0; }
 
@@ -644,10 +671,12 @@ kbd {
         <div class="panel-page-head">
           <h2>Library</h2>
           <p id="lib-summary" class="lib-summary grow" aria-live="polite"></p>
+          <button class="icon-btn" type="button" id="lib-collapse" aria-expanded="true" aria-controls="lib-controls lib-filters" aria-label="Hide library controls and filters" title="Hide controls &amp; filters"><span class="material-symbol-icon">unfold_less</span></button>
           <button class="icon-btn" type="button" id="lib-select" aria-pressed="false" aria-label="Select items" title="Select items"><span class="material-symbol-icon">checklist</span></button>
         </div>
         <button type="button" id="lib-filters" class="lib-filters" title="Open the Filter tab" hidden></button>
-        <div class="lib-controls">
+        <div class="lib-controls" id="lib-controls">
+          <div class="lib-pair">
           <select class="ctl" id="lib-preset" aria-label="Choose preset">
             <option value="">None</option>
             <option>Favorites</option>
@@ -661,6 +690,7 @@ kbd {
             <option>Spread Mode</option>
             <option>Weighted with Spread</option>
           </select>
+          </div>
           <div class="lib-sort">
             <select class="ctl" id="lib-sort" aria-label="Sort library">
               <option value="Name">Name</option>
@@ -848,10 +878,10 @@ kbd {
                 <label><input type="radio" name="set-seek" value="5"> 5 seconds</label>
                 <label><input type="radio" name="set-seek" value="10"> 10 seconds</label>
               </div>
-              <p class="mock-note mock-inline">Open: frame stepping, which a browser can only approximate, is built or declined.</p>
+              <p class="setting-hint">While a video is paused, <kbd>,</kbd> and <kbd>.</kbd> step one frame.</p>
             </div>
             <div class="setting">
-              <span class="setting-label" id="set-volume-label">Volume step <kbd>,</kbd> <kbd>.</kbd></span>
+              <span class="setting-label" id="set-volume-label">Volume step <kbd>[</kbd> <kbd>]</kbd></span>
               <div class="choice-row" role="radiogroup" aria-labelledby="set-volume-label">
                 <label><input type="radio" name="set-volstep" value="1"> 1%</label>
                 <label><input type="radio" name="set-volstep" value="2"> 2%</label>
@@ -860,26 +890,18 @@ kbd {
             </div>
           </div>
           <div class="settings-section">
-            <h3>Loudness normalization</h3>
-            <p class="mock-note mock-inline">Open: built or declined. Shown as it would look if built, with the desktop's ranges and defaults.</p>
-            <div class="choice-row"><label><input type="checkbox" id="set-norm"> Even out loudness between videos</label></div>
-            <div id="norm-fields">
-              <div class="setting">
-                <label class="setting-label" for="set-norm-reduce">Maximum reduction</label>
-                <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="numeric" id="set-norm-reduce" value="15" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>dB</span></div>
+            <h3>Appearance</h3>
+            <div class="setting">
+              <span class="setting-label" id="set-theme-label">Theme</span>
+              <div class="choice-row" role="radiogroup" aria-labelledby="set-theme-label">
+                <label><input type="radio" name="set-theme" value="system"> System</label>
+                <label><input type="radio" name="set-theme" value="dark"> Dark</label>
+                <label><input type="radio" name="set-theme" value="light"> Light</label>
               </div>
-              <div class="setting">
-                <label class="setting-label" for="set-norm-boost">Maximum boost</label>
-                <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="numeric" id="set-norm-boost" value="5" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>dB</span></div>
-              </div>
-              <div class="setting">
-                <span class="setting-label" id="set-baseline-label">Baseline</span>
-                <div class="choice-stack" role="radiogroup" aria-labelledby="set-baseline-label">
-                  <label><input type="radio" name="set-baseline" value="auto" checked><span>Automatic<small>The library's baseline, −20.4 LUFS</small></span></label>
-                  <label><input type="radio" name="set-baseline" value="manual"><span>Manual target</span></label>
-                </div>
-                <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" id="set-norm-target" value="-23" aria-label="Target loudness" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>LUFS</span></div>
-              </div>
+            </div>
+            <div class="setting">
+              <div class="choice-row"><label><input type="checkbox" id="set-status"> Show the status line</label></div>
+              <p class="setting-hint">Connection, refresh, and sync messages below the player.</p>
             </div>
           </div>
           <div class="settings-section">
@@ -951,13 +973,8 @@ kbd {
         <label><input type="checkbox" id="mock-pairing"> The server asks for pairing</label>
         <label><input type="checkbox" id="mock-server-machine"> This browser is on the server machine: Show in File Manager, and admin actions without the control token</label>
         <label><input type="checkbox" id="mock-ios-volume"> Volume is read-only, as on iOS</label>
-        <p class="mock-small">The panel side and Auto-Pause are in the Settings tab.</p>
-      </fieldset>
-      <fieldset>
-        <legend>Theme</legend>
-        <label><input type="radio" name="mock-theme" value="system"> System, as the WebUI does</label>
-        <label><input type="radio" name="mock-theme" value="dark"> Dark</label>
-        <label><input type="radio" name="mock-theme" value="light"> Light</label>
+        <label><input type="checkbox" id="mock-short"> A phone on its side (a touch screen under 500 px tall)</label>
+        <p class="mock-small">The theme, panel side, and Auto-Pause are in the Settings tab.</p>
       </fieldset>
       <div class="mock-sheet-actions">
         <button type="button" id="mock-reset">Forget the panel's state</button>
@@ -1004,6 +1021,9 @@ const state = {
   serverMachine: store.get("serverMachine", false),
   pairing: store.get("pairing", false),
   iosVolume: store.get("iosVolume", false),
+  mockShort: store.get("mockShort", false),
+  showStatus: store.get("showStatus", true),
+  libCollapsed: store.get("libCollapsed", false),
   mode: "side",
   autoTag: false
 };
@@ -1104,6 +1124,7 @@ function chipText() {
     return ["play_arrow", playback.loop ? "Photo looping" : "Photo timer"];
   }
   if (playback.playing) return ["play_arrow", "Playing"];
+  if (playback.frameStep) return ["pause", `Paused, stepped a frame ${playback.frameStep}`];
   if (playback.pausedBy === "auto") return ["pause", "Auto-Paused"];
   if (playback.pausedBy === "end") return ["pause", "Ended"];
   return ["pause", "Paused"];
@@ -1134,13 +1155,20 @@ function renderPlayback() {
 }
 
 function setPlaying(playing, by) {
+  playback.frameStep = null;
   playback.playing = playing;
   playback.autoPaused = !playing && by === "auto";
   playback.pausedBy = playing ? null : by;
   renderPlayback();
 }
 
-function play(item) {
+// Autoplay, Next, Previous, and random picks skip a file that is missing or that this browser can't play, saying so
+// on the status line; a file the user chose from the library shows the notice instead.
+function play(item, how = "chosen", step = 1, tries = 0) {
+  if (how !== "chosen" && (item.missing || !isPlayable(item)) && tries < ITEMS.length) {
+    $("status").textContent = item.missing ? "Skipped a missing file." : "Skipped a file this browser can't play.";
+    return play(nextItemFrom(item, step), how, step, tries + 1);
+  }
   playback.item = item;
   playback.time = 0;
   playback.timer = 0;
@@ -1165,7 +1193,10 @@ function play(item) {
 }
 // The mockup steps through the list in order (the WebUI picks at random), skipping what the applied filter leaves out.
 function nextItem(step = 1) {
-  let index = playback.item.id;
+  return nextItemFrom(playback.item, step);
+}
+function nextItemFrom(from, step) {
+  let index = from.id;
   for (let n = 0; n < ITEMS.length; n++) {
     index = (index + step + ITEMS.length) % ITEMS.length;
     const item = ITEMS[index];
@@ -1196,7 +1227,7 @@ setInterval(() => {
   if (playback.autoplay && state.autoplayMode === "timer" && !isPhoto(item)) {
     playback.timer += 0.25;
     if (playback.timer >= state.advanceAfter) {
-      play(nextItem());
+      play(nextItem(), "auto");
       return;
     }
   }
@@ -1205,13 +1236,13 @@ setInterval(() => {
     playback.time += 0.25;
     if (playback.time >= photoSeconds()) {
       if (playback.loop) playback.time = 0;
-      else play(nextItem());
+      else play(nextItem(), "auto");
     }
   } else {
     playback.time += 0.25;
     if (playback.time >= item.duration) {
       if (playback.loop) playback.time = 0;
-      else if (playback.autoplay) play(nextItem());
+      else if (playback.autoplay) play(nextItem(), "auto");
       else {
         playback.time = item.duration;
         setPlaying(false, "end");
@@ -1225,9 +1256,10 @@ setInterval(() => {
 function handleWidth() {
   return handle.offsetWidth || (coarse.matches ? 20 : 12);
 }
+const isShortScreen = () => state.mockShort || (coarse.matches && window.innerHeight < OVERLAY_TOUCH_BELOW_HEIGHT);
 function computeMode() {
   if (window.innerWidth < OVERLAY_BELOW_WIDTH) return "overlay";
-  if (coarse.matches && window.innerHeight < OVERLAY_TOUCH_BELOW_HEIGHT) return "overlay";
+  if (isShortScreen()) return "overlay";
   return "side";
 }
 function maxWidth() {
@@ -1261,6 +1293,8 @@ function renderPanelButton() {
 
 function applyLayout() {
   state.mode = computeMode();
+  document.body.classList.toggle("short-screen", isShortScreen());
+  $("status").hidden = !state.showStatus;
   stage.dataset.side = state.side;
   stage.classList.toggle("is-overlay", state.mode === "overlay");
   panel.hidden = !state.open;
@@ -1388,14 +1422,38 @@ window.addEventListener("resize", applyLayout);
 coarse.addEventListener("change", applyLayout);
 
 // ---- Player controls ----
-media.addEventListener("click", () => media.classList.toggle("controls-visible"));
+// Swipes and taps on the media area, as the WebUI does (mediaGestures.ts): a swipe right plays the previous item and a
+// swipe left the next, past 50 px and more sideways than up or down; the click that follows a swipe is ignored.
+let swipeStart = null;
+let afterSwipe = false;
+media.addEventListener("touchstart", (event) => {
+  swipeStart = event.target.closest("#overlay-controls .overlay-btn, .overlay-seek-row") ? null : { x: event.touches[0].clientX, y: event.touches[0].clientY };
+}, { passive: true });
+media.addEventListener("touchend", (event) => {
+  if (!swipeStart || !event.changedTouches[0]) return;
+  const dx = event.changedTouches[0].clientX - swipeStart.x;
+  const dy = event.changedTouches[0].clientY - swipeStart.y;
+  swipeStart = null;
+  if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+    afterSwipe = true;
+    if (dx > 0) play(nextItem(-1), "next", -1);
+    else play(nextItem(), "next");
+  }
+}, { passive: true });
+media.addEventListener("click", () => {
+  if (afterSwipe) {
+    afterSwipe = false;
+    return;
+  }
+  media.classList.toggle("controls-visible");
+});
 $("overlay-controls").addEventListener("click", (event) => event.stopPropagation());
 // Play/Pause does nothing on a photo, as today.
 $("play-btn").addEventListener("click", () => {
   if (!isPhoto(playback.item)) setPlaying(!playback.playing, "user");
 });
-$("next-btn").addEventListener("click", () => play(nextItem()));
-$("prev-btn").addEventListener("click", () => play(nextItem(-1)));
+$("next-btn").addEventListener("click", () => play(nextItem(), "next"));
+$("prev-btn").addEventListener("click", () => play(nextItem(-1), "next", -1));
 $("seek").addEventListener("input", (event) => {
   playback.time = Number(event.target.value);
   renderTime();
@@ -1418,6 +1476,7 @@ $("mute-btn").addEventListener("click", toggleMute);
 function toggleFlag(flag) {
   const item = playback.item;
   item[flag] = !item[flag];
+  if (item[flag]) item[flag === "favorite" ? "blacklisted" : "favorite"] = false;
   const messages = flag === "favorite" ? ["Added to favorites", "Removed from favorites"] : ["Blacklisted", "Removed from blacklist"];
   $("status").textContent = item[flag] ? messages[0] : messages[1];
   renderPlayback();
@@ -2297,13 +2356,6 @@ function bindRadio(name, key) {
     });
   });
 }
-document.querySelectorAll('input[name="mock-theme"]').forEach((radio) => {
-  radio.checked = radio.value === store.get("theme", "system");
-  radio.addEventListener("change", () => {
-    store.set("theme", radio.value);
-    applyTheme();
-  });
-});
 
 $("mock-reset").addEventListener("click", () => {
   ["open", "tab", "width", "side"].forEach((key) => store.remove(key));
@@ -2346,7 +2398,7 @@ function readApplied() {
   });
   renderFilterSummary();
 }
-// Proposed: a one-line summary of the applied filter above the grid, as the desktop shows; it opens the Filter tab.
+// A one-line summary of the applied filter above the grid, as the desktop shows; it opens the Filter tab.
 function renderFilterSummary() {
   const line = $("lib-filters");
   line.hidden = applied.parts.length === 0;
@@ -2469,9 +2521,9 @@ async function runBulk(kind) {
   const items = [...selected].map((id) => ITEMS[id]);
   const noun = countOf(items.length);
   const status = (text) => ($("status").textContent = text);
-  if (kind === "fav-add") { items.forEach((item) => (item.favorite = true)); status(`Added ${noun} to favorites.`); }
+  if (kind === "fav-add") { items.forEach((item) => Object.assign(item, { favorite: true, blacklisted: false })); status(`Added ${noun} to favorites.`); }
   if (kind === "fav-remove") { items.forEach((item) => (item.favorite = false)); status(`Removed ${noun} from favorites.`); }
-  if (kind === "bl-add") { items.forEach((item) => (item.blacklisted = true)); status(`Blacklisted ${noun}.`); }
+  if (kind === "bl-add") { items.forEach((item) => Object.assign(item, { blacklisted: true, favorite: false })); status(`Blacklisted ${noun}.`); }
   if (kind === "bl-remove") { items.forEach((item) => (item.blacklisted = false)); status(`Removed ${noun} from the blacklist.`); }
   if (kind === "tags") return openBulkTags(items);
   if (kind === "clear") {
@@ -2575,7 +2627,10 @@ async function removeFromLibrary(items) {
     const text = document.createElement("p");
     text.className = "dialog-message";
     text.id = `remove-${Date.now()}`;
-    text.textContent = `Remove ${noun} from the library?`;
+    const question = (deleting) => deleting
+      ? `Remove ${noun} from the library and permanently delete ${items.length === 1 ? "its file" : `their ${items.length} files`} from disk? This can't be undone.`
+      : `Remove ${noun} from the library? ${items.length === 1 ? "Its file stays" : "Their files stay"} on disk.`;
+    text.textContent = question(false);
     const option = document.createElement("label");
     option.className = "choice-row";
     option.innerHTML = '<input type="checkbox"> Also delete the files from disk';
@@ -2588,6 +2643,10 @@ async function removeFromLibrary(items) {
     actions.append(spacer, cancel, remove);
     body.append(text, option, actions);
     const { close } = openDialog({ content: body, labelledBy: text.id, role: "alertdialog", onClose: (result) => resolve(result) });
+    option.querySelector("input").addEventListener("change", (event) => {
+      text.textContent = question(event.target.checked);
+      remove.querySelector(".btn-label").textContent = event.target.checked ? "Remove and Delete" : "Remove";
+    });
     cancel.addEventListener("click", () => close(null));
     remove.addEventListener("click", () => close({ deleteFiles: option.querySelector("input").checked }));
     cancel.focus();
@@ -2729,20 +2788,19 @@ function initSettings() {
     store.set("advanceAfter", state.advanceAfter);
     renderTime();
   });
-  const reduce = new ValidatedField($("set-norm-reduce"), rangeCheck(1, 30, " dB", true));
-  const boost = new ValidatedField($("set-norm-boost"), rangeCheck(0, 10, " dB", true));
-  const target = new ValidatedField($("set-norm-target"), rangeCheck(-50, -10, " LUFS", false));
-  const syncNorm = () => {
-    const on = $("set-norm").checked;
-    const manual = document.querySelector('input[name="set-baseline"]:checked').value === "manual";
-    $("norm-fields").classList.toggle("is-off", !on);
-    $("norm-fields").querySelectorAll("input").forEach((input) => (input.disabled = !on));
-    target.input.disabled = !on || !manual;
-    [reduce, boost, target].forEach((field) => field.update());
-  };
-  $("set-norm").addEventListener("change", syncNorm);
-  document.querySelectorAll('input[name="set-baseline"]').forEach((radio) => radio.addEventListener("change", syncNorm));
-  syncNorm();
+  document.querySelectorAll('input[name="set-theme"]').forEach((radio) => {
+    radio.checked = radio.value === store.get("theme", "system");
+    radio.addEventListener("change", () => {
+      store.set("theme", radio.value);
+      applyTheme();
+    });
+  });
+  $("set-status").checked = state.showStatus;
+  $("set-status").addEventListener("change", () => {
+    state.showStatus = $("set-status").checked;
+    store.set("showStatus", state.showStatus);
+    applyLayout();
+  });
   const list = $("shortcut-list");
   SHORTCUTS.forEach(([keys, action]) => {
     const dt = document.createElement("dt");
@@ -2771,7 +2829,8 @@ const SHORTCUTS = [
   ["B", "Blacklist"],
   ["A", "Autoplay on or off"],
   ["M", "Mute"],
-  [", / .", "Volume down or up by the volume step"],
+  [", / .", "One frame back or forward, while a video is paused"],
+  ["[ / ]", "Volume down or up by the volume step"],
   ["1 – 5", "Open Library, Filter, Tags, Stats, or Settings; the open tab's key closes the panel"],
   ["T", "Tags, as on the desktop"],
   ["S", "Settings, as on the desktop"],
@@ -2805,18 +2864,26 @@ document.addEventListener("keydown", (event) => {
   }
   // Arrow keys keep their own job on radio buttons and checkboxes.
   if ((key === "ArrowLeft" || key === "ArrowRight") && event.target.tagName === "INPUT") return;
-  if (key === "ArrowLeft") return handled(), play(nextItem(-1));
-  if (key === "ArrowRight") return handled(), play(nextItem());
+  if (key === "ArrowLeft") return handled(), play(nextItem(-1), "next", -1);
+  if (key === "ArrowRight") return handled(), play(nextItem(), "next");
   if (key === "r") {
     handled();
     const pool = ITEMS.filter((x) => !x.removed && (!applied.playable || isPlayable(x)));
-    return play(pool[Math.floor(Math.random() * pool.length)]);
+    return play(pool[Math.floor(Math.random() * pool.length)], "random");
   }
   if (key === "f") return handled(), toggleFlag("favorite");
   if (key === "b") return handled(), toggleFlag("blacklisted");
   if (key === "a") return handled(), $("autoplay-btn").click();
   if (key === "m") return handled(), toggleMute();
-  if ((key === "," || key === ".") && !state.iosVolume) return handled(), setVolume(state.volume + (key === "." ? 1 : -1) * state.volumeStep);
+  // Frame stepping, as YouTube does: the mockup assumes 30 frames a second; the WebUI uses the browser's frame
+  // timings (requestVideoFrameCallback) where it provides them.
+  if ((key === "," || key === ".") && !isPhoto(item) && !playback.failed && !playback.playing) {
+    handled();
+    playback.time = Math.max(0, Math.min(item.duration, playback.time + (key === "." ? 1 : -1) / 30));
+    playback.frameStep = key === "." ? "forward" : "back";
+    return renderPlayback();
+  }
+  if ((key === "[" || key === "]") && !state.iosVolume) return handled(), setVolume(state.volume + (key === "]" ? 1 : -1) * state.volumeStep);
   if (key === "p") return handled(), $("panel-btn").click();
   if (TAB_KEYS[key]) {
     handled();
@@ -2850,14 +2917,35 @@ function applyMockOptions() {
   renderStats();
   placeAllTips();
 }
-[["mock-pairing", "pairing"], ["mock-server-machine", "serverMachine"], ["mock-ios-volume", "iosVolume"]].forEach(([id, key]) => {
+[["mock-pairing", "pairing"], ["mock-server-machine", "serverMachine"], ["mock-ios-volume", "iosVolume"], ["mock-short", "mockShort"]].forEach(([id, key]) => {
   $(id).checked = state[key];
   $(id).addEventListener("change", () => {
     state[key] = $(id).checked;
     store.set(key, state[key]);
     applyMockOptions();
+    applyLayout();
   });
 });
+
+// ---- Library controls collapse, remembered on this device ----
+function applyCollapse() {
+  const button = $("lib-collapse");
+  $("lib-controls").classList.toggle("is-collapsed", state.libCollapsed);
+  $("lib-filters").classList.toggle("is-collapsed", state.libCollapsed);
+  button.setAttribute("aria-expanded", String(!state.libCollapsed));
+  button.setAttribute("aria-label", state.libCollapsed ? "Show library controls and filters" : "Hide library controls and filters");
+  button.title = state.libCollapsed ? "Show controls & filters" : "Hide controls & filters";
+  setIcon(button.querySelector(".material-symbol-icon"), state.libCollapsed ? "unfold_more" : "unfold_less");
+}
+$("lib-collapse").addEventListener("click", () => {
+  state.libCollapsed = !state.libCollapsed;
+  store.set("libCollapsed", state.libCollapsed);
+  applyCollapse();
+});
+applyCollapse();
+
+// For build/check.mjs only: lets the check start playback at a given item.
+window.mockup = { play: (id) => play(ITEMS[id]), items: ITEMS };
 
 // ---- Start ----
 readApplied();
