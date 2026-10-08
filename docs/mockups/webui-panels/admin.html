@@ -1,0 +1,1606 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a1a1a">
+<title>Admin View Mockup</title>
+<style>
+/* Shared by the mockup pages. Tokens and control styles are copied from the WebUI's styles.css. */
+* { box-sizing: border-box; }
+:root {
+  --huggins-orange: #ef7f22;
+  --huggins-orange-hover: #f28a34;
+  --huggins-orange-soft-border: #ef7f22aa;
+  --huggins-orange-soft-inset: #ef7f2266;
+  --lime-green: #22ef7f;
+  --lime-green-soft-border: #22ef7faa;
+  --lime-green-soft-inset: #22ef7f66;
+  --violet: #7f22ef;
+  --violet-soft-border: #7f22efaa;
+  --icon-foreground: #ffffff;
+  --icon-hover-opacity: 0.75;
+  --icon-pressed-opacity: 0.55;
+  --icon-disabled-opacity: 0.45;
+  --page-bg: #1a1a1a;
+  --page-fg: #e0e0e0;
+  --panel-border: #444444;
+  --muted-fg: #888888;
+  --time-display-fg: #ffffff;
+  --control-drop-shadow: 0 2px 10px rgba(0, 0, 0, 0.72);
+  --transport-cluster-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+  /* Surfaces the overlays use today: body #111, controls #2a2a2a with #555 borders. */
+  --surface: #111111;
+  --surface-border: #333333;
+  --surface-raised: #1b1b1b;
+  --control-bg: #2a2a2a;
+  --control-bg-hover: #353535;
+  --control-border: #555555;
+  --control-fg: #ffffff;
+  --icon: #ffffff;
+  --focus-ring: #7aa7ff;
+  /* New for the validation pattern. */
+  --error: #ff5a52;
+  --tip-bg: #f1f1f1;
+  --tip-fg: #141414;
+  /* Mockup-only annotations. */
+  --mock: #e040fb;
+  --mock-bg: rgba(40, 0, 48, 0.92);
+  color-scheme: dark;
+}
+html.theme-light {
+  --page-bg: #eceff4;
+  --page-fg: #1a1d21;
+  --panel-border: #c5cad3;
+  --muted-fg: #5c6570;
+  --time-display-fg: #1a1d21;
+  --control-drop-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  --transport-cluster-shadow: 0 3px 12px rgba(0, 0, 0, 0.22);
+  --surface: #f4f5f8;
+  --surface-border: #c5cad3;
+  --surface-raised: #ffffff;
+  --control-bg: #ffffff;
+  --control-bg-hover: #e8eaef;
+  --control-border: #c5cad3;
+  --control-fg: #1a1d21;
+  --icon: #333333;
+  --focus-ring: #2563eb;
+  --error: #c4291f;
+  --tip-bg: #1f2329;
+  --tip-fg: #ffffff;
+  --mock: #a000b8;
+  --mock-bg: rgba(255, 240, 255, 0.96);
+  color-scheme: light;
+}
+
+@font-face {
+  font-family: "Material Symbols Outlined";
+  src: url("data:font/woff2;base64,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") format("woff2");
+  font-weight: 100 700;
+  font-style: normal;
+  font-display: block;
+}
+.material-symbol-icon {
+  font-family: "Material Symbols Outlined";
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-style: normal;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+}
+
+.themed-scrollbar { scrollbar-width: auto; scrollbar-color: var(--huggins-orange) transparent; }
+.themed-scrollbar::-webkit-scrollbar { width: 16px; height: 16px; }
+.themed-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.themed-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--huggins-orange);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--page-bg);
+  color: var(--page-fg);
+}
+
+/* Icon-only buttons, as the WebUI draws them. */
+.icon-btn {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--icon);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+}
+.icon-btn:hover:not(:disabled) { opacity: var(--icon-hover-opacity); }
+.icon-btn:active:not(:disabled) { opacity: var(--icon-pressed-opacity); }
+.icon-btn:disabled { opacity: var(--icon-disabled-opacity); cursor: default; }
+.icon-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+
+/* Text buttons, selects, and text fields, as the overlays draw them. */
+.btn, .ctl {
+  min-height: 44px;
+  font-size: 1rem;
+  font-family: inherit;
+  background: var(--control-bg);
+  color: var(--control-fg);
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+}
+.btn {
+  padding: 8px 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) { background: var(--control-bg-hover); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:focus-visible, .ctl:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.btn.has-pending { color: var(--huggins-orange); }
+.ctl { padding: 0 10px; min-width: 0; }
+input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
+
+/* An action that can't proceed: its label dims, and the red icon says a field is not valid. */
+.btn[aria-disabled="true"] { cursor: not-allowed; }
+.btn[aria-disabled="true"] .btn-label { opacity: 0.5; }
+.btn .btn-problem {
+  display: none;
+  font-size: 22px;
+  color: var(--error);
+}
+.btn.shows-problem .btn-problem { display: inline-flex; }
+
+/* The field validation pattern. */
+.vfield {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+.vfield > .ctl {
+  width: 100%;
+  padding-right: 40px;
+}
+.vfield-icon {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 24px;
+  color: var(--error);
+  display: none;
+  cursor: help;
+}
+.vfield.is-invalid .vfield-icon { display: inline-flex; }
+.vfield-tip {
+  position: fixed;
+  z-index: 3000;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: var(--tip-bg);
+  color: var(--tip-fg);
+  font-size: 0.9rem;
+  line-height: 1.35;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  display: none;
+}
+.vfield-tip.is-shown { display: block; }
+.vfield-tip::after {
+  content: "";
+  position: absolute;
+  right: var(--arrow-right, 14px);
+  width: 10px;
+  height: 10px;
+  background: var(--tip-bg);
+  transform: rotate(45deg);
+}
+.vfield-tip[data-place="above"]::after { bottom: -5px; }
+.vfield-tip[data-place="below"]::after { top: -5px; }
+
+/* The Filter tab's sub-tabs, as today. */
+.filter-tabstrip { display: flex; flex-wrap: wrap; gap: 8px; }
+.filter-tab {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  background: var(--control-bg);
+  color: var(--control-fg);
+  cursor: pointer;
+  font-size: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.filter-tab.is-active {
+  border-color: var(--huggins-orange);
+  box-shadow: 0 0 0 1px var(--huggins-orange-soft-inset) inset;
+}
+.filter-tab .tab-problem { display: none; font-size: 20px; color: var(--error); }
+.filter-tab.has-problem .tab-problem { display: inline-flex; }
+.filter-section { margin-bottom: 20px; }
+.filter-section h3 { margin: 0 0 8px; font-size: 0.95rem; font-weight: 600; }
+.filter-hint { font-size: 0.85rem; opacity: 0.75; margin: 0 0 8px; }
+.filter-stack { display: flex; flex-direction: column; gap: 4px; }
+.filter-stack label { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.filter-row > label { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.duration-field { width: 14rem; max-width: 100%; }
+.filter-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+
+/* Tag categories: the header's name toggles it; the handle, Edit, and Local select keep their own actions. */
+.tag-category { margin-bottom: 12px; }
+.tag-category-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+  background: #2d2d30;
+  border: 1px solid #3b3b40;
+  border-radius: 4px;
+  padding: 2px 6px 2px 4px;
+  cursor: pointer;
+}
+html.theme-light .tag-category-header { background: #e4e6ec; border-color: #c8ced8; }
+.tag-category-toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  font-size: 1.1rem;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tag-category-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.tag-category.is-collapsed .tag-category-header { margin-bottom: 0; }
+.tag-category.is-collapsed { margin-bottom: 8px; }
+.tag-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px 0 10px;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--violet-soft-border);
+  background: var(--violet);
+}
+.tag-chip.state-all { background: var(--lime-green); border-color: var(--lime-green-soft-border); box-shadow: 0 0 0 1px var(--lime-green-soft-inset) inset; }
+.tag-chip.state-some { background: var(--huggins-orange); border-color: var(--huggins-orange-soft-border); box-shadow: 0 0 0 1px var(--huggins-orange-soft-inset) inset; }
+.tag-chip-label { font-weight: 700; text-shadow: 0 0 8px rgba(0, 0, 0, 0.62); color: #fff; margin-right: 4px; }
+.tag-chip .icon-btn { color: #fff; text-shadow: 0 0 8px rgba(0, 0, 0, 0.62); }
+.tag-chip .icon-btn.is-selected { color: var(--huggins-orange); }
+
+/* Reordering: rows move only by their handle, so dragging elsewhere still scrolls on touch screens. */
+.drag-handle {
+  width: 32px;
+  min-width: 32px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-fg);
+  cursor: grab;
+  touch-action: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.drag-handle .material-symbol-icon { font-size: 26px; }
+.drag-handle:hover { color: var(--icon); }
+.drag-handle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; color: var(--icon); }
+.drag-handle-spacer { width: 32px; flex: 0 0 32px; }
+.is-dragging { position: relative; z-index: 5; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
+.is-dragging .drag-handle { cursor: grabbing; color: var(--huggins-orange); }
+body.sorting, body.sorting * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+.btn-danger { color: var(--error); }
+
+/* The dialog component: themed, stacking, each one dimming whatever is below it. */
+.app-dialog {
+  width: min(420px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  color: var(--page-fg);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  overflow: auto;
+}
+.app-dialog[open]:not(:modal) { position: fixed; inset: 0; margin: auto; height: fit-content; z-index: 4000; }
+.app-dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+.dialog-body { display: flex; flex-direction: column; gap: 8px; padding: 14px; margin: 0; }
+.dialog-body h3 { margin: 0 0 4px; font-size: 1.1rem; }
+.dialog-body .vfield, .dialog-body select { width: 100%; }
+.dialog-message { margin: 0 0 4px; line-height: 1.45; }
+.dialog-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.dialog-spacer { flex: 1; }
+
+/* Visually hidden, still read by screen readers. */
+.vh {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Mockup-only annotations: magenta and dashed, so they never read as part of the WebUI. */
+.mock-note {
+  border: 1px dashed var(--mock);
+  background: var(--mock-bg);
+  color: var(--page-fg);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.mock-note b, .mock-note strong { color: var(--mock); }
+.mock-inline { margin: 4px 0 8px; padding: 6px 8px; }
+.mock-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mock);
+}
+
+
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { height: 100dvh; overflow: hidden; display: flex; flex-direction: column; }
+#app {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+}
+.top-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-bottom: 12px; flex-shrink: 0; }
+.top-bar h1 { margin: 0; font-size: 1.5rem; }
+.top-bar .muted { color: var(--muted-fg); font-size: 0.95rem; }
+a.icon-btn { text-decoration: none; }
+
+/* The admin view: a full page between the header and the status line, covering the player. */
+.admin { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--surface-border); border-radius: 8px; overflow: hidden; }
+.admin-bar { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid var(--surface-border); flex: 0 0 auto; }
+.admin-bar h2 { margin: 0; font-size: 1.15rem; }
+.admin-nav { display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px; border-bottom: 1px solid var(--surface-border); flex: 0 0 auto; scrollbar-width: thin; }
+.admin-nav a {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border: 1px solid var(--control-border);
+  border-radius: 999px;
+  color: var(--page-fg);
+  text-decoration: none;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+.admin-nav a:hover { border-color: var(--huggins-orange); }
+.admin-body { flex: 1; min-height: 0; overflow: auto; padding: 12px; scroll-behavior: smooth; }
+
+/* The Operator page's 12-column grid, which changes at 620 and 980 px. */
+.admin-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; }
+.card { grid-column: span 12; border: 1px solid var(--surface-border); border-radius: 8px; padding: 12px; background: var(--surface-raised); min-width: 0; scroll-margin-top: 8px; }
+@media (min-width: 620px) { .card.half { grid-column: span 6; } }
+@media (min-width: 980px) { .card.third { grid-column: span 4; } }
+.card h3 { margin: 0 0 10px; font-size: 1.05rem; display: flex; align-items: center; gap: 8px; }
+.card h3 .material-symbol-icon { font-size: 22px; color: var(--huggins-orange); }
+.card h4 { margin: 14px 0 8px; font-size: 0.95rem; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.row + .row { margin-top: 8px; }
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.field > label, .field > .field-label { font-weight: 600; font-size: 0.92rem; }
+.field .hint { font-size: 0.82rem; color: var(--muted-fg); margin: 0; }
+.field .vfield { width: 100%; max-width: 22rem; }
+.field .vfield.short { max-width: 9rem; }
+.check { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 10px; font-size: 0.92rem; }
+.facts dt { color: var(--muted-fg); }
+.facts dd { margin: 0; }
+.notice-box { padding: 8px 10px; border-radius: 6px; border: 1px solid var(--error); color: var(--page-fg); margin: 0 0 10px; display: flex; gap: 8px; align-items: flex-start; }
+.notice-box .material-symbol-icon { color: var(--error); font-size: 22px; }
+.progress { height: 6px; border-radius: 3px; background: var(--control-bg); overflow: hidden; margin: 6px 0; }
+.progress > span { display: block; height: 100%; width: 0; background: var(--huggins-orange); transition: width 0.3s; }
+.list { border: 1px solid var(--surface-border); border-radius: 8px; }
+.list-row { display: flex; align-items: center; gap: 8px; padding: 8px; border-bottom: 1px solid var(--surface-border); flex-wrap: wrap; }
+.list-row:last-child { border-bottom: 0; }
+.list-row .grow { flex: 1 1 200px; min-width: 0; }
+.list-row .name { font-weight: 600; }
+.list-row .sub { font-size: 0.82rem; color: var(--muted-fg); word-break: break-all; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8rem; }
+.logbox { height: 220px; overflow: auto; border: 1px solid var(--surface-border); border-radius: 6px; padding: 8px; background: var(--surface); white-space: pre; }
+.events { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 620px) { .events { grid-template-columns: 1fr 1fr; } }
+.switch { width: 40px; height: 22px; }
+.btn .material-symbol-icon { font-size: 20px; }
+
+/* Duplicate review, inside the admin view. */
+.dup-group { border: 1px solid var(--surface-border); border-radius: 8px; padding: 10px; margin-bottom: 12px; background: var(--surface-raised); }
+.dup-group h4 { margin: 0 0 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.dup-files { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.dup-file { border: 2px solid var(--surface-border); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+.dup-file.is-kept { border-color: var(--lime-green); }
+.dup-file.is-deleted { border-color: var(--error); }
+.dup-file.is-deleted .dup-art { opacity: 0.45; }
+.dup-art { aspect-ratio: 16 / 9; background: linear-gradient(to bottom, hsl(var(--h) 65% 58%), hsl(calc(var(--h) + 40) 60% 32%)); }
+.dup-meta { padding: 6px 8px; font-size: 0.82rem; display: flex; flex-direction: column; gap: 2px; }
+.dup-meta .name { font-weight: 600; word-break: break-all; }
+.dup-meta label { display: flex; gap: 6px; align-items: center; min-height: 32px; font-size: 0.9rem; }
+.dup-footer { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-top: 1px solid var(--surface-border); flex: 0 0 auto; }
+
+/* The token gate, shown first from another machine. */
+.gate { margin: auto; width: min(380px, 100%); padding: 16px; border: 1px solid var(--surface-border); border-radius: 10px; background: var(--surface-raised); }
+.gate h2 { margin: 0 0 6px; font-size: 1.15rem; }
+.gate p { margin: 0 0 12px; color: var(--muted-fg); font-size: 0.92rem; }
+.gate .vfield { width: 100%; margin-bottom: 10px; }
+
+.status { font-size: 0.9rem; color: var(--muted-fg); margin-top: 10px; min-height: 1.2em; flex-shrink: 0; }
+.mock-bar { padding: 6px 10px; margin: 0 0 10px; display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; flex: 0 0 auto; }
+.mock-bar label { display: flex; gap: 6px; align-items: center; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top-bar">
+    <h1>ReelRoulette</h1>
+    <span class="muted">Admin</span>
+  </header>
+
+  <div class="mock-bar mock-note">
+    <span class="mock-label">Mockup</span>
+    <label><input type="checkbox" id="mock-remote"> Opened from another machine</label>
+    <label><input type="checkbox" id="mock-no-library"> Server running without a library</label>
+    <span>The admin view covers the player, so Always and Responsive Auto-Pause pause playback until it closes.</span>
+  </div>
+
+  <div id="gate" class="admin" hidden>
+    <form class="gate" id="gate-form" novalidate>
+      <h2>Control token required</h2>
+      <p>Admin from another machine needs the server's control token. On the server machine, admin opens directly.</p>
+      <label class="field-label" for="gate-token">Control token</label>
+      <span class="vfield"><input class="ctl" type="password" id="gate-token" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
+      <div class="row"><span class="grow"></span><a class="btn" href="layout.html">Cancel</a><button class="btn" type="submit" id="gate-continue"><span class="btn-label">Continue</span><span class="btn-problem material-symbol-icon">error</span></button></div>
+    </form>
+  </div>
+
+  <div id="admin" class="admin" data-dialog-host>
+    <div class="admin-bar">
+      <a class="icon-btn" href="layout.html" aria-label="Back to the player" title="Back to the player"><span class="material-symbol-icon">arrow_back</span></a>
+      <h2 class="grow">Admin</h2>
+    </div>
+    <nav class="admin-nav" aria-label="Admin sections">
+      <a href="#server">Server</a><a href="#web">Web access</a><a href="#control">Control</a><a href="#library">Library</a>
+      <a href="#transfer">Transfer</a><a href="#backups">Backups</a><a href="#sources">Sources</a><a href="#duplicates">Duplicates</a>
+      <a href="#testing">Testing</a><a href="#clients">Clients</a><a href="#logs">Logs</a><a href="#events">Events</a>
+    </nav>
+
+    <div class="admin-body themed-scrollbar" id="admin-body">
+      <div class="admin-grid">
+        <section class="card half" id="server">
+          <h3><span class="material-symbol-icon">dns</span>Server</h3>
+          <p class="notice-box" id="no-library" hidden><span class="material-symbol-icon">warning</span><span>Running without a library: the catalog was saved by a newer version of ReelRoulette and was left unchanged. Restore a backup or import a library, or update the server.</span></p>
+          <dl class="facts">
+            <dt>Version</dt><dd>0.15.0</dd>
+            <dt>Running for</dt><dd>3 days, 4 hours</dd>
+            <dt>Library</dt><dd id="library-state">49,055 items in 3 sources</dd>
+          </dl>
+          <div class="row">
+            <button class="btn" type="button" id="restart"><span class="material-symbol-icon">restart_alt</span>Restart</button>
+            <button class="btn" type="button" id="stop"><span class="material-symbol-icon">power_settings_new</span>Stop</button>
+          </div>
+          <h4>Updates</h4>
+          <p class="hint" id="update-state" style="margin:0 0 8px">Up to date: 0.15.0.</p>
+          <div class="row">
+            <button class="btn" type="button" id="update-check"><span class="material-symbol-icon">update</span>Check for Updates</button>
+            <button class="btn" type="button" id="update-download" hidden><span class="material-symbol-icon">download</span>Download Update</button>
+            <button class="btn" type="button" id="update-apply" hidden>Apply &amp; Restart</button>
+          </div>
+        </section>
+
+        <section class="card half" id="web">
+          <h3><span class="material-symbol-icon">lan</span>Web access</h3>
+          <form id="web-form" novalidate>
+            <label class="check"><input type="checkbox" id="web-remote" checked> Allow remote connections</label>
+            <p class="hint" style="margin:-4px 0 10px 28px;font-size:.82rem;color:var(--muted-fg)">Other devices connect over the LAN or through a proxy. Listening on the LAN starts at the server's next start.</p>
+            <div class="field">
+              <label for="web-port">Port</label>
+              <span class="vfield short"><input class="ctl" type="text" inputmode="numeric" id="web-port" value="45123" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
+            </div>
+            <label class="check"><input type="checkbox" id="web-mdns" checked> Advertise on the local network (mDNS)</label>
+            <div class="field">
+              <label for="web-host">LAN hostname</label>
+              <span class="vfield"><input class="ctl" type="text" id="web-host" value="reel" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
+              <p class="hint">Reached as reel.local on networks that support it.</p>
+            </div>
+            <div class="field">
+              <span class="field-label" id="web-auth-label">Authentication</span>
+              <div role="radiogroup" aria-labelledby="web-auth-label">
+                <label class="check"><input type="radio" name="web-auth" value="off" checked> No authentication</label>
+                <label class="check"><input type="radio" name="web-auth" value="token"> Require the shared token or pairing</label>
+              </div>
+            </div>
+            <div class="field">
+              <label for="web-token">Shared token</label>
+              <span class="vfield"><input class="ctl" type="password" id="web-token" value="b7e1-29fa-c3d0" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
+            </div>
+            <div class="row"><span class="grow"></span><button class="btn" type="submit" id="web-save"><span class="btn-label">Save</span><span class="btn-problem material-symbol-icon">error</span></button></div>
+          </form>
+        </section>
+
+        <section class="card half" id="control">
+          <h3><span class="material-symbol-icon">key</span>Control</h3>
+          <div class="field">
+            <label for="control-token">Control token</label>
+            <div class="row">
+              <span class="vfield" style="flex:1 1 12rem"><input class="ctl" type="password" id="control-token" value="5c2f-81aa-9e04-77d1" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
+              <button class="icon-btn" type="button" id="control-show" aria-label="Show the token" title="Show"><span class="material-symbol-icon">visibility</span></button>
+              <button class="icon-btn" type="button" id="control-copy" aria-label="Copy the token" title="Copy"><span class="material-symbol-icon">content_copy</span></button>
+            </div>
+            <p class="hint">Other machines need it to open admin.</p>
+          </div>
+          <label class="check"><input type="checkbox" id="control-dev"> Dev (pre-release) update channel</label>
+          <label class="check"><input type="checkbox" id="control-startup" checked> Launch Server on Startup</label>
+          <div class="row"><span class="grow"></span><button class="btn" type="button" id="control-save"><span class="btn-label">Save</span><span class="btn-problem material-symbol-icon">error</span></button></div>
+        </section>
+
+        <section class="card half" id="library">
+          <h3><span class="material-symbol-icon">sync</span>Library refresh</h3>
+          <p class="hint" id="refresh-state" style="margin:0">Last refresh 2 hours ago: 3 added, 1 removed, 0 renamed.</p>
+          <div class="progress" id="refresh-progress" hidden><span></span></div>
+          <div class="row" style="margin:8px 0 12px"><button class="btn" type="button" id="refresh-now"><span class="material-symbol-icon">sync</span>Refresh Now</button></div>
+          <form id="refresh-form" novalidate>
+            <label class="check"><input type="checkbox" id="refresh-auto" checked> Refresh sources automatically</label>
+            <div class="field">
+              <label for="refresh-interval">Every</label>
+              <div class="row"><span class="vfield short"><input class="ctl" type="text" inputmode="numeric" id="refresh-interval" value="60" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>minutes</span></div>
+            </div>
+            <label class="check"><input type="checkbox" id="refresh-loudness"> Rescan loudness on the next refresh</label>
+            <label class="check"><input type="checkbox" id="refresh-duration"> Rescan durations on the next refresh</label>
+            <div class="field">
+              <label for="refresh-parallel">Fingerprint scan parallelism</label>
+              <span class="vfield short"><input class="ctl" type="text" inputmode="numeric" id="refresh-parallel" value="4" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
+            </div>
+            <div class="row"><span class="grow"></span><button class="btn" type="submit" id="refresh-save"><span class="btn-label">Save</span><span class="btn-problem material-symbol-icon">error</span></button></div>
+          </form>
+          <h4>Playback stats</h4>
+          <p class="mock-note mock-inline" style="margin:0 0 8px;padding:6px 8px">Proposed: clearing the whole library's playback stats is an admin action, here.</p>
+          <button class="btn btn-danger" type="button" id="clear-all-stats"><span class="material-symbol-icon">history</span>Clear All Playback Stats…</button>
+        </section>
+
+        <section class="card half" id="transfer">
+          <h3><span class="material-symbol-icon">swap_vert</span>Library transfer</h3>
+          <p class="hint" style="margin:0 0 10px">Export saves the whole library: items, tags, presets, and stats. Import replaces it while the server runs; the current library is kept aside until the new one opens.</p>
+          <div class="row">
+            <button class="btn" type="button" id="export"><span class="material-symbol-icon">download</span>Export Library</button>
+            <label class="btn" for="import-file"><span class="material-symbol-icon">upload</span>Import Library…</label>
+            <input type="file" id="import-file" accept=".db" hidden>
+          </div>
+        </section>
+
+        <section class="card half" id="backups">
+          <h3><span class="material-symbol-icon">storage</span>Backups</h3>
+          <form id="backup-form" novalidate>
+            <label class="check"><input type="checkbox" id="backup-on" checked> Back up the library and server settings</label>
+            <div class="field">
+              <label for="backup-gap">Time between backups</label>
+              <div class="row"><span class="vfield short"><input class="ctl" type="text" inputmode="numeric" id="backup-gap" value="360" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>minutes</span></div>
+            </div>
+            <div class="field">
+              <label for="backup-count">Backups kept</label>
+              <span class="vfield short"><input class="ctl" type="text" inputmode="numeric" id="backup-count" value="10" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
+            </div>
+            <div class="field">
+              <label for="backup-days">Days of daily backups kept</label>
+              <span class="vfield short"><input class="ctl" type="text" inputmode="numeric" id="backup-days" value="14" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
+              <p class="hint">One backup per day for this many days, on top of the count above.</p>
+              <p class="mock-note mock-inline" style="margin:4px 0 0;padding:6px 8px">Open: this field's range. Proposed 0 to 365, where 0 keeps none by date.</p>
+            </div>
+            <div class="row"><span class="grow"></span><button class="btn" type="submit" id="backup-save"><span class="btn-label">Save</span><span class="btn-problem material-symbol-icon">error</span></button></div>
+          </form>
+          <h4>Restore</h4>
+          <div class="list" id="backup-list"></div>
+        </section>
+
+        <section class="card" id="sources">
+          <h3><span class="material-symbol-icon">folder</span>Sources</h3>
+          <div class="list" id="source-list"></div>
+          <form class="field" id="source-add" novalidate style="margin:12px 0 0">
+            <label for="source-path">Add a folder on the server</label>
+            <div class="row">
+              <span class="vfield" style="flex:1 1 16rem;max-width:32rem"><input class="ctl" type="text" id="source-path" placeholder="/media/new-folder" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
+              <button class="btn" type="submit" id="source-add-btn"><span class="btn-label">Add Source</span><span class="btn-problem material-symbol-icon">error</span></button>
+            </div>
+            <p class="mock-note mock-inline" style="margin:4px 0 0;padding:6px 8px">Proposed: a typed server path that the server checks as it is typed, rather than a new route that browses the server's folders.</p>
+          </form>
+        </section>
+
+        <section class="card" id="duplicates">
+          <h3><span class="material-symbol-icon">content_paste</span>Duplicates</h3>
+          <div class="row">
+            <label for="dup-scope">Scan</label>
+            <select class="ctl" id="dup-scope"><option>The whole library</option><option>Videos</option><option>Phone backup</option><option>Archive</option></select>
+            <button class="btn" type="button" id="dup-scan">Scan</button>
+          </div>
+          <div class="field" style="margin-top:10px">
+            <span class="field-label" id="dup-default-label">Each group starts at</span>
+            <div class="row" role="radiogroup" aria-labelledby="dup-default-label">
+              <label class="check"><input type="radio" name="dup-default" value="keep-all" checked> Keep All</label>
+              <label class="check"><input type="radio" name="dup-default" value="best"> Select Best</label>
+            </div>
+            <p class="hint">Kept on this device.</p>
+          </div>
+          <p class="hint" id="dup-state" style="margin:0"></p>
+        </section>
+
+        <section class="card half" id="testing">
+          <h3><span class="material-symbol-icon">bug_report</span>Testing suite</h3>
+          <label class="check"><input type="checkbox" id="testing-mode"> Testing mode</label>
+          <div id="scenarios"></div>
+          <div class="row" style="margin-top:8px"><button class="btn" type="button" id="testing-apply">Apply</button><button class="btn" type="button" id="testing-reset">Reset</button></div>
+        </section>
+
+        <section class="card half" id="clients">
+          <h3><span class="material-symbol-icon">group</span>Connected clients</h3>
+          <div class="list mono" id="client-list"></div>
+          <div class="row" style="margin-top:8px"><button class="btn" type="button" id="clients-copy"><span class="material-symbol-icon">content_copy</span>Copy</button></div>
+        </section>
+
+        <section class="card" id="logs">
+          <h3><span class="material-symbol-icon">article</span>Server logs</h3>
+          <div class="row" style="margin-bottom:8px">
+            <label for="log-tail">Lines</label><span class="vfield short" style="width:6rem"><input class="ctl" type="text" inputmode="numeric" id="log-tail" value="200" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
+            <label for="log-level">Level</label><select class="ctl" id="log-level"><option>All</option><option>info</option><option>warn</option><option>error</option></select>
+            <input class="ctl" type="search" id="log-contains" placeholder="Contains…" aria-label="Contains">
+            <button class="btn" type="button" id="logs-refresh"><span class="material-symbol-icon">refresh</span>Refresh</button>
+            <button class="btn" type="button" id="logs-copy"><span class="material-symbol-icon">content_copy</span>Copy</button>
+          </div>
+          <div class="logbox mono themed-scrollbar" id="logbox"></div>
+        </section>
+
+        <section class="card" id="events">
+          <h3><span class="material-symbol-icon">description</span>API events</h3>
+          <div class="events">
+            <div><h4 style="margin-top:0">Incoming</h4><div class="logbox mono themed-scrollbar" id="events-in" style="height:160px"></div></div>
+            <div><h4 style="margin-top:0">Outgoing</h4><div class="logbox mono themed-scrollbar" id="events-out" style="height:160px"></div></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="review" class="admin" data-dialog-host hidden>
+    <div class="admin-bar">
+      <button class="icon-btn" type="button" id="review-back" aria-label="Back to admin" title="Back to admin"><span class="material-symbol-icon">arrow_back</span></button>
+      <h2 class="grow">Duplicate review</h2>
+      <span class="hint" id="review-count" style="font-size:.9rem;color:var(--muted-fg)"></span>
+    </div>
+    <div class="admin-body themed-scrollbar" id="review-body"></div>
+    <div class="dup-footer">
+      <span class="grow" id="review-summary"></span>
+      <button class="btn" type="button" id="review-cancel">Cancel</button>
+      <button class="btn btn-danger" type="button" id="review-apply">Delete Files</button>
+    </div>
+  </div>
+
+  <div id="status" class="status">Ready</div>
+</div>
+
+<script>
+// Shared by the mockup pages.
+"use strict";
+
+// The mockups carry only the icons they use, looked up by codepoint instead of by ligature, so markup can keep
+// the WebUI's `<span class="material-symbol-icon">name</span>` form.
+const ICON_CODEPOINTS = {"add": 57669, "admin_panel_settings": 61245, "arrow_back": 58820, "article": 61250, "auto_awesome": 58975, "autoplay": 63157, "bar_chart": 57963, "browse": 60179, "bug_report": 59496, "check_circle": 59500, "checklist": 59057, "close": 57676, "content_copy": 57677, "content_paste": 57679, "delete": 59506, "description": 59507, "desktop_windows": 58124, "dns": 59509, "dock_to_right": 63460, "download": 57713, "drag_indicator": 59717, "edit_note": 59205, "error": 57344, "expand_more": 58831, "favorite": 59517, "filter_alt": 61263, "folder": 58055, "folder_open": 58056, "fullscreen": 58832, "fullscreen_exit": 58833, "group": 59375, "heart_minus": 63619, "heart_plus": 63620, "history": 57998, "info": 59534, "key": 59196, "keyboard": 58130, "lan": 60207, "left_panel_close": 63255, "left_panel_open": 63254, "open_in_new": 59541, "pause": 57396, "photo": 58384, "play_arrow": 57399, "power_settings_new": 59564, "radio_button_unchecked": 59446, "refresh": 58837, "remove": 57691, "repeat_one": 57409, "restart_alt": 61523, "right_panel_close": 63237, "right_panel_open": 63236, "save": 57697, "settings": 59576, "shuffle": 57411, "skip_next": 57412, "skip_previous": 57413, "storage": 57819, "swap_vert": 57539, "sync": 58919, "tag": 59887, "thumb_down": 59414, "update": 59683, "upload": 58054, "visibility": 58391, "visibility_off": 59637, "volume_down": 57421, "volume_off": 57423, "volume_up": 57424, "warning": 57346};
+
+function setIcon(el, name) {
+  el.dataset.icon = name;
+  el.textContent = String.fromCodePoint(ICON_CODEPOINTS[name] || 0xe000);
+  el.setAttribute("aria-hidden", "true");
+}
+
+function hydrateIcons(root) {
+  (root || document).querySelectorAll(".material-symbol-icon:not([data-icon])").forEach((el) => {
+    setIcon(el, el.textContent.trim());
+  });
+}
+
+function iconSpan(name, extraClass) {
+  const span = document.createElement("span");
+  span.className = "material-symbol-icon" + (extraClass ? " " + extraClass : "");
+  setIcon(span, name);
+  return span;
+}
+
+const store = {
+  get(key, fallback) {
+    try {
+      const raw = localStorage.getItem("rr-mockup." + key);
+      return raw === null ? fallback : JSON.parse(raw);
+    } catch {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem("rr-mockup." + key, JSON.stringify(value));
+    } catch {
+      // Storage can be unavailable for file:// pages or private windows; the mockup still works without it.
+    }
+  },
+  remove(key) {
+    try {
+      localStorage.removeItem("rr-mockup." + key);
+    } catch {
+      // As above.
+    }
+  }
+};
+
+// Theme follows the system as the WebUI does, unless the mockup options override it.
+const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+function applyTheme() {
+  const pref = store.get("theme", "system");
+  const dark = pref === "system" ? systemDark.matches : pref === "dark";
+  document.documentElement.classList.toggle("theme-light", !dark);
+  document.documentElement.classList.toggle("theme-dark", dark);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", dark ? "#1a1a1a" : "#eceff4");
+}
+systemDark.addEventListener("change", applyTheme);
+applyTheme();
+
+// The strict duration parser proposed for the WebUI: whole MM:SS or HH:MM:SS with seconds and minutes under 60, or a
+// plain number of seconds. Today's parser reads "1:7x" as 1:07 and "12abc" as 12 seconds; this one rejects both.
+function parseDuration(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+  let match = /^(\d+):(\d{1,2})$/.exec(raw);
+  if (match) {
+    const [m, s] = [Number(match[1]), Number(match[2])];
+    return s < 60 ? m * 60 + s : "invalid";
+  }
+  match = /^(\d+):(\d{1,2}):(\d{1,2})$/.exec(raw);
+  if (match) {
+    const [h, m, s] = [Number(match[1]), Number(match[2]), Number(match[3])];
+    return m < 60 && s < 60 ? h * 3600 + m * 60 + s : "invalid";
+  }
+  return /^\d+(\.\d+)?$/.test(raw) ? Number(raw) : "invalid";
+}
+
+const DURATION_PROBLEM = "Use MM:SS, HH:MM:SS, or seconds.";
+function checkDuration(value) {
+  return parseDuration(value) === "invalid" ? { message: DURATION_PROBLEM } : null;
+}
+
+/**
+ * A field using the validation pattern. `check(value)` returns null when the value is valid, or `{ message, empty }`.
+ * An empty required field (`empty: true`) is flagged only once the user has typed in it, but still holds its action.
+ */
+const allFields = new Set();
+let tipCounter = 0;
+
+class ValidatedField {
+  constructor(input, check, options) {
+    const opts = options || {};
+    this.input = input;
+    this.check = check;
+    this.pinned = !!opts.pinned;
+    this.touched = !!opts.touched;
+    this.hover = false;
+    this.wrap = input.closest(".vfield");
+    this.icon = this.wrap.querySelector(".vfield-icon");
+    this.listeners = [];
+    this.tip = document.createElement("div");
+    this.tip.className = "vfield-tip";
+    this.tip.id = "field-tip-" + ++tipCounter;
+    this.tip.setAttribute("role", "tooltip");
+    // Inside the field, so it shows in fullscreen and above a dialog; fixed, so scrolling bodies don't clip it.
+    this.wrap.appendChild(this.tip);
+
+    input.addEventListener("input", () => {
+      this.touched = true;
+      this.update();
+    });
+    input.addEventListener("focus", () => this.place());
+    input.addEventListener("blur", () => this.place());
+    this.icon.addEventListener("pointerenter", (event) => {
+      if (event.pointerType === "mouse") {
+        this.hover = true;
+        this.place();
+      }
+    });
+    this.icon.addEventListener("pointerleave", () => {
+      this.hover = false;
+      this.place();
+    });
+    // A tap on the icon focuses the field, which shows the tooltip on touch screens.
+    this.icon.addEventListener("pointerdown", (event) => {
+      if (event.pointerType !== "mouse") {
+        event.preventDefault();
+        input.focus();
+      }
+    });
+    allFields.add(this);
+    this.update();
+  }
+
+  get problem() {
+    return this.input.disabled ? null : this.check(this.input.value);
+  }
+
+  get flagged() {
+    const problem = this.problem;
+    return !!problem && !(problem.empty && !this.touched);
+  }
+
+  /** True while the action that uses this field can't proceed. */
+  get holds() {
+    return !!this.problem;
+  }
+
+  onChange(listener) {
+    this.listeners.push(listener);
+  }
+
+  dispose() {
+    allFields.delete(this);
+  }
+
+  reset(value) {
+    if (value !== undefined) this.input.value = value;
+    this.touched = false;
+    this.update();
+  }
+
+  update() {
+    const problem = this.problem;
+    const flagged = this.flagged;
+    this.wrap.classList.toggle("is-invalid", flagged);
+    if (flagged) {
+      this.tip.textContent = problem.message;
+      this.input.setAttribute("aria-invalid", "true");
+      this.input.setAttribute("aria-describedby", this.tip.id);
+    } else {
+      this.input.removeAttribute("aria-invalid");
+      this.input.removeAttribute("aria-describedby");
+    }
+    this.place();
+    this.listeners.forEach((listener) => listener());
+  }
+
+  /** Moves the user to the field and shows what it expects. */
+  reveal() {
+    this.wrap.scrollIntoView({ block: "center", behavior: "smooth" });
+    this.input.focus({ preventScroll: true });
+    setTimeout(() => this.place(), 350);
+  }
+
+  place() {
+    const shown =
+      this.flagged &&
+      (this.pinned || this.hover || document.activeElement === this.input) &&
+      this.wrap.offsetParent !== null &&
+      this.inScrollView();
+    this.tip.classList.toggle("is-shown", shown);
+    if (!shown) return;
+    const icon = this.icon.getBoundingClientRect();
+    const tip = this.tip.getBoundingClientRect();
+    const margin = 8;
+    const above = icon.top - tip.height - 10 >= margin;
+    const top = above ? icon.top - tip.height - 10 : icon.bottom + 10;
+    let left = icon.right + 6 - tip.width;
+    left = Math.max(margin, Math.min(left, window.innerWidth - tip.width - margin));
+    this.tip.dataset.place = above ? "above" : "below";
+    this.tip.style.top = `${Math.round(top)}px`;
+    this.tip.style.left = `${Math.round(left)}px`;
+    const arrowRight = left + tip.width - (icon.left + icon.width / 2) - 5;
+    this.tip.style.setProperty("--arrow-right", `${Math.max(6, Math.round(arrowRight))}px`);
+  }
+
+  inScrollView() {
+    const scroller = this.wrap.closest(".scroll-y");
+    if (!scroller) return true;
+    const view = scroller.getBoundingClientRect();
+    const icon = this.icon.getBoundingClientRect();
+    return icon.bottom > view.top && icon.top < view.bottom;
+  }
+}
+
+let placeQueued = false;
+function placeAllTips() {
+  if (placeQueued) return;
+  placeQueued = true;
+  requestAnimationFrame(() => {
+    placeQueued = false;
+    allFields.forEach((field) => field.place());
+  });
+}
+window.addEventListener("scroll", placeAllTips, true);
+window.addEventListener("resize", placeAllTips);
+
+/**
+ * Wires an action button to the fields it uses. While any of them holds the action, the button's label dims and it
+ * reads as unavailable; when one of them is flagged, the red icon shows on its right too. Pressing it does nothing
+ * but take the user to the first field that holds it.
+ */
+function holdAction(button, fields, options) {
+  const opts = options || {};
+  const describe = document.createElement("span");
+  describe.className = "vh";
+  describe.id = (button.id || "action") + "-held";
+  button.after(describe);
+
+  function blocker() {
+    return fields().find((field) => field.holds) || null;
+  }
+
+  function refresh() {
+    const field = blocker();
+    const held = !!field;
+    button.classList.toggle("shows-problem", held && fields().some((f) => f.flagged));
+    if (held) {
+      button.setAttribute("aria-disabled", "true");
+    } else {
+      button.removeAttribute("aria-disabled");
+    }
+    if (held) {
+      describe.textContent = opts.reason ? opts.reason(field) : "Correct the field first.";
+      button.setAttribute("aria-describedby", describe.id);
+      button.title = describe.textContent;
+    } else {
+      button.removeAttribute("aria-describedby");
+      button.removeAttribute("title");
+    }
+  }
+
+  button.addEventListener(
+    "click",
+    (event) => {
+      const field = blocker();
+      if (!field) return;
+      event.stopImmediatePropagation();
+      event.preventDefault();
+      if (opts.beforeReveal) opts.beforeReveal(field);
+      field.reveal();
+    },
+    true
+  );
+
+  fields().forEach((field) => field.onChange(refresh));
+  refresh();
+  return { refresh };
+}
+
+/**
+ * The WebUI's dialog, as proposed: a themed modal that stacks above any dialog already open, so a confirmation opens
+ * over the dialog that asked for it. Escape or a click outside closes only the top one, and focus returns to where
+ * it was. It opens inside the element marked `data-dialog-host` (the fullscreen stage) so it shows in fullscreen.
+ */
+let dialogCounter = 0;
+function openDialog({ content, labelledBy, role, onClose }) {
+  const dialog = document.createElement("dialog");
+  dialog.className = "app-dialog";
+  if (labelledBy) dialog.setAttribute("aria-labelledby", labelledBy);
+  if (role) dialog.setAttribute("role", role);
+  dialog.append(content);
+  (document.querySelector("[data-dialog-host]") || document.body).append(dialog);
+  const returnTo = document.activeElement;
+  let closed = false;
+  const close = (result) => {
+    if (closed) return;
+    closed = true;
+    if (dialog.open && dialog.close) dialog.close();
+    dialog.remove();
+    if (returnTo && returnTo.isConnected && returnTo.focus) returnTo.focus({ preventScroll: true });
+    if (onClose) onClose(result);
+    placeAllTips();
+  };
+  dialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    close(false);
+  });
+  // The dialog's content fills its box, so a click whose target is the dialog itself landed on the backdrop.
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) close(false);
+  });
+  if (typeof dialog.showModal === "function") dialog.showModal();
+  else dialog.setAttribute("open", "");
+  return { dialog, close };
+}
+
+function dialogButton(label, className, type) {
+  const button = document.createElement("button");
+  button.type = type || "button";
+  button.className = className ? `btn ${className}` : "btn";
+  const text = document.createElement("span");
+  text.className = "btn-label";
+  text.textContent = label;
+  button.append(text);
+  return button;
+}
+
+/**
+ * Asks before an action. Cancel starts focused, so Enter never confirms by default; the confirming button names the
+ * action, such as a red Delete.
+ */
+function confirmDialog({ message, confirmLabel, danger }) {
+  return new Promise((resolve) => {
+    const body = document.createElement("div");
+    body.className = "dialog-body";
+    const text = document.createElement("p");
+    text.className = "dialog-message";
+    text.id = `dialog-message-${++dialogCounter}`;
+    text.textContent = message;
+    const actions = document.createElement("div");
+    actions.className = "dialog-actions";
+    const cancel = dialogButton("Cancel");
+    const confirm = dialogButton(confirmLabel || "OK", danger ? "btn-danger" : "");
+    const spacer = document.createElement("span");
+    spacer.className = "dialog-spacer";
+    actions.append(spacer, cancel, confirm);
+    body.append(text, actions);
+    const { close } = openDialog({ content: body, labelledBy: text.id, role: "alertdialog", onClose: (result) => resolve(!!result) });
+    cancel.addEventListener("click", () => close(false));
+    confirm.addEventListener("click", () => close(true));
+    cancel.focus();
+  });
+}
+
+/**
+ * A dialog with one name field that uses the validation pattern, Save held while the name is not valid, and an
+ * optional Delete that asks first in a dialog stacked above. `extra(body)` can add fields after the name.
+ */
+function nameDialog({ title, label, value, check, holdReason, onSave, deleteMessage, onDelete, extra, saveLabel, inputType, onClose }) {
+  const id = `dialog-field-${++dialogCounter}`;
+  const form = document.createElement("form");
+  form.className = "dialog-body";
+  form.noValidate = true;
+  const heading = document.createElement("h3");
+  heading.id = `${id}-title`;
+  heading.textContent = title;
+  const labelEl = document.createElement("label");
+  labelEl.htmlFor = id;
+  labelEl.textContent = label;
+  const wrap = document.createElement("span");
+  wrap.className = "vfield";
+  const input = document.createElement("input");
+  input.className = "ctl";
+  input.type = inputType || "text";
+  input.id = id;
+  input.autocomplete = "off";
+  wrap.append(input, iconSpan("error", "vfield-icon"));
+  form.append(heading, labelEl, wrap);
+  if (extra) extra(form);
+  const actions = document.createElement("div");
+  actions.className = "dialog-actions";
+  const spacer = document.createElement("span");
+  spacer.className = "dialog-spacer";
+  const cancel = dialogButton("Cancel");
+  const save = dialogButton(saveLabel || "Save", "", "submit");
+  save.append(iconSpan("error", "btn-problem"));
+  if (onDelete) {
+    const remove = dialogButton("Delete", "btn-danger");
+    remove.addEventListener("click", async () => {
+      if (await confirmDialog({ message: deleteMessage(), confirmLabel: "Delete", danger: true })) {
+        onDelete();
+        close();
+      }
+    });
+    actions.append(remove);
+  }
+  actions.append(spacer, cancel, save);
+  form.append(actions);
+
+  const field = new ValidatedField(input, check);
+  const { close } = openDialog({
+    content: form,
+    labelledBy: heading.id,
+    onClose: (result) => {
+      field.dispose();
+      if (onClose) onClose(!!result);
+    }
+  });
+  field.reset(value || "");
+  holdAction(save, () => [field], { reason: holdReason });
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (field.holds) return;
+    onSave(input.value.trim(), form);
+    close(true);
+  });
+  cancel.addEventListener("click", () => close(false));
+  setTimeout(() => {
+    input.focus();
+    input.select();
+  }, 0);
+  return { close, form, field };
+}
+
+/** A notice: something the user must see, with one OK, as WebUI In-App Dialogs adds. */
+function noticeDialog({ title, message }) {
+  return new Promise((resolve) => {
+    const body = document.createElement("div");
+    body.className = "dialog-body";
+    const text = document.createElement("p");
+    text.className = "dialog-message";
+    text.id = `dialog-message-${++dialogCounter}`;
+    text.textContent = message;
+    if (title) {
+      const heading = document.createElement("h3");
+      heading.textContent = title;
+      body.append(heading);
+    }
+    const actions = document.createElement("div");
+    actions.className = "dialog-actions";
+    const spacer = document.createElement("span");
+    spacer.className = "dialog-spacer";
+    const ok = dialogButton("OK");
+    actions.append(spacer, ok);
+    body.append(text, actions);
+    const { close } = openDialog({ content: body, labelledBy: text.id, role: "alertdialog", onClose: () => resolve() });
+    ok.addEventListener("click", () => close(true));
+    ok.focus();
+  });
+}
+
+
+hydrateIcons();
+const $ = (id) => document.getElementById(id);
+const status = (text) => ($("status").textContent = text);
+const state = {
+  remote: store.get("adminRemote", false),
+  noLibrary: store.get("adminNoLibrary", false),
+  dupDefault: store.get("dupDefault", "keep-all")
+};
+
+// ---- Mockup options and the token gate ----
+function applyGate() {
+  const gated = state.remote && !state.unlocked;
+  $("gate").hidden = !gated;
+  $("admin").hidden = gated || !$("review").hidden;
+  $("no-library").hidden = !state.noLibrary;
+  $("library-state").textContent = state.noLibrary ? "None (newer catalog version)" : "49,055 items in 3 sources";
+  $("refresh-now").disabled = state.noLibrary;
+  $("dup-scan").disabled = state.noLibrary;
+  placeAllTips();
+}
+[["mock-remote", "remote", "adminRemote"], ["mock-no-library", "noLibrary", "adminNoLibrary"]].forEach(([id, key, storeKey]) => {
+  $(id).checked = state[key];
+  $(id).addEventListener("change", () => {
+    state[key] = $(id).checked;
+    state.unlocked = false;
+    store.set(storeKey, state[key]);
+    applyGate();
+  });
+});
+const gateField = new ValidatedField($("gate-token"), (value) => (value.trim() ? null : { message: "Enter the control token.", empty: true }));
+holdAction($("gate-continue"), () => [gateField], { reason: () => "Enter the control token first." });
+$("gate-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (gateField.holds) return;
+  state.unlocked = true;
+  applyGate();
+});
+
+// ---- Validated settings forms: Save is held while a field is not valid ----
+function rangeCheck(min, max, unit) {
+  return (value) => {
+    const text = value.trim();
+    const n = Number(text);
+    return /^\d+$/.test(text) && n >= min && n <= max ? null : { message: `Use a whole number from ${min} to ${max}${unit}.` };
+  };
+}
+function form(formId, saveId, fields, done) {
+  const validated = fields.map(([id, check]) => new ValidatedField($(id), check));
+  holdAction($(saveId), () => validated.filter((field) => !field.input.disabled), { reason: () => "Correct the field first." });
+  const submit = (event) => {
+    event.preventDefault();
+    if (validated.some((field) => field.holds)) return;
+    status(done);
+  };
+  if ($(formId).tagName === "FORM") $(formId).addEventListener("submit", submit);
+  else $(saveId).addEventListener("click", submit);
+  return validated;
+}
+form("web-form", "web-save", [
+  ["web-port", rangeCheck(1024, 65535, "")],
+  ["web-host", (value) => (/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/i.test(value.trim()) ? null : { message: "Use letters, digits, and hyphens, without spaces." })],
+  ["web-token", (value) => (value.trim() || !document.querySelector('input[name="web-auth"][value="token"]').checked ? null : { message: "Enter a shared token.", empty: true })]
+], "Web access settings saved. Port and remote connection changes apply at the server's next start.");
+form("control", "control-save", [
+  ["control-token", (value) => (value.trim().length >= 8 ? null : { message: "Use at least 8 characters." })]
+], "Control settings saved.");
+form("refresh-form", "refresh-save", [
+  ["refresh-interval", rangeCheck(5, 1440, " minutes")],
+  ["refresh-parallel", rangeCheck(1, 16, "")]
+], "Refresh settings saved.");
+form("backup-form", "backup-save", [
+  ["backup-gap", rangeCheck(1, 10080, " minutes")],
+  ["backup-count", rangeCheck(1, 100, "")],
+  ["backup-days", rangeCheck(0, 365, " days")]
+], "Backup settings saved.");
+new ValidatedField($("log-tail"), rangeCheck(1, 5000, " lines"));
+$("control-show").addEventListener("click", () => {
+  const input = $("control-token");
+  input.type = input.type === "password" ? "text" : "password";
+  setIcon($("control-show").querySelector(".material-symbol-icon"), input.type === "password" ? "visibility" : "visibility_off");
+});
+$("control-copy").addEventListener("click", () => {
+  navigator.clipboard?.writeText($("control-token").value).catch(() => {});
+  status("Control token copied.");
+});
+
+// ---- Server and updates; download and apply ask first, as the Operator page does ----
+$("restart").addEventListener("click", () => status("Restarting the server…"));
+$("stop").addEventListener("click", () => status("Stopping the server…"));
+$("update-check").addEventListener("click", () => {
+  $("update-state").textContent = "0.15.1 is available.";
+  $("update-download").hidden = false;
+});
+$("update-download").addEventListener("click", async () => {
+  if (!(await confirmDialog({ message: "Download update 0.15.1 now? The server will not restart until you choose Apply & Restart.", confirmLabel: "Download" }))) return;
+  $("update-state").textContent = "0.15.1 is downloaded and ready to apply.";
+  $("update-download").hidden = true;
+  $("update-apply").hidden = false;
+});
+$("update-apply").addEventListener("click", async () => {
+  if (await confirmDialog({ message: "Apply 0.15.1 and restart the server now? Admin will disconnect while the server restarts.", confirmLabel: "Apply & Restart" })) {
+    status("Applying the update and restarting…");
+  }
+});
+
+// ---- Refresh; the status line shows its progress and result ----
+$("refresh-now").addEventListener("click", () => {
+  const bar = $("refresh-progress");
+  bar.hidden = false;
+  let percent = 0;
+  const stages = ["Scanning sources", "Durations", "Loudness", "Thumbnails"];
+  const timer = setInterval(() => {
+    percent += 10;
+    bar.firstElementChild.style.width = `${percent}%`;
+    status(`Core refresh: ${stages[Math.min(3, Math.floor(percent / 25))]} (${percent}%)`);
+    if (percent >= 100) {
+      clearInterval(timer);
+      bar.hidden = true;
+      $("refresh-state").textContent = "Last refresh just now: 2 added, 0 removed, 0 renamed.";
+      status("Core refresh complete | 2 added, 0 removed, 0 renamed");
+    }
+  }, 300);
+});
+$("clear-all-stats").addEventListener("click", async () => {
+  if (await confirmDialog({ message: "Clear the playback stats of every item in the library? Plays and last played go back to none.", confirmLabel: "Clear", danger: true })) {
+    status("Cleared the library's playback stats.");
+  }
+});
+
+// ---- Library transfer: import keeps the desktop's source folder remap ----
+$("export").addEventListener("click", () => status("Exported library-2026-10-07.db."));
+$("import-file").addEventListener("change", () => {
+  if ($("import-file").files.length) importLibrary($("import-file").files[0].name);
+  $("import-file").value = "";
+});
+function importLibrary(fileName) {
+  const body = document.createElement("form");
+  body.className = "dialog-body";
+  body.noValidate = true;
+  body.innerHTML = `<h3 id="import-title">Import ${fileName}</h3>
+    <p class="dialog-message">Its source folders were on another machine. Point each one at its folder on this server, or leave it to keep the path.</p>`;
+  const fields = [["/Volumes/Media/videos", "/media/videos"], ["D:\\Phone", "/media/phone"]].map(([from, to], i) => {
+    const wrap = document.createElement("div");
+    wrap.className = "field";
+    wrap.innerHTML = `<label for="remap-${i}"></label><span class="vfield"><input class="ctl" type="text" id="remap-${i}" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>`;
+    wrap.querySelector("label").textContent = from;
+    wrap.querySelector("input").value = to;
+    body.append(wrap);
+    return wrap.querySelector("input");
+  });
+  hydrateIcons(body);
+  const actions = document.createElement("div");
+  actions.className = "dialog-actions";
+  const spacer = document.createElement("span");
+  spacer.className = "dialog-spacer";
+  const cancel = dialogButton("Cancel");
+  const go = dialogButton("Import", "", "submit");
+  go.append(iconSpan("error", "btn-problem"));
+  actions.append(spacer, cancel, go);
+  body.append(actions);
+  const validated = fields.map((input) => new ValidatedField(input, (value) => (value.trim().startsWith("/") ? null : { message: "Use a full path on the server, starting with /." })));
+  const { close } = openDialog({ content: body, labelledBy: "import-title", onClose: () => validated.forEach((field) => field.dispose()) });
+  validated.forEach((field) => field.update());
+  holdAction(go, () => validated, { reason: () => "Correct the path first." });
+  cancel.addEventListener("click", () => close(false));
+  body.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (validated.some((field) => field.holds)) return;
+    if (!(await confirmDialog({ message: `Replace the library with ${fileName}? The current library is kept aside until the new one opens.`, confirmLabel: "Replace", danger: true }))) return;
+    close(true);
+    status(`Imported ${fileName}. Connected clients reload the library.`);
+  });
+}
+
+// ---- Backups: restoring is an import of one of the server's own backups ----
+const BACKUPS = ["Today 06:00", "Yesterday 18:00", "Yesterday 06:00", "3 days ago (daily)", "10 days ago (daily)"];
+BACKUPS.forEach((label) => {
+  const row = document.createElement("div");
+  row.className = "list-row";
+  row.innerHTML = '<span class="grow"></span>';
+  row.firstChild.textContent = label;
+  const restore = dialogButton("Restore…");
+  restore.addEventListener("click", async () => {
+    if (await confirmDialog({ message: `Restore the backup from ${label.toLowerCase()}? The current library is kept aside until the backup opens.`, confirmLabel: "Restore", danger: true })) {
+      status(`Restored the backup from ${label.toLowerCase()}.`);
+    }
+  });
+  row.append(restore);
+  $("backup-list").append(row);
+});
+
+// ---- Sources: an Edit dialog holds rename and Remove, as tags, categories, and presets do ----
+const SOURCES = [
+  { name: "Videos", path: "/media/videos", media: 17423, videos: 17423, photos: 0, hours: 2140, withAudio: 16890, enabled: true },
+  { name: "Phone backup", path: "/media/phone", media: 28104, videos: 1310, photos: 26794, hours: 96, withAudio: 1270, enabled: true },
+  { name: "Archive", path: "/mnt/archive", media: 3528, videos: 3528, photos: 0, hours: 610, withAudio: 3302, enabled: false }
+];
+function renderSources() {
+  const list = $("source-list");
+  list.textContent = "";
+  SOURCES.forEach((source) => {
+    const row = document.createElement("div");
+    row.className = "list-row";
+    const toggle = document.createElement("label");
+    toggle.className = "check";
+    toggle.title = source.enabled ? "Enabled" : "Disabled";
+    toggle.innerHTML = '<input type="checkbox" class="switch">';
+    const box = toggle.querySelector("input");
+    box.checked = source.enabled;
+    box.setAttribute("aria-label", `Enable ${source.name}`);
+    box.addEventListener("change", () => {
+      source.enabled = box.checked;
+      status(`${source.name} ${source.enabled ? "enabled" : "disabled"}. Open WebUIs update their library.`);
+    });
+    const info = document.createElement("div");
+    info.className = "grow";
+    info.innerHTML = '<div class="name"></div><div class="sub"></div><div class="sub"></div>';
+    info.children[0].textContent = source.name;
+    info.children[1].textContent = source.path;
+    info.children[2].textContent = `${source.media.toLocaleString()} media: ${source.videos.toLocaleString()} videos, ${source.photos.toLocaleString()} photos · ${source.hours.toLocaleString()} h · ${source.withAudio.toLocaleString()} with audio, ${(source.videos - source.withAudio).toLocaleString()} without`;
+    const refresh = document.createElement("button");
+    refresh.type = "button";
+    refresh.className = "icon-btn";
+    refresh.title = "Refresh (refreshes the whole library)";
+    refresh.setAttribute("aria-label", `Refresh ${source.name}`);
+    refresh.append(iconSpan("sync"));
+    refresh.addEventListener("click", () => $("refresh-now").click());
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "icon-btn";
+    edit.title = "Edit source";
+    edit.setAttribute("aria-label", `Edit source ${source.name}`);
+    edit.append(iconSpan("edit_note"));
+    edit.addEventListener("click", () => nameDialog({
+      title: "Edit Source",
+      label: "Source Name",
+      value: source.name,
+      check: (value) => {
+        const name = value.trim();
+        if (!name) return { message: "Enter a source name.", empty: true };
+        return SOURCES.some((other) => other !== source && other.name.toLowerCase() === name.toLowerCase()) ? { message: "Use a name no other source has." } : null;
+      },
+      holdReason: () => "Correct the name first.",
+      onSave: (name) => {
+        source.name = name;
+        renderSources();
+        status("Source renamed.");
+      },
+      deleteMessage: () => `Remove the source "${source.name}"? Its items leave the library; its files stay on disk.`,
+      onDelete: () => {
+        SOURCES.splice(SOURCES.indexOf(source), 1);
+        renderSources();
+        status("Source removed. Open WebUIs update their library.");
+      }
+    }));
+    row.append(toggle, info, refresh, edit);
+    list.append(row);
+  });
+  sourceField.update();
+}
+const sourceField = new ValidatedField($("source-path"), (value) => {
+  const path = value.trim();
+  if (!path) return { message: "Enter a folder path on the server.", empty: true };
+  if (!path.startsWith("/")) return { message: "Use a full path on the server, starting with /." };
+  if (SOURCES.some((source) => source.path === path.replace(/\/$/, ""))) return { message: "That folder is already a source." };
+  return null;
+});
+holdAction($("source-add-btn"), () => [sourceField], { reason: () => "Enter a folder path first." });
+renderSources();
+$("source-add").addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (sourceField.holds) return;
+  const path = $("source-path").value.trim().replace(/\/$/, "");
+  SOURCES.push({ name: path.split("/").pop() || path, path, media: 0, videos: 0, photos: 0, hours: 0, withAudio: 0, enabled: true });
+  sourceField.reset("");
+  renderSources();
+  status("Source added. Importing its files…");
+});
+
+// ---- Duplicate review ----
+document.querySelectorAll('input[name="dup-default"]').forEach((radio) => {
+  radio.checked = radio.value === state.dupDefault;
+  radio.addEventListener("change", () => {
+    state.dupDefault = radio.value;
+    store.set("dupDefault", state.dupDefault);
+  });
+});
+let groups = [];
+$("dup-scan").addEventListener("click", () => {
+  groups = Array.from({ length: 4 }, (_, g) => ({
+    files: Array.from({ length: g === 1 ? 3 : 2 }, (_, f) => ({
+      name: `${["Beach Sunset 2019", "Harbor Walk 2021", "Snow Morning 2016", "River Ride 2023"][g]}${f ? ` (${f + 1})` : ""}.mp4`,
+      path: `${f ? "/media/phone/2019" : "/media/videos/2019"}`,
+      plays: [12, 0, 3][f] ?? 1,
+      tags: f ? "" : "Beach, Alice",
+      favorite: f === 0 && g % 2 === 0,
+      blacklisted: false,
+      hue: (g * 70 + f * 9) % 360,
+      size: [812, 806, 410][f] ?? 300
+    })),
+    keep: null
+  }));
+  groups.forEach((group) => (group.keep = state.dupDefault === "best" ? 0 : null));
+  $("dup-state").textContent = `Found ${groups.length} groups with ${groups.reduce((n, g) => n + g.files.length, 0)} files.`;
+  openReview();
+});
+function reviewCounts() {
+  const chosen = groups.filter((group) => group.keep !== null);
+  return { files: chosen.reduce((n, g) => n + g.files.length - 1, 0), groups: chosen.length };
+}
+function renderReview() {
+  const body = $("review-body");
+  body.textContent = "";
+  groups.forEach((group, g) => {
+    const box = document.createElement("section");
+    box.className = "dup-group";
+    const head = document.createElement("h4");
+    head.textContent = `Group ${g + 1} of ${groups.length}`;
+    const keepAll = document.createElement("label");
+    keepAll.className = "check";
+    keepAll.innerHTML = `<input type="radio" name="dup-${g}" value="all"> Keep All`;
+    keepAll.querySelector("input").checked = group.keep === null;
+    keepAll.querySelector("input").addEventListener("change", () => {
+      group.keep = null;
+      renderReview();
+    });
+    head.append(keepAll);
+    const files = document.createElement("div");
+    files.className = "dup-files";
+    group.files.forEach((file, f) => {
+      const card = document.createElement("div");
+      card.className = "dup-file" + (group.keep === f ? " is-kept" : group.keep !== null ? " is-deleted" : "");
+      card.innerHTML = '<div class="dup-art"></div><div class="dup-meta"><span class="name"></span><span class="sub"></span><span></span><span></span><label><input type="radio"> Keep this one</label></div>';
+      card.querySelector(".dup-art").style.setProperty("--h", file.hue);
+      card.querySelector(".name").textContent = file.name;
+      card.querySelector(".sub").textContent = `${file.path} · ${file.size} MB`;
+      const spans = card.querySelectorAll(".dup-meta > span");
+      spans[2].textContent = `${file.plays} plays${file.favorite ? " · Favorite" : ""}${file.blacklisted ? " · Blacklisted" : ""}`;
+      spans[3].textContent = file.tags ? `Tags: ${file.tags}` : "No tags";
+      const radio = card.querySelector('input[type="radio"]');
+      radio.name = `dup-${g}`;
+      radio.checked = group.keep === f;
+      radio.addEventListener("change", () => {
+        group.keep = f;
+        renderReview();
+      });
+      files.append(card);
+    });
+    box.append(head, files);
+    body.append(box);
+  });
+  const { files, groups: chosen } = reviewCounts();
+  $("review-count").textContent = `${groups.length} groups`;
+  $("review-summary").textContent = files ? `${files} files to delete from ${chosen} groups; Keep All groups are left as they are.` : "Keep All everywhere: nothing will be deleted.";
+  $("review-apply").disabled = files === 0;
+  $("review-apply").textContent = files ? `Delete ${files} Files` : "Delete Files";
+}
+function openReview() {
+  $("admin").hidden = true;
+  $("review").hidden = false;
+  renderReview();
+}
+function closeReview() {
+  $("review").hidden = true;
+  $("admin").hidden = false;
+}
+$("review-back").addEventListener("click", closeReview);
+$("review-cancel").addEventListener("click", closeReview);
+$("review-apply").addEventListener("click", async () => {
+  const { files, groups: chosen } = reviewCounts();
+  if (!(await confirmDialog({ message: `Delete ${files} files from ${chosen} groups? They are deleted from disk and leave the library.`, confirmLabel: "Delete", danger: true }))) return;
+  closeReview();
+  $("dup-state").textContent = `Deleted ${files} files.`;
+  status(`Deleted ${files} duplicate files.`);
+});
+
+// ---- Testing suite: each scenario names the message the WebUI shows ----
+const SCENARIOS = ["API version mismatch", "Capability mismatch", "API unavailable", "Missing media", "SSE disconnect"];
+SCENARIOS.forEach((name, i) => {
+  const row = document.createElement("div");
+  row.style.margin = "4px 0";
+  row.innerHTML = `<label class="check"><input type="checkbox" id="scenario-${i}"> ${name}</label><p class="hint" style="margin:0 0 0 28px;font-size:.82rem;color:var(--muted-fg)">Expected WebUI message: <span class="mock-label">set by Testing Suite Overhaul</span></p>`;
+  $("scenarios").append(row);
+});
+$("testing-apply").addEventListener("click", () => status("Testing state applied."));
+$("testing-reset").addEventListener("click", () => {
+  $("scenarios").querySelectorAll("input").forEach((box) => (box.checked = false));
+  status("Scenario flags reset.");
+});
+
+// ---- Clients, logs, and events ----
+[["desktop-web", "192.168.1.20", "now"], ["mobile-web", "192.168.1.31", "4 s ago"], ["desktop", "127.0.0.1", "12 s ago"]].forEach(([type, address, seen]) => {
+  const row = document.createElement("div");
+  row.className = "list-row";
+  row.textContent = `${type}  ${address}  last seen ${seen}`;
+  $("client-list").append(row);
+});
+$("clients-copy").addEventListener("click", () => status("Client list copied."));
+const LOG = [
+  "10:02:11 info  server started, port 45123",
+  "10:02:12 info  catalog opened: 49055 items",
+  "10:15:40 info  refresh started",
+  "10:16:02 warn  thumbnail failed: unsupported codec",
+  "10:16:30 info  refresh complete: 2 added",
+  "10:20:05 error media read failed: file not found"
+];
+function renderLog() {
+  const level = $("log-level").value;
+  const contains = $("log-contains").value.toLowerCase();
+  $("logbox").textContent = LOG.filter((line) => (level === "All" || line.includes(` ${level} `)) && line.toLowerCase().includes(contains)).join("\n");
+}
+$("log-level").addEventListener("change", renderLog);
+$("log-contains").addEventListener("input", renderLog);
+$("logs-refresh").addEventListener("click", renderLog);
+$("logs-copy").addEventListener("click", () => status("Logs copied."));
+renderLog();
+$("events-in").textContent = "10:20:01 GET /api/library/stats 200\n10:20:03 POST /api/random 200\n10:20:05 GET /api/media/… 404";
+$("events-out").textContent = "10:20:03 itemStateChanged\n10:20:04 playbackRecorded\n10:16:30 refreshStatusChanged";
+
+applyGate();
+</script>
+</body>
+</html>

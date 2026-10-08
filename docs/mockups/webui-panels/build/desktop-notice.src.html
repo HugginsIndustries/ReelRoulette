@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a1a1a">
+<title>Desktop Notice Mockup</title>
+<style>
+/*@COMMON_CSS@*/
+
+/* A stand-in for the desktop app's window, in Avalonia's Fluent theme, which follows the system theme as the app does. */
+body { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 16px; }
+.window {
+  width: min(760px, 100%);
+  height: min(480px, 70dvh);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--page-bg);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  position: relative;
+  font-family: "Segoe UI", "Inter", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+}
+.titlebar { display: flex; align-items: center; height: 32px; padding: 0 10px; font-size: 0.8rem; background: var(--surface); border-bottom: 1px solid var(--panel-border); }
+.titlebar .grow { flex: 1; }
+.menubar { display: flex; gap: 14px; padding: 6px 12px; font-size: 0.85rem; border-bottom: 1px solid var(--panel-border); }
+.content { flex: 1; display: grid; grid-template-columns: 1fr 2fr; gap: 1px; background: var(--panel-border); }
+.content > div { background: var(--page-bg); }
+.content .player { background: #000; }
+.scrim { position: absolute; inset: 32px 0 0; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.notice {
+  width: min(440px, 100%);
+  padding: 20px;
+  border-radius: 8px;
+  background: var(--surface-raised);
+  border: 1px solid var(--control-border);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+.notice h2 { margin: 0 0 10px; font-size: 1.15rem; font-weight: 600; }
+.notice p { margin: 0 0 10px; line-height: 1.45; font-size: 0.95rem; }
+.notice .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.notice .accent { background: var(--huggins-orange); border-color: var(--huggins-orange); color: #1a1a1a; font-weight: 600; }
+.caption { width: min(760px, 100%); padding: 8px 12px; }
+.done { margin: 0; text-align: center; font-size: 0.95rem; }
+</style>
+</head>
+<body>
+<div class="caption mock-note">
+  <span class="mock-label">Mockup: the desktop app, not the WebUI</span><br>
+  The last desktop build shows this once per installed version, on its first start. <b>Open Web UI</b> is the menu's existing action. The wording needs approval.
+</div>
+<div class="window" role="img" aria-label="The desktop app's main window behind the notice">
+  <div class="titlebar"><span class="grow">ReelRoulette</span><span>— ▢ ✕</span></div>
+  <div class="menubar"><span>Library</span><span>Playback</span><span>View</span><span>Help</span></div>
+  <div class="content"><div></div><div class="player"></div></div>
+  <div class="scrim">
+    <div class="notice" role="dialog" aria-modal="true" aria-labelledby="notice-title" id="notice">
+      <h2 id="notice-title">The desktop app is retired</h2>
+      <p>This is the last version of the ReelRoulette desktop app. It won't get more updates, and later versions of the server won't work with it.</p>
+      <p>Use the WebUI in your browser instead. It does everything the desktop app did, on this computer and on your other devices, and it can be installed as an app.</p>
+      <div class="actions">
+        <button class="btn" type="button" id="notice-close">Close</button>
+        <button class="btn accent" type="button" id="notice-open">Open Web UI</button>
+      </div>
+    </div>
+    <p class="done" id="done" hidden></p>
+  </div>
+</div>
+<script>
+/*@COMMON_JS@*/
+hydrateIcons();
+const done = (text) => {
+  document.getElementById("notice").hidden = true;
+  const line = document.getElementById("done");
+  line.hidden = false;
+  line.textContent = text;
+};
+document.getElementById("notice-open").addEventListener("click", () => done("(Mockup) The WebUI opens in the default browser; the notice doesn't show again for this version."));
+document.getElementById("notice-close").addEventListener("click", () => done("(Mockup) The notice closes and doesn't show again for this version."));
+</script>
+</body>
+</html>

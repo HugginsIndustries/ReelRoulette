@@ -36,22 +36,29 @@ th { font-weight: 600; }
 </head>
 <body>
 <div class="page">
-  <h1>Responsive layout and panels: mockups</h1>
-  <p class="lede">For approval before code. Both pages work at desktop and phone widths and follow the system light or dark theme.</p>
+  <h1>WebUI design mockup</h1>
+  <p class="lede">The whole visible UI of v0.15.0, for approval before each milestone builds it. Every page works at desktop and phone widths and follows the system light or dark theme. Magenta dashed boxes are mockup notes; notes that start with “Proposed” or “Open” still need a decision.</p>
 
   <a class="card" href="layout.html">
-    <h2><span class="material-symbol-icon">dock_to_right</span>Panel layout</h2>
+    <h2><span class="material-symbol-icon">dock_to_right</span>Main page</h2>
     <ul>
-      <li>The player's one panel button opens the panel on its last tab, and closes it. Favorite and Blacklist stay on the player.</li>
+      <li>The player's one panel button opens the panel on its last tab, and closes it. Favorite and Blacklist stay on the player; the seek row ends with the volume control.</li>
       <li>Drag the handle between the player and the panel, or focus it and use the arrow keys. Open or closed, side, width, and last tab survive a reload.</li>
       <li>Below 800 px wide, or on a touch screen under 500 px tall, the panel is a full-screen overlay. The chip at the player's top left shows what Auto-Pause did.</li>
-      <li>Tags tab: tap a category's name to collapse it; categories reorder by their handle; chips and categories open an edit dialog that holds Delete.</li>
-      <li>Unsaved Filter and Tags changes survive closing the panel and switching tabs; an orange dot marks their tab, and the player's panel button, until they are applied, saved, canceled, or discarded.</li>
-      <li>The Tags tab shows the playing item's tags and follows it. Add or remove a tag, then press Next: the tab stays on its item with an “Editing tags for …” line until you Save, or Refresh and discard.</li>
-      <li>Filter tab, Presets: presets reorder by their handle, and Edit opens an Edit Preset dialog with the name and Delete.</li>
-      <li>Every dialog is an in-app dialog. Delete asks in a second dialog stacked above, with Cancel focused so Enter never deletes; Escape closes only the top one.</li>
-      <li>Every third item is a photo, so Next moves between photos and videos. On a photo the scrub bar stays, disabled, and fills as the photo's timer runs while Autoplay is on.</li>
-      <li>The <b>Mockup</b> tab on the left edge switches the side, Auto-Pause, theme, and what later milestones add.</li>
+      <li>Library: the filter summary line, placeholder tiles while a page loads, and selection (the checklist button, Ctrl or Shift+click, or a long press) with bulk actions.</li>
+      <li>Filter, Tags, and their dialogs as approved so far, plus the browser-playable option. Play an .avi or .wmv file to see the format notice.</li>
+      <li>Stats: the current file, with Show in File Manager or Copy Path, and the library. Click the file name in the header to open it.</li>
+      <li>Settings: autoplay mode, Advance after, seek and volume steps, loudness normalization, panel side, Auto-Pause, the shortcut reference, and diagnostics.</li>
+      <li>Keyboard shortcuts work: K, J, L, arrows, R, F, B, A, M, comma and period, 1 to 5, T, S, P, and Shift+F.</li>
+      <li>The <b>Mockup</b> tab on the left edge sets the situation: pairing asked for, the server machine, and a read-only volume.</li>
+    </ul>
+  </a>
+
+  <a class="card" href="admin.html">
+    <h2><span class="material-symbol-icon">admin_panel_settings</span>Admin view</h2>
+    <ul>
+      <li>The full-page view the header's admin icon opens: server and updates, web access, control, refresh, library transfer, backups, sources, duplicates, the testing suite, clients, logs, and events.</li>
+      <li>Duplicate review opens within it. The control token gate shows first from another machine.</li>
     </ul>
   </a>
 
@@ -60,6 +67,13 @@ th { font-weight: 600; }
     <ul>
       <li>Each state of the durations (parsed strictly), the new preset name, and the Edit Tag and Edit Category names, with what a screen reader gets.</li>
       <li>Apply when the field that is not valid is out of view.</li>
+    </ul>
+  </a>
+
+  <a class="card" href="desktop-notice.html">
+    <h2><span class="material-symbol-icon">desktop_windows</span>Desktop retirement notice</h2>
+    <ul>
+      <li>What the last desktop build shows once on its first start.</li>
     </ul>
   </a>
 

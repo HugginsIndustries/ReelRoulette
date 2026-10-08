@@ -363,7 +363,7 @@ function confirmDialog({ message, confirmLabel, danger }) {
  * A dialog with one name field that uses the validation pattern, Save held while the name is not valid, and an
  * optional Delete that asks first in a dialog stacked above. `extra(body)` can add fields after the name.
  */
-function nameDialog({ title, label, value, check, holdReason, onSave, deleteMessage, onDelete, extra }) {
+function nameDialog({ title, label, value, check, holdReason, onSave, deleteMessage, onDelete, extra, saveLabel, inputType, onClose }) {
   const id = `dialog-field-${++dialogCounter}`;
   const form = document.createElement("form");
   form.className = "dialog-body";
@@ -378,7 +378,7 @@ function nameDialog({ title, label, value, check, holdReason, onSave, deleteMess
   wrap.className = "vfield";
   const input = document.createElement("input");
   input.className = "ctl";
-  input.type = "text";
+  input.type = inputType || "text";
   input.id = id;
   input.autocomplete = "off";
   wrap.append(input, iconSpan("error", "vfield-icon"));
@@ -389,7 +389,7 @@ function nameDialog({ title, label, value, check, holdReason, onSave, deleteMess
   const spacer = document.createElement("span");
   spacer.className = "dialog-spacer";
   const cancel = dialogButton("Cancel");
-  const save = dialogButton("Save", "", "submit");
+  const save = dialogButton(saveLabel || "Save", "", "submit");
   save.append(iconSpan("error", "btn-problem"));
   if (onDelete) {
     const remove = dialogButton("Delete", "btn-danger");
@@ -405,7 +405,14 @@ function nameDialog({ title, label, value, check, holdReason, onSave, deleteMess
   form.append(actions);
 
   const field = new ValidatedField(input, check);
-  const { close } = openDialog({ content: form, labelledBy: heading.id, onClose: () => field.dispose() });
+  const { close } = openDialog({
+    content: form,
+    labelledBy: heading.id,
+    onClose: (result) => {
+      field.dispose();
+      if (onClose) onClose(!!result);
+    }
+  });
   field.reset(value || "");
   holdAction(save, () => [field], { reason: holdReason });
   form.addEventListener("submit", (event) => {
@@ -420,4 +427,31 @@ function nameDialog({ title, label, value, check, holdReason, onSave, deleteMess
     input.select();
   }, 0);
   return { close, form, field };
+}
+
+/** A notice: something the user must see, with one OK, as WebUI In-App Dialogs adds. */
+function noticeDialog({ title, message }) {
+  return new Promise((resolve) => {
+    const body = document.createElement("div");
+    body.className = "dialog-body";
+    const text = document.createElement("p");
+    text.className = "dialog-message";
+    text.id = `dialog-message-${++dialogCounter}`;
+    text.textContent = message;
+    if (title) {
+      const heading = document.createElement("h3");
+      heading.textContent = title;
+      body.append(heading);
+    }
+    const actions = document.createElement("div");
+    actions.className = "dialog-actions";
+    const spacer = document.createElement("span");
+    spacer.className = "dialog-spacer";
+    const ok = dialogButton("OK");
+    actions.append(spacer, ok);
+    body.append(text, actions);
+    const { close } = openDialog({ content: body, labelledBy: text.id, role: "alertdialog", onClose: () => resolve() });
+    ok.addEventListener("click", () => close(true));
+    ok.focus();
+  });
 }

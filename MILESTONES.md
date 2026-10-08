@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI becomes the only client on every device. The desktop client is frozen to bug fixes (crashes, data loss, broken playback, security) until the desktop removal release, and until then server contract changes only add fields, so the last desktop build keeps working. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. The desktop still ships as a fallback, and its last build tells users it is retired. M12a, M12b, M12c, M12d, M12e, M12f, M12g, M12h, M12i, M12j, M12k, M12l, M12m, M12n, M12o, M12p, M12q, M12r.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. The desktop still ships as a fallback, and its last build tells users it is retired. M12a, M12b, M12c, M12d, M12e, M12f, M12g, M12h, M12i, M12j, M12k, M12l, M12m, M12n, M12o, M12p, M12q, M12r, M12s.
 - **v0.16.0 — Desktop removal**: Remove the desktop client, its packaging, and its tests, then move preset writes to per-preset routes. P48, P25.
 - **v0.16.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.17.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access. P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28j, P28k, P28l.
@@ -108,17 +108,46 @@ Do not use this file for detailed architecture explanation or current capability
 
 Last milestone completed: M12b
 
-### M12c - WebUI Responsive Layout and Panels
+### M12c - WebUI Design Mockup
 
 - **Status**: 🚧 In Progress
+- **Goal**: Every visible part of v0.15.0 is designed in one interactive mockup and approved before the milestone that builds it starts, so the release's UI is designed as a whole.
+- **Scope**:
+  - Ships in v0.15.0, after the WebUI Preact migration milestone and before the rest of the series. Depends on: WebUI Preact Migration, whose look the mockup starts from.
+  - The mockup is in `docs/mockups/webui-panels/`: self-contained pages that open without the WebUI or a network, built from sources in `build/`, with a happy-dom check of their scripts and a README on rebuilding them and serving them to a phone. It is tracked and stays as the design reference when this milestone completes. Its magenta Mockup tab and dashed notes are mockup controls, not part of the design.
+  - The whole visible UI of v0.15.0, at phone, tablet, and desktop widths and in the light and dark themes:
+    - The main page: the header, the player and its controls, the status line, and the panel beside the player or as the full-screen overlay, from WebUI Responsive Layout and Panels.
+    - The Library, Filter, and Tags tabs, from WebUI Responsive Layout and Panels; the Stats tab, from WebUI Stats Panel; and the Settings tab with every per-device setting from the desktop's Settings dialog that the WebUI keeps, including the autoplay modes and Auto-Pause, from WebUI Settings Panel and WebUI Keyboard Shortcuts and Player Controls.
+    - The dialogs and the field validation pattern, from WebUI Responsive Layout and Panels and WebUI In-App Dialogs, and the notices and status line messages, from WebUI Status Line Overhaul.
+    - The full-page admin view and its sections, from WebUI Admin Section, Admin Refresh, Backup, and Duplicate Review (with duplicate review), Admin Source and Item Management, Admin Library Catalog Transfer, and Testing Suite Overhaul.
+    - The keyboard shortcuts and their reference, the volume control, and the seek and volume steps, from WebUI Keyboard Shortcuts and Player Controls.
+    - Show in File Manager and Copy Path, from Show in File Manager from the WebUI.
+    - The browser-playable option and its message, from Browser-Playable Filter.
+    - The grid's placeholder tiles, from WebUI Grid Rendering.
+    - Multi-select and bulk actions, from WebUI Multi-Select and Bulk Actions.
+    - The desktop's retirement notice, from Desktop Retirement Notice.
+  - Each decision approved in the mockup is recorded in the milestone that builds it. A UX question a later milestone leaves to be decided there is decided in the mockup, where it can be seen, and recorded in that milestone.
+  - Settled with the mockup so far:
+    - The panel is a full-screen overlay below 800 px of viewport width, or on a touch screen (coarse pointer) below 500 px of viewport height, which is a phone on its side. Otherwise it sits beside the player, on the right until the Settings tab lets each device choose.
+    - Beside the player, the panel's width runs from 360 px to whatever leaves the player 400 px wide, and starts at 420 px. The 800 px breakpoint is those 360 px and 400 px plus the resize handle and the page's padding. These widths may still change with mockup testing.
+    - Library tiles are smaller, beside the player and as the overlay: rows 100–240 px high, aiming for 160 px.
+    - Recorded in WebUI Responsive Layout and Panels: the header without a settings icon; one panel button on the player; the remembered open state; Auto Tag over the whole page; the scrub bar on photos and the held photo timer; the Tags tab following the playing item; unsaved Filter and Tags changes surviving a close, marked by dots; the dialog component with stacking and Cancel-first confirmations; the Edit Tag, Edit Category, and Edit Preset dialogs that hold Delete; reordering by drag handle; category headers that toggle; the field validation pattern with its icon on the right, held actions, and strict typed durations; and Refresh keeping unsaved preset changes. WebUI In-App Dialogs and WebUI Settings Panel record their part of these.
+  - Changes to user-facing UX need explicit approval.
+- **Acceptance criteria**:
+  - Every visible v0.15.0 feature is in the mockup at phone and desktop widths, and the user has approved it.
+  - Each decision approved in the mockup, including each UX question a later milestone left to be decided there, is recorded in the milestone that builds it.
+  - The mockup's pages open without a network, and its check passes.
+- **Verification evidence**:
+  - Completion evidence must include `node docs/mockups/webui-panels/build/check.mjs` passing, the user's approval of each screen, and the milestones each decision was recorded in.
+  - The mockup in `docs/mockups/webui-panels/` stays in place when this milestone completes.
+
+### M12d - WebUI Responsive Layout and Panels
+
+- **Status**: ⏳ Planned
 - **Goal**: The WebUI layout adapts to the viewport: on tablets and desktops a side panel beside the player keeps the video playing in view while browsing, filtering, tagging, or viewing stats and settings, and on phones the panel is a full-screen overlay.
 - **Scope**:
-  - Ships in v0.15.0, after the WebUI Preact migration milestone. Depends on: WebUI Preact Migration.
-  - This changes user-facing UX: mockups for phone, tablet, and desktop widths are approved before code. They are in `docs/mockups/webui-panels/`, which is tracked and stays as the design reference when this milestone completes; its README says how to rebuild them and serve them to a phone. Settled with the mockups so far:
-    - The panel is a full-screen overlay below 800 px of viewport width, or on a touch screen (coarse pointer) below 500 px of viewport height, which is a phone on its side. Otherwise it sits beside the player.
-    - Beside the player, its width runs from 360 px to whatever leaves the player 400 px wide, and starts at 420 px. The 800 px breakpoint is those 360 px and 400 px plus the resize handle and the page's padding. These widths may still change with mockup testing.
-    - The panel is on the right until the Settings tab lets each device choose.
-    - Library tiles are smaller, beside the player and as the overlay: rows 100–240 px high, aiming for 160 px. Today they are 200–400 px, aiming for 300 px (`libraryGridLayout.ts`, read from code at this edit).
+  - Ships in v0.15.0, after the WebUI design mockup milestone. Depends on: WebUI Preact Migration and WebUI Design Mockup.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`). Changes to user-facing UX need approval there.
   - Lands in five parts, each verified on its own, in this order:
     1. The field validation pattern, strict typed durations, and the Filter tab's Refresh, inside today's overlays.
     2. The in-app dialog component and the edit dialogs.
@@ -127,7 +156,7 @@ Last milestone completed: M12b
     5. The player: Auto-Pause, the held photo timer, and the scrub bar on photos.
   - Measured again at promotion: the tag editor, filter, and library overlays are each `position: fixed; inset: 0` with `z-index: 1000`, so they cover the player while it keeps playing underneath, except that the tag editor pauses playback when it opens and resumes it when it closes (`pauseForTagEditor` and `resumeAfterTagEditor`, read from code when Auto-Pause was planned). The stylesheet has two `@media (max-width: 600px)` rules, and mobile browsers are detected by user agent (`getClientType` in `src/api/coreApi.ts`).
   - The main page is a header bar, the player with its overlay controls, and the footer status line as today. The header holds the app name and the current file name, and at the right an admin icon, which arrives with WebUI Admin Section. It has no settings icon: the Settings tab is reached from the panel's tab row. Photo duration stays in the header until WebUI Settings Panel moves it into the Settings tab, and the pairing token prompt keeps showing there when the server asks for pairing.
-  - A panel host: at most one panel is open at a time, beside the player or as the full-screen overlay with the same tabs, by the breakpoints above, which use viewport size and pointer type, not the user agent. Beside the player it sits on the right or the left as a per-device setting, and a drag handle between them sets its width, also with the arrow keys while the handle has focus. The side is chosen in the Settings tab, which WebUI Settings Panel adds.
+  - A panel host: at most one panel is open at a time. Below 800 px of viewport width, or on a touch screen (coarse pointer) below 500 px of viewport height, it is a full-screen overlay with the same tabs; otherwise it sits beside the player. The breakpoints use viewport size and pointer type, not the user agent. Beside the player it sits on the right by default or on the left as a per-device setting, and a drag handle between them sets its width, from 360 px to whatever leaves the player 400 px wide, starting at 420 px; the handle also takes the arrow keys while it has focus. The side is chosen in the Settings tab, which WebUI Settings Panel adds.
   - The panel has a single row of icon-only tabs: Library, Filter, Tags, Stats, and Settings, each with a tooltip and an accessible name. Library, Filter, and Tags keep the icons the player's buttons for them use today (`browse`, `filter_alt`, and `tag`). This milestone builds the Library, Filter, and Tags tabs from the library overlay, filter dialog, and tag editor; WebUI Stats Panel and WebUI Settings Panel add the Stats and Settings tabs.
   - The player's Library, Filter, and Tags buttons give way to one panel button, which opens the panel on its last tab, Library the first time, and closes the panel when it is open. Its icon shows the panel's side and whether it is open (`right_panel_open` and `right_panel_close`, or their left counterparts), and it is orange while the panel is open. Favorite and Blacklist stay on the player.
   - Auto-Pause replaces the tag editor's pause and resume. Opening the panel on any tab, or as its full-screen overlay, pauses playback according to an Auto-Pause mode:
@@ -140,7 +169,7 @@ Last milestone completed: M12b
     - The mode is fixed at Responsive until WebUI Settings Panel adds the setting. WebUI Preact Migration keeps today's tag editor pause, since that milestone changes nothing visible.
   - On a photo, the player's scrub bar stays, disabled, so the controls keep their place between photos and videos. Read from code at this edit: today `playCurrent` hides the seek row for a photo. With Autoplay on and Loop off, the bar fills as the photo's timer runs, showing when the next item plays, with the time shown as elapsed and photo duration; otherwise it stays empty, and the time is blank. Loop on with a photo restarts the same photo, so the bar does not fill then.
   - The preset dropdown and randomization mode leave the header for the Library tab, laid out like the desktop library panel: above the grid, the preset, then randomization mode, then sort with its direction toggle, then search.
-  - The Library tab fits its column count to the panel width, and choosing a tile plays it in the player beside the panel. As the overlay, choosing a tile plays it and closes the overlay, as the library overlay does today.
+  - The Library tab fits its column count to the panel width, with rows 100–240 px high, aiming for 160 px, beside the player and as the overlay. Read from code at this edit: today they are 200–400 px, aiming for 300 px (`libraryGridLayout.ts`). Choosing a tile plays it in the player beside the panel. As the overlay, choosing a tile plays it and closes the overlay, as the library overlay does today.
   - Beside the player, the Filter tab's Apply and Cancel leave the panel open. As the overlay they close it, as the filter dialog does today.
   - The Tags tab edits the playing item's tags and follows the playing item when it changes, unless the tab has unsaved changes to its item's tags. Then it stays on that item and shows a line naming it, "Editing tags for {file name}", until those changes are saved or discarded (Refresh discards them, asking first), and then follows the playing item. Unsaved changes that are not to the item's tags, such as a category reorder or rename, don't hold it. Read from code at this edit: the tag editor takes the item playing when it opens (`open` in `src/tags/tagEditor.ts`), and today its overlay and pause keep that item on screen while it is open.
   - Unsaved changes survive closing the panel and switching tabs: the Filter tab's until Apply or Cancel, and the Tags tab's until Save, or Refresh, which discards them after asking. The tag editor's close confirmation goes away. While the Filter or Tags tab holds unsaved changes, a small orange dot marks its tab icon, and the player's panel button while either does, so they aren't forgotten when the panel is closed, and their accessible names say so. Read from code at this edit: closing the tag editor asks "Discard changes?" when it has changes (`close` in `src/tags/tagEditor.ts`), and reopening the filter dialog rebuilds its draft from the applied filter and the server's presets, dropping unsaved filter and preset changes (`open` in `src/filter/filterDialog.ts`).
@@ -227,9 +256,8 @@ Last milestone completed: M12b
     - the Filter tab's Refresh after an unsaved preset change.
 
     Plus `npm run verify`, and one quick spot check on a phone and a desktop browser, including dragging on a touch screen.
-  - The mockups in `docs/mockups/webui-panels/` stay in place when this milestone completes.
 
-### M12d - WebUI In-App Dialogs
+### M12e - WebUI In-App Dialogs
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI asks for names and confirmations, and shows anything the user must notice or act on, in its own dialogs, styled like the rest of the WebUI, instead of the browser's `prompt`, `confirm`, and `alert`.
@@ -253,7 +281,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for confirm and cancel on each converted dialog, for a notice and its `last.log` line, and for the new category name check with the field validation pattern, a check that no native dialog calls remain, `npm run verify`, and a spot check in an installed web app.
 
-### M12e - WebUI Settings Panel
+### M12f - WebUI Settings Panel
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI side panel has a Settings tab for per-device preferences and diagnostics.
@@ -281,7 +309,7 @@ Last milestone completed: M12b
   - Completion evidence must include WebUI tests for preference storage, for a page refresh keeping each setting this milestone adds, and for photo duration with the field validation pattern, `npm run verify`, and one quick spot check on a phone.
   - Add a Release Specific checklist item: "On a desktop browser and a phone, and as an installed app, every remembered setting is kept after a refresh and a browser restart, and the library search starts empty."
 
-### M12f - WebUI Admin Section
+### M12g - WebUI Admin Section
 
 - **Status**: ⏳ Planned
 - **Goal**: Everything the Operator page does moves into a full-page admin section of the WebUI, and the server keeps a minimal recovery page for when the WebUI's files are broken.
@@ -322,7 +350,7 @@ Last milestone completed: M12b
   - Server tests call the handlers and gating as functions over `DefaultHttpContext`, as the library route gate's tests do. No test project has an HTTP test host, and `Microsoft.AspNetCore.TestHost` is not added (decided at promotion).
   - Add a Release Specific checklist item: "From another machine, the admin section asks for the control token and works after it is entered; with the WebUI files removed, the recovery page restarts, stops, shows logs, and applies an update, on Linux and Windows."
 
-### M12g - Admin Refresh, Backup, and Duplicate Review
+### M12h - Admin Refresh, Backup, and Duplicate Review
 
 - **Status**: ⏳ Planned
 - **Goal**: The admin section starts a refresh, edits refresh and backup settings, and reviews and applies duplicates, so none of these needs the desktop.
@@ -350,7 +378,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include admin section UI tests for each slice, including the duplicate default surviving a page refresh and each refresh and backup field with the field validation pattern, `npm run verify`, and one quick spot check of a refresh and a duplicate scan.
 
-### M12h - Admin Source and Item Management
+### M12i - Admin Source and Item Management
 
 - **Status**: ⏳ Planned
 - **Goal**: Manage sources and remove library items from the WebUI admin section, with server routes for what no client can do today, and every open WebUI follows source changes without a reload.
@@ -376,7 +404,7 @@ Last milestone completed: M12b
   - Completion evidence must include server tests for each new route and for the event each source change publishes, admin section UI tests for Manage Sources, WebUI tests for source event handling, `dotnet test ReelRoulette.sln`, `npm run verify`, and one quick spot check of an admin section source toggle seen in another WebUI tab.
   - Add a Release Specific checklist item: "From the admin section, add, rename, disable, refresh, and remove a source, and other open WebUI sessions update without a reload."
 
-### M12i - Admin Library Catalog Transfer
+### M12j - Admin Library Catalog Transfer
 
 - **Status**: ⏳ Planned
 - **Goal**: Export and import the library from the WebUI admin section, with the server applying the catalog, so catalog transfer does not need the desktop app.
@@ -401,7 +429,7 @@ Last milestone completed: M12b
   - Completion evidence must include server tests for running-server import, rejection of a file that is not a library database, and interrupted-replace recovery, plus admin section UI tests for export and import, including an upload larger than 30 MB.
   - Add a Release Specific checklist item: "With no desktop app, export the library from the admin section and import it into a fresh server, on Linux and Windows."
 
-### M12j - WebUI Stats Panel
+### M12k - WebUI Stats Panel
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI shows library and playback statistics and details of the current file in a Stats tab, as the desktop stats panel does.
@@ -423,7 +451,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include component tests for both sections and for the file name opening the Stats tab, coalescing tests, `npm run verify`, and one quick spot check.
 
-### M12k - WebUI Keyboard Shortcuts and Player Controls
+### M12l - WebUI Keyboard Shortcuts and Player Controls
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI has the desktop's keyboard shortcuts wherever a browser allows them, plus volume and seek-step controls and two autoplay modes, and the desktop's loudness normalization is built or declined.
@@ -462,7 +490,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include keyboard tests per binding under `happy-dom`, autoplay tests for both modes with loop on and off and with a paused video, a test that a looping photo keeps its image shown through each loop, tests for a page refresh keeping each setting this milestone adds, tests for loudness normalization if built, `npm run verify`, and one quick spot check.
 
-### M12l - Show in File Manager from the WebUI
+### M12m - Show in File Manager from the WebUI
 
 - **Status**: ⏳ Planned
 - **Goal**: A WebUI on the server machine opens the system file manager at the playing file, and elsewhere copies its path.
@@ -482,7 +510,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include server tests for loopback, the server's own address, another LAN address, proxied, unknown-id, and headless requests with the launcher faked, contract tests, `npm run verify`, and one quick Linux spot check.
 
-### M12m - WebUI Status Line Overhaul
+### M12n - WebUI Status Line Overhaul
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI status line shows only background information, one stable message per situation, and what the user must notice or act on moves to an in-app dialog or the field it is about.
@@ -537,7 +565,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include WebUI tests of the precedence rule and the per-event messages, covering the server stopped, the API unavailable, a version or capability mismatch, and refresh progress and results, tests that each screen's dialog messages show in the notice with their `last.log` lines and its background messages stay on the status line, tests of the pairing token field and of a 401 on a random pick and a library play, tests of the three Auto Tag and tag save messages in place of the tests that lock them today, a check of every status line write against the sorted list, and one quick spot check with the server stopped.
 
-### M12n - Testing Suite Overhaul
+### M12o - Testing Suite Overhaul
 
 - **Status**: ⏳ Planned
 - **Goal**: The testing suite produces clear results that match the WebUI's connection and status handling.
@@ -555,7 +583,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include automated tests that each scenario sets and resets the server state it describes, and that SSE disconnect closes and reconnects the same way on repeated runs, plus one quick spot check of one scenario.
 
-### M12o - Browser-Playable Filter
+### M12p - Browser-Playable Filter
 
 - **Status**: ⏳ Planned
 - **Goal**: Browse and random play can be limited to files a browser can play, and a file the browser cannot play says so instead of "not found".
@@ -578,7 +606,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include server tests for the option in the list query, counts, and random selection, contract tests, WebUI tests for the option and both error messages, `dotnet test ReelRoulette.sln`, and `npm run verify`.
 
-### M12p - WebUI Grid Rendering
+### M12q - WebUI Grid Rendering
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI library grid updates only the rows and tiles that change, and dragging the scrollbar reaches any part of the results without loading every page before it.
@@ -605,7 +633,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for row reuse, tile patching, and loading the page at a scrollbar position, before-and-after timings for rendering a large window in a browser, and `npm run verify`.
 
-### M12q - WebUI Multi-Select and Bulk Actions
+### M12r - WebUI Multi-Select and Bulk Actions
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI selects several library items and applies the desktop's bulk actions to them, and clears playback stats for the whole library.
@@ -627,7 +655,7 @@ Last milestone completed: M12b
   - Completion evidence must include WebUI tests for selection and each bulk action, and `npm run verify`.
   - Add a Release Specific checklist item: "In the WebUI on a desktop browser and a phone, select several items, apply each bulk action, and the tiles update."
 
-### M12r - Desktop Retirement Notice
+### M12s - Desktop Retirement Notice
 
 - **Status**: ⏳ Planned
 - **Goal**: The last desktop build tells users the desktop app is retired and points them to the WebUI.

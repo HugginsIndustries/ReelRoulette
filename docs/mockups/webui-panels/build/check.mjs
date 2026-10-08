@@ -27,7 +27,7 @@ function check(label, ok) {
   console.log(`${ok ? "PASS" : "FAIL"} ${label}`);
 }
 
-for (const name of ["index", "validation"]) {
+for (const name of ["index", "validation", "desktop-notice"]) {
   const { errors } = await load(name, 1280);
   check(`${name}: no script errors ${errors.join("; ")}`, errors.length === 0);
 }
@@ -70,6 +70,16 @@ for (const width of [1280, 390]) {
   const topDialog = () => openDialogs().at(-1);
   const button = (root, label) => [...root.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith(label));
   const pressEscape = (dialog) => dialog.dispatchEvent(new window.Event("cancel", { cancelable: true }));
+  // Next can land on a file this browser can't play, whose notice then needs its OK.
+  const dismissNotices = () => {
+    for (const dialog of openDialogs().reverse()) {
+      if (dialog.textContent.includes("isn't supported") || dialog.textContent.includes("not found")) button(dialog, "OK").click();
+    }
+  };
+  const next = () => {
+    $("next-btn").click();
+    dismissNotices();
+  };
   check(`layout@${width}: no script errors on load ${errors.join("; ")}`, errors.length === 0);
   check(`layout@${width}: panel starts closed and playing`, $("panel").hidden && $("play-chip").textContent.includes("Playing"));
   const corner = [...document.querySelectorAll(".overlay-corner-btn")].map((b) => b.id).join(",");
@@ -98,7 +108,7 @@ for (const width of [1280, 390]) {
   document.querySelector('[data-sub="presets"]').click();
   apply.click();
   check(`layout@${width}: held Apply goes to the field and keeps the panel open`,
-    !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === min && !$("panel").hidden && $("status").textContent === "Connected.");
+    !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === min && !$("panel").hidden && $("status").textContent === "Ready");
   input(min, "1:30");
   document.querySelector('[data-sub="presets"]').click();
   const presetNames = () => [...document.querySelectorAll(".filter-preset-row")].map((r) => r.dataset.key).join(",");
@@ -179,7 +189,7 @@ for (const width of [1280, 390]) {
   const line = $("tags-target");
   const edited = $("np-name").textContent;
   document.querySelector('#tags-body .tag-chip [title="Add tag"]').click();
-  $("next-btn").click();
+  next();
   check(`layout@${width}: with unsaved tag changes the tab stays on its item and names it ("${line.textContent}")`,
     !line.hidden && line.textContent === `Editing tags for ${edited}` && $("np-name").textContent !== edited);
   $("panel-close").click();
@@ -192,10 +202,10 @@ for (const width of [1280, 390]) {
     dot("tab-btn-tags") && !$("tags-save").disabled && !line.hidden);
   $("tags-save").click();
   check(`layout@${width}: after Save it follows the playing item, and the dots go`, line.hidden && !dot("tab-btn-tags") && !dot("panel-btn"));
-  $("next-btn").click();
+  next();
   check(`layout@${width}: with no unsaved changes it follows`, line.hidden);
   document.querySelector('#tags-body .tag-chip [title="Remove tag"]').click();
-  $("next-btn").click();
+  next();
   $("tags-refresh").click();
   await new Promise((resolve) => setTimeout(resolve, 0));
   check(`layout@${width}: Refresh asks "Discard changes?" with Cancel focused`,
@@ -212,6 +222,7 @@ for (const width of [1280, 390]) {
   $("tab-btn-library").click();
   $("lib-preset").value = "Photos only";
   $("lib-preset").dispatchEvent(new window.Event("change"));
+  await new Promise((resolve) => setTimeout(resolve, 520));
   $("lib-grid").querySelector(".lib-tile").click();
   if (!$("panel").hidden) $("panel-close").click();
   await new Promise((resolve) => setTimeout(resolve, 600));
@@ -220,7 +231,149 @@ for (const width of [1280, 390]) {
     seek.disabled && Number(seek.value) > 0 && $("time-display").textContent.includes("/ 00:05") && $("mute-btn").disabled);
   $("autoplay-btn").click();
   check(`layout@${width}: with Autoplay off it stays empty`, Number(seek.value) === 0 && $("time-display").textContent === "");
+  $("autoplay-btn").click();
+  dismissNotices();
+
+  // Stats: the file name opens it; Copy Path off the server machine, Show in File Manager on it.
+  $("np-name").click();
+  check(`layout@${width}: the file name opens the Stats tab on the current file`,
+    !$("panel").hidden && !$("tab-stats").hidden && $("stats-body").textContent.includes($("np-name").textContent) && $("stats-body").textContent.includes("Copy Path"));
+  $("mock-server-machine").click();
+  check(`layout@${width}: on the server machine it offers Show in File Manager`, $("stats-body").textContent.includes("Show in File Manager"));
+  $("mock-server-machine").click();
+
+  // Settings: Advance after is validated, and a value that is not valid is not kept.
+  $("tab-btn-settings").click();
+  const advance = $("set-advance");
+  input(advance, "0");
+  check(`layout@${width}: Advance after flags 0 and keeps 5`, advance.getAttribute("aria-invalid") === "true" && window.localStorage.getItem("rr-mockup.advanceAfter") === null);
+  input(advance, "8");
+  check(`layout@${width}: Advance after keeps 8`, !advance.hasAttribute("aria-invalid") && window.localStorage.getItem("rr-mockup.advanceAfter") === "8");
+  check(`layout@${width}: the shortcut reference lists the bindings`, $("shortcut-list").querySelectorAll("dt").length === 15);
+
+  // Keyboard shortcuts, ignored while typing.
+  const press = (k, target = document.body, extra = {}) =>
+    target.dispatchEvent(new window.KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...extra }));
+  $("panel-close").click();
+  dismissNotices();
+  press("2");
+  check(`layout@${width}: 2 opens the Filter tab`, !$("panel").hidden && !$("tab-filter").hidden);
+  press("2");
+  check(`layout@${width}: 2 again closes the panel`, $("panel").hidden);
+  const volumeBefore = Number($("volume").value);
+  press(",");
+  check(`layout@${width}: comma lowers the volume by the step (${volumeBefore} to ${$("volume").value})`, Number($("volume").value) === volumeBefore - 5);
+  $("panel-btn").click();
+  $("tab-btn-library").click();
+  const before = $("play-chip").textContent;
+  press("k", $("lib-search"));
+  check(`layout@${width}: K in the search box types instead of pausing`, $("play-chip").textContent === before);
+
+  // Multi-select and bulk actions; removing from the library is an admin action.
+  $("lib-preset").value = "";
+  $("lib-preset").dispatchEvent(new window.Event("change"));
+  await new Promise((resolve) => setTimeout(resolve, 520));
+  $("lib-select").click();
+  const tiles = () => [...$("lib-grid").querySelectorAll(".lib-tile")];
+  check(`layout@${width}: selection marks the tiles as checkboxes`, tiles()[0].getAttribute("role") === "checkbox" && !$("bulk-bar").hidden);
+  tiles()[0].click();
+  tiles()[1].click();
+  check(`layout@${width}: two taps select two (${$("bulk-count").textContent})`, $("bulk-count").textContent === "2 selected" && tiles()[0].classList.contains("is-selected"));
+  $("bulk-actions").click();
+  $("bulk-menu").querySelector('[data-bulk="tags"]').click();
+  check(`layout@${width}: Edit tags for 2 items opens`, topDialog()?.textContent.includes("Edit tags for 2 items"));
+  pressEscape(topDialog());
+  const removedName = tiles()[0].getAttribute("aria-label");
+  $("bulk-actions").click();
+  $("bulk-menu").querySelector('[data-bulk="remove"]').click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  check(`layout@${width}: Remove from library asks for the control token first`, topDialog()?.querySelector("h3")?.textContent === "Control token");
+  input(topDialog().querySelector("input"), "secret-token");
+  topDialog().querySelector('button[type="submit"]').click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  check(`layout@${width}: then asks to remove, with the delete-from-disk option`, topDialog()?.textContent.includes("Remove 2 items from the library?") && topDialog().textContent.includes("Also delete the files from disk"));
+  button(topDialog(), "Remove").click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  check(`layout@${width}: the items leave the grid (${$("status").textContent})`, !tiles().some((t) => t.getAttribute("aria-label") === removedName) && $("status").textContent === "Removed 2 items from the library.");
+  $("bulk-exit").click();
+
+  // The browser-playable option and the format notice.
+  const avi = tiles().find((t) => t.getAttribute("aria-label").endsWith(".avi"));
+  avi.click();
+  check(`layout@${width}: an .avi says its format isn't supported (${topDialog()?.textContent.slice(0, 60)})`,
+    topDialog()?.textContent.includes("format (.avi) isn't supported in this browser") && $("play-chip").textContent.includes("Can't play"));
+  button(topDialog(), "OK").click();
+  if ($("panel").hidden) $("panel-btn").click();
+  $("tab-btn-filter").click();
+  document.querySelector('[data-sub="general"]').click();
+  $("filter-playable").click();
+  $("filter-playable").dispatchEvent(new window.Event("change", { bubbles: true }));
+  $("filter-apply").click();
+  await new Promise((resolve) => setTimeout(resolve, 520));
+  if ($("panel").hidden) $("panel-btn").click();
+  $("tab-btn-library").click();
+  await new Promise((resolve) => setTimeout(resolve, 520));
+  check(`layout@${width}: with it on, no .avi or .wmv tiles show, and the filter line says so (${$("lib-filters").textContent})`,
+    !tiles().some((t) => /\.(avi|wmv)$/.test(t.getAttribute("aria-label"))) && $("lib-filters").textContent.includes("Only files this browser can play"));
+
+  // Pairing prompt and read-only volume.
+  $("mock-pairing").click();
+  check(`layout@${width}: the pairing prompt shows in the header`, !$("pair").hidden);
+  input($("pair-token"), "x");
+  input($("pair-token"), "");
+  check(`layout@${width}: an emptied pairing token is flagged and Pair held`, $("pair-token").getAttribute("aria-invalid") === "true" && $("pair-btn").getAttribute("aria-disabled") === "true");
+  input($("pair-token"), "abc123");
+  $("pair").dispatchEvent(new window.Event("submit", { cancelable: true }));
+  check(`layout@${width}: Pair hides the prompt`, $("pair").hidden && $("status").textContent === "Paired.");
+  $("mock-ios-volume").click();
+  check(`layout@${width}: a read-only volume hides the slider`, $("volume-wrap").hidden);
+  check(`layout@${width}: no browser dialog was used anywhere (${nativeCalls.join(",")})`, nativeCalls.length === 0);
   check(`layout@${width}: no script errors anywhere ${errors.join("; ")}`, errors.length === 0);
+}
+
+for (const width of [1280, 390]) {
+  const { document, errors, window } = await load("admin", width);
+  const $ = (id) => document.getElementById(id);
+  const input = (el, value) => {
+    el.value = value;
+    el.dispatchEvent(new window.Event("input"));
+  };
+  const topDialog = () => [...document.querySelectorAll("dialog.app-dialog")].at(-1);
+  const button = (root, label) => [...root.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith(label));
+  check(`admin@${width}: no script errors on load ${errors.join("; ")}`, errors.length === 0);
+  $("mock-remote").click();
+  check(`admin@${width}: from another machine the token gate shows first`, !$("gate").hidden && $("admin").hidden);
+  input($("gate-token"), "secret");
+  $("gate-form").dispatchEvent(new window.Event("submit", { cancelable: true }));
+  check(`admin@${width}: the token opens admin`, $("gate").hidden && !$("admin").hidden);
+  input($("web-port"), "80");
+  check(`admin@${width}: a port below 1024 is flagged and Save held`, $("web-port").getAttribute("aria-invalid") === "true" && $("web-save").getAttribute("aria-disabled") === "true");
+  input($("refresh-interval"), "2");
+  check(`admin@${width}: a refresh interval below 5 is flagged`, $("refresh-interval").getAttribute("aria-invalid") === "true");
+  input($("source-path"), "/media/videos");
+  check(`admin@${width}: an existing source's folder is flagged`, $("source-path").getAttribute("aria-invalid") === "true");
+  document.querySelector('#source-list [title="Edit source"]').click();
+  check(`admin@${width}: Edit Source holds the name and Remove`, topDialog()?.querySelector("h3")?.textContent === "Edit Source" && !!button(topDialog(), "Delete"));
+  topDialog().dispatchEvent(new window.Event("cancel", { cancelable: true }));
+  $("dup-scan").click();
+  check(`admin@${width}: a duplicate scan opens review inside admin`, !$("review").hidden && $("admin").hidden && $("review-summary").textContent.includes("Keep All"));
+  document.querySelector('#review-body .dup-file input[type="radio"]').click();
+  document.querySelector('#review-body .dup-file input[type="radio"]').dispatchEvent(new window.Event("change"));
+  $("review-apply").click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  check(`admin@${width}: deleting asks with the counts (${topDialog()?.textContent.slice(0, 40)})`, topDialog()?.textContent.includes("Delete 1 files from 1 groups?"));
+  button(topDialog(), "Delete").click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  check(`admin@${width}: and review closes`, $("review").hidden && !$("admin").hidden);
+  $("mock-no-library").click();
+  check(`admin@${width}: without a library the server card says why and Refresh is off`, !$("no-library").hidden && $("refresh-now").disabled);
+  check(`admin@${width}: no script errors anywhere ${errors.join("; ")}`, errors.length === 0);
+}
+
+{
+  const { document, errors } = await load("desktop-notice", 1280);
+  document.getElementById("notice-open").click();
+  check(`desktop-notice: Open Web UI closes the notice ${errors.join("; ")}`, document.getElementById("notice").hidden && errors.length === 0);
 }
 
 console.log(failures ? `${failures} failed` : "all passed");

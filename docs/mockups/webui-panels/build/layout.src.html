@@ -43,18 +43,6 @@ body { height: 100dvh; overflow: hidden; display: flex; flex-direction: column; 
 .now-playing .is-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .now-playing .is-link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .top-bar-end { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; margin-left: auto; }
-.photo-duration { display: flex; align-items: center; gap: 6px; white-space: nowrap; margin-right: 4px; }
-.photo-duration input {
-  width: 4.5ch;
-  min-height: 34px;
-  padding: 0 6px;
-  border-radius: 4px;
-  text-align: center;
-  appearance: textfield;
-  -moz-appearance: textfield;
-}
-.photo-duration input::-webkit-outer-spin-button,
-.photo-duration input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 @media (max-width: 600px) {
   .now-playing { order: 3; flex-basis: 100%; }
 }
@@ -378,6 +366,145 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
 .autotag-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .autotag-results { flex: 1; border: 1px solid var(--surface-border); border-radius: 8px; padding: 8px; min-height: 120px; }
 
+/* Header: the file name opens the Stats tab; the pairing prompt shows when the server asks for pairing. */
+a.icon-btn { text-decoration: none; }
+.pair { display: flex; align-items: center; gap: 6px; margin: 0; }
+.pair .vfield { width: 12rem; }
+.pair .ctl, .pair .btn { min-height: 38px; }
+@media (max-width: 600px) {
+  .pair { order: 4; flex: 1 1 100%; }
+  .pair .vfield { flex: 1 1 auto; width: auto; }
+}
+
+/* Volume, at the end of the seek row; hidden where the browser keeps volume read-only (iOS). */
+.volume { display: inline-flex; align-items: center; }
+.volume input[type="range"] { width: 84px; height: 24px; }
+@container (max-width: 480px) { .volume input[type="range"] { width: 60px; } }
+.fake-video.is-error { background: #000; animation: none; }
+.fake-video.is-error .subject { display: none; }
+
+/* Library: the filter summary, selection, bulk actions, and placeholder tiles. */
+.lib-filters {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-fg);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 0 auto;
+}
+.lib-filters b { color: var(--page-fg); font-weight: 600; }
+.icon-btn[aria-pressed="true"] { color: var(--huggins-orange); }
+.lib-tile.is-placeholder { background: var(--placeholder, #2b2b2b); animation: pulse 1.1s ease-in-out infinite; }
+html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
+.lib-tile.is-placeholder > * { display: none; }
+@keyframes pulse { 50% { opacity: 0.55; } }
+.select-mark {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.select-mark .material-symbol-icon { font-size: 30px; color: var(--huggins-orange); display: none; }
+.lib-tile.is-selected .select-mark { border: 0; background: #fff; }
+.lib-tile.is-selected .select-mark .material-symbol-icon { display: inline-flex; }
+.lib-tile.is-selected { box-shadow: inset 0 0 0 3px var(--huggins-orange); }
+.bulk-bar { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; position: relative; }
+.bulk-bar .btn { min-height: 40px; padding: 4px 10px; }
+.menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 230px;
+  padding: 6px;
+  background: var(--surface-raised);
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+}
+.menu button {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--page-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.menu button:hover, .menu button:focus-visible { background: rgba(127, 127, 127, 0.16); outline: none; }
+.menu .menu-danger { color: var(--error); }
+.menu-rule { border: 0; border-top: 1px solid var(--surface-border); margin: 4px 0; }
+.bulk-tags { max-height: min(50dvh, 420px); overflow: auto; }
+.bulk-tags h4 { margin: 8px 0 6px; font-size: 0.9rem; }
+
+/* Stats tab. */
+.stats-body, .settings-body { display: flex; flex-direction: column; gap: 12px; }
+.stats-section, .settings-section { border: 1px solid var(--surface-border); border-radius: 8px; padding: 10px 12px; }
+.stats-section h3, .settings-section h3 { margin: 0 0 8px; font-size: 0.95rem; }
+.stats-file-name { font-weight: 600; word-break: break-word; margin: 0 0 4px; }
+.stats-path { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
+.stats-path code { flex: 1 1 auto; min-width: 0; font-size: 0.82rem; color: var(--muted-fg); word-break: break-all; }
+.stats-path .btn { min-height: 36px; padding: 4px 10px; font-size: 0.9rem; flex: 0 0 auto; }
+.stats-path .btn .material-symbol-icon { font-size: 20px; }
+.stats-table { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin: 0; font-size: 0.92rem; }
+.stats-table dt { color: var(--muted-fg); }
+.stats-table dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.stats-tags { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.stats-tag { padding: 2px 8px; border-radius: 999px; background: var(--violet); color: #fff; font-size: 0.8rem; font-weight: 600; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.stat-card { border: 1px solid var(--surface-border); border-radius: 8px; padding: 8px 10px; }
+.stat-card .value { font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat-card .label { font-size: 0.8rem; color: var(--muted-fg); }
+
+/* Settings tab. */
+.setting { margin-bottom: 12px; }
+.setting:last-child { margin-bottom: 0; }
+.setting-label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 0.92rem; }
+.setting-hint { font-size: 0.82rem; color: var(--muted-fg); margin: 4px 0 0; }
+.choice-row { display: flex; flex-wrap: wrap; gap: 0 16px; }
+.choice-row label, .choice-stack label { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.choice-stack { display: flex; flex-direction: column; }
+.choice-stack label { align-items: flex-start; padding: 4px 0; }
+.choice-stack label input { margin-top: 3px; }
+.choice-stack small { display: block; color: var(--muted-fg); font-size: 0.82rem; }
+.number-field { width: 8rem; }
+.shortcut-list, .diag { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 0.9rem; }
+.shortcut-list dt { white-space: nowrap; }
+.shortcut-list dd, .diag dd { margin: 0; }
+.diag dd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8rem; word-break: break-all; }
+kbd {
+  font-family: inherit;
+  font-size: 0.8rem;
+  padding: 1px 6px;
+  border: 1px solid var(--control-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--control-bg);
+}
+.is-off { opacity: 0.5; }
+
 /* The status line. */
 .status { font-size: 0.9rem; color: var(--muted-fg); margin-top: 10px; min-height: 1.2em; flex-shrink: 0; }
 
@@ -457,10 +584,13 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
 <div id="app">
   <header class="top-bar">
     <h1>ReelRoulette</h1>
-    <div class="now-playing"><span id="np-name"></span><span id="np-duration" class="muted"></span></div>
+    <div class="now-playing"><span id="np-name" class="is-link" role="button" tabindex="0" title="Show stats"></span><span id="np-duration" class="muted"></span></div>
+    <form class="pair" id="pair" novalidate hidden>
+      <span class="vfield"><input class="ctl" type="text" id="pair-token" placeholder="Pairing token" aria-label="Pairing token" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
+      <button class="btn" type="submit" id="pair-btn"><span class="btn-label">Pair</span><span class="btn-problem material-symbol-icon">error</span></button>
+    </form>
     <div class="top-bar-end">
-      <label class="photo-duration" id="photo-duration">Photo Duration: <input type="number" class="ctl" id="photo-seconds" min="1" max="300" value="5" aria-label="Photo duration in seconds"><span>s</span></label>
-      <button class="icon-btn" id="header-admin" aria-label="Admin" title="Admin" hidden><span class="material-symbol-icon">admin_panel_settings</span></button>
+      <a class="icon-btn" id="header-admin" href="admin.html" aria-label="Admin" title="Admin"><span class="material-symbol-icon">admin_panel_settings</span></a>
     </div>
   </header>
 
@@ -472,8 +602,8 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
         <div id="mock-hint" class="mock-hint mock-note">The panel button opens the panel on its last tab.</div>
         <div class="overlay-controls" id="overlay-controls">
           <button id="panel-btn" class="overlay-btn overlay-corner-btn" aria-expanded="false" aria-controls="panel"><span class="material-symbol-icon">right_panel_open</span><span class="unsaved-dot" hidden></span></button>
-          <button id="favorite-btn" class="overlay-btn overlay-corner-btn" aria-label="Favorite" title="Favorite" data-toggle><span class="material-symbol-icon">favorite</span></button>
-          <button id="blacklist-btn" class="overlay-btn overlay-corner-btn" aria-label="Blacklist" title="Blacklist" data-toggle><span class="material-symbol-icon">thumb_down</span></button>
+          <button id="favorite-btn" class="overlay-btn overlay-corner-btn" aria-label="Favorite" title="Favorite"><span class="material-symbol-icon">favorite</span></button>
+          <button id="blacklist-btn" class="overlay-btn overlay-corner-btn" aria-label="Blacklist" title="Blacklist"><span class="material-symbol-icon">thumb_down</span></button>
           <div class="overlay-controls-row overlay-controls-transport">
             <button id="prev-btn" class="overlay-btn" aria-label="Previous" title="Previous"><span class="material-symbol-icon">skip_previous</span></button>
             <button id="play-btn" class="overlay-btn" aria-label="Play/Pause" title="Play/Pause"><span class="material-symbol-icon">pause</span></button>
@@ -486,6 +616,7 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
           <div class="overlay-seek-row">
             <input type="range" id="seek" min="0" max="100" step="0.25" value="0" aria-label="Seek">
             <span id="time-display"></span>
+            <span class="volume" id="volume-wrap"><input type="range" id="volume" min="0" max="100" step="1" value="80" aria-label="Volume" title="Volume"></span>
           </div>
         </div>
       </div>
@@ -502,8 +633,8 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
           <button class="panel-tab" role="tab" id="tab-btn-library" data-tab="library" aria-controls="tab-library" aria-label="Library" title="Library"><span class="material-symbol-icon">browse</span></button>
           <button class="panel-tab" role="tab" id="tab-btn-filter" data-tab="filter" aria-controls="tab-filter" aria-label="Filter" title="Filter"><span class="material-symbol-icon">filter_alt</span><span class="unsaved-dot" hidden></span></button>
           <button class="panel-tab" role="tab" id="tab-btn-tags" data-tab="tags" aria-controls="tab-tags" aria-label="Tags" title="Tags"><span class="material-symbol-icon">tag</span><span class="unsaved-dot" hidden></span></button>
-          <button class="panel-tab" role="tab" id="tab-btn-stats" data-tab="stats" aria-controls="tab-stats" aria-label="Stats" title="Stats" data-later hidden><span class="material-symbol-icon">bar_chart</span></button>
-          <button class="panel-tab" role="tab" id="tab-btn-settings" data-tab="settings" aria-controls="tab-settings" aria-label="Settings" title="Settings" data-later hidden><span class="material-symbol-icon">settings</span></button>
+          <button class="panel-tab" role="tab" id="tab-btn-stats" data-tab="stats" aria-controls="tab-stats" aria-label="Stats" title="Stats"><span class="material-symbol-icon">bar_chart</span></button>
+          <button class="panel-tab" role="tab" id="tab-btn-settings" data-tab="settings" aria-controls="tab-settings" aria-label="Settings" title="Settings"><span class="material-symbol-icon">settings</span></button>
         </div>
         <span class="panel-tabs-spacer"></span>
         <button class="icon-btn" id="panel-close" aria-label="Close panel" title="Close"><span class="material-symbol-icon">close</span></button>
@@ -513,7 +644,9 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
         <div class="panel-page-head">
           <h2>Library</h2>
           <p id="lib-summary" class="lib-summary grow" aria-live="polite"></p>
+          <button class="icon-btn" type="button" id="lib-select" aria-pressed="false" aria-label="Select items" title="Select items"><span class="material-symbol-icon">checklist</span></button>
         </div>
+        <button type="button" id="lib-filters" class="lib-filters" title="Open the Filter tab" hidden></button>
         <div class="lib-controls">
           <select class="ctl" id="lib-preset" aria-label="Choose preset">
             <option value="">None</option>
@@ -541,6 +674,23 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
           <input class="ctl" type="search" id="lib-search" placeholder="Search…" aria-label="Search library" autocomplete="off">
         </div>
         <div id="lib-grid" class="lib-grid scroll-y themed-scrollbar"></div>
+        <div id="bulk-bar" class="bulk-bar" hidden>
+          <button class="icon-btn" type="button" id="bulk-exit" aria-label="Stop selecting" title="Stop selecting"><span class="material-symbol-icon">close</span></button>
+          <span id="bulk-count" class="grow" aria-live="polite">0 selected</span>
+          <button class="btn" type="button" id="bulk-all">Select all</button>
+          <button class="btn" type="button" id="bulk-actions" aria-haspopup="menu" aria-expanded="false" aria-controls="bulk-menu" disabled><span class="btn-label">Actions</span><span class="material-symbol-icon" style="font-size:22px">expand_more</span></button>
+          <div id="bulk-menu" class="menu" role="menu" hidden>
+            <button type="button" role="menuitem" data-bulk="fav-add">Add to favorites</button>
+            <button type="button" role="menuitem" data-bulk="fav-remove">Remove from favorites</button>
+            <button type="button" role="menuitem" data-bulk="bl-add">Add to blacklist</button>
+            <button type="button" role="menuitem" data-bulk="bl-remove">Remove from blacklist</button>
+            <hr class="menu-rule">
+            <button type="button" role="menuitem" data-bulk="tags">Edit tags…</button>
+            <button type="button" role="menuitem" data-bulk="clear">Clear playback stats…</button>
+            <hr class="menu-rule">
+            <button type="button" role="menuitem" data-bulk="remove" class="menu-danger">Remove from library…</button>
+          </div>
+        </div>
       </section>
 
       <section id="tab-filter" class="panel-page" role="tabpanel" aria-labelledby="tab-btn-filter" hidden>
@@ -563,6 +713,7 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
                 <label><input type="checkbox"> Only never played</label>
                 <label><input type="checkbox"> Only videos with known duration</label>
                 <label><input type="checkbox"> Only videos with known loudness</label>
+                <label><input type="checkbox" id="filter-playable"> Only files this browser can play</label>
               </div>
             </div>
             <div class="filter-section">
@@ -670,11 +821,102 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
 
       <section id="tab-stats" class="panel-page" role="tabpanel" aria-labelledby="tab-btn-stats" hidden>
         <div class="panel-page-head"><h2>Stats</h2></div>
-        <p class="mock-note placeholder-page">Arrives with <b>WebUI Stats Panel</b>, which picks its icon. Clicking the file name in the header opens this tab.</p>
+        <div id="stats-body" class="stats-body scroll-y themed-scrollbar"></div>
       </section>
       <section id="tab-settings" class="panel-page" role="tabpanel" aria-labelledby="tab-btn-settings" hidden>
         <div class="panel-page-head"><h2>Settings</h2></div>
-        <p class="mock-note placeholder-page">Arrives with <b>WebUI Settings Panel</b>: panel side, Auto-Pause mode, and photo duration move here. The header has no settings icon; this tab is reached from the tab row.</p>
+        <div id="settings-body" class="settings-body scroll-y themed-scrollbar">
+          <div class="settings-section">
+            <h3>Playback</h3>
+            <div class="setting">
+              <span class="setting-label" id="set-autoplay-label">Autoplay mode</span>
+              <div class="choice-stack" role="radiogroup" aria-labelledby="set-autoplay-label">
+                <label><input type="radio" name="set-autoplay" value="normal"><span>Normal<small>Photos advance after the timer; videos play to the end.</small></span></label>
+                <label><input type="radio" name="set-autoplay" value="timer"><span>Timer<small>Every item advances after the timer, even a video that hasn't finished. Pausing a video holds the timer.</small></span></label>
+              </div>
+              <p class="setting-hint">The player's autoplay button turns autoplay on and off.</p>
+            </div>
+            <div class="setting">
+              <label class="setting-label" for="set-advance">Advance after</label>
+              <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="numeric" id="set-advance" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>seconds</span></div>
+              <p class="setting-hint">Today's photo duration, renamed; it leaves the header.</p>
+            </div>
+            <div class="setting">
+              <span class="setting-label" id="set-seek-label">Seek step <kbd>J</kbd> <kbd>L</kbd></span>
+              <div class="choice-row" role="radiogroup" aria-labelledby="set-seek-label">
+                <label><input type="radio" name="set-seek" value="1"> 1 second</label>
+                <label><input type="radio" name="set-seek" value="5"> 5 seconds</label>
+                <label><input type="radio" name="set-seek" value="10"> 10 seconds</label>
+              </div>
+              <p class="mock-note mock-inline">Open: frame stepping, which a browser can only approximate, is built or declined.</p>
+            </div>
+            <div class="setting">
+              <span class="setting-label" id="set-volume-label">Volume step <kbd>,</kbd> <kbd>.</kbd></span>
+              <div class="choice-row" role="radiogroup" aria-labelledby="set-volume-label">
+                <label><input type="radio" name="set-volstep" value="1"> 1%</label>
+                <label><input type="radio" name="set-volstep" value="2"> 2%</label>
+                <label><input type="radio" name="set-volstep" value="5"> 5%</label>
+              </div>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3>Loudness normalization</h3>
+            <p class="mock-note mock-inline">Open: built or declined. Shown as it would look if built, with the desktop's ranges and defaults.</p>
+            <div class="choice-row"><label><input type="checkbox" id="set-norm"> Even out loudness between videos</label></div>
+            <div id="norm-fields">
+              <div class="setting">
+                <label class="setting-label" for="set-norm-reduce">Maximum reduction</label>
+                <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="numeric" id="set-norm-reduce" value="15" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>dB</span></div>
+              </div>
+              <div class="setting">
+                <label class="setting-label" for="set-norm-boost">Maximum boost</label>
+                <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="numeric" id="set-norm-boost" value="5" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>dB</span></div>
+              </div>
+              <div class="setting">
+                <span class="setting-label" id="set-baseline-label">Baseline</span>
+                <div class="choice-stack" role="radiogroup" aria-labelledby="set-baseline-label">
+                  <label><input type="radio" name="set-baseline" value="auto" checked><span>Automatic<small>The library's baseline, −20.4 LUFS</small></span></label>
+                  <label><input type="radio" name="set-baseline" value="manual"><span>Manual target</span></label>
+                </div>
+                <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" id="set-norm-target" value="-23" aria-label="Target loudness" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>LUFS</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3>Panel</h3>
+            <div class="setting">
+              <span class="setting-label" id="set-side-label">Side</span>
+              <div class="choice-row" role="radiogroup" aria-labelledby="set-side-label">
+                <label><input type="radio" name="set-side" value="right"> Right</label>
+                <label><input type="radio" name="set-side" value="left"> Left</label>
+              </div>
+            </div>
+            <div class="setting">
+              <span class="setting-label" id="set-autopause-label">Auto-Pause</span>
+              <div class="choice-stack" role="radiogroup" aria-labelledby="set-autopause-label">
+                <label><input type="radio" name="set-autopause" value="responsive"><span>Responsive<small>Pauses only while the panel or the admin view covers the player.</small></span></label>
+                <label><input type="radio" name="set-autopause" value="always"><span>Always<small>Pauses whenever the panel opens.</small></span></label>
+                <label><input type="radio" name="set-autopause" value="never"><span>Never</span></label>
+              </div>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3>Keyboard shortcuts</h3>
+            <dl class="shortcut-list" id="shortcut-list"></dl>
+            <p class="setting-hint">Shortcuts do nothing while you type in a text field.</p>
+          </div>
+          <div class="settings-section">
+            <h3>Diagnostics</h3>
+            <dl class="diag">
+              <dt>Client</dt><dd>web 3f9c2e81-…</dd>
+              <dt>Session</dt><dd>7a01d6c4-…</dd>
+              <dt>Client type</dt><dd>desktop-web</dd>
+              <dt>Server</dt><dd>0.15.0 (API 9)</dd>
+              <dt>WebUI</dt><dd>0.15.0</dd>
+            </dl>
+          </div>
+          <p class="setting-hint">Settings apply at once and are kept on this device.</p>
+        </div>
       </section>
       <p id="sort-help" class="vh">Drag to reorder, or press the up and down arrow keys.</p>
       <div id="sort-live" class="vh" aria-live="polite"></div>
@@ -705,20 +947,11 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
       <h2>Panel layout</h2>
       <p id="mock-readout" class="mock-readout"></p>
       <fieldset>
-        <legend>Panel side</legend>
-        <label><input type="radio" name="mock-side" value="right"> Right (the default)</label>
-        <label><input type="radio" name="mock-side" value="left"> Left</label>
-        <p class="mock-small">Chosen per device in the Settings tab later.</p>
-      </fieldset>
-      <fieldset>
-        <legend>Auto-Pause (fixed at Responsive until the Settings tab)</legend>
-        <label><input type="radio" name="mock-autopause" value="responsive"> Responsive</label>
-        <label><input type="radio" name="mock-autopause" value="always"> Always</label>
-        <label><input type="radio" name="mock-autopause" value="never"> Never</label>
-      </fieldset>
-      <fieldset>
-        <legend>Later milestones</legend>
-        <label><input type="checkbox" id="mock-later"> Show the Stats and Settings tabs, the header's Admin icon, and the file name opening Stats, without Photo Duration</label>
+        <legend>Situation</legend>
+        <label><input type="checkbox" id="mock-pairing"> The server asks for pairing</label>
+        <label><input type="checkbox" id="mock-server-machine"> This browser is on the server machine: Show in File Manager, and admin actions without the control token</label>
+        <label><input type="checkbox" id="mock-ios-volume"> Volume is read-only, as on iOS</label>
+        <p class="mock-small">The panel side and Auto-Pause are in the Settings tab.</p>
       </fieldset>
       <fieldset>
         <legend>Theme</legend>
@@ -733,7 +966,7 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
     </div>
   </div>
 
-  <div id="status" class="status">Connected.</div>
+  <div id="status" class="status">Ready</div>
 </div>
 
 <script>
@@ -763,7 +996,14 @@ const state = {
   width: store.get("width", PANEL_DEFAULT),
   side: store.get("side", "right"),
   autoPause: store.get("autoPause", "responsive"),
-  later: store.get("later", false),
+  autoplayMode: store.get("autoplayMode", "normal"),
+  advanceAfter: store.get("advanceAfter", 5),
+  seekStep: store.get("seekStep", 5),
+  volumeStep: store.get("volumeStep", 5),
+  volume: store.get("volume", 80),
+  serverMachine: store.get("serverMachine", false),
+  pairing: store.get("pairing", false),
+  iosVolume: store.get("iosVolume", false),
   mode: "side",
   autoTag: false
 };
@@ -793,7 +1033,8 @@ const ITEMS = Array.from({ length: 72 }, (_, i) => {
   return {
     id: i,
     type: photo ? "photo" : "video",
-    name: `${a} ${b} ${year}${i % 5 === 0 ? " (2)" : ""}.${photo ? "jpg" : "mp4"}`,
+    name: `${a} ${b} ${year}${i % 5 === 0 ? " (2)" : ""}.${photo ? "jpg" : i % 11 === 4 ? "avi" : i % 13 === 7 ? "wmv" : i % 9 === 1 ? "mkv" : "mp4"}`,
+    year,
     aspect: aspects[Math.floor(rand() * aspects.length)],
     hue: Math.floor(rand() * 360),
     duration: photo ? 0 : 20 + Math.floor(rand() * 900),
@@ -801,6 +1042,23 @@ const ITEMS = Array.from({ length: 72 }, (_, i) => {
   };
 });
 const isPhoto = (item) => item.type === "photo";
+// The browser-playable profile: photos, and videos in these containers.
+const PLAYABLE = ["mp4", "m4v", "webm", "mkv"];
+const extOf = (item) => item.name.slice(item.name.lastIndexOf(".") + 1);
+const isPlayable = (item) => isPhoto(item) || PLAYABLE.includes(extOf(item));
+const statRand = rng(23);
+ITEMS.forEach((item) => {
+  item.plays = statRand() < 0.2 ? 0 : 1 + Math.floor(statRand() * 40);
+  item.lastPlayedDays = item.plays ? 1 + Math.floor(statRand() * 300) : null;
+  item.blacklisted = statRand() < 0.05;
+  item.hasAudio = !isPhoto(item) && statRand() < 0.85;
+  item.loudness = isPhoto(item) ? null : -(12 + Math.round(statRand() * 180) / 10);
+  item.peak = isPhoto(item) ? null : -(Math.round(statRand() * 60) / 10);
+  item.missing = item.id === 13;
+  item.removed = false;
+  item.path = `${isPhoto(item) ? "/media/phone" : "/media/videos"}/${item.year}/${item.name}`;
+});
+const BASELINE = -20.4;
 
 function fmt(seconds) {
   const s = Math.floor(seconds);
@@ -812,12 +1070,10 @@ function fmt(seconds) {
 
 // ---- Playback, photo timer, and Auto-Pause ----
 // For a photo, `playing` means its timer runs; Auto-Pause holds it, and it resumes with the time it had left.
-const playback = { item: ITEMS[0], playing: true, autoPaused: false, pausedBy: null, time: 12, autoplay: true, loop: false };
+const playback = { item: ITEMS[0], playing: true, autoPaused: false, pausedBy: null, time: 12, timer: 0, autoplay: true, loop: false, failed: null, muted: false };
 
-function photoSeconds() {
-  const value = Number.parseInt($("photo-seconds").value, 10);
-  return Math.min(300, Math.max(1, Number.isFinite(value) ? value : 5));
-}
+// "Advance after" in the Settings tab: today's photo duration, renamed, and the Timer mode's interval.
+const photoSeconds = () => state.advanceAfter;
 // The photo timer runs with Autoplay or Loop on, as today; the bar shows it only when it will advance to another item.
 const photoTimerRuns = () => isPhoto(playback.item) && (playback.autoplay || playback.loop);
 const photoBarFills = () => isPhoto(playback.item) && playback.autoplay && !playback.loop;
@@ -841,6 +1097,7 @@ function renderTime() {
 }
 
 function chipText() {
+  if (playback.failed) return ["warning", "Can't play"];
   if (isPhoto(playback.item)) {
     if (!photoTimerRuns()) return ["photo", "Photo, no timer"];
     if (!playback.playing) return ["pause", "Timer held"];
@@ -858,6 +1115,10 @@ function renderPlayback() {
   video.style.setProperty("--ar", item.aspect);
   video.classList.toggle("is-paused", !playback.playing);
   video.classList.toggle("is-photo", isPhoto(item));
+  video.classList.toggle("is-error", !!playback.failed);
+  $("favorite-btn").classList.toggle("active", item.favorite);
+  $("blacklist-btn").classList.toggle("active", item.blacklisted);
+  $("volume").disabled = isPhoto(item);
   $("np-name").textContent = item.name;
   $("np-duration").textContent = isPhoto(item) ? "" : fmt(item.duration);
   setIcon($("play-btn").querySelector(".material-symbol-icon"), playback.playing && !isPhoto(item) ? "pause" : "play_arrow");
@@ -869,6 +1130,7 @@ function renderPlayback() {
   $("play-chip").append(iconSpan(icon), text);
   renderTime();
   document.querySelectorAll(".lib-tile").forEach((tile) => tile.classList.toggle("is-current", Number(tile.dataset.id) === item.id));
+  renderStats();
 }
 
 function setPlaying(playing, by) {
@@ -881,10 +1143,36 @@ function setPlaying(playing, by) {
 function play(item) {
   playback.item = item;
   playback.time = 0;
+  playback.timer = 0;
+  playback.failed = item.missing ? "missing" : isPlayable(item) ? null : "format";
+  if (playback.failed) {
+    // Playback failures are notices: something the user must see, not a status line message.
+    playback.playing = false;
+    playback.autoPaused = false;
+    playback.pausedBy = "error";
+    renderPlayback();
+    followPlayingItem();
+    noticeDialog({
+      message: playback.failed === "missing"
+        ? "Video file not found."
+        : `This video's format (.${extOf(item)}) isn't supported in this browser.`
+    });
+    return;
+  }
+  item.plays += 1;
   setPlaying(true, "user");
   followPlayingItem();
 }
-const nextItem = () => ITEMS[(playback.item.id + 1) % ITEMS.length];
+// The mockup steps through the list in order (the WebUI picks at random), skipping what the applied filter leaves out.
+function nextItem(step = 1) {
+  let index = playback.item.id;
+  for (let n = 0; n < ITEMS.length; n++) {
+    index = (index + step + ITEMS.length) % ITEMS.length;
+    const item = ITEMS[index];
+    if (!item.removed && (!applied.playable || isPlayable(item))) return item;
+  }
+  return playback.item;
+}
 
 let pauseWanted = false;
 function autoPauseWants() {
@@ -904,6 +1192,14 @@ function syncAutoPause() {
 setInterval(() => {
   if (!playback.playing) return;
   const item = playback.item;
+  // Timer mode: every item advances after the timer, even a video that hasn't finished; a paused video holds it.
+  if (playback.autoplay && state.autoplayMode === "timer" && !isPhoto(item)) {
+    playback.timer += 0.25;
+    if (playback.timer >= state.advanceAfter) {
+      play(nextItem());
+      return;
+    }
+  }
   if (isPhoto(item)) {
     if (!photoTimerRuns()) return;
     playback.time += 0.25;
@@ -1099,7 +1395,7 @@ $("play-btn").addEventListener("click", () => {
   if (!isPhoto(playback.item)) setPlaying(!playback.playing, "user");
 });
 $("next-btn").addEventListener("click", () => play(nextItem()));
-$("prev-btn").addEventListener("click", () => play(ITEMS[(playback.item.id + ITEMS.length - 1) % ITEMS.length]));
+$("prev-btn").addEventListener("click", () => play(nextItem(-1)));
 $("seek").addEventListener("input", (event) => {
   playback.time = Number(event.target.value);
   renderTime();
@@ -1112,15 +1408,24 @@ $("autoplay-btn").addEventListener("click", () => {
   playback.autoplay = !playback.autoplay;
   renderPlayback();
 });
-$("photo-seconds").addEventListener("change", renderTime);
-$("mute-btn").addEventListener("click", () => {
-  const button = $("mute-btn");
-  button.classList.toggle("active");
-  setIcon(button.querySelector(".material-symbol-icon"), button.classList.contains("active") ? "volume_off" : "volume_up");
-});
-document.querySelectorAll("[data-toggle]").forEach((button) => {
-  button.addEventListener("click", () => button.classList.toggle("active"));
-});
+function toggleMute() {
+  if (isPhoto(playback.item)) return;
+  playback.muted = !playback.muted;
+  $("mute-btn").classList.toggle("active", playback.muted);
+  setIcon($("mute-btn").querySelector(".material-symbol-icon"), playback.muted ? "volume_off" : "volume_up");
+}
+$("mute-btn").addEventListener("click", toggleMute);
+function toggleFlag(flag) {
+  const item = playback.item;
+  item[flag] = !item[flag];
+  const messages = flag === "favorite" ? ["Added to favorites", "Removed from favorites"] : ["Blacklisted", "Removed from blacklist"];
+  $("status").textContent = item[flag] ? messages[0] : messages[1];
+  renderPlayback();
+  renderStats();
+  layoutGrid(true);
+}
+$("favorite-btn").addEventListener("click", () => toggleFlag("favorite"));
+$("blacklist-btn").addEventListener("click", () => toggleFlag("blacklisted"));
 
 // Fullscreen keeps the panel: it is inside the stage. Without element fullscreen (iPhone), the stage fills the page.
 function isFullscreen() {
@@ -1159,6 +1464,10 @@ document.addEventListener("keydown", (event) => {
   if (document.querySelector("dialog[open]")) return;
   if (state.autoTag) {
     closeAutoTag();
+  } else if (!$("bulk-menu").hidden) {
+    closeBulkMenu();
+  } else if (selecting) {
+    setSelecting(false);
   } else if (!$("mock-sheet").hidden) {
     toggleSheet(false);
   } else if (state.open) {
@@ -1286,7 +1595,11 @@ const DIRECTION_LABELS = {
   Duration: ["Shortest → Longest", "Longest → Shortest"]
 };
 function visibleItems() {
-  let items = ITEMS.slice();
+  let items = ITEMS.filter((item) =>
+    !item.removed &&
+    (!applied.playable || isPlayable(item)) &&
+    (!applied.favoritesOnly || item.favorite) &&
+    (applied.media === "all" || (applied.media === "photos") === isPhoto(item)));
   if (lib.preset === "Favorites") items = items.filter((item) => item.favorite);
   if (lib.preset === "Short clips") items = items.filter((item) => !isPhoto(item) && item.duration < 120);
   if (lib.preset === "Photos only") items = items.filter(isPhoto);
@@ -1349,11 +1662,18 @@ function layoutGrid(force) {
     for (const tile of row.tiles) {
       const item = items[tile.index];
       const tileEl = document.createElement("div");
-      tileEl.className = "lib-tile" + (item.id === playback.item.id ? " is-current" : "");
+      tileEl.className = "lib-tile" + (item.id === playback.item.id ? " is-current" : "") +
+        (selected.has(item.id) ? " is-selected" : "") + (Date.now() < placeholderUntil ? " is-placeholder" : "");
       tileEl.dataset.id = String(item.id);
       tileEl.tabIndex = 0;
-      tileEl.setAttribute("role", "button");
-      tileEl.setAttribute("aria-label", `Play ${item.name}`);
+      if (selecting) {
+        tileEl.setAttribute("role", "checkbox");
+        tileEl.setAttribute("aria-checked", String(selected.has(item.id)));
+        tileEl.setAttribute("aria-label", item.name);
+      } else {
+        tileEl.setAttribute("role", "button");
+        tileEl.setAttribute("aria-label", `Play ${item.name}`);
+      }
       tileEl.style.width = `${tile.width}px`;
       tileEl.style.height = `${row.height}px`;
       const art = document.createElement("div");
@@ -1370,6 +1690,12 @@ function layoutGrid(force) {
       name.className = "lib-tile-name";
       name.textContent = item.name;
       tileEl.append(name);
+      if (selecting) {
+        const mark = document.createElement("span");
+        mark.className = "select-mark";
+        mark.append(iconSpan("check_circle"));
+        tileEl.append(mark);
+      }
       rowEl.append(tileEl);
     }
     grid.append(rowEl);
@@ -1380,8 +1706,18 @@ new ResizeObserver(() => layoutGrid()).observe($("lib-grid"));
 
 function chooseTile(event) {
   const tile = event.target.closest(".lib-tile");
-  if (!tile) return;
-  play(ITEMS[Number(tile.dataset.id)]);
+  if (!tile || tile.classList.contains("is-placeholder")) return;
+  if (swallowClick) {
+    swallowClick = false;
+    return;
+  }
+  const id = Number(tile.dataset.id);
+  // In selection, a tap selects; outside it, Ctrl or Cmd and Shift select as on the desktop.
+  if (selecting || event.ctrlKey || event.metaKey || event.shiftKey) {
+    selectTile(id, event.shiftKey);
+    return;
+  }
+  play(ITEMS[id]);
   // As the overlay, choosing a tile closes it as the library overlay does today; beside the player it stays open.
   if (state.mode === "overlay") closePanel();
 }
@@ -1394,23 +1730,23 @@ $("lib-grid").addEventListener("keydown", (event) => {
 });
 $("lib-search").addEventListener("input", (event) => {
   lib.search = event.target.value;
-  layoutGrid(true);
+  reloadGrid();
 });
 $("lib-sort").addEventListener("change", (event) => {
   lib.sort = event.target.value;
   lib.descending = lib.sort !== "Name";
   $("lib-dir").textContent = DIRECTION_LABELS[lib.sort][lib.descending ? 1 : 0];
-  layoutGrid(true);
+  reloadGrid();
 });
 $("lib-dir").addEventListener("click", () => {
   lib.descending = !lib.descending;
   $("lib-dir").textContent = DIRECTION_LABELS[lib.sort][lib.descending ? 1 : 0];
-  layoutGrid(true);
+  reloadGrid();
 });
 $("lib-preset").addEventListener("change", (event) => {
   lib.preset = event.target.value;
   $("filter-heading").textContent = `Preset: ${lib.preset || "None"}`;
-  layoutGrid(true);
+  reloadGrid();
 });
 
 // ---- Filter tab ----
@@ -1506,6 +1842,8 @@ $("filter-apply").addEventListener("click", () => {
   filterPending = false;
   takeSnapshot();
   renderApply();
+  readApplied();
+  reloadGrid();
   $("status").textContent = "Filters applied.";
   if (state.mode === "overlay") closePanel();
 });
@@ -1919,7 +2257,7 @@ $("header-admin").addEventListener("click", () => {
   $("status").textContent = "(Mockup) The admin view arrives with WebUI Admin Section.";
 });
 function openStats() {
-  if (state.later) openPanel("stats", $("np-name"));
+  openPanel("stats", $("np-name"));
 }
 $("np-name").addEventListener("click", openStats);
 $("np-name").addEventListener("keydown", (event) => {
@@ -1959,8 +2297,6 @@ function bindRadio(name, key) {
     });
   });
 }
-bindRadio("mock-side", "side");
-bindRadio("mock-autopause", "autoPause");
 document.querySelectorAll('input[name="mock-theme"]').forEach((radio) => {
   radio.checked = radio.value === store.get("theme", "system");
   radio.addEventListener("change", () => {
@@ -1969,40 +2305,566 @@ document.querySelectorAll('input[name="mock-theme"]').forEach((radio) => {
   });
 });
 
-function applyLater() {
-  document.querySelectorAll("[data-later]").forEach((el) => (el.hidden = !state.later));
-  $("header-admin").hidden = !state.later;
-  $("photo-duration").hidden = state.later;
-  const name = $("np-name");
-  name.classList.toggle("is-link", state.later);
-  if (state.later) {
-    name.setAttribute("role", "button");
-    name.tabIndex = 0;
-    name.title = "Show stats";
-  } else {
-    name.removeAttribute("role");
-    name.removeAttribute("tabindex");
-    name.title = "";
-  }
-  if (!state.later && (state.tab === "stats" || state.tab === "settings")) showTab("library");
-}
-$("mock-later").checked = state.later;
-$("mock-later").addEventListener("change", (event) => {
-  state.later = event.target.checked;
-  store.set("later", state.later);
-  applyLater();
-  applyLayout();
-});
 $("mock-reset").addEventListener("click", () => {
   ["open", "tab", "width", "side"].forEach((key) => store.remove(key));
   Object.assign(state, { open: false, width: PANEL_DEFAULT, side: "right" });
-  document.querySelectorAll('input[name="mock-side"]').forEach((radio) => (radio.checked = radio.value === "right"));
+  document.querySelectorAll('input[name="set-side"]').forEach((radio) => (radio.checked = radio.value === "right"));
   showTab("library");
 });
 
+// ---- The applied filter, its summary line, and placeholder tiles ----
+const applied = { playable: false, favoritesOnly: false, media: "all", parts: [] };
+function readApplied() {
+  const general = filterBody.querySelector('[data-subpanel="general"]');
+  const parts = [];
+  general.querySelectorAll(".filter-section").forEach((section) => {
+    const heading = section.querySelector("h3").textContent;
+    if (heading === "Basic Filters") {
+      section.querySelectorAll("label").forEach((label) => {
+        if (label.querySelector("input").checked) parts.push(label.textContent.trim());
+      });
+    } else if (heading === "Media Type" || heading === "Audio Filter") {
+      const radios = [...section.querySelectorAll('input[type="radio"]')];
+      const chosen = radios.find((radio) => radio.checked);
+      if (chosen && chosen !== radios[0]) parts.push(chosen.parentElement.textContent.trim());
+    } else if (heading.startsWith("Sources")) {
+      const boxes = [...section.querySelectorAll('input[type="checkbox"]')];
+      const on = boxes.filter((box) => box.checked).length;
+      if (on < boxes.length) parts.push(`${on} of ${boxes.length} sources`);
+    }
+  });
+  if (minField.input.value && !minField.holds) parts.push(`Min ${minField.input.value}`);
+  if (maxField.input.value && !maxField.holds) parts.push(`Max ${maxField.input.value}`);
+  const tagCount = FILTER_TAGS.reduce((n, category) => n + category.chips.filter((chip) => chip[1]).length, 0);
+  if (tagCount) parts.push(`${tagCount} tag${tagCount === 1 ? "" : "s"}`);
+  const media = [...general.querySelectorAll('input[name="media"]')].findIndex((radio) => radio.checked);
+  Object.assign(applied, {
+    playable: $("filter-playable").checked,
+    favoritesOnly: general.querySelector('input[type="checkbox"]').checked,
+    media: ["all", "videos", "photos"][media] || "all",
+    parts
+  });
+  renderFilterSummary();
+}
+// Proposed: a one-line summary of the applied filter above the grid, as the desktop shows; it opens the Filter tab.
+function renderFilterSummary() {
+  const line = $("lib-filters");
+  line.hidden = applied.parts.length === 0;
+  line.textContent = "";
+  const label = document.createElement("b");
+  label.textContent = "Filters: ";
+  line.append(label, applied.parts.join(" · "));
+}
+$("lib-filters").addEventListener("click", () => showTab("filter"));
+
+// While a page of results loads, its tiles show as placeholders.
+let placeholderUntil = 0;
+function reloadGrid() {
+  placeholderUntil = Date.now() + 450;
+  layoutGrid(true);
+  setTimeout(() => layoutGrid(true), 480);
+}
+
+// ---- Multi-select and bulk actions ----
+let selecting = false;
+let lastSelected = null;
+let swallowClick = false;
+const selected = new Set();
+function renderBulk() {
+  $("lib-select").setAttribute("aria-pressed", String(selecting));
+  $("bulk-bar").hidden = !selecting;
+  $("bulk-count").textContent = `${selected.size} selected`;
+  $("bulk-actions").disabled = selected.size === 0;
+}
+function setSelecting(on) {
+  selecting = on;
+  if (!on) {
+    selected.clear();
+    lastSelected = null;
+  }
+  closeBulkMenu();
+  renderBulk();
+  layoutGrid(true);
+}
+function selectTile(id, range) {
+  selecting = true;
+  if (range && lastSelected !== null) {
+    const ids = visibleItems().items.map((item) => item.id);
+    const from = ids.indexOf(lastSelected);
+    const to = ids.indexOf(id);
+    if (from >= 0 && to >= 0) ids.slice(Math.min(from, to), Math.max(from, to) + 1).forEach((x) => selected.add(x));
+  } else if (selected.has(id)) {
+    selected.delete(id);
+  } else {
+    selected.add(id);
+  }
+  lastSelected = id;
+  renderBulk();
+  layoutGrid(true);
+  const tile = $("lib-grid").querySelector(`.lib-tile[data-id="${id}"]`);
+  if (tile) tile.focus({ preventScroll: true });
+}
+$("lib-select").addEventListener("click", () => setSelecting(!selecting));
+$("bulk-exit").addEventListener("click", () => setSelecting(false));
+$("bulk-all").addEventListener("click", () => {
+  visibleItems().items.forEach((item) => selected.add(item.id));
+  renderBulk();
+  layoutGrid(true);
+});
+
+// A long press on a tile starts selection on touch screens.
+let pressTimer = 0;
+$("lib-grid").addEventListener("pointerdown", (event) => {
+  const tile = event.target.closest(".lib-tile");
+  if (!tile || event.pointerType === "mouse") return;
+  const start = { x: event.clientX, y: event.clientY };
+  clearTimeout(pressTimer);
+  pressTimer = setTimeout(() => {
+    swallowClick = true;
+    selectTile(Number(tile.dataset.id), false);
+  }, 500);
+  const cancel = (move) => {
+    if (move.type === "pointermove" && Math.hypot(move.clientX - start.x, move.clientY - start.y) < 8) return;
+    clearTimeout(pressTimer);
+    $("lib-grid").removeEventListener("pointermove", cancel);
+  };
+  $("lib-grid").addEventListener("pointermove", cancel);
+  $("lib-grid").addEventListener("pointerup", cancel, { once: true });
+  $("lib-grid").addEventListener("pointercancel", cancel, { once: true });
+});
+$("lib-grid").addEventListener("contextmenu", (event) => {
+  if (event.target.closest(".lib-tile") && swallowClick) event.preventDefault();
+});
+
+function closeBulkMenu() {
+  $("bulk-menu").hidden = true;
+  $("bulk-actions").setAttribute("aria-expanded", "false");
+}
+$("bulk-actions").addEventListener("click", (event) => {
+  event.stopPropagation();
+  const open = $("bulk-menu").hidden;
+  $("bulk-menu").hidden = !open;
+  $("bulk-actions").setAttribute("aria-expanded", String(open));
+  if (open) $("bulk-menu").querySelector("button").focus();
+});
+document.addEventListener("click", (event) => {
+  if (!$("bulk-menu").hidden && !event.target.closest("#bulk-menu")) closeBulkMenu();
+});
+$("bulk-menu").addEventListener("keydown", (event) => {
+  const items = [...$("bulk-menu").querySelectorAll("button")];
+  const index = items.indexOf(document.activeElement);
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    items[(index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus();
+  }
+});
+$("bulk-menu").addEventListener("click", (event) => {
+  const item = event.target.closest("[data-bulk]");
+  if (item) runBulk(item.dataset.bulk);
+});
+
+const countOf = (n) => (n === 1 ? "1 item" : `${n} items`);
+async function runBulk(kind) {
+  closeBulkMenu();
+  const items = [...selected].map((id) => ITEMS[id]);
+  const noun = countOf(items.length);
+  const status = (text) => ($("status").textContent = text);
+  if (kind === "fav-add") { items.forEach((item) => (item.favorite = true)); status(`Added ${noun} to favorites.`); }
+  if (kind === "fav-remove") { items.forEach((item) => (item.favorite = false)); status(`Removed ${noun} from favorites.`); }
+  if (kind === "bl-add") { items.forEach((item) => (item.blacklisted = true)); status(`Blacklisted ${noun}.`); }
+  if (kind === "bl-remove") { items.forEach((item) => (item.blacklisted = false)); status(`Removed ${noun} from the blacklist.`); }
+  if (kind === "tags") return openBulkTags(items);
+  if (kind === "clear") {
+    if (!(await confirmDialog({ message: `Clear playback stats for ${noun}?`, confirmLabel: "Clear", danger: true }))) return;
+    items.forEach((item) => {
+      item.plays = 0;
+      item.lastPlayedDays = null;
+    });
+    status(`Cleared playback stats for ${noun}.`);
+  }
+  if (kind === "remove") await removeFromLibrary(items);
+  renderPlayback();
+  layoutGrid(true);
+}
+
+// Tag edits across the selection, as the desktop's item tags dialog does: green chips are on every selected item,
+// orange on some of them.
+function openBulkTags(items) {
+  const pending = new Map();
+  const body = document.createElement("div");
+  body.className = "dialog-body";
+  const heading = document.createElement("h3");
+  heading.id = `bulk-tags-${Date.now()}`;
+  heading.textContent = `Edit tags for ${countOf(items.length)}`;
+  const hint = document.createElement("p");
+  hint.className = "filter-hint";
+  hint.textContent = "Green: every selected item has the tag. Orange: some do. Add or remove applies to all of them.";
+  const list = document.createElement("div");
+  list.className = "bulk-tags";
+  const actions = document.createElement("div");
+  actions.className = "dialog-actions";
+  const spacer = document.createElement("span");
+  spacer.className = "dialog-spacer";
+  const cancel = dialogButton("Cancel");
+  const save = dialogButton("Save");
+  actions.append(spacer, cancel, save);
+  body.append(heading, hint, list, actions);
+  const render = () => {
+    list.textContent = "";
+    TAGS.forEach((category) => {
+      if (!category.chips.length) return;
+      const title = document.createElement("h4");
+      title.textContent = category.name;
+      const grid = document.createElement("div");
+      grid.className = "tag-grid";
+      category.chips.forEach((chip) => {
+        const count = items.filter((item) => item.tags.has(chip.key)).length;
+        const toggle = (action) => () => {
+          if (pending.get(chip.key) === action) pending.delete(chip.key);
+          else pending.set(chip.key, action);
+          render();
+        };
+        grid.append(chipEl(chip.name, [
+          ["add", "Add to all", pending.get(chip.key) === "add", toggle("add")],
+          ["remove", "Remove from all", pending.get(chip.key) === "remove", toggle("remove")]
+        ], count === items.length ? "state-all" : count ? "state-some" : ""));
+      });
+      list.append(title, grid);
+    });
+    save.disabled = pending.size === 0;
+  };
+  render();
+  const { close } = openDialog({ content: body, labelledBy: heading.id });
+  cancel.addEventListener("click", () => close(false));
+  save.addEventListener("click", () => {
+    items.forEach((item) => pending.forEach((action, key) => (action === "add" ? item.tags.add(key) : item.tags.delete(key))));
+    $("status").textContent = `Updated tags on ${countOf(items.length)}.`;
+    close(true);
+    followPlayingItem();
+    renderStats();
+  });
+  cancel.focus();
+}
+
+// Admin actions ask for the control token from another machine, as the admin view does.
+function askControlToken() {
+  if (state.serverMachine) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let accepted = false;
+    nameDialog({
+      title: "Control token",
+      label: "This is an admin action. Enter the server's control token.",
+      value: "",
+      inputType: "password",
+      saveLabel: "Continue",
+      check: (value) => (value.trim() ? null : { message: "Enter the control token.", empty: true }),
+      holdReason: () => "Enter the control token first.",
+      onSave: () => {
+        accepted = true;
+      },
+      onClose: () => resolve(accepted)
+    });
+  });
+}
+async function removeFromLibrary(items) {
+  if (!(await askControlToken())) return;
+  const noun = countOf(items.length);
+  const answer = await new Promise((resolve) => {
+    const body = document.createElement("div");
+    body.className = "dialog-body";
+    const text = document.createElement("p");
+    text.className = "dialog-message";
+    text.id = `remove-${Date.now()}`;
+    text.textContent = `Remove ${noun} from the library?`;
+    const option = document.createElement("label");
+    option.className = "choice-row";
+    option.innerHTML = '<input type="checkbox"> Also delete the files from disk';
+    const actions = document.createElement("div");
+    actions.className = "dialog-actions";
+    const spacer = document.createElement("span");
+    spacer.className = "dialog-spacer";
+    const cancel = dialogButton("Cancel");
+    const remove = dialogButton("Remove", "btn-danger");
+    actions.append(spacer, cancel, remove);
+    body.append(text, option, actions);
+    const { close } = openDialog({ content: body, labelledBy: text.id, role: "alertdialog", onClose: (result) => resolve(result) });
+    cancel.addEventListener("click", () => close(null));
+    remove.addEventListener("click", () => close({ deleteFiles: option.querySelector("input").checked }));
+    cancel.focus();
+  });
+  if (!answer) return;
+  items.forEach((item) => (item.removed = true));
+  selected.clear();
+  renderBulk();
+  $("status").textContent = answer.deleteFiles ? `Removed ${noun} from the library and deleted their files.` : `Removed ${noun} from the library.`;
+}
+
+// ---- Stats tab ----
+function statRow(list, label, value) {
+  const dt = document.createElement("dt");
+  dt.textContent = label;
+  const dd = document.createElement("dd");
+  if (value instanceof Node) dd.append(value);
+  else dd.textContent = value;
+  list.append(dt, dd);
+}
+const yesNo = (value) => (value ? "Yes" : "No");
+function renderStats() {
+  const host = $("stats-body");
+  if (!host) return;
+  const item = playback.item;
+  host.textContent = "";
+
+  const file = document.createElement("section");
+  file.className = "stats-section";
+  file.innerHTML = "<h3>Current file</h3>";
+  const name = document.createElement("p");
+  name.className = "stats-file-name";
+  name.textContent = item.name;
+  const path = document.createElement("div");
+  path.className = "stats-path";
+  const code = document.createElement("code");
+  code.textContent = item.path;
+  // The server opens its file manager only for a browser on the server machine; elsewhere the path is copied.
+  const action = dialogButton(state.serverMachine ? "Show in File Manager" : "Copy Path");
+  action.prepend(iconSpan(state.serverMachine ? "folder_open" : "content_copy"));
+  action.addEventListener("click", () => {
+    if (state.serverMachine) {
+      $("status").textContent = "Opened in the file manager.";
+    } else {
+      navigator.clipboard?.writeText(item.path).catch(() => {});
+      $("status").textContent = "Path copied.";
+    }
+  });
+  path.append(code, action);
+  const table = document.createElement("dl");
+  table.className = "stats-table";
+  statRow(table, "Plays", String(item.plays));
+  statRow(table, "Last played", item.lastPlayedDays ? `${item.lastPlayedDays} days ago` : "Never");
+  statRow(table, "Favorite", yesNo(item.favorite));
+  statRow(table, "Blacklisted", yesNo(item.blacklisted));
+  if (!isPhoto(item)) {
+    statRow(table, "Duration", fmt(item.duration));
+    statRow(table, "Has audio", yesNo(item.hasAudio));
+    statRow(table, "Loudness", `${item.loudness.toFixed(1)} LUFS`);
+    statRow(table, "Adjustment", `${(BASELINE - item.loudness).toFixed(1)} dB`);
+    statRow(table, "Peak", `${item.peak.toFixed(1)} dBFS`);
+  }
+  const tags = document.createElement("div");
+  tags.className = "stats-tags";
+  TAGS.flatMap((category) => category.chips).filter((chip) => item.tags.has(chip.key)).forEach((chip) => {
+    const tag = document.createElement("span");
+    tag.className = "stats-tag";
+    tag.textContent = chip.name;
+    tags.append(tag);
+  });
+  statRow(table, "Tags", tags.childElementCount ? tags : "None");
+  file.append(name, path, table);
+
+  const library = document.createElement("section");
+  library.className = "stats-section";
+  library.innerHTML = "<h3>Library</h3>";
+  const live = ITEMS.filter((x) => !x.removed);
+  const videos = live.filter((x) => !isPhoto(x));
+  const cards = [
+    ["Videos", videos.length],
+    ["Photos", live.length - videos.length],
+    ["Total media", live.length],
+    ["Favorites", live.filter((x) => x.favorite).length],
+    ["Blacklisted", live.filter((x) => x.blacklisted).length],
+    ["Total plays", live.reduce((n, x) => n + x.plays, 0)],
+    ["Unique played", live.filter((x) => x.plays).length],
+    ["Never played", live.filter((x) => !x.plays).length],
+    ["Videos with audio", videos.filter((x) => x.hasAudio).length],
+    ["Videos without audio", videos.filter((x) => !x.hasAudio).length],
+    ["Baseline loudness", `${BASELINE} LUFS`]
+  ];
+  const grid = document.createElement("div");
+  grid.className = "stats-grid";
+  cards.forEach(([label, value]) => {
+    const card = document.createElement("div");
+    card.className = "stat-card";
+    card.innerHTML = '<div class="value"></div><div class="label"></div>';
+    card.firstChild.textContent = typeof value === "number" ? value.toLocaleString() : value;
+    card.lastChild.textContent = label;
+    grid.append(card);
+  });
+  library.append(grid);
+  // Proposed order: the current file first, since the file name opens this tab.
+  host.append(file, library);
+}
+
+// ---- Settings tab ----
+function bindChoice(name, key, toValue, after) {
+  document.querySelectorAll(`input[name="${name}"]`).forEach((radio) => {
+    radio.checked = String(state[key]) === radio.value;
+    radio.addEventListener("change", () => {
+      state[key] = toValue(radio.value);
+      store.set(key, state[key]);
+      if (after) after();
+    });
+  });
+}
+function rangeCheck(min, max, unit, whole) {
+  return (value) => {
+    const text = value.trim();
+    const ok = whole ? /^\d+$/.test(text) : /^-?\d+(\.\d+)?$/.test(text);
+    const n = Number(text);
+    return ok && n >= min && n <= max ? null : { message: `Use a ${whole ? "whole " : ""}number from ${min} to ${max}${unit}.` };
+  };
+}
+function initSettings() {
+  bindChoice("set-autoplay", "autoplayMode", String, renderTime);
+  bindChoice("set-seek", "seekStep", Number);
+  bindChoice("set-volstep", "volumeStep", Number);
+  bindChoice("set-side", "side", String, applyLayout);
+  bindChoice("set-autopause", "autoPause", String, applyLayout);
+  // A value that is not valid is flagged and not kept; the one in use stays.
+  const advance = new ValidatedField($("set-advance"), rangeCheck(1, 3600, " seconds", true));
+  advance.input.value = String(state.advanceAfter);
+  advance.update();
+  advance.onChange(() => {
+    if (advance.holds) return;
+    state.advanceAfter = Number(advance.input.value);
+    store.set("advanceAfter", state.advanceAfter);
+    renderTime();
+  });
+  const reduce = new ValidatedField($("set-norm-reduce"), rangeCheck(1, 30, " dB", true));
+  const boost = new ValidatedField($("set-norm-boost"), rangeCheck(0, 10, " dB", true));
+  const target = new ValidatedField($("set-norm-target"), rangeCheck(-50, -10, " LUFS", false));
+  const syncNorm = () => {
+    const on = $("set-norm").checked;
+    const manual = document.querySelector('input[name="set-baseline"]:checked').value === "manual";
+    $("norm-fields").classList.toggle("is-off", !on);
+    $("norm-fields").querySelectorAll("input").forEach((input) => (input.disabled = !on));
+    target.input.disabled = !on || !manual;
+    [reduce, boost, target].forEach((field) => field.update());
+  };
+  $("set-norm").addEventListener("change", syncNorm);
+  document.querySelectorAll('input[name="set-baseline"]').forEach((radio) => radio.addEventListener("change", syncNorm));
+  syncNorm();
+  const list = $("shortcut-list");
+  SHORTCUTS.forEach(([keys, action]) => {
+    const dt = document.createElement("dt");
+    keys.split(" ").forEach((key, i) => {
+      if (key === "/" || key === "–") {
+        dt.append(` ${key} `);
+        return;
+      }
+      const kbd = document.createElement("kbd");
+      kbd.textContent = key;
+      dt.append(kbd);
+    });
+    const dd = document.createElement("dd");
+    dd.textContent = action;
+    list.append(dt, dd);
+  });
+}
+
+// ---- Keyboard shortcuts: the desktop's keys, plus proposed keys for the tabs and fullscreen ----
+const SHORTCUTS = [
+  ["K", "Play or pause"],
+  ["J / L", "Seek back or forward by the seek step"],
+  ["← / →", "Previous or next"],
+  ["R", "Random"],
+  ["F", "Favorite"],
+  ["B", "Blacklist"],
+  ["A", "Autoplay on or off"],
+  ["M", "Mute"],
+  [", / .", "Volume down or up by the volume step"],
+  ["1 – 5", "Open Library, Filter, Tags, Stats, or Settings; the open tab's key closes the panel"],
+  ["T", "Tags, as on the desktop"],
+  ["S", "Settings, as on the desktop"],
+  ["P", "Show or hide the panel, like the desktop's player view"],
+  ["Shift+F", "Fullscreen"],
+  ["Esc", "Close the top dialog, stop selecting, or close the panel"]
+];
+const TAB_KEYS = { 1: "library", 2: "filter", 3: "tags", 4: "stats", 5: "settings", t: "tags", s: "settings" };
+const isTextField = (el) =>
+  el && (el.isContentEditable || el.tagName === "TEXTAREA" || el.tagName === "SELECT" ||
+    (el.tagName === "INPUT" && !["checkbox", "radio", "button", "submit"].includes(el.type)));
+function setVolume(value) {
+  state.volume = Math.max(0, Math.min(100, value));
+  store.set("volume", state.volume);
+  $("volume").value = String(state.volume);
+  $("status").textContent = `Volume ${state.volume}%`;
+}
+document.addEventListener("keydown", (event) => {
+  if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (isTextField(event.target) || document.querySelector("dialog[open]")) return;
+  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+  const item = playback.item;
+  const handled = () => event.preventDefault();
+  if (event.shiftKey && key === "f") return handled(), $("fullscreen-btn").click();
+  if (event.shiftKey) return;
+  if (key === "k") return handled(), $("play-btn").click();
+  if ((key === "j" || key === "l") && !isPhoto(item) && !playback.failed) {
+    handled();
+    playback.time = Math.max(0, Math.min(item.duration, playback.time + (key === "l" ? 1 : -1) * state.seekStep));
+    return renderTime();
+  }
+  // Arrow keys keep their own job on radio buttons and checkboxes.
+  if ((key === "ArrowLeft" || key === "ArrowRight") && event.target.tagName === "INPUT") return;
+  if (key === "ArrowLeft") return handled(), play(nextItem(-1));
+  if (key === "ArrowRight") return handled(), play(nextItem());
+  if (key === "r") {
+    handled();
+    const pool = ITEMS.filter((x) => !x.removed && (!applied.playable || isPlayable(x)));
+    return play(pool[Math.floor(Math.random() * pool.length)]);
+  }
+  if (key === "f") return handled(), toggleFlag("favorite");
+  if (key === "b") return handled(), toggleFlag("blacklisted");
+  if (key === "a") return handled(), $("autoplay-btn").click();
+  if (key === "m") return handled(), toggleMute();
+  if ((key === "," || key === ".") && !state.iosVolume) return handled(), setVolume(state.volume + (key === "." ? 1 : -1) * state.volumeStep);
+  if (key === "p") return handled(), $("panel-btn").click();
+  if (TAB_KEYS[key]) {
+    handled();
+    if (state.open && state.tab === TAB_KEYS[key]) closePanel();
+    else openPanel(TAB_KEYS[key]);
+  }
+});
+
+// ---- Volume and pairing ----
+$("volume").value = String(state.volume);
+$("volume").addEventListener("input", (event) => {
+  state.volume = Number(event.target.value);
+  store.set("volume", state.volume);
+});
+const pairField = new ValidatedField($("pair-token"), (value) => (value.trim() ? null : { message: "Enter the pairing token.", empty: true }));
+holdAction($("pair-btn"), () => [pairField], { reason: () => "Enter the pairing token first." });
+$("pair").addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (pairField.holds) return;
+  state.pairing = false;
+  store.set("pairing", false);
+  $("mock-pairing").checked = false;
+  applyMockOptions();
+  $("status").textContent = "Paired.";
+});
+
+// ---- Mockup options ----
+function applyMockOptions() {
+  $("pair").hidden = !state.pairing;
+  $("volume-wrap").hidden = state.iosVolume;
+  renderStats();
+  placeAllTips();
+}
+[["mock-pairing", "pairing"], ["mock-server-machine", "serverMachine"], ["mock-ios-volume", "iosVolume"]].forEach(([id, key]) => {
+  $(id).checked = state[key];
+  $(id).addEventListener("change", () => {
+    state[key] = $(id).checked;
+    store.set(key, state[key]);
+    applyMockOptions();
+  });
+});
+
 // ---- Start ----
-applyLater();
-showTab(state.tab === "stats" || state.tab === "settings" ? (state.later ? state.tab : "library") : state.tab);
+readApplied();
+renderStats();
+initSettings();
+applyMockOptions();
+showTab(state.tab);
 $("mock-hint").hidden = state.open;
 renderPlayback();
 renderApply();

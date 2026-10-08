@@ -1,19 +1,19 @@
-# WebUI panel mockups
+# WebUI design mockup
 
-Interactive mockups of the WebUI's responsive layout, approved before the code was written. They are kept as the design reference after that work ships, and are not part of the WebUI build.
+An interactive mockup of the whole visible UI of v0.15.0, approved before the milestones that build it. It stays as the design reference after that work ships, and is not part of the WebUI build.
 
 - `index.html` links the pages and lists the numbers set with them.
 - `layout.html` shows the main page:
-  - the side panel on either side of the player, with its resize handle;
-  - the icon tab row;
-  - the full-screen overlay at phone widths;
-  - what Auto-Pause does, shown by a stand-in video that plays;
-  - the in-app dialogs;
-  - drag-handle reordering;
-  - the scrub bar on photos.
+  - the header, the player with its controls, and the status line;
+  - the side panel on either side of the player, with its resize handle, or as the full-screen overlay at phone widths;
+  - the Library, Filter, Tags, Stats, and Settings tabs, with multi-select and bulk actions in the Library;
+  - the in-app dialogs, the keyboard shortcuts, and the volume control;
+  - what Auto-Pause does, shown by a stand-in video that plays.
+- `admin.html` shows the full-page admin view, its sections, duplicate review, and the control token gate.
 - `validation.html` shows each state of the field validation pattern, with what a screen reader is given.
+- `desktop-notice.html` shows the notice the last desktop build gives once.
 
-Magenta dashed boxes and the **Mockup** tab on the left edge are mockup controls, not part of the design.
+Magenta dashed boxes and the mockup controls are not part of the design. A note that starts with "Proposed" or "Open" marks something still to decide.
 
 ## Opening them
 

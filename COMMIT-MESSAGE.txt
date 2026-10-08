@@ -19,11 +19,10 @@ Instructions:
 
 Commit Message:
 
-Docs: Record the WebUI panel design and keep its mockups
+Docs: Add the WebUI design mockup milestone and mock all of v0.15.0
 
-- Add interactive mockups of the WebUI's responsive layout and field validation in `docs/mockups/webui-panels/`, with their build scripts, a happy-dom check, and a README on rebuilding them and serving them to a phone. They stay as the design reference after the work ships.
-- Record in WebUI Responsive Layout and Panels the decisions settled with the mockups: the overlay and width breakpoints, the right side by default, smaller library tiles, one panel button on the player, a remembered open state, Auto Tag over the whole page, and a scrub bar on photos that shows the photo's timer.
-- Add to it a themed in-app dialog component that stacks a delete confirmation above its edit dialog, Edit Category and Edit Preset dialogs that hold Delete, drag-handle reordering, category headers that toggle, strict typed durations, a held photo resuming with its time left, and Refresh keeping unsaved preset changes, and split the milestone into five parts.
-- Record that the Tags tab follows the playing item unless it has unsaved changes to that item's tags, naming the item it stays on; that unsaved Filter and Tags changes survive closing the panel, marked by a dot on their tab and the panel button; and that a confirmation opens with Cancel focused so Enter never deletes.
-- Move the dialog component and six of the native dialogs from WebUI In-App Dialogs, and drop the tag editor's close confirmation; that milestone keeps the Refresh confirmation, new category name, and the notice.
-- Drop the header's settings icon from WebUI Settings Panel, since the panel's tab row reaches the Settings tab.
+- Add WebUI Design Mockup, first in v0.15.0 after the Preact migration: the whole visible UI of the release is designed and approved in one interactive mockup, and each decision is recorded in the milestone that builds it. Renumber the unstarted v0.15.0 milestones after it.
+- Move the mockup work and its settled numbers out of WebUI Responsive Layout and Panels, which keeps the implementation and returns to planned.
+- Extend the mockup to what later milestones build: the Stats tab with Show in File Manager or Copy Path, the Settings tab with every per-device setting, the autoplay modes, and Auto-Pause, working keyboard shortcuts and their reference, the volume control, multi-select and bulk actions, the browser-playable option and its notice, placeholder tiles, and the pairing prompt.
+- Add the full-page admin view, with the Operator page's sections, refresh, backups, sources, catalog transfer, duplicate review, and the control token gate, and the desktop's retirement notice.
+- Mark each proposal and open question in the mockup for approval; none is recorded in its building milestone yet.

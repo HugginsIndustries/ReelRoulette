@@ -10,7 +10,7 @@ js = open(os.path.join(here, "common.js")).read().replace(
     "/*@ICON_CODEPOINTS@*/ {}", json.dumps(icons["codepoints"], sort_keys=True)
 )
 
-for name in ("index", "layout", "validation"):
+for name in ("index", "layout", "validation", "admin", "desktop-notice"):
     page = open(os.path.join(here, f"{name}.src.html")).read()
     assert page.count("/*@COMMON_CSS@*/") == 1 and page.count("/*@COMMON_JS@*/") == 1, name
     page = page.replace("/*@COMMON_CSS@*/", css).replace("/*@COMMON_JS@*/", js)

@@ -363,6 +363,7 @@ body.sorting, body.sorting * { cursor: grabbing !important; user-select: none; -
   line-height: 1.4;
 }
 .mock-note b, .mock-note strong { color: var(--mock); }
+.mock-inline { margin: 4px 0 8px; padding: 6px 8px; }
 .mock-label {
   font-size: 0.7rem;
   font-weight: 700;
