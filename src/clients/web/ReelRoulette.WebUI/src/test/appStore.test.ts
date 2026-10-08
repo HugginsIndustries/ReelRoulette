@@ -228,8 +228,7 @@ describe("createAppStore", () => {
     const { store } = setup();
     const requested = vi.fn();
     store.on("overlayRequested", requested);
-    store.openOverlay("filter");
     store.openOverlay("tagEditor");
-    expect(requested.mock.calls).toEqual([["filter"], ["tagEditor"]]);
+    expect(requested.mock.calls).toEqual([["tagEditor"]]);
   });
 });

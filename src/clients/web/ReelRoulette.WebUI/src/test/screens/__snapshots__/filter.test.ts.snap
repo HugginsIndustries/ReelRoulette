@@ -1,0 +1,907 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`opening and closing > keeps its markup on each tab > general 1`] = `
+"<div class="filter-dialog" id="filter-dialog" style="display: flex">
+  <div class="filter-dialog-header">
+    <h2 id="filter-dialog-heading">
+      "Preset: Rich"
+    <div class="filter-dialog-actions">
+      <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="filter-dialog-refresh-btn" title="Refresh" type="button">
+        <span class="material-symbol-icon">
+          "refresh"
+      <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="filter-dialog-close-btn" title="Close" type="button">
+        <span class="material-symbol-icon">
+          "close"
+  <div class="filter-dialog-tabstrip" role="tablist">
+    <button aria-selected="true" class="filter-tab is-active" data-filter-tab="general" role="tab" type="button">
+      "General"
+    <button aria-selected="false" class="filter-tab" data-filter-tab="tags" role="tab" type="button">
+      "Tags"
+    <button aria-selected="false" class="filter-tab" data-filter-tab="presets" role="tab" type="button">
+      "Presets"
+  <div class="filter-dialog-body themed-scrollbar">
+    <div class="filter-panel" id="filter-panel-general" style="display: block">
+      <div class="filter-section">
+        <h3>
+          "Basic Filters"
+        <div class="filter-stack">
+          <label>
+            <input checked="true" id="filter-fav-only" type="checkbox">
+            "Favorites only"
+          <label>
+            <input checked="true" id="filter-excl-bl" type="checkbox">
+            "Exclude blacklisted"
+          <label>
+            <input checked="false" id="filter-never-played" type="checkbox">
+            "Only never played"
+          <label>
+            <input checked="false" id="filter-known-dur" type="checkbox">
+            "Only videos with known duration"
+          <label>
+            <input checked="false" id="filter-known-loud" type="checkbox">
+            "Only videos with known loudness"
+      <div class="filter-section">
+        <h3>
+          "Media Type"
+        <div class="filter-stack">
+          <label>
+            <input checked="false" name="filter-media-type" type="radio" value="0">
+            "All (Videos and Photos)"
+          <label>
+            <input checked="true" name="filter-media-type" type="radio" value="1">
+            "Videos only"
+          <label>
+            <input checked="false" name="filter-media-type" type="radio" value="2">
+            "Photos only"
+      <div class="filter-section">
+        <h3>
+          "Sources (Client Filter)"
+        <p class="filter-hint">
+          "Checked sources are included. If all are checked, no source restriction is stored."
+        <div class="filter-stack">
+          <label>
+            <input checked="true" data-source-id="source-1" id="filter-src-0" type="checkbox">
+            "Movies"
+          <label>
+            <input checked="false" data-source-id="source-2" id="filter-src-1" type="checkbox">
+            "C:\\media\\photos"
+          <label>
+            <input checked="false" data-source-id="source-3" disabled="" id="filter-src-2" type="checkbox">
+            "Archive"
+      <div class="filter-section">
+        <h3>
+          "Audio Filter"
+        <div class="filter-stack">
+          <label>
+            <input checked="false" name="filter-audio" type="radio" value="0">
+            "All videos"
+          <label>
+            <input checked="false" name="filter-audio" type="radio" value="1">
+            "Only videos with audio"
+          <label>
+            <input checked="true" name="filter-audio" type="radio" value="2">
+            "Only videos without audio"
+      <div class="filter-section">
+        <h3>
+          "Duration Filter"
+        <div class="filter-stack">
+          <div class="filter-row">
+            <span style="min-width: 3rem">
+              "Min"
+            <input id="filter-min-dur-text" placeholder="HH:MM:SS or MM:SS" type="text" value="01:30">
+            <label>
+              <input checked="false" id="filter-no-min-dur" type="checkbox">
+              "No minimum"
+          <div class="filter-row">
+            <span style="min-width: 3rem">
+              "Max"
+            <input id="filter-max-dur-text" placeholder="HH:MM:SS or MM:SS" type="text" value="01:01:40">
+            <label>
+              <input checked="false" id="filter-no-max-dur" type="checkbox">
+              "No maximum"
+    <div class="filter-panel" id="filter-panel-tags" style="display: none">
+      <div class="filter-section">
+        <h3>
+          "Category Combination"
+        <p class="filter-hint">
+          "AND = all categories must match. OR = any category can match."
+        <label>
+          "Combine categories using:"
+          <select id="filter-global-match">
+            <option selected="false" value="and">
+              "AND"
+            <option selected="true" value="or">
+              "OR"
+      <div class="filter-section">
+        <h3>
+          "Tags Filter"
+        <div class="tag-editor-category" data-filter-category="cat-places">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" data-filter-category-toggle="cat-places" title="Collapse category" type="button">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_down"
+              <span class="tag-editor-category-title">
+                "Places"
+            <div class="tag-editor-category-controls">
+              <label class="filter-hint" style="margin: 0px">
+                "Local:"
+                <select class="filter-local-mode" data-cat-id="cat-places">
+                  <option selected="true" value="0">
+                    "ALL (AND)"
+                  <option selected="false" value="1">
+                    "ANY (OR)"
+          <div class="tag-editor-tag-grid">
+            <div class="tag-chip" data-filter-cat="cat-places">
+              <span class="tag-chip-label">
+                "alps"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="inc" data-tag="alps" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="exc" data-tag="alps" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+            <div class="tag-chip state-all" data-filter-cat="cat-places">
+              <span class="tag-chip-label">
+                "Beach"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle is-selected" data-filter-chip="inc" data-tag="Beach" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="exc" data-tag="Beach" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+        <div class="tag-editor-category" data-filter-category="cat-mood">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" data-filter-category-toggle="cat-mood" title="Expand category" type="button">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_right"
+              <span class="tag-editor-category-title">
+                "Mood"
+            <div class="tag-editor-category-controls">
+              <label class="filter-hint" style="margin: 0px">
+                "Local:"
+                <select class="filter-local-mode" data-cat-id="cat-mood">
+                  <option selected="true" value="0">
+                    "ALL (AND)"
+                  <option selected="false" value="1">
+                    "ANY (OR)"
+          <div class="tag-editor-tag-grid" style="display: none">
+            <div class="tag-chip" data-filter-cat="cat-mood">
+              <span class="tag-chip-label">
+                "Calm"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="inc" data-tag="Calm" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="exc" data-tag="Calm" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+        <div class="tag-editor-category" data-filter-category="cat-people">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" data-filter-category-toggle="cat-people" title="Collapse category" type="button">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_down"
+              <span class="tag-editor-category-title">
+                "People"
+            <div class="tag-editor-category-controls">
+              <label class="filter-hint" style="margin: 0px">
+                "Local:"
+                <select class="filter-local-mode" data-cat-id="cat-people">
+                  <option selected="false" value="0">
+                    "ALL (AND)"
+                  <option selected="true" value="1">
+                    "ANY (OR)"
+          <div class="tag-editor-tag-grid">
+            <div class="tag-chip" data-filter-cat="cat-people">
+              <span class="tag-chip-label">
+                "Alice"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="inc" data-tag="Alice" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="exc" data-tag="Alice" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+            <div class="tag-chip state-none" data-filter-cat="cat-people">
+              <span class="tag-chip-label">
+                "Bob"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="inc" data-tag="Bob" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle is-selected" data-filter-chip="exc" data-tag="Bob" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+        <div class="tag-editor-category">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" data-filter-category-toggle="__filter_uncategorized__" title="Collapse category" type="button">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_down"
+              <span class="tag-editor-category-title">
+                "Uncategorized"
+            <div class="tag-editor-category-controls">
+              <label class="filter-hint" style="margin: 0px">
+                "Local:"
+                <select class="filter-local-mode" data-cat-id="">
+                  <option selected="true" value="0">
+                    "ALL (AND)"
+                  <option selected="false" value="1">
+                    "ANY (OR)"
+          <div class="tag-editor-tag-grid">
+            <div class="tag-chip state-all">
+              <span class="tag-chip-label">
+                "Ghost"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle is-selected" data-filter-chip="inc" data-tag="Ghost" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="exc" data-tag="Ghost" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+    <div class="filter-panel" id="filter-panel-presets" style="display: none">
+      <div class="filter-section">
+        <h3>
+          "Choose Preset"
+        <div class="filter-row">
+          <select id="filter-dialog-preset-select">
+            <option selected="false" value="">
+              "None"
+            <option selected="true" value="Rich">
+              "Rich"
+            <option selected="false" value="Favorites">
+              "Favorites"
+          <button id="filter-update-preset-btn" type="button">
+            "Update Preset"
+      <div class="filter-section">
+        <h3>
+          "Create New Preset From Current Filter"
+        <div class="filter-row">
+          <input id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
+          <button id="filter-add-preset-btn" type="button">
+            "Add Preset"
+      <div class="filter-section filter-section-manage">
+        <h3>
+          "Manage Presets"
+        <div class="filter-preset-list themed-scrollbar">
+          <div class="filter-preset-row" data-preset-idx="0">
+            <span class="filter-preset-name">
+              "Rich"
+            <button aria-label="Move up" class="icon-glyph-base icon-glyph-button" data-preset-up="0" disabled="" title="Move up" type="button">
+              <span class="material-symbol-icon">
+                "keyboard_arrow_up"
+            <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="0" title="Move down" type="button">
+              <span class="material-symbol-icon">
+                "keyboard_arrow_down"
+            <button aria-label="Rename" class="icon-glyph-base icon-glyph-button" data-preset-rename="0" title="Rename" type="button">
+              <span class="material-symbol-icon">
+                "edit_note"
+            <button aria-label="Delete" class="icon-glyph-base icon-glyph-button" data-preset-del="0" title="Delete" type="button">
+              <span class="material-symbol-icon">
+                "delete"
+          <div class="filter-preset-row" data-preset-idx="1">
+            <span class="filter-preset-name">
+              "Favorites"
+            <button aria-label="Move up" class="icon-glyph-base icon-glyph-button" data-preset-up="1" title="Move up" type="button">
+              <span class="material-symbol-icon">
+                "keyboard_arrow_up"
+            <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="1" disabled="" title="Move down" type="button">
+              <span class="material-symbol-icon">
+                "keyboard_arrow_down"
+            <button aria-label="Rename" class="icon-glyph-base icon-glyph-button" data-preset-rename="1" title="Rename" type="button">
+              <span class="material-symbol-icon">
+                "edit_note"
+            <button aria-label="Delete" class="icon-glyph-base icon-glyph-button" data-preset-del="1" title="Delete" type="button">
+              <span class="material-symbol-icon">
+                "delete"
+  <div class="filter-dialog-footer">
+    <button id="filter-clear-all-btn" type="button">
+      "Clear all filters"
+    <button id="filter-cancel-btn" type="button">
+      "Cancel"
+    <button id="filter-apply-btn" type="button">
+      "Apply"
+"
+`;
+
+exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
+"<div class="filter-dialog" id="filter-dialog" style="display: flex">
+  <div class="filter-dialog-header">
+    <h2 id="filter-dialog-heading">
+      "Preset: Rich"
+    <div class="filter-dialog-actions">
+      <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="filter-dialog-refresh-btn" title="Refresh" type="button">
+        <span class="material-symbol-icon">
+          "refresh"
+      <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="filter-dialog-close-btn" title="Close" type="button">
+        <span class="material-symbol-icon">
+          "close"
+  <div class="filter-dialog-tabstrip" role="tablist">
+    <button aria-selected="false" class="filter-tab" data-filter-tab="general" role="tab" type="button">
+      "General"
+    <button aria-selected="false" class="filter-tab" data-filter-tab="tags" role="tab" type="button">
+      "Tags"
+    <button aria-selected="true" class="filter-tab is-active" data-filter-tab="presets" role="tab" type="button">
+      "Presets"
+  <div class="filter-dialog-body themed-scrollbar">
+    <div class="filter-panel" id="filter-panel-general" style="display: none">
+      <div class="filter-section">
+        <h3>
+          "Basic Filters"
+        <div class="filter-stack">
+          <label>
+            <input checked="true" id="filter-fav-only" type="checkbox">
+            "Favorites only"
+          <label>
+            <input checked="true" id="filter-excl-bl" type="checkbox">
+            "Exclude blacklisted"
+          <label>
+            <input checked="false" id="filter-never-played" type="checkbox">
+            "Only never played"
+          <label>
+            <input checked="false" id="filter-known-dur" type="checkbox">
+            "Only videos with known duration"
+          <label>
+            <input checked="false" id="filter-known-loud" type="checkbox">
+            "Only videos with known loudness"
+      <div class="filter-section">
+        <h3>
+          "Media Type"
+        <div class="filter-stack">
+          <label>
+            <input checked="false" name="filter-media-type" type="radio" value="0">
+            "All (Videos and Photos)"
+          <label>
+            <input checked="true" name="filter-media-type" type="radio" value="1">
+            "Videos only"
+          <label>
+            <input checked="false" name="filter-media-type" type="radio" value="2">
+            "Photos only"
+      <div class="filter-section">
+        <h3>
+          "Sources (Client Filter)"
+        <p class="filter-hint">
+          "Checked sources are included. If all are checked, no source restriction is stored."
+        <div class="filter-stack">
+          <label>
+            <input checked="true" data-source-id="source-1" id="filter-src-0" type="checkbox">
+            "Movies"
+          <label>
+            <input checked="false" data-source-id="source-2" id="filter-src-1" type="checkbox">
+            "C:\\media\\photos"
+          <label>
+            <input checked="false" data-source-id="source-3" disabled="" id="filter-src-2" type="checkbox">
+            "Archive"
+      <div class="filter-section">
+        <h3>
+          "Audio Filter"
+        <div class="filter-stack">
+          <label>
+            <input checked="false" name="filter-audio" type="radio" value="0">
+            "All videos"
+          <label>
+            <input checked="false" name="filter-audio" type="radio" value="1">
+            "Only videos with audio"
+          <label>
+            <input checked="true" name="filter-audio" type="radio" value="2">
+            "Only videos without audio"
+      <div class="filter-section">
+        <h3>
+          "Duration Filter"
+        <div class="filter-stack">
+          <div class="filter-row">
+            <span style="min-width: 3rem">
+              "Min"
+            <input id="filter-min-dur-text" placeholder="HH:MM:SS or MM:SS" type="text" value="01:30">
+            <label>
+              <input checked="false" id="filter-no-min-dur" type="checkbox">
+              "No minimum"
+          <div class="filter-row">
+            <span style="min-width: 3rem">
+              "Max"
+            <input id="filter-max-dur-text" placeholder="HH:MM:SS or MM:SS" type="text" value="01:01:40">
+            <label>
+              <input checked="false" id="filter-no-max-dur" type="checkbox">
+              "No maximum"
+    <div class="filter-panel" id="filter-panel-tags" style="display: none">
+      <div class="filter-section">
+        <h3>
+          "Category Combination"
+        <p class="filter-hint">
+          "AND = all categories must match. OR = any category can match."
+        <label>
+          "Combine categories using:"
+          <select id="filter-global-match">
+            <option selected="false" value="and">
+              "AND"
+            <option selected="true" value="or">
+              "OR"
+      <div class="filter-section">
+        <h3>
+          "Tags Filter"
+        <div class="tag-editor-category" data-filter-category="cat-places">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" data-filter-category-toggle="cat-places" title="Collapse category" type="button">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_down"
+              <span class="tag-editor-category-title">
+                "Places"
+            <div class="tag-editor-category-controls">
+              <label class="filter-hint" style="margin: 0px">
+                "Local:"
+                <select class="filter-local-mode" data-cat-id="cat-places">
+                  <option selected="true" value="0">
+                    "ALL (AND)"
+                  <option selected="false" value="1">
+                    "ANY (OR)"
+          <div class="tag-editor-tag-grid">
+            <div class="tag-chip" data-filter-cat="cat-places">
+              <span class="tag-chip-label">
+                "alps"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="inc" data-tag="alps" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="exc" data-tag="alps" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+            <div class="tag-chip state-all" data-filter-cat="cat-places">
+              <span class="tag-chip-label">
+                "Beach"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle is-selected" data-filter-chip="inc" data-tag="Beach" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="exc" data-tag="Beach" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+        <div class="tag-editor-category" data-filter-category="cat-mood">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" data-filter-category-toggle="cat-mood" title="Expand category" type="button">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_right"
+              <span class="tag-editor-category-title">
+                "Mood"
+            <div class="tag-editor-category-controls">
+              <label class="filter-hint" style="margin: 0px">
+                "Local:"
+                <select class="filter-local-mode" data-cat-id="cat-mood">
+                  <option selected="true" value="0">
+                    "ALL (AND)"
+                  <option selected="false" value="1">
+                    "ANY (OR)"
+          <div class="tag-editor-tag-grid" style="display: none">
+            <div class="tag-chip" data-filter-cat="cat-mood">
+              <span class="tag-chip-label">
+                "Calm"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="inc" data-tag="Calm" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="exc" data-tag="Calm" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+        <div class="tag-editor-category" data-filter-category="cat-people">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" data-filter-category-toggle="cat-people" title="Collapse category" type="button">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_down"
+              <span class="tag-editor-category-title">
+                "People"
+            <div class="tag-editor-category-controls">
+              <label class="filter-hint" style="margin: 0px">
+                "Local:"
+                <select class="filter-local-mode" data-cat-id="cat-people">
+                  <option selected="false" value="0">
+                    "ALL (AND)"
+                  <option selected="true" value="1">
+                    "ANY (OR)"
+          <div class="tag-editor-tag-grid">
+            <div class="tag-chip" data-filter-cat="cat-people">
+              <span class="tag-chip-label">
+                "Alice"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="inc" data-tag="Alice" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="exc" data-tag="Alice" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+            <div class="tag-chip state-none" data-filter-cat="cat-people">
+              <span class="tag-chip-label">
+                "Bob"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="inc" data-tag="Bob" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle is-selected" data-filter-chip="exc" data-tag="Bob" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+        <div class="tag-editor-category">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" data-filter-category-toggle="__filter_uncategorized__" title="Collapse category" type="button">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_down"
+              <span class="tag-editor-category-title">
+                "Uncategorized"
+            <div class="tag-editor-category-controls">
+              <label class="filter-hint" style="margin: 0px">
+                "Local:"
+                <select class="filter-local-mode" data-cat-id="">
+                  <option selected="true" value="0">
+                    "ALL (AND)"
+                  <option selected="false" value="1">
+                    "ANY (OR)"
+          <div class="tag-editor-tag-grid">
+            <div class="tag-chip state-all">
+              <span class="tag-chip-label">
+                "Ghost"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle is-selected" data-filter-chip="inc" data-tag="Ghost" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="exc" data-tag="Ghost" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+    <div class="filter-panel" id="filter-panel-presets" style="display: flex">
+      <div class="filter-section">
+        <h3>
+          "Choose Preset"
+        <div class="filter-row">
+          <select id="filter-dialog-preset-select">
+            <option selected="false" value="">
+              "None"
+            <option selected="true" value="Rich">
+              "Rich"
+            <option selected="false" value="Favorites">
+              "Favorites"
+          <button id="filter-update-preset-btn" type="button">
+            "Update Preset"
+      <div class="filter-section">
+        <h3>
+          "Create New Preset From Current Filter"
+        <div class="filter-row">
+          <input id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
+          <button id="filter-add-preset-btn" type="button">
+            "Add Preset"
+      <div class="filter-section filter-section-manage">
+        <h3>
+          "Manage Presets"
+        <div class="filter-preset-list themed-scrollbar">
+          <div class="filter-preset-row" data-preset-idx="0">
+            <span class="filter-preset-name">
+              "Rich"
+            <button aria-label="Move up" class="icon-glyph-base icon-glyph-button" data-preset-up="0" disabled="" title="Move up" type="button">
+              <span class="material-symbol-icon">
+                "keyboard_arrow_up"
+            <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="0" title="Move down" type="button">
+              <span class="material-symbol-icon">
+                "keyboard_arrow_down"
+            <button aria-label="Rename" class="icon-glyph-base icon-glyph-button" data-preset-rename="0" title="Rename" type="button">
+              <span class="material-symbol-icon">
+                "edit_note"
+            <button aria-label="Delete" class="icon-glyph-base icon-glyph-button" data-preset-del="0" title="Delete" type="button">
+              <span class="material-symbol-icon">
+                "delete"
+          <div class="filter-preset-row" data-preset-idx="1">
+            <span class="filter-preset-name">
+              "Favorites"
+            <button aria-label="Move up" class="icon-glyph-base icon-glyph-button" data-preset-up="1" title="Move up" type="button">
+              <span class="material-symbol-icon">
+                "keyboard_arrow_up"
+            <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="1" disabled="" title="Move down" type="button">
+              <span class="material-symbol-icon">
+                "keyboard_arrow_down"
+            <button aria-label="Rename" class="icon-glyph-base icon-glyph-button" data-preset-rename="1" title="Rename" type="button">
+              <span class="material-symbol-icon">
+                "edit_note"
+            <button aria-label="Delete" class="icon-glyph-base icon-glyph-button" data-preset-del="1" title="Delete" type="button">
+              <span class="material-symbol-icon">
+                "delete"
+  <div class="filter-dialog-footer">
+    <button id="filter-clear-all-btn" type="button">
+      "Clear all filters"
+    <button id="filter-cancel-btn" type="button">
+      "Cancel"
+    <button id="filter-apply-btn" type="button">
+      "Apply"
+"
+`;
+
+exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
+"<div class="filter-dialog" id="filter-dialog" style="display: flex">
+  <div class="filter-dialog-header">
+    <h2 id="filter-dialog-heading">
+      "Preset: Rich"
+    <div class="filter-dialog-actions">
+      <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="filter-dialog-refresh-btn" title="Refresh" type="button">
+        <span class="material-symbol-icon">
+          "refresh"
+      <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="filter-dialog-close-btn" title="Close" type="button">
+        <span class="material-symbol-icon">
+          "close"
+  <div class="filter-dialog-tabstrip" role="tablist">
+    <button aria-selected="false" class="filter-tab" data-filter-tab="general" role="tab" type="button">
+      "General"
+    <button aria-selected="true" class="filter-tab is-active" data-filter-tab="tags" role="tab" type="button">
+      "Tags"
+    <button aria-selected="false" class="filter-tab" data-filter-tab="presets" role="tab" type="button">
+      "Presets"
+  <div class="filter-dialog-body themed-scrollbar">
+    <div class="filter-panel" id="filter-panel-general" style="display: none">
+      <div class="filter-section">
+        <h3>
+          "Basic Filters"
+        <div class="filter-stack">
+          <label>
+            <input checked="true" id="filter-fav-only" type="checkbox">
+            "Favorites only"
+          <label>
+            <input checked="true" id="filter-excl-bl" type="checkbox">
+            "Exclude blacklisted"
+          <label>
+            <input checked="false" id="filter-never-played" type="checkbox">
+            "Only never played"
+          <label>
+            <input checked="false" id="filter-known-dur" type="checkbox">
+            "Only videos with known duration"
+          <label>
+            <input checked="false" id="filter-known-loud" type="checkbox">
+            "Only videos with known loudness"
+      <div class="filter-section">
+        <h3>
+          "Media Type"
+        <div class="filter-stack">
+          <label>
+            <input checked="false" name="filter-media-type" type="radio" value="0">
+            "All (Videos and Photos)"
+          <label>
+            <input checked="true" name="filter-media-type" type="radio" value="1">
+            "Videos only"
+          <label>
+            <input checked="false" name="filter-media-type" type="radio" value="2">
+            "Photos only"
+      <div class="filter-section">
+        <h3>
+          "Sources (Client Filter)"
+        <p class="filter-hint">
+          "Checked sources are included. If all are checked, no source restriction is stored."
+        <div class="filter-stack">
+          <label>
+            <input checked="true" data-source-id="source-1" id="filter-src-0" type="checkbox">
+            "Movies"
+          <label>
+            <input checked="false" data-source-id="source-2" id="filter-src-1" type="checkbox">
+            "C:\\media\\photos"
+          <label>
+            <input checked="false" data-source-id="source-3" disabled="" id="filter-src-2" type="checkbox">
+            "Archive"
+      <div class="filter-section">
+        <h3>
+          "Audio Filter"
+        <div class="filter-stack">
+          <label>
+            <input checked="false" name="filter-audio" type="radio" value="0">
+            "All videos"
+          <label>
+            <input checked="false" name="filter-audio" type="radio" value="1">
+            "Only videos with audio"
+          <label>
+            <input checked="true" name="filter-audio" type="radio" value="2">
+            "Only videos without audio"
+      <div class="filter-section">
+        <h3>
+          "Duration Filter"
+        <div class="filter-stack">
+          <div class="filter-row">
+            <span style="min-width: 3rem">
+              "Min"
+            <input id="filter-min-dur-text" placeholder="HH:MM:SS or MM:SS" type="text" value="01:30">
+            <label>
+              <input checked="false" id="filter-no-min-dur" type="checkbox">
+              "No minimum"
+          <div class="filter-row">
+            <span style="min-width: 3rem">
+              "Max"
+            <input id="filter-max-dur-text" placeholder="HH:MM:SS or MM:SS" type="text" value="01:01:40">
+            <label>
+              <input checked="false" id="filter-no-max-dur" type="checkbox">
+              "No maximum"
+    <div class="filter-panel" id="filter-panel-tags" style="display: block">
+      <div class="filter-section">
+        <h3>
+          "Category Combination"
+        <p class="filter-hint">
+          "AND = all categories must match. OR = any category can match."
+        <label>
+          "Combine categories using:"
+          <select id="filter-global-match">
+            <option selected="false" value="and">
+              "AND"
+            <option selected="true" value="or">
+              "OR"
+      <div class="filter-section">
+        <h3>
+          "Tags Filter"
+        <div class="tag-editor-category" data-filter-category="cat-places">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" data-filter-category-toggle="cat-places" title="Collapse category" type="button">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_down"
+              <span class="tag-editor-category-title">
+                "Places"
+            <div class="tag-editor-category-controls">
+              <label class="filter-hint" style="margin: 0px">
+                "Local:"
+                <select class="filter-local-mode" data-cat-id="cat-places">
+                  <option selected="true" value="0">
+                    "ALL (AND)"
+                  <option selected="false" value="1">
+                    "ANY (OR)"
+          <div class="tag-editor-tag-grid">
+            <div class="tag-chip" data-filter-cat="cat-places">
+              <span class="tag-chip-label">
+                "alps"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="inc" data-tag="alps" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="exc" data-tag="alps" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+            <div class="tag-chip state-all" data-filter-cat="cat-places">
+              <span class="tag-chip-label">
+                "Beach"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle is-selected" data-filter-chip="inc" data-tag="Beach" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="exc" data-tag="Beach" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+        <div class="tag-editor-category" data-filter-category="cat-mood">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" data-filter-category-toggle="cat-mood" title="Expand category" type="button">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_right"
+              <span class="tag-editor-category-title">
+                "Mood"
+            <div class="tag-editor-category-controls">
+              <label class="filter-hint" style="margin: 0px">
+                "Local:"
+                <select class="filter-local-mode" data-cat-id="cat-mood">
+                  <option selected="true" value="0">
+                    "ALL (AND)"
+                  <option selected="false" value="1">
+                    "ANY (OR)"
+          <div class="tag-editor-tag-grid" style="display: none">
+            <div class="tag-chip" data-filter-cat="cat-mood">
+              <span class="tag-chip-label">
+                "Calm"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="inc" data-tag="Calm" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="exc" data-tag="Calm" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+        <div class="tag-editor-category" data-filter-category="cat-people">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" data-filter-category-toggle="cat-people" title="Collapse category" type="button">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_down"
+              <span class="tag-editor-category-title">
+                "People"
+            <div class="tag-editor-category-controls">
+              <label class="filter-hint" style="margin: 0px">
+                "Local:"
+                <select class="filter-local-mode" data-cat-id="cat-people">
+                  <option selected="false" value="0">
+                    "ALL (AND)"
+                  <option selected="true" value="1">
+                    "ANY (OR)"
+          <div class="tag-editor-tag-grid">
+            <div class="tag-chip" data-filter-cat="cat-people">
+              <span class="tag-chip-label">
+                "Alice"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="inc" data-tag="Alice" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="exc" data-tag="Alice" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+            <div class="tag-chip state-none" data-filter-cat="cat-people">
+              <span class="tag-chip-label">
+                "Bob"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="inc" data-tag="Bob" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle is-selected" data-filter-chip="exc" data-tag="Bob" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+        <div class="tag-editor-category">
+          <div class="tag-editor-category-header">
+            <div class="tag-editor-category-left">
+              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" data-filter-category-toggle="__filter_uncategorized__" title="Collapse category" type="button">
+                <span class="material-symbol-icon">
+                  "keyboard_arrow_down"
+              <span class="tag-editor-category-title">
+                "Uncategorized"
+            <div class="tag-editor-category-controls">
+              <label class="filter-hint" style="margin: 0px">
+                "Local:"
+                <select class="filter-local-mode" data-cat-id="">
+                  <option selected="true" value="0">
+                    "ALL (AND)"
+                  <option selected="false" value="1">
+                    "ANY (OR)"
+          <div class="tag-editor-tag-grid">
+            <div class="tag-chip state-all">
+              <span class="tag-chip-label">
+                "Ghost"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle is-selected" data-filter-chip="inc" data-tag="Ghost" title="Include" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button class="chip-btn icon-glyph-base icon-glyph-toggle" data-filter-chip="exc" data-tag="Ghost" title="Exclude" type="button">
+                <span class="material-symbol-icon">
+                  "remove"
+    <div class="filter-panel" id="filter-panel-presets" style="display: none">
+      <div class="filter-section">
+        <h3>
+          "Choose Preset"
+        <div class="filter-row">
+          <select id="filter-dialog-preset-select">
+            <option selected="false" value="">
+              "None"
+            <option selected="true" value="Rich">
+              "Rich"
+            <option selected="false" value="Favorites">
+              "Favorites"
+          <button id="filter-update-preset-btn" type="button">
+            "Update Preset"
+      <div class="filter-section">
+        <h3>
+          "Create New Preset From Current Filter"
+        <div class="filter-row">
+          <input id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
+          <button id="filter-add-preset-btn" type="button">
+            "Add Preset"
+      <div class="filter-section filter-section-manage">
+        <h3>
+          "Manage Presets"
+        <div class="filter-preset-list themed-scrollbar">
+          <div class="filter-preset-row" data-preset-idx="0">
+            <span class="filter-preset-name">
+              "Rich"
+            <button aria-label="Move up" class="icon-glyph-base icon-glyph-button" data-preset-up="0" disabled="" title="Move up" type="button">
+              <span class="material-symbol-icon">
+                "keyboard_arrow_up"
+            <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="0" title="Move down" type="button">
+              <span class="material-symbol-icon">
+                "keyboard_arrow_down"
+            <button aria-label="Rename" class="icon-glyph-base icon-glyph-button" data-preset-rename="0" title="Rename" type="button">
+              <span class="material-symbol-icon">
+                "edit_note"
+            <button aria-label="Delete" class="icon-glyph-base icon-glyph-button" data-preset-del="0" title="Delete" type="button">
+              <span class="material-symbol-icon">
+                "delete"
+          <div class="filter-preset-row" data-preset-idx="1">
+            <span class="filter-preset-name">
+              "Favorites"
+            <button aria-label="Move up" class="icon-glyph-base icon-glyph-button" data-preset-up="1" title="Move up" type="button">
+              <span class="material-symbol-icon">
+                "keyboard_arrow_up"
+            <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="1" disabled="" title="Move down" type="button">
+              <span class="material-symbol-icon">
+                "keyboard_arrow_down"
+            <button aria-label="Rename" class="icon-glyph-base icon-glyph-button" data-preset-rename="1" title="Rename" type="button">
+              <span class="material-symbol-icon">
+                "edit_note"
+            <button aria-label="Delete" class="icon-glyph-base icon-glyph-button" data-preset-del="1" title="Delete" type="button">
+              <span class="material-symbol-icon">
+                "delete"
+  <div class="filter-dialog-footer">
+    <button id="filter-clear-all-btn" type="button">
+      "Clear all filters"
+    <button id="filter-cancel-btn" type="button">
+      "Cancel"
+    <button id="filter-apply-btn" type="button">
+      "Apply"
+"
+`;

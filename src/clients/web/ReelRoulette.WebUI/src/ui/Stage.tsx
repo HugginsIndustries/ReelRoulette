@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { useApp } from "./appContext";
+import { FilterDialog } from "./FilterDialog";
 import { LegacyOverlays } from "./LegacyOverlays";
 import { LibraryOverlay } from "./LibraryOverlay";
 import { Player } from "./Player";
@@ -40,6 +41,9 @@ export function Stage() {
         </ScreenBoundary>
       </main>
       <LegacyOverlays />
+      <ScreenBoundary screen="filter" relay={api.relayLog}>
+        <FilterDialog />
+      </ScreenBoundary>
       <ScreenBoundary screen="library" relay={api.relayLog}>
         <LibraryOverlay />
       </ScreenBoundary>

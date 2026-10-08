@@ -59,8 +59,8 @@ export interface ClientIdentity {
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
-/** The screens still in `app.js` that the player's buttons open. */
-export type OverlayName = "filter" | "tagEditor";
+/** The screen still in `app.js` that a player button opens. */
+export type OverlayName = "tagEditor";
 
 /** Changes one screen makes that another screen acts on. */
 export interface AppStoreEvents {
@@ -68,7 +68,7 @@ export interface AppStoreEvents {
   headerFilterChanged: () => void;
   /** The photo duration changed from the header. */
   photoDurationChanged: () => void;
-  /** A player button asked to open a screen still in `app.js`. */
+  /** A player button asked to open the screen still in `app.js`. */
   overlayRequested: (overlay: OverlayName) => void;
 }
 

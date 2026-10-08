@@ -309,12 +309,20 @@ export async function settle(rounds = 5): Promise<void> {
  *   nothing inside the flex rows the markup uses. A space that does show, as in the now-playing line, is
  *   checked by the test of that screen.
  * - Style declarations are compared as a sorted list: the HTML wrote `display:none`, and Preact writes
- *   `display: none;`.
+ *   `display: none;`. A zero length compares as `0px`: the HTML wrote `margin:0`, and Preact sets styles
+ *   through the browser, which writes `margin: 0px`. An empty `class` attribute is left out:
+ *   `classList.toggle` left one where Preact writes none. These two were added when moving the filter dialog and
+ *   are deliberate.
  * - An `<option>` is compared by `option.value`, the value the browser uses, whether it comes from the
  *   attribute or the option's text: Preact skips writing a `value` attribute that equals the text, as for the
  *   library sort list's Name and Duration. This was added when moving the first screens and is deliberate.
+ *
+ * With `liveFormState`, a checkbox or radio is compared by its `checked` property, an option by its `selected`
+ * property, and any other input by its `value` property, in place of those attributes: what the user sees. The
+ * HTML wrote them as attributes, which keep their first value after the user changes the control, and Preact
+ * sets the properties and writes no attribute. Added with the filter dialog's tests, before that screen moved.
  */
-export function normalizedMarkup(node: Node, depth = 0): string {
+export function normalizedMarkup(node: Node, options: { liveFormState?: boolean } = {}, depth = 0): string {
   const pad = "  ".repeat(depth);
   if (node.nodeType === Node.TEXT_NODE) {
     const text = (node.textContent ?? "").replace(/\s+/g, " ").trim();
@@ -325,15 +333,18 @@ export function normalizedMarkup(node: Node, depth = 0): string {
   }
   const element = node as Element;
   const isOption = element instanceof HTMLOptionElement;
+  const live = options.liveFormState ? liveFormState(element) : null;
   const attributes = Array.from(element.attributes)
     .filter((attribute) => !(isOption && attribute.name === "value"))
+    .filter((attribute) => !live || !(attribute.name in live))
+    .filter((attribute) => !(attribute.name === "class" && !attribute.value.trim()))
     .map((attribute) => {
       if (attribute.name === "style") {
         const declarations = attribute.value
           .split(";")
           .map((part) => part.trim())
           .filter(Boolean)
-          .map((part) => part.replace(/\s*:\s*/, ": "))
+          .map((part) => part.replace(/\s*:\s*/, ": ").replace(/: 0$/, ": 0px"))
           .sort();
         return `style="${declarations.join("; ")}"`;
       }
@@ -342,10 +353,26 @@ export function normalizedMarkup(node: Node, depth = 0): string {
   if (isOption) {
     attributes.push(`value="${element.value}"`);
   }
+  for (const [name, value] of Object.entries(live ?? {})) {
+    attributes.push(`${name}="${value}"`);
+  }
   attributes.sort();
   let out = `${pad}<${element.tagName.toLowerCase()}${attributes.length ? ` ${attributes.join(" ")}` : ""}>\n`;
   for (const child of Array.from(element.childNodes)) {
-    out += normalizedMarkup(child, depth + 1);
+    out += normalizedMarkup(child, options, depth + 1);
   }
   return out;
+}
+
+/** The form state an element shows, by attribute name, for `liveFormState`. */
+function liveFormState(element: Element): Record<string, string> | null {
+  if (element instanceof HTMLOptionElement) {
+    return { selected: String(element.selected) };
+  }
+  if (element instanceof HTMLInputElement) {
+    return element.type === "checkbox" || element.type === "radio"
+      ? { checked: String(element.checked) }
+      : { value: element.value };
+  }
+  return null;
 }

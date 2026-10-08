@@ -19,11 +19,12 @@ Instructions:
 
 Commit Message:
 
-M12b: Move the WebUI library overlay to Preact
+M12b: Move the WebUI filter dialog to Preact
 
-- Move the library overlay (totals, search and sort toolbar, grid and its messages, and tile play) to a component, with no visible change.
-- Move browse, search and its wait, sort, fill on scroll, live updates, refresh and resync reloads, and tile play into a typed `library` service with node tests; `app.js`'s tag editor and filter dialog use its loaded window and `commitQuery`.
-- Show the overlay before the grid flushes a layout deferred while hidden, keep the grid's element and scroll position through reloads, and keep the direction label changing when the re-sorted page arrives.
-- Render the loading, error, and empty messages as text instead of HTML, and handle Escape in the stage, still closing the library before leaving pseudo-fullscreen.
-- Add `happy-dom` behavior tests written against `app.js` before the move, with a markup snapshot of the open overlay, a library error boundary test, and a layout stub that gives hidden elements no size.
-- Update the milestone, domain inventory, and `CONTEXT.md`, and record the grid's flicker after a hard refresh in WebUI Grid Rendering and a looping photo's flicker in WebUI Keyboard Shortcuts and Player Controls.
+- Move the filter dialog (General, Tags, and Presets tabs, preset management, Refresh, Clear all, and Apply) to a component that keeps its markup and behavior.
+- Its panels are no longer rebuilt on each change, so focus on a tag chip or collapse toggle, the preset list's scroll position, a typed preset name, and the General tab's fields after a preset is deleted stay as the user left them.
+- Move the working copy, heading and Apply's star, preset edits and save, the header's None hold, collapsed categories, and header changes into a typed `filterDialog` service, and the General, Tags, and preset row logic into `filterDialogModel`, with node tests; Select filters calls the service, and the store's overlay request names only the tag editor.
+- Add `happy-dom` behavior tests written against `app.js` before the move, with a markup snapshot of each tab, a filter dialog error boundary test, and harness normalizations for live form state, zero lengths, and empty class attributes.
+- Update the milestone with the slice's spot check, the domain inventory, and `CONTEXT.md`, and record in WebUI Responsive Layout and Panels that the Filter tab's Refresh drops unsaved preset changes while Apply keeps its star.
+- Plan one WebUI field validation pattern in WebUI Responsive Layout and Panels (a red icon in the field with a tooltip, marked invalid for screen readers, and actions held while a field is invalid), first for the Filter tab's durations and new preset name and the Edit Tag dialog's tag name, and note it in the later milestones with fields.
+- Plan a WebUI-wide message rule: what the user must notice or act on shows in an in-app dialog (WebUI In-App Dialogs), field problems use the validation pattern, and the status line keeps only background information, with every current status message sorted in WebUI Status Line Overhaul.

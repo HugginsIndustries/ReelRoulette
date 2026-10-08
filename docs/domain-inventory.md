@@ -155,7 +155,7 @@ Boundary:
 WebUI is runtime-config-driven API/SSE client orchestration. Its screens are moving from `app.js` to Preact components over `@preact/signals` shared state.
 
 - `src/clients/web/ReelRoulette.WebUI/src/app.js`
-  - the screens not yet moved to components: filter dialog, and the tag overlay with **Edit Tags** + **Auto Tag** API flows. Reads and writes shared state through the store, acts on store and server connection events, calls the player to pause and resume for the tag editor, and uses the library's loaded window for tag saves and item-tag events and its `commitQuery` when a filter is applied.
+  - the screen not yet moved to a component: the tag overlay with **Edit Tags** + **Auto Tag** API flows. Reads and writes shared state through the store, acts on store and server connection events, calls the player to pause and resume for the tag editor, and uses the library's loaded window for tag saves and item-tag events.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/App.tsx`
   - page root: header, the stage, status line, and mobile diagnostics, each screen in an error boundary; starts `app.js` right after the first render, then the server connection. Also the startup error page, which shows its message as text.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/Header.tsx`
@@ -163,17 +163,19 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are mov
 - `src/clients/web/ReelRoulette.WebUI/src/ui/StatusLine.tsx`
   - status line and the mobile diagnostics line.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/Stage.tsx`
-  - the fullscreen stage and its pseudo-fullscreen class, holding the player and the library overlay in their error boundaries and the other overlays, which stay inside the stage so they show in fullscreen. Escape closes the library overlay when it is open and otherwise leaves pseudo-fullscreen.
+  - the fullscreen stage and its pseudo-fullscreen class, holding the player, the filter dialog, and the library overlay in their error boundaries and the tag editor, which stay inside the stage so they show in fullscreen. Escape closes the library overlay when it is open and otherwise leaves pseudo-fullscreen.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/Player.tsx`
   - the media area: video, photo, empty state, and the controls over them; swipe and tap listeners (passive, added through a ref). The player sets the media elements' sources and `display` and the seek slider's value, so the component renders those once and never replaces the video element.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/LibraryOverlay.tsx`
   - the library overlay: header with the totals, search and sort toolbar, and a body that is either the grid's host, an element with no children that the grid controller fills and that stays while tiles show, or a loading, error, or empty message. The library sets the overlay's `display`, so the component renders it once. Click, Enter, or Space on a tile plays it.
+- `src/clients/web/ReelRoulette.WebUI/src/ui/FilterDialog.tsx`
+  - the filter dialog: header with the preset heading, Refresh, and Close; the General, Tags, and Presets tabs; and Clear all, Cancel, and Apply with its pending star. It renders from the filter dialog service and shows only while open; its panels stay empty until it first opens.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/LegacyOverlays.tsx`
-  - the tag editor and filter dialog markup `app.js` still owns, rendered once and never updated.
+  - the tag editor markup `app.js` still owns, rendered once and never updated.
 - `src/clients/web/ReelRoulette.WebUI/src/ui/ScreenBoundary.tsx`
   - per-screen error boundary: a screen that fails to render stops showing and relays `ui-error screen=<name> error=<type>` to `last.log`.
 - `src/clients/web/ReelRoulette.WebUI/src/state/appStore.ts`
-  - shared state as signals (status line, playing item and history, loop and autoplay, presets and the header preset menu, applied filter, active preset, randomization mode, photo duration, compatibility block, pairing prompt), the item-state cache, and the actions and events that cross screens, including the player buttons' requests to open a screen still in `app.js`; status changes relay to `last.log`, a repeat at most once a second.
+  - shared state as signals (status line, playing item and history, loop and autoplay, presets and the header preset menu, applied filter, active preset, randomization mode, photo duration, compatibility block, pairing prompt), the item-state cache, and the actions and events that cross screens, including the Edit Tags button's request to open the tag editor still in `app.js`; status changes relay to `last.log`, a repeat at most once a second.
 - `src/clients/web/ReelRoulette.WebUI/src/state/serverConnection.ts`
   - version and capability check, pairing, preset loading, the event stream, and reconnecting on focus, visibility, page show, and coming online; passes server events to the player, the library, and `app.js`.
 - `src/clients/web/ReelRoulette.WebUI/src/state/serverCompatibility.ts`
@@ -181,7 +183,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are mov
 - `src/clients/web/ReelRoulette.WebUI/src/state/appApi.ts`
   - API URLs, JSON posts and reads (a 401 shows the pairing prompt), and the client log relay.
 - `src/clients/web/ReelRoulette.WebUI/src/state/appServices.ts`
-  - builds one page's store, API, server connection, player, fullscreen, and library from the runtime config; the library after the player, so the player handles an item-state event first.
+  - builds one page's store, API, server connection, player, fullscreen, library, and filter dialog from the runtime config; the library after the player, so the player handles an item-state event first.
 - `src/clients/web/ReelRoulette.WebUI/src/playback/player.ts`
   - playback: plays the current item (sets the source and shows the element, then loop and mute, then `play()`), random pick, Previous and Next through history, play/pause, mute, loop, autoplay and the photo timer, favorite and blacklist, seek and the time display, the tag editor's pause and resume, and item-state events with their status line. Records a play on start unless the server already did, and relays playback steps to `last.log` without file names.
 - `src/clients/web/ReelRoulette.WebUI/src/playback/stageFullscreen.ts`
@@ -194,6 +196,10 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are mov
   - the library overlay's state and actions: the first page once the server is ready, open and close (shows the overlay, then flushes the grid's deferred layout), the toolbar, totals, direction label, and body as signals, search with its wait, sort, fill from the grid's coverage while open, favorite, playback, refresh, resync, and header filter events, and tile play through `POST /api/play/{itemId}`, which joins history, closes the overlay, and hands the item to the player.
 - `src/clients/web/ReelRoulette.WebUI/src/filter/filterStateModel.ts`
   - filter JSON serialize/parse aligned with desktop/server `FilterState`.
+- `src/clients/web/ReelRoulette.WebUI/src/filter/filterDialog.ts`
+  - the filter dialog's state and actions: open (loads sources, the tag model, and presets, then starts from the applied filter, the header's preset, and its None hold), the working copy with the heading and Apply's pending star worked out after each change, General, Tags, and preset edits, collapsed categories kept in `sessionStorage`, Refresh, Clear all, a header preset change while open, and Apply, which saves a changed preset list, applies the filter, updates the header, and starts the library over.
+- `src/clients/web/ReelRoulette.WebUI/src/filter/filterDialogModel.ts`
+  - the General tab's fields as a draft beside the working filter and their reading into it, duration checks, include and exclude toggles, the Tags tab's categories with Uncategorized for filter tags the catalog does not have, and preset rows from the API.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryOverlayModel.ts`
   - the library overlay's loading, error, and empty messages, and projection summary parsing.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryProjectionModel.ts`

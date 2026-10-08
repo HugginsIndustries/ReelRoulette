@@ -53,7 +53,7 @@ export type CreateLibraryGrid = (
  * ready, and the window keeps its tiles and scroll position while the overlay is hidden.
  */
 export interface Library {
-  /** The loaded window, which the tag editor and filter dialog still in `app.js` read and update. */
+  /** The loaded window, which the tag editor still in `app.js` reads and updates. */
   readonly session: LibraryQuerySession;
   /** The search text and sort the toolbar shows, as the user sets them. */
   readonly controls: ReadonlySignal<LibraryBrowseControls>;
