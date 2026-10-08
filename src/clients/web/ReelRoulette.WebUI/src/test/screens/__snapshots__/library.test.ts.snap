@@ -1,0 +1,125 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`overlay > keeps its markup while loading, with tiles, and when a query fails > error 1`] = `
+"<div class="library-overlay" id="library-overlay" style="display: flex">
+  <div class="library-overlay-header">
+    <h2>
+      "Library"
+    <p aria-live="polite" class="library-overlay-summary" hidden="" id="library-overlay-summary">
+    <div class="library-overlay-actions">
+      <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="library-overlay-close-btn" title="Close" type="button">
+        <span class="material-symbol-icon">
+          "close"
+  <div class="library-overlay-toolbar" id="library-overlay-toolbar" style="display: none">
+    <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
+    <div class="library-overlay-sort-cluster">
+      <select aria-label="Sort library" class="library-overlay-sort-select" id="library-sort-select">
+        <option value="Name">
+          "Name"
+        <option value="LastPlayed">
+          "Last played"
+        <option value="PlayCount">
+          "Play count"
+        <option value="Duration">
+          "Duration"
+        <option value="DateAdded">
+          "Date added"
+      <button aria-label="Toggle sort direction" class="library-overlay-sort-direction" id="library-sort-direction-btn" type="button">
+        "A–Z"
+  <div class="library-overlay-body" id="library-overlay-body">
+    <p class="library-overlay-status library-overlay-status-error" role="alert">
+      "HTTP 500"
+"
+`;
+
+exports[`overlay > keeps its markup while loading, with tiles, and when a query fails > loading 1`] = `
+"<div class="library-overlay" id="library-overlay" style="display: flex">
+  <div class="library-overlay-header">
+    <h2>
+      "Library"
+    <p aria-live="polite" class="library-overlay-summary" hidden="" id="library-overlay-summary">
+    <div class="library-overlay-actions">
+      <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="library-overlay-close-btn" title="Close" type="button">
+        <span class="material-symbol-icon">
+          "close"
+  <div class="library-overlay-toolbar" id="library-overlay-toolbar" style="display: none">
+    <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
+    <div class="library-overlay-sort-cluster">
+      <select aria-label="Sort library" class="library-overlay-sort-select" id="library-sort-select">
+        <option value="Name">
+          "Name"
+        <option value="LastPlayed">
+          "Last played"
+        <option value="PlayCount">
+          "Play count"
+        <option value="Duration">
+          "Duration"
+        <option value="DateAdded">
+          "Date added"
+      <button aria-label="Toggle sort direction" class="library-overlay-sort-direction" id="library-sort-direction-btn" type="button">
+        "A–Z"
+  <div class="library-overlay-body" id="library-overlay-body">
+    <p aria-live="polite" class="library-overlay-status">
+      "Loading library…"
+"
+`;
+
+exports[`overlay > keeps its markup while loading, with tiles, and when a query fails > tiles 1`] = `
+"<div class="library-overlay" id="library-overlay" style="display: flex">
+  <div class="library-overlay-header">
+    <h2>
+      "Library"
+    <p aria-live="polite" class="library-overlay-summary" id="library-overlay-summary">
+      "Showing 3 of 3 items"
+    <div class="library-overlay-actions">
+      <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="library-overlay-close-btn" title="Close" type="button">
+        <span class="material-symbol-icon">
+          "close"
+  <div class="library-overlay-toolbar" id="library-overlay-toolbar" style="display: flex">
+    <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
+    <div class="library-overlay-sort-cluster">
+      <select aria-label="Sort library" class="library-overlay-sort-select" id="library-sort-select">
+        <option value="Name">
+          "Name"
+        <option value="LastPlayed">
+          "Last played"
+        <option value="PlayCount">
+          "Play count"
+        <option value="Duration">
+          "Duration"
+        <option value="DateAdded">
+          "Date added"
+      <button aria-label="Toggle sort direction" class="library-overlay-sort-direction" id="library-sort-direction-btn" type="button">
+        "A–Z"
+  <div class="library-overlay-body" id="library-overlay-body">
+    <div class="library-overlay-browse">
+      <p class="library-overlay-status" hidden="">
+      <div class="library-grid-scroll themed-scrollbar">
+        <div class="library-grid-spacer library-grid-spacer-top" style="height: 0px">
+        <div class="library-grid-rows">
+          <div class="library-grid-row" style="height: 224.4375px">
+            <div class="library-grid-tile" data-item-id="item-1" role="button" style="height: 224.4375px; width: 399px" tabindex="0">
+              <div class="library-grid-tile-media">
+                <div class="library-grid-tile-scrim">
+                <div class="library-grid-tile-filename" title="clip 1.mp4">
+                  "clip 1.mp4"
+            <div class="library-grid-tile" data-item-id="item-2" role="button" style="height: 224.4375px; width: 399px" tabindex="0">
+              <div class="library-grid-tile-media">
+                <div class="library-grid-tile-scrim">
+                  <img alt="" class="library-grid-tile-image" decoding="async" loading="lazy" src="http://localhost:51301/api/thumbnail/item-2?v=v7">
+                <div class="library-grid-tile-filename" title="clip 2.mp4">
+                  "clip 2.mp4"
+          <div class="library-grid-row" style="height: 300px">
+            <div class="library-grid-tile" data-item-id="item-3" role="button" style="height: 300px; width: 400px" tabindex="0">
+              <div class="library-grid-tile-media">
+                <div class="library-grid-tile-scrim">
+                <div class="library-grid-tile-badge">
+                  <span aria-hidden="true" class="material-symbol-icon library-grid-tile-badge-icon">
+                    "favorite"
+                  <span aria-hidden="true" class="material-symbol-icon library-grid-tile-badge-icon">
+                    "thumb_down"
+                <div class="library-grid-tile-filename" title="clip 3.mp4">
+                  "clip 3.mp4"
+        <div class="library-grid-spacer library-grid-spacer-bottom" style="height: 0px">
+"
+`;

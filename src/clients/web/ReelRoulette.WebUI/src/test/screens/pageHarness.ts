@@ -188,10 +188,33 @@ export function stubFullscreenApi(options: { refuse?: boolean } = {}): FakeFulls
   return { requests, exits: () => exits };
 }
 
-/** Gives every element a layout size, which happy-dom does not compute, so the library grid renders its tiles. */
+/**
+ * Gives every rendered element a layout size, which happy-dom does not compute, so the library grid renders its
+ * tiles. An element that is not in the page, or is inside one that is `hidden` or has `display: none`, has no
+ * size, as in a browser, so the grid defers its layout while the library overlay is hidden.
+ */
 export function stubLayoutSize(width = 800, height = 600): void {
-  stubProperty(HTMLElement.prototype, "clientWidth", { get: () => width });
-  stubProperty(HTMLElement.prototype, "clientHeight", { get: () => height });
+  const rendered = (element: HTMLElement): boolean => {
+    if (!element.isConnected) {
+      return false;
+    }
+    for (let node: HTMLElement | null = element; node; node = node.parentElement) {
+      if (node.hidden || node.style.display === "none") {
+        return false;
+      }
+    }
+    return true;
+  };
+  stubProperty(HTMLElement.prototype, "clientWidth", {
+    get(this: HTMLElement) {
+      return rendered(this) ? width : 0;
+    }
+  });
+  stubProperty(HTMLElement.prototype, "clientHeight", {
+    get(this: HTMLElement) {
+      return rendered(this) ? height : 0;
+    }
+  });
 }
 
 export interface MountedPage {

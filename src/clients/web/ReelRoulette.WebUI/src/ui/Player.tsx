@@ -35,7 +35,7 @@ function stopPropagation(event: Event): void {
  * once and never changed here, and the video element is never replaced or moved.
  */
 export function Player() {
-  const { store, player, fullscreen } = useApp();
+  const { store, player, fullscreen, library } = useApp();
   const container = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const photo = useRef<HTMLImageElement>(null);
@@ -113,7 +113,7 @@ export function Player() {
       <img id="photo" alt="Photo" style="display:none" ref={photo} onLoad={player.photoLoaded} onError={player.photoFailed} />
       <div id="empty-state" class="empty-state" ref={emptyState}>Click here to play (choose a preset or open Filter…)</div>
       <div id="overlay-controls" class="overlay-controls" onTouchStart={stopPropagation} onTouchMove={stopPropagation} onTouchEnd={stopPropagation} onClick={stopPropagation}>
-        <button id="library-open-btn" class={`${OVERLAY_BUTTON} overlay-corner-btn`} aria-label="Library" title="Library" onClick={press(() => store.openOverlay("library"))}><span class="material-symbol-icon">browse</span></button>
+        <button id="library-open-btn" class={`${OVERLAY_BUTTON} overlay-corner-btn`} aria-label="Library" title="Library" onClick={press(library.open)}><span class="material-symbol-icon">browse</span></button>
         <button id="filter-edit-btn" class={`${OVERLAY_BUTTON} overlay-corner-btn`} aria-label="Select filters" title="Select filters…" onClick={press(() => store.openOverlay("filter"))}><span class="material-symbol-icon">filter_alt</span></button>
         <button id="tag-edit-btn" class={`${OVERLAY_BUTTON} overlay-corner-btn`} aria-label="Edit Tags" title="Edit Tags" onClick={press(() => store.openOverlay("tagEditor"))}><span class="material-symbol-icon">tag</span></button>
         <button id="favorite-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, player.favorite.value)} aria-label="Favorite" title="Favorite" onClick={press(player.toggleFavorite)}><span class="material-symbol-icon">favorite</span></button>

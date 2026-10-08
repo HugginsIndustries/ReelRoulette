@@ -19,11 +19,11 @@ Instructions:
 
 Commit Message:
 
-M12b: Move the WebUI player and its controls to Preact
+M12b: Move the WebUI library overlay to Preact
 
-- Move the media area, its controls, fullscreen and iOS pseudo-fullscreen, swipe and tap gestures, and the empty state to components, with no visible change.
-- Move playback, random pick, history, mute, loop, autoplay and the photo timer, favorite and blacklist, seek, and the tag editor's pause and resume into a typed `player` service with node tests; the store holds history, loop, autoplay, and the item-state cache.
-- Keep setting which media element shows, its source, and mute directly on the elements before `play()`, so the video is never hidden when it starts.
-- The player's Library, Select filters, and Edit Tags buttons open the screens still in `app.js` through a store event, and a library play hands off to the player in the same order as before.
-- Add `happy-dom` behavior tests written against `app.js` before the move, a player error boundary test, and harness stubs for the Fullscreen API and layout size.
-- Update the milestone, domain inventory, and `CONTEXT.md`, and record in Client Robustness Findings that a favorite or blacklist answer arriving after Next lands on the new item.
+- Move the library overlay (totals, search and sort toolbar, grid and its messages, and tile play) to a component, with no visible change.
+- Move browse, search and its wait, sort, fill on scroll, live updates, refresh and resync reloads, and tile play into a typed `library` service with node tests; `app.js`'s tag editor and filter dialog use its loaded window and `commitQuery`.
+- Show the overlay before the grid flushes a layout deferred while hidden, keep the grid's element and scroll position through reloads, and keep the direction label changing when the re-sorted page arrives.
+- Render the loading, error, and empty messages as text instead of HTML, and handle Escape in the stage, still closing the library before leaving pseudo-fullscreen.
+- Add `happy-dom` behavior tests written against `app.js` before the move, with a markup snapshot of the open overlay, a library error boundary test, and a layout stub that gives hidden elements no size.
+- Update the milestone, domain inventory, and `CONTEXT.md`, and record the grid's flicker after a hard refresh in WebUI Grid Rendering and a looping photo's flicker in WebUI Keyboard Shortcuts and Player Controls.

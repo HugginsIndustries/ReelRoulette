@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { useApp } from "./appContext";
 import { LegacyOverlays } from "./LegacyOverlays";
+import { LibraryOverlay } from "./LibraryOverlay";
 import { Player } from "./Player";
 import { ScreenBoundary } from "./ScreenBoundary";
 
@@ -9,12 +10,26 @@ import { ScreenBoundary } from "./ScreenBoundary";
  * fullscreen too.
  */
 export function Stage() {
-  const { api, fullscreen } = useApp();
+  const { api, fullscreen, library } = useApp();
   const stage = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     fullscreen.attach(stage.current!);
     return () => fullscreen.detach();
+  }, []);
+
+  // Escape closes the library overlay when it is open, and otherwise leaves pseudo-fullscreen.
+  useLayoutEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (library.isOpen()) {
+        library.close();
+        return;
+      }
+      fullscreen.exitPseudo();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
   return (
@@ -25,6 +40,9 @@ export function Stage() {
         </ScreenBoundary>
       </main>
       <LegacyOverlays />
+      <ScreenBoundary screen="library" relay={api.relayLog}>
+        <LibraryOverlay />
+      </ScreenBoundary>
     </div>
   );
 }

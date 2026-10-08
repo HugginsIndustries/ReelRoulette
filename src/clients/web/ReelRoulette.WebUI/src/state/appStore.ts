@@ -60,7 +60,7 @@ export interface ClientIdentity {
 export type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
 /** The screens still in `app.js` that the player's buttons open. */
-export type OverlayName = "library" | "filter" | "tagEditor";
+export type OverlayName = "filter" | "tagEditor";
 
 /** Changes one screen makes that another screen acts on. */
 export interface AppStoreEvents {

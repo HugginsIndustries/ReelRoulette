@@ -1,8 +1,8 @@
 import { Component } from "preact";
 
 /**
- * The tag editor, filter dialog, and library overlay markup that `app.js` still owns. It renders once and never
- * updates, so Preact never resets what `app.js` changes, such as a hidden overlay or the library's scroll position.
+ * The tag editor and filter dialog markup that `app.js` still owns. It renders once and never updates, so Preact
+ * never resets what `app.js` changes, such as a hidden overlay or a panel it rendered.
  */
 export class LegacyOverlays extends Component {
   shouldComponentUpdate(): boolean {
@@ -90,29 +90,6 @@ export class LegacyOverlays extends Component {
             <button id="filter-cancel-btn" type="button">Cancel</button>
             <button id="filter-apply-btn" type="button">Apply</button>
           </div>
-        </div>
-        <div id="library-overlay" class="library-overlay" style="display:none">
-          <div class="library-overlay-header">
-            <h2>Library</h2>
-            <p id="library-overlay-summary" class="library-overlay-summary" aria-live="polite" hidden></p>
-            <div class="library-overlay-actions">
-              <button id="library-overlay-close-btn" class="icon-glyph-base icon-glyph-button" type="button" title="Close" aria-label="Close"><span class="material-symbol-icon">close</span></button>
-            </div>
-          </div>
-          <div id="library-overlay-toolbar" class="library-overlay-toolbar" style="display:none">
-            <input id="library-search-input" class="library-overlay-search" type="search" placeholder="Search…" aria-label="Search library" autocomplete="off" />
-            <div class="library-overlay-sort-cluster">
-              <select id="library-sort-select" class="library-overlay-sort-select" aria-label="Sort library">
-                <option value="Name">Name</option>
-                <option value="LastPlayed">Last played</option>
-                <option value="PlayCount">Play count</option>
-                <option value="Duration">Duration</option>
-                <option value="DateAdded">Date added</option>
-              </select>
-              <button id="library-sort-direction-btn" class="library-overlay-sort-direction" type="button" aria-label="Toggle sort direction">A–Z</button>
-            </div>
-          </div>
-          <div id="library-overlay-body" class="library-overlay-body"></div>
         </div>
       </>
     );

@@ -1,4 +1,4 @@
-export type LibraryOverlayPhase = "loading" | "ready" | "empty" | "error";
+export type LibraryOverlayMessagePhase = "loading" | "empty" | "error";
 
 export interface LibraryProjectionSummary {
   totalItems: number;
@@ -43,28 +43,24 @@ export function parseLibraryProjectionSummary(raw: unknown): LibraryProjectionSu
   };
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+/** What the overlay's body says while it has no tiles to show. */
+export interface LibraryOverlayMessage {
+  text: string;
+  /** An error, shown as an alert. */
+  error: boolean;
+  /** Read out by screen readers when it changes. */
+  live: boolean;
 }
 
-export function renderLibraryOverlayBodyHtml(
-  phase: LibraryOverlayPhase,
-  summary: LibraryProjectionSummary | null,
+export function libraryOverlayMessage(
+  phase: LibraryOverlayMessagePhase,
   errorMessage: string | null
-): string {
+): LibraryOverlayMessage {
   if (phase === "loading") {
-    return `<p class="library-overlay-status" aria-live="polite">Loading library…</p>`;
+    return { text: "Loading library…", error: false, live: true };
   }
   if (phase === "error") {
-    const message = errorMessage || "Could not load library.";
-    return `<p class="library-overlay-status library-overlay-status-error" role="alert">${escapeHtml(message)}</p>`;
+    return { text: errorMessage || "Could not load library.", error: true, live: false };
   }
-  if (phase === "empty" || (summary && !summary.hasItems)) {
-    return `<p class="library-overlay-status">No media in library.</p>`;
-  }
-  return "";
+  return { text: "No media in library.", error: false, live: false };
 }

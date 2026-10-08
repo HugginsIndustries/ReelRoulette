@@ -14,23 +14,9 @@ import {
   presetHeading,
   presetsToPostBody
 } from "./filter/filterStateModel.ts";
-import {
-  createDefaultBrowseControls,
-  getSortDirectionLabel,
-  isDefaultDescendingForSortMode
-} from "./library/libraryBrowseModel.ts";
-import { parseLibraryQueryPage } from "./library/libraryProjectionModel.ts";
-import { createLibraryGridController } from "./library/libraryGridController.ts";
-import { mapPlayItemErrorToStatus } from "./library/libraryPlayModel.ts";
 import { compareTagNames } from "./library/tagNameOrder.ts";
 import {
-  LIBRARY_OVERLAY_FETCH_ERROR,
-  renderLibraryOverlayBodyHtml
-} from "./library/libraryOverlayModel.ts";
-import {
-  LIBRARY_QUERY_SEARCH_DEBOUNCE_MS,
   createAutoTagScanRequest,
-  createLibraryQuerySession,
   libraryQueryTagSaveEffect
 } from "./library/libraryQuerySession.ts";
 import {
@@ -40,8 +26,6 @@ import {
   retargetTagFilter,
   runTagEditorSave
 } from "./library/tagSave.ts";
-import { requestPlayItem } from "./api/coreApi.ts";
-import { playbackTraceLine } from "./logging/relayLogLines.ts";
 
 const TAG_EDITOR_COLLAPSED_KEY = "rr_tagEditorCollapsed";
 const AUTO_TAG_SCAN_FULL_KEY = "rr_autoTagScanFullLibrary";
@@ -54,22 +38,16 @@ function getElement(id) {
   return document.getElementById(id);
 }
 
-export function startApp({ config, store, api, connection, player, fullscreen }) {
-  const apiBaseUrl = String(config.apiBaseUrl || "").replace(/\/+$/, "");
-  const sseUrl = config.sseUrl;
+export function startApp({ store, api, connection, player, library }) {
   const setStatus = store.setStatus;
   const apiPost = api.post;
   const fetchJson = api.getJson;
-  const relayClientLog = api.relayLog;
   const loadPresets = connection.loadPresets;
   const state = {
     // Shared with the Preact screens: these read and write the store's signals.
-    get clientId() { return store.identity.clientId; },
-    get sessionId() { return store.identity.sessionId; },
     get presets() { return store.presets.peek(); },
     set presets(value) { store.presets.value = value; },
     get current() { return store.current.peek(); },
-    get playAttemptId() { return store.playAttemptId.peek(); },
     get compatibilityBlocked() { return store.compatibilityBlocked.peek(); },
     get appliedFilterState() { return store.appliedFilter.peek(); },
     set appliedFilterState(value) { store.appliedFilter.value = value; },
@@ -88,29 +66,11 @@ export function startApp({ config, store, api, connection, player, fullscreen })
     autoTagScanInFlight: false,
     autoTagRows: [],
     autoTagScanHasRun: false,
-    filterDialogOpen: false,
-    libraryOverlayOpen: false
+    filterDialogOpen: false
   };
 
-  let libraryBrowseControls = createDefaultBrowseControls();
   const tagSaveSession = createTagSaveSession();
-  let libraryGridController = null;
-  let libraryPlayInFlight = false;
-  let librarySearchTimer = null;
-  const librarySession = createLibraryQuerySession((request, signal) => postLibraryQuery(request, signal));
-  librarySession.setListener((event) => {
-    renderLibraryWindow(event.scroll);
-    if (event.statusMessage) {
-      setStatus(event.statusMessage);
-    }
-  });
-
-  function destroyLibraryGridController() {
-    if (libraryGridController) {
-      libraryGridController.destroy();
-      libraryGridController = null;
-    }
-  }
+  const librarySession = library.session;
 
   const tagEditor = getElement("tag-editor");
   const tagEditorBody = getElement("tag-editor-body");
@@ -146,14 +106,6 @@ export function startApp({ config, store, api, connection, player, fullscreen })
   const filterClearAllBtn = getElement("filter-clear-all-btn");
   const filterCancelBtn = getElement("filter-cancel-btn");
   const filterApplyBtn = getElement("filter-apply-btn");
-  const libraryOverlay = getElement("library-overlay");
-  const libraryOverlayToolbar = getElement("library-overlay-toolbar");
-  const librarySearchInput = getElement("library-search-input");
-  const librarySortSelect = getElement("library-sort-select");
-  const librarySortDirectionBtn = getElement("library-sort-direction-btn");
-  const libraryOverlayBody = getElement("library-overlay-body");
-  const libraryOverlaySummary = getElement("library-overlay-summary");
-  const libraryOverlayCloseBtn = getElement("library-overlay-close-btn");
 
   if (
     !tagEditor || !tagEditorBody ||
@@ -164,21 +116,10 @@ export function startApp({ config, store, api, connection, player, fullscreen })
     !tagEditCategory || !tagEditCancelBtn || !tagEditSaveBtn ||
     !filterDialog || !filterDialogHeading || !filterDialogRefreshBtn || !filterDialogCloseBtn ||
     !filterPanelGeneral || !filterPanelTags || !filterPanelPresets || !filterClearAllBtn ||
-    !filterCancelBtn || !filterApplyBtn || !libraryOverlay ||
-    !libraryOverlayToolbar || !librarySearchInput || !librarySortSelect || !librarySortDirectionBtn ||
-    !libraryOverlayBody || !libraryOverlaySummary || !libraryOverlayCloseBtn
+    !filterCancelBtn || !filterApplyBtn
   ) {
     throw new Error("Legacy WebUI bootstrap failed: missing required DOM elements.");
   }
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-    if (state.libraryOverlayOpen) {
-      closeLibraryOverlay();
-      return;
-    }
-    fullscreen.exitPseudo();
-  });
 
   let filterWorkingPresets = [];
   let filterWorking = createDefaultFilterState();
@@ -912,224 +853,6 @@ export function startApp({ config, store, api, connection, player, fullscreen })
     state.filterDialogOpen = false;
   }
 
-  function setLibraryOverlayToolbarVisible(visible) {
-    libraryOverlayToolbar.style.display = visible ? "flex" : "none";
-  }
-
-  function setLibraryOverlaySummary(text) {
-    if (!text) {
-      libraryOverlaySummary.textContent = "";
-      libraryOverlaySummary.hidden = true;
-      return;
-    }
-    libraryOverlaySummary.textContent = text;
-    libraryOverlaySummary.hidden = false;
-  }
-
-  function syncLibraryOverlayToolbarFromControls() {
-    librarySearchInput.value = libraryBrowseControls.searchQuery;
-    librarySortSelect.value = libraryBrowseControls.sortMode;
-    librarySortDirectionBtn.textContent = getSortDirectionLabel(
-      libraryBrowseControls.sortMode,
-      libraryBrowseControls.sortDescending
-    );
-  }
-
-  function applyLibraryWindowChrome(snap) {
-    if (snap.phase !== "ready") {
-      return;
-    }
-    setLibraryOverlayToolbarVisible(true);
-    syncLibraryOverlayToolbarFromControls();
-    setLibraryOverlaySummary(snap.summaryText);
-  }
-
-  function renderLibraryWindow(scroll) {
-    const snap = librarySession.snapshot();
-    const showGrid = snap.phase === "ready";
-    if (!state.libraryOverlayOpen) {
-      if (!libraryGridController || !showGrid) {
-        return;
-      }
-      applyLibraryWindowChrome(snap);
-      libraryGridController.setBrowseContent({
-        visibleItems: snap.items,
-        searchQuery: libraryBrowseControls.searchQuery,
-        resetScroll: scroll === "top"
-      });
-      return;
-    }
-
-    if (!showGrid) {
-      destroyLibraryGridController();
-      setLibraryOverlayToolbarVisible(false);
-      setLibraryOverlaySummary(null);
-      const phase = snap.phase === "error" ? "error" : snap.phase === "empty" ? "empty" : "loading";
-      libraryOverlayBody.innerHTML = renderLibraryOverlayBodyHtml(
-        phase,
-        null,
-        snap.errorMessage || LIBRARY_OVERLAY_FETCH_ERROR
-      );
-      return;
-    }
-
-    applyLibraryWindowChrome(snap);
-    if (!libraryGridController) {
-      libraryGridController = createLibraryGridController(libraryOverlayBody, apiBaseUrl, {
-        onCoverage: onLibraryGridCoverage
-      });
-    }
-    libraryGridController.setBrowseContent({
-      visibleItems: snap.items,
-      searchQuery: libraryBrowseControls.searchQuery,
-      resetScroll: scroll === "top"
-    });
-  }
-
-  function onLibraryGridCoverage(coverage) {
-    librarySession.noteScroll(coverage.scrollTop);
-    if (!state.libraryOverlayOpen) {
-      return;
-    }
-    void librarySession.considerFill(coverage.extentHeight, coverage.viewportBottom, coverage.lastPageHeight);
-  }
-
-  function commitLibraryQuery() {
-    if (librarySearchTimer) {
-      clearTimeout(librarySearchTimer);
-      librarySearchTimer = null;
-    }
-    return librarySession.resetQuery(state.appliedFilterState, libraryBrowseControls);
-  }
-
-  function openLibraryOverlay() {
-    if (state.compatibilityBlocked) {
-      return;
-    }
-
-    libraryOverlay.style.display = "flex";
-    state.libraryOverlayOpen = true;
-    librarySession.setOverlayVisible(true);
-    const snap = librarySession.snapshot();
-    if (snap.phase !== "ready" || !libraryGridController) {
-      renderLibraryWindow("keep");
-    } else {
-      applyLibraryWindowChrome(snap);
-      libraryGridController.flushDeferredLayout();
-    }
-    if (!snap.hasResult) {
-      void librarySession.ensureLoaded(state.appliedFilterState, libraryBrowseControls);
-    }
-    requestAnimationFrame(() => {
-      if (!state.libraryOverlayOpen) {
-        return;
-      }
-      const coverage = libraryGridController?.measureCoverage();
-      if (coverage) {
-        void librarySession.considerFill(coverage.extentHeight, coverage.viewportBottom, coverage.lastPageHeight);
-      }
-    });
-  }
-
-  function closeLibraryOverlay() {
-    libraryOverlay.style.display = "none";
-    state.libraryOverlayOpen = false;
-    librarySession.setOverlayVisible(false);
-  }
-
-  async function postLibraryQuery(request, signal) {
-    const raw = await fetchJson("/api/library/query", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        filterState: request.filterState,
-        search: request.search,
-        sortMode: request.sortMode,
-        sortDescending: request.sortDescending,
-        offset: request.offset,
-        limit: request.limit
-      }),
-      signal
-    });
-    return parseLibraryQueryPage(raw);
-  }
-
-  async function playFromLibraryItemId(itemId) {
-    const trimmedItemId = String(itemId || "").trim();
-    if (!trimmedItemId) {
-      setStatus("Playback unavailable: no library item was selected.");
-      return;
-    }
-
-    if (state.compatibilityBlocked) {
-      setStatus("Cannot play: server compatibility check failed.");
-      return;
-    }
-
-    if (libraryPlayInFlight) {
-      return;
-    }
-
-    libraryPlayInFlight = true;
-    setStatus("Loading...");
-    tracePlayback("info", "library-play-start");
-
-    try {
-      const result = await requestPlayItem(
-        { apiBaseUrl, sseUrl },
-        trimmedItemId,
-        { clientId: state.clientId, sessionId: state.sessionId }
-      );
-
-      if (result.statusCode === 401) {
-        store.pairingRequired.value = true;
-        setStatus("Unauthorized. Pair first.");
-        return;
-      }
-
-      if (!result.ok) {
-        tracePlayback("warn", "library-play-failed", {
-          statusCode: result.statusCode,
-          code: result.code || "none"
-        });
-        setStatus(mapPlayItemErrorToStatus(result), "Playback failed");
-        return;
-      }
-
-      const data = result.response;
-      if (!data?.mediaUrl) {
-        setStatus("Playback failed.");
-        return;
-      }
-
-      store.pushHistory(data);
-      closeLibraryOverlay();
-      tracePlayback("info", "library-play-success");
-      player.playCurrent({ recordPlayback: false });
-    } catch (error) {
-      tracePlayback("warn", "library-play-error", {
-        message: error?.message || String(error)
-      });
-      setStatus(`Playback failed: ${error?.message || error}`);
-    } finally {
-      libraryPlayInFlight = false;
-    }
-  }
-
-  function resolveLibraryTileFromEventTarget(target) {
-    if (!(target instanceof Element)) {
-      return null;
-    }
-
-    const tile = target.closest(".library-grid-tile[data-item-id]");
-    if (!tile) {
-      return null;
-    }
-
-    const itemId = tile.getAttribute("data-item-id");
-    return itemId ? itemId : null;
-  }
-
   async function applyFilterDialog() {
     const err = validateFilterDurationsForApply();
     if (err) {
@@ -1167,7 +890,7 @@ export function startApp({ config, store, api, connection, player, fullscreen })
     await loadPresets();
     closeFilterDialog();
     setStatus("Filters applied.");
-    await commitLibraryQuery();
+    await library.commitQuery();
   }
 
   function clearAllFiltersInDialog() {
@@ -1183,10 +906,6 @@ export function startApp({ config, store, api, connection, player, fullscreen })
       sel.value = "";
     }
     updateFilterApplyButtonPending();
-  }
-
-  function tracePlayback(level, message, context = {}) {
-    relayClientLog(level, playbackTraceLine(message, state.current, state.playAttemptId, context));
   }
 
   function setButtonSymbol(button, symbolName) {
@@ -2297,28 +2016,9 @@ export function startApp({ config, store, api, connection, player, fullscreen })
       setFilterDialogHeading();
       updateFilterApplyButtonPending();
     }
-    void commitLibraryQuery();
   });
 
-  connection.on("serverReady", () => {
-    void librarySession.ensureLoaded(state.appliedFilterState, libraryBrowseControls);
-  });
-  // The player updates the playing item and the status line first.
-  connection.on("itemStateChanged", (payload) => {
-    if (!payload?.itemId) return;
-    void librarySession.applyFavorite(payload);
-  });
-  connection.on("playbackRecorded", (payload) => {
-    void librarySession.applyPlayback(payload);
-  });
   connection.on("itemTagsChanged", applyItemTagsEvent);
-  // A finished refresh can add items and rewrite thumbnails, so the loaded window reloads once per run.
-  connection.on("refreshCompleted", () => {
-    void librarySession.reloadLoaded();
-  });
-  connection.on("resyncRequired", () => {
-    void librarySession.resync();
-  });
 
   filterDialog.querySelector(".filter-dialog-tabstrip")?.addEventListener("click", (event) => {
     const btn = event.target && event.target.closest ? event.target.closest("[data-filter-tab]") : null;
@@ -2408,65 +2108,11 @@ export function startApp({ config, store, api, connection, player, fullscreen })
   });
 
   store.on("overlayRequested", (overlay) => {
-    if (overlay === "library") {
-      void openLibraryOverlay();
-    } else if (overlay === "filter") {
+    if (overlay === "filter") {
       void openFilterDialog();
     } else if (overlay === "tagEditor") {
       openTagEditor();
     }
-  });
-  libraryOverlayCloseBtn.addEventListener("click", () => {
-    closeLibraryOverlay();
-  });
-  libraryOverlayBody.addEventListener("click", (event) => {
-    const itemId = resolveLibraryTileFromEventTarget(event.target);
-    if (!itemId) {
-      return;
-    }
-    event.preventDefault();
-    void playFromLibraryItemId(itemId);
-  });
-  libraryOverlayBody.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" && event.key !== " ") {
-      return;
-    }
-
-    const itemId = resolveLibraryTileFromEventTarget(event.target);
-    if (!itemId) {
-      return;
-    }
-
-    event.preventDefault();
-    void playFromLibraryItemId(itemId);
-  });
-  librarySearchInput.addEventListener("input", () => {
-    libraryBrowseControls = {
-      ...libraryBrowseControls,
-      searchQuery: librarySearchInput.value
-    };
-    if (librarySearchTimer) {
-      clearTimeout(librarySearchTimer);
-    }
-    librarySearchTimer = setTimeout(() => {
-      void commitLibraryQuery();
-    }, LIBRARY_QUERY_SEARCH_DEBOUNCE_MS);
-  });
-  librarySortSelect.addEventListener("change", () => {
-    const sortMode = librarySortSelect.value || "Name";
-    libraryBrowseControls = {
-      ...libraryBrowseControls,
-      sortMode,
-      sortDescending: isDefaultDescendingForSortMode(sortMode)
-    };
-    void commitLibraryQuery();
-  });
-  librarySortDirectionBtn.addEventListener("click", () => {
-    libraryBrowseControls = {
-      ...libraryBrowseControls,
-      sortDescending: !libraryBrowseControls.sortDescending
-    };
-    void commitLibraryQuery();
   });
   filterDialogCloseBtn.addEventListener("click", () => {
     closeFilterDialog();

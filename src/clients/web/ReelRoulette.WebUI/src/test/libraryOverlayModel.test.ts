@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseLibraryProjectionSummary, renderLibraryOverlayBodyHtml } from "../library/libraryOverlayModel";
+import { libraryOverlayMessage, parseLibraryProjectionSummary } from "../library/libraryOverlayModel";
 
 describe("libraryOverlayModel", () => {
   it("parses populated projection with enabled-source item counts", () => {
@@ -43,10 +43,14 @@ describe("libraryOverlayModel", () => {
     expect(summary.totalItems).toBe(1);
   });
 
-  it("renders loading, empty, error body HTML", () => {
-    expect(renderLibraryOverlayBodyHtml("loading", null, null)).toContain("Loading library");
-    expect(renderLibraryOverlayBodyHtml("empty", null, null)).toContain("No media in library");
-    expect(renderLibraryOverlayBodyHtml("error", null, "HTTP 500")).toContain("HTTP 500");
-    expect(renderLibraryOverlayBodyHtml("ready", { totalItems: 1, enabledSourceCount: 1, hasItems: true }, null)).toBe("");
+  it("describes the loading, empty, and error messages", () => {
+    expect(libraryOverlayMessage("loading", null)).toEqual({ text: "Loading library…", error: false, live: true });
+    expect(libraryOverlayMessage("empty", "ignored")).toEqual({ text: "No media in library.", error: false, live: false });
+    expect(libraryOverlayMessage("error", "HTTP 500")).toEqual({ text: "HTTP 500", error: true, live: false });
+    expect(libraryOverlayMessage("error", null).text).toBe("Could not load library.");
+  });
+
+  it("keeps an error message as text", () => {
+    expect(libraryOverlayMessage("error", "<b>HTTP</b> 500").text).toBe("<b>HTTP</b> 500");
   });
 });
