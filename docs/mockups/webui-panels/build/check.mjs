@@ -10,9 +10,10 @@ const dir = fileURLToPath(new URL("..", import.meta.url));
 let failures = 0;
 const windows = [];
 
-async function load(name, width, query = "") {
+async function load(name, width, query = "", setup = null) {
   console.log(`  loading ${name}@${width}`);
   const window = new Window({ width, height: 800, url: "https://mockup.test/" + name + query, settings: { enableJavaScriptEvaluation: true, suppressInsecureJavaScriptEnvironmentWarning: true } });
+  if (setup) setup(window);
   const errors = [];
   window.addEventListener("error", (event) => errors.push(String(event.error?.stack || event.message)));
   window.console.error = (...args) => errors.push(args.join(" "));
@@ -25,6 +26,73 @@ async function load(name, width, query = "") {
 function check(label, ok) {
   if (!ok) failures++;
   console.log(`${ok ? "PASS" : "FAIL"} ${label}`);
+}
+
+// A stand-in for Web Audio, which happy-dom lacks: it records each gain node and its changes, and the media elements'
+// plays and pauses. A direct set of a gain's value is a jump, and a jump in level is a click.
+function standInAudio() {
+  const gains = [];
+  const playedBy = [];
+  class StandInAudioContext {
+    constructor() {
+      this.state = "suspended";
+      this.destination = {};
+    }
+    resume() {
+      this.state = "running";
+      return Promise.resolve();
+    }
+    createMediaElementSource() {
+      return { connect: (node) => node };
+    }
+    get currentTime() {
+      return performance.now() / 1000;
+    }
+    createGain() {
+      // Records each change: a direct set of its value is a jump, and a jump in level is a click.
+      const param = {
+        level: 1,
+        directSets: 0,
+        calls: [],
+        get value() {
+          return this.level;
+        },
+        set value(level) {
+          this.directSets += 1;
+          this.level = level;
+        },
+        setValueAtTime(level) {
+          this.calls.push(["set", level]);
+          this.level = level;
+        },
+        setTargetAtTime(level, start, timeConstant) {
+          this.calls.push(["glide", level, timeConstant]);
+          this.level = level;
+        }
+      };
+      const node = { gain: param, connect: (next) => next };
+      gains.push(node);
+      return node;
+    }
+  }
+  // The stand-in sound's element: plays and pauses are recorded, and paused follows them.
+  const mediaCalls = [];
+  const setup = (w) => {
+    w.AudioContext = StandInAudioContext;
+    const proto = w.HTMLMediaElement.prototype;
+    Object.defineProperty(proto, "paused", { configurable: true, get() { return this.standInPaused !== false; } });
+    proto.play = function () {
+      this.standInPaused = false;
+      mediaCalls.push("play");
+      playedBy.push(this);
+      return Promise.resolve();
+    };
+    proto.pause = function () {
+      this.standInPaused = true;
+      mediaCalls.push("pause");
+    };
+  };
+  return { setup, gains, mediaCalls, playedBy };
 }
 
 const logoIcon = "data:image/svg+xml;base64," + readFileSync(new URL("../../../../assets/logo/logo-icon.svg", import.meta.url)).toString("base64");
@@ -62,7 +130,8 @@ for (const name of ["index", "validation", "recovery", "desktop-notice", "layout
 
 for (const width of [1280, 390]) {
   // "?instant" skips the mockup's waits: random picks, loading, and Auto Tag's scan finish at once.
-  const { document, errors, window } = await load("layout", width, "?instant");
+  const standIn = standInAudio();
+  const { document, errors, window } = await load("layout", width, "?instant", standIn.setup);
   const $ = (id) => document.getElementById(id);
   const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
   const input = (el, value) => {
@@ -667,6 +736,50 @@ for (const width of [1280, 390]) {
   hideChoice("timeout").click();
   input($("set-hide-after"), "3");
 
+  // Volume: the scroll wheel and a two-finger drag change it by the volume step, show the controls, and never scroll
+  // the page over the player.
+  const volumeNow = () => Number($("volume").value);
+  const wheel = (deltaY, deltaMode = 0) => {
+    const event = new window.WheelEvent("wheel", { deltaY, deltaMode, bubbles: true, cancelable: true });
+    $("media").dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  closePanel();
+  window.mockup.choose(3);
+  input($("volume"), "50");
+  hideChoice("timeout").click();
+  await sleep(10);
+  const wheelPrevented = wheel(-100);
+  check(`layout@${width}: a wheel notch up raises the volume a step, shows the controls, and doesn't scroll the page (${volumeNow()})`, volumeNow() === 55 && wheelPrevented && controlsUp());
+  wheel(3, 1);
+  check(`layout@${width}: a notch down in lines lowers it a step (${volumeNow()})`, volumeNow() === 50);
+  wheel(-30);
+  wheel(-30);
+  wheel(-30);
+  const afterLightSwipe = volumeNow();
+  wheel(-30);
+  check(`layout@${width}: a trackpad's small deltas add up to a step every 100 px (${afterLightSwipe}, then ${volumeNow()})`, afterLightSwipe === 50 && volumeNow() === 55);
+  window.mockup.choose(2);
+  const photoPrevented = wheel(-100);
+  check(`layout@${width}: on a photo the wheel does nothing, and still doesn't scroll the page`, volumeNow() === 55 && photoPrevented);
+  window.mockup.choose(3);
+  const touches = (type, ys) => {
+    const event = Object.assign(new window.Event(type, { bubbles: true, cancelable: true }), {
+      touches: ys.map((y) => ({ clientX: 120, clientY: y })),
+      changedTouches: [{ clientX: 120, clientY: ys[0] ?? 0 }]
+    });
+    $("media").dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  touches("touchstart", [300, 340]);
+  const dragPrevented = touches("touchmove", [240, 280]);
+  touches("touchend", []);
+  check(`layout@${width}: two fingers dragged up 60 px raise it two steps, claimed from the browser (${volumeNow()})`,
+    volumeNow() === 65 && dragPrevented && window.getComputedStyle($("media")).touchAction === "none" && controlsUp());
+  check(`layout@${width}: the player is clipped by a rounded shape as well, which keeps its corners on iOS (${window.getComputedStyle($("media")).clipPath})`,
+    /^inset\(0(px)? round /.test(window.getComputedStyle($("media")).clipPath));
+  input($("volume"), "80");
+
   // Ambient mode: on by default, with its settings in an expandable section beside the toggle. It samples at the
   // update rate while a video plays, holds while the video is paused or the tab is hidden, and samples a photo once.
   const samples = () => window.mockup.ambientSamples();
@@ -984,7 +1097,7 @@ for (const width of [1280, 390]) {
   $("pair").dispatchEvent(new window.Event("submit", { cancelable: true }));
   check(`layout@${width}: Pair hides the prompt`, $("pair").hidden && status() === "Paired." && !document.body.classList.contains("pairing"));
   $("mock-ios-volume").click();
-  check(`layout@${width}: a read-only volume hides the slider`, $("volume-wrap").hidden);
+  check(`layout@${width}: with the gain stage running, a read-only volume, as on iOS, keeps its slider`, !$("volume-wrap").hidden && standIn.gains.length === 1);
   // Library controls collapse, and the preset and randomization dropdowns share a row.
   openTab("library");
   check(`layout@${width}: preset and randomization sit in one row`, $("lib-preset").parentElement === $("lib-mode").parentElement && $("lib-preset").parentElement.classList.contains("lib-pair"));
@@ -1034,6 +1147,97 @@ for (const width of [1280, 390]) {
   $("startup-error-back").click();
   check(`layout@${width}: no browser dialog was used anywhere (${nativeCalls.join(",")})`, nativeCalls.length === 0);
   check(`layout@${width}: no script errors anywhere ${errors.join("; ")}`, errors.length === 0);
+}
+
+{
+  // iOS: a media element's volume is read-only, so the volume works through a Web Audio gain stage. The slider shows
+  // once the stage starts on the first tap, and the wheel and the slider then set its gain.
+  const { setup, gains, mediaCalls } = standInAudio();
+  const { document, errors, window } = await load("layout", 390, "?instant", setup);
+  const $ = (id) => document.getElementById(id);
+  document.getElementById("mock-ios-volume").click();
+  window.mockup.choose(3);
+  const wheelUp = () => $("media").dispatchEvent(new window.WheelEvent("wheel", { deltaY: -100, bubbles: true, cancelable: true }));
+  const volumeBefore = Number($("volume").value);
+  wheelUp();
+  check("ios: with the volume read-only and no gain stage yet, the slider is hidden and the wheel does nothing", $("volume-wrap").hidden && Number($("volume").value) === volumeBefore && gains.length === 0);
+  document.body.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  check(`ios: the first tap starts the gain stage, and the slider shows (${gains.length} gain node)`, gains.length === 1 && !$("volume-wrap").hidden);
+  wheelUp();
+  check(`ios: the wheel then raises the volume, and the gain follows it (${$("volume").value}, gain ${gains[0]?.gain.value})`,
+    Number($("volume").value) === Math.min(100, volumeBefore + 5) && Math.abs(gains[0].gain.value - Number($("volume").value) / 100) < 1e-9);
+  const param = gains[0].gain;
+  const lastCall = () => param.calls.at(-1);
+  const glides = (call, level) => call?.[0] === "glide" && Math.abs(call[1] - level) < 1e-9 && call[2] > 0 && call[2] <= 0.03;
+  check(`ios: playing a video started the sound from silence and faded it in (${JSON.stringify(param.calls.slice(0, 2))})`,
+    param.calls[0]?.[0] === "set" && param.calls[0][1] === 0 && glides(param.calls[1], volumeBefore / 100) && mediaCalls[0] === "play");
+  check(`ios: a volume step glides to its level instead of jumping (${JSON.stringify(lastCall())})`, glides(lastCall(), Number($("volume").value) / 100));
+  $("play-btn").click();
+  const pausedAtOnce = mediaCalls.at(-1) === "pause";
+  check(`ios: pause fades the sound out first (${JSON.stringify(lastCall())})`, glides(lastCall(), 0) && !pausedAtOnce);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  check("ios: and stops it once it is silent", mediaCalls.at(-1) === "pause");
+  $("play-btn").click();
+  check(`ios: play fades it back in from silence (${JSON.stringify(param.calls.slice(-2))})`,
+    param.calls.at(-2)?.[0] === "set" && param.calls.at(-2)[1] === 0 && glides(lastCall(), Number($("volume").value) / 100) && mediaCalls.at(-1) === "play");
+  $("mute-btn").click();
+  check("ios: Mute glides the gain to 0", glides(lastCall(), 0) && param.value === 0);
+  check(`ios: the gain is never set straight to a level (${param.directSets} direct sets)`, param.directSets === 0);
+  check(`ios: no script errors ${errors.join("; ")}`, errors.length === 0);
+}
+
+{
+  // Enhanced audio, on by default: every device plays through the gain stage. Off, the sound plays directly, and on
+  // iOS the volume controls hide.
+  const { setup, gains, playedBy } = standInAudio();
+  const { document, errors, window } = await load("layout", 1280, "?instant", setup);
+  const $ = (id) => document.getElementById(id);
+  const toggle = $("set-enhanced-audio");
+  check(`enhanced: Enhanced audio starts on, in Playback, with its description (${toggle.closest(".setting").querySelector(".setting-hint").textContent})`,
+    toggle.checked && toggle.closest(".settings-section").querySelector("h3").textContent === "Playback" &&
+    toggle.closest(".setting").querySelector(".setting-hint").textContent === "Processes audio in the app, so in-app volume works on iPhone and iPad.");
+  document.body.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  window.mockup.choose(3);
+  const routed = playedBy.at(-1);
+  check(`enhanced: a device whose volume isn't read-only also plays through the gain stage (${gains.length} gain node)`, gains.length === 1 && !!routed);
+  toggle.checked = false;
+  toggle.dispatchEvent(new window.Event("change"));
+  const direct = playedBy.at(-1);
+  check("enhanced: turning it off plays the sound directly, on another element, with no gain stage", direct !== routed && routed.paused && !direct.paused && gains.length === 1 && window.localStorage.getItem("rr-mockup.enhancedAudio") === "false");
+  const slider = $("volume");
+  slider.value = "40";
+  slider.dispatchEvent(new window.Event("input"));
+  check(`enhanced: directly, the volume sets the element's own volume (${direct.volume})`, Math.abs(direct.volume - 0.4) < 1e-9 && !$("volume-wrap").hidden);
+  $("mock-ios-volume").click();
+  check("enhanced: off, on iOS the volume controls hide", $("volume-wrap").hidden);
+  $("mock-ios-volume").click();
+  toggle.checked = true;
+  toggle.dispatchEvent(new window.Event("change"));
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  check(`enhanced: turning it back on starts a new gain stage and plays through it (${gains.length} gain nodes)`, gains.length === 2 && direct.paused && playedBy.at(-1) !== direct);
+  check(`enhanced: no script errors ${errors.join("; ")}`, errors.length === 0);
+}
+
+{
+  // No silent fallback: a gain stage that can't start shows a notice that offers to turn Enhanced audio off.
+  const { setup, gains, playedBy } = standInAudio();
+  const { document, errors, window } = await load("layout", 390, "?instant", setup);
+  const $ = (id) => document.getElementById(id);
+  $("mock-audio-fails").click();
+  document.body.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const notice = [...document.querySelectorAll("dialog.app-dialog")].at(-1);
+  const turnOff = notice && [...notice.querySelectorAll("button")].find((b) => b.textContent.trim() === "Turn off Enhanced audio");
+  check(`audio-fails: the next tap shows the notice (${notice?.querySelector(".dialog-message")?.textContent.slice(0, 45)})`,
+    !!notice && notice.querySelector(".dialog-message").textContent.startsWith("Audio processing couldn't start on this device.") && !!turnOff && gains.length === 0 &&
+    document.activeElement?.textContent.trim() === "OK");
+  turnOff.click();
+  window.mockup.choose(3);
+  check("audio-fails: its button turns Enhanced audio off for this device, and the sound then plays directly",
+    !$("set-enhanced-audio").checked && window.localStorage.getItem("rr-mockup.enhancedAudio") === "false" && !document.querySelector("dialog.app-dialog") && playedBy.length === 1 && !playedBy[0].paused);
+  check(`audio-fails: no script errors ${errors.join("; ")}`, errors.length === 0);
 }
 
 for (const width of [1280, 390]) {

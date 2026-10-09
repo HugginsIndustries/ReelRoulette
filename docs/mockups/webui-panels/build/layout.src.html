@@ -59,14 +59,18 @@ body { height: 100dvh; overflow: hidden; display: flex; flex-direction: column; 
   background: #000;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
-.stage:fullscreen .media-container { border-radius: 0; }
-.stage.fullscreen-pseudo .media-container { border-radius: 0; }
+.stage:fullscreen .media-container { --player-radius: 0px; }
+.stage.fullscreen-pseudo .media-container { --player-radius: 0px; }
 .player-col { flex: 1 1 0; min-width: 0; display: flex; }
 
+/* The player is clipped by a rounded clip-path as well as overflow: WebKit doesn't clip a layer of its own, such as the
+   blurred ambient canvas, to its parent's rounded corners, so on iOS they turned square once ambient mode drew. */
 .media-container {
+  --player-radius: 8px;
   position: relative;
   background: #000;
-  border-radius: 8px;
+  border-radius: var(--player-radius);
+  clip-path: inset(0 round var(--player-radius));
   overflow: hidden;
   flex: 1;
   display: flex;
@@ -76,6 +80,7 @@ body { height: 100dvh; overflow: hidden; display: flex; flex-direction: column; 
   min-height: 0;
   min-width: 0;
   container-type: size;
+  touch-action: none;
 }
 
 /* Ambient mode: a heavily blurred, dimmed copy of the frame fills the black space around it. The glow sits on the
@@ -579,7 +584,7 @@ kbd {
    screen, like fullscreen without the browser's fullscreen mode. The panel and dialogs still open, compacted. */
 body.short-screen #app { padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); }
 body.short-screen .top-bar, body.short-screen .status { display: none; }
-body.short-screen .media-container { border-radius: 0; }
+body.short-screen .media-container { --player-radius: 0px; }
 body.short-screen .panel-tabs { padding: 2px 6px; }
 body.short-screen .panel-tab, body.short-screen #panel-close { width: 40px; height: 40px; min-width: 40px; }
 body.short-screen .panel-page { padding: 6px 10px; gap: 6px; }
@@ -985,6 +990,11 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
                 <label><input type="radio" name="set-volstep" value="2"> 2%</label>
                 <label><input type="radio" name="set-volstep" value="5"> 5%</label>
               </div>
+              <p class="setting-hint">The scroll wheel over the player changes the volume by this step for each notch, and so does a two-finger drag up or down on a touch screen.</p>
+            </div>
+            <div class="setting">
+              <div class="choice-row"><label><input type="checkbox" id="set-enhanced-audio"> Enhanced audio</label></div>
+              <p class="setting-hint">Processes audio in the app, so in-app volume works on iPhone and iPad.</p>
             </div>
             <div class="setting">
               <span class="setting-label" id="set-hide-controls-label">Hide player controls</span>
@@ -1139,7 +1149,9 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
         <legend>Situation</legend>
         <label><input type="checkbox" id="mock-pairing"> The server asks for pairing (a token of "wrong" fails)</label>
         <label><input type="checkbox" id="mock-server-machine"> This browser is on the server machine: Show in File Manager, and admin actions without the control token</label>
-        <label><input type="checkbox" id="mock-ios-volume"> Volume is read-only, as on iOS</label>
+        <label><input type="checkbox" id="mock-ios-volume"> Volume is read-only, as on iOS: the slider shows once the Web Audio gain stage starts on the first tap</label>
+        <label><input type="checkbox" id="mock-sound"> A stand-in sound plays with videos, through the Web Audio gain stage, so the volume can be heard</label>
+        <label><input type="checkbox" id="mock-audio-fails"> The Web Audio gain stage fails to start (the next tap shows the notice)</label>
         <label><input type="checkbox" id="mock-short"> A phone on its side (a touch screen under 500 px tall)</label>
         <p class="mock-small mock-keep">The theme, panel side, and Auto-Pause are in the Settings tab.</p>
       </fieldset>
@@ -1197,11 +1209,14 @@ const state = {
   serverMachine: store.get("serverMachine", false),
   pairing: store.get("pairing", false),
   iosVolume: store.get("iosVolume", false),
+  sound: store.get("sound", true),
   mockShort: store.get("mockShort", false),
   showStatus: store.get("showStatus", true),
   libCollapsed: store.get("libCollapsed", false),
   tileNames: store.get("tileNames", false),
   hideControls: store.get("hideControls", "timeout"),
+  enhancedAudio: store.get("enhancedAudio", true),
+  audioFails: store.get("audioFails", false),
   hideAfter: store.get("hideAfter", 3),
   keepWhilePaused: store.get("keepWhilePaused", true),
   ambient: store.get("ambient", true),
@@ -1365,6 +1380,7 @@ function chipText() {
 }
 
 function renderPlayback() {
+  syncStandInSound();
   const item = playback.item;
   const photo = !!item && isPhoto(item);
   $("empty-state").hidden = !!item;
@@ -1903,6 +1919,255 @@ overlayControls.addEventListener("focusout", () => setTimeout(controlsActivity))
 document.addEventListener("keydown", (event) => {
   if (!isTextField(event.target)) controlsActivity();
 });
+
+// ---- Volume: the scroll wheel, a two-finger drag, and the Web Audio gain stage ----
+// With Enhanced audio, on by default, every device plays the player's audio through a Web Audio gain stage: the
+// element's audio goes through a gain node the app sets, relative to the system volume, so iOS, where Safari makes the
+// element's own volume read-only, gets an in-app volume too, and WebUI Loudness Normalization later adds its stage to
+// a path in use everywhere. The mockup's stand-in sound, a soft looping chord played with videos, goes through it,
+// started on the first tap or key, as Web Audio needs. Without Enhanced audio, the sound plays directly. The slider,
+// the scroll wheel, and a two-finger drag work wherever the volume can change.
+const elementVolumeReadOnly = (() => {
+  try {
+    const probe = document.createElement("audio");
+    probe.volume = 0.5;
+    return probe.volume !== 0.5;
+  } catch {
+    return false;
+  }
+})();
+// element: routed through the gain stage; direct: plays without it, once Enhanced audio is off, since an element
+// routed through Web Audio stays routed.
+const audio = { context: null, gain: null, element: null, direct: null, url: "", ready: false, failed: false };
+const volumeReadOnly = () => elementVolumeReadOnly || state.iosVolume;
+const volumeAdjustable = () => (state.enhancedAudio && audio.ready) || !volumeReadOnly();
+function renderVolume() {
+  $("volume-wrap").hidden = !volumeAdjustable();
+}
+// A four-second chord that swells and fades, so its loop has no click, written as a WAV file in the page.
+function standInSoundUrl() {
+  const rate = 22050;
+  const seconds = 4;
+  const frames = rate * seconds;
+  const wav = new DataView(new ArrayBuffer(44 + frames * 2));
+  const text = (offset, value) => [...value].forEach((char, i) => wav.setUint8(offset + i, char.charCodeAt(0)));
+  text(0, "RIFF");
+  wav.setUint32(4, 36 + frames * 2, true);
+  text(8, "WAVEfmt ");
+  wav.setUint32(16, 16, true);
+  wav.setUint16(20, 1, true);
+  wav.setUint16(22, 1, true);
+  wav.setUint32(24, rate, true);
+  wav.setUint32(28, rate * 2, true);
+  wav.setUint16(32, 2, true);
+  wav.setUint16(34, 16, true);
+  text(36, "data");
+  wav.setUint32(40, frames * 2, true);
+  for (let i = 0; i < frames; i++) {
+    const t = i / rate;
+    const swell = 0.5 - 0.5 * Math.cos((2 * Math.PI * t) / seconds);
+    const chord = Math.sin(2 * Math.PI * 220 * t) + 0.8 * Math.sin(2 * Math.PI * 277.18 * t) + 0.6 * Math.sin(2 * Math.PI * 329.63 * t);
+    wav.setInt16(44 + i * 2, (chord / 2.4) * swell * 0.35 * 32767, true);
+  }
+  const blob = new Blob([wav], { type: "audio/wav" });
+  return URL.createObjectURL ? URL.createObjectURL(blob) : "";
+}
+const soundUrl = () => (audio.url ||= standInSoundUrl());
+function startAudio() {
+  if (!state.enhancedAudio || audio.failed) return;
+  if (audio.context) {
+    // iOS suspends the context while the page is in the background; the next tap resumes it.
+    if (audio.context.state !== "running") Promise.resolve(audio.context.resume?.()).catch(() => {});
+    return;
+  }
+  const Context = window.AudioContext || window.webkitAudioContext;
+  try {
+    // The Mockup tab can make it fail, to show the notice.
+    if (!Context || state.audioFails) throw new Error("Web Audio is unavailable");
+    audio.context = new Context();
+    audio.element = document.createElement("audio");
+    audio.element.loop = true;
+    audio.element.src = soundUrl();
+    const source = audio.context.createMediaElementSource(audio.element);
+    audio.gain = audio.context.createGain();
+    source.connect(audio.gain).connect(audio.context.destination);
+  } catch {
+    return void gainStageFailed();
+  }
+  // It works once the context runs, which it can only start from a tap or key.
+  Promise.resolve(audio.context.resume?.()).then(() => {
+    if (audio.context?.state !== "running") return void gainStageFailed();
+    audio.ready = true;
+    renderVolume();
+    syncStandInSound();
+  }, gainStageFailed);
+}
+// No silent fallback: a gain stage that can't start says so, once, and offers to play audio directly on this device.
+function gainStageFailed() {
+  if (audio.failed) return;
+  dropGainStage();
+  audio.failed = true;
+  renderVolume();
+  const body = document.createElement("div");
+  body.className = "dialog-body";
+  const text = document.createElement("p");
+  text.className = "dialog-message";
+  text.id = `audio-notice-${Date.now()}`;
+  text.textContent = "Audio processing couldn't start on this device. Turn off Enhanced audio to play sound directly, without in-app volume on iPhone and iPad.";
+  const actions = document.createElement("div");
+  actions.className = "dialog-actions";
+  const spacer = document.createElement("span");
+  spacer.className = "dialog-spacer";
+  const ok = dialogButton("OK");
+  const turnOff = dialogButton("Turn off Enhanced audio");
+  actions.append(spacer, ok, turnOff);
+  body.append(text, actions);
+  const { close } = openDialog({ content: body, labelledBy: text.id, role: "alertdialog" });
+  ok.addEventListener("click", () => close(false));
+  turnOff.addEventListener("click", () => {
+    close(true);
+    setEnhancedAudio(false);
+  });
+  ok.focus();
+}
+function dropGainStage() {
+  clearTimeout(fadeOutTimer);
+  fadeOutTimer = 0;
+  try {
+    audio.element?.pause();
+    audio.context?.close?.();
+  } catch {
+    // Already gone.
+  }
+  Object.assign(audio, { context: null, gain: null, element: null, ready: false, failed: false });
+}
+// Enhanced audio, kept per device. Off, the sound plays directly; on, the gain stage starts at once, since the
+// setting's own click is a tap Web Audio accepts.
+function setEnhancedAudio(on) {
+  state.enhancedAudio = on;
+  store.set("enhancedAudio", on);
+  $("set-enhanced-audio").checked = on;
+  if (on) {
+    stopDirectSound();
+    audio.failed = false;
+    startAudio();
+  } else {
+    dropGainStage();
+  }
+  renderVolume();
+  syncStandInSound();
+}
+function stopDirectSound() {
+  try {
+    if (audio.direct && !audio.direct.paused) audio.direct.pause();
+  } catch {
+    // Nothing to stop.
+  }
+}
+document.addEventListener("pointerdown", startAudio, true);
+document.addEventListener("keydown", startAudio, true);
+// The gain never jumps: a jump in level is a click, so stepping the volume crackled and starting or stopping popped.
+// Each change glides to its level with a 15 ms time constant, settling within a few tens of milliseconds. Play starts
+// from silence and fades in; pause fades out and stops the sound once it is silent. The stand-in chord goes through
+// the same stage, so it fades the same way.
+const GAIN_GLIDE_SECONDS = 0.015;
+const FADE_OUT_MS = 60;
+let fadeOutTimer = 0;
+const glideGain = (level) => audio.gain.gain.setTargetAtTime(level, audio.context.currentTime, GAIN_GLIDE_SECONDS);
+function syncStandInSound() {
+  const level = playback.muted ? 0 : state.volume / 100;
+  const audible = state.sound && !!playback.item && !isPhoto(playback.item) && playback.playing && !playback.failed;
+  try {
+    if (!state.enhancedAudio) {
+      // Directly, without the gain stage: the element's own volume, where it can change, and no fades.
+      if (!audio.direct) {
+        if (!audible) return;
+        audio.direct = document.createElement("audio");
+        audio.direct.loop = true;
+        audio.direct.src = soundUrl();
+      }
+      if (!volumeReadOnly()) audio.direct.volume = level;
+      audio.direct.muted = playback.muted;
+      if (audible && audio.direct.paused) audio.direct.play()?.catch?.(() => {});
+      if (!audible && !audio.direct.paused) audio.direct.pause();
+      return;
+    }
+    if (!audio.ready) return;
+    if (audible) {
+      clearTimeout(fadeOutTimer);
+      fadeOutTimer = 0;
+      if (audio.element.paused) {
+        audio.gain.gain.setValueAtTime(0, audio.context.currentTime);
+        audio.element.play()?.catch?.(() => {});
+      }
+      glideGain(level);
+    } else if (!audio.element.paused && !fadeOutTimer) {
+      glideGain(0);
+      fadeOutTimer = setTimeout(() => {
+        fadeOutTimer = 0;
+        audio.element.pause();
+      }, FADE_OUT_MS);
+    }
+  } catch {
+    // A browser that can't play the stand-in sound still has the gain stage for the volume.
+  }
+}
+// Scrolling or dragging shows the controls, so the slider is visible while it moves.
+function showControlsForVolume() {
+  if (state.hideControls === "timeout") controlsActivity();
+  else setControlsShown(true);
+}
+const volumeChangesHere = () => !(playback.item && isPhoto(playback.item)) && volumeAdjustable();
+function stepVolume(notches) {
+  showControlsForVolume();
+  if (notches) setVolume(state.volume + notches * state.volumeStep);
+}
+// A mouse wheel sends whole notches: line or page units, or a large pixel delta. A trackpad sends small pixel deltas,
+// which add up to a notch every 100 px, so a light swipe doesn't jump the volume. Over the player the page never
+// scrolls.
+const WHEEL_NOTCH_PX = 100;
+let wheelRest = 0;
+let wheelIdle = 0;
+media.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  if (!volumeChangesHere()) return;
+  let notches;
+  if (event.deltaMode !== 0 || Math.abs(event.deltaY) >= 50) {
+    notches = -Math.sign(event.deltaY);
+  } else {
+    wheelRest -= event.deltaY;
+    notches = Math.trunc(wheelRest / WHEEL_NOTCH_PX);
+    wheelRest -= notches * WHEEL_NOTCH_PX;
+    clearTimeout(wheelIdle);
+    wheelIdle = setTimeout(() => (wheelRest = 0), 300);
+  }
+  stepVolume(notches);
+}, { passive: false });
+// Two fingers dragged up or down change the volume a step per 30 px. The player claims its touches (touch-action:
+// none), and Safari's own pinch gesture is turned away, so the browser doesn't zoom there.
+const DRAG_NOTCH_PX = 30;
+let twoFinger = null;
+const middleY = (touches) => (touches[0].clientY + touches[1].clientY) / 2;
+media.addEventListener("touchstart", (event) => {
+  if (event.touches.length !== 2) return;
+  swipeStart = null;
+  twoFinger = { y: middleY(event.touches), rest: 0 };
+}, { passive: true });
+media.addEventListener("touchmove", (event) => {
+  if (!twoFinger || event.touches.length !== 2) return;
+  event.preventDefault();
+  if (!volumeChangesHere()) return;
+  const y = middleY(event.touches);
+  twoFinger.rest += twoFinger.y - y;
+  twoFinger.y = y;
+  const notches = Math.trunc(twoFinger.rest / DRAG_NOTCH_PX);
+  twoFinger.rest -= notches * DRAG_NOTCH_PX;
+  stepVolume(notches);
+}, { passive: false });
+media.addEventListener("touchend", (event) => {
+  if (event.touches.length === 0) twoFinger = null;
+}, { passive: true });
+media.addEventListener("gesturestart", (event) => event.preventDefault());
 $("overlay-controls").addEventListener("click", (event) => event.stopPropagation());
 // Play starts a random pick while nothing plays, and does nothing on a photo, as today.
 $("play-btn").addEventListener("click", () => {
@@ -3763,6 +4028,8 @@ function initSettings() {
   bindChoice("set-autoplay", "autoplayMode", String, renderTime);
   bindChoice("set-seek", "seekStep", Number);
   bindChoice("set-volstep", "volumeStep", Number);
+  $("set-enhanced-audio").checked = state.enhancedAudio;
+  $("set-enhanced-audio").addEventListener("change", () => setEnhancedAudio($("set-enhanced-audio").checked));
   // Hide player controls: Hide after and Keep visible while paused show only while Timeout is chosen.
   const renderHideSettings = () => ($("set-hide-timeout").hidden = state.hideControls !== "timeout");
   bindChoice("set-hide-controls", "hideControls", String, () => {
@@ -3903,6 +4170,7 @@ function setVolume(value) {
   state.volume = Math.max(0, Math.min(100, value));
   store.set("volume", state.volume);
   $("volume").value = String(state.volume);
+  syncStandInSound();
 }
 document.addEventListener("keydown", (event) => {
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
@@ -3938,7 +4206,7 @@ document.addEventListener("keydown", (event) => {
     playback.frameStep = key === "." ? "forward" : "back";
     return renderPlayback();
   }
-  if ((key === "[" || key === "]") && !state.iosVolume) return handled(), setVolume(state.volume + (key === "]" ? 1 : -1) * state.volumeStep);
+  if ((key === "[" || key === "]") && volumeAdjustable()) return handled(), setVolume(state.volume + (key === "]" ? 1 : -1) * state.volumeStep);
   if (key === "p") return handled(), $("panel-btn").click();
   if (TAB_KEYS[key]) {
     handled();
@@ -3952,6 +4220,7 @@ $("volume").value = String(state.volume);
 $("volume").addEventListener("input", (event) => {
   state.volume = Number(event.target.value);
   store.set("volume", state.volume);
+  syncStandInSound();
 });
 const pairField = new ValidatedField($("pair-token"), (value) => (value.trim() ? null : { message: "Enter the pairing token.", empty: true }));
 holdAction($("pair-btn"), () => [pairField], { reason: () => "Enter the pairing token first." });
@@ -3974,11 +4243,16 @@ function applyMockOptions() {
   $("pair").hidden = !state.pairing;
   // On a phone on its side, the header shows while the server asks for pairing, so its prompt can be reached.
   document.body.classList.toggle("pairing", state.pairing);
-  $("volume-wrap").hidden = state.iosVolume;
+  renderVolume();
   renderStats();
   placeAllTips();
 }
-[["mock-pairing", "pairing"], ["mock-server-machine", "serverMachine"], ["mock-ios-volume", "iosVolume"], ["mock-short", "mockShort"]].forEach(([id, key]) => {
+// A change to whether the gain stage fails starts it over, so the next tap tries again.
+$("mock-audio-fails").addEventListener("change", () => {
+  dropGainStage();
+  renderVolume();
+});
+[["mock-pairing", "pairing"], ["mock-server-machine", "serverMachine"], ["mock-ios-volume", "iosVolume"], ["mock-sound", "sound"], ["mock-audio-fails", "audioFails"], ["mock-short", "mockShort"]].forEach(([id, key]) => {
   $(id).checked = state[key];
   $(id).addEventListener("change", () => {
     state[key] = $(id).checked;

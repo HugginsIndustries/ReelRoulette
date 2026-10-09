@@ -19,8 +19,10 @@ Instructions:
 
 Commit Message:
 
-Docs: Add the Hide player controls setting to the plan and the mockup
+Docs: Plan wheel and two-finger volume, a Web Audio gain stage on every device, and rounded iOS corners
 
-- Record Hide player controls in WebUI Keyboard Shortcuts and Player Controls: Timeout by default, hiding the controls after 1 to 30 seconds with no activity (3 by default) and keeping them while the pointer is on them, while the scrub bar or volume is dragged, and, by default, while paused; On click/tap, today's behavior; and Never.
-- Record its place in the Settings tab's Playback section in WebUI Settings Panel, and list the mockup's own additions, inert hidden controls, a key press as activity, and keyboard focus keeping the controls shown, as pending approval.
-- Mockup: the setting with Hide after and Keep visible while paused under Timeout, and the player following each mode; extend the happy-dom check to cover them.
+- Record in WebUI Keyboard Shortcuts and Player Controls that the scroll wheel over the player and a two-finger drag on a touch screen change the volume by the volume step, with a trackpad's deltas added up into notches, showing the controls and never scrolling or zooming the page.
+- Route every device's audio through a Web Audio gain stage while Enhanced audio, a new per-device setting on by default, is on: started on the first tap, it gives iOS an in-app volume, glides each volume change and fades play and pause so nothing crackles or pops, and offers to turn Enhanced audio off in a notice when it can't start, with no silent fallback.
+- Record a small, additive server slice for cross-origin headers on media responses, so media from another address doesn't play silent through Web Audio, and the traps around routed elements and suspended audio contexts.
+- Record Enhanced audio in WebUI Settings Panel, described in v0.15.0 by the in-app volume it gives iPhone and iPad, and in WebUI Loudness Normalization, which disables its option while Enhanced audio is off and adds normalization to the description, and the iOS rounded-corner fix with ambient mode; move the approved Hide player controls additions out of the pending list.
+- Mockup: wheel and two-finger volume, the gain stage on every device with a stand-in sound, Enhanced audio and its notice, a Mockup option that makes the gain stage fail, and the clip-path fix; extend the happy-dom check to cover them.
