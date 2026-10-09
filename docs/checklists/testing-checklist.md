@@ -59,9 +59,13 @@ A quick pass over the basics no automated test covers end to end.
 
 An agent verifies these from the repo, its docs, or the release workflow's runs during the pass, and ticks them.
 
+- [ ] Mockup gap audit: every screen in `docs/mockups/reelroulette/` matches the release's WebUI, admin section, recovery page, and desktop retirement notice, and each difference found is fixed in the mockup or recorded as a backlog item in `MILESTONES.md`.
+
 ### Manual checks
 
 These need a person, real devices, or the Windows VM.
+
+- [ ] Mockup side by side: with `docs/mockups/reelroulette/` and the release's app open side by side on a desktop browser and on a phone, each screen looks as the mockup shows it, and each difference found is fixed in the mockup or recorded as a backlog item in `MILESTONES.md`.
 
 - [ ] Behind `tailscale serve` and one other HTTPS proxy, the WebUI and its admin section connect, pair, browse, and play, and the server treats them as remote.
 - [ ] On Android Chrome over HTTPS through each proxy, with the default auth mode, choosing Install (not Create shortcut) adds the WebUI to Settings → Apps and opens it standalone with its icon; iOS Add to Home Screen and desktop browser install still open standalone.

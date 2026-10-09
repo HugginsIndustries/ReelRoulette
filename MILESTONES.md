@@ -115,7 +115,7 @@ Last milestone completed: M12c
 - **Scope**:
   - Placed first after the mockup so the milestones after it build on the new marks instead of replacing old ones later: WebUI Responsive Layout and Panels reworks the header, Recovery Page and Operator Retirement builds the recovery page and renames the tray item, and Desktop Retirement Notice shows the icon in its notice. It is small and independent, so dev releases carry the new icons for the rest of the series.
   - Ships in v0.15.0, right after the WebUI design mockup milestone. Depends on: WebUI Design Mockup, whose mockup approves the header's logo.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - The files in `assets/logo/`, read from them at this edit: `logo-lockup.svg` (the icon with light text, for the dark theme) and `logo-lockup-dark.svg` (dark text, for the light theme); `logo-icon.svg` (the orange icon alone, on transparency); `logo-icon-tile.svg` (the icon on a rounded orange tile) and `logo-icon-maskable.svg` (on a full-bleed orange square); `app.ico` (16 to 256 px) and `favicon.ico` (16, 32, and 48 px); and in `png/`, the plain icon at 16 to 256 px (`icon-*.png`), the tile at 192 and 512 px (`pwa-*.png`), the maskable square at 192 and 512 px (`pwa-maskable-*.png`), and `apple-touch-icon.png` (180 px, full bleed).
   - WebUI slice. Its copies live in `src/clients/web/ReelRoulette.WebUI/public/`, which the WebUI build copies into its output and `tools/scripts/stage-webui-assets.ps1` stages into the server's web root:
     - The header shows `logo-lockup.svg` in the dark theme and `logo-lockup-dark.svg` in the light theme in place of the "ReelRoulette" text, and `logo-icon.svg` alone on a phone, with "ReelRoulette" as its accessible name (decided in WebUI Design Mockup). Read from code at this edit: the header shows the name as text (`ui/Header.tsx`).
@@ -146,6 +146,7 @@ Last milestone completed: M12c
   - The server's executable and tray icon are `app.ico`, its Linux menu entry uses the new icons and leaves no old 512 px icon behind, and its Velopack legs use the new icons while the desktop's keep the old ones.
   - Outside the desktop project and its release legs, nothing refers to `HI.ico`, `HI-256.png`, or `HI-512.png`.
   - `verify-build-output.mjs` checks `dist/runtime-config.json` with the rules `parseRuntimeConfig` uses.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include `npm run verify` with `verify-build-output.mjs` checking the new files and the runtime config, a server test that Linux registration installs the new icons and removes the old 512 px one, `dotnet test ReelRoulette.sln`, `./tools/scripts/verify-linux-packaged-server-smoke.sh`, a search showing only the desktop project and its release legs use the old icons, and the Release Specific checklist item for the installed icons.
 
@@ -155,7 +156,7 @@ Last milestone completed: M12c
 - **Goal**: The Favorites and Blacklisted filters each choose only or excluded, in the server and both clients, so a filter such as Favorites excluded or Blacklisted only works the same in browse, random picks, and presets.
 - **Scope**:
   - Ships in v0.15.0, after the new logo and icons milestone and before WebUI Responsive Layout and Panels builds the Filter tab. Depends on: WebUI Design Mockup, whose mockup approves its look.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Read from code at this edit: the filter state has two booleans, `favoritesOnly` (off by default) and `excludeBlacklisted` (on by default). They are in Core (`FilterState` in `FilteringContracts.cs`), the server's parser (`LibraryListFilterParser`) and list query (`LibraryCatalogListQuery`), the desktop (`FilterState.cs`, and the Favorites only and Exclude blacklisted checkboxes in `FilterDialog.axaml`), and the WebUI (`filterStateModel.ts`). Browse, its counts, and random picks all filter through them.
   - Each filter becomes a checkbox with a small dropdown to its right offering only and excluded, and the dropdown is disabled while its checkbox is off (decided in WebUI Design Mockup). Favorites starts off; Blacklisted starts on and excluded, which is today's Exclude blacklisted. Both clients offer the same options, so a preset behaves identically in each.
   - Contract slice: new fields beside the old ones, a contract change that only adds. A filter that carries only the old fields reads as before: `favoritesOnly` as Favorites only, `excludeBlacklisted` as Blacklisted excluded. Desktop Client Removal drops the old fields. The new fields' names, and what the server writes in the old fields for a client that reads only them, are decided here.
@@ -173,6 +174,7 @@ Last milestone completed: M12c
   - Preset matching compares the new fields, and both clients pass `preset-filter-equality.json` with cases for them.
   - Both clients pass `library-tile-effect.json` with cases for the new modes.
   - OpenAPI has a FilterState schema that names every existing filter field and the new ones, every filter state in the contract uses it, the generated WebUI types carry it, and `npm run verify:contracts` passes.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include server tests for each combination in the list query, its counts, and random selection, contract tests, including that a filter state written before this milestone still parses, the new cases in both shared fixtures run by both clients, desktop and WebUI filter dialog tests, `dotnet test ReelRoulette.sln`, `npm run verify`, and one quick spot check in each client.
 
@@ -182,7 +184,7 @@ Last milestone completed: M12c
 - **Goal**: A field that holds a value that is not valid says so as it is typed, through one reusable pattern for the whole WebUI, and typed durations are parsed strictly.
 - **Scope**:
   - Ships in v0.15.0, after the favorite and blacklist filter modes milestone, as the first of the parts WebUI Responsive Layout and Panels was split into in the v0.15.0 milestone review. Depends on: WebUI Preact Migration and WebUI Design Mockup.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - It lands inside today's overlays, the filter dialog and the tag editor, which WebUI Responsive Layout and Panels later turns into the Filter and Tags tabs.
   - Field validation pattern: one reusable pattern for the whole WebUI, used anywhere a field can hold a value that is not valid. In this milestone the filter dialog's minimum and maximum durations and new preset name, and the Edit Tag dialog's tag name, use it. Every later milestone uses it for its own fields that can hold a value that is not valid, starting with WebUI In-App Dialogs.
     - Field problems use this pattern, never a dialog or the status line. WebUI In-App Dialogs holds the dialog side of the WebUI's message rule, and WebUI Status Line Overhaul the status line side.
@@ -204,6 +206,7 @@ Last milestone completed: M12c
   - A new preset name that is emptied after typing, or that matches a saved preset's name ignoring case, is flagged with the field validation pattern; Add Preset can't proceed while the name is empty or taken; and neither "Enter a preset name." nor "A preset with that name already exists." shows on the status line.
   - An Edit Tag dialog tag name that is emptied is flagged with the field validation pattern, its Save can't proceed while the name is empty, and "Tag name is required." no longer shows.
   - After an unsaved preset change in the filter dialog, Refresh keeps the change and Apply's star, and Apply then saves it.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for the field validation pattern on both durations, the new preset name, and the Edit Tag name: the icon, tooltip, and `aria-invalid` as a value is typed and corrected, an untouched empty field not flagged, the action held with and without other changes and moving to the field, and no status-line or `last.log` message; tests for strict typed durations and a server preset with fractional seconds loading as today; a test of Refresh after an unsaved preset change; `npm run verify`; and one quick spot check.
 
@@ -213,7 +216,7 @@ Last milestone completed: M12c
 - **Goal**: The WebUI asks for names and confirmations, and shows anything the user must notice or act on, in its own dialogs, styled like the rest of the WebUI, instead of the browser's `prompt`, `confirm`, and `alert`.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI field validation pattern milestone. In the v0.15.0 milestone review it took in the dialog part of WebUI Responsive Layout and Panels, so the dialog component and every conversion land together. Depends on: WebUI Preact Migration, so the dialog is a Preact component the migrated screens use, and WebUI Field Validation Pattern, whose pattern its name fields use.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Found during the post-migration fixes desktop spot checks: preset rename in the WebUI opens the browser's native prompt, which does not match the WebUI's styling and does not suit the WebUI when it runs as an installed web app.
   - Measured again at promotion: the WebUI uses native dialogs in nine places: preset delete and rename; tag editor category rename, duplicate-name alert, and category delete; tag delete; two **Discard changes?** confirmations; and new category name. Since the WebUI Preact Migration they are in `src/filter/filterDialog.ts` and `src/tags/tagEditor.ts`, which take `confirm`, `prompt`, and `alert` as options. Read from code at this edit: the two **Discard changes?** confirmations are the tag editor's Close and Refresh (`close` and `refresh` in `src/tags/tagEditor.ts`).
   - The dialog component: themed, shown inside the fullscreen stage, so it works in fullscreen, including iOS pseudo-fullscreen, and able to stack one dialog above another. Escape or a click outside closes only the top dialog, and focus returns to where it was. Enter in a dialog's field saves it. A confirmation opens with Cancel focused, so Enter never confirms it by default, and its confirming button names the action, such as a red Delete. Every dialog in the WebUI uses it, never a browser dialog.
@@ -234,6 +237,7 @@ Last milestone completed: M12c
   - The tag editor's Close and Refresh confirmations and new category name use the dialog component, keep their wording, and confirming or canceling does what it does today, apart from the name check.
   - In new category, an empty name is flagged with the field validation pattern as it is typed, and the dialog can't be confirmed until the name is corrected.
   - A notice shows its message in the in-app dialog and is relayed to `last.log` with the text a status message with that wording is relayed with today.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for the dialog component (stacking, Escape and a click outside closing only the top dialog, Enter saving a dialog's field, a confirmation opening with Cancel focused, focus returning, and showing in fullscreen), for the edit dialogs with Delete asking first and canceling, for confirm and cancel on each converted dialog, for a notice and its `last.log` line, and for the Edit Category, Edit Preset, and new category names with the field validation pattern, plus a check that no native dialog calls remain, `npm run verify`, and a spot check in an installed web app.
 
@@ -243,12 +247,13 @@ Last milestone completed: M12c
 - **Goal**: Tag categories and presets reorder by dragging a handle, or with the arrow keys on it, instead of up and down icons.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI in-app dialogs milestone, as a part of WebUI Responsive Layout and Panels split off in the v0.15.0 milestone review. Depends on: WebUI In-App Dialogs, whose Edit button the drag handle sits beside.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Tag categories and presets reorder by drag and drop instead of up and down arrows, and the rows' up and down icons go. Each row has a visible drag handle, the only place a drag starts, so dragging elsewhere on a row still scrolls on a touch screen. The up and down arrow keys move a row while its handle has focus, and screen readers hear the new position. Uncategorized stays last, as today, and shows its handle dimmed and disabled, so its name lines up with the other categories' (decided in WebUI Design Mockup). A new order stays pending until Save or Apply, as a move does today.
 - **Acceptance criteria**:
   - Category and preset rows have no up or down icons, and each has a drag handle beside its Edit button.
   - Tag categories and presets reorder by dragging their handle, and with the up and down arrow keys on a focused handle. A drag that starts elsewhere on a row scrolls instead, screen readers hear the new position, and Uncategorized stays last with its handle disabled.
   - A new order stays pending until Save or Apply.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for reordering with the arrow keys and for the drag logic deciding where a dragged row lands, `npm run verify`, and one quick spot check of dragging on a touch screen.
 
@@ -258,7 +263,7 @@ Last milestone completed: M12c
 - **Goal**: The WebUI layout adapts to the viewport: on tablets and desktops a side panel beside the player keeps the video in view while browsing, filtering, or tagging, and on phones the panel is a full-screen overlay.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI drag reordering milestone. In the v0.15.0 milestone review it was split into seven parts and keeps the panel host: WebUI Field Validation Pattern, WebUI In-App Dialogs, and WebUI Drag Reordering come before it, and WebUI Library Tab, WebUI Tags and Filter Tabs, and WebUI Auto-Pause and Photo Scrub Bar after it. Depends on: WebUI Preact Migration, WebUI Design Mockup, and New Logo and Icons, whose logo the header shows, and Favorite and Blacklist Filter Modes, whose filter controls the Filter tab carries, and WebUI In-App Dialogs, whose dialogs open inside the panel.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`). Changes to user-facing UX need approval there.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`). Changes to user-facing UX need approval there.
   - Measured again at promotion: the tag editor, filter, and library overlays are each `position: fixed; inset: 0` with `z-index: 1000`, so they cover the player while it keeps playing underneath, except that the tag editor pauses playback when it opens and resumes it when it closes (`pauseForTagEditor` and `resumeAfterTagEditor`, read from code when Auto-Pause was planned). The stylesheet has two `@media (max-width: 600px)` rules, and mobile browsers are detected by user agent (`getClientType` in `src/api/coreApi.ts`).
   - The main page is a header bar, the player with its overlay controls, and the footer status line as today. The header holds the logo, which New Logo and Icons puts there in place of the app name, and the current file name, and at the right an admin icon, which arrives with WebUI Admin Section. It has no settings icon: the Settings tab is reached from the panel's tab row. Photo duration stays in the header until WebUI Settings Panel moves it into the Settings tab, the preset dropdown and randomization mode stay there until WebUI Library Tab moves them into the Library tab, and the pairing token prompt keeps showing there, labeled "Pairing token", when the server asks for pairing.
   - Before anything plays, the player says "Tap to play, or open the panel to choose a preset or filter." in place of today's "Click here to play (choose a preset or open Filter…)", and a tap or Play starts a random pick, as today (decided in WebUI Design Mockup).
@@ -296,6 +301,7 @@ Last milestone completed: M12c
   - Before anything plays, the player shows "Tap to play, or open the panel to choose a preset or filter.", and a tap or Play starts a random pick.
   - When the server fails the compatibility check, the panel opens, the Library tab shows the message in place of the grid, and Play shows its notice.
   - On a phone on its side the header shows while the server asks for pairing, and while the status line is hidden a reconnecting indicator shows on the player when the connection is lost.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include component tests for the panel host (breakpoints by width and by pointer and height, the panel side, width limits and memory, tab selection and the last tab, the tabs' accessible names, and the panel button), for choosing a tile and for the Filter tab's Apply and Cancel beside the player and as the overlay, for the short-screen layout of a phone on its side, for safe-area insets in a standalone display, for a page refresh keeping the panel's state, for the compatibility-failure state, and for the reconnecting indicator, plus `npm run verify` and one quick spot check on a phone and a desktop browser.
 
@@ -305,7 +311,7 @@ Last milestone completed: M12c
 - **Goal**: The Library tab holds the library's controls above a grid of smaller tiles, laid out like the desktop library panel, with a line that sums up the applied filters.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI responsive layout and panels milestone, as a part of it split off in the v0.15.0 milestone review. Depends on: WebUI Responsive Layout and Panels, whose panel holds the tab, and Favorite and Blacklist Filter Modes, whose modes the filter summary line names.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - The preset dropdown and randomization mode leave the header for the Library tab, laid out like the desktop library panel: above the grid, the preset, then randomization mode, then sort with its direction toggle, then search. The preset and randomization dropdowns share one row from a panel width of about 440 px. The controls collapse to give the grid more room, together with the filter summary line below, and stay collapsed or open per device. The collapse button's tooltip reads "Hide controls & filters" or "Show controls & filters".
   - The Library tab's justified rows fit the panel width, 100–240 px high, aiming for 160 px, beside the player and as the overlay. Read from code at this edit: today they are 200–400 px, aiming for 300 px (`libraryGridLayout.ts`). When nothing matches the search or the filters, the grid says "Nothing matches the search or filters."; its other messages stay as they are today (decided in WebUI Design Mockup).
   - Library tiles (decided in WebUI Design Mockup): the favorite and blacklist icons lose their dark rectangle and become filled icons, by the icon font's FILL axis, with a soft drop shadow, so they stay readable on bright thumbnails. The playing tile shows a filled play icon in its middle, modest in size and slightly translucent so the thumbnail shows through, in the same style. With a mouse, hovering a tile shows its file name as a tooltip. File names keep showing on tiles until WebUI Settings Panel adds the setting that turns them off. Read from code at this edit: the badges are outlined orange icons on a dark rectangle (`.library-grid-tile-badge` in `src/styles.css`), the grid doesn't mark the playing tile, and every tile shows its name in a bar, which alone carries the tooltip (`renderGridTileHtml` in `src/library/libraryGridTileModel.ts`).
@@ -322,6 +328,7 @@ Last milestone completed: M12c
   - While a filter applies, the Library tab shows the filter summary line above the grid, in the format above, without naming Blacklisted excluded, and tapping or clicking it opens the Filter tab.
   - After a page refresh, whether the controls are collapsed, the active preset and applied filter, randomization mode, and sort and direction are each as they were, and the search box is empty.
   - After a page refresh, a remembered preset, tag, or source that was renamed or deleted elsewhere is handled as it is when that happens while the WebUI is open.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include component tests for the control order and the row heights, the dropdowns sharing a line, the controls and summary line collapsing together, the tile badges, playing icon, and hover tooltip, the summary line's text for each kind of filter and its opening the Filter tab, and a page refresh keeping each remembered setting and clearing the search text, plus `npm run verify` and one quick spot check.
 
@@ -331,7 +338,7 @@ Last milestone completed: M12c
 - **Goal**: The Tags tab follows the playing item, unsaved Tags and Filter changes survive closing the panel, tag categories collapse and show what's in use, and Auto Tag opens over the whole page.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI library tab milestone, as a part of WebUI Responsive Layout and Panels split off in the v0.15.0 milestone review. Depends on: WebUI Responsive Layout and Panels, whose panel holds the tabs, and WebUI In-App Dialogs, whose dialog Refresh asks in, and WebUI Drag Reordering, whose handle a category header keeps.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - The Tags tab edits the playing item's tags and follows the playing item when it changes, unless the tab has unsaved changes to its item's tags. Then it stays on that item and shows a line naming it, "Editing tags for {file name}", until those changes are saved or discarded (Refresh discards them, asking first), and then follows the playing item. Unsaved changes that are not to the item's tags, such as a category reorder or rename, don't hold it. WebUI Multi-Select and Bulk Actions points the tab at several selected items the same way, with "Editing tags for {n} items". Read from code at this edit: the tag editor takes the item playing when it opens (`open` in `src/tags/tagEditor.ts`), and its pause keeps that item on screen while it is open.
   - Unsaved changes survive closing the panel and switching tabs: the Filter tab's until Apply or Cancel, and the Tags tab's until Save, or Refresh, which discards them after asking. The tag editor's Close confirmation, which WebUI In-App Dialogs moved to its dialog, goes away. While the Filter or Tags tab holds unsaved changes, a small orange dot marks its tab icon, and the player's panel button while either does, so they aren't forgotten when the panel is closed, and their accessible names say so. Read from code at this edit: closing the tag editor asks "Discard changes?" when it has changes (`close` in `src/tags/tagEditor.ts`), and reopening the filter dialog rebuilds its draft from the applied filter and the server's presets, dropping unsaved filter and preset changes (`open` in `src/filter/filterDialog.ts`).
   - Tag categories, in the Tags tab and the Filter tab's Tags section, collapse and expand when their header is tapped or clicked, and their expand and collapse arrows go. The drag handle, the Edit button, and the Filter tab's Local match select keep their own actions.
@@ -356,6 +363,7 @@ Last milestone completed: M12c
   - Auto Tag opens from the Tags tab over the whole page, applies its selected changes with its own Apply, and its Close is disabled while a scan runs.
   - Auto Tag's Cancel, left of Apply, clears the scan and closes it, and the X closes it and keeps the last scan. With View all matches, files that already have the tag are checked and disabled. Its results area shows one placeholder before any scan and another when a scan finds nothing, and its two count columns line up under their headers.
   - The Filter tab's no-tags message names the Tags tab.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include component tests for the Tags tab following the playing item and staying on its item with the "Editing tags for" line while it has unsaved changes to that item's tags; unsaved Filter and Tags changes surviving closing the panel and switching tabs, and the dots on their tabs and the panel button; category headers toggling while their other controls don't, categories starting collapsed and remembered per tab across a page refresh, expanding when a tag is added or moved into them, and a collapsed header's count and unsaved-changes dot; and Auto Tag's Apply, Cancel, X, View all matches, placeholders, and Close during a scan; plus `npm run verify` and one quick spot check.
 
@@ -365,7 +373,7 @@ Last milestone completed: M12c
 - **Goal**: Opening the panel pauses playback only as the Auto-Pause mode says, a photo's timer shows on the scrub bar and pauses and resumes with the time it had left, and the player's controls use the app's colors.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI tags and filter tabs milestone, as the last part of WebUI Responsive Layout and Panels split off in the v0.15.0 milestone review. Depends on: WebUI Responsive Layout and Panels and WebUI Tags and Filter Tabs, whose Auto Tag overlay and Tags tab it pauses for in place of the tag editor's own pause.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Auto-Pause replaces the tag editor's pause and resume. Opening the panel on any tab, or as its full-screen overlay, pauses playback according to an Auto-Pause mode:
     - **Never**: never pauses.
     - **Always**: pauses whenever the panel opens, at any width.
@@ -387,6 +395,7 @@ Last milestone completed: M12c
   - The tag editor has no pause of its own, and Auto-Pause is Responsive until the Settings tab can change it.
   - On a photo, the scrub bar shows in the place it has on a video. With Autoplay on and Loop off it fills as the photo's timer runs, Play/Pause pauses and resumes the timer with the time left kept, and dragging the bar moves the timer. With Autoplay off or Loop on, Play and the bar are disabled on a photo. Turning Autoplay on starts the photo's full time, and turning it off clears the timer.
   - The overlay's time display is light in both themes, and checkboxes, radio buttons, and sliders use the orange accent in both themes.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include component tests for Auto-Pause in each mode at phone and desktop widths, across a breakpoint, with Auto Tag, with playback the user paused or resumed, and with a photo resuming with the time it had left, and for the scrub bar on a photo with Autoplay on and off, plus `npm run verify` and one quick spot check.
 
@@ -396,7 +405,7 @@ Last milestone completed: M12c
 - **Goal**: The WebUI side panel has a Settings tab for per-device preferences and diagnostics.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI auto-pause and photo scrub bar milestone. Depends on: WebUI Responsive Layout and Panels, WebUI Field Validation Pattern, and WebUI Library Tab, whose tiles Show file names on tiles changes, and WebUI Auto-Pause and Photo Scrub Bar, whose Auto-Pause mode it sets.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - The Settings tab joins the side panel's tab row. The header has no settings icon: WebUI Responsive Layout and Panels leaves it out, since the tab row reaches the Settings tab.
   - Not included: admin. It opens as a full-page view from the header's admin icon, which is WebUI Admin Section.
   - Checked against the code at promotion: the diagnostics panel is shown only when `isMobileBrowser()` is true. Photo duration and randomization mode are already kept per device in `localStorage`; autoplay and loop are not kept and start off.
@@ -435,6 +444,7 @@ Last milestone completed: M12c
   - Diagnostics shows the client and session ids, the client type, the device name, the server's version with its API version, and the app's version from `.version`, labeled "ReelRoulette".
   - After a page refresh, Advance after, the panel's side, Auto-Pause, the theme, whether file names show on tiles, whether the status line shows, and the autoplay, loop, and mute buttons' state are each as they were.
   - Preferences are stored per device and do not change other devices.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for preference storage, for a page refresh keeping each setting this milestone adds, and for Advance after with the field validation pattern, a build check that the app's version matches `.version`, `npm run verify`, and one quick spot check on a phone.
 
@@ -444,7 +454,7 @@ Last milestone completed: M12c
 - **Goal**: Everything the Operator page does, apart from its logs, moves into a full-page admin section of the WebUI.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI settings panel milestone, as the first of the parts it was split into in the v0.15.0 milestone review: Log Viewer Redesign adds the logs, and Recovery Page and Operator Retirement adds the recovery page and retires the Operator page. Depends on: WebUI Responsive Layout and Panels, whose header holds the admin icon, and WebUI Auto-Pause and Photo Scrub Bar, whose Auto-Pause the admin view follows, and WebUI In-App Dialogs, whose confirmation the control token change uses, and WebUI Field Validation Pattern, whose pattern its settings fields use, and Catalog Open and Backup Safety, whose library state and message the admin section shows.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Measured again at promotion: the Operator page is 842 lines of HTML, CSS, and JavaScript inside a raw string in `src/core/ReelRoulette.ServerApp/Program.cs`, up from 779 when this entry was written, after the control token, shutdown, and no-library work. No test covers the page's content; the only test that names `/operator` checks that the library route gate leaves it open. The sections listed below match the page, and `verify-linux-packaged-server-smoke.sh` still requests `/operator`.
   - Admin is a full-page view opened from the header's admin icon, not a panel tab. The icon is always visible. The view keeps the Operator page's responsive layout (a 12-column grid that changes at 620 and 980 px wide, read from code at this edit), restyled to match the rest of the WebUI.
   - Its layout (decided in WebUI Design Mockup): a bar with a back arrow ("Back to the player") and the title Admin; a row of jump links to its sections; and cards, each titled with its icon, in this order: Server (`dns`), Web access (`lan`), Control (`key`), Library refresh (`sync`), Library transfer (`swap_vert`), Backups (`storage`), Sources (`folder`), Duplicates (`content_paste`), Testing suite (`bug_report`), Connected clients (`group`), Log Viewer (`article`), and API events (`description`). Sources, Duplicates, the Log Viewer, and API events take the full width, and on a wide screen the others take half. The cards for refresh, transfer, backups, sources, duplicates, and the Log Viewer arrive with the milestones that build them, in their places.
@@ -470,6 +480,7 @@ Last milestone completed: M12c
   - The control token shows hidden with Show and Copy, saving a changed token asks first and warns that other machines will be signed out, and saving it unchanged asks nothing.
   - An admin settings field with a value the server would not accept, such as the port, is flagged with the field validation pattern as it is typed, and its Save can't proceed until it is corrected.
   - From another machine, opening admin asks for the control token first, and nothing in the admin section is shown until a valid token is entered; on the server machine it opens without one.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include the update download's cause, reported before its controls are built, and admin section UI tests for the admin icon opening the full-page view, Auto-Pause on opening and leaving it in each mode, loading status and settings, saving settings, settings fields with the field validation pattern, the control token's Show, Copy, and change confirmation, the testing panel, and control-token gating, in `npm run verify`, plus one quick spot check.
 
@@ -479,7 +490,7 @@ Last milestone completed: M12c
 - **Goal**: The admin section's Log Viewer filters today's log by time, source, level, and text, in the design Admin Log Viewer later moves to structured entries.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI admin section milestone, as a part of it split off in the v0.15.0 milestone review. Depends on: WebUI Admin Section.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - The Operator's Server Logs becomes the **Log Viewer**, redesigned to its final design from Admin Log Viewer rather than moved as it is (decided in WebUI Design Mockup). It is named Log Viewer everywhere the interface names it, in the admin section from this milestone and on the recovery page, which Recovery Page and Operator Retirement adds. Only the route, `GET /control/logs/server`, keeps its name until Admin Log Viewer renames it.
   - Its filters sit in a panel that starts collapsed, with chips for the active ones. A live indicator pauses while the list is scrolled away from the newest lines, with a resume control, and rows expand to the full line.
   - The Operator's Tail lines field goes. The Log Viewer fetches the newest matching lines once, up to the route's limit, and renders older ones as the list scrolls, as the mockup does, so the route needs no paging parameter (decided in the v0.15.0 milestone review). Read from code at this edit: `ServerLogService.Read` returns at most the last 5000 lines. Trap, from the repository audit: it walks the whole file on every request, so paging through the route would read the file again for each page.
@@ -492,6 +503,7 @@ Last milestone completed: M12c
   - The Log Viewer filters by time window, by several sources and several levels, and by contained text, with its filters in a collapsed panel with chips, a live indicator that pauses away from the newest lines, and rows that expand to the full line.
   - The Log Viewer has no Tail lines field: it fetches the newest matching lines once, up to 5000, and shows older ones as the list scrolls without another request.
   - The route's new filters are in OpenAPI, and `npm run verify:contracts` passes.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include server tests for the log route's level, source, and time filters, admin section UI tests for the Log Viewer's filters, chips, live indicator, and showing older lines, `dotnet test ReelRoulette.sln`, `npm run verify`, and one quick spot check.
 
@@ -501,7 +513,7 @@ Last milestone completed: M12c
 - **Goal**: The server keeps a minimal recovery page for when the WebUI's files are broken, always serves the WebUI, and retires the Operator page.
 - **Scope**:
   - Ships in v0.15.0, after the log viewer redesign milestone, as a part of WebUI Admin Section split off in the v0.15.0 milestone review. Depends on: WebUI Admin Section and Log Viewer Redesign, so the Operator page goes only once the admin section offers everything it does.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Recovery page slice:
     - The server keeps a minimal built-in page with restart, stop, a log tail named Log Viewer, and updates, at a fixed path such as `/recovery` (decided here). It is plain, in the WebUI's theme colors, and titled "ReelRoulette Recovery", laid out as the mockup's recovery page shows, with `logo-icon.svg` beside its title and as its page icon (decided in WebUI Design Mockup). The icon is built into the page, since the page loads none of the WebUI's files. It does not load the WebUI's files, so it works when they are missing or broken, and it has the same control-token gating.
     - It renders settings and status text without `innerHTML` interpolation (found by the repository audit: Operator HTML page interpolates user input via `innerHTML`).
@@ -520,6 +532,7 @@ Last milestone completed: M12c
   - `/operator` reaches the admin section, and the packaged Linux server smoke passes against the recovery page.
   - With the web runtime settings' `enabled` stored or posted as off, the server still serves the WebUI and `/runtime-config.json`, allows the WebUI's CORS origins, and, with remote connections and mDNS on, advertises over mDNS after a restart, and it reports `enabled` as on.
   - Neither the admin section nor the desktop Settings dialog shows an Enable Web UI switch, and `enabled` is still in OpenAPI.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include server tests that the recovery page is served without WebUI assets and keeps control-token gating, that `/operator` redirects to the admin section, and that a stored or posted `enabled` of off is ignored and reported as on, a desktop test that the Settings dialog has no Enable Web UI switch, `dotnet test ReelRoulette.sln`, and `./tools/scripts/verify-linux-packaged-server-smoke.sh`.
 
@@ -533,6 +546,7 @@ Last milestone completed: M12c
   - Contract slice, partial settings posts: `CoreSettingsService.UpdateRefreshSettings`, `UpdateBackupSettings`, and `UpdateWebRuntimeSettings` assign every field from the posted snapshot, and the contract fields are not nullable, so a post that leaves out a field writes its default (for example `fingerprintScanMaxDegreeOfParallelism` back to 4). Make those request fields nullable, with an omitted field left unchanged, as `devChannelEnabled` already is. The change only relaxes what a request must send: the frozen desktop posts every field it knows and is unaffected (read from code at this edit: its backup settings save posts its three fields, `MainWindow.axaml.cs`). OpenAPI and generated WebUI types.
   - Atomic settings write: `CoreSettingsService.PersistSettings` writes `core-settings.json` in place with `File.WriteAllText`, so a crash mid-write leaves it truncated. Write a temporary file in the same folder and rename it over the original.
   - Settings load failure: `CoreSettingsService.LoadSettings` ends in an empty `catch` and falls back to defaults, so an unreadable or corrupt `core-settings.json` looks like a fresh install and the next persist overwrites it. Log a warning, move the unreadable file aside before anything is written, and report it on the admin section's status. The report needs a field on `/control/status`, a contract change that only adds.
+  - The admin section's report of an unreadable settings file is added to the mockup (`docs/mockups/reelroulette/`), which doesn't show it yet, with its wording approved there.
   - Not included: the server's other robustness findings and the desktop's settings file, which is Server Robustness Findings.
 - **Acceptance criteria**:
   - A partial post to the refresh, backup, or web runtime settings changes only the fields it names, and leaves the other fields and the other settings sections unchanged on disk.
@@ -540,6 +554,7 @@ Last milestone completed: M12c
   - Killing the server during a settings write leaves the previous or the new file, never a truncated one.
   - An unreadable `core-settings.json` is moved aside before anything is written, a warning is logged, and the admin section's status shows it.
   - The nullable request fields and the new status field are in OpenAPI, and `npm run verify:contracts` passes.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include server tests that a partial post leaves the other fields and sections unchanged on disk, that a full post saves as before, that an interrupted write leaves the previous or the new file, and that an unreadable file is kept aside, logged, and reported, an admin section UI test for the status message, `dotnet test ReelRoulette.sln`, and `npm run verify`.
 
@@ -549,7 +564,7 @@ Last milestone completed: M12c
 - **Goal**: The admin section starts a refresh, edits refresh and backup settings, reviews and applies duplicates, and clears the whole library's playback stats, so none of these needs the desktop.
 - **Scope**:
   - Ships in v0.15.0, after the server settings robustness milestone. Depends on: WebUI Admin Section and Server Settings Robustness, so a settings save sends only the fields it changes.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Measured again at promotion: only the desktop calls `POST /api/refresh/start`, `/api/refresh/settings`, `/api/backup/settings`, `/api/duplicates/scan`, and `/api/duplicates/apply`. The routes exist, so this needs no contract change. The tray can also start a refresh.
   - Gated like the rest of the admin section.
   - Refresh slice: Refresh Now with the refresh status, and the refresh settings the desktop Settings dialog shows: auto-refresh and its interval (5–1440 minutes), forced loudness and duration rescans on the next refresh, and fingerprint scan parallelism (1–16). The ranges are the ones the server already clamps to (read from code at this edit).
@@ -574,6 +589,7 @@ Last milestone completed: M12c
   - Duplicate apply deletes only the files not kept, from disk, after a confirmation that names the groups and files to delete and asks for nothing to be typed, and Keep All deletes nothing in that group.
   - The duplicate default is chosen in duplicate review, starts at Keep All, is kept per device, and survives a page refresh.
   - The whole library's playback stats can be cleared from the admin view's Library refresh card, after a confirmation.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include server tests for daily retention (the window, older-version backups aging out, newer-version backups and unrecognized files left byte-identical, a days value of 0 rotating as today, and a post without the days field keeping it), admin section UI tests for each slice, including the duplicate default surviving a page refresh, each refresh and backup field with the field validation pattern, and clearing all playback stats, `dotnet test ReelRoulette.sln`, `npm run verify`, and one quick spot check of a refresh and a duplicate scan.
 
@@ -583,7 +599,7 @@ Last milestone completed: M12c
 - **Goal**: Manage sources and remove library items from the WebUI admin section, with server routes for what no client can do today, and every open WebUI follows source changes without a reload.
 - **Scope**:
   - Ships in v0.15.0, after the admin refresh, backup, and duplicate review milestone. Depends on: WebUI Admin Section.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Gated like the rest of the admin section: localhost, or the control token from other machines. The accounts release later moves this behind admin accounts.
   - Today the desktop Manage Sources dialog shows Rename and Remove buttons and the grid shows Remove from Library, but none of them has a server route; v0.14.0 hides them, and the frozen desktop keeps them hidden. Checked at promotion: the routes are still missing and the three controls are still hidden.
   - Contract slice: server routes to rename a source, remove a source (its items leave the catalog; files stay on disk), and remove items from the library, with the delete-from-disk option the desktop remove dialog offers. OpenAPI and generated WebUI types.
@@ -607,6 +623,7 @@ Last milestone completed: M12c
   - Removing items updates connected WebUI sessions through events and list requery.
   - Overlapping resync events cause one reload at a time.
   - New routes are in OpenAPI, and `npm run verify:contracts` passes.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include server tests for each new route and for the event each source change publishes, admin section UI tests for Manage Sources, WebUI tests for source event handling and for overlapping resyncs, `dotnet test ReelRoulette.sln`, `npm run verify`, and one quick spot check of an admin section source toggle seen in another WebUI tab.
 
@@ -616,7 +633,7 @@ Last milestone completed: M12c
 - **Goal**: Export and import the library from the WebUI admin section, with the server applying the catalog, so catalog transfer does not need the desktop app.
 - **Scope**:
   - Ships in v0.15.0, after the admin source and item management milestone. Depends on: WebUI Admin Section, Remove library.json Library Support, and Catalog Open and Backup Safety, so import can restore a library while the server runs without one, and Admin Source and Item Management, whose server path check the remap fields use, and Admin Refresh, Backup, and Duplicate Review, whose daily retention marks the backups the restore list labels daily.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Gated like the rest of the admin section.
   - Today import is desktop-only and needs the server stopped: `LibraryArchiveMigration.ImportDatabase` writes the server's `library.db` from the desktop process (read from code, still the case at promotion). This is the main blocker for removing the desktop.
   - Export is already a server operation, checked at promotion: `GET /api/library/catalog-checkpoint` writes a standalone checkpoint while the server has `library.db` open, and the desktop's Library Export saves that file. The admin section's export uses the same route. What is left is moving import onto server operations. Settings and backups are not part of the transfer. Presets and thumbnail revision and dimensions travel with `library.db`. JPEG files stay in the local thumbnail directory.
@@ -644,6 +661,7 @@ Last milestone completed: M12c
   - Before an import or a restore replaces the library, a catalog backup of the current one is taken, even with server backups off, and it shows first in the restore list, labeled "(before import)" or "(before restore)".
   - An import while a refresh, backup, or scan runs does what the report decided, and never leaves a partial catalog.
   - A file larger than 30 MB uploads to the packaged server without a refusal for its size.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include the report on catalog state holders, written before the import slice, server tests for the export's suggested name, running-server import, an import during a refresh, the backup taken before a replace, rejection of a file that is not a library database, and interrupted-replace recovery, admin section UI tests for export, import, the remap fields, restore, and the safety backup's place and label in the restore list, `./tools/scripts/verify-linux-packaged-server-smoke.sh` with its upload larger than 30 MB, `dotnet test ReelRoulette.sln`, and `npm run verify`.
 
@@ -653,7 +671,7 @@ Last milestone completed: M12c
 - **Goal**: The WebUI shows library and playback statistics and details of the current file in a Stats tab, as the desktop stats panel does.
 - **Scope**:
   - Ships in v0.15.0, after the admin library catalog transfer milestone. Depends on: WebUI Responsive Layout and Panels.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Measured again at promotion: the WebUI never calls `GET /api/library/stats`, and its now-playing line shows only the file name and duration.
   - Library and current-file stats live in the side panel's Stats tab, which joins the tab row here. Clicking the current file name in the header opens the panel on the Stats tab. Its tooltip shows the full file name and then "Show stats" (decided in WebUI Design Mockup); today it shows the full name only.
   - Library stats: total videos, photos, and media, favorites, blacklisted, total plays, unique media played, never played, videos with and without audio, and baseline loudness.
@@ -671,6 +689,7 @@ Last milestone completed: M12c
   - The current file's Adjustment reads "Off", or "N/A" with Loudness "Unknown" for a file without loudness data, until WebUI Loudness Normalization applies an adjustment.
   - A burst of events causes one stats request, plus at most one more for events during it.
   - `integratedLoudness` and `peakDb` are in the OpenAPI item schema, and `npm run verify:contracts` passes.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include component tests for both sections, including Adjustment reading Off and a file without loudness data, and for the file name opening the Stats tab, coalescing tests, contract tests for the two fields, `npm run verify`, and one quick spot check.
 
@@ -680,7 +699,7 @@ Last milestone completed: M12c
 - **Goal**: The WebUI has a volume control on every device, by slider, scroll wheel, and two-finger drag, through an Enhanced audio gain stage that also gives iPhone and iPad an in-app volume.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI stats panel milestone, as the first of the parts WebUI Keyboard Shortcuts and Player Controls was split into in the v0.15.0 milestone review. Depends on: WebUI Settings Panel, whose Audio section holds its settings, and WebUI In-App Dialogs, whose notice reports a gain stage that can't start.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Report first, before the controls are built (decided in the v0.15.0 milestone review): Enhanced audio is on by default, so every device's audio moves to Web Audio in one release, and the mockup tried the path only with a synthesized chord, not a real media element. Route a real video through the gain stage (`createMediaElementSource` into a `GainNode`) in a throwaway page under `artifacts/scratch/`, served over the LAN as the mockup is, in Safari and Firefox on an iPhone and an iPad, Chrome and Firefox on Android, and Chrome, Firefox, and Safari on a desktop, and report silent output, sound drifting from the picture, behavior in iOS pseudo-fullscreen, and resuming after the app was in the background. Inferred, not checked: WebKit has had bugs where a media element routed through Web Audio plays silent. The report decides whether WebUI Loudness Normalization stays in v0.15.0.
   - Measured again at promotion: the WebUI has a mute button and no volume control.
   - A volume slider at the end of the seek row (decided in WebUI Design Mockup). With Enhanced audio on, it sets the Web Audio gain stage below, on every device, which is also how iOS, where Safari makes a media element's volume read-only, gets one. The Settings tab offers the desktop's volume steps: 1, 2, or 5 percent, used by the scroll wheel, a two-finger drag, and the [ and ] keys that WebUI Keyboard Shortcuts binds.
@@ -707,6 +726,7 @@ Last milestone completed: M12c
   - With Enhanced audio on, every device plays through the gain stage, which starts on the first tap. On iOS the volume slider shows once it runs, and the slider, scroll wheel, and two-finger drag set the gain. The gain glides to each new level and fades in on play and out on pause, so nothing crackles or pops. Off, audio plays directly, and on iOS the volume controls hide. If the gain stage can't start, the notice's **Turn off Enhanced audio** turns it off for the device.
   - In the Vite dev server, media from the server's other origin isn't silent through the gain stage.
   - After a page refresh, Enhanced audio, the volume, and the volume step are each as they were.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include the audio spike's report, wheel tests for notches and added-up trackpad deltas, two-finger drag tests, a test that the gain stage starts on the first tap and the slider then shows, tests for Enhanced audio on and off and for the notice when the gain stage can't start, tests that the gain only glides and that play and pause fade it in and out, a server test that media responses carry the cross-origin header for the WebUI's origins, tests for a page refresh keeping each setting this milestone adds, `dotnet test ReelRoulette.sln`, `npm run verify`, and one quick spot check.
 
@@ -717,7 +737,7 @@ Last milestone completed: M12c
 - **Scope**:
   - Ships in v0.15.0, after the WebUI volume and Enhanced audio milestone, on one condition: the audio spike in WebUI Volume and Enhanced Audio finds the gain stage reliable, including on iOS. If it doesn't, this milestone moves to v0.16.0, before Desktop Client Removal, and the desktop's gains for the fixture's cases are captured first, while its code is still in the repository. Depends on: WebUI Volume and Enhanced Audio, whose gain stage it adds a stage to, and WebUI Settings Panel, whose tab holds its settings.
   - WebUI Design Mockup declined it for v0.15.0 and gave it its own milestone, so it could be made to work properly. The v0.15.0 milestone review pulled it back in: WebUI Volume and Enhanced Audio now routes every device's audio through a gain stage, which was what it was waiting for, and the shared-fixture rule can lock it to the desktop's formula only while the desktop is in the repository.
-  - Built to the mockup in `docs/mockups/webui-panels/`, where its settings were approved in the v0.15.0 milestone review, the reference for its settled design. Changes to user-facing UX need approval there.
+  - Built to the mockup in `docs/mockups/reelroulette/`, where its settings were approved in the v0.15.0 milestone review, the reference for its settled design. Changes to user-facing UX need approval there.
   - The desktop's normalization, read from code at this edit: `CalculateNormalizedVolume` in `MainWindow.axaml.cs` takes the baseline, from `LoudnessNormalizationService.GetBaselineLoudness` (the server's library baseline in automatic mode, or the manual target), minus the item's integrated loudness (the item's `IntegratedLoudness`, read into `MeanVolumeDb`), limits it to the maximum boost above and the maximum reduction below, turns it into a linear gain (10^(dB/20)), multiplies the user's volume by it, and clamps the result to LibVLC's 0–200%. An item without loudness data plays at the user's volume. Normalization is off by default.
   - On iOS, the gain stage gives the app its own volume, as WebUI Volume and Enhanced Audio sets out, and normalization adds its gain on that path; the audio spike in that milestone checks the path on iOS. The server's cross-origin headers on media responses, from the same milestone, keep media from another origin in development from playing silent through it.
   - The WebUI reads each item's integrated loudness from the `integratedLoudness` field that WebUI Stats Panel names in OpenAPI, and the automatic baseline from the baseline loudness the server's library stats already report (read from code when this was planned).
@@ -735,6 +755,7 @@ Last milestone completed: M12c
   - Enhanced audio's description names loudness normalization.
   - The Stats tab's Adjustment shows the adjustment applied to the current file, signed and within the limits, "Off" while normalization or Enhanced audio is off, and "N/A" for a file without loudness data, and it follows the settings as they change.
   - It works in Chrome, Firefox, and Safari on a desktop and on Android and iOS, or the setting is hidden in a browser where it cannot work, and that browser is named in this entry.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include the fixture's cases run by the desktop's and the WebUI's tests, WebUI tests for each setting, the field validation pattern on its fields, each setting surviving a page refresh, and the Stats tab's Adjustment in each case, `dotnet test ReelRoulette.sln`, `npm run verify`, and one quick spot check; the browser matrix is the Release Specific item above.
 
@@ -744,7 +765,7 @@ Last milestone completed: M12c
 - **Goal**: Autoplay has two modes, Normal and Timer, in place of the desktop's Keep Playing, and a looping photo no longer flickers.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI loudness normalization milestone, as a part of WebUI Keyboard Shortcuts and Player Controls split off in the v0.15.0 milestone review. Depends on: WebUI Settings Panel, whose Advance after setting both modes use, and WebUI Auto-Pause and Photo Scrub Bar, whose photo timer they drive.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Autoplay gets two modes, replacing the desktop's separate Keep Playing, which plays a random item every N seconds until stopped (Playback → Keep Playing (Timer) and Set Interval):
     - Normal: photos advance after the timer and videos play to the end, as autoplay does today.
     - Timer: every item advances after the timer, including a video that has not finished. With loop on, a video shorter than the timer repeats until the timer advances. Pausing a video holds the timer.
@@ -761,6 +782,7 @@ Last milestone completed: M12c
   - Changing the timer while a photo shows keeps the time already shown and changes only the length.
   - The Settings tab shows the autoplay mode beside Advance after, which accepts 1 to 3600 seconds and starts from the value stored before this milestone.
   - After a page refresh, the autoplay mode is as it was.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include autoplay tests for both modes with loop on and off and with a paused video, a test that a looping photo keeps its image shown through each loop, a test that changing the timer keeps the time shown, a test for Advance after's new range, a test for a page refresh keeping the mode, `npm run verify`, and one quick spot check.
 
@@ -770,7 +792,7 @@ Last milestone completed: M12c
 - **Goal**: The player's controls can hide after a time with no activity, and ambient mode fills the black space around the picture with a soft glow of its colors.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI autoplay modes milestone, as a part of WebUI Keyboard Shortcuts and Player Controls split off in the v0.15.0 milestone review. Depends on: WebUI Settings Panel, whose Player controls and Appearance sections hold its settings, and WebUI Volume and Enhanced Audio, whose volume slider keeps the controls shown while it is dragged.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - The fullscreen button shows the exit icon (`fullscreen_exit`) while the stage is in fullscreen or pseudo-fullscreen; today it always shows `fullscreen` (decided in WebUI Design Mockup).
   - Ambient mode, as YouTube's (decided in WebUI Design Mockup): behind the player, a heavily blurred, dimmed copy of the current frame's colors fills the black space around the picture. At the update rate the player draws the frame into a tiny canvas, and the glow fades toward each new copy over the fade time, so the colors drift smoothly. A photo gets the same effect, drawn once from the photo. Sampling pauses while the video is paused or the tab is hidden. The glow sits on the player's dark background in both themes, so the light theme uses full color too, and each theme has its own strength, the same kind of setting in both (decided in WebUI Design Mockup). With ambient mode off, the space is plain black in both themes, as today.
   - Ambient mode's settings ship with it (decided in WebUI Design Mockup): an Ambient mode toggle, on by default, in the Settings tab's Appearance section, and beside it an expandable "Ambient mode settings" section, whose header shows a chevron that points right while it is closed and down while it is open, with plain labels, each showing its value: Update rate (1 per second by default, from 0.25 to 4), Fade time (2 s, from 0.25 to 4 s), Blur (64 px, from 10 to 80 px), Strength in the dark theme (50%), Strength in the light theme (75%), and Saturation (100%, from 0 to 200%), with a Reset to defaults button. They apply as they change and are kept per device.
@@ -793,6 +815,7 @@ Last milestone completed: M12c
   - With Hide player controls on Timeout, the controls hide after the Hide after time with no activity, moving the mouse or tapping shows them and restarts the countdown, and they stay while the pointer is over them, while the scrub bar or volume is dragged, and, with Keep visible while paused, while paused. On click/tap toggles them on a click or tap, and Never keeps them visible. Hide after accepts 1 to 30 seconds. Hidden controls can't be pressed.
   - On iOS, with ambient mode on, the player's corners stay rounded.
   - After a page refresh, ambient mode and its settings, and Hide player controls and its two settings, are each as they were.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include ambient mode tests for sampling at the update rate while a video plays, holding while it is paused or the tab is hidden, a photo drawn once, and each of its settings, controls tests for each Hide player controls mode, the countdown, and each thing that keeps the controls shown, a test of the fullscreen button's icon, tests for a page refresh keeping each setting this milestone adds, `npm run verify`, and one quick spot check.
 
@@ -802,7 +825,7 @@ Last milestone completed: M12c
 - **Goal**: The WebUI has the desktop's keyboard shortcuts wherever a browser allows them, plus seek-step and frame-step keys and a shortcut reference.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI player controls and ambient mode milestone, as the last part of WebUI Keyboard Shortcuts and Player Controls split off in the v0.15.0 milestone review, so its reference lists bindings that exist. Depends on: WebUI Settings Panel, WebUI Stats Panel, so every panel tab exists, and WebUI Volume and Enhanced Audio, whose volume its keys step, and WebUI Autoplay Modes, whose autoplay it toggles, and WebUI Player Controls and Ambient Mode, whose controls show on a key press.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Measured again at promotion: the WebUI handles only Escape, which closes overlays, and Enter or Space on a focused library tile. The desktop binds K play or pause, J and L seek, Left and Right previous and next, R random, F favorite, B blacklist, A autoplay, M mute, comma and period volume, T tags, P player view, S settings, O import folder, Q quit, F11 fullscreen, and 1 to 5 to show or hide parts of the window; it also swallows 6 to 8 and Space, which do nothing.
   - Use the desktop keys. Keys the browser keeps (Ctrl+Q, Ctrl+O, and F11 for the browser's own fullscreen; inferred) are not bound, and Q quit and O import folder have no WebUI equivalent. Each panel tab has a shortcut: Library, Filter, Tags, Stats, and Settings. The number keys 1 to 5 open Library, Filter, Tags, Stats, and Settings, T and S open Tags and Settings as on the desktop, and the open tab's key closes the panel; P shows or hides the panel (decided in WebUI Design Mockup). Shift+F enters and leaves fullscreen, since F stays Favorite. Space plays or pauses as K does, and pauses and resumes a photo's timer, except while focus is on something Space already activates, such as a button or a library tile (both decided in WebUI Design Mockup).
   - [ and ] step the volume by the volume step from WebUI Volume and Enhanced Audio. The desktop steps volume with comma and period, which step frames here instead.
@@ -827,6 +850,7 @@ Last milestone completed: M12c
   - Space plays or pauses as K does, and leaves a focused button or tile to its own action.
   - The shortcut reference matches the bindings, and `?` opens Settings with it expanded.
   - After a page refresh, the seek step is as it was.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include keyboard tests per binding under `happy-dom`, tests of the Esc order, frame stepping tests with and without the browser's frame timings, a test that the reference lists every binding, a test for a page refresh keeping the seek step, `npm run verify`, and one quick spot check.
 
@@ -837,7 +861,7 @@ Last milestone completed: M12c
 - **Scope**:
   - Ships in v0.15.0, after the WebUI keyboard shortcuts milestone. Depends on: Reverse Proxy and HTTPS Access, WebUI Preact Migration, and WebUI Stats Panel.
   - WebUI Stats Panel's Stats tab holds the action, beside the file's path.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - It uses the single localhost check that Reverse Proxy and HTTPS Access adds.
   - The desktop's `OpenFileLocation` opens Explorer with the file selected on Windows and opens the folder with `xdg-open` on Linux. A browser cannot do this itself; the server can when the browser runs on the server machine, and the tray already launches programs (`AvaloniaTrayHostUi.cs`). Both checked against the code at promotion.
   - Contract slice: a route that takes an item id, never a path, accepted only from the server machine, meaning a direct connection from loopback or from the server's own address as the merged localhost helper decides, and a capability the WebUI reads to decide whether to offer the action. A request through a reverse proxy is not localhost, so the action is not offered there, even on the server machine.
@@ -851,6 +875,7 @@ Last milestone completed: M12c
   - The WebUI shows the action only when the server offers it, and Copy Path otherwise.
   - Copy Path copies the path over plain HTTP from another device, where the Clipboard API is missing, as well as over HTTPS.
   - The file manager is started without a shell.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include server tests for loopback, the server's own address, another LAN address, proxied, unknown-id, and headless requests with the launcher faked, contract tests, a WebUI test of Copy Path without the Clipboard API, `npm run verify`, and one quick Linux spot check.
 
@@ -860,7 +885,7 @@ Last milestone completed: M12c
 - **Goal**: The WebUI status line shows only background information, one stable message per situation, and what the user must notice or act on moves to an in-app dialog or the field it is about.
 - **Scope**:
   - Ships in v0.15.0, after the Show in File Manager from the WebUI milestone. Depends on: WebUI Field Validation Pattern, whose pattern the field messages move to, and WebUI In-App Dialogs, whose notice the dialog messages move to, and Catalog Open and Backup Safety, whose 503 message the status line shows.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Moved here from v0.14.0 when the desktop was frozen. The desktop half and the shared fixture are dropped, and the status line moves with the panel layout.
   - Observed in the v0.13.0 manual regression pass: with the server stopped, the WebUI shows "library load failed: HTTP 503" only briefly before "SSE reconnecting...". The desktop alternates between "core runtime unavailable" and "core runtime is required to browse the library", and stays as it is. Not re-run at promotion, since it needs a running server; the v0.14.1 release notes still list the WebUI status line flipping between messages as a known issue.
   - Read from code at promotion: the WebUI's `fetchJson` throws `HTTP {status}` and drops the response body, so the server's library message in a 503 never reaches the status line.
@@ -909,6 +934,7 @@ Last milestone completed: M12c
   - A scan where every match already has its tag clears "Scanning…".
   - A tag save that fails on a network error shows that error, not one from an earlier save.
   - A pair, refresh status, version, or random response that isn't JSON, such as a proxy's HTML error page, shows a clear error, not a `SyntaxError`.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include WebUI tests of the precedence rule and the per-event messages, covering the server stopped, the API unavailable, a version or capability mismatch, and refresh progress and results, tests that each screen's dialog messages show in the notice with their `last.log` lines and its background messages stay on the status line, tests of the pairing token field and of a 401 on a random pick and a library play, tests of the three Auto Tag and tag save messages in place of the tests that lock them today, tests of a response that isn't JSON for each of the four reads, a check of every status line write against the sorted list, `npm run verify`, and one quick spot check with the server stopped.
 
@@ -918,7 +944,7 @@ Last milestone completed: M12c
 - **Goal**: The testing suite produces clear results that match the WebUI's connection and status handling.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI status line overhaul milestone. Depends on: WebUI Status Line Overhaul, Server Shutdown Fixes, and WebUI Admin Section.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - The status line overhaul defines the messages these scenarios check, the shutdown fixes change how event streams close, and the suite runs from the admin section.
   - Moved here from v0.14.0 when the desktop was frozen; the desktop's expected messages are dropped.
   - The suite predates the current client connection and status handling and no longer produces clear results. Observed in the v0.13.0 manual regression pass: with the API unavailable, the WebUI shows "library load failed: HTTP 503" only briefly before settling on "SSE reconnecting...", and SSE disconnect behaves inconsistently and may need redesigning. Not re-run at promotion, since it needs a running server. The Operator testing suite still has five scenario flags: API version mismatch, capability mismatch, API unavailable, missing media, and SSE disconnect.
@@ -932,6 +958,7 @@ Last milestone completed: M12c
   - SSE disconnect behaves the same way on every run.
   - Running and resetting each scenario leaves the WebUI connected and working.
   - The report of each scenario's behavior on a running server is written before the redesign.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include the report, automated tests that each scenario sets and resets the server state it describes, that SSE disconnect closes and reconnects the same way on repeated runs, and that each scenario's simulated server responses make the WebUI show its expected message, contract tests if the scenarios change, `dotnet test ReelRoulette.sln`, `npm run verify`, and one quick spot check of one scenario.
 
@@ -941,7 +968,7 @@ Last milestone completed: M12c
 - **Goal**: Browse and random play can be limited to files a browser can play, and a file the browser cannot play says so instead of "not found".
 - **Scope**:
   - Ships in v0.15.0, after the testing suite overhaul milestone. Depends on: WebUI Preact Migration, Favorite and Blacklist Filter Modes, whose FilterState schema it adds its field to, and WebUI Status Line Overhaul, whose precedence rule the new message follows.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Accepted gap until playback sessions: browsers cannot play every format LibVLC plays on the desktop. Re-measured at promotion on a copy of the developer's catalog, by file extension: 17,423 videos, of which 16,611 are mp4, 533 mkv (3.1%), 225 avi, and 54 wmv. The codecs inside the files were not measured. Tested by the user: avi and wmv files from that library fail in the WebUI. mkv plays in Chrome and Firefox with common codecs but not in Safari or on iOS (inferred), and counts as browser-playable.
   - The server decides playability from one documented container profile, so browse, random play, and counts agree. The profile lists the playable video containers, starting with mp4, m4v, webm, and mkv; any other video container, including avi and wmv, is not browser-playable. Photos are always playable. Codec-level detection waits for the probe in Server Playback Decision Engine.
   - Contract slice: a nullable browser-playable field in the FilterState schema that Favorite and Blacklist Filter Modes adds, applied by the server in the list query, its counts, and random selection. OpenAPI and generated WebUI types; it only adds a field.
@@ -959,6 +986,7 @@ Last milestone completed: M12c
   - Autoplay, Next, Previous, and random picks skip a file this browser can't play or one that is missing, and say so on the status line; a file chosen from the library shows its message instead.
   - After ten skips in a row, the player stops on the last file's message.
   - The profile is documented in `docs/api.md`.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include server tests for the option in the list query, counts, and random selection, and for a preset posted without the field keeping it, contract tests, WebUI tests for the option, both error messages with the server answering found and not found, and the stop after ten skips, `dotnet test ReelRoulette.sln`, and `npm run verify`.
 
@@ -968,7 +996,7 @@ Last milestone completed: M12c
 - **Goal**: The WebUI library grid updates only the rows and tiles that change, so it no longer flickers on an iPad or after a hard refresh.
 - **Scope**:
   - Ships in v0.15.0, after the browser-playable filter milestone, as the first of the parts WebUI Grid Rendering was split into in the v0.15.0 milestone review. Depends on: WebUI Library Tab, so it is built in the Preact Library tab, whose width changes whenever the side panel is resized.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Found by the efficiency and divergence report from code reading, and confirmed in the code at promotion: each change of visible rows replaces the rows' HTML through `innerHTML`, which recreates every tile image. Each patch and each appended page rebuilds the layout and virtualizer for every loaded item, so loading a window page by page costs time that grows with the square of its size.
   - Measured at promotion, in Node 24 on the development machine with the layout and virtualizer modules alone (no DOM): one full rebuild takes 0.5 ms for 10,000 items at 1,400 px wide and 1.2 ms at 390 px, and 2.7 to 7.8 ms for 49,000. Loading 10,000 items in 200-item pages spends 13 to 32 ms in total on rebuilds, and 49,000 spends 355 to 953 ms over 245 pages, about 1.5 to 4 ms per page. The growth is real but small. Replacing the rows' HTML, the likely cause of the iPad flicker below, was not measured.
   - Seen on an iPad with the WebUI installed as an app: the grid flickers dark each time it re-renders its visible rows while scrolling, about seven times for a screen-height drag in landscape with three to four rows on screen. Desktop browsers and Firefox on Android are fine. Each re-render rebuilds every visible row's HTML, including images that were already showing. Not re-measured at promotion, since it needs the device.
@@ -994,7 +1022,7 @@ Last milestone completed: M12c
 - **Goal**: Dragging the library grid's scrollbar reaches any part of the results without loading every page before it.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI grid row reuse milestone, as a part of WebUI Grid Rendering split off in the v0.15.0 milestone review. Depends on: WebUI Grid Row Reuse.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Design note first, before the slice is built (decided in the v0.15.0 milestone review): today the WebUI's query session holds one contiguous window from the first page. It reloads that window in one request for up to 10,000 tiles, fill-on-scroll appends to it, the patch-or-reload rule (`library-tile-effect.json`) decides for the tiles in it, and `resyncRequired` reloads it. Pages loaded at the scroll position break each of these. The note settles how the session tracks the pages it has loaded, what a reload, a patch-or-reload decision, and a resync request with scattered pages, and how the grid keeps the tile in view when a page's real thumbnail ratios replace its placeholders' fallback ratios. It is reviewed before the slice is built.
   - Size the grid to the full result count with placeholder tiles, and load the page at the scroll position, so dragging the scrollbar far down works without scrolling through every page.
   - Trap, inferred from code: the row layout depends on each item's thumbnail aspect ratio, so placeholder tiles for items not loaded yet use fallback ratios, and rows can change when their page arrives and shift what is on screen.
@@ -1007,6 +1035,7 @@ Last milestone completed: M12c
   - Dragging the scrollbar far down loads the page at that position without loading the pages before it.
   - A reload, a patch-or-reload decision, and a resync request work with scattered loaded pages as the design note sets out.
   - When a page's real thumbnail ratios replace the fallback ratios, the tile in view stays in view.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include the design note, WebUI tests for loading the page at a scrollbar position, for a reload, a patch-or-reload decision, and a resync request with scattered pages, and for keeping the tile in view when a page arrives, `npm run verify`, and one quick spot check.
 
@@ -1016,7 +1045,7 @@ Last milestone completed: M12c
 - **Goal**: The WebUI selects several library items, or every item that matches, and applies the desktop's bulk actions to them.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI grid scrollbar seek milestone. Depends on: Admin Source and Item Management, whose item removal route bulk removal uses, and WebUI Grid Row Reuse, which updates a tile in place, so selection marks are tile updates, and WebUI Grid Scrollbar Seek, whose placeholder tiles show selection once their page loads, and WebUI Tags and Filter Tabs, whose Tags tab edits several items, and WebUI Keyboard Shortcuts, whose Esc order it extends.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - From the desktop-versus-web feature comparison and the desktop retirement report, checked against the code at promotion. Adding a feature changes user-facing UX and needs approval.
   - Multi-select and bulk actions: the desktop library grid selects several items (click, Ctrl+click, Shift+click) and acts on them from its context menu: add to or remove from favorites and the blacklist, add or remove tags, clear playback stats, and remove from library. The WebUI library plays one item per click and has no selection.
   - Selection works as Google Photos does, with one icon throughout: a white circle with a check mark at the tile's top left (decided in WebUI Design Mockup). With a mouse it shows faded while the pointer is over a tile, and on every tile once selection is active; with the pointer on the icon itself it turns bright white, and clicking it selects the tile and starts selection. Selecting a tile turns the same icon filled orange, and the thumbnail shrinks inside the tile so the icon sits on its top-left corner. Hovering dims only the thumbnail, so the icon stays bright. On a touch screen a long press starts selection, and the icons then show on every tile. To screen readers the icon is a checkbox named "Select {file name}", and its tooltip reads "Select" or "Deselect".
@@ -1054,6 +1083,7 @@ Last milestone completed: M12c
   - Esc closes the Actions menu, then selection, after Auto Tag and before the panel.
   - A favorite or blacklist answer that arrives after Next applies to the item it was for, not the item now playing.
   - The ids-only query, the bulk route, and clear-stats ids are in OpenAPI, and `npm run verify:contracts` passes.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include server tests for the ids-only query, the bulk route and its one event, and clearing stats by ids, contract tests, the measurement that picks the tag-count read, a desktop test that the bulk event reloads the loaded window, WebUI tests for selection, Select all over items not loaded, each bulk action, the Esc order, and a favorite answer after Next, `dotnet test ReelRoulette.sln`, and `npm run verify`.
 
@@ -1064,7 +1094,7 @@ Last milestone completed: M12c
 - **Scope**:
   - Placed after the milestones that build the screens it covers, the last of which is WebUI Multi-Select and Bulk Actions, whose check icons the grid's keyboard model uses, and before Desktop Retirement Notice, which stays last as the desktop's final build.
   - Ships in v0.15.0, after the WebUI multi-select and bulk actions milestone. Depends on: WebUI In-App Dialogs, WebUI Drag Reordering, WebUI Responsive Layout and Panels, WebUI Library Tab, WebUI Tags and Filter Tabs, WebUI Auto-Pause and Photo Scrub Bar, WebUI Settings Panel, WebUI Admin Section, Log Viewer Redesign, Recovery Page and Operator Retirement, Admin Refresh, Backup, and Duplicate Review, Admin Source and Item Management, Admin Library Catalog Transfer, WebUI Stats Panel, WebUI Volume and Enhanced Audio, WebUI Player Controls and Ambient Mode, WebUI Keyboard Shortcuts, Testing Suite Overhaul, WebUI Grid Row Reuse, and WebUI Multi-Select and Bulk Actions.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - Read from code at this edit: only the pairing prompt, the tag editor, the library overlay's buttons, and the grid's tiles style their focus, in blue (`#7aa7ff`, and `#2563eb` for tiles in the light theme, in `src/styles.css`); other controls show the browser's own ring or none. Every grid tile is a tab stop (`tabindex="0"` in `renderGridTileHtml`, `src/library/libraryGridTileModel.ts`), and Enter or Space on one plays it.
   - The focus look (decided in WebUI Design Mockup): keyboard focus shows as one ring in the brand orange at a little transparency, in place of the browser's own, with no extra outline, and a mouse click shows none (`:focus-visible`). In the grid, as Google Photos shows it, a focused tile gets an orange border drawn above its thumbnail, and its focused check icon turns bright white inside a thick orange ring, which starts at the icon's visible edge with no gap, reaches about 22 px from its center, and is cropped by the tile.
     - The exact values, as the mockup sets them: the ring's color is the brand orange (`#ef7f22`) at 80% opacity in the dark theme and 95% in the light theme, `rgba(239, 127, 34, 0.8)` and `rgba(239, 127, 34, 0.95)`. It is a 2 px solid outline, 2 px outside the control; buttons, fields, icon buttons, panel tabs, and drag handles draw it 1 px outside, and tag category headers 2 px inside their edge. Menu items show focus as their hover highlight instead. A focused tile's border is 3 px, drawn inside the tile, and a focused check icon's ring is an 11 px outline set 2 px into the icon's box.
@@ -1079,6 +1109,7 @@ Last milestone completed: M12c
   - Keyboard focus shows as one orange ring on every focusable control, in both themes, and a mouse click shows none.
   - The grid is one tab stop: the arrow keys move between tiles without playing anything, Tab from a tile reaches its check icon, Space or Enter toggles it and starts selection with focus staying on it, and Tab again leaves the grid. A focused tile shows an orange border above its thumbnail, and a focused check icon a thick orange ring, starting at its edge, that the tile crops.
   - On every screen listed above, each control is reached by Tab in a sensible order and has an accessible name, and the full-screen panel and Auto Tag keep Tab inside them while open and return focus on close.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for the grid's tab stop, arrow keys, check icon toggling and the focus it keeps, the tab row's keys, focus staying inside the full-screen panel and Auto Tag, a focus style on each kind of control, and, for each screen listed above, its Tab order and its controls' accessible names, `npm run verify`, one quick keyboard-only spot check, and the Release Specific checklist item for keyboard use.
 
@@ -1089,7 +1120,7 @@ Last milestone completed: M12c
 - **Scope**:
   - Ships in v0.15.0, last in the series. Depends on: New Logo and Icons, whose icon the notice shows, and Recovery Page and Operator Retirement, whose always-on WebUI keeps the desktop's Open Web UI item enabled.
   - The desktop's other changes in this release, outside bug fixes, are small ones matching server changes: Favorite and Blacklist Filter Modes' filter dropdowns, Recovery Page and Operator Retirement's removal of the Enable Web UI switch, WebUI Loudness Normalization's move of its formula for the shared fixture, and WebUI Multi-Select and Bulk Actions' reload on the bulk event.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`), the reference for its settled design.
+  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
   - After Desktop Client Removal no desktop update is published, so installed desktops stay on their last version (inferred: the Velopack desktop feed stops getting releases). Later servers stop working with it from Desktop Client Removal in v0.16.0, which removes routes and fields it reads, such as `/api/library/item`, `/api/library-states`, and the filter state's old fields; the accounts release then removes pairing.
   - On start, show a notice once per installed version, titled "The desktop app is retired" (decided in WebUI Design Mockup): "This is the last version of the ReelRoulette desktop app. It won't get more updates, and later versions of the server won't work with it." and "Use ReelRoulette in your browser instead. It does everything the desktop app did, on this computer and on your other devices, and it can be installed as an app." Its buttons are Close and **Open ReelRoulette in your browser**, which does what the existing Open Web UI menu item does, so desktop users know where they're going. Either closes the notice for this version. The menu item keeps its name, since the desktop is frozen.
   - The notice shows the new logo's icon beside its title (decided in WebUI Design Mockup), from a PNG in `assets/logo/png/` added to the desktop's resources. The desktop otherwise keeps its old icons, as New Logo and Icons leaves them. Checked at promotion: the desktop's Open Web UI menu item exists, and `release.yml` still packages the desktop.
@@ -1098,6 +1129,7 @@ Last milestone completed: M12c
   - The notice appears on the first start of this version and not again after it is dismissed.
   - The notice shows the approved wording, which names ReelRoulette and never the WebUI.
   - The notice's Open ReelRoulette in your browser opens ReelRoulette in the browser.
+  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - **Verification evidence**:
   - Completion evidence must include a headless desktop test that the notice shows once per version, `dotnet test ReelRoulette.sln`, and one quick spot check.
 
@@ -1531,7 +1563,7 @@ Last milestone completed: M12c
     - The source multi-select takes one option per `svc` value (`server` and `webui`; the desktop client is gone by this release).
   - Newest first by `ts`, tie-broken by `ingestReqId` and then a stable row sequence, with a versioned cursor and defined `from` and `to` bounds, so paging never repeats or skips rows.
   - Read from the end of the file and across rotated archives instead of walking every line on each request (found by the repository audit: `ServerLogService.Read` walks the entire log on every request).
-  - Admin section view: it keeps the design Log Viewer Redesign gives it (controls collapsed by default with active-filter chips, and auto-refresh that pauses while scrolled away from the newest rows, with a resume control), and its rows expand to raw JSON. The admin view in `docs/mockups/webui-panels/` (WebUI Design Mockup) shows the Log Viewer Redesign version.
+  - Admin section view: it keeps the design Log Viewer Redesign gives it (controls collapsed by default with active-filter chips, and auto-refresh that pauses while scrolled away from the newest rows, with a resume control), and its rows expand to raw JSON. The admin view in `docs/mockups/reelroulette/` (WebUI Design Mockup) shows the Log Viewer Redesign version.
 - **Acceptance criteria**:
   - The admin section's Log Viewer filters by every listed field, text, and time window.
   - The level filter is one checkbox per `lvl` value, and checking several levels shows entries of exactly those levels.
@@ -1896,7 +1928,7 @@ Last milestone completed: M12c
   - Bridge: a preload script exposes a small API the WebUI detects. In a plain browser it is absent and the WebUI works as it does today; each native feature shows only when the bridge offers it.
   - Browse for a source folder: a Browse button beside the admin section's add-folder path field opens the OS folder picker and fills in the picked path, which the server then checks as it does a typed one. It shows only when the app and the server run on the same machine, since a picked path is only meaningful there.
   - Save as for exporting the library: in the app, Export Library opens a save dialog that suggests `library-{date}.db` and saves where the user picks. It works with a server on this machine or another, since the file is saved on the app's machine. In the app the button opens a dialog, so it gets an ellipsis.
-  - Changes to user-facing UX need approval, mocked in `docs/mockups/webui-panels/`.
+  - Changes to user-facing UX need approval, mocked in `docs/mockups/reelroulette/`.
   - Decide at promotion whether the app bundles the server or starts an installed one, and how it is packaged and updated beside the server's Velopack releases.
   - Not included: other native features the desktop client had, such as always-on-top; the bridge can offer them later.
 - **Acceptance criteria**:

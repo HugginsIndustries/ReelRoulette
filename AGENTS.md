@@ -33,6 +33,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
   - `MILESTONES-COMPLETED.md` = completed milestones, newest first, kept as historical record.
   - `CONTEXT.md` = current implemented capabilities.
   - Update affected docs when applicable: `README.md`, `docs/architecture.md`, `docs/api.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`.
+  - `docs/mockups/reelroulette/` = the design mockup of the whole app, kept matching what ships from v0.15.0 onward. Any change to the app's look or behavior updates the mockup in the same milestone, including deviations found during implementation, and the mockup check passes. Where the app has to differ from the approved mockup for a technical reason, update the mockup to match what shipped and say so in the milestone's evidence.
   - Keep `docs/checklists/testing-checklist.md` current: update its Smoke and Release Flow items when the workflows they check change, and put checks for one release's changes in Release Specific, under Agent checks or Manual checks. Feature behavior is covered by automated tests, not standing checklist items.
 - When documenting current behavior, do not rewrite historical `CHANGELOG.md` sections or `MILESTONES-COMPLETED.md` entries. Change only active surfaces (`[Unreleased]`, Active Milestones, the tracker line, and evidence you are landing) unless the user asks to correct historical text.
 - Milestone IDs (for example `M8f`) may appear only in `MILESTONES.md` section headers, its tracker line, and its Planned Releases outline, `MILESTONES-COMPLETED.md`, `CHANGELOG.md`, and `COMMIT-MESSAGE.txt`. Never put them in current-state docs, code, comments, log messages, or user-facing text.
@@ -43,7 +44,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
   - `dotnet build ReelRoulette.sln` and `dotnet test ReelRoulette.sln`; stop if the build fails.
   - `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose`
   - In `src/clients/web/ReelRoulette.WebUI`: `npm run generate:contracts`, `npm run verify`, and the scripts `verify` runs.
-  - `python3 docs/mockups/webui-panels/build/build_pages.py` and `node docs/mockups/webui-panels/build/check.mjs`, which rebuild the design mockup's pages from their sources and check them.
+  - `python3 docs/mockups/reelroulette/build/build_pages.py` and `node docs/mockups/reelroulette/build/check.mjs`, which rebuild the design mockup's pages from their sources and check them.
   - `pwsh ./tools/scripts/reset-checklist.ps1`
   - `pwsh ./tools/scripts/check-milestones.ps1`, which only reads.
   - `pwsh ./tools/scripts/cut-changelog.ps1`, which edits `CHANGELOG.md` and changes nothing if a check fails.
