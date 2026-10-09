@@ -31,7 +31,7 @@ Then open `http://<this computer's LAN address>:8000/` on the phone, and stop th
 
 ## Changing them
 
-Each page is self-contained: styles, script, and icons are inlined, so it opens without the WebUI or a network. The pages are built from the sources in `build/`:
+Each page is self-contained: styles, script, icons, and the logo are inlined, so it opens without the WebUI or a network. The build reads the logo from the repository's `assets/logo/`. The pages are built from the sources in `build/`:
 
 - `common.css` and `common.js` are shared by every page. They hold the WebUI's theme tokens, the field validation pattern, and the dialog component.
 - `*.src.html` are the pages, with placeholders for the shared parts.

@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI becomes the only client on every device. Until the desktop removal release, the desktop client gets no significant changes or new features: bug fixes (crashes, data loss, broken playback, security) and small changes that keep it working with the server, or that match a small server-side change, are allowed. Until then server contract changes only add fields, so the last desktop build keeps working. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. The desktop still ships as a fallback, and its last build tells users it is retired. M12a, M12b, M12c, M12d, M12e, M12f, M12g, M12h, M12i, M12j, M12k, M12l, M12m, M12n, M12o, M12p, M12q, M12r, M12s, M12t.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. The desktop still ships as a fallback, and its last build tells users it is retired. M12a, M12b, M12c, M12d, M12e, M12f, M12g, M12h, M12i, M12j, M12k, M12l, M12m, M12n, M12o, M12p, M12q, M12r, M12s, M12t, M12u.
 - **v0.16.0 — Desktop removal**: Remove the desktop client, its packaging, and its tests, then move preset writes to per-preset routes. P48, P25.
 - **v0.16.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.17.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access. P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28j, P28k, P28l.
@@ -126,12 +126,13 @@ Last milestone completed: M12b
     - The grid's placeholder tiles, from WebUI Grid Rendering.
     - Multi-select and bulk actions, from WebUI Multi-Select and Bulk Actions.
     - The desktop's retirement notice, from Desktop Retirement Notice.
+    - The logo in the header, the page icon, and the icon on the recovery page and the desktop notice, from New Logo and Icons, WebUI Admin Section, and Desktop Retirement Notice.
   - Each decision approved in the mockup is recorded in the milestone that builds it. A UX question a later milestone leaves to be decided there is decided in the mockup, where it can be seen, and recorded in that milestone.
   - Settled with the mockup so far:
     - The panel is a full-screen overlay below 800 px of viewport width, or on a touch screen (coarse pointer) below 500 px of viewport height, which is a phone on its side. Otherwise it sits beside the player, on the right until the Settings tab lets each device choose.
     - Beside the player, the panel's width runs from 360 px to whatever leaves the player 400 px wide, and starts at 420 px. The 800 px breakpoint is those 360 px and 400 px plus the resize handle and the page's padding. These widths may still change with mockup testing.
     - Library tiles are smaller, beside the player and as the overlay: rows 100–240 px high, aiming for 160 px.
-    - Each approved decision is recorded in the milestone that builds it: Favorite and Blacklist Filter Modes, WebUI Responsive Layout and Panels, WebUI In-App Dialogs, WebUI Settings Panel, WebUI Admin Section, Admin Refresh, Backup, and Duplicate Review, Admin Source and Item Management, Admin Library Catalog Transfer, WebUI Keyboard Shortcuts and Player Controls, Browser-Playable Filter, WebUI Multi-Select and Bulk Actions, WebUI Stats Panel, WebUI Status Line Overhaul, Admin Log Viewer, and Desktop Client Removal. Loudness normalization is declined for v0.15.0 and has its own milestone, WebUI Loudness Normalization.
+    - Each approved decision is recorded in the milestone that builds it: New Logo and Icons, Favorite and Blacklist Filter Modes, WebUI Responsive Layout and Panels, WebUI In-App Dialogs, WebUI Settings Panel, WebUI Admin Section, Admin Refresh, Backup, and Duplicate Review, Admin Source and Item Management, Admin Library Catalog Transfer, WebUI Keyboard Shortcuts and Player Controls, Browser-Playable Filter, WebUI Multi-Select and Bulk Actions, WebUI Stats Panel, WebUI Status Line Overhaul, Admin Log Viewer, Desktop Retirement Notice, and Desktop Client Removal. Loudness normalization is declined for v0.15.0 and has its own milestone, WebUI Loudness Normalization.
   - Proposed in the mockup and not approved yet:
     - The Settings tab's sections, and "Advance after" as the timer's name.
     - The volume slider at the end of the seek row.
@@ -150,12 +151,48 @@ Last milestone completed: M12b
   - Completion evidence must include `node docs/mockups/webui-panels/build/check.mjs` passing, the user's approval of each screen, and the milestones each decision was recorded in.
   - The mockup in `docs/mockups/webui-panels/` stays in place when this milestone completes.
 
-### M12d - Favorite and Blacklist Filter Modes
+### M12d - New Logo and Icons
+
+- **Status**: ⏳ Planned
+- **Goal**: The server and the WebUI carry the new logo and icons from `assets/logo/` everywhere they show the app's mark, while the desktop client keeps its old icons until it is removed.
+- **Scope**:
+  - Placed first after the mockup so the milestones after it build on the new marks instead of replacing old ones later: WebUI Responsive Layout and Panels reworks the header, WebUI Admin Section builds the recovery page and renames the tray item, and Desktop Retirement Notice shows the icon in its notice. It is small and independent, so dev releases carry the new icons for the rest of the series.
+  - Ships in v0.15.0, right after the WebUI design mockup milestone. Depends on: WebUI Design Mockup, whose mockup approves the header's logo.
+  - The files in `assets/logo/`, read from them at this edit: `logo-lockup.svg` (the icon with light text, for the dark theme) and `logo-lockup-dark.svg` (dark text, for the light theme); `logo-icon.svg` (the orange icon alone, on transparency); `logo-icon-tile.svg` (the icon on a rounded orange tile) and `logo-icon-maskable.svg` (on a full-bleed orange square); `app.ico` (16 to 256 px) and `favicon.ico` (16, 32, and 48 px); and in `png/`, the plain icon at 16 to 256 px (`icon-*.png`), the tile at 192 and 512 px (`pwa-*.png`), the maskable square at 192 and 512 px (`pwa-maskable-*.png`), and `apple-touch-icon.png` (180 px, full bleed).
+  - WebUI slice. Its copies live in `src/clients/web/ReelRoulette.WebUI/public/`, which the WebUI build copies into its output and `tools/scripts/stage-webui-assets.ps1` stages into the server's web root:
+    - The header shows `logo-lockup.svg` in the dark theme and `logo-lockup-dark.svg` in the light theme in place of the "ReelRoulette" text, and `logo-icon.svg` alone on a phone, with "ReelRoulette" as its accessible name (decided in WebUI Design Mockup). Read from code at this edit: the header shows the name as text (`ui/Header.tsx`).
+    - The favicon is `favicon.ico`, with `logo-icon.svg` for browsers that take an SVG icon, in place of `/HI.ico` in `index.html`.
+    - The manifest's icons are `pwa-192.png` and `pwa-512.png` with purpose `any`, and `pwa-maskable-192.png` and `pwa-maskable-512.png` with purpose `maskable`, in place of `icons/icon-192.png` and `icons/icon-512.png`. The Apple touch icon is `apple-touch-icon.png`.
+    - `scripts/sync-shared-icon.mjs`, which runs before dev and build, copies these files. Read from code at this edit: it copies `HI.ico` and resizes `HI-256.png` and `HI-512.png` with `sharp`, its only user, so `sharp` leaves the dev dependencies now that the files come at their sizes. `scripts/verify-build-output.mjs` checks the new files, and the tracked `public/HI.ico` and old `public/icons/` PNGs go.
+  - Server slice. Its copies sit next to the executable, copied there by `ReelRoulette.ServerApp.csproj`:
+    - The Windows executable icon (`ApplicationIcon`) and the tray icon are `app.ico`, in place of `HI.ico` (`ResolveSharedIconPath` in `Program.cs`, which `AvaloniaTrayHostUi` loads).
+    - The Linux desktop entry (`LinuxAppImageRegistrationService`, `reelroulette-server.desktop`) installs `png/icon-256.png` as its 256 px icon and `logo-icon.svg` as its scalable icon, in place of `HI-256.png` and `HI-512.png`, since the new set has no plain 512 px PNG.
+      - Trap, inferred: an install that registered the old icons keeps `icons/hicolor/512x512/apps/reelroulette-server.png` in the user's data folder, and a desktop environment may prefer it to the scalable icon, so registration removes it.
+    - The Operator page's icon link (`/HI.ico` in `Program.cs`) points at the new favicon until WebUI Admin Section replaces the page.
+  - Release packaging slice. Read from code at this edit: `release.yml` passes one `--icon` to every Velopack leg, `assets/HI.ico` on Windows and `assets/HI-256.png` on Linux, which sets the Windows installer's and the Linux AppImage's icon (inferred from Velopack's `--icon` option, not checked against its docs at this edit). Each leg gets its own: the server's use `assets/logo/app.ico` and `assets/logo/png/icon-256.png`, and the desktop's keep the old ones. `verify-linux-packaged-server-smoke.sh` packs with `icon-256.png`.
+  - The desktop client keeps its old icons, since Desktop Client Removal removes it in v0.16.0: its executable and window icon, its Avalonia resource, its Linux menu registration, and its release legs' `--icon`.
+  - Where the old icons are used, read from code at this edit:
+    - `assets/HI.ico`: the server's `ApplicationIcon`, tray icon, and Operator page icon link; the WebUI's favicon, through `sync-shared-icon.mjs` and the tracked `public/HI.ico`; `stage-webui-assets.ps1`; `release.yml`'s Windows `--icon`; `ReverseProxyAccessTests`' list of files an unpaired device may load; and the desktop's `ApplicationIcon`, window icon (`MainWindow.axaml`), and Avalonia resource.
+    - `assets/HI-256.png`: the server's and the desktop's Linux menu registration, the WebUI's 192 px PWA icon and Apple touch icon, `release.yml`'s Linux `--icon`, and `verify-linux-packaged-server-smoke.sh`.
+    - `assets/HI-512.png`: the server's and the desktop's Linux menu registration, and the WebUI's 512 px PWA icon.
+    - After this milestone only the desktop project and its release legs use them, and Desktop Client Removal deletes them.
+  - Tests: `ReverseProxyAccessTests`' list of files an unpaired device may load swaps `/HI.ico` and `/icons/icon-192.png` for the new favicon and manifest icons.
+  - Docs: `README.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, and `CONTEXT.md`, which describe the old icons and their pipeline.
+  - Add a Release Specific checklist item, under Manual checks: "With the dev release installed on Windows and Linux, the server's executable, shortcut, tray, and Linux menu icons show the new logo, the WebUI's tab icon and its installed app icon on Android and iOS show it too, and the desktop app keeps its old icon."
+- **Acceptance criteria**:
+  - The WebUI's header shows the lockup for the theme, or the icon alone on a phone, named "ReelRoulette", and no "ReelRoulette" text.
+  - The favicon, the manifest's `any` and `maskable` icons, and the Apple touch icon are the new files, and the manifest's sizes match them.
+  - The server's executable and tray icon are `app.ico`, its Linux menu entry uses the new icons and leaves no old 512 px icon behind, and its Velopack legs use the new icons while the desktop's keep the old ones.
+  - Outside the desktop project and its release legs, nothing refers to `HI.ico`, `HI-256.png`, or `HI-512.png`.
+- **Verification evidence**:
+  - Completion evidence must include `npm run verify` with `verify-build-output.mjs` checking the new files, a server test that Linux registration installs the new icons and removes the old 512 px one, `dotnet test ReelRoulette.sln`, `./tools/scripts/verify-linux-packaged-server-smoke.sh`, a search showing only the desktop project and its release legs use the old icons, and the Release Specific checklist item for the installed icons.
+
+### M12e - Favorite and Blacklist Filter Modes
 
 - **Status**: ⏳ Planned
 - **Goal**: The Favorites and Blacklisted filters each choose only or excluded, in the server and both clients, so a filter such as Favorites excluded or Blacklisted only works the same in browse, random picks, and presets.
 - **Scope**:
-  - Ships in v0.15.0, after the WebUI design mockup milestone and before WebUI Responsive Layout and Panels builds the Filter tab. Depends on: WebUI Design Mockup, whose mockup approves its look.
+  - Ships in v0.15.0, after the new logo and icons milestone and before WebUI Responsive Layout and Panels builds the Filter tab. Depends on: WebUI Design Mockup, whose mockup approves its look.
   - Read from code at this edit: the filter state has two booleans, `favoritesOnly` (off by default) and `excludeBlacklisted` (on by default). They are in Core (`FilterState` in `FilteringContracts.cs`), the server's parser (`LibraryListFilterParser`) and list query (`LibraryCatalogListQuery`), the desktop (`FilterState.cs`, and the Favorites only and Exclude blacklisted checkboxes in `FilterDialog.axaml`), and the WebUI (`filterStateModel.ts`). Browse, its counts, and random picks all filter through them.
   - Each filter becomes a checkbox with a small dropdown to its right offering only and excluded, and the dropdown is disabled while its checkbox is off (decided in WebUI Design Mockup). Favorites starts off; Blacklisted starts on and excluded, which is today's Exclude blacklisted. Both clients offer the same options, so a preset behaves identically in each.
   - Contract slice: new fields beside the old ones, a contract change that only adds. A filter that carries only the old fields reads as before: `favoritesOnly` as Favorites only, `excludeBlacklisted` as Blacklisted excluded. Desktop Client Removal drops the old fields. The new fields' names, and what the server writes in the old fields for a client that reads only them, are decided here.
@@ -175,7 +212,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include server tests for each combination in the list query, its counts, and random selection, contract tests, the new cases in both shared fixtures run by both clients, desktop and WebUI filter dialog tests, `dotnet test ReelRoulette.sln`, `npm run verify`, and one quick spot check in each client.
 
-### M12e - WebUI Responsive Layout and Panels
+### M12f - WebUI Responsive Layout and Panels
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI layout adapts to the viewport: on tablets and desktops a side panel beside the player keeps the video playing in view while browsing, filtering, tagging, or viewing stats and settings, and on phones the panel is a full-screen overlay.
@@ -189,7 +226,7 @@ Last milestone completed: M12b
     4. The panel host and layout.
     5. The player: Auto-Pause, the photo timer with Play and the scrub bar, the time display's color, and the orange accent on native controls.
   - Measured again at promotion: the tag editor, filter, and library overlays are each `position: fixed; inset: 0` with `z-index: 1000`, so they cover the player while it keeps playing underneath, except that the tag editor pauses playback when it opens and resumes it when it closes (`pauseForTagEditor` and `resumeAfterTagEditor`, read from code when Auto-Pause was planned). The stylesheet has two `@media (max-width: 600px)` rules, and mobile browsers are detected by user agent (`getClientType` in `src/api/coreApi.ts`).
-  - The main page is a header bar, the player with its overlay controls, and the footer status line as today. The header holds the app name and the current file name, and at the right an admin icon, which arrives with WebUI Admin Section. It has no settings icon: the Settings tab is reached from the panel's tab row. Photo duration stays in the header until WebUI Settings Panel moves it into the Settings tab, and the pairing token prompt keeps showing there, labeled "Pairing token", when the server asks for pairing.
+  - The main page is a header bar, the player with its overlay controls, and the footer status line as today. The header holds the logo, which New Logo and Icons puts there in place of the app name, and the current file name, and at the right an admin icon, which arrives with WebUI Admin Section. It has no settings icon: the Settings tab is reached from the panel's tab row. Photo duration stays in the header until WebUI Settings Panel moves it into the Settings tab, and the pairing token prompt keeps showing there, labeled "Pairing token", when the server asks for pairing.
   - Before anything plays, the player says "Tap to play, or open the panel to choose a preset or filter." in place of today's "Click here to play (choose a preset or open Filter…)", and a tap or Play starts a random pick, as today (decided in WebUI Design Mockup).
   - When the server fails the compatibility check, the panel still opens, the Library tab shows the compatibility message in place of the grid, and Play shows its notice (decided in WebUI Design Mockup). Read from code at this edit: today the library overlay doesn't open then (`open` in `src/library/library.ts`), and play, pairing, and events stop.
   - A panel host: at most one panel is open at a time. Below 800 px of viewport width, or on a touch screen (coarse pointer) below 500 px of viewport height, it is a full-screen overlay with the same tabs; otherwise it sits beside the player. The breakpoints use viewport size and pointer type, not the user agent. Beside the player it sits on the right by default or on the left as a per-device setting, and a drag handle between them sets its width, from 360 px to whatever leaves the player 400 px wide, starting at 420 px; the handle also takes the arrow keys while it has focus. The side is chosen in the Settings tab, which WebUI Settings Panel adds.
@@ -314,7 +351,7 @@ Last milestone completed: M12b
 
     Plus `npm run verify`, and one quick spot check on a phone and a desktop browser, including dragging on a touch screen.
 
-### M12f - WebUI In-App Dialogs
+### M12g - WebUI In-App Dialogs
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI asks for names and confirmations, and shows anything the user must notice or act on, in its own dialogs, styled like the rest of the WebUI, instead of the browser's `prompt`, `confirm`, and `alert`.
@@ -338,7 +375,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for confirm and cancel on each converted dialog, for a notice and its `last.log` line, and for the new category name check with the field validation pattern, a check that no native dialog calls remain, `npm run verify`, and a spot check in an installed web app.
 
-### M12g - WebUI Settings Panel
+### M12h - WebUI Settings Panel
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI side panel has a Settings tab for per-device preferences and diagnostics.
@@ -371,7 +408,7 @@ Last milestone completed: M12b
   - Completion evidence must include WebUI tests for preference storage, for a page refresh keeping each setting this milestone adds, and for photo duration with the field validation pattern, `npm run verify`, and one quick spot check on a phone.
   - Add a Release Specific checklist item: "On a desktop browser and a phone, and as an installed app, every remembered setting is kept after a refresh and a browser restart, and the library search starts empty."
 
-### M12h - WebUI Admin Section
+### M12i - WebUI Admin Section
 
 - **Status**: ⏳ Planned
 - **Goal**: Everything the Operator page does moves into a full-page admin section of the WebUI, and the server keeps a minimal recovery page for when the WebUI's files are broken.
@@ -394,7 +431,7 @@ Last milestone completed: M12b
     - Gating: opening admin from another machine asks for the control token first, through `POST /control/pair`, and shows nothing until it is accepted. On the server machine, which the merged localhost helper decides, it opens directly. The accounts release replaces the token with admin accounts.
     - Later admin work lands here: refresh, backup, and duplicate review, with duplicate review opening within the admin section, source and item management, catalog transfer, the Log Viewer, and account administration.
   - Recovery page slice:
-    - The server keeps a minimal built-in page with restart, stop, a log tail, and updates, at a fixed path such as `/recovery` (decided here). It is plain, in the WebUI's theme colors, and titled "ReelRoulette Recovery", laid out as the mockup's recovery page shows (decided in WebUI Design Mockup). It does not load the WebUI's files, so it works when they are missing or broken, and it has the same control-token gating.
+    - The server keeps a minimal built-in page with restart, stop, a log tail, and updates, at a fixed path such as `/recovery` (decided here). It is plain, in the WebUI's theme colors, and titled "ReelRoulette Recovery", laid out as the mockup's recovery page shows, with `logo-icon.svg` beside its title and as its page icon (decided in WebUI Design Mockup). The icon is built into the page, since the page loads none of the WebUI's files. It does not load the WebUI's files, so it works when they are missing or broken, and it has the same control-token gating.
     - It renders settings and status text without `innerHTML` interpolation (found by the repository audit: Operator HTML page interpolates user input via `innerHTML`).
     - Retire the Operator page: `/operator` redirects to the admin section, the tray's Open Operator UI item becomes **Open ReelRoulette** and opens the WebUI's main page (decided in WebUI Design Mockup; read from code at this edit: `AvaloniaTrayHostUi.cs`), `verify-linux-packaged-server-smoke.sh` checks the recovery page and the admin section entry instead of `/operator`, and the testing checklist's Smoke item checks the admin section instead of the Operator page.
   - Always-on WebUI slice:
@@ -424,7 +461,7 @@ Last milestone completed: M12b
   - Server tests call the handlers and gating as functions over `DefaultHttpContext`, as the library route gate's tests do. No test project has an HTTP test host, and `Microsoft.AspNetCore.TestHost` is not added (decided at promotion).
   - Add a Release Specific checklist item: "From another machine, the admin section asks for the control token and works after it is entered; with the WebUI files removed, the recovery page restarts, stops, shows logs, and applies an update, on Linux and Windows."
 
-### M12i - Admin Refresh, Backup, and Duplicate Review
+### M12j - Admin Refresh, Backup, and Duplicate Review
 
 - **Status**: ⏳ Planned
 - **Goal**: The admin section starts a refresh, edits refresh and backup settings, and reviews and applies duplicates, so none of these needs the desktop.
@@ -452,7 +489,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include admin section UI tests for each slice, including the duplicate default surviving a page refresh and each refresh and backup field with the field validation pattern, `npm run verify`, and one quick spot check of a refresh and a duplicate scan.
 
-### M12j - Admin Source and Item Management
+### M12k - Admin Source and Item Management
 
 - **Status**: ⏳ Planned
 - **Goal**: Manage sources and remove library items from the WebUI admin section, with server routes for what no client can do today, and every open WebUI follows source changes without a reload.
@@ -479,7 +516,7 @@ Last milestone completed: M12b
   - Completion evidence must include server tests for each new route and for the event each source change publishes, admin section UI tests for Manage Sources, WebUI tests for source event handling, `dotnet test ReelRoulette.sln`, `npm run verify`, and one quick spot check of an admin section source toggle seen in another WebUI tab.
   - Add a Release Specific checklist item: "From the admin section, add, rename, disable, refresh, and remove a source, and other open WebUI sessions update without a reload."
 
-### M12k - Admin Library Catalog Transfer
+### M12l - Admin Library Catalog Transfer
 
 - **Status**: ⏳ Planned
 - **Goal**: Export and import the library from the WebUI admin section, with the server applying the catalog, so catalog transfer does not need the desktop app.
@@ -504,7 +541,7 @@ Last milestone completed: M12b
   - Completion evidence must include server tests for running-server import, rejection of a file that is not a library database, and interrupted-replace recovery, plus admin section UI tests for export and import, including an upload larger than 30 MB.
   - Add a Release Specific checklist item: "With no desktop app, export the library from the admin section and import it into a fresh server, on Linux and Windows."
 
-### M12l - WebUI Stats Panel
+### M12m - WebUI Stats Panel
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI shows library and playback statistics and details of the current file in a Stats tab, as the desktop stats panel does.
@@ -526,7 +563,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include component tests for both sections and for the file name opening the Stats tab, coalescing tests, `npm run verify`, and one quick spot check.
 
-### M12m - WebUI Keyboard Shortcuts and Player Controls
+### M12n - WebUI Keyboard Shortcuts and Player Controls
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI has the desktop's keyboard shortcuts wherever a browser allows them, plus volume, seek-step, and frame-step controls, two autoplay modes, and ambient mode.
@@ -574,7 +611,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include keyboard tests per binding under `happy-dom`, autoplay tests for both modes with loop on and off and with a paused video, a test that a looping photo keeps its image shown through each loop, tests for a page refresh keeping each setting this milestone adds, frame stepping tests with and without the browser's frame timings, ambient mode tests for sampling at the update rate while a video plays, holding while it is paused or the tab is hidden, a photo drawn once, and each of its settings, `npm run verify`, and one quick spot check.
 
-### M12n - Show in File Manager from the WebUI
+### M12o - Show in File Manager from the WebUI
 
 - **Status**: ⏳ Planned
 - **Goal**: A WebUI on the server machine opens the system file manager at the playing file, and elsewhere copies its path.
@@ -594,7 +631,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include server tests for loopback, the server's own address, another LAN address, proxied, unknown-id, and headless requests with the launcher faked, contract tests, `npm run verify`, and one quick Linux spot check.
 
-### M12o - WebUI Status Line Overhaul
+### M12p - WebUI Status Line Overhaul
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI status line shows only background information, one stable message per situation, and what the user must notice or act on moves to an in-app dialog or the field it is about.
@@ -649,7 +686,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include WebUI tests of the precedence rule and the per-event messages, covering the server stopped, the API unavailable, a version or capability mismatch, and refresh progress and results, tests that each screen's dialog messages show in the notice with their `last.log` lines and its background messages stay on the status line, tests of the pairing token field and of a 401 on a random pick and a library play, tests of the three Auto Tag and tag save messages in place of the tests that lock them today, a check of every status line write against the sorted list, and one quick spot check with the server stopped.
 
-### M12p - Testing Suite Overhaul
+### M12q - Testing Suite Overhaul
 
 - **Status**: ⏳ Planned
 - **Goal**: The testing suite produces clear results that match the WebUI's connection and status handling.
@@ -667,7 +704,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include automated tests that each scenario sets and resets the server state it describes, and that SSE disconnect closes and reconnects the same way on repeated runs, plus one quick spot check of one scenario.
 
-### M12q - Browser-Playable Filter
+### M12r - Browser-Playable Filter
 
 - **Status**: ⏳ Planned
 - **Goal**: Browse and random play can be limited to files a browser can play, and a file the browser cannot play says so instead of "not found".
@@ -692,7 +729,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include server tests for the option in the list query, counts, and random selection, contract tests, WebUI tests for the option and both error messages, `dotnet test ReelRoulette.sln`, and `npm run verify`.
 
-### M12r - WebUI Grid Rendering
+### M12s - WebUI Grid Rendering
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI library grid updates only the rows and tiles that change, and dragging the scrollbar reaches any part of the results without loading every page before it.
@@ -719,7 +756,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for row reuse, tile patching, and loading the page at a scrollbar position, before-and-after timings for rendering a large window in a browser, and `npm run verify`.
 
-### M12s - WebUI Multi-Select and Bulk Actions
+### M12t - WebUI Multi-Select and Bulk Actions
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI selects several library items and applies the desktop's bulk actions to them, and clears playback stats for the whole library.
@@ -751,14 +788,15 @@ Last milestone completed: M12b
   - Completion evidence must include WebUI tests for selection and each bulk action, and `npm run verify`.
   - Add a Release Specific checklist item: "In the WebUI on a desktop browser and a phone, select several items, apply each bulk action, and the tiles update."
 
-### M12t - Desktop Retirement Notice
+### M12u - Desktop Retirement Notice
 
 - **Status**: ⏳ Planned
 - **Goal**: The last desktop build tells users the desktop app is retired and points them to the WebUI.
 - **Scope**:
   - Ships in v0.15.0, last in the series. With the Enable Web UI switch that WebUI Admin Section removes, the only desktop changes outside bug fixes.
   - After Desktop Client Removal no desktop update is published, so installed desktops stay on their last version (inferred: the Velopack desktop feed stops getting releases). Later servers stop working with it, starting with the accounts release, which removes pairing.
-  - On start, show a notice once per installed version: the desktop app is retired; use the WebUI. It offers the existing Open Web UI action. The wording needs approval. Checked at promotion: the desktop's Open Web UI menu item exists, and `release.yml` still packages the desktop.
+  - On start, show a notice once per installed version: the desktop app is retired; use the WebUI. It offers the existing Open Web UI action. The wording needs approval.
+  - The notice shows the new logo's icon beside its title (decided in WebUI Design Mockup), from a PNG in `assets/logo/png/` added to the desktop's resources. The desktop otherwise keeps its old icons, as New Logo and Icons leaves them. Checked at promotion: the desktop's Open Web UI menu item exists, and `release.yml` still packages the desktop.
   - Add a Release Specific checklist item: "After updating, the desktop shows the retirement notice once, and Open Web UI opens the WebUI."
 - **Acceptance criteria**:
   - The notice appears on the first start of this version and not again after it is dismissed.
@@ -1540,8 +1578,9 @@ Last milestone completed: M12b
   - Desktop features this drops without a WebUI equivalent, declined during the desktop parity work because a browser cannot offer them: always-on-top (the closest is picture-in-picture, which the WebUI turns off with `disablepictureinpicture`), desktop self-update, the Linux dependency dialog, application menu registration, and the FFmpeg log window, which has been empty since the server took over refresh.
   - Desktop Settings dialog entries this drops as not useful in the WebUI, decided when the WebUI's settings were planned: the desktop's own dev update channel (the server's is in the admin section), client settings backups (the WebUI's settings are a few values in browser storage), the core server base URL (the WebUI calls the server that served it), Force API playback (the WebUI always plays through `/api/media`), and image scaling (it limits how large the desktop decodes photos, and the browser scales photos to fit by itself).
   - Code and tests slice, measured: remove `ReelRoulette.DesktopApp`, `ReelRoulette.LibraryArchive`, and `ReelRoulette.DesktopApp.Tests` from the solution and the repository, about 30,300 lines of C# and AXAML including 3,267 test lines and 134 tests. Remove Core's `LibraryGridLayout` and its tests, which only the desktop uses, and `JsonFileStorageService` and `CoreStorageServices` if nothing else uses them.
-  - Packaging slice: remove the `desktop` component from the `release.yml` matrix, including the Windows LibVLC relocation step, stop publishing the desktop update feed, and remove the desktop references in `set-release-version.ps1` and `verify-linux-packaged-server-smoke.sh`. CI has no desktop job: desktop tests run inside the solution test on the Ubuntu and Windows jobs, so `ci.yml` needs no change.
+  - Packaging slice: remove the `desktop` component from the `release.yml` matrix, including the Windows LibVLC relocation step and its legs' old `--icon`, stop publishing the desktop update feed, and remove the desktop references in `set-release-version.ps1` and `verify-linux-packaged-server-smoke.sh`. CI has no desktop job: desktop tests run inside the solution test on the Ubuntu and Windows jobs, so `ci.yml` needs no change.
   - Contract slice: remove routes and fields that no remaining caller uses, each checked against the WebUI and the admin section. Remove the web runtime settings' `enabled` field, which the server has ignored and reported as on since WebUI Admin Section, and the filter state's old `favoritesOnly` and `excludeBlacklisted` fields, which Favorite and Blacklist Filter Modes keeps beside its new ones. Candidates: `/api/library-states`, `/api/library/item`, the full path kept in the random and play responses' `id` for the desktop, and `itemTagsChanged.itemIds` and the auto-tag apply response's `changedItemPaths`, which the WebUI no longer reads beside their item id fields. `/api/library/catalog-checkpoint` stays for the admin section's export. OpenAPI and generated WebUI types.
+  - Icons slice: delete the old icons `assets/HI.ico`, `assets/HI-256.png`, and `assets/HI-512.png` once nothing uses them. After New Logo and Icons only the desktop uses them: its `ApplicationIcon`, window icon (`MainWindow.axaml`), Avalonia resource, Linux menu registration (`LinuxAppImageRegistration.cs`), and its release legs' `--icon`.
   - Fixture slice: `event-revision.json`, `library-tile-effect.json`, `preset-filter-equality.json`, and `sort-direction-labels.json` lose their C# readers and stay as WebUI test data. `tag-name-order.json` stays, read by Core and the WebUI.
   - Docs slice: `CONTEXT.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/api.md`, `docs/dev-setup.md`, `README.md` (desktop install and the LibVLC prerequisite), the testing checklist's desktop Smoke item and the desktop in-app update item in Release Flow, and `AGENTS.md`: remove the desktop freeze rule and the desktop test-isolation note, and keep the shared-fixture rule for rules implemented in server C# and the WebUI.
   - Add a Release Specific checklist item: "On Linux and Windows, the release publishes only the server, every former desktop workflow works in the WebUI, and an existing desktop install keeps its last version."
@@ -1551,6 +1590,7 @@ Last milestone completed: M12b
   - A release builds and publishes only server packages and feeds.
   - OpenAPI has no route or field that only the desktop used, including the web runtime settings' `enabled` field.
   - No current-state doc describes the desktop client as current.
+  - `assets/HI.ico`, `assets/HI-256.png`, and `assets/HI-512.png` are deleted, and nothing refers to them.
   - The four former desktop fixtures are read by WebUI tests.
 - **Verification evidence**:
   - Completion evidence must include the build, test, and verify runs, `./tools/scripts/verify-linux-packaged-server-smoke.sh`, a dev-channel release run of `release.yml`, and a search of current-state docs for the desktop client.

@@ -38,7 +38,9 @@ body { min-height: 100dvh; display: flex; flex-direction: column; align-items: c
   border: 1px solid var(--control-border);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
-.notice h2 { margin: 0 0 10px; font-size: 1.15rem; font-weight: 600; }
+.notice-head { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; }
+.notice-head img { width: 40px; height: 40px; flex: 0 0 auto; }
+.notice h2 { margin: 0; font-size: 1.15rem; font-weight: 600; }
 .notice p { margin: 0 0 10px; line-height: 1.45; font-size: 0.95rem; }
 .notice .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .notice .accent { background: var(--huggins-orange); border-color: var(--huggins-orange); color: #1a1a1a; font-weight: 600; }
@@ -57,7 +59,7 @@ body { min-height: 100dvh; display: flex; flex-direction: column; align-items: c
   <div class="content"><div></div><div class="player"></div></div>
   <div class="scrim">
     <div class="notice" role="dialog" aria-modal="true" aria-labelledby="notice-title" id="notice">
-      <h2 id="notice-title">The desktop app is retired</h2>
+      <div class="notice-head"><img src="@LOGO_ICON@" alt=""><h2 id="notice-title">The desktop app is retired</h2></div>
       <p>This is the last version of the ReelRoulette desktop app. It won't get more updates, and later versions of the server won't work with it.</p>
       <p>Use the WebUI in your browser instead. It does everything the desktop app did, on this computer and on your other devices, and it can be installed as an app.</p>
       <div class="actions">

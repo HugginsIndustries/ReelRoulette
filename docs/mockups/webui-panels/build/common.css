@@ -363,6 +363,18 @@ body.sorting, body.sorting * { cursor: grabbing !important; user-select: none; -
   border: 0;
 }
 
+/* The logo in the header: the lockup with light text in the dark theme and dark text in the light theme, and the icon
+   alone on a phone. Its images carry the name "ReelRoulette", so the heading keeps it. */
+.brand { display: flex; align-items: center; margin: 0; line-height: 0; }
+.brand img { display: block; height: 30px; width: auto; }
+.brand .brand-on-dark, .brand .brand-on-light { display: none; }
+@media (min-width: 601px) {
+  .brand img.brand-icon { display: none; }
+  .brand img.brand-on-dark { display: block; }
+  html.theme-light .brand img.brand-on-dark { display: none; }
+  html.theme-light .brand img.brand-on-light { display: block; }
+}
+
 /* Mockup-only annotations: magenta and dashed, so they never read as part of the WebUI. */
 .mock-note {
   border: 1px dashed var(--mock);

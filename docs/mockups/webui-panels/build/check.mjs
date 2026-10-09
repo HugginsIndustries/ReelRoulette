@@ -27,9 +27,13 @@ function check(label, ok) {
   console.log(`${ok ? "PASS" : "FAIL"} ${label}`);
 }
 
-for (const name of ["index", "validation", "recovery", "desktop-notice"]) {
-  const { errors } = await load(name, 1280);
+const logoIcon = "data:image/svg+xml;base64," + readFileSync(new URL("../../../../assets/logo/logo-icon.svg", import.meta.url)).toString("base64");
+for (const name of ["index", "validation", "recovery", "desktop-notice", "layout", "admin"]) {
+  const { document, errors } = await load(name, 1280);
   check(`${name}: no script errors ${errors.join("; ")}`, errors.length === 0);
+  check(`${name}: the page icon is logo-icon.svg`, document.querySelector('link[rel="icon"][type="image/svg+xml"]')?.getAttribute("href") === logoIcon);
+  if (name === "recovery") check("recovery: the title shows the icon", document.querySelector("h1 img")?.getAttribute("src") === logoIcon && document.querySelector("h1").textContent === "ReelRoulette Recovery");
+  if (name === "desktop-notice") check("desktop-notice: the notice shows the icon", document.querySelector("#notice .notice-head img")?.getAttribute("src") === logoIcon);
 }
 
 {
@@ -108,6 +112,25 @@ for (const width of [1280, 390]) {
   const corner = [...document.querySelectorAll(".overlay-corner-btn")].map((b) => b.id).join(",");
   check(`layout@${width}: the player's corner buttons are ${corner}`, corner === "panel-btn,favorite-btn,blacklist-btn");
   check(`layout@${width}: the header has no settings icon`, !$("header-settings") && !!$("header-admin"));
+  // The header shows the lockup for the theme, or the icon alone on a phone, in place of the "ReelRoulette" text.
+  // happy-dom keeps an element's computed style after a class changes on <html>, so each is measured on a fresh copy.
+  const shownNow = (el) => {
+    const copy = el.cloneNode(true);
+    el.after(copy);
+    const shown = window.getComputedStyle(copy).display !== "none";
+    copy.remove();
+    return shown;
+  };
+  const brand = document.querySelector(".top-bar .brand");
+  const brandShown = () => [...brand.querySelectorAll("img")].filter(shownNow).map((img) => img.className).join(",");
+  const lockupFor = (theme) => (width <= 600 ? "brand-icon" : theme === "light" ? "brand-on-light" : "brand-on-dark");
+  const themeNow = () => (document.documentElement.classList.contains("theme-light") ? "light" : "dark");
+  check(`layout@${width}: the header shows the ${themeNow()} theme's logo (${brandShown()}), named ReelRoulette, with no text`,
+    brandShown() === lockupFor(themeNow()) && brand.textContent.trim() === "" && [...brand.querySelectorAll("img")].every((img) => img.alt === "ReelRoulette" && img.src.startsWith("data:image/svg+xml")));
+  const otherTheme = themeNow() === "light" ? "dark" : "light";
+  document.querySelector(`input[name="set-theme"][value="${otherTheme}"]`).click();
+  check(`layout@${width}: and the ${otherTheme} theme's (${brandShown()})`, brandShown() === lockupFor(otherTheme));
+  document.querySelector('input[name="set-theme"][value="system"]').click();
   press("4");
   check(`layout@${width}: with nothing playing, Stats says so`, !$("tab-stats").hidden && $("stats-body").textContent.includes("Nothing is playing yet."));
   press("3");
@@ -886,6 +909,7 @@ for (const width of [1280, 390]) {
   const topDialog = () => [...document.querySelectorAll("dialog.app-dialog")].at(-1);
   const button = (root, label) => [...root.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith(label));
   check(`admin@${width}: no script errors on load ${errors.join("; ")}`, errors.length === 0);
+  check(`admin@${width}: the header shows the logo, not the "ReelRoulette" text`, !!document.querySelector(".top-bar .brand img") && document.querySelector(".top-bar .brand").textContent.trim() === "");
   $("mock-remote").click();
   check(`admin@${width}: from another machine the token gate shows first`, !$("gate").hidden && $("admin").hidden);
   input($("gate-token"), "secret");

@@ -12,7 +12,8 @@
 [hidden] { display: none !important; }
 body { padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
 main { max-width: 760px; margin: 0 auto; }
-h1 { margin: 0 0 4px; font-size: 1.5rem; }
+h1 { margin: 0 0 4px; font-size: 1.5rem; display: flex; align-items: center; gap: 10px; }
+h1 img { width: 36px; height: 36px; }
 .lede { margin: 0 0 16px; color: var(--muted-fg); }
 section { border-top: 1px solid var(--surface-border); padding: 12px 0; }
 h2 { margin: 0 0 8px; font-size: 1.1rem; }
@@ -37,7 +38,7 @@ h2 { margin: 0 0 8px; font-size: 1.1rem; }
   <span>The server serves this page itself, at a fixed path such as /recovery, and it loads none of the WebUI's files, so it works when they are missing or broken.</span>
 </div>
 <main>
-  <h1>ReelRoulette Recovery</h1>
+  <h1><img src="@LOGO_ICON@" alt="">ReelRoulette Recovery</h1>
   <p class="lede">Restart or stop the server, check its logs, and apply updates when the WebUI can't load.</p>
 
   <form class="gate" id="gate" novalidate hidden>
