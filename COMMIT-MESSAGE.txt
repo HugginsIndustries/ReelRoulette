@@ -19,9 +19,8 @@ Instructions:
 
 Commit Message:
 
-Docs: Keep the design mockup matching the shipped app and rename its folder
+Docs: Add new skills for mockup creation and iteration
 
-- AGENTS.md: from v0.15.0 on, any change to the app's look or behavior updates the design mockup in the same milestone, including deviations found during implementation, and a deviation needed for a technical reason is noted in the milestone's evidence.
-- Add an acceptance criterion to the 31 v0.15.0 milestones that change UI: the mockup matches what the milestone shipped, and the mockup check passes. Server Settings Robustness adds its report of an unreadable settings file to the mockup for approval.
-- Add two v0.15.0 Release Specific checks: an agent gap audit of the mockup against the release, and a manual side-by-side look at the mockup and the app on a desktop and a phone, with each difference fixed in the mockup or recorded as a backlog item.
-- Rename docs/mockups/webui-panels to docs/mockups/reelroulette, since it covers the whole app, and update its references, README, headings, and page titles; 672 checks pass.
+- Introduce `mockup-create` skill for building interactive HTML mockups, detailing the process for creating self-contained designs that reflect the app's future UI.
+- Introduce `mockup-iterate` skill for applying user feedback to existing mockups, emphasizing the importance of recording decisions and maintaining alignment with project planning.
+- Both skills include comprehensive guidelines on user interaction, design fidelity, and documentation practices to ensure effective mockup management.
