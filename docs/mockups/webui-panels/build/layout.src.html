@@ -540,6 +540,9 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
 .setting-hint { font-size: 0.82rem; color: var(--muted-fg); margin: 4px 0 0; }
 /* An expandable group of a setting's own options, such as Ambient mode settings. */
 .setting-more { margin: 6px 0 0 26px; }
+/* The Keyboard shortcuts section opens like Ambient mode settings, from its heading. */
+.setting-more.shortcuts-more { margin: 0; }
+.shortcuts-more summary h3 { margin: 0; }
 .setting-more summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; gap: 4px; font-size: 0.9rem; list-style: none; }
 .setting-more summary::-webkit-details-marker { display: none; }
 /* The chevron points right while the section is closed and down while it is open. */
@@ -970,48 +973,52 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
               <span class="setting-label" id="set-autoplay-label">Autoplay mode</span>
               <div class="choice-stack" role="radiogroup" aria-labelledby="set-autoplay-label">
                 <label><input type="radio" name="set-autoplay" value="normal"><span>Normal<small>Photos advance after the timer; videos play to the end.</small></span></label>
-                <label><input type="radio" name="set-autoplay" value="timer"><span>Timer<small>Every item advances after the timer, even a video that hasn't finished. Pausing a video holds the timer.</small></span></label>
+                <label><input type="radio" name="set-autoplay" value="timer"><span>Timer<small>Every item advances after the timer. Pausing a video holds it.</small></span></label>
               </div>
-              <p class="setting-hint">The player's autoplay button turns autoplay on and off.</p>
+              <p class="setting-hint">The player's autoplay button turns it on and off.</p>
             </div>
             <div class="setting">
               <label class="setting-label" for="set-advance">Advance after</label>
               <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="numeric" id="set-advance" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>seconds</span></div>
-              <p class="setting-hint">Today's photo duration, renamed; it leaves the header.</p>
             </div>
             <div class="setting">
-              <span class="setting-label" id="set-seek-label">Seek step <kbd>J</kbd> <kbd>L</kbd></span>
+              <span class="setting-label" id="set-seek-label">Seek step</span>
               <div class="choice-row" role="radiogroup" aria-labelledby="set-seek-label">
                 <label><input type="radio" name="set-seek" value="1"> 1 second</label>
                 <label><input type="radio" name="set-seek" value="5"> 5 seconds</label>
                 <label><input type="radio" name="set-seek" value="10"> 10 seconds</label>
               </div>
-              <p class="setting-hint">While a video is paused, <kbd>,</kbd> and <kbd>.</kbd> step one frame.</p>
             </div>
+          </div>
+          <div class="settings-section">
+            <h3>Audio</h3>
             <div class="setting">
-              <span class="setting-label" id="set-volume-label">Volume step <kbd>[</kbd> <kbd>]</kbd></span>
+              <span class="setting-label" id="set-volume-label">Volume step</span>
               <div class="choice-row" role="radiogroup" aria-labelledby="set-volume-label">
                 <label><input type="radio" name="set-volstep" value="1"> 1%</label>
                 <label><input type="radio" name="set-volstep" value="2"> 2%</label>
                 <label><input type="radio" name="set-volstep" value="5"> 5%</label>
               </div>
-              <p class="setting-hint">The scroll wheel over the player changes the volume by this step for each notch, and so does a two-finger drag up or down on a touch screen.</p>
+              <p class="setting-hint">Also for the scroll wheel and a two-finger drag over the player.</p>
             </div>
             <div class="setting">
               <div class="choice-row"><label><input type="checkbox" id="set-enhanced-audio"> Enhanced audio</label></div>
               <p class="setting-hint">Processes audio in the app, so in-app volume works on iPhone and iPad.</p>
             </div>
+          </div>
+          <div class="settings-section">
+            <h3>Player controls</h3>
             <div class="setting">
               <span class="setting-label" id="set-hide-controls-label">Hide player controls</span>
               <div class="choice-stack" role="radiogroup" aria-labelledby="set-hide-controls-label">
-                <label><input type="radio" name="set-hide-controls" value="timeout"><span>Timeout<small>They hide after a time with no activity. Moving the mouse or tapping shows them again.</small></span></label>
+                <label><input type="radio" name="set-hide-controls" value="timeout"><span>Timeout<small>They hide after a time with no activity.</small></span></label>
                 <div class="setting-sub" id="set-hide-timeout">
                   <label class="setting-label" for="set-hide-after">Hide after</label>
                   <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="numeric" id="set-hide-after" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>seconds</span></div>
                   <div class="choice-row"><label><input type="checkbox" id="set-keep-paused"> Keep visible while paused</label></div>
                 </div>
-                <label><input type="radio" name="set-hide-controls" value="click"><span>On click/tap<small>Clicking or tapping the player shows or hides them.</small></span></label>
-                <label><input type="radio" name="set-hide-controls" value="never"><span>Never<small>They stay visible.</small></span></label>
+                <label><input type="radio" name="set-hide-controls" value="click"><span>On click/tap<small>A click or tap on the player shows or hides them.</small></span></label>
+                <label><input type="radio" name="set-hide-controls" value="never"><span>Never</span></label>
               </div>
             </div>
           </div>
@@ -1049,7 +1056,7 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
             </div>
             <div class="setting">
               <div class="choice-row"><label><input type="checkbox" id="set-tile-names"> Show file names on tiles</label></div>
-              <p class="setting-hint">With a mouse, hovering a tile shows its name either way.</p>
+              <p class="setting-hint">Hovering a tile shows its name either way.</p>
             </div>
             <div class="setting">
               <div class="choice-row"><label><input type="checkbox" id="set-status"> Show the status line</label></div>
@@ -1075,9 +1082,11 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
             </div>
           </div>
           <div class="settings-section">
-            <h3>Keyboard shortcuts</h3>
-            <dl class="shortcut-list" id="shortcut-list"></dl>
-            <p class="setting-hint">Shortcuts do nothing while you type in a text field.</p>
+            <details class="setting-more shortcuts-more" id="set-shortcuts">
+              <summary><span class="material-symbol-icon setting-more-chevron">chevron_right</span><h3>Keyboard shortcuts</h3></summary>
+              <dl class="shortcut-list" id="shortcut-list"></dl>
+              <p class="setting-hint">Shortcuts do nothing while you type in a text field.</p>
+            </details>
           </div>
           <div class="settings-section">
             <h3>Diagnostics</h3>
@@ -4204,12 +4213,20 @@ const SHORTCUTS = [
   [", / .", "One frame back or forward, while a video is paused"],
   ["[ / ]", "Volume down or up by the volume step"],
   ["1 – 5", "Open Library, Filter, Tags, Stats, or Settings; the open tab's key closes the panel"],
-  ["T", "Tags, as on the desktop"],
-  ["S", "Settings, as on the desktop"],
-  ["P", "Show or hide the panel, like the desktop's player view"],
+  ["T", "Tags"],
+  ["S", "Settings"],
+  ["P", "Show or hide the panel"],
   ["Shift+F", "Fullscreen"],
+  ["?", "These shortcuts"],
   ["Esc", "Close the top dialog, stop selecting, or close the panel"]
 ];
+function showShortcuts() {
+  openPanel("settings");
+  const section = $("set-shortcuts");
+  section.open = true;
+  section.scrollIntoView?.({ block: "start" });
+  section.querySelector("summary").focus({ preventScroll: true });
+}
 const TAB_KEYS = { 1: "library", 2: "filter", 3: "tags", 4: "stats", 5: "settings", t: "tags", s: "settings" };
 const isTextField = (el) =>
   el && (el.isContentEditable || el.tagName === "TEXTAREA" || el.tagName === "SELECT" ||
@@ -4229,6 +4246,8 @@ document.addEventListener("keydown", (event) => {
   const video = !!item && !isPhoto(item) && !playback.failed;
   const handled = () => event.preventDefault();
   if (event.shiftKey && key === "f") return handled(), $("fullscreen-btn").click();
+  // ? opens Settings with the shortcuts shown, from anywhere outside a text field.
+  if (key === "?") return handled(), showShortcuts();
   if (event.shiftKey) return;
   // Space plays or pauses as K does, unless focus is on something Space already activates, such as a button or a tile.
   if (key === " " && event.target !== document.body && event.target.closest("button, a, input, select, textarea, summary, [tabindex]")) return;

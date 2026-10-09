@@ -19,8 +19,9 @@ Instructions:
 
 Commit Message:
 
-Docs: Make tag categories start collapsed, remember their state, and show what's in use
+Docs: Reorganize the Settings tab into sections and collapse the shortcut reference
 
-- Record in WebUI Responsive Layout and Panels that tag categories start collapsed, new ones included, and remember per device which are expanded, separately for the Tags tab and the Filter tab's Tags section.
-- A category expands by itself when a tag is added to it or moved into it, and a collapsed category's header counts its tags in use, on the item or, with WebUI Multi-Select and Bulk Actions, the selection, or in the filter, and shows the orange unsaved-changes dot while it holds unsaved changes.
-- Mockup: remembered collapsed state per tab, auto-expanding categories, and the count and dot on collapsed headers; extend the happy-dom check to cover them.
+- Record the Settings tab's layout in WebUI Settings Panel: Playback, Audio, Player controls, Appearance, Panel, Keyboard shortcuts, and Diagnostics, with WebUI Loudness Normalization's option going in Audio, and take the sections off the pending list.
+- Collapse the Keyboard shortcuts section by default, with a chevron like Ambient mode settings, and open it with `?` from anywhere outside a text field, recorded in WebUI Keyboard Shortcuts and Player Controls.
+- Declutter the hints: drop mockup notes, "as on the desktop" asides, the key badges in setting labels, and the frame-stepping hint, and shorten hints the labels already cover.
+- Mockup: the new sections, the collapsed reference and `?`, and the shorter hints; extend the happy-dom check to cover them.

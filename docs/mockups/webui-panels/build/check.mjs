@@ -707,7 +707,19 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: Advance after flags 0 and keeps 5`, advance.getAttribute("aria-invalid") === "true" && window.localStorage.getItem("rr-mockup.advanceAfter") === null);
   input(advance, "8");
   check(`layout@${width}: Advance after keeps 8`, !advance.hasAttribute("aria-invalid") && window.localStorage.getItem("rr-mockup.advanceAfter") === "8");
-  check(`layout@${width}: the shortcut reference lists the bindings`, $("shortcut-list").querySelectorAll("dt").length === 16);
+  check(`layout@${width}: the shortcut reference lists the bindings, ? among them`, $("shortcut-list").querySelectorAll("dt").length === 17 &&
+    [...$("shortcut-list").querySelectorAll("dt")].some((dt) => dt.textContent === "?"));
+  const sectionNames = [...$("settings-body").querySelectorAll(".settings-section h3")].map((h) => h.textContent).join(", ");
+  check(`layout@${width}: Settings is in sections: ${sectionNames}`, sectionNames === "Playback, Audio, Player controls, Appearance, Panel, Keyboard shortcuts, Diagnostics");
+  const sectionOf = (id) => $(id).closest(".settings-section").querySelector("h3").textContent;
+  check(`layout@${width}: each setting sits in its section`,
+    sectionOf("set-advance") === "Playback" && sectionOf("set-ambient") === "Appearance" && document.querySelector('input[name="set-seek"]').closest(".settings-section").querySelector("h3").textContent === "Playback" &&
+    document.querySelector('input[name="set-volstep"]').closest(".settings-section").querySelector("h3").textContent === "Audio" && sectionOf("set-hide-after") === "Player controls");
+  const settingsText = $("settings-body").textContent;
+  check(`layout@${width}: no mockup notes, desktop asides, or key badges in the setting labels`,
+    !settingsText.includes("photo duration, renamed") && !settingsText.includes("as on the desktop") && !settingsText.includes("desktop's player view") &&
+    !$("settings-body").querySelector(".setting-label kbd") && !settingsText.includes("step one frame"));
+  check(`layout@${width}: Keyboard shortcuts starts collapsed, with a chevron`, !$("set-shortcuts").open && !!$("set-shortcuts").querySelector("summary .setting-more-chevron"));
   check(`layout@${width}: v0.15.0 has no loudness normalization settings`, !$("settings-body").textContent.includes("Loudness"));
   check(`layout@${width}: Diagnostics show today's client type and device name`, $("diag-type").textContent === "web" && $("diag-device").textContent === "Web Browser");
   document.querySelector('input[name="set-theme"][value="light"]').click();
@@ -724,7 +736,7 @@ for (const width of [1280, 390]) {
   const moveOverPlayer = () => $("media").dispatchEvent(new window.PointerEvent("pointermove", { bubbles: true }));
   check(`layout@${width}: Hide player controls starts on Timeout, hiding after 3 s and kept while paused`,
     hideChoice("timeout").checked && !$("set-hide-timeout").hidden && $("set-hide-after").value === "3" && $("set-keep-paused").checked &&
-    hideChoice("timeout").closest(".settings-section").querySelector("h3").textContent === "Playback");
+    hideChoice("timeout").closest(".settings-section").querySelector("h3").textContent === "Player controls");
   input($("set-hide-after"), "31");
   check(`layout@${width}: Hide after flags 31 and keeps 3`, $("set-hide-after").getAttribute("aria-invalid") === "true" && window.localStorage.getItem("rr-mockup.hideAfter") === null);
   input($("set-hide-after"), "1");
@@ -930,6 +942,13 @@ for (const width of [1280, 390]) {
 
   // Keyboard shortcuts, ignored while typing.
   closePanel();
+  // ? is Shift+/ on most keyboards, so it arrives with Shift held.
+  press("?", document.body, { shiftKey: true });
+  check(`layout@${width}: ? opens Settings with the shortcuts expanded`, !$("panel").hidden && !$("tab-settings").hidden && $("set-shortcuts").open && document.activeElement === $("set-shortcuts").querySelector("summary"));
+  $("set-shortcuts").open = false;
+  closePanel();
+  press("?", $("lib-search"), { shiftKey: true });
+  check(`layout@${width}: but not while typing`, $("panel").hidden);
   press("2");
   check(`layout@${width}: 2 opens the Filter tab`, !$("panel").hidden && !$("tab-filter").hidden);
   press("2");
@@ -1246,7 +1265,7 @@ for (const width of [1280, 390]) {
   const $ = (id) => document.getElementById(id);
   const toggle = $("set-enhanced-audio");
   check(`enhanced: Enhanced audio starts on, in Playback, with its description (${toggle.closest(".setting").querySelector(".setting-hint").textContent})`,
-    toggle.checked && toggle.closest(".settings-section").querySelector("h3").textContent === "Playback" &&
+    toggle.checked && toggle.closest(".settings-section").querySelector("h3").textContent === "Audio" &&
     toggle.closest(".setting").querySelector(".setting-hint").textContent === "Processes audio in the app, so in-app volume works on iPhone and iPad.");
   document.body.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 5));
