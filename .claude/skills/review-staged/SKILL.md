@@ -25,6 +25,16 @@ If `MILESTONES.md` or `MILESTONES-COMPLETED.md` is staged, run `pwsh ./tools/scr
 
 Also check anything the project's own review or architecture docs say to watch for.
 
+## Delegating
+
+For a diff of more than a few files, or one touching anything the project's docs call risky, run `reviewer` subagents in parallel, one lens each:
+
+1. Correctness: behaviour that changed without being intended, tests that pass for the wrong reason, and coverage lost with deleted tests.
+2. Architecture and contract: layering, API contract compatibility, callers outside the build, and the project's risky areas.
+3. Docs and rules: docs or messages that no longer match the code, `AGENTS.md` rules, and tracker and changelog conventions.
+
+Then read the diff yourself, confirm each finding against it, merge duplicates, drop anything you can't confirm, and number the result as the report format below says. Small diffs are reviewed directly.
+
 ## Report format
 
 For each finding: what it is, where, what triggers it, and a recommended fix in one or two sentences. Number them and put the ones that produce wrong output first.

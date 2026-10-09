@@ -41,6 +41,16 @@ Keep `MILESTONES.md` and docs in the state `AGENTS.md` (and any docs it points a
 
 A check for the pre-release pass goes in the Release Specific section of the testing checklist: under Agent checks when an agent can verify it from the repo, its docs, or the release workflow's runs, and under Manual checks when it needs a person, real devices, or the Windows VM.
 
+## Delegating
+
+Delegation never replaces the plan stop: nothing goes to a subagent that writes until I've confirmed the plan.
+
+- Before planning, measuring that spans many files can go to `investigator` subagents.
+- After confirmation, parts of the plan that are independent and touch disjoint files may go to `implementer` subagents, each given its slice verbatim, the exact files it owns, and how to verify it. Parallel implementers never share a file. Keep sequential or tightly coupled work, and anything small, in this session.
+- An implementer that stops on a problem is a blocker under "During implementation": stop and bring it to me.
+- This session alone edits the tracker, changelog, commit message, and docs, and writes the final summary. Read each implementer's report, review its changes in the diff, and carry its deviations into the summary.
+- Use `verifier` for verification runs, and check what it reports before fixing anything.
+
 ## Verification
 
 Run the checks the change touches: `dotnet build ReelRoulette.sln` and `dotnet test ReelRoulette.sln` for code, `npm run verify` for WebUI or contract changes, and SystemChecks for Core changes. Verify the actual behaviour rather than only that the code looks right. Where a change is meant to preserve something, prove it.

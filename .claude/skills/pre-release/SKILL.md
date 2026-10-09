@@ -43,6 +43,8 @@ Run each item in the Automated Checks section, in order. Tick a box only for a c
 - If a check is marked as skipped (for example pending a backlog item), leave it unticked and add `Skipped:` with the reason.
 - For docs-review items, do the review. Tick only if you found no problems; otherwise list each problem as a sub-bullet. For `MILESTONES.md`, start from the milestones checker item's result and review the rest by reading. `MILESTONES-COMPLETED.md` is history: the checker guards it, so don't review it for current behavior.
 
+Run the automated checks through `verifier` subagents, and give any audit that spans many files, such as the mockup gap audit, to an `investigator`. Review their reports yourself before writing Part 1's results; everything else in Part 1 stays in this session.
+
 ## 5. Release-specific coverage
 
 Check that the Release Specific section holds only this release's items; `promote-milestones` clears the previous release's when it promotes the next one. List any item from an earlier release and ask about it rather than removing it. Compare the section with the user-visible changes in `[Unreleased]`. For any user-visible change with no matching check, propose a one-line check in the group it belongs to and ask before adding it.

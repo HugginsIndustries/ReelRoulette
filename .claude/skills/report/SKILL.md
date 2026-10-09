@@ -15,6 +15,12 @@ An answer derived from reading code is a hypothesis. An answer derived from runn
 
 Say which of your claims are measured and which are inferred. If you cannot measure something, say so rather than presenting an inference as a fact.
 
+## Delegating the legwork
+
+For a question that means searching or tracing across many files, or that has more than one plausible explanation, hand the legwork to `investigator` subagents: two or three in parallel, each assigned a different area or hypothesis, with what's already known. For a cause that is unknown or can't be reproduced, ask for xhigh effort. Use `verifier` for any build or test run whose output would be long.
+
+Their reports are inputs, not the answer. Check anything surprising yourself, keep their measured and inferred marks, resolve disagreements between them, and write the report. A small question is answered directly, without subagents.
+
 ## Shape the answer to the question
 
 Any question about the project is in scope — how something should be done, why it is the way it is, whether an approach would work, what a change would cost, what the tradeoffs are, what a piece of code actually does. The two shapes below cover most of them; use whichever parts fit and ignore the rest.
