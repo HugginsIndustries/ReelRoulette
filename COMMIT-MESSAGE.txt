@@ -19,9 +19,12 @@ Instructions:
 
 Commit Message:
 
-Docs: Reorganize the Settings tab into sections and collapse the shortcut reference
+Docs: Complete the WebUI design mockup and name the app ReelRoulette in user-facing text
 
-- Record the Settings tab's layout in WebUI Settings Panel: Playback, Audio, Player controls, Appearance, Panel, Keyboard shortcuts, and Diagnostics, with WebUI Loudness Normalization's option going in Audio, and take the sections off the pending list.
-- Collapse the Keyboard shortcuts section by default, with a chevron like Ambient mode settings, and open it with `?` from anywhere outside a text field, recorded in WebUI Keyboard Shortcuts and Player Controls.
-- Declutter the hints: drop mockup notes, "as on the desktop" asides, the key badges in setting labels, and the frame-stepping hint, and shorten hints the labels already cover.
-- Mockup: the new sections, the collapsed reference and `?`, and the shorter hints; extend the happy-dom check to cover them.
+- M12c: mark WebUI Design Mockup complete and move it to MILESTONES-COMPLETED.md with its evidence (641 passing mockup checks, no network references, the user's approvals); the tracker now reads M12c.
+- Record the last approvals in the milestones that build them: the volume slider's place, the tab and panel keys and the Esc order, the Stats tab, the browser-playable label and format notice (off by default), the admin layout, Edit Source, backup restore, the import remap, duplicate review, and the desktop retirement notice.
+- Record every remaining mocked detail as approved, including the exact focus values, the selection and bulk action texts, the filter summary format, and the admin and catalog transfer messages.
+- Control token: hidden with Show and Copy; saving a changed token asks first and keeps today's warning that other machines will be signed out.
+- Add the naming rule to AGENTS.md: "WebUI" is internal, and text users see says "ReelRoulette", while the changelog keeps "WebUI" through v0.15.x. Apply it to the mockup, the milestones, and the release notes style guide's example, including the retirement notice's "Open ReelRoulette in your browser" button, and add a mockup check for it.
+- Point every v0.15.0 UI milestone at docs/mockups/webui-panels/ as its design reference, and trim the repeated sentences in WebUI Settings Panel's Appearance bullet.
+- Mockup fixes: confirmations open over duplicate review instead of freezing the page, duplicate review's counts of one read in the singular, Edit Source's Delete becomes Remove since the files stay on disk, and Export downloads library-{date}.db (a server change recorded in Admin Library Catalog Transfer) and says the download has started.

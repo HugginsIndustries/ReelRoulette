@@ -42,7 +42,7 @@ body { min-height: 100dvh; display: flex; flex-direction: column; align-items: c
 .notice-head img { width: 40px; height: 40px; flex: 0 0 auto; }
 .notice h2 { margin: 0; font-size: 1.15rem; font-weight: 600; }
 .notice p { margin: 0 0 10px; line-height: 1.45; font-size: 0.95rem; }
-.notice .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.notice .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .notice .accent { background: var(--huggins-orange); border-color: var(--huggins-orange); color: #1a1a1a; font-weight: 600; }
 .caption { width: min(760px, 100%); padding: 8px 12px; }
 .done { margin: 0; text-align: center; font-size: 0.95rem; }
@@ -51,7 +51,7 @@ body { min-height: 100dvh; display: flex; flex-direction: column; align-items: c
 <body>
 <div class="caption mock-note">
   <span class="mock-label">Mockup: the desktop app, not the WebUI</span><br>
-  The last desktop build shows this once per installed version, on its first start. <b>Open Web UI</b> is the menu's existing action. The wording needs approval.
+  The last desktop build shows this once per installed version, on its first start. <b>Open ReelRoulette in your browser</b> does what the menu's existing Open Web UI action does.
 </div>
 <div class="window" role="img" aria-label="The desktop app's main window behind the notice">
   <div class="titlebar"><span class="grow">ReelRoulette</span><span>— ▢ ✕</span></div>
@@ -61,10 +61,10 @@ body { min-height: 100dvh; display: flex; flex-direction: column; align-items: c
     <div class="notice" role="dialog" aria-modal="true" aria-labelledby="notice-title" id="notice">
       <div class="notice-head"><img src="@LOGO_ICON@" alt=""><h2 id="notice-title">The desktop app is retired</h2></div>
       <p>This is the last version of the ReelRoulette desktop app. It won't get more updates, and later versions of the server won't work with it.</p>
-      <p>Use the WebUI in your browser instead. It does everything the desktop app did, on this computer and on your other devices, and it can be installed as an app.</p>
+      <p>Use ReelRoulette in your browser instead. It does everything the desktop app did, on this computer and on your other devices, and it can be installed as an app.</p>
       <div class="actions">
         <button class="btn" type="button" id="notice-close">Close</button>
-        <button class="btn accent" type="button" id="notice-open">Open Web UI</button>
+        <button class="btn accent" type="button" id="notice-open">Open ReelRoulette in your browser</button>
       </div>
     </div>
     <p class="done" id="done" hidden></p>
@@ -79,7 +79,7 @@ const done = (text) => {
   line.hidden = false;
   line.textContent = text;
 };
-document.getElementById("notice-open").addEventListener("click", () => done("(Mockup) The WebUI opens in the default browser; the notice doesn't show again for this version."));
+document.getElementById("notice-open").addEventListener("click", () => done("(Mockup) ReelRoulette opens in the default browser; the notice doesn't show again for this version."));
 document.getElementById("notice-close").addEventListener("click", () => done("(Mockup) The notice closes and doesn't show again for this version."));
 </script>
 </body>

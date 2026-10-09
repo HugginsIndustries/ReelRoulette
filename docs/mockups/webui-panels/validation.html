@@ -500,7 +500,7 @@ h1 { font-size: 1.4rem; margin: 0; }
   <div class="page-head">
     <div>
       <h1>Field validation pattern</h1>
-      <p class="lede">Every field below is live. Point at a red icon, or put the cursor in a flagged field, to see its tooltip; on a touch screen tap the icon. Magenta dashed boxes are mockup notes, not part of the WebUI.</p>
+      <p class="lede">Every field below is live. Point at a red icon, or put the cursor in a flagged field, to see its tooltip; on a touch screen tap the icon. Magenta dashed boxes are mockup notes, not part of the design.</p>
     </div>
     <div class="theme-switch mock-note" role="group" aria-label="Mockup theme">
       <button type="button" data-theme="system">System</button>
@@ -741,7 +741,7 @@ function applyTheme() {
 systemDark.addEventListener("change", applyTheme);
 applyTheme();
 
-// The strict duration parser proposed for the WebUI: whole MM:SS or HH:MM:SS with seconds and minutes under 60, or a
+// The strict duration parser for the WebUI: whole MM:SS or HH:MM:SS with seconds and minutes under 60, or a
 // plain number of seconds. Today's parser reads "1:7x" as 1:07 and "12abc" as 12 seconds; this one rejects both.
 function parseDuration(text) {
   const raw = String(text || "").trim();
@@ -964,9 +964,10 @@ function holdAction(button, fields, options) {
 }
 
 /**
- * The WebUI's dialog, as proposed: a themed modal that stacks above any dialog already open, so a confirmation opens
+ * The WebUI's dialog: a themed modal that stacks above any dialog already open, so a confirmation opens
  * over the dialog that asked for it. Escape or a click outside closes only the top one, and focus returns to where
- * it was. It opens inside the element marked `data-dialog-host` (the fullscreen stage) so it shows in fullscreen.
+ * it was. It opens inside the first showing element marked `data-dialog-host` (on the main page, the fullscreen stage)
+ * so it shows in fullscreen.
  */
 let dialogCounter = 0;
 function openDialog({ content, labelledBy, role, onClose }) {
@@ -975,7 +976,10 @@ function openDialog({ content, labelledBy, role, onClose }) {
   if (labelledBy) dialog.setAttribute("aria-labelledby", labelledBy);
   if (role) dialog.setAttribute("role", role);
   dialog.append(content);
-  (document.querySelector("[data-dialog-host]") || document.body).append(dialog);
+  // The first host that is showing: a dialog inside a hidden view, such as admin behind duplicate review, would leave the
+  // page inert with nothing to answer.
+  const host = [...document.querySelectorAll("[data-dialog-host]")].find((el) => !el.closest("[hidden]"));
+  (host || document.body).append(dialog);
   const returnTo = document.activeElement;
   let closed = false;
   const close = (result) => {
@@ -1040,9 +1044,10 @@ function confirmDialog({ message, confirmLabel, danger }) {
 
 /**
  * A dialog with one name field that uses the validation pattern, Save held while the name is not valid, and an
- * optional Delete that asks first in a dialog stacked above. `extra(body)` can add fields after the name.
+ * optional Delete that asks first in a dialog stacked above. `deleteLabel` renames Delete, in the dialog and in its
+ * confirmation, for an action that deletes nothing, such as removing a source. `extra(body)` can add fields after the name.
  */
-function nameDialog({ title, label, value, check, holdReason, onSave, deleteMessage, onDelete, extra, saveLabel, inputType, onClose }) {
+function nameDialog({ title, label, value, check, holdReason, onSave, deleteMessage, onDelete, deleteLabel, extra, saveLabel, inputType, onClose }) {
   const id = `dialog-field-${++dialogCounter}`;
   const form = document.createElement("form");
   form.className = "dialog-body";
@@ -1071,9 +1076,9 @@ function nameDialog({ title, label, value, check, holdReason, onSave, deleteMess
   const save = dialogButton(saveLabel || "Save", "", "submit");
   save.append(iconSpan("error", "btn-problem"));
   if (onDelete) {
-    const remove = dialogButton("Delete", "btn-danger");
+    const remove = dialogButton(deleteLabel || "Delete", "btn-danger");
     remove.addEventListener("click", async () => {
-      if (await confirmDialog({ message: deleteMessage(), confirmLabel: "Delete", danger: true })) {
+      if (await confirmDialog({ message: deleteMessage(), confirmLabel: deleteLabel || "Delete", danger: true })) {
         onDelete();
         close();
       }

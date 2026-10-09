@@ -9,7 +9,7 @@ Use this document for public GitHub releases. Rules:
 - **Lead with impact, not mechanics.** Open each section with why it matters to the user, not what changed in the code. "Move your library without the headache" beats "zip-based export/import with per-source remapping."
 - **Write like a person, not a changelog.** Contractions are fine. Short punchy sentences are good. Dry passive voice is not.
 - **The intro should earn attention.** One or two sentences that set the mood for the release — what's the big story? Why does this one matter? Don't just restate the title.
-- **Group by user benefit, not code area.** "The WebUI got a serious upgrade" is a section. "WebUI changes" is not.
+- **Group by user benefit, not code area.** "ReelRoulette in your browser got a serious upgrade" is a section. "Web client changes" is not.
 - **Planned Features should read like a teaser, not a ticket backlog.** No implementation details, no technical jargon — just what the user will eventually be able to do.
 - **Keep Notes short and practical.** Only include caveats that will actually trip someone up. No boilerplate.
 - **One voice throughout.** Confident, direct, slightly informal. Avoid "this release introduces," "we are pleased to announce," and similar filler.

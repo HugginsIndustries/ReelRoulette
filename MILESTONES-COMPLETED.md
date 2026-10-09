@@ -6,6 +6,47 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12c - WebUI Design Mockup
+
+- **Status**: ✅ Complete
+- **Goal**: Every visible part of v0.15.0 is designed in one interactive mockup and approved before the milestone that builds it starts, so the release's UI is designed as a whole.
+- **Scope**:
+  - Ships in v0.15.0, after the WebUI Preact migration milestone and before the rest of the series. Depends on: WebUI Preact Migration, whose look the mockup starts from.
+  - The mockup is in `docs/mockups/webui-panels/`: self-contained pages that open without the WebUI or a network, built from sources in `build/`, with a happy-dom check of their scripts and a README on rebuilding them and serving them to a phone. It is tracked and stays as the design reference when this milestone completes. Its magenta Mockup tab and dashed notes are mockup controls, not part of the design. A Mockup option hides every note, leaving only the Mockup tab and its options, so screens can be seen as they will ship.
+  - The whole visible UI of v0.15.0, at phone, tablet, and desktop widths and in the light and dark themes:
+    - The main page: the header, the player and its controls, the status line, and the panel beside the player or as the full-screen overlay, from WebUI Responsive Layout and Panels.
+    - The Library, Filter, and Tags tabs, from WebUI Responsive Layout and Panels, with the Favorites and Blacklisted filter modes from Favorite and Blacklist Filter Modes; the Stats tab, from WebUI Stats Panel; and the Settings tab with every per-device setting from the desktop's Settings dialog that the WebUI keeps, including the autoplay modes and Auto-Pause, from WebUI Settings Panel and WebUI Keyboard Shortcuts and Player Controls.
+    - The dialogs and the field validation pattern, from WebUI Responsive Layout and Panels and WebUI In-App Dialogs, and the notices and status line messages, from WebUI Status Line Overhaul.
+    - The full-page admin view and its sections, from WebUI Admin Section, Admin Refresh, Backup, and Duplicate Review (with duplicate review), Admin Source and Item Management, Admin Library Catalog Transfer, and Testing Suite Overhaul.
+    - The keyboard shortcuts and their reference, the volume control, the seek and volume steps, ambient mode, and when the player's controls hide, from WebUI Keyboard Shortcuts and Player Controls.
+    - Show in File Manager and Copy Path, from Show in File Manager from the WebUI.
+    - The browser-playable option and its message, from Browser-Playable Filter.
+    - The grid's placeholder tiles, from WebUI Grid Rendering.
+    - Multi-select and bulk actions, from WebUI Multi-Select and Bulk Actions.
+    - Keyboard focus throughout and the Library grid's keyboard navigation, from WebUI Keyboard Navigation and Focus.
+    - The desktop's retirement notice, from Desktop Retirement Notice.
+    - The logo in the header, the page icon, and the icon on the recovery page and the desktop notice, from New Logo and Icons, WebUI Admin Section, and Desktop Retirement Notice.
+  - Each decision approved in the mockup is recorded in the milestone that builds it. A UX question a later milestone leaves to be decided there is decided in the mockup, where it can be seen, and recorded in that milestone.
+  - Settled with the mockup:
+    - The panel is a full-screen overlay below 800 px of viewport width, or on a touch screen (coarse pointer) below 500 px of viewport height, which is a phone on its side. Otherwise it sits beside the player, on the right until the Settings tab lets each device choose.
+    - Beside the player, the panel's width runs from 360 px to whatever leaves the player 400 px wide, and starts at 420 px. The 800 px breakpoint is those 360 px and 400 px plus the resize handle and the page's padding.
+    - Library tiles are smaller, beside the player and as the overlay: rows 100–240 px high, aiming for 160 px.
+    - Each approved decision is recorded in the milestone that builds it: New Logo and Icons, Favorite and Blacklist Filter Modes, WebUI Responsive Layout and Panels, WebUI In-App Dialogs, WebUI Settings Panel, WebUI Admin Section, Admin Refresh, Backup, and Duplicate Review, Admin Source and Item Management, Admin Library Catalog Transfer, WebUI Keyboard Shortcuts and Player Controls, Browser-Playable Filter, WebUI Multi-Select and Bulk Actions, WebUI Keyboard Navigation and Focus, WebUI Stats Panel, Show in File Manager from the WebUI, WebUI Status Line Overhaul, Testing Suite Overhaul, Admin Log Viewer, Desktop Retirement Notice, and Desktop Client Removal. Loudness normalization is declined for v0.15.0 and has its own milestone, WebUI Loudness Normalization.
+    - "WebUI" is an internal name: from v0.15.0, text users see says "ReelRoulette" instead, as `AGENTS.md` requires. The mockup follows it, and the milestones that build each renamed text record it: New Logo and Icons (the page title, the installed app's name, and the startup error page's heading), WebUI Settings Panel (the Diagnostics row), Admin Source and Item Management, Testing Suite Overhaul, and Desktop Retirement Notice.
+    - Each v0.15.0 milestone that builds UI names the mockup as the reference for its settled design.
+  - Changes to user-facing UX need explicit approval.
+- **Acceptance criteria**:
+  - Every visible v0.15.0 feature is in the mockup at phone and desktop widths, and the user has approved it.
+  - Each decision approved in the mockup, including each UX question a later milestone left to be decided there, is recorded in the milestone that builds it.
+  - The mockup's pages open without a network, and its check passes.
+- **Verification evidence**:
+  - `node docs/mockups/webui-panels/build/check.mjs`: 641 checks, all passing, at 1280 and 390 px wide. Checks added for a fix were each seen to fail with the fix undone and pass with it.
+  - The pages open without a network: a search of the six built pages finds no `http://` or `https://` URL, and every `src`, `href`, and CSS `url()` in them is a `data:` URI, an in-page anchor, or another of the mockup's pages.
+  - The user approved each screen over the mockup's review rounds, the last on 2026-10-08: the volume slider at the end of the seek row; the keys for the tabs and the panel, and the order Esc closes things in; the Stats tab; the browser-playable option's label and format notice; the admin view's layout, the Edit Source dialog, the backup restore list, the import remap dialog, and duplicate review's layout; the desktop retirement notice's wording; the panel widths; the browser-playable option off by default; and every other detail as mocked, including the exact focus colors and the control token hidden with Show and Copy, asking before a change is saved.
+  - Each decision is recorded in the milestone that builds it, listed under Settled above.
+  - `AGENTS.md` gains the rule that text users see says "ReelRoulette", not "WebUI".
+  - The mockup stays in `docs/mockups/webui-panels/` as the design reference.
+
 ### M12b - WebUI Preact Migration
 
 - **Status**: ✅ Complete

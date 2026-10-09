@@ -16,6 +16,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 - Server-backed flows stay API-first: do not add client-local mutation or fallback authority.
 - Random selection and playback eligibility are decided by the server.
 - The desktop client gets no significant changes or new features until its removal; new UX lands in the WebUI only. Small desktop changes that keep it working with the server, or that match a small server-side change, are allowed. Don't change user-facing UX without explicit approval.
+- "WebUI" is an internal name, for code, comments, logs, and developer docs. Text users see says "ReelRoulette" instead: labels, settings, admin, notices, dialogs, the desktop's retirement notice, and release notes. `CHANGELOG.md` keeps "WebUI" through v0.15.x, since it is developer history and still tells the two clients apart; from v0.16.0, which removes the desktop client, it no longer needs to.
 - When a rule must behave identically in C# and the WebUI (ordering, comparison, normalization), implement it once per language next to its counterpart and lock both to one shared fixture under `shared/fixtures/`.
 - Add `last.log`-based logging where appropriate.
 - Fix lints introduced by your changes.

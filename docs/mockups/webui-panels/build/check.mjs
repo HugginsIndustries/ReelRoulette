@@ -95,6 +95,16 @@ function standInAudio() {
   return { setup, gains, mediaCalls, playedBy };
 }
 
+// "WebUI" is an internal name: what the app shows says "ReelRoulette". Mockup notes and controls, and log lines and
+// events, which keep the internal source name, are left out.
+function internalNames(document) {
+  const copy = document.documentElement.cloneNode(true);
+  copy.querySelectorAll('script, style, [class*="mock-"], [id^="mock-"], #log-rows, #log-svc, #log-chips, #tail, #events').forEach((el) => el.remove());
+  const attributes = [...copy.querySelectorAll("[title], [aria-label], [placeholder], [alt]")]
+    .flatMap((el) => ["title", "aria-label", "placeholder", "alt"].map((name) => el.getAttribute(name) || ""));
+  return [copy.querySelector("body").textContent, ...attributes].join("\n").match(/\bWeb ?UIs?\b[^\n]{0,40}/gi) || [];
+}
+
 const logoIcon = "data:image/svg+xml;base64," + readFileSync(new URL("../../../../assets/logo/logo-icon.svg", import.meta.url)).toString("base64");
 for (const name of ["index", "validation", "recovery", "desktop-notice", "layout", "admin"]) {
   const { document, errors } = await load(name, 1280);
@@ -102,6 +112,10 @@ for (const name of ["index", "validation", "recovery", "desktop-notice", "layout
   check(`${name}: the page icon is logo-icon.svg`, document.querySelector('link[rel="icon"][type="image/svg+xml"]')?.getAttribute("href") === logoIcon);
   if (name === "recovery") check("recovery: the title shows the icon", document.querySelector("h1 img")?.getAttribute("src") === logoIcon && document.querySelector("h1").textContent === "ReelRoulette Recovery");
   if (name === "desktop-notice") check("desktop-notice: the notice shows the icon", document.querySelector("#notice .notice-head img")?.getAttribute("src") === logoIcon);
+  if (!["index", "validation"].includes(name)) {
+    const found = internalNames(document);
+    check(`${name}: what the app shows says ReelRoulette, never WebUI (${found.join(" | ")})`, found.length === 0);
+  }
 }
 
 {
@@ -1333,7 +1347,15 @@ for (const width of [1280, 390]) {
   input($("source-path"), "/media/videos");
   check(`admin@${width}: an existing source's folder is flagged`, $("source-path").getAttribute("aria-invalid") === "true");
   document.querySelector('#source-list [title="Edit source"]').click();
-  check(`admin@${width}: Edit Source holds the name and Remove`, topDialog()?.querySelector("h3")?.textContent === "Edit Source" && !!button(topDialog(), "Delete"));
+  // Removing a source leaves its files on disk, so its button says Remove, not Delete.
+  check(`admin@${width}: Edit Source holds the name and Remove, not Delete`,
+    topDialog()?.querySelector("h3")?.textContent === "Edit Source" && !!button(topDialog(), "Remove") && !button(topDialog(), "Delete"));
+  button(topDialog(), "Remove")?.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  check(`admin@${width}: Remove asks first, with a red Remove (${topDialog()?.textContent.slice(0, 60)})`,
+    topDialog()?.textContent.includes('Remove the source "Videos"?') && !!button(topDialog(), "Remove")?.classList.contains("btn-danger") && !button(topDialog(), "Delete"));
+  button(topDialog(), "Cancel")?.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
   topDialog().dispatchEvent(new window.Event("cancel", { cancelable: true }));
   $("dup-scan").click();
   check(`admin@${width}: a duplicate scan opens review inside admin`, !$("review").hidden && $("admin").hidden && $("review-summary").textContent.includes("Keep All"));
@@ -1341,12 +1363,48 @@ for (const width of [1280, 390]) {
   document.querySelector('#review-body .dup-file input[type="radio"]').dispatchEvent(new window.Event("change"));
   $("review-apply").click();
   await new Promise((resolve) => setTimeout(resolve, 0));
+  check(`admin@${width}: review counts one file in the singular (${$("review-apply").textContent} / ${$("review-summary").textContent})`,
+    $("review-apply").textContent === "Delete 1 File" && $("review-summary").textContent.startsWith("1 file to delete from 1 group;"));
   check(`admin@${width}: deleting asks, naming the counts (${topDialog()?.textContent.slice(0, 50)})`, topDialog()?.textContent.includes("permanently deletes") && topDialog().textContent.includes("Files to delete: 1") && !!button(topDialog(), "Delete 1 File"));
+  // The confirmation opens where it can be seen: a dialog inside a hidden view leaves the page inert with nothing shown.
+  check(`admin@${width}: and the confirmation shows over duplicate review, not inside the hidden admin view (${topDialog()?.parentElement?.id})`,
+    !!topDialog() && !topDialog().closest("[hidden]"));
   button(topDialog(), "Delete").click();
   await new Promise((resolve) => setTimeout(resolve, 0));
-  check(`admin@${width}: and review closes`, $("review").hidden && !$("admin").hidden);
+  check(`admin@${width}: and review closes, saying what it deleted (${$("dup-state").textContent} / ${$("status").textContent})`,
+    $("review").hidden && !$("admin").hidden && $("dup-state").textContent === "Deleted 1 file." && $("status").textContent === "Deleted 1 duplicate file.");
+  const sourceBox = document.querySelector("#source-list input.switch");
+  sourceBox.click();
+  sourceBox.dispatchEvent(new window.Event("change"));
+  check(`admin@${width}: a source change says every open copy of ReelRoulette follows it (${$("status").textContent})`,
+    $("status").textContent === "Videos disabled. ReelRoulette updates the library everywhere it's open.");
+  sourceBox.click();
+  sourceBox.dispatchEvent(new window.Event("change"));
   check(`admin@${width}: one Refresh Sources button for the whole list`, !!$("sources-refresh") && !document.querySelector('#source-list [aria-label^="Refresh"]'));
   check(`admin@${width}: Export Library is a plain download, with no ellipsis`, $("export").textContent.trim().endsWith("Export Library"));
+  // The control token: Save without a change saves at once; a changed token asks first, since it signs other machines out.
+  $("status").textContent = "";
+  $("control-save").click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  check(`admin@${width}: saving Control with the token unchanged asks nothing (${$("status").textContent})`, !topDialog() && $("status").textContent === "Control settings saved.");
+  $("status").textContent = "";
+  input($("control-token"), "new-token-1234");
+  $("control-save").click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  check(`admin@${width}: a changed token asks first, warning other machines will be signed out (${topDialog()?.textContent.slice(0, 60)})`,
+    topDialog()?.textContent.includes("Other machines will be signed out") && button(topDialog(), "Change Token")?.classList.contains("btn-danger") &&
+    document.activeElement?.textContent.trim() === "Cancel" && $("status").textContent === "" && $("control-token").closest(".field").textContent.includes("Changing it signs them out."));
+  button(topDialog(), "Cancel").click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  check(`admin@${width}: Cancel saves nothing`, !topDialog() && $("status").textContent === "");
+  $("control-save").click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  button(topDialog(), "Change Token").click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  check(`admin@${width}: Change Token saves it`, !topDialog() && $("status").textContent === "Control settings saved.");
+  $("control-save").click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  check(`admin@${width}: and saving again without a change asks nothing`, !topDialog());
   check(`admin@${width}: no approved proposal still carries a Proposed or Open note`, !/Proposed|Open:/.test(document.body.textContent));
   const clients = $("client-list").textContent;
   check(`admin@${width}: clients show their id and OS`, ["web-3f9c2e81 · Windows", "web-a71d09c4 · iOS", "web-55be2f10 · Android", "desktop-0c9e7a22 · OS not reported"].every((text) => clients.includes(text)));
@@ -1432,8 +1490,11 @@ for (const width of [1280, 390]) {
 
 {
   const { document, errors } = await load("desktop-notice", 1280);
-  document.getElementById("notice-open").click();
-  check(`desktop-notice: Open Web UI closes the notice ${errors.join("; ")}`, document.getElementById("notice").hidden && errors.length === 0);
+  const open = document.getElementById("notice-open");
+  check(`desktop-notice: the notice names ReelRoulette and its button says where it goes (${open.textContent})`,
+    open.textContent === "Open ReelRoulette in your browser" && document.getElementById("notice").textContent.includes("Use ReelRoulette in your browser instead."));
+  open.click();
+  check(`desktop-notice: Open ReelRoulette in your browser closes the notice ${errors.join("; ")}`, document.getElementById("notice").hidden && errors.length === 0);
 }
 
 console.log(failures ? `${failures} failed` : "all passed");

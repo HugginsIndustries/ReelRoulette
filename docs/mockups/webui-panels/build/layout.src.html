@@ -1096,7 +1096,7 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
               <dt>Client type</dt><dd id="diag-type"></dd>
               <dt>Device name</dt><dd id="diag-device"></dd>
               <dt>Server</dt><dd>0.15.0 (API 1)</dd>
-              <dt>WebUI</dt><dd>0.15.0</dd>
+              <dt>ReelRoulette</dt><dd>0.15.0</dd>
             </dl>
           </div>
           <p class="setting-hint">Settings apply at once and are kept on this device.</p>
@@ -1133,13 +1133,13 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
 
     <div id="startup-error" class="startup-error" hidden>
       <main>
-        <h1>ReelRoulette WebUI</h1>
+        <h1>ReelRoulette</h1>
         <section class="card error">
           <h2>Runtime Configuration Error</h2>
           <p>Failed to load /runtime-config.json (HTTP 404).</p>
           <p>Provide `window.__REEL_ROULETTE_RUNTIME_CONFIG` before boot, or host a valid `/runtime-config.json`.</p>
         </section>
-        <p class="mock-note mock-inline">Today's page, kept as it is.</p>
+        <p class="mock-note mock-inline">Today's page, kept as it is apart from its heading, which says only ReelRoulette.</p>
         <button type="button" class="mock-back" id="startup-error-back">Back to the mockup</button>
       </main>
     </div>
@@ -4059,7 +4059,7 @@ function renderStats() {
     grid.append(card);
   });
   library.append(grid);
-  // Proposed order: the current file first, since the file name opens this tab.
+  // The current file first, since the file name opens this tab.
   host.append(file, library);
 }
 

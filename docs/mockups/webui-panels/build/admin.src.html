@@ -246,7 +246,7 @@ body.short-screen .admin-nav { padding: 4px 8px; }
               <button class="icon-btn" type="button" id="control-show" aria-label="Show the token" title="Show"><span class="material-symbol-icon">visibility</span></button>
               <button class="icon-btn" type="button" id="control-copy" aria-label="Copy the token" title="Copy"><span class="material-symbol-icon">content_copy</span></button>
             </div>
-            <p class="hint">Other machines need it to open admin.</p>
+            <p class="hint">Other machines need it to open admin. Changing it signs them out.</p>
           </div>
           <label class="check"><input type="checkbox" id="control-dev"> Dev (pre-release) update channel</label>
           <label class="check"><input type="checkbox" id="control-startup" checked> Launch Server on Startup</label>
@@ -464,12 +464,14 @@ function rangeCheck(min, max, unit) {
     return /^\d+$/.test(text) && n >= min && n <= max ? null : { message: `Use a whole number from ${min} to ${max}${unit}.` };
   };
 }
-function form(formId, saveId, fields, done) {
+// `confirm`, when given, asks before saving and saves only if it answers yes.
+function form(formId, saveId, fields, done, confirm) {
   const validated = fields.map(([id, check]) => new ValidatedField($(id), check));
   holdAction($(saveId), () => validated.filter((field) => !field.input.disabled), { reason: () => "Correct the field first." });
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     if (validated.some((field) => field.holds)) return;
+    if (confirm && !(await confirm())) return;
     status(done);
   };
   if ($(formId).tagName === "FORM") $(formId).addEventListener("submit", submit);
@@ -481,9 +483,17 @@ form("web-form", "web-save", [
   ["web-host", (value) => (/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/i.test(value.trim()) ? null : { message: "Use letters, digits, and hyphens, without spaces." })],
   ["web-token", (value) => (value.trim() || !document.querySelector('input[name="web-auth"][value="token"]').checked ? null : { message: "Enter a shared token.", empty: true })]
 ], "Web access settings saved. Port and remote connection changes apply at the server's next start.");
+// The control token can be changed. Changing it asks first, since it signs other machines out, as the Operator page
+// warns today.
+let savedControlToken = $("control-token").value;
 form("control", "control-save", [
   ["control-token", (value) => (value.trim().length >= 8 ? null : { message: "Use at least 8 characters." })]
-], "Control settings saved.");
+], "Control settings saved.", async () => {
+  if ($("control-token").value === savedControlToken) return true;
+  const yes = await confirmDialog({ message: "Change the control token? Other machines will be signed out and need the new token to open admin.", confirmLabel: "Change Token", danger: true });
+  if (yes) savedControlToken = $("control-token").value;
+  return yes;
+});
 form("refresh-form", "refresh-save", [
   ["refresh-interval", rangeCheck(5, 1440, " minutes")],
   ["refresh-parallel", rangeCheck(1, 16, "")]
@@ -550,8 +560,9 @@ $("clear-all-stats").addEventListener("click", async () => {
 });
 
 // ---- Library transfer: import keeps the desktop's source folder remap ----
-// A plain download in every browser, with no save picker.
-$("export").addEventListener("click", () => status("Downloaded library-2026-10-08.db."));
+// A plain download in every browser, with no save picker. A browser doesn't say when a download finishes, so the
+// status line says it has started.
+$("export").addEventListener("click", () => status("Downloading library-2026-10-08.db."));
 $("import-file").addEventListener("change", () => {
   if ($("import-file").files.length) uploadLibrary($("import-file").files[0].name, true);
   $("import-file").value = "";
@@ -638,7 +649,8 @@ BACKUPS.forEach((label) => {
   $("backup-list").append(row);
 });
 
-// ---- Sources: an Edit dialog holds rename and Remove, as tags, categories, and presets do ----
+// ---- Sources: an Edit dialog holds rename and Remove, as tags, categories, and presets hold rename and Delete.
+// Removing a source leaves its files on disk, so its button says Remove. ----
 const SOURCES = [
   { name: "Videos", path: "/media/videos", media: 17423, videos: 17423, photos: 0, hours: 2140, withAudio: 16890, enabled: true },
   { name: "Phone backup", path: "/media/phone", media: 28104, videos: 1310, photos: 26794, hours: 96, withAudio: 1270, enabled: true },
@@ -659,7 +671,7 @@ function renderSources() {
     box.setAttribute("aria-label", `Enable ${source.name}`);
     box.addEventListener("change", () => {
       source.enabled = box.checked;
-      status(`${source.name} ${source.enabled ? "enabled" : "disabled"}. Open WebUIs update their library.`);
+      status(`${source.name} ${source.enabled ? "enabled" : "disabled"}. ReelRoulette updates the library everywhere it's open.`);
     });
     const info = document.createElement("div");
     info.className = "grow";
@@ -688,11 +700,12 @@ function renderSources() {
         renderSources();
         status("Source renamed.");
       },
+      deleteLabel: "Remove",
       deleteMessage: () => `Remove the source "${source.name}"? Its items leave the library; its files stay on disk.`,
       onDelete: () => {
         SOURCES.splice(SOURCES.indexOf(source), 1);
         renderSources();
-        status("Source removed. Open WebUIs update their library.");
+        status("Source removed. ReelRoulette updates the library everywhere it's open.");
       }
     }));
     row.append(toggle, info, edit);
@@ -744,9 +757,10 @@ $("dup-scan").addEventListener("click", () => {
     keep: null
   }));
   groups.forEach((group) => (group.keep = state.dupDefault === "best" ? 0 : null));
-  $("dup-state").textContent = `Found ${groups.length} groups with ${groups.reduce((n, g) => n + g.files.length, 0)} files.`;
+  $("dup-state").textContent = `Found ${count(groups.length, "group", "groups")} with ${count(groups.reduce((n, g) => n + g.files.length, 0), "file", "files")}.`;
   openReview();
 });
+const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 function reviewCounts() {
   const chosen = groups.filter((group) => group.keep !== null);
   return { files: chosen.reduce((n, g) => n + g.files.length - 1, 0), groups: chosen.length };
@@ -793,10 +807,10 @@ function renderReview() {
     body.append(box);
   });
   const { files, groups: chosen } = reviewCounts();
-  $("review-count").textContent = `${groups.length} groups`;
-  $("review-summary").textContent = files ? `${files} files to delete from ${chosen} groups; Keep All groups are left as they are.` : "Keep All everywhere: nothing will be deleted.";
+  $("review-count").textContent = count(groups.length, "group", "groups");
+  $("review-summary").textContent = files ? `${count(files, "file", "files")} to delete from ${count(chosen, "group", "groups")}; Keep All groups are left as they are.` : "Keep All everywhere: nothing will be deleted.";
   $("review-apply").disabled = files === 0;
-  $("review-apply").textContent = files ? `Delete ${files} Files` : "Delete Files";
+  $("review-apply").textContent = files ? `Delete ${count(files, "File", "Files")}` : "Delete Files";
 }
 function openReview() {
   $("admin").hidden = true;
@@ -813,20 +827,20 @@ $("review-apply").addEventListener("click", async () => {
   const { files, groups: chosen } = reviewCounts();
   if (!(await confirmDialog({
     message: `This permanently deletes the duplicate files you didn't keep from disk.\n\nGroups to process: ${chosen}\nFiles to delete: ${files}`,
-    confirmLabel: `Delete ${files} ${files === 1 ? "File" : "Files"}`,
+    confirmLabel: `Delete ${count(files, "File", "Files")}`,
     danger: true
   }))) return;
   closeReview();
-  $("dup-state").textContent = `Deleted ${files} files.`;
-  status(`Deleted ${files} duplicate files.`);
+  $("dup-state").textContent = `Deleted ${count(files, "file", "files")}.`;
+  status(`Deleted ${count(files, "duplicate file", "duplicate files")}.`);
 });
 
-// ---- Testing suite: each scenario names the message the WebUI shows ----
+// ---- Testing suite: each scenario names the message the app shows ----
 const SCENARIOS = ["API version mismatch", "Capability mismatch", "API unavailable", "Missing media", "SSE disconnect"];
 SCENARIOS.forEach((name, i) => {
   const row = document.createElement("div");
   row.style.margin = "4px 0";
-  row.innerHTML = `<label class="check"><input type="checkbox" id="scenario-${i}"> ${name}</label><p class="hint" style="margin:0 0 0 28px;font-size:.82rem;color:var(--muted-fg)">Expected WebUI message: <span class="mock-label">set by Testing Suite Overhaul</span></p>`;
+  row.innerHTML = `<label class="check"><input type="checkbox" id="scenario-${i}"> ${name}</label><p class="hint" style="margin:0 0 0 28px;font-size:.82rem;color:var(--muted-fg)">Expected message: <span class="mock-label">set by Testing Suite Overhaul</span></p>`;
   $("scenarios").append(row);
 });
 $("testing-apply").addEventListener("click", () => status("Testing state applied."));
