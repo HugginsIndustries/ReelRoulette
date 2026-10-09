@@ -19,12 +19,9 @@ Instructions:
 
 Commit Message:
 
-Docs: Complete the WebUI design mockup and name the app ReelRoulette in user-facing text
+Docs: Plan a desktop app shell around the WebUI
 
-- M12c: mark WebUI Design Mockup complete and move it to MILESTONES-COMPLETED.md with its evidence (641 passing mockup checks, no network references, the user's approvals); the tracker now reads M12c.
-- Record the last approvals in the milestones that build them: the volume slider's place, the tab and panel keys and the Esc order, the Stats tab, the browser-playable label and format notice (off by default), the admin layout, Edit Source, backup restore, the import remap, duplicate review, and the desktop retirement notice.
-- Record every remaining mocked detail as approved, including the exact focus values, the selection and bulk action texts, the filter summary format, and the admin and catalog transfer messages.
-- Control token: hidden with Show and Copy; saving a changed token asks first and keeps today's warning that other machines will be signed out.
-- Add the naming rule to AGENTS.md: "WebUI" is internal, and text users see says "ReelRoulette", while the changelog keeps "WebUI" through v0.15.x. Apply it to the mockup, the milestones, and the release notes style guide's example, including the retirement notice's "Open ReelRoulette in your browser" button, and add a mockup check for it.
-- Point every v0.15.0 UI milestone at docs/mockups/webui-panels/ as its design reference, and trim the repeated sentences in WebUI Settings Panel's Appearance bullet.
-- Mockup fixes: confirmations open over duplicate review instead of freezing the page, duplicate review's counts of one read in the singular, Edit Source's Delete becomes Remove since the files stay on disk, and Export downloads library-{date}.db (a server change recorded in Admin Library Catalog Transfer) and says the download has started.
+- Add Desktop App Shell (P50) to the unscheduled backlog, for after the planned releases once the new UI has been in daily use: an Electron app that wraps the WebUI as-is, starts the server when it isn't running or connects to a remote one, and offers native features through a bridge the WebUI detects.
+- Its features: Browse for a source folder, shown only when the app and server share a machine, and Save as for the library export, which works with any server.
+- Record why Electron over Tauri: one Chromium engine on every platform, matching what's tested in Chrome.
+- Point Admin Source and Item Management and Admin Library Catalog Transfer at it with Not included lines.

@@ -15,7 +15,7 @@ The WebUI becomes the only client on every device. Until the desktop removal rel
 - **v0.17.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access. P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28j, P28k, P28l.
 - **v0.18.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
 - **v0.19.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for the WebUI. P2a, P2b, P2c, P2d, P2f, P2g, P2h.
-- **Unscheduled backlog**: P1, P4, P5, P6, P9a, P9b, P10, P33, P35, P36, P49.
+- **Unscheduled backlog**: P1, P4, P5, P6, P9a, P9b, P10, P33, P35, P36, P49, P50.
 
 ## Document Purpose
 
@@ -495,6 +495,7 @@ Last milestone completed: M12c
   - Source and item changes publish events so connected clients update. Read from code at promotion: only enabling or disabling a source publishes one (`sourceStateChanged`), and `POST /api/sources/import` publishes nothing, so import gets an event here too.
   - WebUI source sync slice, folded in from WebUI Source State Sync at promotion: the server already applies source state (list query, random selection, and item play only use enabled sources), and the WebUI keeps no source authority of its own; its source checkboxes are a filter choice. Checked at promotion: the WebUI ignores `sourceStateChanged` and reads `GET /api/sources` only when the filter dialog loads its data. On a source event, reload the loaded library window, keeping the scroll position as the desktop does, and refresh the Filter tab's source list.
   - Not included: per-user source visibility, which is Per-User Source Permissions.
+  - Not included: browsing for a source folder, which is Desktop App Shell.
 - **Acceptance criteria**:
   - From the admin section, sources can be added by server path, renamed, removed, enabled, disabled, and refreshed, with per-source statistics, and one Refresh covers the whole list.
   - A typed path that is not a folder on the server, or is already a source, is flagged with the field validation pattern as it is typed, and adding can't proceed until it is corrected.
@@ -527,6 +528,7 @@ Last milestone completed: M12c
   - Export name, server slice: the export route suggests `library-{date}.db` as the download's name (its `Content-Disposition` file name) in place of `library.db`, and only the suggested name changes. Read from code at this edit: `GET /api/library/catalog-checkpoint` passes `library.db` to `Results.Stream` (`ServerHostComposition.cs`). The desktop's Library Export is unaffected: it saves to the path its own save picker returns, which suggests `library.db` (`MainWindow.axaml.cs`).
   - Backup restore (decided in WebUI Design Mockup): the Backups card lists the server's backups under Restore, newest first, each named by when it was made, such as "Today 06:00", "Yesterday 18:00", or "3 days ago (daily)", with a Restore… button. Restore asks "Restore the backup from {when}? The current library is kept aside until the backup opens.", with Cancel focused and a red Restore, and the status line then says "Restored the backup from {when}.". Read from OpenAPI at this edit: no route lists the server's backups, so the list needs one, a contract change that only adds.
   - Trap: re-measured at promotion on a copy of the developer's catalog, `library.db` is 92.5 MB (92,520,448 bytes, no free pages) for 49,055 items, up from 70.5 MB when this entry was written. That is larger than ASP.NET Core's default request body limit of about 30 MB (the framework default, not tested here). Read from code at promotion: the server raises the multipart form limit (`FormOptions.MultipartBodyLengthLimit`) to 512 MB, left from earlier library import work, but no route reads a form now and the request body limit itself is not raised. The import upload needs its own limit and should stream to the incoming file rather than buffer in memory.
+  - Not included: a Save as dialog for the export, which is Desktop App Shell.
 - **Acceptance criteria**:
   - The admin section can export a server-produced checkpoint and import a `library.db` while the server is running.
   - The export downloads as `library-{date}.db`, dated by the server's local date.
@@ -1676,3 +1678,28 @@ Last milestone completed: M12c
   - It works in Chrome, Firefox, and Safari on a desktop and on Android and iOS, or the setting is hidden in a browser where it cannot work, and that browser is named in this entry.
 - **Verification evidence**:
   - Completion evidence must include tests of the gain against the desktop's for the same loudness, baseline, and limits, tests for each setting surviving a page refresh, `npm run verify`, and a spot check in each browser named above.
+
+---
+
+### P50 - Desktop App Shell
+
+- **Status**: ⏳ Planned
+- **Goal**: An optional desktop app wraps the WebUI as-is and adds the native features a browser can't offer: browsing for a source folder and saving the library export with Save as.
+- **Scope**:
+  - Unscheduled. Planned for after the releases in Planned Releases, once the new UI has been in daily use. Depends on: Admin Source and Item Management, whose add-folder field gets Browse, and Admin Library Catalog Transfer, whose export gets Save as.
+  - An Electron app that loads the WebUI from the server, unchanged. On launch it starts the server on this machine when it isn't already running, or connects to a server on another machine.
+  - Why Electron over Tauri: Electron ships one Chromium engine on every platform, matching what's tested in Chrome. Tauri renders in each OS's own webview (WebKitGTK on Linux, WebView2 on Windows), so the app would render and play media differently on each platform.
+  - Bridge: a preload script exposes a small API the WebUI detects. In a plain browser it is absent and the WebUI works as it does today; each native feature shows only when the bridge offers it.
+  - Browse for a source folder: a Browse button beside the admin section's add-folder path field opens the OS folder picker and fills in the picked path, which the server then checks as it does a typed one. It shows only when the app and the server run on the same machine, since a picked path is only meaningful there.
+  - Save as for exporting the library: in the app, Export Library opens a save dialog that suggests `library-{date}.db` and saves where the user picks. It works with a server on this machine or another, since the file is saved on the app's machine. In the app the button opens a dialog, so it gets an ellipsis.
+  - Changes to user-facing UX need approval, mocked in `docs/mockups/webui-panels/`.
+  - Decide at promotion whether the app bundles the server or starts an installed one, and how it is packaged and updated beside the server's Velopack releases.
+  - Not included: other native features the desktop client had, such as always-on-top; the bridge can offer them later.
+- **Acceptance criteria**:
+  - Launching the app with no server running starts one and opens the WebUI; with a server already running, it opens that one without starting another.
+  - The app connects to a server on another machine and works as a browser does.
+  - With the app and the server on the same machine, Browse fills the add-folder path with the picked folder; with a server on another machine, or in a plain browser, Browse does not show.
+  - In the app, Export Library saves to the path picked in its save dialog, with a server on this machine or another; in a plain browser it stays a download.
+  - In a plain browser the WebUI is unchanged.
+- **Verification evidence**:
+  - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for each native feature with and without the bridge, `npm run verify`, and Release Specific checklist items for the packaged app on Linux and Windows, both starting its own server and connecting to one on another machine.
