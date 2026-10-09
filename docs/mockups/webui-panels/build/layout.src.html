@@ -307,7 +307,11 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
 html.theme-light .lib-grid { background: #fff; }
 .lib-row { display: flex; gap: 2px; margin-bottom: 1px; }
 .lib-tile { position: relative; flex-shrink: 0; overflow: hidden; cursor: pointer; }
-.lib-tile:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+/* A focused tile gets an orange border. It is a layer of its own after the thumbnail's frame, since the frame fills the
+   tile and covers anything the tile itself draws, its outline included. */
+.lib-tile:focus-visible { outline: none; }
+.tile-focus { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: none; pointer-events: none; box-shadow: inset 0 0 0 3px var(--focus-ring); }
+.lib-tile:focus-visible > .tile-focus { display: block; }
 /* The thumbnail and what sits on it. A selected tile's thumbnail shrinks inside the tile, so the selection icon, which
    stays put, sits on its top-left corner. */
 .lib-tile-frame { position: absolute; inset: 0; overflow: hidden; transition: transform 0.15s ease, border-radius 0.15s ease; }
@@ -457,6 +461,12 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
   .select-mark:hover { opacity: 1; }
 }
 .lib-grid.selecting .select-mark { display: flex; }
+/* Keyboard focus on a tile shows its check icon, as hovering does, so Tab can reach it. The focused check icon turns
+   bright white inside a thick orange ring, which the tile crops. */
+.lib-tile:focus-visible .select-mark { display: flex; }
+/* The ring starts at the icon's visible edge, which sits about 2 px inside its 26 px box, and reaches about 22 px from
+   its center. */
+.select-mark:focus-visible { display: flex; opacity: 1; outline: 11px solid var(--focus-ring); outline-offset: -2px; }
 .lib-tile.is-selected { background: color-mix(in srgb, var(--huggins-orange) 22%, var(--surface)); }
 .lib-tile.is-selected .lib-tile-frame { transform: scale(0.86); border-radius: 4px; }
 .lib-tile.is-selected .select-mark { display: flex; opacity: 1; color: var(--huggins-orange); background: radial-gradient(circle, #fff 0 42%, transparent 44%); }
@@ -756,7 +766,6 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
           <h2>Library</h2>
           <p id="lib-summary" class="lib-summary grow" aria-live="polite"></p>
           <button class="icon-btn" type="button" id="lib-collapse" aria-expanded="true" aria-controls="lib-controls lib-filters" aria-label="Hide library controls and filters" title="Hide controls &amp; filters"><span class="material-symbol-icon">unfold_less</span></button>
-          <button class="icon-btn" type="button" id="lib-select" aria-pressed="false" aria-label="Select items" title="Select items"><span class="material-symbol-icon">checklist</span></button>
         </div>
         <button type="button" id="lib-filters" class="lib-filters" title="Open the Filter tab" hidden></button>
         <div class="lib-controls" id="lib-controls">
@@ -2131,7 +2140,9 @@ function layoutGrid(force) {
       tileEl.className = "lib-tile" + (item.id === playback.item?.id ? " is-current" : "") +
         (selected.has(item.id) ? " is-selected" : "") + (Date.now() < placeholderUntil ? " is-placeholder" : "");
       tileEl.dataset.id = String(item.id);
-      tileEl.tabIndex = 0;
+      // The grid is one tab stop: the last tile focused, or the first. Its check icon is the next stop.
+      const tabStop = item.id === (items.some((x) => x.id === gridFocusId) ? gridFocusId : items[0].id);
+      tileEl.tabIndex = tabStop ? 0 : -1;
       if (selecting) {
         tileEl.setAttribute("role", "checkbox");
         tileEl.setAttribute("aria-checked", String(selected.has(item.id)));
@@ -2167,9 +2178,15 @@ function layoutGrid(force) {
       frame.append(playing, name);
       const mark = document.createElement("span");
       mark.className = "select-mark";
+      mark.tabIndex = tabStop ? 0 : -1;
+      mark.setAttribute("role", "checkbox");
+      mark.setAttribute("aria-label", `Select ${item.name}`);
+      mark.setAttribute("aria-checked", String(selected.has(item.id)));
       mark.title = selected.has(item.id) ? "Deselect" : "Select";
       mark.append(iconSpan("check_circle", "is-filled tile-icon"));
-      tileEl.append(frame, mark);
+      const focusLayer = document.createElement("span");
+      focusLayer.className = "tile-focus";
+      tileEl.append(frame, focusLayer, mark);
       rowEl.append(tileEl);
     }
     grid.append(rowEl);
@@ -2197,10 +2214,49 @@ function chooseTile(event) {
   if (state.mode === "overlay" && !document.querySelector("dialog[open]")) closePanel();
 }
 $("lib-grid").addEventListener("click", chooseTile);
+// Arrow keys move between tiles: left and right in order, up and down to the nearest tile in the next row. Enter or
+// Space on a tile chooses it, and on its check icon selects it, as a click does.
+let gridFocusId = null;
+function moveTabStop(tile) {
+  gridFocusId = Number(tile.dataset.id);
+  $("lib-grid").querySelectorAll(".lib-tile, .select-mark").forEach((el) => (el.tabIndex = -1));
+  tile.tabIndex = 0;
+  tile.querySelector(".select-mark").tabIndex = 0;
+}
+$("lib-grid").addEventListener("focusin", (event) => {
+  const tile = event.target.closest(".lib-tile");
+  if (tile) moveTabStop(tile);
+});
+function neighborTile(tile, key) {
+  const tiles = [...$("lib-grid").querySelectorAll(".lib-tile")];
+  const index = tiles.indexOf(tile);
+  if (key === "ArrowLeft") return tiles[index - 1] || null;
+  if (key === "ArrowRight") return tiles[index + 1] || null;
+  if (key !== "ArrowUp" && key !== "ArrowDown") return undefined;
+  const row = key === "ArrowUp" ? tile.parentElement.previousElementSibling : tile.parentElement.nextElementSibling;
+  if (!row) return null;
+  const center = (el) => {
+    const box = el.getBoundingClientRect();
+    return box.left + box.width / 2;
+  };
+  const x = center(tile);
+  return [...row.children].reduce((best, other) => (!best || Math.abs(center(other) - x) < Math.abs(center(best) - x) ? other : best), null);
+}
 $("lib-grid").addEventListener("keydown", (event) => {
+  const tile = event.target.closest(".lib-tile");
+  if (!tile) return;
   if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
     chooseTile(event);
+    return;
+  }
+  const next = neighborTile(tile, event.key);
+  if (next === undefined) return;
+  // Handled here, so the arrow keys don't also play the previous or next item.
+  event.preventDefault();
+  if (next) {
+    next.focus();
+    moveTabStop(next);
   }
 });
 $("lib-search").addEventListener("input", (event) => {
@@ -2926,7 +2982,7 @@ function openEditCategory(category) {
 
 // ---- Auto Tag ----
 // Scan Files runs for about 5 seconds with today's indeterminate bar, then lists each tag whose name a file name
-// holds (ignoring the extension). Rows expand to their files; Apply applies the checked changes.
+// holds (ignoring the extension), with nothing checked, as today; Select all checks everything. Rows expand to their files; Apply applies the checked changes.
 const autoTag = { scanning: false, rows: null };
 function autoTagScan() {
   if (state.situation === "empty") return [];
@@ -2934,7 +2990,7 @@ function autoTagScan() {
   return TAGS.flatMap((category) => category.chips).map((chip) => {
     const files = pool
       .filter((item) => item.name.replace(/\.[^.]+$/, "").toLowerCase().includes(chip.name.toLowerCase()))
-      .map((item) => ({ item, change: !item.tags.has(chip.key), checked: !item.tags.has(chip.key) }));
+      .map((item) => ({ item, change: !item.tags.has(chip.key), checked: false }));
     return { chip, files, expanded: false };
   }).filter((row) => row.files.length);
 }
@@ -2958,11 +3014,11 @@ function renderAutoTag() {
   const placeholder = (text) => host.append(Object.assign(document.createElement("p"), { className: "autotag-empty", textContent: text }));
   if (!autoTag.rows) {
     $("autotag-status").textContent = "";
-    return void placeholder("Scan results show here.");
+    return void placeholder("Scan to find files whose names contain a tag's name.");
   }
   if (!autoTag.rows.length) {
     $("autotag-status").textContent = "Scan complete: no matching tags found.";
-    return void placeholder("No file names contain a tag's name.");
+    return void placeholder("No file names contain any tag's name.");
   }
   const matches = autoTag.rows.reduce((n, row) => n + row.files.length, 0);
   $("autotag-status").textContent = `Scan complete: ${autoTag.rows.length} matching tags, ${matches} matches, ${checkedCount}/${changes.length} selected changes.`;
@@ -3304,7 +3360,6 @@ let lastSelected = null;
 let swallowClick = false;
 const selected = new Set();
 function renderBulk() {
-  $("lib-select").setAttribute("aria-pressed", String(selecting));
   $("bulk-bar").hidden = !selecting;
   $("bulk-count").textContent = `${selected.size} selected`;
   $("bulk-actions").disabled = selected.size === 0;
@@ -3318,7 +3373,25 @@ function setSelecting(on) {
   }
   closeBulkMenu();
   renderBulk();
-  layoutGrid(true);
+  renderSelection();
+}
+// Selection updates the tiles in place, as the grid patches a tile, so focus stays on the tile or check icon in use.
+function renderSelection() {
+  const grid = $("lib-grid");
+  grid.classList.toggle("selecting", selecting);
+  grid.querySelectorAll(".lib-tile").forEach((tile) => {
+    const id = Number(tile.dataset.id);
+    const name = ITEMS[id].name;
+    const on = selected.has(id);
+    tile.classList.toggle("is-selected", on);
+    tile.setAttribute("role", selecting ? "checkbox" : "button");
+    tile.setAttribute("aria-label", selecting ? name : `Play ${name}`);
+    if (selecting) tile.setAttribute("aria-checked", String(on));
+    else tile.removeAttribute("aria-checked");
+    const mark = tile.querySelector(".select-mark");
+    mark.setAttribute("aria-checked", String(on));
+    mark.title = on ? "Deselect" : "Select";
+  });
 }
 function selectTile(id, range) {
   selecting = true;
@@ -3333,17 +3406,19 @@ function selectTile(id, range) {
     selected.add(id);
   }
   lastSelected = id;
+  // Deselecting the last tile ends selection.
+  if (!selected.size) {
+    selecting = false;
+    lastSelected = null;
+  }
   renderBulk();
-  layoutGrid(true);
-  const tile = $("lib-grid").querySelector(`.lib-tile[data-id="${id}"]`);
-  if (tile) tile.focus({ preventScroll: true });
+  renderSelection();
 }
-$("lib-select").addEventListener("click", () => setSelecting(!selecting));
 $("bulk-exit").addEventListener("click", () => setSelecting(false));
 $("bulk-all").addEventListener("click", () => {
   visibleItems().items.forEach((item) => selected.add(item.id));
   renderBulk();
-  layoutGrid(true);
+  renderSelection();
 });
 
 // A long press on a tile starts selection on touch screens.
@@ -3476,7 +3551,10 @@ async function removeFromLibrary(items) {
   });
   if (!answer) return;
   items.forEach((item) => (item.removed = true));
+  // The removed items were the selection, so selection ends.
   selected.clear();
+  selecting = false;
+  lastSelected = null;
   renderBulk();
   $("status").textContent = answer.deleteFiles ? `Removed ${noun} from the library and deleted their files.` : `Removed ${noun} from the library.`;
 }

@@ -1,7 +1,8 @@
 """Cuts the WebUI's Material Symbols font down to the icons the mockups use, at the WebUI's axis settings.
 
 The few icons the tiles show filled are also cut at FILL 1, as a second font; the WebUI sets the variable font's FILL
-axis instead.
+axis instead. They are cut at optical size 20, as the WebUI's tile badges are: at weight 700 the font's filled glyphs
+close only at optical sizes 20 and 24, and from 32 up each leaves a thin gap between its outline and its fill.
 
 Writes icons.json next to this script. Needs fontTools; run it only when the icon list changes.
 """
@@ -12,6 +13,7 @@ import os
 
 from fontTools import subset
 from fontTools.ttLib import TTFont
+from fontTools.pens.areaPen import AreaPen
 from fontTools.varLib import instancer
 
 here = os.path.dirname(os.path.abspath(__file__))
@@ -40,8 +42,44 @@ codepoints = {name: by_glyph[name] for name in ICONS}
 
 
 
+def contour_areas(font, codepoint):
+    """The signed area of each of a glyph's contours: holes and fills have opposite signs."""
+    areas = []
+    pen = AreaPen()
+    glyph_set = font.getGlyphSet()
+    for op, args in _recording(glyph_set[font.getBestCmap()[codepoint]]):
+        getattr(pen, op)(*args)
+        if op in ("closePath", "endPath"):
+            areas.append(pen.value)
+            pen = AreaPen()
+    return areas
+
+
+def _recording(glyph):
+    from fontTools.pens.recordingPen import RecordingPen
+    recording = RecordingPen()
+    glyph.draw(recording)
+    return recording.value
+
+
+def assert_flat(font, names):
+    """A filled glyph draws its outline and its fill as separate shapes; the fill must close the hole it sits in."""
+    for name in names:
+        areas = contour_areas(font, codepoints[name])
+        holes = [a for a in areas if a > 0]
+        fills = [-a for a in areas if a < 0]
+        for hole in holes:
+            # A cutout, such as the check in check_circle, has no fill near its size. A fill a little smaller than the
+            # hole leaves the gap.
+            near = [f for f in fills if 0.9 * hole < f < hole * 0.999]
+            assert not near, f"{name}: a fill falls short of its hole ({min(near):.0f} of {hole:.0f}), leaving a gap"
+
+
 def cut(fill, names):
-    static = instancer.instantiateVariableFont(TTFont(src), {"FILL": fill, "GRAD": 0, "opsz": 48, "wght": 700})
+    opsz = 20 if fill else 48
+    static = instancer.instantiateVariableFont(TTFont(src), {"FILL": fill, "GRAD": 0, "opsz": opsz, "wght": 700})
+    if fill:
+        assert_flat(static, names)
     options = subset.Options()
     options.layout_features = []
     options.name_IDs = ["*"]

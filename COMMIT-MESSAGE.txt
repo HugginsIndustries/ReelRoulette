@@ -19,9 +19,10 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan the new logo rollout and show the logo in the mockup
+Docs: Plan keyboard navigation and focus, and settle selection and Auto Tag details
 
-- Add New Logo and Icons to v0.15.0 as the first milestone after the design mockup, renumbering the rest. It rolls the files in `assets/logo/` out to the WebUI's header, favicon, PWA `any` and `maskable` icons, and Apple touch icon, and to the server's executable, tray, and Linux menu icons, with each Velopack leg getting its own icon.
-- Record where the old `assets/HI.ico`, `HI-256.png`, and `HI-512.png` are used today: everything but the desktop switches to the new logo, and Desktop Client Removal deletes the old icons once only the desktop used them.
-- Record the recovery page's built-in icon in WebUI Admin Section and the notice's icon in Desktop Retirement Notice.
-- Mockup: the header shows the lockup for each theme and the icon alone on a phone, every page uses the icon as its page icon, and the recovery page and the desktop notice show it, inlined from `assets/logo/` at build time; extend the happy-dom check to cover them.
+- Add WebUI Keyboard Navigation and Focus to v0.15.0, after WebUI Multi-Select and Bulk Actions and before Desktop Retirement Notice: keyboard focus in the brand orange throughout, the Library grid as one tab stop with arrow keys and a focusable check icon on each tile, and full keyboard operation of every screen.
+- Record in WebUI Multi-Select and Bulk Actions that the Library tab loses its Select button, selection starts from a tile's check icon or a long press, and it ends when its last tile is deselected.
+- Record in WebUI Responsive Layout and Panels that Auto Tag starts every scan with nothing checked, as today, and its two placeholders' wording, which leaves the pending list.
+- Mockup: orange keyboard focus everywhere, Google Photos' focus on tiles and check icons, the grid's keyboard navigation, selection updates in place so focus stays put, no Select button, selection ending with its last tile, and Auto Tag's new defaults and wording; extend the happy-dom check to cover them.
+- Fix the mockup's invisible focused-tile border by drawing it on its own layer above the thumbnail, make the filled tile icons flat by cutting them at optical size 20, where the font's fill closes its outline, and start the check icon's focus ring at its edge; record both traps in the milestones that build them.

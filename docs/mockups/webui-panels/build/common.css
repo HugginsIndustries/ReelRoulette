@@ -30,7 +30,8 @@
   --control-border: #555555;
   --control-fg: #ffffff;
   --icon: #ffffff;
-  --focus-ring: #7aa7ff;
+  /* Keyboard focus: the brand orange, a little translucent. */
+  --focus-ring: rgba(239, 127, 34, 0.8);
   /* New for the validation pattern. */
   --error: #ff5a52;
   --tip-bg: #f1f1f1;
@@ -57,7 +58,7 @@ html.theme-light {
   --control-border: #c5cad3;
   --control-fg: #1a1d21;
   --icon: #333333;
-  --focus-ring: #2563eb;
+  --focus-ring: rgba(239, 127, 34, 0.95);
   --error: #c4291f;
   --tip-bg: #1f2329;
   --tip-fg: #ffffff;
@@ -362,6 +363,11 @@ body.sorting, body.sorting * { cursor: grabbing !important; user-select: none; -
   white-space: nowrap;
   border: 0;
 }
+
+/* Keyboard focus shows as one orange ring in place of the browser's own; a mouse click shows none. Controls with their
+   own focus style below keep the same color. */
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 /* The logo in the header: the lockup with light text in the dark theme and dark text in the light theme, and the icon
    alone on a phone. Its images carry the name "ReelRoulette", so the heading keeps it. */

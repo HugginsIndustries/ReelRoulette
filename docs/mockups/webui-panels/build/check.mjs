@@ -471,7 +471,7 @@ for (const width of [1280, 390]) {
   $("open-autotag").click();
   const footerButtons = [...document.querySelectorAll("#autotag .autotag-footer button")].map((b) => b.id).join(",");
   check(`layout@${width}: Auto Tag opens with its before-scan placeholder, and Cancel then Apply at the footer's end (${autoTagText()}; ${footerButtons})`,
-    !$("autotag").hidden && autoTagText() === "Scan results show here." && $("autotag-apply").disabled && footerButtons === "autotag-cancel,autotag-apply");
+    !$("autotag").hidden && autoTagText() === "Scan to find files whose names contain a tag's name." && $("autotag-apply").disabled && footerButtons === "autotag-cancel,autotag-apply");
   change($("autotag-full"), true);
   $("autotag-scan").click();
   check(`layout@${width}: Scan shows the indeterminate bar and disables Close and Cancel`,
@@ -480,8 +480,12 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: Escape doesn't close it while scanning`, !$("autotag").hidden);
   await tick();
   const autoRows = $("autotag-results").querySelectorAll(".autotag-result").length;
-  check(`layout@${width}: then it lists matching tags (${autoRows} rows, ${$("autotag-status").textContent})`,
-    $("autotag-progress").hidden && !$("autotag-close").disabled && autoRows > 0 && $("autotag-status").textContent.startsWith("Scan complete:") && !$("autotag-apply").disabled);
+  check(`layout@${width}: then it lists matching tags with nothing checked, as today (${autoRows} rows, ${$("autotag-status").textContent})`,
+    $("autotag-progress").hidden && !$("autotag-close").disabled && autoRows > 0 && /^Scan complete: .* 0\/\d+ selected changes\.$/.test($("autotag-status").textContent) && $("autotag-apply").disabled &&
+    ![...$("autotag-results").querySelectorAll(".autotag-row-main input")].some((box) => box.checked));
+  $("autotag-select-all").click();
+  const [chosenChanges, allChanges] = /(\d+)\/(\d+) selected changes/.exec($("autotag-status").textContent).slice(1).map(Number);
+  check(`layout@${width}: Select all checks everything (${chosenChanges}/${allChanges})`, chosenChanges === allChanges && allChanges > 0 && !$("autotag-apply").disabled);
   const autoHead = $("autotag-results").querySelector(".autotag-table-head");
   const autoRow = $("autotag-results").querySelector(".autotag-row-main");
   const columns = (el) => window.getComputedStyle(el).gridTemplateColumns;
@@ -514,11 +518,11 @@ for (const width of [1280, 390]) {
   $("autotag-cancel").click();
   check(`layout@${width}: Cancel closes it`, $("autotag").hidden);
   $("open-autotag").click();
-  check(`layout@${width}: and clears the scan (${autoTagText()})`, autoTagText() === "Scan results show here." && $("autotag-status").textContent === "");
+  check(`layout@${width}: and clears the scan (${autoTagText()})`, autoTagText() === "Scan to find files whose names contain a tag's name." && $("autotag-status").textContent === "");
   situation("empty");
   $("autotag-scan").click();
   await tick();
-  check(`layout@${width}: a scan that finds nothing shows its own placeholder (${autoTagText()})`, autoTagText() === "No file names contain a tag's name.");
+  check(`layout@${width}: a scan that finds nothing shows its own placeholder (${autoTagText()})`, autoTagText() === "No file names contain any tag's name.");
   situation("connected");
   $("autotag-close").click();
 
@@ -718,7 +722,20 @@ for (const width of [1280, 390]) {
 
   // Selection, as Google Photos does it: one check icon at each tile's top left.
   const markOf = (tile) => tile.querySelector(".select-mark");
-  check(`layout@${width}: outside selection the check icons stay hidden until a tile is hovered`, tiles().every((tile) => !shown(markOf(tile))));
+  // Selection patches tiles in place, and happy-dom keeps an element's computed style after a class change, so styles
+  // here are measured on a fresh copy in the element's place.
+  const freshStyle = (el) => {
+    const copy = el.cloneNode(true);
+    copy.removeAttribute("id");
+    el.after(copy);
+    const style = window.getComputedStyle(copy);
+    const values = { display: style.display, opacity: style.opacity, color: style.color, transform: style.transform };
+    copy.remove();
+    return values;
+  };
+  const markShown = (el) => !!el && freshStyle(el).display !== "none";
+  check(`layout@${width}: the Library has no Select button`, !$("lib-select"));
+  check(`layout@${width}: outside selection the check icons stay hidden until a tile is hovered`, tiles().every((tile) => !markShown(markOf(tile))));
   const firstId = tiles()[0].dataset.id;
   const playingBefore = np();
   markOf(tiles()[0]).click();
@@ -727,19 +744,18 @@ for (const width of [1280, 390]) {
     picked.classList.contains("is-selected") && $("bulk-count").textContent === "1 selected" && !$("bulk-bar").hidden && np() === playingBefore);
   const others = tiles().filter((tile) => tile !== picked);
   check(`layout@${width}: during selection every tile shows the icon, faded`,
-    others.every((tile) => shown(markOf(tile)) && window.getComputedStyle(markOf(tile)).opacity === "0.6"));
+    others.every((tile) => markShown(markOf(tile)) && freshStyle(markOf(tile)).opacity === "0.6"));
   check(`layout@${width}: a selected tile's icon is filled orange and its thumbnail shrinks inside the tile`,
-    window.getComputedStyle(markOf(picked)).opacity === "1" && window.getComputedStyle(markOf(picked)).color === window.getComputedStyle(document.documentElement).getPropertyValue("--huggins-orange").trim() &&
-    /scale\(0\.86\)/.test(window.getComputedStyle(picked.querySelector(".lib-tile-frame")).transform) && markOf(picked).querySelector(".material-symbol-icon").dataset.icon === "check_circle");
+    freshStyle(markOf(picked)).opacity === "1" && freshStyle(markOf(picked)).color === window.getComputedStyle(document.documentElement).getPropertyValue("--huggins-orange").trim() &&
+    /scale\(0\.86\)/.test(freshStyle(picked.querySelector(".lib-tile-frame")).transform) && markOf(picked).querySelector(".material-symbol-icon").dataset.icon === "check_circle");
   markOf(picked).click();
-  check(`layout@${width}: clicking it again deselects the tile`, !$("lib-grid").querySelector(`.lib-tile[data-id="${firstId}"]`).classList.contains("is-selected") && $("bulk-count").textContent === "0 selected");
+  check(`layout@${width}: deselecting the last tile ends selection`, !$("lib-grid").querySelector(`.lib-tile[data-id="${firstId}"]`).classList.contains("is-selected") && $("bulk-bar").hidden && !$("lib-grid").classList.contains("selecting"));
   $("bulk-exit").click();
-  check(`layout@${width}: leaving selection hides the icons again`, tiles().every((tile) => !shown(markOf(tile))));
+  check(`layout@${width}: leaving selection hides the icons again`, tiles().every((tile) => !markShown(markOf(tile))));
 
   // Multi-select and bulk actions; removing from the library is an admin action.
-  $("lib-select").click();
+  markOf(tiles()[0]).click();
   check(`layout@${width}: selection marks the tiles as checkboxes`, tiles()[0].getAttribute("role") === "checkbox" && !$("bulk-bar").hidden);
-  tiles()[0].click();
   tiles()[1].click();
   check(`layout@${width}: two taps select two (${$("bulk-count").textContent})`, $("bulk-count").textContent === "2 selected" && tiles()[0].classList.contains("is-selected"));
   // Edit tags opens the Tags tab on the selected items: green for a tag every one has, orange for one only some have.
@@ -789,8 +805,7 @@ for (const width of [1280, 390]) {
   $("bulk-exit").click();
   check(`layout@${width}: when selection ends without unsaved changes, the Tags tab follows the playing item again`, tagLine.hidden);
   // Selection ending with unsaved changes keeps its items in the Tags tab until the changes are saved or discarded.
-  $("lib-select").click();
-  tiles()[0].click();
+  markOf(tiles()[0]).click();
   $("bulk-actions").click();
   $("bulk-menu").querySelector('[data-bulk="tags"]').click();
   await tick();
@@ -806,8 +821,7 @@ for (const width of [1280, 390]) {
   // Shift+click selects a range and no text; Ctrl+click is an ordinary click.
   openTab("library");
   check(`layout@${width}: the grid's text can't be selected (${window.getComputedStyle($("lib-grid")).userSelect})`, window.getComputedStyle($("lib-grid")).userSelect === "none");
-  $("lib-select").click();
-  tiles()[0].click();
+  markOf(tiles()[0]).click();
   tiles()[3].dispatchEvent(new window.MouseEvent("click", { bubbles: true, shiftKey: true }));
   check(`layout@${width}: Shift+click selects the range (${$("bulk-count").textContent})`, $("bulk-count").textContent === "4 selected");
   $("bulk-exit").click();
@@ -817,6 +831,60 @@ for (const width of [1280, 390]) {
   dismissNotices();
   check(`layout@${width}: Ctrl+click plays the tile and selects nothing`, $("bulk-bar").hidden && np() === ctrlName);
   openTab("library");
+
+  // Keyboard focus shows in the brand orange throughout, as one ring and none for a mouse click. In the grid, as Google
+  // Photos does it, a focused tile gets an orange border and a focused check icon a thick ring that the tile crops.
+  const css = [...document.querySelectorAll("style")].map((el) => el.textContent).join("\n");
+  const ruleFor = (selector) => {
+    const start = css.indexOf(`\n${selector} {`);
+    return start < 0 ? "" : css.slice(start, css.indexOf("}", start));
+  };
+  const focusRing = window.getComputedStyle(document.documentElement).getPropertyValue("--focus-ring").trim();
+  check(`layout@${width}: focus is one orange ring, at some transparency, and none for a mouse click (${focusRing})`,
+    /^rgba\(239, 127, 34, 0\.\d+\)$/.test(focusRing) && ruleFor(":focus").includes("outline: none") && ruleFor(":focus-visible").includes("outline: 2px solid var(--focus-ring)"));
+  // happy-dom paints nothing, so the border counts as shown only when a layer after the thumbnail's frame draws it, over
+  // the tile's whole edge: the frame fills the tile and covers anything the tile itself draws, its outline included.
+  const ringColor = window.getComputedStyle(document.documentElement).getPropertyValue("--focus-ring").trim();
+  const borderTile = tiles()[2];
+  borderTile.focus();
+  const layers = [...borderTile.children];
+  const borderLayer = layers.slice(layers.indexOf(borderTile.querySelector(".lib-tile-frame")) + 1).find((layer) => {
+    const copy = layer.cloneNode(true);
+    copy.removeAttribute("id");
+    layer.after(copy);
+    const style = window.getComputedStyle(copy);
+    const draws = style.display !== "none" && style.position === "absolute" && style.top === "0px" && style.left === "0px" && style.right === "0px" && style.bottom === "0px" &&
+      ((style.boxShadow.includes("inset") && style.boxShadow.includes(ringColor)) || `${style.outlineColor} ${style.outline}`.includes(ringColor));
+    copy.remove();
+    return draws;
+  });
+  check(`layout@${width}: a focused tile's orange border is drawn by a layer above its thumbnail (${borderLayer?.className || "none"})`, !!borderLayer);
+  check(`layout@${width}: and its check icon shows, then turns bright white in a thick ring the tile crops`,
+    ruleFor(".lib-tile:focus-visible .select-mark").includes("display: flex") && /opacity: 1;.*outline: 11px solid var\(--focus-ring\); outline-offset: -2px/.test(ruleFor(".select-mark:focus-visible")) &&
+    window.getComputedStyle(tiles()[0]).overflow === "hidden");
+  const stops = () => [...$("lib-grid").querySelectorAll(".lib-tile, .select-mark")].filter((el) => el.tabIndex === 0);
+  check(`layout@${width}: the grid is one tab stop: a tile, then its check icon`, stops().length === 2 && stops()[0].classList.contains("lib-tile") && stops()[1].parentElement === stops()[0]);
+  const gridTiles = tiles();
+  gridTiles[0].focus();
+  const npBeforeArrows = np();
+  press("ArrowRight", gridTiles[0]);
+  check(`layout@${width}: ArrowRight moves focus and the tab stop to the next tile, and plays nothing`,
+    document.activeElement === gridTiles[1] && gridTiles[1].tabIndex === 0 && gridTiles[0].tabIndex === -1 && markOf(gridTiles[1]).tabIndex === 0 && np() === npBeforeArrows);
+  press("ArrowDown", gridTiles[1]);
+  check(`layout@${width}: ArrowDown moves to a tile in the next row`, document.activeElement?.parentElement === gridTiles[1].parentElement.nextElementSibling && stops()[0] === document.activeElement);
+  press("ArrowUp", document.activeElement);
+  check(`layout@${width}: ArrowUp moves back up a row`, document.activeElement?.parentElement === gridTiles[1].parentElement);
+  press("ArrowLeft", document.activeElement);
+  const focusedTile = document.activeElement;
+  check(`layout@${width}: ArrowLeft moves to the previous tile`, focusedTile?.classList.contains("lib-tile") && np() === npBeforeArrows);
+  const focusedMark = markOf(focusedTile);
+  focusedMark.focus();
+  press("Enter", focusedMark);
+  check(`layout@${width}: Enter on a tile's check icon selects it and starts selection, and focus stays on the icon`,
+    focusedTile.classList.contains("is-selected") && $("bulk-count").textContent === "1 selected" && focusedMark.getAttribute("aria-checked") === "true" && document.activeElement === focusedMark);
+  press(" ", focusedMark);
+  check(`layout@${width}: Space on it deselects it, ending selection, with focus still there`,
+    !focusedTile.classList.contains("is-selected") && $("bulk-bar").hidden && document.activeElement === focusedMark && np() === npBeforeArrows);
 
   // The browser-playable option and the format notice.
   const avi = tiles().find((t) => t.getAttribute("aria-label").endsWith(".avi"));
