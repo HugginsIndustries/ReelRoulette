@@ -289,6 +289,11 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
   pointer-events: none;
 }
 #panel-btn .unsaved-dot { top: 6px; right: 5px; box-shadow: 0 0 0 2px #000; }
+/* A collapsed tag category's header: its name, a count of its tags in use, and the unsaved-changes dot. */
+.tag-category-toggle { display: flex; align-items: center; gap: 8px; }
+.tag-category-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.category-count { flex: 0 0 auto; min-width: 22px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--control-border); background: var(--control-bg); font-size: 0.78rem; font-weight: 600; line-height: 1.4; text-align: center; }
+.unsaved-dot.category-dot { position: static; flex: 0 0 auto; box-shadow: none; }
 .panel-page { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
 .panel-page-head { display: flex; align-items: center; gap: 8px; min-height: 44px; flex: 0 0 auto; }
 .panel-page-head h2 { margin: 0; font-size: 1.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2989,8 +2994,21 @@ function chipEl(name, buttons, stateClass) {
   });
   return chip;
 }
-const collapsed = new Set();
-function categoryEl(key, name, { handle: handleEl, controls } = {}) {
+// Tag categories remember per device, separately in the Tags tab and the Filter tab's Tags section, which ones are
+// open; every other category, a new one included, starts collapsed. A collapsed category's header shows how many of its
+// tags are in use and, while it holds unsaved changes, the orange dot that marks unsaved changes everywhere.
+const expandedCategories = {
+  tags: new Set(store.get("tagsExpanded", [])),
+  filter: new Set(store.get("filterTagsExpanded", []))
+};
+function setCategoryExpanded(view, id, open) {
+  const set = expandedCategories[view];
+  if (open) set.add(id);
+  else set.delete(id);
+  store.set(view === "tags" ? "tagsExpanded" : "filterTagsExpanded", [...set]);
+}
+function categoryEl(view, id, name, { handle: handleEl, controls, inUse = 0, inUseTitle = "", unsaved = false } = {}) {
+  const key = view === "tags" ? id : `filter-${id}`;
   const section = document.createElement("section");
   section.className = "tag-category";
   const header = document.createElement("div");
@@ -3001,18 +3019,23 @@ function categoryEl(key, name, { handle: handleEl, controls } = {}) {
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "tag-category-toggle";
-  toggle.textContent = name;
   toggle.setAttribute("aria-controls", grid.id);
+  const label = Object.assign(document.createElement("span"), { className: "tag-category-name", textContent: name });
+  const count = Object.assign(document.createElement("span"), { className: "category-count", textContent: String(inUse), title: inUseTitle });
+  const dot = Object.assign(document.createElement("span"), { className: "unsaved-dot category-dot", title: "Unsaved changes" });
+  toggle.append(label, count, dot);
   const show = () => {
-    const isCollapsed = collapsed.has(key);
+    const isCollapsed = !expandedCategories[view].has(id);
     grid.hidden = isCollapsed;
     section.classList.toggle("is-collapsed", isCollapsed);
+    count.hidden = !isCollapsed || !inUse;
+    dot.hidden = !isCollapsed || !unsaved;
     toggle.setAttribute("aria-expanded", String(!isCollapsed));
+    toggle.setAttribute("aria-label", [name, !count.hidden && inUseTitle, !dot.hidden && "unsaved changes"].filter(Boolean).join(", "));
     toggle.title = isCollapsed ? "Expand category" : "Collapse category";
   };
   toggle.addEventListener("click", () => {
-    if (collapsed.has(key)) collapsed.delete(key);
-    else collapsed.add(key);
+    setCategoryExpanded(view, id, !expandedCategories[view].has(id));
     show();
   });
   // A tap on the header's padding toggles too; its other controls keep their own actions.
@@ -3039,7 +3062,14 @@ function renderFilterTags() {
     const local = document.createElement("label");
     local.className = "filter-local";
     local.innerHTML = 'Local: <select class="ctl"><option>ALL (AND)</option><option>ANY (OR)</option></select>';
-    const { section, grid } = categoryEl(`filter-${category.id}`, category.name, { controls: local });
+    const inUse = category.chips.filter((chip) => filterTagState.has(chip.key)).length;
+    const unsaved = category.chips.some((chip) => (filterTagState.get(chip.key) || "") !== (tagSnapshot.get(chip.key) || ""));
+    const { section, grid } = categoryEl("filter", category.id, category.name, {
+      controls: local,
+      inUse,
+      inUseTitle: `${inUse} ${inUse === 1 ? "tag" : "tags"} in the filter`,
+      unsaved
+    });
     category.chips.forEach((chip) => {
       const mode = filterTagState.get(chip.key) || "";
       const set = (next) => () => {
@@ -3148,7 +3178,14 @@ function renderTags() {
       edit.addEventListener("click", () => openEditCategory(category));
       controls.append(edit);
     }
-    const { section, grid } = categoryEl(category.id, category.name, { handle: handleEl, controls });
+    const inUse = category.chips.filter((chip) => items.some((item) => item.tags.has(chip.key))).length;
+    const { section, grid } = categoryEl("tags", category.id, category.name, {
+      handle: handleEl,
+      controls,
+      inUse,
+      inUseTitle: `${inUse} ${inUse === 1 ? "tag" : "tags"} on ${tagSelection ? "the selected items" : "this item"}`,
+      unsaved: categoryUnsaved(category)
+    });
     section.dataset.key = category.id;
     category.chips.forEach((chip) => {
       pending = pending || !!chip.pending;
@@ -3174,6 +3211,14 @@ function renderTags() {
   select.textContent = "";
   TAGS.forEach((category) => select.append(Object.assign(document.createElement("option"), { value: category.id, textContent: category.name })));
   if (TAGS.some((category) => category.id === keep)) select.value = keep;
+}
+// A category holds unsaved changes while a chip's Add or Remove is pending, or its name or tags differ from the saved
+// ones; a new category always does until saved.
+function categoryUnsaved(category) {
+  if (category.chips.some((chip) => chip.pending)) return true;
+  const saved = savedTags.find((c) => c.id === category.id);
+  const shape = (c) => JSON.stringify([c.name, c.chips.map((chip) => [chip.key, chip.name])]);
+  return !saved || shape(saved) !== shape(category);
 }
 function tagsChanged() {
   tagsDirty = true;
@@ -3230,6 +3275,8 @@ function addTag() {
     category.chips.push(chip);
   }
   if (tagItems().length) chip.pending = "add";
+  // The category the tag is in opens, so the change is visible.
+  setCategoryExpanded("tags", TAGS.find((c) => c.chips.includes(chip)).id, true);
   $("tags-new-name").value = "";
   tagsChanged();
 }
@@ -3296,6 +3343,7 @@ function openEditTag(category, chip) {
       if (target && target !== category) {
         category.chips.splice(category.chips.indexOf(chip), 1);
         target.chips.push(chip);
+        setCategoryExpanded("tags", target.id, true);
       }
       tagsChanged();
     },
@@ -3322,6 +3370,7 @@ function openEditCategory(category) {
     onDelete: () => {
       TAGS.splice(TAGS.indexOf(category), 1);
       TAGS.find((c) => c.id === UNCATEGORIZED).chips.push(...category.chips);
+      if (category.chips.length) setCategoryExpanded("tags", UNCATEGORIZED, true);
       tagsChanged();
     }
   });

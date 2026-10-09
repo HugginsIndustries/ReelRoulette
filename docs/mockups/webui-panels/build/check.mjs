@@ -463,11 +463,29 @@ for (const width of [1280, 390]) {
   const uncategorized = document.querySelector('#tags-body [data-key="uncategorized"] .drag-handle');
   check(`layout@${width}: Uncategorized shows a disabled handle and no Edit`,
     uncategorized?.disabled === true && !document.querySelector('#tags-body [data-key="uncategorized"] [title="Edit category"]'));
+  // Categories start collapsed and remember which are open per device, separately here and in the Filter tab.
+  const tagSection = (id) => document.querySelector(`#tags-body [data-key="${id}"]`);
+  const filterSection = (id) => document.getElementById(`tag-grid-filter-${id}`)?.parentElement;
+  const collapsedNow = (section) => section.classList.contains("is-collapsed");
+  check(`layout@${width}: every category starts collapsed, in the Tags tab and the Filter tab`,
+    [...document.querySelectorAll("#tags-body .tag-category, #filter-tag-categories .tag-category")].every(collapsedNow));
   header.querySelector(".tag-category-toggle").click();
   const peopleGrid = document.querySelector('#tags-body [data-key="people"] .tag-grid');
-  check(`layout@${width}: clicking the header's name collapses the category`, peopleGrid.hidden && header.querySelector(".tag-category-toggle").getAttribute("aria-expanded") === "false");
+  // The Filter tab's Refresh redraws its categories, so they show what it remembers.
+  $("filter-refresh").click();
+  check(`layout@${width}: clicking the header's name expands the category, remembered here only`,
+    !peopleGrid.hidden && header.querySelector(".tag-category-toggle").getAttribute("aria-expanded") === "true" &&
+    JSON.parse(window.localStorage.getItem("rr-mockup.tagsExpanded")).includes("people") && collapsedNow(filterSection("people")));
   header.click();
-  check(`layout@${width}: clicking the header itself expands it again`, !peopleGrid.hidden);
+  check(`layout@${width}: clicking the header itself collapses it again`, peopleGrid.hidden);
+  // A collapsed header counts the item's tags in it.
+  const playingItem = items.find((item) => item.name === np());
+  const usedCategory = window.mockup.tags.find((category) => category.id !== "people" && category.chips.some((chip) => playingItem.tags.has(chip.key)));
+  const usedCount = usedCategory.chips.filter((chip) => playingItem.tags.has(chip.key)).length;
+  const usedBadge = tagSection(usedCategory.id).querySelector(".category-count");
+  check(`layout@${width}: a collapsed category's header counts the item's tags in it (${usedBadge.textContent}, "${usedBadge.title}")`,
+    !usedBadge.hidden && usedBadge.textContent === String(usedCount) && usedBadge.title === `${usedCount} ${usedCount === 1 ? "tag" : "tags"} on this item` &&
+    tagSection(usedCategory.id).querySelector(".tag-category-toggle").getAttribute("aria-label").includes(usedBadge.title));
   const orderBefore = categoryOrder();
   key(document.querySelector('#tags-body [data-key="trips"] .drag-handle'), "ArrowDown");
   check(`layout@${width}: the last category can't move below Uncategorized`, categoryOrder() === orderBefore && categoryOrder().endsWith(",trips,uncategorized"));
@@ -483,7 +501,7 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: category Delete asks with today's wording`, topDialog().textContent.includes('Delete category "Places"? Tags will become Uncategorized.'));
   button(topDialog(), "Delete").click();
   await tick();
-  check(`layout@${width}: confirming removes it`, !categoryOrder().includes("places") && openDialogs().length === 0);
+  check(`layout@${width}: confirming removes it, and Uncategorized, which gets its tags, opens`, !categoryOrder().includes("places") && openDialogs().length === 0 && !collapsedNow(tagSection("uncategorized")));
   document.querySelector('#tags-body [title="Edit tag"]').click();
   const tagDialog = topDialog();
   const name = tagDialog.querySelector("input");
@@ -496,7 +514,10 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: Delete in Edit Tag removes the chip`, ![...document.querySelectorAll("#tags-body .tag-chip-label")].some((l) => l.textContent === "Alice"));
   $("tags-add-category").click();
   check(`layout@${width}: New Category opens as an in-app dialog`, topDialog()?.querySelector("h3")?.textContent === "New Category");
-  pressEscape(topDialog());
+  input(topDialog().querySelector("input"), "Pets");
+  topDialog().querySelector('button[type="submit"]').click();
+  const pets = [...document.querySelectorAll("#tags-body .tag-category")].find((section) => section.querySelector(".tag-category-name").textContent === "Pets");
+  check(`layout@${width}: a new category starts collapsed, with the dot until saved`, !!pets && collapsedNow(pets) && !pets.querySelector(".unsaved-dot").hidden);
   // The Tags tab follows the playing item unless it has unsaved changes to its item's tags.
   const playOther = () => {
     const other = items.find((item) => playable(item) && item.name !== np());
@@ -533,6 +554,36 @@ for (const width of [1280, 390]) {
   button(topDialog(), "Discard").click();
   await tick();
   check(`layout@${width}: after discarding it follows and nothing is pending`, line.hidden && $("tags-save").disabled);
+  // A collapsed category with unsaved changes shows the dot; a category opens when a tag is added to it or moved into it.
+  const weatherChip = tagSection("weather").querySelector(".tag-chip");
+  weatherChip.querySelector('[title="Add tag"]').click();
+  check(`layout@${width}: a collapsed category with a pending change shows the orange dot`,
+    collapsedNow(tagSection("weather")) && !tagSection("weather").querySelector(".unsaved-dot").hidden &&
+    tagSection("weather").querySelector(".tag-category-toggle").getAttribute("aria-label").endsWith("unsaved changes"));
+  tagSection("weather").querySelector(".tag-chip").querySelector('[title="Add tag"]').click();
+  check(`layout@${width}: and loses it once nothing is pending`, tagSection("weather").querySelector(".unsaved-dot").hidden);
+  change($("tags-category-select"), "mood");
+  input($("tags-new-name"), "Serene");
+  $("tags-add-tag").click();
+  check(`layout@${width}: adding a tag opens its category`, !collapsedNow(tagSection("mood")) && JSON.parse(window.localStorage.getItem("rr-mockup.tagsExpanded")).includes("mood"));
+  tagSection("camera").querySelector('[title="Edit tag"]').click();
+  topDialog().querySelector("select").value = "quality";
+  topDialog().querySelector('button[type="submit"]').click();
+  check(`layout@${width}: moving a tag into a category opens it`, !collapsedNow(tagSection("quality")));
+  $("tags-refresh").click();
+  await tick();
+  button(topDialog(), "Discard").click();
+  await tick();
+  // In the Filter tab, a collapsed category counts the filter's tags in it, and shows the dot until the change applies.
+  openTab("filter");
+  filterSection("people").querySelector('[title="Include"]').click();
+  const filterBadge = filterSection("people").querySelector(".category-count");
+  check(`layout@${width}: a collapsed Filter category counts the filter's tags in it and shows the dot while unapplied (${filterBadge.title})`,
+    collapsedNow(filterSection("people")) && !filterBadge.hidden && filterBadge.textContent === "1" && filterBadge.title === "1 tag in the filter" &&
+    !filterSection("people").querySelector(".unsaved-dot").hidden);
+  $("filter-cancel").click();
+  check(`layout@${width}: Cancel clears both`, filterSection("people").querySelector(".category-count").hidden && filterSection("people").querySelector(".unsaved-dot").hidden);
+  openTab("tags");
   check(`layout@${width}: no browser dialog was used (${nativeCalls.join(",")})`, nativeCalls.length === 0);
 
   // Auto Tag: a scan runs with today's indeterminate bar, then lists matches; Close and Cancel wait for it.
