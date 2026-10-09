@@ -7,9 +7,9 @@ It tracks scope, sequencing, acceptance criteria, and evidence by milestone.
 
 An outline of upcoming releases and the milestones each one ships, in order. Each release becomes a new `M*` series when it is promoted.
 
-The WebUI becomes the only client on every device. The desktop client is frozen to bug fixes (crashes, data loss, broken playback, security) until the desktop removal release, and until then server contract changes only add fields, so the last desktop build keeps working. The native Android client is dropped.
+The WebUI becomes the only client on every device. Until the desktop removal release, the desktop client gets no significant changes or new features: bug fixes (crashes, data loss, broken playback, security) and small changes that keep it working with the server, or that match a small server-side change, are allowed. Until then server contract changes only add fields, so the last desktop build keeps working. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. The desktop still ships as a fallback, and its last build tells users it is retired. M12a, M12b, M12c, M12d, M12e, M12f, M12g, M12h, M12i, M12j, M12k, M12l, M12m, M12n, M12o, M12p, M12q, M12r, M12s.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. The desktop still ships as a fallback, and its last build tells users it is retired. M12a, M12b, M12c, M12d, M12e, M12f, M12g, M12h, M12i, M12j, M12k, M12l, M12m, M12n, M12o, M12p, M12q, M12r, M12s, M12t.
 - **v0.16.0 — Desktop removal**: Remove the desktop client, its packaging, and its tests, then move preset writes to per-preset routes. P48, P25.
 - **v0.16.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.17.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access. P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28j, P28k, P28l.
@@ -114,13 +114,13 @@ Last milestone completed: M12b
 - **Goal**: Every visible part of v0.15.0 is designed in one interactive mockup and approved before the milestone that builds it starts, so the release's UI is designed as a whole.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI Preact migration milestone and before the rest of the series. Depends on: WebUI Preact Migration, whose look the mockup starts from.
-  - The mockup is in `docs/mockups/webui-panels/`: self-contained pages that open without the WebUI or a network, built from sources in `build/`, with a happy-dom check of their scripts and a README on rebuilding them and serving them to a phone. It is tracked and stays as the design reference when this milestone completes. Its magenta Mockup tab and dashed notes are mockup controls, not part of the design.
+  - The mockup is in `docs/mockups/webui-panels/`: self-contained pages that open without the WebUI or a network, built from sources in `build/`, with a happy-dom check of their scripts and a README on rebuilding them and serving them to a phone. It is tracked and stays as the design reference when this milestone completes. Its magenta Mockup tab and dashed notes are mockup controls, not part of the design. A Mockup option hides every note, leaving only the Mockup tab and its options, so screens can be seen as they will ship.
   - The whole visible UI of v0.15.0, at phone, tablet, and desktop widths and in the light and dark themes:
     - The main page: the header, the player and its controls, the status line, and the panel beside the player or as the full-screen overlay, from WebUI Responsive Layout and Panels.
-    - The Library, Filter, and Tags tabs, from WebUI Responsive Layout and Panels; the Stats tab, from WebUI Stats Panel; and the Settings tab with every per-device setting from the desktop's Settings dialog that the WebUI keeps, including the autoplay modes and Auto-Pause, from WebUI Settings Panel and WebUI Keyboard Shortcuts and Player Controls.
+    - The Library, Filter, and Tags tabs, from WebUI Responsive Layout and Panels, with the Favorites and Blacklisted filter modes from Favorite and Blacklist Filter Modes; the Stats tab, from WebUI Stats Panel; and the Settings tab with every per-device setting from the desktop's Settings dialog that the WebUI keeps, including the autoplay modes and Auto-Pause, from WebUI Settings Panel and WebUI Keyboard Shortcuts and Player Controls.
     - The dialogs and the field validation pattern, from WebUI Responsive Layout and Panels and WebUI In-App Dialogs, and the notices and status line messages, from WebUI Status Line Overhaul.
     - The full-page admin view and its sections, from WebUI Admin Section, Admin Refresh, Backup, and Duplicate Review (with duplicate review), Admin Source and Item Management, Admin Library Catalog Transfer, and Testing Suite Overhaul.
-    - The keyboard shortcuts and their reference, the volume control, and the seek and volume steps, from WebUI Keyboard Shortcuts and Player Controls.
+    - The keyboard shortcuts and their reference, the volume control, the seek and volume steps, and ambient mode, from WebUI Keyboard Shortcuts and Player Controls.
     - Show in File Manager and Copy Path, from Show in File Manager from the WebUI.
     - The browser-playable option and its message, from Browser-Playable Filter.
     - The grid's placeholder tiles, from WebUI Grid Rendering.
@@ -131,16 +131,16 @@ Last milestone completed: M12b
     - The panel is a full-screen overlay below 800 px of viewport width, or on a touch screen (coarse pointer) below 500 px of viewport height, which is a phone on its side. Otherwise it sits beside the player, on the right until the Settings tab lets each device choose.
     - Beside the player, the panel's width runs from 360 px to whatever leaves the player 400 px wide, and starts at 420 px. The 800 px breakpoint is those 360 px and 400 px plus the resize handle and the page's padding. These widths may still change with mockup testing.
     - Library tiles are smaller, beside the player and as the overlay: rows 100–240 px high, aiming for 160 px.
-    - Each approved decision is recorded in the milestone that builds it: WebUI Responsive Layout and Panels, WebUI In-App Dialogs, WebUI Settings Panel, WebUI Admin Section, Admin Refresh, Backup, and Duplicate Review, Admin Source and Item Management, Admin Library Catalog Transfer, WebUI Keyboard Shortcuts and Player Controls, Browser-Playable Filter, WebUI Multi-Select and Bulk Actions, Admin Log Viewer, and Desktop Client Removal. Loudness normalization is declined for v0.15.0 and has its own milestone, WebUI Loudness Normalization.
+    - Each approved decision is recorded in the milestone that builds it: Favorite and Blacklist Filter Modes, WebUI Responsive Layout and Panels, WebUI In-App Dialogs, WebUI Settings Panel, WebUI Admin Section, Admin Refresh, Backup, and Duplicate Review, Admin Source and Item Management, Admin Library Catalog Transfer, WebUI Keyboard Shortcuts and Player Controls, Browser-Playable Filter, WebUI Multi-Select and Bulk Actions, WebUI Stats Panel, WebUI Status Line Overhaul, Admin Log Viewer, and Desktop Client Removal. Loudness normalization is declined for v0.15.0 and has its own milestone, WebUI Loudness Normalization.
   - Proposed in the mockup and not approved yet:
     - The Settings tab's sections, and "Advance after" as the timer's name.
     - The volume slider at the end of the seek row.
     - Number keys 1 to 5 for the tabs, T and S as on the desktop, P to show or hide the panel, and the order in which Esc closes things.
     - The Stats tab with the current file first, its `bar_chart` icon, and Show in File Manager or Copy Path beside the file's path.
-    - Multi-select: the Select button, Ctrl or Cmd and Shift-click, a long press on touch, the bar at the bottom, and the bulk tag dialog.
     - The browser-playable option's label and the format notice's wording.
     - The admin view's layout, the Edit Source dialog, the backup restore list, the import remap dialog, and duplicate review's layout.
     - The desktop retirement notice's wording.
+    - Auto Tag's placeholders: "Scan results show here." before any scan, and "No file names contain a tag's name." when a scan finds nothing.
   - Changes to user-facing UX need explicit approval.
 - **Acceptance criteria**:
   - Every visible v0.15.0 feature is in the mockup at phone and desktop widths, and the user has approved it.
@@ -150,21 +150,48 @@ Last milestone completed: M12b
   - Completion evidence must include `node docs/mockups/webui-panels/build/check.mjs` passing, the user's approval of each screen, and the milestones each decision was recorded in.
   - The mockup in `docs/mockups/webui-panels/` stays in place when this milestone completes.
 
-### M12d - WebUI Responsive Layout and Panels
+### M12d - Favorite and Blacklist Filter Modes
+
+- **Status**: ⏳ Planned
+- **Goal**: The Favorites and Blacklisted filters each choose only or excluded, in the server and both clients, so a filter such as Favorites excluded or Blacklisted only works the same in browse, random picks, and presets.
+- **Scope**:
+  - Ships in v0.15.0, after the WebUI design mockup milestone and before WebUI Responsive Layout and Panels builds the Filter tab. Depends on: WebUI Design Mockup, whose mockup approves its look.
+  - Read from code at this edit: the filter state has two booleans, `favoritesOnly` (off by default) and `excludeBlacklisted` (on by default). They are in Core (`FilterState` in `FilteringContracts.cs`), the server's parser (`LibraryListFilterParser`) and list query (`LibraryCatalogListQuery`), the desktop (`FilterState.cs`, and the Favorites only and Exclude blacklisted checkboxes in `FilterDialog.axaml`), and the WebUI (`filterStateModel.ts`). Browse, its counts, and random picks all filter through them.
+  - Each filter becomes a checkbox with a small dropdown to its right offering only and excluded, and the dropdown is disabled while its checkbox is off (decided in WebUI Design Mockup). Favorites starts off; Blacklisted starts on and excluded, which is today's Exclude blacklisted. Both clients offer the same options, so a preset behaves identically in each.
+  - Contract slice: new fields beside the old ones, a contract change that only adds. A filter that carries only the old fields reads as before: `favoritesOnly` as Favorites only, `excludeBlacklisted` as Blacklisted excluded. Desktop Client Removal drops the old fields. The new fields' names, and what the server writes in the old fields for a client that reads only them, are decided here.
+  - Server slice: the list query, its counts, and random selection apply Favorites only or excluded and Blacklisted only or excluded, in any combination.
+  - Presets: saved filters carry the new fields, and preset matching compares them, locked to `preset-filter-equality.json` (read from code at this edit: the desktop's `PresetFilterEqualityFixtureTests` and the WebUI's `presetFilterEquality.test.ts` both read it). A preset saved before this milestone reads through its old fields.
+  - The patch-or-reload rule, which decides whether a favorite or blacklist change patches a loaded tile or reloads the library window, learns the new modes on both clients, locked to `library-tile-effect.json` (read from code at this edit: the desktop's `LibraryPanelBrowse.cs` and the WebUI's `libraryQuerySession.ts` both follow it). For example, favoriting a loaded tile under Favorites excluded reloads, and so does removing one from the blacklist under Blacklisted only.
+  - Desktop slice: the desktop's filter dialog gains the two dropdowns, a small change matching the server's, which the desktop's freeze allows.
+  - WebUI slice: today's filter dialog gains the two controls, and WebUI Responsive Layout and Panels carries them into the Filter tab as the mockup shows.
+  - Add a Release Specific checklist item: "In the WebUI and the desktop, Favorites excluded and Blacklisted only each limit browse and random play as named, and a preset saved in one client shows the same filter in the other."
+- **Acceptance criteria**:
+  - For each combination of the two filters, the list query, its counts, and random selection return exactly the matching items, and the defaults give today's results (Favorites off, Blacklisted excluded).
+  - A filter or preset with only the old fields gives the same results as before this milestone.
+  - Both clients show a checkbox and an only-or-excluded dropdown for Favorites and for Blacklisted, and a preset saved in one shows the same filter in the other.
+  - Preset matching compares the new fields, and both clients pass `preset-filter-equality.json` with cases for them.
+  - Both clients pass `library-tile-effect.json` with cases for the new modes.
+  - The new fields are in OpenAPI, and `npm run verify:contracts` passes.
+- **Verification evidence**:
+  - Completion evidence must include server tests for each combination in the list query, its counts, and random selection, contract tests, the new cases in both shared fixtures run by both clients, desktop and WebUI filter dialog tests, `dotnet test ReelRoulette.sln`, `npm run verify`, and one quick spot check in each client.
+
+### M12e - WebUI Responsive Layout and Panels
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI layout adapts to the viewport: on tablets and desktops a side panel beside the player keeps the video playing in view while browsing, filtering, tagging, or viewing stats and settings, and on phones the panel is a full-screen overlay.
 - **Scope**:
-  - Ships in v0.15.0, after the WebUI design mockup milestone. Depends on: WebUI Preact Migration and WebUI Design Mockup.
+  - Ships in v0.15.0, after the favorite and blacklist filter modes milestone. Depends on: WebUI Preact Migration, WebUI Design Mockup, and Favorite and Blacklist Filter Modes, whose filter controls the Filter tab carries.
   - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/webui-panels/`). Changes to user-facing UX need approval there.
   - Lands in five parts, each verified on its own, in this order:
     1. The field validation pattern, strict typed durations, and the Filter tab's Refresh, inside today's overlays.
     2. The in-app dialog component and the edit dialogs.
     3. Reordering by drag handle.
     4. The panel host and layout.
-    5. The player: Auto-Pause, the held photo timer, and the scrub bar on photos.
+    5. The player: Auto-Pause, the photo timer with Play and the scrub bar, the time display's color, and the orange accent on native controls.
   - Measured again at promotion: the tag editor, filter, and library overlays are each `position: fixed; inset: 0` with `z-index: 1000`, so they cover the player while it keeps playing underneath, except that the tag editor pauses playback when it opens and resumes it when it closes (`pauseForTagEditor` and `resumeAfterTagEditor`, read from code when Auto-Pause was planned). The stylesheet has two `@media (max-width: 600px)` rules, and mobile browsers are detected by user agent (`getClientType` in `src/api/coreApi.ts`).
-  - The main page is a header bar, the player with its overlay controls, and the footer status line as today. The header holds the app name and the current file name, and at the right an admin icon, which arrives with WebUI Admin Section. It has no settings icon: the Settings tab is reached from the panel's tab row. Photo duration stays in the header until WebUI Settings Panel moves it into the Settings tab, and the pairing token prompt keeps showing there when the server asks for pairing.
+  - The main page is a header bar, the player with its overlay controls, and the footer status line as today. The header holds the app name and the current file name, and at the right an admin icon, which arrives with WebUI Admin Section. It has no settings icon: the Settings tab is reached from the panel's tab row. Photo duration stays in the header until WebUI Settings Panel moves it into the Settings tab, and the pairing token prompt keeps showing there, labeled "Pairing token", when the server asks for pairing.
+  - Before anything plays, the player says "Tap to play, or open the panel to choose a preset or filter." in place of today's "Click here to play (choose a preset or open Filter…)", and a tap or Play starts a random pick, as today (decided in WebUI Design Mockup).
+  - When the server fails the compatibility check, the panel still opens, the Library tab shows the compatibility message in place of the grid, and Play shows its notice (decided in WebUI Design Mockup). Read from code at this edit: today the library overlay doesn't open then (`open` in `src/library/library.ts`), and play, pairing, and events stop.
   - A panel host: at most one panel is open at a time. Below 800 px of viewport width, or on a touch screen (coarse pointer) below 500 px of viewport height, it is a full-screen overlay with the same tabs; otherwise it sits beside the player. The breakpoints use viewport size and pointer type, not the user agent. Beside the player it sits on the right by default or on the left as a per-device setting, and a drag handle between them sets its width, from 360 px to whatever leaves the player 400 px wide, starting at 420 px; the handle also takes the arrow keys while it has focus. The side is chosen in the Settings tab, which WebUI Settings Panel adds.
   - The panel has a single row of icon-only tabs: Library, Filter, Tags, Stats, and Settings, each with a tooltip and an accessible name. Library, Filter, and Tags keep the icons the player's buttons for them use today (`browse`, `filter_alt`, and `tag`). This milestone builds the Library, Filter, and Tags tabs from the library overlay, filter dialog, and tag editor; WebUI Stats Panel and WebUI Settings Panel add the Stats and Settings tabs.
   - The player's Library, Filter, and Tags buttons give way to one panel button, which opens the panel on its last tab, Library the first time, and closes the panel when it is open. Its icon shows the panel's side and whether it is open (`right_panel_open` and `right_panel_close`, or their left counterparts), and it is orange while the panel is open. Favorite and Blacklist stay on the player.
@@ -176,28 +203,38 @@ Last milestone completed: M12b
     - Closing resumes playback only if Auto-Pause paused it; playback the user paused stays paused. Playing or pausing while the panel is open hands playback back to the user, so closing leaves it as it is.
     - Pausing a photo holds its autoplay timer, and the photo then resumes with the time it had left, not its full duration. Read from code at this edit: the tag editor's resume restarts a held photo (`resumeAfterTagEditor` in `src/playback/player.ts` calls `playCurrent`, which reloads the photo and starts its full duration).
     - The mode is fixed at Responsive until WebUI Settings Panel adds the setting. WebUI Preact Migration keeps today's tag editor pause, since that milestone changes nothing visible.
-  - On a photo, the player's scrub bar stays, disabled, so the controls keep their place between photos and videos. Read from code at this edit: today `playCurrent` hides the seek row for a photo. With Autoplay on and Loop off, the bar fills as the photo's timer runs, showing when the next item plays, with the time shown as elapsed and photo duration; otherwise it stays empty, and the time is blank. Loop on with a photo restarts the same photo, so the bar does not fill then.
+  - On a photo, the player's scrub bar stays in its place, so the controls keep their place between photos and videos. Read from code at this edit: today `playCurrent` hides the seek row for a photo, and Play does nothing on a photo (`playOrPause` in `src/playback/player.ts` acts only on a video). While a photo's timer runs, with Autoplay on and Loop off, the bar fills as the timer runs, showing when the next item plays, with the time shown as elapsed and photo duration. Play/Pause then pauses and resumes the timer, keeping the time left, and dragging the scrub bar moves the timer's position. With Autoplay off or Loop on, Play and the scrub bar are disabled on a photo, and the time is blank; Loop on restarts the same photo, so the bar does not fill then. Turning Autoplay on starts the photo's full time from that moment, and turning it off clears the timer. Auto-Pause still resumes a photo with the time it had left (decided in WebUI Design Mockup).
+  - Checkboxes, radio buttons, sliders (the scrub bar and, from WebUI Keyboard Shortcuts and Player Controls, the volume slider among them), and other native controls use the app's orange accent instead of the browser's default blue, in both themes, set once for the whole WebUI with `accent-color` (decided in WebUI Design Mockup). Read from code at this edit: nothing sets `accent-color` (`src/styles.css`).
+  - The overlay's time display stays light in both themes, like the overlay's other controls, since the player stays dark (decided in WebUI Design Mockup). Read from code at this edit: `--time-display-fg` is `#1a1d21` in the light theme (`src/styles.css`), while the overlay's buttons use `--icon-foreground`, white in both themes, so the time turns dark on the dark player.
   - The preset dropdown and randomization mode leave the header for the Library tab, laid out like the desktop library panel: above the grid, the preset, then randomization mode, then sort with its direction toggle, then search. The preset and randomization dropdowns share one row from a panel width of about 440 px. The controls collapse to give the grid more room, together with the filter summary line that WebUI Multi-Select and Bulk Actions adds, and stay collapsed or open per device. The collapse button's tooltip reads "Hide controls & filters" or "Show controls & filters".
-  - The Library tab fits its column count to the panel width, with rows 100–240 px high, aiming for 160 px, beside the player and as the overlay. Read from code at this edit: today they are 200–400 px, aiming for 300 px (`libraryGridLayout.ts`). Choosing a tile plays it in the player beside the panel. As the overlay, choosing a tile plays it and closes the overlay, as the library overlay does today.
+  - The Library tab fits its column count to the panel width, with rows 100–240 px high, aiming for 160 px, beside the player and as the overlay. Read from code at this edit: today they are 200–400 px, aiming for 300 px (`libraryGridLayout.ts`). Choosing a tile plays it in the player beside the panel. When nothing matches the search or the filters, the grid says "Nothing matches the search or filters."; its other messages stay as they are today (decided in WebUI Design Mockup). As the overlay, choosing a tile plays it and closes the overlay, as the library overlay does today.
+  - Library tiles (decided in WebUI Design Mockup): the favorite and blacklist icons lose their dark rectangle and become filled icons, by the icon font's FILL axis, with a soft drop shadow, so they stay readable on bright thumbnails. The playing tile shows a filled play icon in its middle, modest in size and slightly translucent so the thumbnail shows through, in the same style. With a mouse, hovering a tile shows its file name as a tooltip. File names keep showing on tiles until WebUI Settings Panel adds the setting that turns them off. Read from code at this edit: the badges are outlined orange icons on a dark rectangle (`.library-grid-tile-badge` in `src/styles.css`), the grid doesn't mark the playing tile, and every tile shows its name in a bar, which alone carries the tooltip (`renderGridTileHtml` in `src/library/libraryGridTileModel.ts`).
   - Beside the player, the Filter tab's Apply and Cancel leave the panel open. As the overlay they close it, as the filter dialog does today.
-  - The Tags tab edits the playing item's tags and follows the playing item when it changes, unless the tab has unsaved changes to its item's tags. Then it stays on that item and shows a line naming it, "Editing tags for {file name}", until those changes are saved or discarded (Refresh discards them, asking first), and then follows the playing item. Unsaved changes that are not to the item's tags, such as a category reorder or rename, don't hold it. Read from code at this edit: the tag editor takes the item playing when it opens (`open` in `src/tags/tagEditor.ts`), and today its overlay and pause keep that item on screen while it is open.
+  - The Tags tab edits the playing item's tags and follows the playing item when it changes, unless the tab has unsaved changes to its item's tags. Then it stays on that item and shows a line naming it, "Editing tags for {file name}", until those changes are saved or discarded (Refresh discards them, asking first), and then follows the playing item. Unsaved changes that are not to the item's tags, such as a category reorder or rename, don't hold it. WebUI Multi-Select and Bulk Actions points the tab at several selected items the same way, with "Editing tags for {n} items". Read from code at this edit: the tag editor takes the item playing when it opens (`open` in `src/tags/tagEditor.ts`), and today its overlay and pause keep that item on screen while it is open.
   - Unsaved changes survive closing the panel and switching tabs: the Filter tab's until Apply or Cancel, and the Tags tab's until Save, or Refresh, which discards them after asking. The tag editor's close confirmation goes away. While the Filter or Tags tab holds unsaved changes, a small orange dot marks its tab icon, and the player's panel button while either does, so they aren't forgotten when the panel is closed, and their accessible names say so. Read from code at this edit: closing the tag editor asks "Discard changes?" when it has changes (`close` in `src/tags/tagEditor.ts`), and reopening the filter dialog rebuilds its draft from the applied filter and the server's presets, dropping unsaved filter and preset changes (`open` in `src/filter/filterDialog.ts`).
   - The WebUI remembers its per-device state across a page refresh, as the desktop remembers its own across restarts. This milestone adds one per-device store and remembers whether the panel is open, its side, width, and last tab, whether the Library tab's controls are collapsed, the active preset (including None) and applied filter, randomization mode, and sort and direction. WebUI Settings Panel and WebUI Keyboard Shortcuts and Player Controls remember the client settings they add the same way, and so does duplicate review in Admin Refresh, Backup, and Duplicate Review. The search text is not remembered. The randomization mode already stored per device carries over.
   - Presets stay on the server: the WebUI remembers only which preset is active and the filter it applied. A remembered preset, tag, or source that was renamed or deleted on another device in the meantime is handled as it is when that happens while the WebUI is open.
   - Trap, inferred: browser storage is kept per address, so on one device the WebUI opened at `localhost`, at the LAN address, and through an HTTPS proxy remembers three separate sets of state.
   - Not included: the playing item and its position, which is Resume Position and Session Continuity.
-  - Auto Tag opens from the Tags tab as an overlay over the whole page, as its tab does today, instead of as a tab of the tag editor, so its file list keeps its width. It covers the player, so it pauses under Always and Responsive.
+  - Auto Tag opens from the Tags tab as an overlay over the whole page, as its tab does today, instead of as a tab of the tag editor, so its file list keeps its width. It covers the player, so it pauses under Always and Responsive. It has its own Apply for its selected changes, which today the tag editor's Save applies, and its Close is disabled while a scan runs, as the tag editor's Refresh and Close are today (decided in WebUI Design Mockup).
+  - Auto Tag's footer and results (decided in WebUI Design Mockup):
+    - Apply sits at the right of the footer with Cancel to its left. Cancel clears the scan and closes Auto Tag, while the X at the top right closes it and keeps the last scan; both wait while a scan runs.
+    - With View all matches, files that already have the tag show checked and disabled, so they can't be unchecked. Read from code at this edit: they show as ordinary checkboxes that start unchecked, and checking one sends the file again (`visibleAutoTagFiles` and `autoTagAssignments` in `src/tags/autoTagModel.ts`).
+    - The results area shows a placeholder before any scan and a different one when a scan finds nothing. Read from code at this edit: it is empty before a scan, and after one that finds nothing it repeats the status line's "Scan complete: no matching tags found." (`autoTagResults` in `src/tags/autoTagModel.ts`).
+    - The Total matched and To be changed counts each line up under their own header, with room between the two columns. Read from code at this edit: the header and each row are separate grids whose count columns size to their own content (`.tag-autotag-table-head` and `.tag-autotag-row-main` in `src/styles.css`), so the numbers drift from their headers.
+  - The Filter tab's message for a library with no tags reads "No tags yet. Add them in the Tags tab." in place of "No tags available. Use Edit tags to create tags." (decided in WebUI Design Mockup).
   - Not included: admin and duplicate review as panel tabs. They open in a full-page admin view, which is WebUI Admin Section.
   - The panel and the dialogs stay inside the fullscreen stage, so they work in fullscreen as the overlays do today, including iOS pseudo-fullscreen.
   - Phone layouts work in an installed app (standalone display, safe-area insets).
-  - A phone on its side, by the overlay's short-screen rule (a touch screen below 500 px of viewport height): the header and status line hide and the player fills the screen, as in fullscreen but without the browser's fullscreen mode. The panel, as the overlay, and the dialogs still open there, in layouts that fit a short screen. A tablet in landscape, at 500 px or more, keeps the normal layout.
+  - A phone on its side, by the overlay's short-screen rule (a touch screen below 500 px of viewport height): the header and status line hide and the player fills the screen, as in fullscreen but without the browser's fullscreen mode. The panel, as the overlay, and the dialogs still open there, in layouts that fit a short screen. A tablet in landscape, at 500 px or more, keeps the normal layout. While the server asks for pairing, the header shows there anyway, so its prompt can be reached (decided in WebUI Design Mockup).
+  - While the status line is hidden, on a phone on its side or with WebUI Settings Panel's Show the status line off, a small indicator on the player shows while the connection is lost and reconnecting (decided in WebUI Design Mockup).
   - Tag categories, in the Tags tab and the Filter tab's Tags section, collapse and expand when their header is tapped or clicked, and their expand and collapse arrows go. The drag handle, the Edit button, and the Filter tab's Local match select keep their own actions.
   - In-app dialogs: this milestone builds the WebUI's dialog component and uses it for every dialog it touches, never a browser dialog. The component is themed, shows in fullscreen, and stacks one dialog above another. Escape or a click outside closes only the top dialog, and focus returns to where it was. Enter in a dialog's field saves it. A confirmation opens with Cancel focused, so Enter never confirms it by default, and its confirming button names the action, such as a red Delete.
     - Tags tab: chips lose their delete icon, and category rows lose their up, down, rename, and delete icons for a drag handle and one Edit button. A chip's edit icon opens the Edit Tag dialog. A category's Edit button opens a new Edit Category dialog with the name, in place of today's rename prompt. Both dialogs have Delete, which asks first in a dialog stacked above, with today's wording: `Delete tag "{name}"?` and `Delete category "{name}"? Tags will become Uncategorized.`
     - Filter tab's Manage Presets: preset rows lose their up, down, rename, and delete icons for a drag handle and one Edit button. Edit opens a new Edit Preset dialog with the name and Delete, which asks `Delete preset "{name}"?` in a dialog stacked above. It replaces today's rename prompt.
     - The Edit Category and Edit Preset names use the field validation pattern. They are flagged when emptied, or when another category or preset has the name, ignoring case, and Save can't proceed meanwhile. They replace the alert "Category already exists." and the status message "That name is already in use." (read from code at this edit: `renameCategory` in `src/tags/tagEditor.ts` and `renamePreset` in `src/filter/filterDialog.ts`).
   - Not included: converting the remaining native dialogs (the tag editor's Refresh confirmation, **Discard changes?**, and new category name) and adding a notice, which is WebUI In-App Dialogs.
-  - Reordering: tag categories and presets reorder by drag and drop instead of up and down arrows. Each row has a visible drag handle, the only place a drag starts, so dragging elsewhere on a row still scrolls on a touch screen. The up and down arrow keys move a row while its handle has focus, and screen readers hear the new position. Uncategorized has no handle and stays last, as today. A new order stays pending until Save or Apply, as a move does today.
+  - Reordering: tag categories and presets reorder by drag and drop instead of up and down arrows. Each row has a visible drag handle, the only place a drag starts, so dragging elsewhere on a row still scrolls on a touch screen. The up and down arrow keys move a row while its handle has focus, and screen readers hear the new position. Uncategorized stays last, as today, and shows its handle dimmed and disabled, so its name lines up with the other categories' (decided in WebUI Design Mockup). A new order stays pending until Save or Apply, as a move does today.
   - Field validation pattern: one reusable pattern for the whole WebUI, used anywhere a field can hold a value that is not valid. In this milestone the Filter tab's minimum and maximum durations and new preset name, and the Edit Tag, Edit Category, and Edit Preset names, use it. WebUI In-App Dialogs, WebUI Settings Panel, WebUI Admin Section, Admin Refresh, Backup, and Duplicate Review, and WebUI Status Line Overhaul use it for their fields.
     - Field problems use this pattern, never a dialog or the status line. WebUI In-App Dialogs holds the dialog side of the WebUI's message rule, and WebUI Status Line Overhaul the status line side.
     - A value that is not valid is flagged as it is typed, by a red validation icon inside the field on its right side, in the WebUI's existing Material Symbols icon style. A tooltip says what the field expects, shown while the pointer is on the icon, after a tap on it, or while the field has focus. There is never a separate message line. A required field that is still empty is flagged only once the user has typed in it, but the action that uses it can't proceed meanwhile.
@@ -219,12 +256,14 @@ Last milestone completed: M12b
   - With Auto-Pause on Always, opening the panel pauses playback at every width; on Never, opening it never pauses.
   - Closing the panel resumes playback only if Auto-Pause paused it, playback the user paused stays paused, and playing or pausing while the panel is open leaves playback as it is on close.
   - Auto-Pause holds a photo's autoplay timer while it pauses, and the photo then resumes with the time it had left.
-  - On a photo, the scrub bar shows, disabled, in the place it has on a video. With Autoplay on and Loop off it fills as the photo's timer runs; otherwise it stays empty.
+  - On a photo, the scrub bar shows in the place it has on a video. With Autoplay on and Loop off it fills as the photo's timer runs, Play/Pause pauses and resumes the timer with the time left kept, and dragging the bar moves the timer. With Autoplay off or Loop on, Play and the bar are disabled on a photo. Turning Autoplay on starts the photo's full time, and turning it off clears the timer.
+  - The overlay's time display is light in both themes, and checkboxes, radio buttons, and sliders use the orange accent in both themes.
   - The tag editor has no pause of its own, and Auto-Pause is Responsive until the Settings tab can change it.
   - The tabs are one row of icons, each with a tooltip and an accessible name, and the Library, Filter, and Tags tabs use `browse`, `filter_alt`, and `tag`.
   - The player shows one panel button and no Library, Filter, or Tags button. The panel button opens the panel on its last tab and closes an open panel, and Favorite and Blacklist stay on the player.
   - The Library tab shows, above the grid and in this order, the preset dropdown, randomization mode, sort with its direction toggle, and search. The preset and randomization dropdowns share a row from a panel width of about 440 px, and the controls and the filter summary line collapse and expand together.
   - The Library tab fits its column count to the panel width with rows 100–240 px high. Choosing a tile plays it beside the panel, or plays it and closes the overlay.
+  - Tile badges are filled icons with a drop shadow and no dark rectangle, only the playing tile shows the playing icon in its middle, and hovering a tile with a mouse shows its file name as a tooltip.
   - Beside the player, the Filter tab's Apply and Cancel leave the panel open; as the overlay, they close it.
   - When the playing item changes, the Tags tab shows the new item's tags, unless it has unsaved changes to its item's tags. Then it stays on its item with an "Editing tags for {file name}" line, and follows the playing item once those changes are saved or discarded.
   - Closing the panel or switching tabs keeps unsaved Filter and Tags changes, the Filter tab's until Apply or Cancel and the Tags tab's until Save or Refresh, and closing never asks "Discard changes?".
@@ -236,11 +275,17 @@ Last milestone completed: M12b
   - The panel works in fullscreen.
   - On a touch screen below 500 px of viewport height, the header and status line hide and the player fills the screen without the browser's fullscreen mode, and the panel and dialogs open in layouts that fit; a tablet in landscape keeps the normal layout.
   - The layout does not depend on the user agent.
+  - Before anything plays, the player shows "Tap to play, or open the panel to choose a preset or filter.", and a tap or Play starts a random pick.
+  - When the server fails the compatibility check, the panel opens, the Library tab shows the message in place of the grid, and Play shows its notice.
+  - A search or filter with no results shows "Nothing matches the search or filters.", and the Filter tab's no-tags message names the Tags tab.
+  - Auto Tag applies its selected changes with its own Apply, and its Close is disabled while a scan runs.
+  - Auto Tag's Cancel, left of Apply, clears the scan and closes it, and the X closes it and keeps the last scan. With View all matches, files that already have the tag are checked and disabled. Its results area shows one placeholder before any scan and another when a scan finds nothing, and its two count columns line up under their headers.
+  - On a phone on its side the header shows while the server asks for pairing, and while the status line is hidden a reconnecting indicator shows on the player when the connection is lost.
   - Tapping or clicking a tag category's header collapses or expands it, with no arrows. Its drag handle, its Edit button, and the Filter tab's Local select keep their own actions.
   - Every dialog this milestone touches is an in-app dialog in the WebUI's theme, and none of them calls `prompt`, `confirm`, or `alert`. A delete confirmation opens stacked above its edit dialog, with Cancel focused and a red Delete. Escape or a click outside closes only the top dialog, and focus returns to where it was. The dialogs show and work in fullscreen.
   - Chips have no delete icon, and category and preset rows have no up, down, rename, or delete icons. Edit Tag, Edit Category, and Edit Preset each have Delete, which asks first with today's wording.
   - An Edit Category or Edit Preset name that is emptied, or that another category or preset has ignoring case, is flagged with the field validation pattern, and its Save can't proceed. Neither "Category already exists." nor "That name is already in use." shows.
-  - Tag categories and presets reorder by dragging their handle, and with the up and down arrow keys on a focused handle. A drag that starts elsewhere on a row scrolls instead, screen readers hear the new position, and Uncategorized stays last.
+  - Tag categories and presets reorder by dragging their handle, and with the up and down arrow keys on a focused handle. A drag that starts elsewhere on a row scrolls instead, screen readers hear the new position, and Uncategorized stays last with its handle disabled.
   - A Filter tab duration that is not valid is flagged as it is typed by a red validation icon inside the field on its right side, with a tooltip saying what the field expects, and no separate message line shows. The tooltip shows while the pointer is on the icon, after a tap on it, or while the field has focus.
   - A field flagged as not valid has `aria-invalid` set and the tooltip's text as its accessible description, and loses both once corrected.
   - While a duration is not valid, Apply can't proceed, including when nothing else changed, and Apply never writes an invalid-duration message to the status line or `last.log`.
@@ -269,7 +314,7 @@ Last milestone completed: M12b
 
     Plus `npm run verify`, and one quick spot check on a phone and a desktop browser, including dragging on a touch screen.
 
-### M12e - WebUI In-App Dialogs
+### M12f - WebUI In-App Dialogs
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI asks for names and confirmations, and shows anything the user must notice or act on, in its own dialogs, styled like the rest of the WebUI, instead of the browser's `prompt`, `confirm`, and `alert`.
@@ -293,7 +338,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Evidence placeholders maintained at planned state; completion evidence must include WebUI tests for confirm and cancel on each converted dialog, for a notice and its `last.log` line, and for the new category name check with the field validation pattern, a check that no native dialog calls remain, `npm run verify`, and a spot check in an installed web app.
 
-### M12f - WebUI Settings Panel
+### M12g - WebUI Settings Panel
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI side panel has a Settings tab for per-device preferences and diagnostics.
@@ -303,10 +348,10 @@ Last milestone completed: M12b
   - Not included: admin. It opens as a full-page view from the header's admin icon, which is WebUI Admin Section.
   - Checked against the code at promotion: the diagnostics panel is shown only when `isMobileBrowser()` is true. Photo duration and randomization mode are already kept per device in `localStorage`; autoplay and loop are not kept and start off.
   - Move the diagnostics information to the Settings tab and remove the diagnostics panel from below the main page's status line. That panel is currently shown only on mobile browsers by design; in the v0.13.0 manual regression pass it appeared only on the phone in Firefox.
-  - Client settings live in the Settings tab, all per device: photo duration, which leaves the header, the side the panel opens on, and Auto-Pause (Never, Always, or Responsive, the default), which WebUI Responsive Layout and Panels describes and keeps at Responsive until this setting exists. Randomization mode is in the Library tab, which WebUI Responsive Layout and Panels builds.
+  - Client settings live in the Settings tab, all per device: photo duration, which leaves the header, the side the panel opens on, whose options read Left, then Right, matching the sides (decided in WebUI Design Mockup), and Auto-Pause (Never, Always, or Responsive, the default), which WebUI Responsive Layout and Panels describes and keeps at Responsive until this setting exists. Randomization mode is in the Library tab, which WebUI Responsive Layout and Panels builds.
   - Every client setting survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds. Remembering is the default, with no option to turn it off. The photo duration already stored per device carries over.
   - Settings apply as they change; the Settings tab has no Save.
-  - Appearance settings, per device: Theme, which is System (the default, following the system as the WebUI does today), Dark, or Light, and Show the status line, on by default.
+  - Appearance settings, per device: Theme, which is System (the default, following the system as the WebUI does today), Dark, or Light; Show file names on tiles, off by default (decided in WebUI Design Mockup; read from code at this edit, every tile shows its name today), while hovering a tile with a mouse shows its name as a tooltip either way; and Show the status line, on by default. Ambient mode joins them, on by default, with an expandable Ambient mode settings section beside its toggle, both added with the effect by WebUI Keyboard Shortcuts and Player Controls (decided in WebUI Design Mockup). With the status line hidden, WebUI Responsive Layout and Panels' reconnecting indicator shows on the player while the connection is lost.
   - Loop, autoplay, and mute are only the player's buttons, with no entry in the Settings tab, and each button's state survives a page refresh. The autoplay mode and its timer are Settings tab entries, which WebUI Keyboard Shortcuts and Player Controls adds.
   - Settings fields that can hold a value that is not valid use the field validation pattern from WebUI Responsive Layout and Panels, and such a value is not kept. Photo duration is one: read from code at this edit, the header ignores a value outside 1–300 seconds without saying so.
   - Changes to user-facing UX need explicit approval.
@@ -316,16 +361,17 @@ Last milestone completed: M12b
   - Auto-Pause offers Never, Always, and Responsive, starts at Responsive, and the panel pauses as the chosen mode says.
   - Each setting applies as it changes, with no Save.
   - Theme offers System, Dark, and Light and starts at System, and turning off Show the status line hides it.
+  - Show file names on tiles starts off, and turning it on shows each tile's name on the tile.
   - The Settings tab has no loop or autoplay entry.
   - The Settings tab is in the panel's tab row, and the header has no settings icon.
   - The Settings tab shows the diagnostics information on desktop and mobile browsers, and the main page no longer shows the diagnostics panel.
-  - After a page refresh, photo duration, the panel's side, Auto-Pause, the theme, whether the status line shows, and the autoplay, loop, and mute buttons' state are each as they were.
+  - After a page refresh, photo duration, the panel's side, Auto-Pause, the theme, whether file names show on tiles, whether the status line shows, and the autoplay, loop, and mute buttons' state are each as they were.
   - Preferences are stored per device and do not change other devices.
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for preference storage, for a page refresh keeping each setting this milestone adds, and for photo duration with the field validation pattern, `npm run verify`, and one quick spot check on a phone.
   - Add a Release Specific checklist item: "On a desktop browser and a phone, and as an installed app, every remembered setting is kept after a refresh and a browser restart, and the library search starts empty."
 
-### M12g - WebUI Admin Section
+### M12h - WebUI Admin Section
 
 - **Status**: ⏳ Planned
 - **Goal**: Everything the Operator page does moves into a full-page admin section of the WebUI, and the server keeps a minimal recovery page for when the WebUI's files are broken.
@@ -342,14 +388,15 @@ Last milestone completed: M12b
     - The Operator's Tail lines field goes: the Log Viewer shows the newest matching lines and loads older ones as the list scrolls, up to the route's limit (read from code at this edit: `ServerLogService.Read` returns at most the last 5000 lines).
     - It reads today's line format, `[timestamp] [source] [level] message` (read from code at this edit: `ServerLogService.Append`). It filters by time window, by source (the second bracket: `server`, `webui`, and the desktop's sources, such as `desktop-app` and `desktop-update`), by level, with one checkbox per level found (today `info`, `warn`, and `error`), and by contained text. Category and component filters arrive with Admin Log Viewer.
     - Read from code at this edit: `GET /control/logs/server` filters by one level and contained text, then takes the last 1–5000 lines. Inferred: it also takes several levels, several sources, and a time window, applied before it takes the last lines, as level and text are; a contract change that only adds.
-    - Connected clients show each client's id and, where its user agent names one, its operating system. Read from code at this edit: the server keeps each event stream's client id and user agent (`ConnectedClientTracker`), so this needs no contract change.
+    - Connected clients show each client's id and, where its user agent names one, its operating system, then its type, address, and the time it connected, with counts of API sessions, control sessions, and event streams. They leave out the session id, which the Operator page shows today (decided in WebUI Design Mockup). Read from code at this edit: the server keeps each event stream's client id, user agent, and connection time (`ConnectedClientTracker`), so this needs no contract change.
+    - On a phone on its side, where the app's header hides, the admin view keeps its own bar, with the back arrow and its title (decided in WebUI Design Mockup).
     - The Operator's update download needs two attempts every time: click Download and confirm, and nothing happens; click Download and confirm again, and it downloads. Find the cause before building the admin section's update controls, so they don't inherit it. No commit has fixed it (checked at promotion).
     - Gating: opening admin from another machine asks for the control token first, through `POST /control/pair`, and shows nothing until it is accepted. On the server machine, which the merged localhost helper decides, it opens directly. The accounts release replaces the token with admin accounts.
     - Later admin work lands here: refresh, backup, and duplicate review, with duplicate review opening within the admin section, source and item management, catalog transfer, the Log Viewer, and account administration.
   - Recovery page slice:
-    - The server keeps a minimal built-in page with restart, stop, a log tail, and updates, at a fixed path such as `/recovery` (decided here). It does not load the WebUI's files, so it works when they are missing or broken, and it has the same control-token gating.
+    - The server keeps a minimal built-in page with restart, stop, a log tail, and updates, at a fixed path such as `/recovery` (decided here). It is plain, in the WebUI's theme colors, and titled "ReelRoulette Recovery", laid out as the mockup's recovery page shows (decided in WebUI Design Mockup). It does not load the WebUI's files, so it works when they are missing or broken, and it has the same control-token gating.
     - It renders settings and status text without `innerHTML` interpolation (found by the repository audit: Operator HTML page interpolates user input via `innerHTML`).
-    - Retire the Operator page: `/operator` redirects to the admin section, the tray's Operator shortcut opens the admin section, `verify-linux-packaged-server-smoke.sh` checks the recovery page and the admin section entry instead of `/operator`, and the testing checklist's Smoke item checks the admin section instead of the Operator page.
+    - Retire the Operator page: `/operator` redirects to the admin section, the tray's Open Operator UI item becomes **Open ReelRoulette** and opens the WebUI's main page (decided in WebUI Design Mockup; read from code at this edit: `AvaloniaTrayHostUi.cs`), `verify-linux-packaged-server-smoke.sh` checks the recovery page and the admin section entry instead of `/operator`, and the testing checklist's Smoke item checks the admin section instead of the Operator page.
   - Always-on WebUI slice:
     - The server always serves the WebUI from this release, since the admin section lives there, and ignores the web runtime settings' `enabled` field. Read from code at this edit: turned off, that field stops the server serving the WebUI's files and `/runtime-config.json` from its next start, leaves the WebUI's origins out of CORS, and stops mDNS advertising. Turned off from the admin section, it would remove the admin section itself, and the recovery page has no way to turn it back on.
     - The field stays in the contract, so the last desktop build keeps working, and the server reports it as on. Trap, read from code: the desktop enables its Open Web UI menu item only when the server reports the WebUI as on, and Desktop Retirement Notice's notice offers that action. Desktop Client Removal drops the field.
@@ -359,7 +406,8 @@ Last milestone completed: M12b
   - Under Always and Responsive, opening the admin section pauses playback and leaving it resumes only playback Auto-Pause paused; under Never, playback keeps going.
   - The admin section keeps the Operator page's layout at phone and desktop widths and matches the rest of the WebUI's styling.
   - The admin section offers every action and setting the Operator page offers today and calls the same routes.
-  - Connected clients show each client's id, and its operating system where the user agent names one.
+  - Connected clients show each client's id with its operating system where the user agent names one, its type, address, and connection time, and the three counts, without the session id.
+  - The tray's Open ReelRoulette opens the WebUI's main page, and the recovery page is titled "ReelRoulette Recovery".
   - The interface names the logs section Log Viewer in the admin section and the recovery page, and nowhere Server Logs; the route is still `GET /control/logs/server`.
   - The Log Viewer filters by time window, by several sources and several levels, and by contained text, with its filters in a collapsed panel with chips, a live indicator that pauses away from the newest lines, and rows that expand to the full line.
   - The Log Viewer has no Tail lines field: it shows the newest matching lines and loads older ones as the list scrolls, up to 5000 lines.
@@ -376,7 +424,7 @@ Last milestone completed: M12b
   - Server tests call the handlers and gating as functions over `DefaultHttpContext`, as the library route gate's tests do. No test project has an HTTP test host, and `Microsoft.AspNetCore.TestHost` is not added (decided at promotion).
   - Add a Release Specific checklist item: "From another machine, the admin section asks for the control token and works after it is entered; with the WebUI files removed, the recovery page restarts, stops, shows logs, and applies an update, on Linux and Windows."
 
-### M12h - Admin Refresh, Backup, and Duplicate Review
+### M12i - Admin Refresh, Backup, and Duplicate Review
 
 - **Status**: ⏳ Planned
 - **Goal**: The admin section starts a refresh, edits refresh and backup settings, and reviews and applies duplicates, so none of these needs the desktop.
@@ -404,7 +452,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include admin section UI tests for each slice, including the duplicate default surviving a page refresh and each refresh and backup field with the field validation pattern, `npm run verify`, and one quick spot check of a refresh and a duplicate scan.
 
-### M12i - Admin Source and Item Management
+### M12j - Admin Source and Item Management
 
 - **Status**: ⏳ Planned
 - **Goal**: Manage sources and remove library items from the WebUI admin section, with server routes for what no client can do today, and every open WebUI follows source changes without a reload.
@@ -431,7 +479,7 @@ Last milestone completed: M12b
   - Completion evidence must include server tests for each new route and for the event each source change publishes, admin section UI tests for Manage Sources, WebUI tests for source event handling, `dotnet test ReelRoulette.sln`, `npm run verify`, and one quick spot check of an admin section source toggle seen in another WebUI tab.
   - Add a Release Specific checklist item: "From the admin section, add, rename, disable, refresh, and remove a source, and other open WebUI sessions update without a reload."
 
-### M12j - Admin Library Catalog Transfer
+### M12k - Admin Library Catalog Transfer
 
 - **Status**: ⏳ Planned
 - **Goal**: Export and import the library from the WebUI admin section, with the server applying the catalog, so catalog transfer does not need the desktop app.
@@ -444,7 +492,7 @@ Last milestone completed: M12b
   - Import runs while the server is up. The previous database stays aside until the new file is in place and opens. A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed. A file that is not a library database is rejected.
   - Import also works while the server runs without a library, and can import one of the server's own backups, which is how the admin section restores a backup.
   - Import keeps the source folder remap the desktop import offers.
-  - Add **Export Library** and **Import Library…** to the admin section. Export is a plain download in every browser, with no save picker, so it has no ellipsis (decided in WebUI Design Mockup). Desktop Client Removal removes the desktop's Library Export and Import menus.
+  - Add **Export Library** and **Import Library…** to the admin section. Export is a plain download in every browser, with no save picker, so it has no ellipsis. While an import uploads, a progress bar shows in the library transfer section. The file uploads first; the server then reads its source folders for the remap dialog, or rejects a file that isn't a library with the notice "{file} isn't a ReelRoulette library. The library wasn't changed." (decided in WebUI Design Mockup). Desktop Client Removal removes the desktop's Library Export and Import menus.
   - Trap: re-measured at promotion on a copy of the developer's catalog, `library.db` is 92.5 MB (92,520,448 bytes, no free pages) for 49,055 items, up from 70.5 MB when this entry was written. That is larger than ASP.NET Core's default request body limit of about 30 MB (the framework default, not tested here). Read from code at promotion: the server raises the multipart form limit (`FormOptions.MultipartBodyLengthLimit`) to 512 MB, left from earlier library import work, but no route reads a form now and the request body limit itself is not raised. The import upload needs its own limit and should stream to the incoming file rather than buffer in memory.
 - **Acceptance criteria**:
   - The admin section can export a server-produced checkpoint and import a `library.db` while the server is running.
@@ -456,14 +504,14 @@ Last milestone completed: M12b
   - Completion evidence must include server tests for running-server import, rejection of a file that is not a library database, and interrupted-replace recovery, plus admin section UI tests for export and import, including an upload larger than 30 MB.
   - Add a Release Specific checklist item: "With no desktop app, export the library from the admin section and import it into a fresh server, on Linux and Windows."
 
-### M12k - WebUI Stats Panel
+### M12l - WebUI Stats Panel
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI shows library and playback statistics and details of the current file in a Stats tab, as the desktop stats panel does.
 - **Scope**:
   - Ships in v0.15.0, after the admin library catalog transfer milestone. Depends on: WebUI Responsive Layout and Panels.
   - Measured again at promotion: the WebUI never calls `GET /api/library/stats`, and its now-playing line shows only the file name and duration.
-  - Library and current-file stats live in the side panel's Stats tab, which joins the tab row here. Clicking the current file name in the header opens the panel on the Stats tab.
+  - Library and current-file stats live in the side panel's Stats tab, which joins the tab row here. Clicking the current file name in the header opens the panel on the Stats tab. Its tooltip shows the full file name and then "Show stats" (decided in WebUI Design Mockup); today it shows the full name only.
   - Library stats: total videos, photos, and media, favorites, blacklisted, total plays, unique media played, never played, videos with and without audio, and baseline loudness.
   - Current file: file name and full path, plays, last played (the time before this play, or Never), favorite, blacklisted, duration, has audio, loudness, adjustment, peak, and tags.
   - Refresh after events and actions is coalesced as the desktop does it: a short wait gathers a burst, one request is in flight at a time, and requests during it get one more.
@@ -478,18 +526,19 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include component tests for both sections and for the file name opening the Stats tab, coalescing tests, `npm run verify`, and one quick spot check.
 
-### M12l - WebUI Keyboard Shortcuts and Player Controls
+### M12m - WebUI Keyboard Shortcuts and Player Controls
 
 - **Status**: ⏳ Planned
-- **Goal**: The WebUI has the desktop's keyboard shortcuts wherever a browser allows them, plus volume, seek-step, and frame-step controls and two autoplay modes.
+- **Goal**: The WebUI has the desktop's keyboard shortcuts wherever a browser allows them, plus volume, seek-step, and frame-step controls, two autoplay modes, and ambient mode.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI stats panel milestone. Depends on: WebUI Responsive Layout and Panels, WebUI Settings Panel, and WebUI Stats Panel, so every panel tab exists.
   - Measured again at promotion: the WebUI handles only Escape, which closes overlays, and Enter or Space on a focused library tile. It has a mute button and no volume control. The desktop binds K play or pause, J and L seek, Left and Right previous and next, R random, F favorite, B blacklist, A autoplay, M mute, comma and period volume, T tags, P player view, S settings, O import folder, Q quit, F11 fullscreen, and 1 to 5 to show or hide parts of the window; it also swallows 6 to 8 and Space, which do nothing.
-  - Use the desktop keys. Keys the browser keeps (Ctrl+Q, Ctrl+O, and F11 for the browser's own fullscreen; inferred) are not bound, and Q quit and O import folder have no WebUI equivalent. Each panel tab has a shortcut: Library, Filter, Tags, Stats, and Settings. Which key opens each tab (the desktop's T for tags and S for settings, or the number keys it uses to show and hide parts of its window) is decided here. Shift+F enters and leaves fullscreen, since F stays Favorite (decided in WebUI Design Mockup).
+  - Use the desktop keys. Keys the browser keeps (Ctrl+Q, Ctrl+O, and F11 for the browser's own fullscreen; inferred) are not bound, and Q quit and O import folder have no WebUI equivalent. Each panel tab has a shortcut: Library, Filter, Tags, Stats, and Settings. Which key opens each tab (the desktop's T for tags and S for settings, or the number keys it uses to show and hide parts of its window) is decided here. Shift+F enters and leaves fullscreen, since F stays Favorite. Space plays or pauses as K does, and pauses and resumes a photo's timer, except while focus is on something Space already activates, such as a button or a library tile (both decided in WebUI Design Mockup).
   - Shortcuts do nothing while focus is in a text field.
   - A shortcut reference in the Settings tab.
   - A volume control where the browser lets a page set volume (not on iOS, where it is read-only; inferred), with [ and ] stepping by a volume step preference. The desktop steps volume with comma and period, which step frames here instead. The Settings tab offers the desktop's volume steps: 1, 2, or 5 percent.
   - J and L seek by a seek step preference. The Settings tab offers the desktop's seek steps: 1, 5, or 10 seconds.
+  - The fullscreen button shows the exit icon (`fullscreen_exit`) while the stage is in fullscreen or pseudo-fullscreen; today it always shows `fullscreen`. Changing the volume, by the slider or the keys, writes nothing to the status line. Changing the timer while a photo shows keeps the time already shown and changes only the length; today it restarts the photo (`photoDurationChanged` in `src/playback/player.ts`). All decided in WebUI Design Mockup.
   - Frame stepping, as YouTube does it (decided in WebUI Design Mockup): while a video is paused, comma steps one frame back and period one frame forward. It uses the browser's frame timings (`requestVideoFrameCallback`) where the browser provides them, and an assumed frame rate, decided when this is built, where it doesn't. It replaces the desktop's Frame seek step (Shift and the arrow keys), which LibVLC drives.
   - Autoplay gets two modes, replacing the desktop's separate Keep Playing, which plays a random item every N seconds until stopped (Playback → Keep Playing (Timer) and Set Interval):
     - Normal: photos advance after the timer and videos play to the end, as autoplay does today.
@@ -497,7 +546,11 @@ Last milestone completed: M12b
     - With loop on in Normal mode, the current item repeats and autoplay waits, as today. Read from code at this edit: the WebUI's video end handler and photo timer both skip advancing while loop is on.
     - Both modes use one timer setting, today's photo duration, renamed to fit (for example "Advance after"). Its range widens from the WebUI's 1–300 seconds to the desktop's 1–3600, so a Keep Playing interval longer than five minutes still fits. The mode and the timer sit together in the Settings tab, and the player's autoplay button still turns autoplay on and off.
   - A looping photo flickers at the end of each loop, because it is restarted by reloading its image, unlike a video, which seeks back. Read from code at this edit: the photo timer calls `playCurrent`, which clears the photo's source and hides it, then loads it again, records a play, and relays a new start; turning Loop or Autoplay on while a photo shows goes through the same restart. Keep the photo on screen and restart only its timer, in both cases. A looping photo then records one play, as a looping video does, and the Player screen tests that count a play per loop change with it.
-  - The autoplay mode, the timer, the volume, and the volume and seek steps survive a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
+  - Ambient mode, as YouTube's (decided in WebUI Design Mockup): behind the player, a heavily blurred, dimmed copy of the current frame's colors fills the black space around the picture. At the update rate the player draws the frame into a tiny canvas, and the glow fades toward each new copy over the fade time, so the colors drift smoothly. A photo gets the same effect, drawn once from the photo. Sampling pauses while the video is paused or the tab is hidden. The glow sits on the player's dark background in both themes, so the light theme uses full color too, and each theme has its own strength, the same kind of setting in both (decided in WebUI Design Mockup). With ambient mode off, the space is plain black in both themes, as today.
+  - Ambient mode's settings ship with it (decided in WebUI Design Mockup): an Ambient mode toggle, on by default, in the Settings tab's Appearance section, and beside it an expandable "Ambient mode settings" section, whose header shows a chevron that points right while it is closed and down while it is open, with plain labels, each showing its value: Update rate (1 per second by default, from 0.25 to 4), Fade time (2 s, from 0.25 to 4 s), Blur (64 px, from 10 to 80 px), Strength in the dark theme (50%), Strength in the light theme (75%), and Saturation (100%, from 0 to 200%), with a Reset to defaults button. They apply as they change and are kept per device.
+    - Trap, found in the mockup's first version, with the cause inferred: two layers crossfading by CSS opacity flickered slightly, since the black background showed through whenever a sample arrived before the last fade finished. The shown canvas blends toward each new sample instead, starting from what is on screen, so a sample that arrives mid-fade continues smoothly.
+    - Trap, inferred: media URLs come from the runtime config's `apiBaseUrl`, which can be another origin, and drawing a cross-origin video taints the canvas. Showing a tainted canvas still works, since the effect never reads its pixels back, so it must not use `getImageData` or `toDataURL`.
+  - The autoplay mode, the timer, ambient mode and its settings, the volume, and the volume and seek steps survive a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
   - Not included: loudness normalization, declined for v0.15.0 in WebUI Design Mockup, which is WebUI Loudness Normalization.
   - Changes to user-facing UX need approval.
   - Add a Release Specific checklist item: "In Chrome, Firefox, and Safari on a desktop, every listed shortcut works in normal view, with a panel open, and in fullscreen, and does nothing while typing in a text field."
@@ -509,16 +562,19 @@ Last milestone completed: M12b
   - The volume control and seek step work, and the Settings tab offers the desktop's volume and seek step choices.
   - [ and ] change the volume by the volume step. While a video is paused, comma and period step one frame back and forward; while it plays, they do nothing.
   - Shift+F enters and leaves fullscreen.
+  - Space plays or pauses as K does, and leaves a focused button or tile to its own action.
   - In Normal mode, photos advance after the timer and videos play to the end. In Timer mode, every item advances after the timer, including an unfinished video, and a paused video holds it.
   - With loop on in Timer mode, a video shorter than the timer repeats until the timer advances. With loop on in Normal mode, the current item repeats and does not advance.
   - A looping photo does not flicker: it stays on screen with its image loaded at the end of each loop, and only its timer restarts.
   - The Settings tab shows the autoplay mode and the timer under its new name, the timer accepts 1 to 3600 seconds, and it starts from the photo duration stored before this milestone.
-  - After a page refresh, the autoplay mode, the timer, the volume, and the volume and seek steps are each as they were.
+  - With ambient mode on, a blurred, dimmed copy of the frame's colors fills the black space around a playing video and crossfades as the picture changes, and a photo gets one from the photo. Sampling stops while the video is paused or the tab is hidden. Off, the space is plain black in both themes. The light theme uses full color at its own strength, and a sample that arrives mid-fade never lets the black background show through.
+  - The Ambient mode settings section offers each setting with its default and range, shows each value, applies changes as they're made, and Reset to defaults restores the defaults.
+  - After a page refresh, the autoplay mode, the timer, ambient mode and its settings, the volume, and the volume and seek steps are each as they were.
   - The shortcut reference matches the bindings.
 - **Verification evidence**:
-  - Completion evidence must include keyboard tests per binding under `happy-dom`, autoplay tests for both modes with loop on and off and with a paused video, a test that a looping photo keeps its image shown through each loop, tests for a page refresh keeping each setting this milestone adds, frame stepping tests with and without the browser's frame timings, `npm run verify`, and one quick spot check.
+  - Completion evidence must include keyboard tests per binding under `happy-dom`, autoplay tests for both modes with loop on and off and with a paused video, a test that a looping photo keeps its image shown through each loop, tests for a page refresh keeping each setting this milestone adds, frame stepping tests with and without the browser's frame timings, ambient mode tests for sampling at the update rate while a video plays, holding while it is paused or the tab is hidden, a photo drawn once, and each of its settings, `npm run verify`, and one quick spot check.
 
-### M12m - Show in File Manager from the WebUI
+### M12n - Show in File Manager from the WebUI
 
 - **Status**: ⏳ Planned
 - **Goal**: A WebUI on the server machine opens the system file manager at the playing file, and elsewhere copies its path.
@@ -538,7 +594,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include server tests for loopback, the server's own address, another LAN address, proxied, unknown-id, and headless requests with the launcher faked, contract tests, `npm run verify`, and one quick Linux spot check.
 
-### M12n - WebUI Status Line Overhaul
+### M12o - WebUI Status Line Overhaul
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI status line shows only background information, one stable message per situation, and what the user must notice or act on moves to an in-app dialog or the field it is about.
@@ -568,7 +624,7 @@ Last milestone completed: M12b
       - Tags: "Tag editor unavailable: {error}", "Tag refresh failed: {error}", "No tag changes to save.", and a failed tag save: "{step} failed ({status})" for Category update, Category delete, Tag create/update, Tag rename, Tag delete, Tag apply, and Auto-tag apply, "Tag update failed", "Tag apply failed", or the error's text.
     - Field validation, moves to the field validation pattern:
       - Moved by earlier milestones, which this milestone checks are gone from the status line: "Minimum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.", "Maximum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.", "Enter a preset name.", "A preset with that name already exists.", "Tag name is required.", and "That name is already in use." in WebUI Responsive Layout and Panels.
-      - Moved here: "Pair token required.", for the pairing prompt's token field. Pair can't proceed while the field is empty.
+      - Moved here: "Pair token required.", for the pairing prompt's token field. Pair can't proceed while the field is empty, and the field's tooltip reads "Enter the pairing token." (decided in WebUI Design Mockup).
     - Leaves the status line with nothing in its place: "Unauthorized. Pair first.". A random pick or library play that the server answers with 401 also shows the header's pairing prompt, which is the thing to act on, so the prompt is the only signal (read from code at this edit: `pickRandom` in `player.ts` and `play` in `library.ts` set the prompt just before the message; the 401 case in `mapPlayItemErrorToStatus` is never reached, since `play` handles 401 first). It keeps its `last.log` line.
   - Three wrong Auto Tag and tag save messages, found in the WebUI Preact Migration's tag editor slice, which kept them as they were and locked them with tests marked as recorded here (read from code at this edit):
     - A failed Auto Tag scan shows "Scan complete: no matching tags found." in the panel's status and results, as a scan that found nothing does: `scan` in `src/tags/tagEditor.ts` treats a failure as no rows. Before that slice, `app.js` set "Auto-tag scan failed. Core runtime is unavailable or still recovering." and overwrote it at once. The scan shows its error instead.
@@ -593,7 +649,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include WebUI tests of the precedence rule and the per-event messages, covering the server stopped, the API unavailable, a version or capability mismatch, and refresh progress and results, tests that each screen's dialog messages show in the notice with their `last.log` lines and its background messages stay on the status line, tests of the pairing token field and of a 401 on a random pick and a library play, tests of the three Auto Tag and tag save messages in place of the tests that lock them today, a check of every status line write against the sorted list, and one quick spot check with the server stopped.
 
-### M12o - Testing Suite Overhaul
+### M12p - Testing Suite Overhaul
 
 - **Status**: ⏳ Planned
 - **Goal**: The testing suite produces clear results that match the WebUI's connection and status handling.
@@ -611,7 +667,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include automated tests that each scenario sets and resets the server state it describes, and that SSE disconnect closes and reconnects the same way on repeated runs, plus one quick spot check of one scenario.
 
-### M12p - Browser-Playable Filter
+### M12q - Browser-Playable Filter
 
 - **Status**: ⏳ Planned
 - **Goal**: Browse and random play can be limited to files a browser can play, and a file the browser cannot play says so instead of "not found".
@@ -636,7 +692,7 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include server tests for the option in the list query, counts, and random selection, contract tests, WebUI tests for the option and both error messages, `dotnet test ReelRoulette.sln`, and `npm run verify`.
 
-### M12q - WebUI Grid Rendering
+### M12r - WebUI Grid Rendering
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI library grid updates only the rows and tiles that change, and dragging the scrollbar reaches any part of the results without loading every page before it.
@@ -663,23 +719,30 @@ Last milestone completed: M12b
 - **Verification evidence**:
   - Completion evidence must include WebUI tests for row reuse, tile patching, and loading the page at a scrollbar position, before-and-after timings for rendering a large window in a browser, and `npm run verify`.
 
-### M12r - WebUI Multi-Select and Bulk Actions
+### M12s - WebUI Multi-Select and Bulk Actions
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI selects several library items and applies the desktop's bulk actions to them, and clears playback stats for the whole library.
 - **Scope**:
   - Ships in v0.15.0, after the WebUI grid rendering milestone. Depends on: Admin Source and Item Management, whose item removal route bulk removal uses, and WebUI Grid Rendering, which updates a tile in place, so selection marks are tile updates.
   - From the desktop-versus-web feature comparison and the desktop retirement report, checked against the code at promotion. Adding a feature changes user-facing UX and needs approval.
-  - Multi-select and bulk actions: the desktop library grid selects several items (click, Ctrl+click, Shift+click) and acts on them from its context menu: add to or remove from favorites and the blacklist, add or remove tags, clear playback stats, and remove from library. The WebUI library plays one item per click and has no selection. How selection works on touch is decided here. Remove from library is an admin action. From another machine it asks for the control token first, as the admin view does. It then asks to confirm, naming the count. Deleting the files from disk is an option there, off by default, and when it is on the question says the files will be permanently deleted from disk (decided in WebUI Design Mockup).
+  - Multi-select and bulk actions: the desktop library grid selects several items (click, Ctrl+click, Shift+click) and acts on them from its context menu: add to or remove from favorites and the blacklist, add or remove tags, clear playback stats, and remove from library. The WebUI library plays one item per click and has no selection.
+  - Selection works as Google Photos does, with one icon throughout: a white circle with a check mark at the tile's top left (decided in WebUI Design Mockup). With a mouse it shows faded while the pointer is over a tile, and on every tile once selection is active; with the pointer on the icon itself it turns bright white, and clicking it selects the tile and starts selection. Selecting a tile turns the same icon filled orange, and the thumbnail shrinks inside the tile so the icon sits on its top-left corner. Hovering dims only the thumbnail, so the icon stays bright. On a touch screen a long press starts selection, and the icons then show on every tile.
+  - Once selection is on, a click adds or removes a tile, and Shift+click adds the range from the last tile chosen. Ctrl or Cmd+click isn't used. The grid's text isn't selectable, so Shift+click selects only tiles and doesn't also highlight text across them. While selecting, a bar at the bottom of the Library tab shows the count, Select all, and Actions, which lists the bulk actions. The Library tab's Select button starts and ends selection, so keyboard users can reach it (decided in WebUI Design Mockup).
+  - Remove from library is an admin action. From another machine it asks for the control token first, as the admin view does. It then asks to confirm, naming the count. Deleting the files from disk is an option there, off by default, and when it is on the question says the files will be permanently deleted from disk (decided in WebUI Design Mockup).
   - Trap, read from code at promotion: `POST /api/favorite` and `POST /api/blacklist` take one item path each, and the desktop sends one request per selected item, while `POST /api/playback/clear-stats` takes a list of item paths and `POST /api/tag-editor/apply-item-tags` a list of item ids. Decide here whether bulk favorite and blacklist get a route that takes many ids, a contract change in its own slice, or send one request per item as the desktop does.
   - Tag edits on several items: the desktop `ItemTagsDialog` adds and removes tags across all selected items at once; the WebUI tag editor works on the current item only.
+  - The WebUI edits several items' tags in the Tags tab, with no dialog (decided in WebUI Design Mockup). Edit tags in Actions opens the Tags tab with the line "Editing tags for {n} items", like the line WebUI Responsive Layout and Panels shows for an item that isn't playing. While the tab edits several items, a chip shows green for a tag all of them have and orange for a tag only some have, and Add or Remove applies to all of them. Save applies the changes to every selected item and says "Updated tags on {n} items.". The tab edits the selection while selection lasts; if selection ends with unsaved changes, it keeps those items until the changes are saved or discarded. Choosing Edit tags while the tab holds unsaved changes to another item's tags asks "Discard changes?" first.
   - Clear playback stats for the whole library, which the desktop offers from its Playback menu through `POST /api/playback/clear-stats` (measured again at promotion: the WebUI never calls it). It is an admin action, in the admin view's library section (decided in WebUI Design Mockup).
+  - Each bulk action acknowledges itself on the status line (decided in WebUI Design Mockup): "Added {n} items to favorites.", "Removed {n} items from favorites.", "Blacklisted {n} items.", "Removed {n} items from the blacklist.", "Updated tags on {n} items.", "Cleared playback stats for {n} items.", and "Removed {n} items from the library.", or "Removed {n} items from the library and deleted their files.", with "1 item" for one.
   - Bulk Add to favorites clears each item's blacklisting, and Add to blacklist clears its favorite, as the player's buttons do. Read from code at this edit: `toggleFlag` in `src/playback/player.ts` clears the other flag when it sets one.
-  - The desktop's filter summary line is built (decided in WebUI Design Mockup): while a filter applies, the Library tab shows one line above the grid listing the applied filters, as the desktop lists them above its library panel, and tapping or clicking it opens the Filter tab. It collapses with the Library tab's controls. The WebUI library's summary today shows only how many items are showing out of how many.
+  - The desktop's filter summary line is built (decided in WebUI Design Mockup): while a filter applies, the Library tab shows one line above the grid listing the applied filters, as the desktop lists them above its library panel, and tapping or clicking it opens the Filter tab. It collapses with the Library tab's controls, and it names Favorites only or excluded and Blacklisted only, the modes from Favorite and Blacklist Filter Modes. Blacklisted excluded, the default, isn't named, as the desktop's summary doesn't name Exclude blacklisted today (decided in WebUI Design Mockup). The WebUI library's summary today shows only how many items are showing out of how many.
   - Settled at promotion: Keep Playing and loudness normalization moved to WebUI Keyboard Shortcuts and Player Controls, where autoplay's Timer mode has since replaced Keep Playing. The FFmpeg log is declined: nothing has written to the desktop's FFmpeg log buffer since the server took over refresh (read from code), so its window is always empty. The desktop features a browser cannot offer are recorded in Desktop Client Removal.
 - **Acceptance criteria**:
   - The WebUI selects several library items and applies favorite, blacklist, tag add and remove, clear stats, and, for admins, remove from library to all of them.
-  - Tag edits apply across all selected items.
+  - With a mouse, a tile's check icon shows faded on hover and selects the tile when clicked; during selection it shows on every tile, and a long press starts selection on a touch screen. A selected tile's icon is filled orange and its thumbnail shrinks inside the tile.
+  - Edit tags opens the Tags tab with "Editing tags for {n} items", with no dialog. Its chips show green for a tag every selected item has and orange for one only some have, and Save applies the changes to every selected item.
+  - Once selection is on, a click adds or removes a tile and Shift+click adds a range without highlighting text; Ctrl or Cmd+click doesn't select.
   - The whole library's playback stats can be cleared from the admin view.
   - Remove from library asks to confirm with the count. Deleting files from disk is off by default, and turning it on makes the question say the files will be permanently deleted from disk.
   - Bulk Add to favorites clears blacklisting, and Add to blacklist clears favorite, on each selected item.
@@ -688,7 +751,7 @@ Last milestone completed: M12b
   - Completion evidence must include WebUI tests for selection and each bulk action, and `npm run verify`.
   - Add a Release Specific checklist item: "In the WebUI on a desktop browser and a phone, select several items, apply each bulk action, and the tiles update."
 
-### M12s - Desktop Retirement Notice
+### M12t - Desktop Retirement Notice
 
 - **Status**: ⏳ Planned
 - **Goal**: The last desktop build tells users the desktop app is retired and points them to the WebUI.
@@ -1474,11 +1537,11 @@ Last milestone completed: M12b
 - **Goal**: The desktop client, its packaging, and its tests are gone, and the WebUI is the only client.
 - **Scope**:
   - First milestone of the desktop removal release, planned for v0.16.0. Depends on: WebUI Keyboard Shortcuts and Player Controls, WebUI Stats Panel, WebUI Settings Panel, Admin Refresh, Backup, and Duplicate Review, Show in File Manager from the WebUI, Admin Source and Item Management, Admin Library Catalog Transfer, WebUI Multi-Select and Bulk Actions, and Browser-Playable Filter.
-  - Desktop features this drops without a WebUI equivalent, declined during the desktop parity work because a browser cannot offer them: always-on-top (the closest is picture-in-picture, which the WebUI turns off with `disablepictureinpicture`), desktop self-update, the Linux dependency dialog, application menu registration, and the FFmpeg log window, which has been empty since the server took over refresh. Also not carried over, decided in WebUI Design Mockup: the Settings dialog's image scaling (the browser scales a photo to fit), Force API playback (the WebUI always plays through the server), client backups (the WebUI keeps its settings in the browser), and the Core API endpoint (the WebUI uses the address it was opened from).
+  - Desktop features this drops without a WebUI equivalent, declined during the desktop parity work because a browser cannot offer them: always-on-top (the closest is picture-in-picture, which the WebUI turns off with `disablepictureinpicture`), desktop self-update, the Linux dependency dialog, application menu registration, and the FFmpeg log window, which has been empty since the server took over refresh.
   - Desktop Settings dialog entries this drops as not useful in the WebUI, decided when the WebUI's settings were planned: the desktop's own dev update channel (the server's is in the admin section), client settings backups (the WebUI's settings are a few values in browser storage), the core server base URL (the WebUI calls the server that served it), Force API playback (the WebUI always plays through `/api/media`), and image scaling (it limits how large the desktop decodes photos, and the browser scales photos to fit by itself).
   - Code and tests slice, measured: remove `ReelRoulette.DesktopApp`, `ReelRoulette.LibraryArchive`, and `ReelRoulette.DesktopApp.Tests` from the solution and the repository, about 30,300 lines of C# and AXAML including 3,267 test lines and 134 tests. Remove Core's `LibraryGridLayout` and its tests, which only the desktop uses, and `JsonFileStorageService` and `CoreStorageServices` if nothing else uses them.
   - Packaging slice: remove the `desktop` component from the `release.yml` matrix, including the Windows LibVLC relocation step, stop publishing the desktop update feed, and remove the desktop references in `set-release-version.ps1` and `verify-linux-packaged-server-smoke.sh`. CI has no desktop job: desktop tests run inside the solution test on the Ubuntu and Windows jobs, so `ci.yml` needs no change.
-  - Contract slice: remove routes and fields that no remaining caller uses, each checked against the WebUI and the admin section. Remove the web runtime settings' `enabled` field, which the server has ignored and reported as on since WebUI Admin Section. Candidates: `/api/library-states`, `/api/library/item`, the full path kept in the random and play responses' `id` for the desktop, and `itemTagsChanged.itemIds` and the auto-tag apply response's `changedItemPaths`, which the WebUI no longer reads beside their item id fields. `/api/library/catalog-checkpoint` stays for the admin section's export. OpenAPI and generated WebUI types.
+  - Contract slice: remove routes and fields that no remaining caller uses, each checked against the WebUI and the admin section. Remove the web runtime settings' `enabled` field, which the server has ignored and reported as on since WebUI Admin Section, and the filter state's old `favoritesOnly` and `excludeBlacklisted` fields, which Favorite and Blacklist Filter Modes keeps beside its new ones. Candidates: `/api/library-states`, `/api/library/item`, the full path kept in the random and play responses' `id` for the desktop, and `itemTagsChanged.itemIds` and the auto-tag apply response's `changedItemPaths`, which the WebUI no longer reads beside their item id fields. `/api/library/catalog-checkpoint` stays for the admin section's export. OpenAPI and generated WebUI types.
   - Fixture slice: `event-revision.json`, `library-tile-effect.json`, `preset-filter-equality.json`, and `sort-direction-labels.json` lose their C# readers and stay as WebUI test data. `tag-name-order.json` stays, read by Core and the WebUI.
   - Docs slice: `CONTEXT.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/api.md`, `docs/dev-setup.md`, `README.md` (desktop install and the LibVLC prerequisite), the testing checklist's desktop Smoke item and the desktop in-app update item in Release Flow, and `AGENTS.md`: remove the desktop freeze rule and the desktop test-isolation note, and keep the shared-fixture rule for rules implemented in server C# and the WebUI.
   - Add a Release Specific checklist item: "On Linux and Windows, the release publishes only the server, every former desktop workflow works in the WebUI, and an existing desktop install keeps its last version."

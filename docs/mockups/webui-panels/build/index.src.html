@@ -42,16 +42,20 @@ th { font-weight: 600; }
   <a class="card" href="layout.html">
     <h2><span class="material-symbol-icon">dock_to_right</span>Main page</h2>
     <ul>
+      <li>Nothing plays until a tap or Play starts a random pick. Previous and Next step through what played, and Next, R, and autoplay pick at random at its end. Each skips a missing file or one this browser can't play, saying so on the status line.</li>
       <li>The player's one panel button opens the panel on its last tab, and closes it. Favorite and Blacklist stay on the player; the seek row ends with the volume control.</li>
       <li>Drag the handle between the player and the panel, or focus it and use the arrow keys. Open or closed, side, width, and last tab survive a reload.</li>
       <li>Below 800 px wide, or on a touch screen under 500 px tall, the panel is a full-screen overlay. On a phone on its side the header and status line also hide and the player fills the screen. The chip at the player's top left shows what Auto-Pause did.</li>
       <li>Swipe left or right on the player for the next or previous item. Favorite and Blacklist clear each other.</li>
-      <li>Library: controls that collapse, the filter summary line, placeholder tiles while a page loads, and selection (the checklist button, Ctrl or Shift+click, or a long press) with bulk actions.</li>
-      <li>Filter, Tags, and their dialogs as approved so far, plus the browser-playable option. Pick an .avi or .wmv tile to see the format notice; Next and autoplay skip such files.</li>
+      <li>Ambient mode: a blurred, dimmed copy of the picture's colors fills the black space around it, drifting as the video plays. The Settings tab turns it off, and its Ambient mode settings set the update rate, fade time, blur, strength in each theme, and saturation.</li>
+      <li>On a photo with Autoplay on and Loop off, Play or Space pauses and resumes its timer, and dragging the scrub bar moves it. With Autoplay off or Loop on, both are disabled on a photo.</li>
+      <li>Library: controls that collapse, the filter summary line, the playing tile's icon, the favorite and blacklist icons, placeholder tiles while a page loads, and file names on tiles as a setting. Selection works as in Google Photos: start it with the check at a tile's top left when hovering it, the checklist button, or a long press on a touch screen; then a click adds or removes a tile and Shift+click adds a range. Edit tags opens the Tags tab on the selected items.</li>
+      <li>Filter, Tags, and their dialogs as approved so far, with Favorites and Blacklisted each set to only or excluded, plus the browser-playable option. Pick an .avi or .wmv tile to see the format notice.</li>
+      <li>Auto Tag opens from the Tags tab over the whole page. Its scan runs for about 5 seconds, then lists the tags file names match, and its own Apply applies the checked changes.</li>
       <li>Stats: the current file, with Show in File Manager or Copy Path, and the library. Click the file name in the header to open it.</li>
-      <li>Settings: autoplay mode, Advance after, seek and volume steps, theme, the status line, panel side, Auto-Pause, the shortcut reference, and diagnostics.</li>
-      <li>Keyboard shortcuts work: K, J, L, arrows, R, F, B, A, M, comma and period (one frame, while paused), [ and ] (volume), 1 to 5, T, S, P, and Shift+F.</li>
-      <li>The <b>Mockup</b> tab on the left edge sets the situation: pairing asked for, the server machine, a read-only volume, and a phone on its side.</li>
+      <li>Settings: autoplay mode, Advance after, seek and volume steps, theme, ambient mode and its settings, file names on tiles, the status line, panel side, Auto-Pause, the shortcut reference, and diagnostics. Checkboxes, radio buttons, and sliders use the orange accent.</li>
+      <li>Keyboard shortcuts work: K or Space, J, L, arrows, R, F, B, A, M, comma and period (one frame, while paused), [ and ] (volume), 1 to 5, T, S, P, and Shift+F.</li>
+      <li>The <b>Mockup</b> tab on the left edge sets the situation: the server reconnecting, not answering, running without a library, failing the compatibility check, or with an empty library; pairing asked for (a token of "wrong" fails); the server machine; a read-only volume; a phone on its side; and how the playing tile is marked. It also sends a favorite from another device, a library refresh, and a runtime config failure, tunes ambient mode, and can hide every mockup note to show screens as they will ship.</li>
     </ul>
   </a>
 
@@ -60,6 +64,14 @@ th { font-weight: 600; }
     <ul>
       <li>The full-page view the header's admin icon opens: server and updates, web access, control, refresh, library transfer, backups, sources, duplicates, the testing suite, clients, the Log Viewer, and events.</li>
       <li>Duplicate review opens within it. The control token gate shows first from another machine.</li>
+      <li>Refresh Status, the import's upload progress, and its notice for a file that isn't a library. The mockup bar also shows a dev run's version line and a phone on its side, where the admin bar stays.</li>
+    </ul>
+  </a>
+
+  <a class="card" href="recovery.html">
+    <h2><span class="material-symbol-icon">restart_alt</span>Recovery page</h2>
+    <ul>
+      <li>The server's own plain page for when the WebUI's files are missing or broken: restart, stop, updates, and the newest log lines, behind the control token from another machine.</li>
     </ul>
   </a>
 

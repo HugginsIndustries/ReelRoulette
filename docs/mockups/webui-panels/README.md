@@ -8,8 +8,10 @@ An interactive mockup of the whole visible UI of v0.15.0, approved before the mi
   - the side panel on either side of the player, with its resize handle, or as the full-screen overlay at phone widths;
   - the Library, Filter, Tags, Stats, and Settings tabs, with multi-select and bulk actions in the Library;
   - the in-app dialogs, the keyboard shortcuts, and the volume control;
-  - what Auto-Pause does, shown by a stand-in video that plays.
+  - what Auto-Pause does, shown by a stand-in video that plays;
+  - random picks and the play history, and how each server situation looks, set from the magenta Mockup tab.
 - `admin.html` shows the full-page admin view, its sections, duplicate review, and the control token gate.
+- `recovery.html` shows the server's plain recovery page, for when the WebUI's files are missing or broken.
 - `validation.html` shows each state of the field validation pattern, with what a screen reader is given.
 - `desktop-notice.html` shows the notice the last desktop build gives once.
 
@@ -43,7 +45,7 @@ python3 docs/mockups/webui-panels/build/build_pages.py
 
 To use an icon that isn't in `icons.json`, add its name to `ICONS` in `build/build_font.py`, run that script, then rebuild. The script cuts the WebUI's Material Symbols font and needs [fontTools](https://github.com/fonttools/fonttools).
 
-`build/check.mjs` loads each page in happy-dom and drives the main interactions to catch script errors. It does no layout, so it can't check how the pages look or pointer dragging. It uses the WebUI's dev dependencies, so run `npm install` in `src/clients/web/ReelRoulette.WebUI` first:
+`build/check.mjs` loads each page in happy-dom and drives the main interactions to catch script errors. It opens the main page as `layout.html?instant`, which skips the mockup's waits, such as Auto Tag's 5-second scan. It does no layout, so it can't check how the pages look or pointer dragging. It uses the WebUI's dev dependencies, so run `npm install` in `src/clients/web/ReelRoulette.WebUI` first:
 
 ```sh
 node docs/mockups/webui-panels/build/check.mjs

@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a1a1a">
+<title>ReelRoulette Recovery</title>
+<style>
+/*@COMMON_CSS@*/
+
+/* The server's built-in recovery page: plain, in the WebUI's theme colors, and without the WebUI's files. */
+[hidden] { display: none !important; }
+body { padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+main { max-width: 760px; margin: 0 auto; }
+h1 { margin: 0 0 4px; font-size: 1.5rem; }
+.lede { margin: 0 0 16px; color: var(--muted-fg); }
+section { border-top: 1px solid var(--surface-border); padding: 12px 0; }
+h2 { margin: 0 0 8px; font-size: 1.1rem; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 10px; }
+.facts dt { color: var(--muted-fg); }
+.facts dd { margin: 0; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.hint { margin: 0 0 8px; color: var(--muted-fg); }
+.tail { height: 260px; overflow: auto; margin: 8px 0 0; padding: 8px; border: 1px solid var(--surface-border); border-radius: 6px; background: var(--surface); font: 0.8rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
+.gate { max-width: 380px; }
+.gate .vfield { width: 100%; margin: 4px 0 10px; }
+.status { min-height: 1.3em; margin-top: 8px; color: var(--muted-fg); }
+.mock-bar { padding: 6px 10px; margin: 0 auto 14px; max-width: 760px; display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; }
+.mock-bar label { display: flex; gap: 6px; align-items: center; }
+</style>
+</head>
+<body>
+<div class="mock-bar mock-note mock-keep">
+  <span class="mock-label mock-keep">Mockup</span>
+  <label><input type="checkbox" id="mock-hide-notes"> Hide mockup notes</label>
+  <label><input type="checkbox" id="mock-remote"> Opened from another machine</label>
+  <span>The server serves this page itself, at a fixed path such as /recovery, and it loads none of the WebUI's files, so it works when they are missing or broken.</span>
+</div>
+<main>
+  <h1>ReelRoulette Recovery</h1>
+  <p class="lede">Restart or stop the server, check its logs, and apply updates when the WebUI can't load.</p>
+
+  <form class="gate" id="gate" novalidate hidden>
+    <h2>Control token required</h2>
+    <p class="hint">From another machine, recovery needs the server's control token, as admin does.</p>
+    <label for="gate-token">Control token</label>
+    <span class="vfield"><input class="ctl" type="password" id="gate-token" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
+    <div class="row"><button class="btn" type="submit" id="gate-continue"><span class="btn-label">Continue</span><span class="btn-problem material-symbol-icon">error</span></button></div>
+  </form>
+
+  <div id="recovery">
+    <section>
+      <h2>Server</h2>
+      <dl class="facts">
+        <dt>Version</dt><dd>0.15.0</dd>
+        <dt>Running for</dt><dd>3 days, 4 hours</dd>
+        <dt>Library</dt><dd>49,055 items in 3 sources</dd>
+      </dl>
+      <div class="row">
+        <button class="btn" type="button" id="restart">Restart</button>
+        <button class="btn" type="button" id="stop">Stop</button>
+      </div>
+    </section>
+    <section>
+      <h2>Updates</h2>
+      <p class="hint" id="update-state">Up to date: 0.15.0.</p>
+      <div class="row">
+        <button class="btn" type="button" id="update-check">Check for Updates</button>
+        <button class="btn" type="button" id="update-download" hidden>Download Update</button>
+        <button class="btn" type="button" id="update-apply" hidden>Apply &amp; Restart</button>
+      </div>
+    </section>
+    <section>
+      <div class="row"><h2 style="flex:1;margin:0">Log Viewer</h2><button class="btn" type="button" id="log-refresh">Refresh</button></div>
+      <pre class="tail" id="tail" tabindex="0" aria-label="The newest log lines, newest first"></pre>
+    </section>
+    <p class="status" id="status" role="status"></p>
+  </div>
+</main>
+<script>
+/*@COMMON_JS@*/
+hydrateIcons();
+initHideMock();
+const $ = (id) => document.getElementById(id);
+const status = (text) => ($("status").textContent = text);
+let unlocked = false;
+function applyGate() {
+  const gated = $("mock-remote").checked && !unlocked;
+  $("gate").hidden = !gated;
+  $("recovery").hidden = gated;
+  placeAllTips();
+}
+$("mock-remote").checked = store.get("recoveryRemote", false);
+$("mock-remote").addEventListener("change", () => {
+  store.set("recoveryRemote", $("mock-remote").checked);
+  unlocked = false;
+  applyGate();
+});
+const gateField = new ValidatedField($("gate-token"), (value) => (value.trim() ? null : { message: "Enter the control token.", empty: true }));
+holdAction($("gate-continue"), () => [gateField], { reason: () => "Enter the control token first." });
+$("gate").addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (gateField.holds) return;
+  unlocked = true;
+  applyGate();
+});
+
+$("restart").addEventListener("click", () => status("Restarting the server…"));
+$("stop").addEventListener("click", () => status("Stopping the server…"));
+// Download and apply ask first, as admin does.
+$("update-check").addEventListener("click", () => {
+  $("update-state").textContent = "0.15.1 is available.";
+  $("update-download").hidden = false;
+});
+$("update-download").addEventListener("click", async () => {
+  if (!(await confirmDialog({ message: "Download update 0.15.1 now? The server will not restart until you choose Apply & Restart.", confirmLabel: "Download" }))) return;
+  $("update-state").textContent = "0.15.1 is downloaded and ready to apply.";
+  $("update-download").hidden = true;
+  $("update-apply").hidden = false;
+});
+$("update-apply").addEventListener("click", async () => {
+  if (await confirmDialog({ message: "Apply 0.15.1 and restart the server now? This page will disconnect while the server restarts.", confirmLabel: "Apply & Restart" })) {
+    status("Applying the update and restarting…");
+  }
+});
+
+// The newest lines of last.log in today's format, newest first, written as text.
+const TAIL = [
+  "[2026-10-08 10:20:05.214] [server] [error] WebUI files missing: index.html not found under wwwroot.",
+  "[2026-10-08 10:20:05.210] [server] [info] Serving the recovery page.",
+  "[2026-10-08 10:19:40.020] [server] [warn] Static file request failed: /assets/index.js (404)",
+  "[2026-10-08 10:16:30.801] [server] [info] Core refresh complete | 2 added, 0 removed, 0 renamed",
+  "[2026-10-08 10:15:40.002] [server] [info] Core refresh started",
+  "[2026-10-08 10:02:12.300] [server] [info] Catalog opened: 49055 items",
+  "[2026-10-08 10:02:11.090] [server] [info] Server started on port 45123"
+];
+function renderTail() {
+  $("tail").textContent = TAIL.join("\n");
+}
+$("log-refresh").addEventListener("click", renderTail);
+renderTail();
+applyGate();
+</script>
+</body>
+</html>

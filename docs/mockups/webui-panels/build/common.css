@@ -45,7 +45,8 @@ html.theme-light {
   --page-fg: #1a1d21;
   --panel-border: #c5cad3;
   --muted-fg: #5c6570;
-  --time-display-fg: #1a1d21;
+  /* The player stays dark in both themes, so its time display stays light, like its other controls. */
+  --time-display-fg: #ffffff;
   --control-drop-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
   --transport-cluster-shadow: 0 3px 12px rgba(0, 0, 0, 0.22);
   --surface: #f4f5f8;
@@ -72,6 +73,14 @@ html.theme-light {
   font-style: normal;
   font-display: block;
 }
+/* The few icons shown filled; the WebUI sets the variable font's FILL axis to 1 instead. */
+@font-face {
+  font-family: "Material Symbols Filled";
+  src: url("data:font/woff2;base64,@FONT_FILLED_B64@") format("woff2");
+  font-weight: 100 700;
+  font-style: normal;
+  font-display: block;
+}
 .material-symbol-icon {
   font-family: "Material Symbols Outlined";
   font-size: 32px;
@@ -87,6 +96,7 @@ html.theme-light {
   direction: ltr;
   -webkit-font-smoothing: antialiased;
 }
+.material-symbol-icon.is-filled { font-family: "Material Symbols Filled"; }
 
 .themed-scrollbar { scrollbar-width: auto; scrollbar-color: var(--huggins-orange) transparent; }
 .themed-scrollbar::-webkit-scrollbar { width: 16px; height: 16px; }
@@ -362,7 +372,14 @@ body.sorting, body.sorting * { cursor: grabbing !important; user-select: none; -
   font-size: 0.85rem;
   line-height: 1.4;
 }
+/* Checkboxes, radio buttons, sliders, and progress bars use the app's orange accent instead of the browser's blue. */
+input, progress, meter { accent-color: var(--huggins-orange); }
 .mock-note b, .mock-note strong { color: var(--mock); }
+/* "Hide mockup notes" hides every mockup-only element except the mockup's own controls, marked mock-keep, so screens
+   show as they will ship. */
+html.hide-mock .mock-note:not(.mock-keep),
+html.hide-mock .mock-label:not(.mock-keep),
+html.hide-mock .mock-small:not(.mock-keep) { display: none !important; }
 .mock-inline { margin: 4px 0 8px; padding: 6px 8px; }
 .mock-label {
   font-size: 0.7rem;

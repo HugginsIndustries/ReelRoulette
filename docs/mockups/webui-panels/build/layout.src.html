@@ -78,6 +78,13 @@ body { height: 100dvh; overflow: hidden; display: flex; flex-direction: column; 
   container-type: size;
 }
 
+/* Ambient mode: a heavily blurred, dimmed copy of the frame fills the black space around it. The glow sits on the
+   player's dark background in both themes, so each theme only sets its own strength; the Settings tab sets the blur,
+   both strengths, and saturation. Its own stacking context keeps it behind the picture. Off, the space stays plain black. */
+.ambient { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.ambient canvas { position: absolute; inset: -15%; width: 130%; height: 130%; filter: blur(var(--ambient-blur)) brightness(var(--ambient-dark)) saturate(var(--ambient-saturation)); }
+html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(var(--ambient-light)) saturate(var(--ambient-saturation)); }
+
 /* A stand-in for the video or photo, letterboxed like object-fit: contain. */
 .fake-video, .lib-tile-art {
   --h: 200;
@@ -288,7 +295,10 @@ body { height: 100dvh; overflow: hidden; display: flex; flex-direction: column; 
 .lib-sort { display: flex; gap: 8px; }
 .lib-sort select { flex: 1 1 auto; }
 .lib-sort .btn { flex: 0 0 auto; min-width: 128px; }
+/* The grid's text isn't selectable, so Shift+click selects tiles and not the text across them. */
 .lib-grid {
+  user-select: none;
+  -webkit-user-select: none;
   border: 1px solid var(--surface-border);
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.2);
@@ -297,21 +307,26 @@ body { height: 100dvh; overflow: hidden; display: flex; flex-direction: column; 
 html.theme-light .lib-grid { background: #fff; }
 .lib-row { display: flex; gap: 2px; margin-bottom: 1px; }
 .lib-tile { position: relative; flex-shrink: 0; overflow: hidden; cursor: pointer; }
-.lib-tile:hover { opacity: 0.79; }
 .lib-tile:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+/* The thumbnail and what sits on it. A selected tile's thumbnail shrinks inside the tile, so the selection icon, which
+   stays put, sits on its top-left corner. */
+.lib-tile-frame { position: absolute; inset: 0; overflow: hidden; transition: transform 0.15s ease, border-radius 0.15s ease; }
 .lib-tile-art { position: absolute; inset: 0; }
-.lib-tile.is-current { box-shadow: inset 0 0 0 3px var(--huggins-orange); }
-.lib-tile-badge {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  display: flex;
-  padding: 2px 3px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.6);
-}
-.lib-tile-badge .material-symbol-icon { font-size: 18px; color: var(--huggins-orange); }
+/* Hovering dims the thumbnail, as it dims the whole tile today, and leaves the selection icon bright. */
+@media (hover: hover) { .lib-tile:hover .lib-tile-frame { opacity: 0.79; } }
+/* Tile icons: filled, with a soft drop shadow and no dark rectangle, so they stay readable on bright thumbnails. */
+.tile-icon { filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.5)); }
+.lib-tile-badge { position: absolute; top: 4px; right: 4px; display: flex; gap: 2px; }
+.lib-tile-badge .material-symbol-icon { font-size: 20px; color: var(--huggins-orange); }
+/* The playing tile: an icon in the middle, modest and slightly translucent so the thumbnail shows through. */
+.playing-mark { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; pointer-events: none; }
+.playing-mark .material-symbol-icon { font-size: 40px; color: var(--huggins-orange); opacity: 0.8; }
+.lib-tile.is-current .playing-mark { display: flex; }
+.lib-empty.is-error { color: var(--error); }
+/* File names show on tiles only with the Settings tab's option; the tile's tooltip names it either way. */
+.lib-grid.show-names .lib-tile-name { display: block; }
 .lib-tile-name {
+  display: none;
   position: absolute;
   left: 0;
   right: 0;
@@ -364,7 +379,31 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
 .autotag-head { display: flex; align-items: center; justify-content: space-between; }
 .autotag-head h2 { margin: 0; }
 .autotag-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.autotag-results { flex: 1; border: 1px solid var(--surface-border); border-radius: 8px; padding: 8px; min-height: 120px; }
+.autotag-results { flex: 1; overflow: auto; border: 1px solid var(--surface-border); border-radius: 8px; padding: 8px; min-height: 120px; }
+.autotag-progress { height: 4px; border-radius: 4px; overflow: hidden; background: var(--control-bg); }
+.autotag-progress::after {
+  content: "";
+  display: block;
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--huggins-orange), transparent);
+  animation: autotag-indeterminate 1s ease-in-out infinite;
+}
+@keyframes autotag-indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+.autotag-status { font-size: 0.9rem; opacity: 0.85; min-height: 1.2em; }
+/* The header and every row share one column template, so each count sits under its own header. */
+.autotag-overlay { --autotag-count: 7rem; }
+@media (max-width: 600px) { .autotag-overlay { --autotag-count: 4.75rem; } }
+.autotag-table-head, .autotag-row-main { display: grid; grid-template-columns: 40px 40px minmax(0, 1fr) var(--autotag-count) var(--autotag-count); column-gap: 12px; align-items: center; }
+.autotag-count { text-align: center; font-variant-numeric: tabular-nums; }
+.autotag-empty { margin: 0; padding: 32px 12px; text-align: center; color: var(--muted-fg); }
+.autotag-table-head { padding: 6px 4px; font-weight: 600; font-size: 0.85rem; border-bottom: 1px solid var(--surface-border); margin-bottom: 6px; }
+.autotag-result { border-bottom: 1px solid var(--surface-border); padding: 4px; }
+.autotag-files { margin: 4px 0 4px 104px; }
+.autotag-file { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; align-items: center; padding: 2px 0; font-size: 0.9rem; }
+.autotag-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.autotag-footer { display: flex; align-items: center; gap: 8px; }
+.autotag-footer #autotag-cancel { margin-left: auto; }
 
 /* Header: the file name opens the Stats tab; the pairing prompt shows when the server asks for pairing. */
 a.icon-btn { text-decoration: none; }
@@ -406,26 +445,22 @@ a.icon-btn { text-decoration: none; }
 .icon-btn[aria-pressed="true"] { color: var(--huggins-orange); }
 .lib-tile.is-placeholder { background: var(--placeholder, #2b2b2b); animation: pulse 1.1s ease-in-out infinite; }
 html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
-.lib-tile.is-placeholder > * { display: none; }
+.lib-tile.is-placeholder > * { visibility: hidden; }
 @keyframes pulse { 50% { opacity: 0.55; } }
-.select-mark {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 2px solid #fff;
-  background: rgba(0, 0, 0, 0.35);
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* Selection, as Google Photos does it: one icon, a white circle with a check mark, at the tile's top left. It shows
+   faded while the pointer is over a tile and on every tile during selection, bright with the pointer on it, and filled
+   orange, with a white check mark, on a selected tile. */
+.select-mark { position: absolute; top: 4px; left: 4px; display: none; border-radius: 50%; color: #fff; opacity: 0.6; transition: opacity 0.1s; }
+.select-mark .material-symbol-icon { font-size: 26px; }
+@media (hover: hover) {
+  .lib-tile:hover .select-mark { display: flex; }
+  .select-mark:hover { opacity: 1; }
 }
-.select-mark .material-symbol-icon { font-size: 30px; color: var(--huggins-orange); display: none; }
-.lib-tile.is-selected .select-mark { border: 0; background: #fff; }
-.lib-tile.is-selected .select-mark .material-symbol-icon { display: inline-flex; }
-.lib-tile.is-selected { box-shadow: inset 0 0 0 3px var(--huggins-orange); }
+.lib-grid.selecting .select-mark { display: flex; }
+.lib-tile.is-selected { background: color-mix(in srgb, var(--huggins-orange) 22%, var(--surface)); }
+.lib-tile.is-selected .lib-tile-frame { transform: scale(0.86); border-radius: 4px; }
+.lib-tile.is-selected .select-mark { display: flex; opacity: 1; color: var(--huggins-orange); background: radial-gradient(circle, #fff 0 42%, transparent 44%); }
+@media (prefers-reduced-motion: reduce) { .lib-tile-frame { transition: none; } }
 .bulk-bar { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; position: relative; }
 .bulk-bar .btn { min-height: 40px; padding: 4px 10px; }
 .menu {
@@ -456,8 +491,6 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
 .menu button:hover, .menu button:focus-visible { background: rgba(127, 127, 127, 0.16); outline: none; }
 .menu .menu-danger { color: var(--error); }
 .menu-rule { border: 0; border-top: 1px solid var(--surface-border); margin: 4px 0; }
-.bulk-tags { max-height: min(50dvh, 420px); overflow: auto; }
-.bulk-tags h4 { margin: 8px 0 6px; font-size: 0.9rem; }
 
 /* Stats tab. */
 .stats-body, .settings-body { display: flex; flex-direction: column; gap: 12px; }
@@ -483,6 +516,19 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
 .setting:last-child { margin-bottom: 0; }
 .setting-label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 0.92rem; }
 .setting-hint { font-size: 0.82rem; color: var(--muted-fg); margin: 4px 0 0; }
+/* An expandable group of a setting's own options, such as Ambient mode settings. */
+.setting-more { margin: 6px 0 0 26px; }
+.setting-more summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; gap: 4px; font-size: 0.9rem; list-style: none; }
+.setting-more summary::-webkit-details-marker { display: none; }
+/* The chevron points right while the section is closed and down while it is open. */
+.setting-more-chevron { font-size: 22px; transition: transform 0.15s ease; }
+.setting-more[open] .setting-more-chevron { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .setting-more-chevron { transition: none; } }
+.setting-sliders { display: grid; gap: 2px; padding: 4px 0 0; }
+.setting-sliders label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 0.88rem; padding-top: 4px; }
+.setting-sliders output { color: var(--muted-fg); font-variant-numeric: tabular-nums; }
+.setting-sliders input[type="range"] { width: 100%; margin: 0; }
+.setting-sliders .btn { justify-self: start; margin-top: 6px; }
 .choice-row { display: flex; flex-wrap: wrap; gap: 0 16px; }
 .choice-row label, .choice-stack label { display: flex; align-items: center; gap: 8px; min-height: 36px; }
 .choice-stack { display: flex; flex-direction: column; }
@@ -531,6 +577,39 @@ body.short-screen .ctl, body.short-screen .btn { min-height: 38px; }
 body.short-screen .filter-tab { min-height: 38px; padding: 4px 12px; }
 body.short-screen .app-dialog { max-height: calc(100dvh - 12px); }
 body.short-screen .dialog-body { padding: 10px 12px; gap: 6px; }
+
+/* Before anything plays, and the reconnecting indicator shown while the status line is hidden. */
+.empty-state { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--muted-fg); }
+.conn-indicator {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+.conn-indicator .material-symbol-icon { font-size: 18px; animation: spin 1.2s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.pair-label { white-space: nowrap; }
+body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
+
+/* The Favorites and Blacklisted filters: a checkbox and an only-or-excluded dropdown. */
+.mode-row { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.mode-row > label { display: flex; align-items: center; gap: 8px; min-width: 7.5rem; }
+.mode-select { min-height: 36px; padding: 0 8px; }
+.mode-select:disabled { opacity: 0.5; }
+.drag-handle:disabled { opacity: 0.3; cursor: not-allowed; color: var(--muted-fg); }
+
+/* Today's startup error page, when the runtime configuration doesn't load. */
+.startup-error { position: fixed; inset: 0; z-index: 6000; background: var(--page-bg); color: var(--page-fg); overflow: auto; padding: 24px; }
 
 /* The status line. */
 .status { font-size: 0.9rem; color: var(--muted-fg); margin-top: 10px; min-height: 1.2em; flex-shrink: 0; }
@@ -594,6 +673,7 @@ body.short-screen .dialog-body { padding: 10px 12px; gap: 6px; }
 .mock-sheet label { display: flex; gap: 8px; align-items: flex-start; padding: 3px 0; }
 .mock-sheet label input { margin-top: 3px; }
 .mock-sheet .mock-small { font-size: 0.8rem; opacity: 0.85; margin: 2px 0 0 0; }
+.mock-back { margin: 0 0 8px; padding: 6px 12px; border: 1px dashed var(--mock); border-radius: 8px; background: var(--mock-bg); color: var(--page-fg); font: inherit; cursor: pointer; }
 .mock-readout { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.78rem; margin: 0 0 10px; white-space: pre-wrap; }
 .mock-sheet-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 .mock-sheet-actions button {
@@ -613,7 +693,8 @@ body.short-screen .dialog-body { padding: 10px 12px; gap: 6px; }
     <h1>ReelRoulette</h1>
     <div class="now-playing"><span id="np-name" class="is-link" role="button" tabindex="0" title="Show stats"></span><span id="np-duration" class="muted"></span></div>
     <form class="pair" id="pair" novalidate hidden>
-      <span class="vfield"><input class="ctl" type="text" id="pair-token" placeholder="Pairing token" aria-label="Pairing token" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
+      <label class="pair-label" for="pair-token">Pairing token</label>
+      <span class="vfield"><input class="ctl" type="text" id="pair-token" placeholder="Enter token" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
       <button class="btn" type="submit" id="pair-btn"><span class="btn-label">Pair</span><span class="btn-problem material-symbol-icon">error</span></button>
     </form>
     <div class="top-bar-end">
@@ -624,7 +705,10 @@ body.short-screen .dialog-body { padding: 10px 12px; gap: 6px; }
   <div id="stage" class="stage" data-side="right" data-dialog-host>
     <main class="player-col">
       <div id="media" class="media-container controls-visible">
+        <div id="ambient" class="ambient" aria-hidden="true" hidden><canvas width="32" height="18"></canvas></div>
         <div id="video" class="fake-video"><div class="subject"></div></div>
+        <div id="empty-state" class="empty-state" hidden>Tap to play, or open the panel to choose a preset or filter.</div>
+        <div id="conn-indicator" class="conn-indicator" role="status" hidden><span class="material-symbol-icon">sync</span>Reconnecting…</div>
         <div id="play-chip" class="mock-chip mock-note"></div>
         <div id="mock-hint" class="mock-hint mock-note">The panel button opens the panel on its last tab.</div>
         <div class="overlay-controls" id="overlay-controls">
@@ -726,7 +810,7 @@ body.short-screen .dialog-body { padding: 10px 12px; gap: 6px; }
       <section id="tab-filter" class="panel-page" role="tabpanel" aria-labelledby="tab-btn-filter" hidden>
         <div class="panel-page-head">
           <h2 id="filter-heading" class="grow">Preset: None</h2>
-          <button class="icon-btn" type="button" aria-label="Refresh" title="Refresh"><span class="material-symbol-icon">refresh</span></button>
+          <button class="icon-btn" type="button" id="filter-refresh" aria-label="Refresh" title="Refresh"><span class="material-symbol-icon">refresh</span></button>
         </div>
         <div class="filter-tabstrip" role="tablist" aria-label="Filter sections">
           <button class="filter-tab is-active" type="button" role="tab" aria-selected="true" data-sub="general">General<span class="tab-problem material-symbol-icon">error</span></button>
@@ -738,8 +822,8 @@ body.short-screen .dialog-body { padding: 10px 12px; gap: 6px; }
             <div class="filter-section">
               <h3>Basic Filters</h3>
               <div class="filter-stack">
-                <label><input type="checkbox"> Favorites only</label>
-                <label><input type="checkbox" checked> Exclude blacklisted</label>
+                <div class="mode-row"><label><input type="checkbox" id="filter-fav"> Favorites</label><select class="ctl mode-select" id="filter-fav-mode" aria-label="Favorites filter"><option value="only">only</option><option value="excluded">excluded</option></select></div>
+                <div class="mode-row"><label><input type="checkbox" id="filter-bl" checked> Blacklisted</label><select class="ctl mode-select" id="filter-bl-mode" aria-label="Blacklisted filter"><option value="only">only</option><option value="excluded" selected>excluded</option></select></div>
                 <label><input type="checkbox"> Only never played</label>
                 <label><input type="checkbox"> Only videos with known duration</label>
                 <label><input type="checkbox"> Only videos with known loudness</label>
@@ -760,7 +844,8 @@ body.short-screen .dialog-body { padding: 10px 12px; gap: 6px; }
               <div class="filter-stack">
                 <label><input type="checkbox" checked> Videos (/media/videos)</label>
                 <label><input type="checkbox" checked> Phone backup (/media/phone)</label>
-                <label><input type="checkbox" checked> Archive (/mnt/archive)</label>
+                <label><input type="checkbox" checked disabled> Archive (/mnt/archive)</label>
+                <span class="filter-hint" id="no-sources" hidden>No sources returned from server.</span>
               </div>
             </div>
             <div class="filter-section">
@@ -805,7 +890,7 @@ body.short-screen .dialog-body { padding: 10px 12px; gap: 6px; }
               <h3>Choose Preset</h3>
               <div class="filter-row">
                 <select class="ctl grow" id="filter-preset-select"></select>
-                <button class="btn" type="button">Update Preset</button>
+                <button class="btn" type="button" id="filter-update-preset">Update Preset</button>
               </div>
             </div>
             <div class="filter-section">
@@ -842,8 +927,8 @@ body.short-screen .dialog-body { padding: 10px 12px; gap: 6px; }
             <select class="ctl" id="tags-category-select" aria-label="Category for new tag"></select>
           </div>
           <div class="tags-footer-row">
-            <input class="ctl" type="text" placeholder="New tag name" aria-label="New tag name">
-            <button class="icon-btn" type="button" aria-label="Add tag" title="Add tag"><span class="material-symbol-icon">add</span></button>
+            <input class="ctl" type="text" id="tags-new-name" placeholder="New tag name" aria-label="New tag name" autocomplete="off">
+            <button class="icon-btn" type="button" id="tags-add-tag" aria-label="Add tag" title="Add tag"><span class="material-symbol-icon">add</span></button>
             <button class="icon-btn" type="button" id="tags-save" aria-label="Save" title="Save" disabled><span class="material-symbol-icon">save</span></button>
           </div>
         </div>
@@ -900,6 +985,32 @@ body.short-screen .dialog-body { padding: 10px 12px; gap: 6px; }
               </div>
             </div>
             <div class="setting">
+              <div class="choice-row"><label><input type="checkbox" id="set-ambient"> Ambient mode</label></div>
+              <p class="setting-hint">A soft glow of the picture's colors fills the black space around it.</p>
+              <details class="setting-more" id="set-ambient-more">
+                <summary><span class="material-symbol-icon setting-more-chevron">chevron_right</span>Ambient mode settings</summary>
+                <div class="setting-sliders">
+                  <label for="set-ambient-rate"><span>Update rate</span><output id="set-ambient-rate-out" for="set-ambient-rate"></output></label>
+                  <input type="range" id="set-ambient-rate" min="0.25" max="4" step="0.25">
+                  <label for="set-ambient-fade"><span>Fade time</span><output id="set-ambient-fade-out" for="set-ambient-fade"></output></label>
+                  <input type="range" id="set-ambient-fade" min="0.25" max="4" step="0.25">
+                  <label for="set-ambient-blur"><span>Blur</span><output id="set-ambient-blur-out" for="set-ambient-blur"></output></label>
+                  <input type="range" id="set-ambient-blur" min="10" max="80" step="1">
+                  <label for="set-ambient-dark"><span>Strength in the dark theme</span><output id="set-ambient-dark-out" for="set-ambient-dark"></output></label>
+                  <input type="range" id="set-ambient-dark" min="0" max="100" step="1">
+                  <label for="set-ambient-light"><span>Strength in the light theme</span><output id="set-ambient-light-out" for="set-ambient-light"></output></label>
+                  <input type="range" id="set-ambient-light" min="0" max="100" step="1">
+                  <label for="set-ambient-saturation"><span>Saturation</span><output id="set-ambient-saturation-out" for="set-ambient-saturation"></output></label>
+                  <input type="range" id="set-ambient-saturation" min="0" max="200" step="5">
+                  <button class="btn" type="button" id="set-ambient-reset">Reset to defaults</button>
+                </div>
+              </details>
+            </div>
+            <div class="setting">
+              <div class="choice-row"><label><input type="checkbox" id="set-tile-names"> Show file names on tiles</label></div>
+              <p class="setting-hint">With a mouse, hovering a tile shows its name either way.</p>
+            </div>
+            <div class="setting">
               <div class="choice-row"><label><input type="checkbox" id="set-status"> Show the status line</label></div>
               <p class="setting-hint">Connection, refresh, and sync messages below the player.</p>
             </div>
@@ -909,8 +1020,8 @@ body.short-screen .dialog-body { padding: 10px 12px; gap: 6px; }
             <div class="setting">
               <span class="setting-label" id="set-side-label">Side</span>
               <div class="choice-row" role="radiogroup" aria-labelledby="set-side-label">
-                <label><input type="radio" name="set-side" value="right"> Right</label>
                 <label><input type="radio" name="set-side" value="left"> Left</label>
+                <label><input type="radio" name="set-side" value="right"> Right</label>
               </div>
             </div>
             <div class="setting">
@@ -930,10 +1041,11 @@ body.short-screen .dialog-body { padding: 10px 12px; gap: 6px; }
           <div class="settings-section">
             <h3>Diagnostics</h3>
             <dl class="diag">
-              <dt>Client</dt><dd>web 3f9c2e81-…</dd>
+              <dt>Client</dt><dd>3f9c2e81-…</dd>
               <dt>Session</dt><dd>7a01d6c4-…</dd>
-              <dt>Client type</dt><dd>desktop-web</dd>
-              <dt>Server</dt><dd>0.15.0 (API 9)</dd>
+              <dt>Client type</dt><dd id="diag-type"></dd>
+              <dt>Device name</dt><dd id="diag-device"></dd>
+              <dt>Server</dt><dd>0.15.0 (API 1)</dd>
               <dt>WebUI</dt><dd>0.15.0</dd>
             </dl>
           </div>
@@ -950,31 +1062,68 @@ body.short-screen .dialog-body { padding: 10px 12px; gap: 6px; }
         <button class="icon-btn" type="button" id="autotag-close" aria-label="Close" title="Close"><span class="material-symbol-icon">close</span></button>
       </div>
       <div class="autotag-row">
-        <label><input type="checkbox"> Scan full library</label>
-        <label><input type="checkbox"> View all matches</label>
+        <label><input type="checkbox" id="autotag-full"> Scan full library</label>
+        <label><input type="checkbox" id="autotag-all"> View all matches</label>
       </div>
-      <p class="filter-hint">Use Scan Files to find matching tags. File name matching ignores extension.</p>
+      <p class="filter-hint" style="margin:0">Use Scan Files to find matching tags. File name matching ignores extension.</p>
       <div class="autotag-row">
-        <button class="btn" type="button">Select all</button>
-        <button class="btn" type="button">Deselect all</button>
-        <button class="btn" type="button" style="margin-left:auto">Scan Files</button>
+        <button class="btn" type="button" id="autotag-select-all">Select all</button>
+        <button class="btn" type="button" id="autotag-deselect-all">Deselect all</button>
+        <button class="btn" type="button" id="autotag-scan" style="margin-left:auto">Scan Files</button>
       </div>
-      <div class="autotag-results"></div>
-      <p class="mock-note" style="margin:0;padding:8px 10px">Auto Tag opens from the Tags tab over the whole page, as its tab does today, so its file list keeps its width. It covers the player, so Responsive Auto-Pause pauses until it closes.</p>
+      <div class="autotag-progress" id="autotag-progress" role="progressbar" aria-label="Scan in progress" hidden></div>
+      <div class="autotag-status" id="autotag-status" aria-live="polite"></div>
+      <div class="autotag-results themed-scrollbar" id="autotag-results"></div>
+      <div class="autotag-footer">
+        <p class="mock-note" style="margin:0;padding:6px 10px;flex:1">Opens over the whole page, as its tab does today, and pauses playback under Responsive Auto-Pause. Its own Apply applies the checked changes. Cancel clears the scan and closes; the X closes and keeps the last scan. Both are disabled while a scan runs.</p>
+        <button class="btn" type="button" id="autotag-cancel">Cancel</button>
+        <button class="btn" type="button" id="autotag-apply" disabled>Apply</button>
+      </div>
+    </div>
+
+    <div id="startup-error" class="startup-error" hidden>
+      <main>
+        <h1>ReelRoulette WebUI</h1>
+        <section class="card error">
+          <h2>Runtime Configuration Error</h2>
+          <p>Failed to load /runtime-config.json (HTTP 404).</p>
+          <p>Provide `window.__REEL_ROULETTE_RUNTIME_CONFIG` before boot, or host a valid `/runtime-config.json`.</p>
+        </section>
+        <p class="mock-note mock-inline">Today's page, kept as it is.</p>
+        <button type="button" class="mock-back" id="startup-error-back">Back to the mockup</button>
+      </main>
     </div>
 
     <button id="mock-toggle" class="mock-toggle" type="button" aria-expanded="false" aria-controls="mock-sheet">Mockup</button>
-    <div id="mock-sheet" class="mock-sheet mock-note" hidden>
-      <div class="mock-label">Mockup options, not part of the WebUI</div>
+    <div id="mock-sheet" class="mock-sheet mock-note mock-keep" hidden>
+      <div class="mock-label mock-keep">Mockup options, not part of the WebUI</div>
+      <label><input type="checkbox" id="mock-hide-notes"> Hide mockup notes, to see screens as they will ship</label>
       <h2>Panel layout</h2>
       <p id="mock-readout" class="mock-readout"></p>
       <fieldset>
+        <legend>Server</legend>
+        <label><input type="radio" name="mock-situation" value="connected"> Connected</label>
+        <label><input type="radio" name="mock-situation" value="reconnecting"> Stopped: the WebUI is reconnecting</label>
+        <label><input type="radio" name="mock-situation" value="noanswer"> Not answering random picks (the WebUI gives up after 10 s; the mockup after 4)</label>
+        <label><input type="radio" name="mock-situation" value="nolibrary"> Running without a library</label>
+        <label><input type="radio" name="mock-situation" value="incompatible"> Fails the compatibility check</label>
+        <label><input type="radio" name="mock-situation" value="empty"> An empty library</label>
+      </fieldset>
+      <fieldset>
         <legend>Situation</legend>
-        <label><input type="checkbox" id="mock-pairing"> The server asks for pairing</label>
+        <label><input type="checkbox" id="mock-pairing"> The server asks for pairing (a token of "wrong" fails)</label>
         <label><input type="checkbox" id="mock-server-machine"> This browser is on the server machine: Show in File Manager, and admin actions without the control token</label>
         <label><input type="checkbox" id="mock-ios-volume"> Volume is read-only, as on iOS</label>
         <label><input type="checkbox" id="mock-short"> A phone on its side (a touch screen under 500 px tall)</label>
-        <p class="mock-small">The theme, panel side, and Auto-Pause are in the Settings tab.</p>
+        <p class="mock-small mock-keep">The theme, panel side, and Auto-Pause are in the Settings tab.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Events</legend>
+        <div class="mock-sheet-actions">
+          <button type="button" id="mock-sync">A favorite from another device</button>
+          <button type="button" id="mock-refresh">A library refresh</button>
+          <button type="button" id="mock-startup">The runtime config fails</button>
+        </div>
       </fieldset>
       <div class="mock-sheet-actions">
         <button type="button" id="mock-reset">Forget the panel's state</button>
@@ -1005,6 +1154,7 @@ const media = $("media");
 const video = $("video");
 const coarse = window.matchMedia("(pointer: coarse)");
 hydrateIcons();
+initHideMock();
 
 // The panel's per-device state: open or closed, side, width, and last tab.
 const state = {
@@ -1024,13 +1174,17 @@ const state = {
   mockShort: store.get("mockShort", false),
   showStatus: store.get("showStatus", true),
   libCollapsed: store.get("libCollapsed", false),
+  tileNames: store.get("tileNames", false),
+  ambient: store.get("ambient", true),
+  // Mockup option: the server's situation.
+  situation: null,
   mode: "side",
   autoTag: false
 };
 // Unsaved changes survive closing the panel and switching tabs; the dots keep them from being forgotten.
 const unsaved = { filter: false, tags: false };
 
-// ---- Library items ----
+// ---- Library items, tags, and presets ----
 function rng(seed) {
   let s = seed >>> 0;
   return () => {
@@ -1043,7 +1197,7 @@ const WORDS_A = ["Beach", "Harbor", "Mountain", "City", "Forest", "Desert", "Riv
 const WORDS_B = ["Sunset", "Walk", "Drive", "Timelapse", "Picnic", "Hike", "Party", "Fireworks", "Swim", "Ride", "Storm", "Morning", "Concert", "Trip"];
 const VIDEO_ASPECTS = [16 / 9, 16 / 9, 16 / 9, 16 / 9, 9 / 16, 9 / 16, 4 / 3, 21 / 9];
 const PHOTO_ASPECTS = [4 / 3, 3 / 4, 3 / 2, 2 / 3, 1];
-// Every third item is a photo, so Next moves between photos and videos.
+// Every third item is a photo; a few videos are in containers a browser can't play.
 const ITEMS = Array.from({ length: 72 }, (_, i) => {
   const photo = i % 3 === 2;
   const a = WORDS_A[Math.floor(rand() * WORDS_A.length)];
@@ -1070,7 +1224,8 @@ const statRand = rng(23);
 ITEMS.forEach((item) => {
   item.plays = statRand() < 0.2 ? 0 : 1 + Math.floor(statRand() * 40);
   item.lastPlayedDays = item.plays ? 1 + Math.floor(statRand() * 300) : null;
-  item.blacklisted = statRand() < 0.05;
+  // Favorite and blacklisted never go together, as the player's buttons keep them.
+  item.blacklisted = !item.favorite && statRand() < 0.12;
   item.hasAudio = !isPhoto(item) && statRand() < 0.85;
   item.loudness = isPhoto(item) ? null : -(12 + Math.round(statRand() * 180) / 10);
   item.peak = isPhoto(item) ? null : -(Math.round(statRand() * 60) / 10);
@@ -1079,36 +1234,85 @@ ITEMS.forEach((item) => {
   item.path = `${isPhoto(item) ? "/media/phone" : "/media/videos"}/${item.year}/${item.name}`;
 });
 const BASELINE = -20.4;
+const NO_LIBRARY_MESSAGE = "Running without a library. The catalog was saved by a newer version of ReelRoulette and was left unchanged.";
+
+// Many tags across many categories, to see long lists and try reordering them.
+const UNCATEGORIZED = "uncategorized";
+const tagCategory = (id, name, names) => ({
+  id,
+  name,
+  chips: names.map((chipName) => ({ key: `${id}-${chipName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, name: chipName }))
+});
+const TAGS = [
+  tagCategory("people", "People", ["Alice", "Bob", "Carol", "Dan", "Erin", "Frank", "Grace", "Hugo", "Ivy", "Jack", "Kim", "Leo"]),
+  tagCategory("places", "Places", ["Beach", "Harbor", "Mountain", "City", "Forest", "Desert", "River", "Garden", "Lake", "Canyon", "Island", "Bridge", "Meadow", "Market"]),
+  tagCategory("events", "Events", ["Party", "Fireworks", "Concert", "Picnic", "Wedding", "Birthday", "Graduation", "Holiday"]),
+  tagCategory("activities", "Activities", ["Walk", "Drive", "Hike", "Swim", "Ride", "Timelapse", "Cooking", "Gaming", "Dancing"]),
+  tagCategory("time", "Time of day", ["Sunset", "Morning", "Night", "Noon"]),
+  tagCategory("weather", "Weather", ["Storm", "Snow", "Rain", "Fog", "Sunny"]),
+  tagCategory("mood", "Mood", ["Calm", "Funny", "Loud", "Cozy", "Epic", "Nostalgic", "Chaotic"]),
+  tagCategory("camera", "Camera", ["Phone", "Drone", "GoPro", "DSLR", "Webcam"]),
+  tagCategory("quality", "Quality", ["4K", "HD", "Low light", "Shaky"]),
+  tagCategory("trips", "Trips", ["Road trip", "Japan 2019", "Iceland", "Camping", "Ski week", "Paris", "Lisbon"]),
+  tagCategory(UNCATEGORIZED, "Uncategorized", ["To sort", "Duplicate?", "Ask Erin"])
+];
+// Items carry some of the tags their names suggest, so Auto Tag finds both new and existing matches, plus a few others.
+const tagRand = rng(11);
+ITEMS.forEach((item) => {
+  const base = item.name.replace(/\.[^.]+$/, "").toLowerCase();
+  item.tags = new Set(TAGS.flatMap((category) => category.chips)
+    .filter((chip) => (base.includes(chip.name.toLowerCase()) ? tagRand() < 0.5 : tagRand() < 0.05))
+    .map((chip) => chip.key));
+});
+const presets = ["Favorites", "Short clips", "Photos only", "Long videos", "Beach days", "Family", "Not yet watched", "Night shots",
+  "Trips abroad", "Drone footage", "Concerts", "Kids", "Cooking", "Timelapses", "Winter", "Summer"];
 
 function fmt(seconds) {
-  const s = Math.floor(seconds);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const pad = (n) => String(n).padStart(2, "0");
-  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s % 60)}` : `${pad(m)}:${pad(s % 60)}`;
+  // m:ss, as the WebUI shows times today.
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-// ---- Playback, photo timer, and Auto-Pause ----
-// For a photo, `playing` means its timer runs; Auto-Pause holds it, and it resumes with the time it had left.
-const playback = { item: ITEMS[0], playing: true, autoPaused: false, pausedBy: null, time: 12, timer: 0, autoplay: true, loop: false, failed: null, muted: false };
+// ---- Playback, history, random picks, photo timer, and Auto-Pause ----
+// Nothing plays until a tap or Play starts a random pick, as today. For a photo, `playing` means its timer runs;
+// Auto-Pause holds it, and it resumes with the time it had left.
+const playback = {
+  item: null,
+  playing: false,
+  autoPaused: false,
+  pausedBy: null,
+  time: 0,
+  timer: 0,
+  autoplay: store.get("autoplay", false),
+  loop: store.get("loop", false),
+  muted: store.get("muted", false),
+  failed: null
+};
+const history = [];
+let historyIndex = -1;
+let pickInFlight = false;
+// For build/check.mjs: picks it queues come first, and "?instant" in the address skips the mockup's waits.
+const mockHooks = { queue: [], instant: new URLSearchParams(location.search).has("instant") };
 
 // "Advance after" in the Settings tab: today's photo duration, renamed, and the Timer mode's interval.
 const photoSeconds = () => state.advanceAfter;
 // The photo timer runs with Autoplay or Loop on, as today; the bar shows it only when it will advance to another item.
-const photoTimerRuns = () => isPhoto(playback.item) && (playback.autoplay || playback.loop);
-const photoBarFills = () => isPhoto(playback.item) && playback.autoplay && !playback.loop;
+const photoTimerRuns = () => !!playback.item && isPhoto(playback.item) && (playback.autoplay || playback.loop);
+const photoBarFills = () => !!playback.item && isPhoto(playback.item) && playback.autoplay && !playback.loop;
+const cannotPlay = (item) => item.missing || item.removed || !isPlayable(item);
 
 function renderTime() {
   const item = playback.item;
   const seek = $("seek");
-  if (isPhoto(item)) {
-    seek.disabled = true;
-    seek.max = String(photoSeconds());
+  if (!item || isPhoto(item)) {
+    // While a photo's timer runs, the bar shows it and dragging moves it; otherwise the bar is disabled.
+    seek.disabled = !photoBarFills();
+    seek.max = String(item ? photoSeconds() : 1);
     seek.value = String(photoBarFills() ? playback.time : 0);
-    seek.setAttribute("aria-label", "Photo timer");
+    seek.setAttribute("aria-label", item ? "Photo timer" : "Seek");
     $("time-display").textContent = photoBarFills() ? `${fmt(playback.time)} / ${fmt(photoSeconds())}` : "";
   } else {
-    seek.disabled = false;
+    seek.disabled = !!playback.failed;
     seek.max = String(item.duration);
     seek.value = String(playback.time);
     seek.setAttribute("aria-label", "Seek");
@@ -1117,10 +1321,11 @@ function renderTime() {
 }
 
 function chipText() {
+  if (!playback.item) return ["play_arrow", "Nothing playing yet"];
   if (playback.failed) return ["warning", "Can't play"];
   if (isPhoto(playback.item)) {
     if (!photoTimerRuns()) return ["photo", "Photo, no timer"];
-    if (!playback.playing) return ["pause", "Timer held"];
+    if (!playback.playing) return ["pause", playback.pausedBy === "auto" ? "Timer held by Auto-Pause" : "Timer paused"];
     return ["play_arrow", playback.loop ? "Photo looping" : "Photo timer"];
   }
   if (playback.playing) return ["play_arrow", "Playing"];
@@ -1132,25 +1337,38 @@ function chipText() {
 
 function renderPlayback() {
   const item = playback.item;
-  video.style.setProperty("--h", item.hue);
-  video.style.setProperty("--ar", item.aspect);
+  const photo = !!item && isPhoto(item);
+  $("empty-state").hidden = !!item;
+  video.hidden = !item;
+  if (item) {
+    video.style.setProperty("--h", item.hue);
+    video.style.setProperty("--ar", item.aspect);
+  }
   video.classList.toggle("is-paused", !playback.playing);
-  video.classList.toggle("is-photo", isPhoto(item));
+  video.classList.toggle("is-photo", photo);
   video.classList.toggle("is-error", !!playback.failed);
-  $("favorite-btn").classList.toggle("active", item.favorite);
-  $("blacklist-btn").classList.toggle("active", item.blacklisted);
-  $("volume").disabled = isPhoto(item);
-  $("np-name").textContent = item.name;
-  $("np-duration").textContent = isPhoto(item) ? "" : fmt(item.duration);
-  setIcon($("play-btn").querySelector(".material-symbol-icon"), playback.playing && !isPhoto(item) ? "pause" : "play_arrow");
-  $("mute-btn").disabled = isPhoto(item);
+  renderAmbient();
+  $("favorite-btn").classList.toggle("active", !!item?.favorite);
+  $("blacklist-btn").classList.toggle("active", !!item?.blacklisted);
+  $("volume").disabled = photo;
+  $("mute-btn").disabled = photo;
+  $("mute-btn").classList.toggle("active", playback.muted && !photo);
+  setIcon($("mute-btn").querySelector(".material-symbol-icon"), playback.muted && !photo ? "volume_off" : "volume_up");
+  // The file name opens the Stats tab; its tooltip shows the full name and then "Show stats".
+  $("np-name").parentElement.hidden = !item;
+  $("np-name").textContent = item ? item.name : "";
+  $("np-name").title = item ? `${item.name}\nShow stats` : "";
+  $("np-duration").textContent = item && !photo ? fmt(item.duration) : "";
+  // On a photo, Play pauses and resumes its timer while the timer runs, and is disabled otherwise.
+  setIcon($("play-btn").querySelector(".material-symbol-icon"), playback.playing && item && (!photo || photoBarFills()) ? "pause" : "play_arrow");
+  $("play-btn").disabled = photo && !photoBarFills();
   $("loop-btn").classList.toggle("active", playback.loop);
   $("autoplay-btn").classList.toggle("active", playback.autoplay);
   const [icon, text] = chipText();
   $("play-chip").textContent = "";
   $("play-chip").append(iconSpan(icon), text);
   renderTime();
-  document.querySelectorAll(".lib-tile").forEach((tile) => tile.classList.toggle("is-current", Number(tile.dataset.id) === item.id));
+  document.querySelectorAll(".lib-tile").forEach((tile) => tile.classList.toggle("is-current", Number(tile.dataset.id) === item?.id));
   renderStats();
 }
 
@@ -1162,47 +1380,102 @@ function setPlaying(playing, by) {
   renderPlayback();
 }
 
-// Autoplay, Next, Previous, and random picks skip a file that is missing or that this browser can't play, saying so
-// on the status line; a file the user chose from the library shows the notice instead.
-function play(item, how = "chosen", step = 1, tries = 0) {
-  if (how !== "chosen" && (item.missing || !isPlayable(item)) && tries < ITEMS.length) {
-    $("status").textContent = item.missing ? "Skipped a missing file." : "Skipped a file this browser can't play.";
-    return play(nextItemFrom(item, step), how, step, tries + 1);
-  }
+function skipNotice(item) {
+  $("status").textContent = item.missing ? "Skipped a missing file." : "Skipped a file this browser can't play.";
+}
+
+// Starts an item. The status line says "Loading..." and then "Playing", as today, unless it is reporting a skip.
+function start(item, { quiet = false } = {}) {
   playback.item = item;
   playback.time = 0;
   playback.timer = 0;
-  playback.failed = item.missing ? "missing" : isPlayable(item) ? null : "format";
+  playback.failed = isPlayable(item) ? null : "format";
   if (playback.failed) {
-    // Playback failures are notices: something the user must see, not a status line message.
+    // A file chosen from the library that this browser can't play: its notice, not the status line.
     playback.playing = false;
     playback.autoPaused = false;
     playback.pausedBy = "error";
     renderPlayback();
     followPlayingItem();
-    noticeDialog({
-      message: playback.failed === "missing"
-        ? "Video file not found."
-        : `This video's format (.${extOf(item)}) isn't supported in this browser.`
-    });
+    noticeDialog({ message: `This video's format (.${extOf(item)}) isn't supported in this browser.` });
     return;
   }
   item.plays += 1;
   setPlaying(true, "user");
   followPlayingItem();
-}
-// The mockup steps through the list in order (the WebUI picks at random), skipping what the applied filter leaves out.
-function nextItem(step = 1) {
-  return nextItemFrom(playback.item, step);
-}
-function nextItemFrom(from, step) {
-  let index = from.id;
-  for (let n = 0; n < ITEMS.length; n++) {
-    index = (index + step + ITEMS.length) % ITEMS.length;
-    const item = ITEMS[index];
-    if (!item.removed && (!applied.playable || isPlayable(item))) return item;
+  if (!quiet) {
+    $("status").textContent = "Loading...";
+    setTimeout(() => {
+      if (playback.item === item && $("status").textContent === "Loading...") $("status").textContent = "Playing";
+    }, mockHooks.instant ? 0 : 300);
   }
-  return playback.item;
+}
+function pushHistory(item) {
+  history.splice(historyIndex + 1);
+  history.push(item);
+  historyIndex = history.length - 1;
+}
+
+// One random pick at a time, as today: a press while one waits does nothing.
+function pickRandom(tries = 0) {
+  if (state.situation === "incompatible") return void noticeDialog({ message: "Cannot play: server compatibility check failed." });
+  if (pickInFlight) return;
+  pickInFlight = true;
+  if (!tries) $("status").textContent = "Loading...";
+  const finish = () => {
+    pickInFlight = false;
+    if (state.situation === "reconnecting") return void noticeDialog({ message: "Random selection failed: Failed to fetch" });
+    if (state.situation === "noanswer") return void noticeDialog({ message: "No response from the server. Try again." });
+    if (state.situation === "nolibrary") return void noticeDialog({ message: "Random selection failed (503)." });
+    const pool = state.situation === "empty" ? [] : ITEMS.filter((item) => !item.removed && passesApplied(item));
+    if (!pool.length) return void noticeDialog({ message: "No eligible media for current filters." });
+    const queued = mockHooks.queue.shift();
+    const item = queued !== undefined ? ITEMS[queued] : pool[Math.floor(Math.random() * pool.length)];
+    if (cannotPlay(item) && tries < 20) {
+      skipNotice(item);
+      return pickRandom(tries + 1);
+    }
+    pushHistory(item);
+    start(item, { quiet: tries > 0 });
+  };
+  // The WebUI gives up on a pick after 10 seconds; the mockup waits 4.
+  const delay = mockHooks.instant ? 0 : state.situation === "noanswer" ? 4000 : 350;
+  if (delay) setTimeout(finish, delay);
+  else finish();
+}
+
+// Next steps forward through history and picks at random at its end; Previous steps back and does nothing at the
+// start, as today. Both skip a file that is missing or that this browser can't play, saying so on the status line.
+function goNext(tries = 0) {
+  if (historyIndex < history.length - 1) {
+    historyIndex += 1;
+    const item = history[historyIndex];
+    if (cannotPlay(item)) {
+      skipNotice(item);
+      return goNext(tries + 1);
+    }
+    return start(item, { quiet: tries > 0 });
+  }
+  pickRandom(tries);
+}
+function goPrevious() {
+  let index = historyIndex - 1;
+  let skipped = null;
+  while (index >= 0 && cannotPlay(history[index])) {
+    skipped = history[index];
+    index -= 1;
+  }
+  if (index < 0) return;
+  historyIndex = index;
+  if (skipped) skipNotice(skipped);
+  start(history[index], { quiet: !!skipped });
+}
+// A tile chosen from the library: a missing file says so and nothing else changes, as a library play does today.
+function chooseItem(item) {
+  if (state.situation === "incompatible") return void noticeDialog({ message: "Cannot play: server compatibility check failed." });
+  if (item.missing) return void noticeDialog({ message: "Media not found. The file may have moved or been deleted." });
+  pushHistory(item);
+  start(item);
 }
 
 let pauseWanted = false;
@@ -1221,28 +1494,26 @@ function syncAutoPause() {
 }
 
 setInterval(() => {
-  if (!playback.playing) return;
   const item = playback.item;
+  if (!item || !playback.playing) return;
   // Timer mode: every item advances after the timer, even a video that hasn't finished; a paused video holds it.
   if (playback.autoplay && state.autoplayMode === "timer" && !isPhoto(item)) {
     playback.timer += 0.25;
-    if (playback.timer >= state.advanceAfter) {
-      play(nextItem(), "auto");
-      return;
-    }
+    if (playback.timer >= state.advanceAfter) return void goNext();
   }
   if (isPhoto(item)) {
     if (!photoTimerRuns()) return;
     playback.time += 0.25;
+    // A changed timer keeps the time already shown and changes only the length.
     if (playback.time >= photoSeconds()) {
       if (playback.loop) playback.time = 0;
-      else play(nextItem(), "auto");
+      else return void goNext();
     }
   } else {
     playback.time += 0.25;
     if (playback.time >= item.duration) {
       if (playback.loop) playback.time = 0;
-      else if (playback.autoplay) play(nextItem(), "auto");
+      else if (playback.autoplay) return void goNext();
       else {
         playback.time = item.duration;
         setPlaying(false, "end");
@@ -1251,6 +1522,97 @@ setInterval(() => {
   }
   renderTime();
 }, 250);
+
+// ---- Ambient mode ----
+// At the sampling rate, a tiny copy of the frame becomes the target that the shown canvas blends toward over the
+// crossfade time. A sample that arrives mid-fade starts from what is on screen, so the black background never shows
+// through. Sampling holds while the video is paused or the tab is hidden; a photo is sampled once.
+// Its settings, kept on this device; the Settings tab's Ambient mode settings change them.
+const AMBIENT_DEFAULTS = { rate: 1, fade: 2, blur: 64, dark: 50, light: 75, saturation: 100 };
+const tuning = { ...AMBIENT_DEFAULTS, ...store.get("ambientSettings", {}) };
+const ambientCanvas = $("ambient").querySelector("canvas");
+const [ambientFrom, ambientTo] = [0, 1].map(() => {
+  const canvas = document.createElement("canvas");
+  canvas.width = ambientCanvas.width;
+  canvas.height = ambientCanvas.height;
+  return canvas;
+});
+const context2d = (canvas) => (canvas.getContext ? canvas.getContext("2d") : null);
+let ambientSampledId = null;
+let ambientSamples = 0;
+let fadeStart = 0;
+let fadeFrame = 0;
+const ambientShows = () => state.ambient && !!playback.item && !playback.failed;
+function renderAmbient() {
+  const el = $("ambient");
+  el.hidden = !ambientShows();
+  el.style.setProperty("--ambient-blur", `${tuning.blur}px`);
+  el.style.setProperty("--ambient-dark", String(tuning.dark / 100));
+  el.style.setProperty("--ambient-light", String(tuning.light / 100));
+  el.style.setProperty("--ambient-saturation", String(tuning.saturation / 100));
+}
+// The mockup draws its stand-in's scene, with the sun where the animation has it; the WebUI draws the video element.
+function drawFrameCopy(ctx, item) {
+  const { width: w, height: h } = ctx.canvas;
+  const hue = item.hue;
+  const sky = ctx.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, `hsl(${hue} 65% 58%)`);
+  sky.addColorStop(1, `hsl(${hue + 40} 60% 32%)`);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, w, h);
+  const blob = (color, x, y, rx, ry) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  blob(`hsl(${hue + 120} 45% 22%)`, 0.2 * w, h, 0.42 * w, 0.24 * h);
+  blob(`hsl(${hue + 100} 40% 30%)`, 0.85 * w, h, 0.48 * w, 0.27 * h);
+  const sunX = isPhoto(item) ? 72 : parseFloat(getComputedStyle(video).getPropertyValue("--sun-x")) || 72;
+  blob(`hsl(${hue + 30} 95% 78%)`, (sunX / 100) * w, 0.28 * h, 0.1 * w, 0.1 * w);
+}
+function blendAmbient() {
+  const progress = Math.min(1, (performance.now() - fadeStart) / (tuning.fade * 1000));
+  const shown = context2d(ambientCanvas);
+  if (shown) {
+    shown.globalAlpha = 1;
+    shown.drawImage(ambientFrom, 0, 0);
+    shown.globalAlpha = progress;
+    shown.drawImage(ambientTo, 0, 0);
+    shown.globalAlpha = 1;
+  }
+  fadeFrame = progress < 1 ? requestAnimationFrame(blendAmbient) : 0;
+}
+function sampleAmbient() {
+  const item = playback.item;
+  const from = context2d(ambientFrom);
+  const to = context2d(ambientTo);
+  if (from && to) {
+    from.globalAlpha = 1;
+    from.clearRect(0, 0, ambientFrom.width, ambientFrom.height);
+    from.drawImage(ambientCanvas, 0, 0);
+    drawFrameCopy(to, item);
+  }
+  fadeStart = performance.now();
+  if (!fadeFrame) fadeFrame = requestAnimationFrame(blendAmbient);
+  ambientSampledId = item.id;
+  ambientSamples += 1;
+}
+let ambientTimer = 0;
+function ambientTick() {
+  if (ambientShows() && !document.hidden) {
+    const fresh = ambientSampledId !== playback.item.id;
+    if (fresh || (!isPhoto(playback.item) && playback.playing)) sampleAmbient();
+  }
+  scheduleAmbient();
+}
+// A new sampling rate applies from now, not after the wait already scheduled.
+function scheduleAmbient() {
+  clearTimeout(ambientTimer);
+  ambientTimer = setTimeout(ambientTick, 1000 / tuning.rate);
+}
+scheduleAmbient();
 
 // ---- Layout ----
 function handleWidth() {
@@ -1306,6 +1668,7 @@ function applyLayout() {
   handle.setAttribute("aria-valuenow", String(width));
   handle.setAttribute("aria-valuetext", `${width} pixels`);
   renderPanelButton();
+  renderConnection();
   syncAutoPause();
   renderReadout();
   placeAllTips();
@@ -1423,7 +1786,8 @@ coarse.addEventListener("change", applyLayout);
 
 // ---- Player controls ----
 // Swipes and taps on the media area, as the WebUI does (mediaGestures.ts): a swipe right plays the previous item and a
-// swipe left the next, past 50 px and more sideways than up or down; the click that follows a swipe is ignored.
+// swipe left the next, past 50 px and more sideways than up or down; the click that follows a swipe is ignored. A tap
+// with nothing playing starts a random pick; otherwise it shows or hides the controls.
 let swipeStart = null;
 let afterSwipe = false;
 media.addEventListener("touchstart", (event) => {
@@ -1436,8 +1800,8 @@ media.addEventListener("touchend", (event) => {
   swipeStart = null;
   if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
     afterSwipe = true;
-    if (dx > 0) play(nextItem(-1), "next", -1);
-    else play(nextItem(), "next");
+    if (dx > 0) goPrevious();
+    else goNext();
   }
 }, { passive: true });
 media.addEventListener("click", () => {
@@ -1445,50 +1809,67 @@ media.addEventListener("click", () => {
     afterSwipe = false;
     return;
   }
+  if (!playback.item) return void pickRandom();
   media.classList.toggle("controls-visible");
 });
 $("overlay-controls").addEventListener("click", (event) => event.stopPropagation());
-// Play/Pause does nothing on a photo, as today.
+// Play starts a random pick while nothing plays, and does nothing on a photo, as today.
 $("play-btn").addEventListener("click", () => {
-  if (!isPhoto(playback.item)) setPlaying(!playback.playing, "user");
+  if (!playback.item) return void pickRandom();
+  if (isPhoto(playback.item) ? photoBarFills() : !playback.failed) setPlaying(!playback.playing, "user");
 });
-$("next-btn").addEventListener("click", () => play(nextItem(), "next"));
-$("prev-btn").addEventListener("click", () => play(nextItem(-1), "next", -1));
+$("next-btn").addEventListener("click", () => goNext());
+$("prev-btn").addEventListener("click", () => goPrevious());
 $("seek").addEventListener("input", (event) => {
   playback.time = Number(event.target.value);
   renderTime();
 });
+// Loop, Autoplay, and Mute keep their state across a page refresh (WebUI Settings Panel).
 $("loop-btn").addEventListener("click", () => {
   playback.loop = !playback.loop;
+  store.set("loop", playback.loop);
   renderPlayback();
 });
 $("autoplay-btn").addEventListener("click", () => {
   playback.autoplay = !playback.autoplay;
+  store.set("autoplay", playback.autoplay);
+  // On a photo, turning Autoplay on starts its full time from now, and turning it off clears the timer.
+  if (playback.item && isPhoto(playback.item)) {
+    playback.time = 0;
+    setPlaying(true, "user");
+  }
   renderPlayback();
 });
 function toggleMute() {
-  if (isPhoto(playback.item)) return;
+  if (playback.item && isPhoto(playback.item)) return;
   playback.muted = !playback.muted;
-  $("mute-btn").classList.toggle("active", playback.muted);
-  setIcon($("mute-btn").querySelector(".material-symbol-icon"), playback.muted ? "volume_off" : "volume_up");
+  store.set("muted", playback.muted);
+  renderPlayback();
 }
 $("mute-btn").addEventListener("click", toggleMute);
 function toggleFlag(flag) {
   const item = playback.item;
+  if (!item) return;
+  if (state.situation === "reconnecting") {
+    return void noticeDialog({ message: `${flag === "favorite" ? "Favorite" : "Blacklist"} update failed (503).` });
+  }
   item[flag] = !item[flag];
   if (item[flag]) item[flag === "favorite" ? "blacklisted" : "favorite"] = false;
   const messages = flag === "favorite" ? ["Added to favorites", "Removed from favorites"] : ["Blacklisted", "Removed from blacklist"];
   $("status").textContent = item[flag] ? messages[0] : messages[1];
   renderPlayback();
-  renderStats();
   layoutGrid(true);
 }
 $("favorite-btn").addEventListener("click", () => toggleFlag("favorite"));
 $("blacklist-btn").addEventListener("click", () => toggleFlag("blacklisted"));
 
-// Fullscreen keeps the panel: it is inside the stage. Without element fullscreen (iPhone), the stage fills the page.
+// Fullscreen keeps the panel: it is inside the stage. iPhone and iPad always use pseudo-fullscreen, where the stage
+// fills the page, as stageFullscreen.ts does; elsewhere so does a browser that refuses element fullscreen.
 function isFullscreen() {
   return !!(document.fullscreenElement || document.webkitFullscreenElement) || stage.classList.contains("fullscreen-pseudo");
+}
+function isIosTouchWebKit() {
+  return /iPad|iPhone|iPod/i.test(navigator.userAgent || "") || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 function syncFullscreenIcon() {
   setIcon($("fullscreen-btn").querySelector(".material-symbol-icon"), isFullscreen() ? "fullscreen_exit" : "fullscreen");
@@ -1508,7 +1889,7 @@ $("fullscreen-btn").addEventListener("click", () => {
     return;
   }
   const request = stage.requestFullscreen || stage.webkitRequestFullscreen;
-  if (!request) {
+  if (isIosTouchWebKit() || !request) {
     setPseudo(true);
     return;
   }
@@ -1522,7 +1903,8 @@ document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape" || document.body.classList.contains("sorting")) return;
   if (document.querySelector("dialog[open]")) return;
   if (state.autoTag) {
-    closeAutoTag();
+    // Auto Tag can't close while a scan runs.
+    if (!autoTag.scanning) closeAutoTag();
   } else if (!$("bulk-menu").hidden) {
     closeBulkMenu();
   } else if (selecting) {
@@ -1556,7 +1938,8 @@ function dragHandle(label) {
  * focus. `commit(keys)` receives the new order of those rows and redraws the list.
  */
 function makeSortable({ list, rowSelector, keyOf, labelOf, commit }) {
-  const movable = () => [...list.children].filter((row) => row.matches(rowSelector) && row.querySelector(".drag-handle"));
+  // A row whose handle is disabled, such as Uncategorized, stays where it is.
+  const movable = () => [...list.children].filter((row) => row.matches(rowSelector) && row.querySelector(".drag-handle:not(:disabled)"));
   const midpoint = (row) => {
     const box = row.getBoundingClientRect();
     return box.top + box.height / 2;
@@ -1568,7 +1951,7 @@ function makeSortable({ list, rowSelector, keyOf, labelOf, commit }) {
 
   list.addEventListener("keydown", (event) => {
     const handleEl = event.target.closest(".drag-handle");
-    if (!handleEl || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+    if (!handleEl || handleEl.disabled || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
     event.preventDefault();
     const rows = movable();
     const row = handleEl.closest(rowSelector);
@@ -1585,7 +1968,7 @@ function makeSortable({ list, rowSelector, keyOf, labelOf, commit }) {
 
   list.addEventListener("pointerdown", (start) => {
     const handleEl = start.target.closest(".drag-handle");
-    if (!handleEl || start.button !== 0) return;
+    if (!handleEl || handleEl.disabled || start.button !== 0) return;
     start.preventDefault();
     const row = handleEl.closest(rowSelector);
     const before = movable().map(keyOf);
@@ -1645,7 +2028,14 @@ function makeSortable({ list, rowSelector, keyOf, labelOf, commit }) {
 }
 
 // ---- Library tab ----
-const lib = { sort: "Name", descending: false, search: "", preset: "" };
+// Sort, direction, and the active preset are remembered on this device; the search text is not.
+const lib = {
+  sort: store.get("libSort", "Name"),
+  descending: store.get("libDescending", false),
+  search: "",
+  preset: store.get("libPreset", ""),
+  presetModified: store.get("libPresetModified", false)
+};
 const DIRECTION_LABELS = {
   Name: ["A–Z", "Z–A"],
   LastPlayed: ["Oldest → Newest", "Newest → Oldest"],
@@ -1653,15 +2043,25 @@ const DIRECTION_LABELS = {
   PlayCount: ["Least Plays → Most Plays", "Most Plays → Least Plays"],
   Duration: ["Shortest → Longest", "Longest → Shortest"]
 };
+let libLoading = true;
+let presetsLoading = true;
+function saveLibState() {
+  store.set("libSort", lib.sort);
+  store.set("libDescending", lib.descending);
+  store.set("libPreset", lib.preset);
+  store.set("libPresetModified", lib.presetModified);
+}
+// What the grid says in place of tiles: today's messages, and the server's own when it fails the compatibility check
+// or runs without a library.
+function libraryMessage() {
+  if (state.situation === "incompatible") return { text: "Unsupported server API version: 2.", error: true };
+  if (state.situation === "nolibrary") return { text: NO_LIBRARY_MESSAGE, error: true };
+  if (state.situation === "empty") return { text: "No media in library." };
+  if (libLoading) return { text: "Loading library…" };
+  return null;
+}
 function visibleItems() {
-  let items = ITEMS.filter((item) =>
-    !item.removed &&
-    (!applied.playable || isPlayable(item)) &&
-    (!applied.favoritesOnly || item.favorite) &&
-    (applied.media === "all" || (applied.media === "photos") === isPhoto(item)));
-  if (lib.preset === "Favorites") items = items.filter((item) => item.favorite);
-  if (lib.preset === "Short clips") items = items.filter((item) => !isPhoto(item) && item.duration < 120);
-  if (lib.preset === "Photos only") items = items.filter(isPhoto);
+  let items = ITEMS.filter((item) => !item.removed && passesApplied(item));
   const baseline = items.length;
   if (lib.search) items = items.filter((item) => item.name.toLowerCase().includes(lib.search.toLowerCase()));
   const key = lib.sort === "Duration" ? (item) => item.duration : lib.sort === "Name" ? (item) => item.name : (item) => (item.id * 37) % 101;
@@ -1698,30 +2098,37 @@ function buildRows(aspects, width, size) {
 }
 
 let lastGridWidth = 0;
+function gridMessage(grid, text, error) {
+  const empty = document.createElement("p");
+  empty.className = error ? "lib-empty is-error" : "lib-empty";
+  if (error) empty.setAttribute("role", "alert");
+  empty.textContent = text;
+  grid.append(empty);
+}
 function layoutGrid(force) {
   const grid = $("lib-grid");
   if (grid.offsetParent === null) return;
   const width = Math.max(200, grid.clientWidth);
   if (!force && width === lastGridWidth && grid.childElementCount) return;
   lastGridWidth = width;
-  const { items, baseline } = visibleItems();
-  $("lib-summary").textContent = `Showing ${items.length.toLocaleString()} of ${baseline.toLocaleString()} items`;
+  grid.className = `lib-grid scroll-y themed-scrollbar${state.tileNames ? " show-names" : ""}${selecting ? " selecting" : ""}`;
   const scrollTop = grid.scrollTop;
   grid.textContent = "";
-  if (!items.length) {
-    const empty = document.createElement("p");
-    empty.className = "lib-empty";
-    empty.textContent = "No items match.";
-    grid.append(empty);
-    return;
+  const message = libraryMessage();
+  if (message) {
+    $("lib-summary").textContent = "";
+    return gridMessage(grid, message.text, message.error);
   }
+  const { items, baseline } = visibleItems();
+  $("lib-summary").textContent = `Showing ${items.length.toLocaleString()} of ${baseline.toLocaleString()} items`;
+  if (!items.length) return gridMessage(grid, "Nothing matches the search or filters.", false);
   for (const row of buildRows(items.map((item) => item.aspect), width, TILE_SIZE)) {
     const rowEl = document.createElement("div");
     rowEl.className = "lib-row";
     for (const tile of row.tiles) {
       const item = items[tile.index];
       const tileEl = document.createElement("div");
-      tileEl.className = "lib-tile" + (item.id === playback.item.id ? " is-current" : "") +
+      tileEl.className = "lib-tile" + (item.id === playback.item?.id ? " is-current" : "") +
         (selected.has(item.id) ? " is-selected" : "") + (Date.now() < placeholderUntil ? " is-placeholder" : "");
       tileEl.dataset.id = String(item.id);
       tileEl.tabIndex = 0;
@@ -1733,28 +2140,36 @@ function layoutGrid(force) {
         tileEl.setAttribute("role", "button");
         tileEl.setAttribute("aria-label", `Play ${item.name}`);
       }
+      // With a mouse, hovering a tile shows its name, whether or not names show on tiles.
+      tileEl.title = item.name;
       tileEl.style.width = `${tile.width}px`;
       tileEl.style.height = `${row.height}px`;
+      const frame = document.createElement("div");
+      frame.className = "lib-tile-frame";
       const art = document.createElement("div");
       art.className = "lib-tile-art";
       art.style.setProperty("--h", item.hue);
-      tileEl.append(art);
-      if (item.favorite) {
+      frame.append(art);
+      // Today's badges, favorite and blacklisted, as filled icons.
+      if (item.favorite || item.blacklisted) {
         const badge = document.createElement("div");
         badge.className = "lib-tile-badge";
-        badge.append(iconSpan("favorite"));
-        tileEl.append(badge);
+        if (item.favorite) badge.append(iconSpan("favorite", "is-filled tile-icon"));
+        if (item.blacklisted) badge.append(iconSpan("thumb_down", "is-filled tile-icon"));
+        frame.append(badge);
       }
+      const playing = document.createElement("div");
+      playing.className = "playing-mark";
+      playing.append(iconSpan("play_circle", "is-filled tile-icon"));
       const name = document.createElement("div");
       name.className = "lib-tile-name";
       name.textContent = item.name;
-      tileEl.append(name);
-      if (selecting) {
-        const mark = document.createElement("span");
-        mark.className = "select-mark";
-        mark.append(iconSpan("check_circle"));
-        tileEl.append(mark);
-      }
+      frame.append(playing, name);
+      const mark = document.createElement("span");
+      mark.className = "select-mark";
+      mark.title = selected.has(item.id) ? "Deselect" : "Select";
+      mark.append(iconSpan("check_circle", "is-filled tile-icon"));
+      tileEl.append(frame, mark);
       rowEl.append(tileEl);
     }
     grid.append(rowEl);
@@ -1771,14 +2186,15 @@ function chooseTile(event) {
     return;
   }
   const id = Number(tile.dataset.id);
-  // In selection, a tap selects; outside it, Ctrl or Cmd and Shift select as on the desktop.
-  if (selecting || event.ctrlKey || event.metaKey || event.shiftKey) {
+  // The selection icon selects its tile and starts selection. In selection, a click adds or removes a tile, and
+  // Shift+click adds the range from the last tile chosen.
+  if (event.target.closest(".select-mark") || selecting || event.shiftKey) {
     selectTile(id, event.shiftKey);
     return;
   }
-  play(ITEMS[id]);
+  chooseItem(ITEMS[id]);
   // As the overlay, choosing a tile closes it as the library overlay does today; beside the player it stays open.
-  if (state.mode === "overlay") closePanel();
+  if (state.mode === "overlay" && !document.querySelector("dialog[open]")) closePanel();
 }
 $("lib-grid").addEventListener("click", chooseTile);
 $("lib-grid").addEventListener("keydown", (event) => {
@@ -1791,22 +2207,57 @@ $("lib-search").addEventListener("input", (event) => {
   lib.search = event.target.value;
   reloadGrid();
 });
+function renderSortControls() {
+  $("lib-sort").value = lib.sort;
+  $("lib-dir").textContent = DIRECTION_LABELS[lib.sort][lib.descending ? 1 : 0];
+}
 $("lib-sort").addEventListener("change", (event) => {
   lib.sort = event.target.value;
   lib.descending = lib.sort !== "Name";
-  $("lib-dir").textContent = DIRECTION_LABELS[lib.sort][lib.descending ? 1 : 0];
+  saveLibState();
+  renderSortControls();
   reloadGrid();
 });
 $("lib-dir").addEventListener("click", () => {
   lib.descending = !lib.descending;
-  $("lib-dir").textContent = DIRECTION_LABELS[lib.sort][lib.descending ? 1 : 0];
+  saveLibState();
+  renderSortControls();
   reloadGrid();
 });
+// The preset menu, as the header's is today: "Loading..." until presets arrive, "Error loading presets" when they
+// can't load, and a starred row, such as "Favorites*", once the applied filter differs from the chosen preset.
+function renderLibPresets() {
+  const select = $("lib-preset");
+  select.textContent = "";
+  const add = (value, label) => select.append(Object.assign(document.createElement("option"), { value, textContent: label }));
+  select.disabled = true;
+  if (state.situation === "incompatible") return add("", "Server compatibility check failed");
+  if (state.situation === "nolibrary") return add("", "Error loading presets");
+  if (presetsLoading) return add("", "Loading...");
+  select.disabled = false;
+  if (lib.preset && lib.presetModified) add("*", `${lib.preset}*`);
+  add("", "None");
+  presetSnapshot.forEach((name) => add(name, name));
+  select.value = lib.preset && lib.presetModified ? "*" : lib.preset;
+  $("filter-heading").textContent = `Preset: ${lib.preset ? lib.preset + (lib.presetModified ? "*" : "") : "None"}`;
+}
 $("lib-preset").addEventListener("change", (event) => {
+  if (event.target.value === "*") return;
   lib.preset = event.target.value;
-  $("filter-heading").textContent = `Preset: ${lib.preset || "None"}`;
+  lib.presetModified = false;
+  saveLibState();
+  $("filter-preset-select").value = lib.preset;
+  loadPresetFilter(lib.preset);
+  filterPending = false;
+  takeSnapshot();
+  saveFilterState();
+  readApplied();
+  renderApply();
+  renderLibPresets();
   reloadGrid();
 });
+$("lib-mode").value = store.get("libMode", "Smart Shuffle");
+$("lib-mode").addEventListener("change", (event) => store.set("libMode", event.target.value));
 
 // ---- Filter tab ----
 const filterBody = $("filter-body");
@@ -1819,7 +2270,12 @@ function checkPresetName(value, own) {
   return null;
 }
 let filterPending = false;
-const presets = ["Favorites", "Short clips", "Photos only", "Long videos"];
+// A preset chosen in the Presets section, and whether the filter changed after it, decide the preset Apply leaves
+// active: the chosen one, or a starred row once the filter differs from it.
+let presetPicked = false;
+let filterEdited = false;
+// Tag filters: each tag included or excluded, by key.
+const filterTagState = new Map();
 
 function showSub(sub) {
   document.querySelectorAll(".filter-tab").forEach((tab) => {
@@ -1848,6 +2304,13 @@ function noneBox(box, field) {
 }
 noneBox($("filter-no-min"), minField);
 noneBox($("filter-no-max"), maxField);
+// Each mode dropdown applies only while its checkbox is on.
+function syncModeSelects() {
+  $("filter-fav-mode").disabled = !$("filter-fav").checked;
+  $("filter-bl-mode").disabled = !$("filter-bl").checked;
+}
+$("filter-fav").addEventListener("change", syncModeSelects);
+$("filter-bl").addEventListener("change", syncModeSelects);
 
 function renderApply() {
   const apply = $("filter-apply");
@@ -1875,15 +2338,26 @@ holdAction($("filter-add-preset"), () => [nameField], {
 
 filterBody.addEventListener("change", (event) => {
   if (event.target.closest('[data-subpanel="presets"]') && event.target.id !== "filter-preset-select") return;
+  if (event.target.id === "filter-preset-select") {
+    // Choosing a preset loads its filter into the tab, as today; Apply then makes it active.
+    loadPresetFilter(event.target.value);
+    presetPicked = true;
+    filterEdited = false;
+    $("filter-heading").textContent = `Preset: ${event.target.value || "None"}`;
+  } else {
+    filterEdited = true;
+  }
   filterPending = true;
   renderApply();
 });
 
 let snapshot = null;
 let presetSnapshot = presets.slice();
+let tagSnapshot = new Map();
 function takeSnapshot() {
   snapshot = [...filterBody.querySelectorAll("input, select")].map((el) => [el, el.value, el.checked, el.disabled]);
   presetSnapshot = presets.slice();
+  tagSnapshot = new Map(filterTagState);
 }
 function restoreSnapshot() {
   snapshot.forEach(([el, value, checked, disabled]) => {
@@ -1892,37 +2366,126 @@ function restoreSnapshot() {
     el.disabled = disabled;
   });
   presets.splice(0, presets.length, ...presetSnapshot);
+  filterTagState.clear();
+  tagSnapshot.forEach((value, key) => filterTagState.set(key, value));
   renderPresets();
+  renderFilterTags();
   [minField, maxField, nameField].forEach((field) => field.reset());
 }
-takeSnapshot();
+// The applied filter is remembered on this device, as the per-device store keeps it.
+function saveFilterState() {
+  store.set("filterInputs", [...filterBody.querySelectorAll('[data-subpanel="general"] input, [data-subpanel="general"] select')].map((el) => [el.value, el.checked]));
+  store.set("filterTags", [...filterTagState]);
+}
+function restoreFilterState() {
+  const inputs = store.get("filterInputs", null);
+  const elements = [...filterBody.querySelectorAll('[data-subpanel="general"] input, [data-subpanel="general"] select')];
+  if (inputs && inputs.length === elements.length) {
+    elements.forEach((el, i) => {
+      el.value = inputs[i][0];
+      el.checked = inputs[i][1];
+    });
+  }
+  store.get("filterTags", []).forEach(([key, value]) => filterTagState.set(key, value));
+  $("filter-min").disabled = $("filter-no-min").checked;
+  $("filter-max").disabled = $("filter-no-max").checked;
+  syncModeSelects();
+  [minField, maxField].forEach((field) => field.update());
+}
 
 $("filter-apply").addEventListener("click", () => {
+  if (state.situation === "reconnecting") return void noticeDialog({ message: "Saving presets failed: Failed to fetch" });
+  if (presetPicked) {
+    lib.preset = $("filter-preset-select").value;
+    lib.presetModified = false;
+  } else if (lib.preset && filterEdited) {
+    lib.presetModified = true;
+  }
+  presetPicked = false;
+  filterEdited = false;
   filterPending = false;
   takeSnapshot();
+  saveFilterState();
+  saveLibState();
   renderApply();
   readApplied();
+  renderLibPresets();
   reloadGrid();
   $("status").textContent = "Filters applied.";
   if (state.mode === "overlay") closePanel();
 });
 $("filter-cancel").addEventListener("click", () => {
   restoreSnapshot();
+  presetPicked = false;
+  filterEdited = false;
   filterPending = false;
+  renderLibPresets();
   renderApply();
   if (state.mode === "overlay") closePanel();
 });
-$("filter-clear").addEventListener("click", () => {
-  filterBody.querySelectorAll('[data-subpanel="general"] input[type="checkbox"]').forEach((box) => {
+// The default filter: every source, Blacklisted excluded, and nothing else.
+function resetGeneral() {
+  const general = filterBody.querySelector('[data-subpanel="general"]');
+  general.querySelectorAll('input[type="checkbox"]').forEach((box) => {
     box.checked = box.closest(".filter-section").querySelector("h3").textContent.startsWith("Sources");
   });
-  filterBody.querySelectorAll('input[type="radio"]').forEach((radio) => {
+  $("filter-bl").checked = true;
+  $("filter-bl-mode").value = "excluded";
+  $("filter-fav-mode").value = "only";
+  general.querySelectorAll('input[type="radio"]').forEach((radio) => {
     radio.checked = radio === radio.closest(".filter-stack").querySelector('input[type="radio"]');
   });
   [minField, maxField].forEach((field) => {
     field.input.disabled = false;
     field.reset("");
   });
+  filterTagState.clear();
+  syncModeSelects();
+}
+// What a few of the mockup's presets hold; the others hold the default filter.
+const PRESET_FILTERS = {
+  Favorites: { fav: "only" },
+  "Short clips": { media: 1, max: "2:00" },
+  "Photos only": { media: 2 },
+  "Long videos": { media: 1, min: "10:00" },
+  "Not yet watched": { neverPlayed: true }
+};
+function loadPresetFilter(name) {
+  const preset = PRESET_FILTERS[name] || {};
+  const general = filterBody.querySelector('[data-subpanel="general"]');
+  resetGeneral();
+  if (preset.fav) {
+    $("filter-fav").checked = true;
+    $("filter-fav-mode").value = preset.fav;
+  }
+  if (preset.media) general.querySelectorAll('input[name="media"]')[preset.media].checked = true;
+  if (preset.neverPlayed) general.querySelector(".filter-stack > label input").checked = true;
+  if (preset.min) minField.reset(preset.min);
+  if (preset.max) maxField.reset(preset.max);
+  syncModeSelects();
+  renderFilterTags();
+}
+// Clear all filters returns to the default filter and the saved presets, as today.
+$("filter-clear").addEventListener("click", () => {
+  resetGeneral();
+  presets.splice(0, presets.length, ...presetSnapshot);
+  renderPresets();
+  renderFilterTags();
+  filterEdited = true;
+  filterPending = true;
+  renderApply();
+});
+// Refresh reloads sources and tags and keeps unsaved preset changes.
+$("filter-refresh").addEventListener("click", () => {
+  if (state.situation === "reconnecting") return void noticeDialog({ message: "Filter refresh failed: Failed to fetch" });
+  renderFilterTags();
+  $("status").textContent = "Filter data refreshed.";
+});
+// Update Preset saves the tab's filter into the chosen preset until Apply saves the list, as today.
+$("filter-update-preset").addEventListener("click", () => {
+  const chosen = $("filter-preset-select").value;
+  if (!chosen) return void noticeDialog({ message: "Select a preset to update." });
+  $("status").textContent = `Updated preset "${chosen}" locally — Apply to save.`;
   filterPending = true;
   renderApply();
 });
@@ -1935,7 +2498,7 @@ function presetsChanged() {
 }
 function renderPresets() {
   const select = $("filter-preset-select");
-  const keep = select.value;
+  const keep = select.value || lib.preset;
   select.textContent = "";
   ["None", ...presets].forEach((name, index) => {
     const option = document.createElement("option");
@@ -1946,6 +2509,10 @@ function renderPresets() {
   select.value = presets.includes(keep) ? keep : "";
   const list = $("filter-preset-list");
   list.textContent = "";
+  if (state.situation === "empty" || !presets.length) {
+    list.append(Object.assign(document.createElement("span"), { className: "filter-hint", textContent: "No presets" }));
+    return;
+  }
   presets.forEach((name, index) => {
     const row = document.createElement("div");
     row.className = "filter-preset-row";
@@ -1964,7 +2531,6 @@ function renderPresets() {
     list.append(row);
   });
 }
-renderPresets();
 makeSortable({
   list: $("filter-preset-list"),
   rowSelector: ".filter-preset-row",
@@ -2000,11 +2566,6 @@ $("filter-add-preset").addEventListener("click", () => {
   presetsChanged();
 });
 
-const FILTER_TAGS = [
-  { name: "People", chips: [["Alice", "inc"], ["Bob", ""], ["Carol", "exc"], ["Dan", ""]] },
-  { name: "Places", chips: [["Beach", ""], ["Mountains", "inc"], ["City", ""]] },
-  { name: "Uncategorized", chips: [["Road trip", ""]] }
-];
 function chipEl(name, buttons, stateClass) {
   const chip = document.createElement("div");
   chip.className = "tag-chip" + (stateClass ? ` ${stateClass}` : "");
@@ -2012,11 +2573,12 @@ function chipEl(name, buttons, stateClass) {
   label.className = "tag-chip-label";
   label.textContent = name;
   chip.append(label);
-  buttons.forEach(([icon, title, selected, onClick]) => {
+  buttons.forEach(([icon, title, selected, onClick, disabled]) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "icon-btn" + (selected ? " is-selected" : "");
     button.title = title;
+    button.disabled = !!disabled;
     button.setAttribute("aria-label", `${title} ${name}`);
     button.append(iconSpan(icon));
     button.addEventListener("click", onClick);
@@ -2061,51 +2623,86 @@ function categoryEl(key, name, { handle: handleEl, controls } = {}) {
   show();
   return { section, grid };
 }
+// The Filter tab's tags are the library's tags.
 function renderFilterTags() {
   const host = $("filter-tag-categories");
   host.textContent = "";
-  FILTER_TAGS.forEach((category) => {
+  const categories = state.situation === "empty" ? [] : TAGS.filter((category) => category.chips.length);
+  if (!categories.length) {
+    host.append(Object.assign(document.createElement("p"), { className: "filter-hint", textContent: "No tags yet. Add them in the Tags tab." }));
+    return;
+  }
+  categories.forEach((category) => {
     const local = document.createElement("label");
     local.className = "filter-local";
     local.innerHTML = 'Local: <select class="ctl"><option>ALL (AND)</option><option>ANY (OR)</option></select>';
-    const { section, grid } = categoryEl(`filter-${category.name}`, category.name, { controls: local });
+    const { section, grid } = categoryEl(`filter-${category.id}`, category.name, { controls: local });
     category.chips.forEach((chip) => {
-      const stateClass = chip[1] === "inc" ? "state-all" : chip[1] === "exc" ? "state-none" : "";
-      grid.append(
-        chipEl(chip[0], [
-          ["add", "Include", chip[1] === "inc", () => { chip[1] = chip[1] === "inc" ? "" : "inc"; filterPending = true; renderFilterTags(); renderApply(); }],
-          ["remove", "Exclude", chip[1] === "exc", () => { chip[1] = chip[1] === "exc" ? "" : "exc"; filterPending = true; renderFilterTags(); renderApply(); }]
-        ], stateClass)
-      );
+      const mode = filterTagState.get(chip.key) || "";
+      const set = (next) => () => {
+        if (mode === next) filterTagState.delete(chip.key);
+        else filterTagState.set(chip.key, next);
+        filterEdited = true;
+        filterPending = true;
+        renderFilterTags();
+        renderApply();
+      };
+      grid.append(chipEl(chip.name, [
+        ["add", "Include", mode === "inc", set("inc")],
+        ["remove", "Exclude", mode === "exc", set("exc")]
+      ], mode === "inc" ? "state-all" : mode === "exc" ? "state-none" : ""));
     });
     host.append(section);
   });
 }
-renderFilterTags();
+// Today's empty states: no sources, and (above) no tags and no presets.
+function renderFilterEmpty() {
+  const empty = state.situation === "empty";
+  const stack = $("no-sources").parentElement;
+  stack.querySelectorAll("label").forEach((label) => (label.hidden = empty));
+  $("no-sources").hidden = !empty;
+}
 
 // ---- Tags tab ----
-const UNCATEGORIZED = "uncategorized";
-const TAGS = [
-  { id: "people", name: "People", chips: [{ key: "alice", name: "Alice" }, { key: "bob", name: "Bob" }, { key: "carol", name: "Carol" }, { key: "dan", name: "Dan" }] },
-  { id: "places", name: "Places", chips: [{ key: "beach", name: "Beach" }, { key: "mountains", name: "Mountains" }, { key: "city", name: "City" }] },
-  { id: "events", name: "Events", chips: [{ key: "birthday", name: "Birthday" }, { key: "wedding", name: "Wedding" }] },
-  { id: UNCATEGORIZED, name: "Uncategorized", chips: [{ key: "roadtrip", name: "Road trip" }] }
-];
-const tagRand = rng(11);
-ITEMS.forEach((item) => {
-  item.tags = new Set(TAGS.flatMap((category) => category.chips).filter(() => tagRand() < 0.3).map((chip) => chip.key));
-});
 let tagsDirty = false;
 const snapshotTags = () => JSON.parse(JSON.stringify(TAGS, (key, value) => (key === "pending" ? undefined : value)));
 let savedTags = snapshotTags();
 
 // The Tags tab edits its item's tags. It follows the playing item, unless it has unsaved changes to its item's tags:
-// then it stays on its item, names it, and follows once those changes are saved or discarded.
+// then it stays on its item, names it, and follows once those changes are saved or discarded. With nothing playing,
+// chips can't add or remove, as today.
+// Edit tags in the selection's Actions menu points it at the selected items instead. It edits the selection while
+// selection lasts; if selection ends with unsaved changes, it keeps those items until the changes are saved or
+// discarded, as it keeps an item that isn't playing.
 let tagTarget = playback.item;
+let tagSelection = null;
+let tagSelectionLive = false;
+const tagItems = () => tagSelection || (tagTarget ? [tagTarget] : []);
 const hasItemEdits = () => TAGS.some((category) => category.chips.some((chip) => chip.pending));
 function followPlayingItem() {
-  if (!hasItemEdits()) tagTarget = playback.item;
+  if (tagSelection && tagSelectionLive) {
+    if (selecting) {
+      tagSelection = [...selected].map((id) => ITEMS[id]);
+      return renderTags();
+    }
+    tagSelectionLive = false;
+  }
+  if (!hasItemEdits()) {
+    tagSelection = null;
+    tagTarget = playback.item;
+  }
   renderTags();
+}
+async function editSelectionTags() {
+  // Unsaved changes to other items' tags would land on the selection, so they go first, after asking.
+  if (hasItemEdits() && !tagSelectionLive) {
+    if (!(await confirmDialog({ message: "Discard changes?", confirmLabel: "Discard", danger: true }))) return;
+    TAGS.forEach((category) => category.chips.forEach((chip) => (chip.pending = null)));
+  }
+  tagSelection = [...selected].map((id) => ITEMS[id]);
+  tagSelectionLive = true;
+  renderTags();
+  openPanel("tags");
 }
 
 function renderTags() {
@@ -2113,22 +2710,31 @@ function renderTags() {
   const scrollTop = host.scrollTop;
   host.textContent = "";
   let pending = tagsDirty;
+  const items = tagItems();
   const line = $("tags-target");
-  line.hidden = tagTarget === playback.item;
   line.textContent = "Editing tags for ";
   const target = document.createElement("b");
-  target.textContent = tagTarget.name;
+  if (tagSelection) {
+    line.hidden = false;
+    target.textContent = items.length === 1 ? "1 item" : `${items.length} items`;
+    line.title = "";
+  } else {
+    line.hidden = !tagTarget || tagTarget === playback.item;
+    target.textContent = tagTarget ? tagTarget.name : "";
+    line.title = tagTarget ? tagTarget.name : "";
+  }
   line.append(target);
-  line.title = tagTarget.name;
-  TAGS.forEach((category) => {
+  const shown = state.situation === "empty" ? TAGS.filter((category) => category.id === UNCATEGORIZED).map((category) => ({ ...category, chips: [] })) : TAGS;
+  shown.forEach((category) => {
     const fixed = category.id === UNCATEGORIZED;
     let controls = null;
-    let handleEl = null;
+    // Uncategorized has a dimmed, disabled handle, so its name lines up and it is clear it can't move.
+    const handleEl = dragHandle(category.name);
     if (fixed) {
-      handleEl = document.createElement("span");
-      handleEl.className = "drag-handle-spacer";
+      handleEl.disabled = true;
+      handleEl.title = "Uncategorized stays last";
+      handleEl.setAttribute("aria-label", "Uncategorized stays last");
     } else {
-      handleEl = dragHandle(category.name);
       controls = document.createElement("div");
       const edit = document.createElement("button");
       edit.type = "button";
@@ -2143,12 +2749,14 @@ function renderTags() {
     section.dataset.key = category.id;
     category.chips.forEach((chip) => {
       pending = pending || !!chip.pending;
+      // Green: every item being edited has the tag. Orange: only some do. Add or Remove applies to all of them.
+      const count = items.filter((item) => item.tags.has(chip.key)).length;
       grid.append(
         chipEl(chip.name, [
-          ["add", "Add tag", chip.pending === "add", () => { chip.pending = chip.pending === "add" ? null : "add"; renderTags(); }],
-          ["remove", "Remove tag", chip.pending === "remove", () => { chip.pending = chip.pending === "remove" ? null : "remove"; renderTags(); }],
+          ["add", "Add tag", chip.pending === "add", () => { chip.pending = chip.pending === "add" ? null : "add"; renderTags(); }, !items.length],
+          ["remove", "Remove tag", chip.pending === "remove", () => { chip.pending = chip.pending === "remove" ? null : "remove"; renderTags(); }, !items.length],
           ["edit_note", "Edit tag", false, () => openEditTag(category, chip)]
-        ], tagTarget.tags.has(chip.key) ? "state-all" : "")
+        ], count && count === items.length ? "state-all" : count ? "state-some" : "")
       );
     });
     host.append(section);
@@ -2158,24 +2766,16 @@ function renderTags() {
   unsaved.tags = pending;
   renderUnsaved();
   $("tags-save").style.color = pending ? "var(--huggins-orange)" : "";
-  ["tags-category-select"].forEach((id) => {
-    const select = $(id);
-    const keep = select.value;
-    select.textContent = "";
-    TAGS.forEach((category) => {
-      const option = document.createElement("option");
-      option.value = category.id;
-      option.textContent = category.name;
-      select.append(option);
-    });
-    if (TAGS.some((category) => category.id === keep)) select.value = keep;
-  });
+  const select = $("tags-category-select");
+  const keep = select.value || UNCATEGORIZED;
+  select.textContent = "";
+  TAGS.forEach((category) => select.append(Object.assign(document.createElement("option"), { value: category.id, textContent: category.name })));
+  if (TAGS.some((category) => category.id === keep)) select.value = keep;
 }
 function tagsChanged() {
   tagsDirty = true;
   renderTags();
 }
-renderTags();
 makeSortable({
   list: $("tags-body"),
   rowSelector: ".tag-category",
@@ -2189,15 +2789,23 @@ makeSortable({
   }
 });
 $("tags-save").addEventListener("click", () => {
+  if (state.situation === "reconnecting") return void noticeDialog({ message: "Tag apply failed" });
+  const items = tagItems();
+  const several = !!tagSelection && hasItemEdits();
   TAGS.forEach((category) => category.chips.forEach((chip) => {
-    if (chip.pending === "add") tagTarget.tags.add(chip.key);
-    if (chip.pending === "remove") tagTarget.tags.delete(chip.key);
+    items.forEach((item) => {
+      if (chip.pending === "add") item.tags.add(chip.key);
+      if (chip.pending === "remove") item.tags.delete(chip.key);
+    });
     chip.pending = null;
   }));
   tagsDirty = false;
   savedTags = snapshotTags();
   followPlayingItem();
-  $("status").textContent = "Tags saved.";
+  renderFilterTags();
+  renderStats();
+  // Saving for the selection acknowledges itself as the other bulk actions do.
+  $("status").textContent = several ? `Updated tags on ${items.length === 1 ? "1 item" : `${items.length} items`}.` : "Tag editor changes applied";
 });
 // Refresh discards unsaved changes, asking first, and the tab then follows the playing item.
 $("tags-refresh").addEventListener("click", async () => {
@@ -2207,6 +2815,27 @@ $("tags-refresh").addEventListener("click", async () => {
     tagsDirty = false;
   }
   followPlayingItem();
+});
+// Add Tag adds the tag to the chosen category and selects Add for the item being edited, until Save, as today.
+function addTag() {
+  const name = $("tags-new-name").value.trim();
+  if (!name) return;
+  const category = TAGS.find((c) => c.id === $("tags-category-select").value) || TAGS[TAGS.length - 1];
+  let chip = TAGS.flatMap((c) => c.chips).find((existing) => existing.name.toLowerCase() === name.toLowerCase());
+  if (!chip) {
+    chip = { key: `${category.id}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`, name };
+    category.chips.push(chip);
+  }
+  if (tagItems().length) chip.pending = "add";
+  $("tags-new-name").value = "";
+  tagsChanged();
+}
+$("tags-add-tag").addEventListener("click", addTag);
+$("tags-new-name").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    addTag();
+  }
 });
 function checkCategoryName(value, own) {
   const name = value.trim();
@@ -2296,13 +2925,123 @@ function openEditCategory(category) {
 }
 
 // ---- Auto Tag ----
+// Scan Files runs for about 5 seconds with today's indeterminate bar, then lists each tag whose name a file name
+// holds (ignoring the extension). Rows expand to their files; Apply applies the checked changes.
+const autoTag = { scanning: false, rows: null };
+function autoTagScan() {
+  if (state.situation === "empty") return [];
+  const pool = $("autotag-full").checked ? ITEMS.filter((item) => !item.removed) : visibleItems().items;
+  return TAGS.flatMap((category) => category.chips).map((chip) => {
+    const files = pool
+      .filter((item) => item.name.replace(/\.[^.]+$/, "").toLowerCase().includes(chip.name.toLowerCase()))
+      .map((item) => ({ item, change: !item.tags.has(chip.key), checked: !item.tags.has(chip.key) }));
+    return { chip, files, expanded: false };
+  }).filter((row) => row.files.length);
+}
+function renderAutoTag() {
+  const scanning = autoTag.scanning;
+  $("autotag-progress").hidden = !scanning;
+  $("autotag-close").disabled = scanning;
+  $("autotag-cancel").disabled = scanning;
+  $("autotag-scan").disabled = scanning;
+  const host = $("autotag-results");
+  host.textContent = "";
+  const rows = (autoTag.rows || []).filter((row) => $("autotag-all").checked || row.files.some((file) => file.change));
+  const changes = (autoTag.rows || []).flatMap((row) => row.files.filter((file) => file.change));
+  const checkedCount = changes.filter((file) => file.checked).length;
+  $("autotag-apply").disabled = scanning || checkedCount === 0;
+  if (scanning) {
+    $("autotag-status").textContent = "Scanning…";
+    return;
+  }
+  // Placeholders: one before any scan, and another when a scan finds nothing.
+  const placeholder = (text) => host.append(Object.assign(document.createElement("p"), { className: "autotag-empty", textContent: text }));
+  if (!autoTag.rows) {
+    $("autotag-status").textContent = "";
+    return void placeholder("Scan results show here.");
+  }
+  if (!autoTag.rows.length) {
+    $("autotag-status").textContent = "Scan complete: no matching tags found.";
+    return void placeholder("No file names contain a tag's name.");
+  }
+  const matches = autoTag.rows.reduce((n, row) => n + row.files.length, 0);
+  $("autotag-status").textContent = `Scan complete: ${autoTag.rows.length} matching tags, ${matches} matches, ${checkedCount}/${changes.length} selected changes.`;
+  if (!rows.length) {
+    host.append(Object.assign(document.createElement("p"), { className: "filter-hint", textContent: "No rows to show." }));
+    return;
+  }
+  const head = document.createElement("div");
+  head.className = "autotag-table-head";
+  head.innerHTML = '<span></span><span>Apply</span><span>Tag / File</span><span class="autotag-count">Total matched</span><span class="autotag-count">To be changed</span>';
+  host.append(head);
+  rows.forEach((row) => {
+    const files = row.files.filter((file) => $("autotag-all").checked || file.change);
+    const toChange = row.files.filter((file) => file.change);
+    const box = document.createElement("div");
+    box.className = "autotag-result";
+    const main = document.createElement("div");
+    main.className = "autotag-row-main";
+    const expand = document.createElement("button");
+    expand.type = "button";
+    expand.className = "icon-btn";
+    expand.setAttribute("aria-label", row.expanded ? "Collapse" : "Expand");
+    expand.append(iconSpan(row.expanded ? "expand_more" : "chevron_right"));
+    expand.addEventListener("click", () => {
+      row.expanded = !row.expanded;
+      renderAutoTag();
+    });
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.setAttribute("aria-label", `Apply ${row.chip.name}`);
+    // A file that already has the tag counts as checked, so the row's box matches the boxes it shows.
+    const checkedShown = files.filter((file) => !file.change || file.checked).length;
+    check.checked = files.length > 0 && checkedShown === files.length;
+    check.indeterminate = checkedShown > 0 && !check.checked;
+    check.disabled = !toChange.length;
+    check.addEventListener("change", () => {
+      toChange.forEach((file) => (file.checked = check.checked));
+      renderAutoTag();
+    });
+    const name = Object.assign(document.createElement("span"), { textContent: row.chip.name });
+    name.style.fontWeight = "600";
+    main.append(expand, check, name,
+      Object.assign(document.createElement("span"), { className: "autotag-count", textContent: String(row.files.length) }),
+      Object.assign(document.createElement("span"), { className: "autotag-count", textContent: String(toChange.length) }));
+    box.append(main);
+    if (row.expanded) {
+      const list = document.createElement("div");
+      list.className = "autotag-files";
+      files.forEach((file) => {
+        const line = document.createElement("label");
+        line.className = "autotag-file";
+        const fileCheck = document.createElement("input");
+        fileCheck.type = "checkbox";
+        // With View all matches, a file that already has the tag shows checked and can't be unchecked.
+        fileCheck.checked = !file.change || file.checked;
+        fileCheck.disabled = !file.change;
+        if (!file.change) fileCheck.title = "Already has this tag";
+        fileCheck.addEventListener("change", () => {
+          file.checked = fileCheck.checked;
+          renderAutoTag();
+        });
+        const path = Object.assign(document.createElement("span"), { textContent: file.item.path, title: file.item.path });
+        line.append(fileCheck, path);
+        list.append(line);
+      });
+      box.append(list);
+    }
+    host.append(box);
+  });
+}
 function openAutoTag() {
   state.autoTag = true;
   $("autotag").hidden = false;
   syncAutoPause();
+  renderAutoTag();
   $("autotag-close").focus();
 }
 function closeAutoTag() {
+  if (autoTag.scanning) return;
   state.autoTag = false;
   $("autotag").hidden = true;
   syncAutoPause();
@@ -2310,11 +3049,41 @@ function closeAutoTag() {
 }
 $("open-autotag").addEventListener("click", openAutoTag);
 $("autotag-close").addEventListener("click", closeAutoTag);
+// Cancel clears the scan and closes; the X keeps the last scan for next time.
+$("autotag-cancel").addEventListener("click", () => {
+  if (autoTag.scanning) return;
+  autoTag.rows = null;
+  renderAutoTag();
+  closeAutoTag();
+});
+$("autotag-all").addEventListener("change", renderAutoTag);
+$("autotag-scan").addEventListener("click", () => {
+  autoTag.scanning = true;
+  autoTag.rows = null;
+  renderAutoTag();
+  setTimeout(() => {
+    autoTag.scanning = false;
+    autoTag.rows = autoTagScan();
+    renderAutoTag();
+  }, mockHooks.instant ? 0 : 5000);
+});
+const setAllAutoTag = (checked) => () => {
+  (autoTag.rows || []).forEach((row) => row.files.forEach((file) => file.change && (file.checked = checked)));
+  renderAutoTag();
+};
+$("autotag-select-all").addEventListener("click", setAllAutoTag(true));
+$("autotag-deselect-all").addEventListener("click", setAllAutoTag(false));
+$("autotag-apply").addEventListener("click", () => {
+  (autoTag.rows || []).forEach((row) => row.files.forEach((file) => {
+    if (file.change && file.checked) file.item.tags.add(row.chip.key);
+  }));
+  autoTag.rows = autoTagScan();
+  renderAutoTag();
+  followPlayingItem();
+  $("status").textContent = "Tag editor changes applied";
+});
 
 // ---- Header ----
-$("header-admin").addEventListener("click", () => {
-  $("status").textContent = "(Mockup) The admin view arrives with WebUI Admin Section.";
-});
 function openStats() {
   openPanel("stats", $("np-name"));
 }
@@ -2346,17 +3115,6 @@ function renderReadout() {
     `Remembered: ${state.open ? "open" : "closed"}, ${state.side}, ${state.width} px, ${state.tab}`;
 }
 
-function bindRadio(name, key) {
-  document.querySelectorAll(`input[name="${name}"]`).forEach((radio) => {
-    radio.checked = radio.value === state[key];
-    radio.addEventListener("change", () => {
-      state[key] = radio.value;
-      store.set(key, radio.value);
-      applyLayout();
-    });
-  });
-}
-
 $("mock-reset").addEventListener("click", () => {
   ["open", "tab", "width", "side"].forEach((key) => store.remove(key));
   Object.assign(state, { open: false, width: PANEL_DEFAULT, side: "right" });
@@ -2364,39 +3122,158 @@ $("mock-reset").addEventListener("click", () => {
   showTab("library");
 });
 
+// The server's situation, with today's messages for each. The status line shows "Ready (API 1)" once connected,
+// "SSE reconnecting..." while the event stream is down, and "SSE connected" when it comes back.
+const SITUATION_STATUS = {
+  connected: "Ready (API 1)",
+  reconnecting: "SSE reconnecting...",
+  noanswer: "Ready (API 1)",
+  nolibrary: NO_LIBRARY_MESSAGE,
+  incompatible: "Unsupported server API version: 2.",
+  empty: "Ready (API 1)"
+};
+function renderConnection() {
+  // While the status line is hidden, a small indicator on the player shows the lost connection.
+  const statusHidden = !state.showStatus || isShortScreen();
+  $("conn-indicator").hidden = !(state.situation === "reconnecting" && statusHidden);
+}
+function applySituation(situation) {
+  const was = state.situation;
+  state.situation = situation;
+  document.querySelectorAll('input[name="mock-situation"]').forEach((radio) => (radio.checked = radio.value === situation));
+  $("status").textContent = was === "reconnecting" && situation !== "reconnecting" ? "SSE connected" : SITUATION_STATUS[situation];
+  renderConnection();
+  renderLibPresets();
+  renderPresets();
+  renderFilterTags();
+  renderFilterEmpty();
+  renderTags();
+  layoutGrid(true);
+}
+document.querySelectorAll('input[name="mock-situation"]').forEach((radio) => {
+  radio.addEventListener("change", () => applySituation(radio.value));
+});
+
+// Events from the server, as the event stream brings them.
+$("mock-sync").addEventListener("click", () => {
+  const item = playback.item || visibleItems().items[0];
+  if (!item) return;
+  item.favorite = !item.favorite;
+  if (item.favorite) item.blacklisted = false;
+  $("status").textContent = `Synced: ${item.favorite ? "Added to favorites" : "Removed from favorites"}: ${item.name}`;
+  renderPlayback();
+  layoutGrid(true);
+});
+$("mock-refresh").addEventListener("click", () => {
+  const steps = [
+    "Core refresh: Refreshing sources (10%)",
+    "Core refresh: Fingerprinting files (35%)",
+    "Core refresh: Scanning durations (60%)",
+    "Core refresh: Scanning loudness (80%)",
+    "Core refresh: Generating thumbnails (95%)",
+    "Core refresh complete | Source: no changes | Fingerprint: ready 72 | Duration: files 48, all cached | Loudness: files 48, all cached | Thumbnails: reused 72"
+  ];
+  steps.forEach((text, i) => setTimeout(() => {
+    $("status").textContent = text;
+    // The library window reloads once the refresh finishes.
+    if (i === steps.length - 1) reloadGrid();
+  }, mockHooks.instant ? 0 : i * 900));
+});
+$("mock-startup").addEventListener("click", () => {
+  toggleSheet(false);
+  $("startup-error").hidden = false;
+});
+$("startup-error-back").addEventListener("click", () => {
+  $("startup-error").hidden = true;
+});
+
 // ---- The applied filter, its summary line, and placeholder tiles ----
-const applied = { playable: false, favoritesOnly: false, media: "all", parts: [] };
+// The filter that Apply applied. It limits the grid and random picks alike, as the server's filter does.
+const applied = {
+  fav: null,
+  bl: "excluded",
+  neverPlayed: false,
+  knownDuration: false,
+  knownLoudness: false,
+  playable: false,
+  media: "all",
+  audio: "all",
+  sources: null,
+  min: null,
+  max: null,
+  include: [],
+  exclude: [],
+  parts: []
+};
 function readApplied() {
   const general = filterBody.querySelector('[data-subpanel="general"]');
+  const sectionOf = (heading) => [...general.querySelectorAll(".filter-section")].find((section) => section.querySelector("h3").textContent.startsWith(heading));
   const parts = [];
-  general.querySelectorAll(".filter-section").forEach((section) => {
-    const heading = section.querySelector("h3").textContent;
-    if (heading === "Basic Filters") {
-      section.querySelectorAll("label").forEach((label) => {
-        if (label.querySelector("input").checked) parts.push(label.textContent.trim());
-      });
-    } else if (heading === "Media Type" || heading === "Audio Filter") {
-      const radios = [...section.querySelectorAll('input[type="radio"]')];
-      const chosen = radios.find((radio) => radio.checked);
-      if (chosen && chosen !== radios[0]) parts.push(chosen.parentElement.textContent.trim());
-    } else if (heading.startsWith("Sources")) {
-      const boxes = [...section.querySelectorAll('input[type="checkbox"]')];
-      const on = boxes.filter((box) => box.checked).length;
-      if (on < boxes.length) parts.push(`${on} of ${boxes.length} sources`);
-    }
+  const fav = $("filter-fav").checked ? $("filter-fav-mode").value : null;
+  const bl = $("filter-bl").checked ? $("filter-bl-mode").value : null;
+  // The summary names Favorites only or excluded, and Blacklisted only. Blacklisted excluded is the default, which
+  // the summary leaves out as the desktop's leaves out Exclude blacklisted today.
+  if (fav) parts.push(`Favorites ${fav}`);
+  if (bl === "only") parts.push("Blacklisted only");
+  const basic = [...sectionOf("Basic Filters").querySelectorAll(".filter-stack > label")];
+  basic.forEach((label) => {
+    if (label.querySelector("input").checked) parts.push(label.textContent.trim());
   });
-  if (minField.input.value && !minField.holds) parts.push(`Min ${minField.input.value}`);
-  if (maxField.input.value && !maxField.holds) parts.push(`Max ${maxField.input.value}`);
-  const tagCount = FILTER_TAGS.reduce((n, category) => n + category.chips.filter((chip) => chip[1]).length, 0);
-  if (tagCount) parts.push(`${tagCount} tag${tagCount === 1 ? "" : "s"}`);
-  const media = [...general.querySelectorAll('input[name="media"]')].findIndex((radio) => radio.checked);
+  const chosen = (name) => {
+    const radios = [...general.querySelectorAll(`input[name="${name}"]`)];
+    const index = radios.findIndex((radio) => radio.checked);
+    if (index > 0) parts.push(radios[index].parentElement.textContent.trim());
+    return Math.max(0, index);
+  };
+  const media = chosen("media");
+  const audio = chosen("audio");
+  const boxes = [...sectionOf("Sources").querySelectorAll('input[type="checkbox"]')];
+  const on = boxes.filter((box) => box.checked);
+  if (on.length < boxes.length) parts.push(`${on.length} of ${boxes.length} sources`);
+  const min = minField.input.value && !minField.holds ? parseDuration(minField.input.value) : null;
+  const max = maxField.input.value && !maxField.holds ? parseDuration(maxField.input.value) : null;
+  if (min !== null) parts.push(`Min ${minField.input.value.trim()}`);
+  if (max !== null) parts.push(`Max ${maxField.input.value.trim()}`);
+  const include = [...filterTagState].filter(([, mode]) => mode === "inc").map(([key]) => key);
+  const exclude = [...filterTagState].filter(([, mode]) => mode === "exc").map(([key]) => key);
+  if (include.length) parts.push(`${include.length} tag${include.length === 1 ? "" : "s"}`);
+  if (exclude.length) parts.push(`${exclude.length} tag${exclude.length === 1 ? "" : "s"} excluded`);
   Object.assign(applied, {
+    fav,
+    bl,
+    neverPlayed: basic[0].querySelector("input").checked,
+    knownDuration: basic[1].querySelector("input").checked,
+    knownLoudness: basic[2].querySelector("input").checked,
     playable: $("filter-playable").checked,
-    favoritesOnly: general.querySelector('input[type="checkbox"]').checked,
-    media: ["all", "videos", "photos"][media] || "all",
+    media: ["all", "videos", "photos"][media],
+    audio: ["all", "with", "without"][audio],
+    sources: on.length < boxes.length ? on.map((box) => /\(([^)]+)\)/.exec(box.parentElement.textContent)[1]) : null,
+    min,
+    max,
+    include,
+    exclude,
     parts
   });
   renderFilterSummary();
+}
+function passesApplied(item) {
+  const a = applied;
+  if (a.fav === "only" && !item.favorite) return false;
+  if (a.fav === "excluded" && item.favorite) return false;
+  if (a.bl === "only" && !item.blacklisted) return false;
+  if (a.bl === "excluded" && item.blacklisted) return false;
+  if (a.neverPlayed && item.plays) return false;
+  if ((a.knownDuration || a.knownLoudness) && isPhoto(item)) return false;
+  if (a.playable && !isPlayable(item)) return false;
+  if (a.media === "videos" && isPhoto(item)) return false;
+  if (a.media === "photos" && !isPhoto(item)) return false;
+  if (a.audio !== "all" && (isPhoto(item) || item.hasAudio !== (a.audio === "with"))) return false;
+  if (a.sources && !a.sources.some((root) => item.path.startsWith(`${root}/`))) return false;
+  if (a.min !== null && (isPhoto(item) || item.duration < a.min)) return false;
+  if (a.max !== null && (isPhoto(item) || item.duration > a.max)) return false;
+  if (a.include.some((key) => !item.tags.has(key))) return false;
+  if (a.exclude.some((key) => item.tags.has(key))) return false;
+  return true;
 }
 // A one-line summary of the applied filter above the grid, as the desktop shows; it opens the Filter tab.
 function renderFilterSummary() {
@@ -2412,9 +3289,13 @@ $("lib-filters").addEventListener("click", () => showTab("filter"));
 // While a page of results loads, its tiles show as placeholders.
 let placeholderUntil = 0;
 function reloadGrid() {
-  placeholderUntil = Date.now() + 450;
+  if (state.situation === "reconnecting") {
+    $("status").textContent = "Library browse failed. Showing the tiles already loaded.";
+    return;
+  }
+  placeholderUntil = Date.now() + (mockHooks.instant ? 0 : 450);
   layoutGrid(true);
-  setTimeout(() => layoutGrid(true), 480);
+  setTimeout(() => layoutGrid(true), mockHooks.instant ? 0 : 480);
 }
 
 // ---- Multi-select and bulk actions ----
@@ -2427,6 +3308,7 @@ function renderBulk() {
   $("bulk-bar").hidden = !selecting;
   $("bulk-count").textContent = `${selected.size} selected`;
   $("bulk-actions").disabled = selected.size === 0;
+  if (tagSelectionLive) followPlayingItem();
 }
 function setSelecting(on) {
   selecting = on;
@@ -2525,7 +3407,7 @@ async function runBulk(kind) {
   if (kind === "fav-remove") { items.forEach((item) => (item.favorite = false)); status(`Removed ${noun} from favorites.`); }
   if (kind === "bl-add") { items.forEach((item) => Object.assign(item, { blacklisted: true, favorite: false })); status(`Blacklisted ${noun}.`); }
   if (kind === "bl-remove") { items.forEach((item) => (item.blacklisted = false)); status(`Removed ${noun} from the blacklist.`); }
-  if (kind === "tags") return openBulkTags(items);
+  if (kind === "tags") return editSelectionTags();
   if (kind === "clear") {
     if (!(await confirmDialog({ message: `Clear playback stats for ${noun}?`, confirmLabel: "Clear", danger: true }))) return;
     items.forEach((item) => {
@@ -2537,65 +3419,6 @@ async function runBulk(kind) {
   if (kind === "remove") await removeFromLibrary(items);
   renderPlayback();
   layoutGrid(true);
-}
-
-// Tag edits across the selection, as the desktop's item tags dialog does: green chips are on every selected item,
-// orange on some of them.
-function openBulkTags(items) {
-  const pending = new Map();
-  const body = document.createElement("div");
-  body.className = "dialog-body";
-  const heading = document.createElement("h3");
-  heading.id = `bulk-tags-${Date.now()}`;
-  heading.textContent = `Edit tags for ${countOf(items.length)}`;
-  const hint = document.createElement("p");
-  hint.className = "filter-hint";
-  hint.textContent = "Green: every selected item has the tag. Orange: some do. Add or remove applies to all of them.";
-  const list = document.createElement("div");
-  list.className = "bulk-tags";
-  const actions = document.createElement("div");
-  actions.className = "dialog-actions";
-  const spacer = document.createElement("span");
-  spacer.className = "dialog-spacer";
-  const cancel = dialogButton("Cancel");
-  const save = dialogButton("Save");
-  actions.append(spacer, cancel, save);
-  body.append(heading, hint, list, actions);
-  const render = () => {
-    list.textContent = "";
-    TAGS.forEach((category) => {
-      if (!category.chips.length) return;
-      const title = document.createElement("h4");
-      title.textContent = category.name;
-      const grid = document.createElement("div");
-      grid.className = "tag-grid";
-      category.chips.forEach((chip) => {
-        const count = items.filter((item) => item.tags.has(chip.key)).length;
-        const toggle = (action) => () => {
-          if (pending.get(chip.key) === action) pending.delete(chip.key);
-          else pending.set(chip.key, action);
-          render();
-        };
-        grid.append(chipEl(chip.name, [
-          ["add", "Add to all", pending.get(chip.key) === "add", toggle("add")],
-          ["remove", "Remove from all", pending.get(chip.key) === "remove", toggle("remove")]
-        ], count === items.length ? "state-all" : count ? "state-some" : ""));
-      });
-      list.append(title, grid);
-    });
-    save.disabled = pending.size === 0;
-  };
-  render();
-  const { close } = openDialog({ content: body, labelledBy: heading.id });
-  cancel.addEventListener("click", () => close(false));
-  save.addEventListener("click", () => {
-    items.forEach((item) => pending.forEach((action, key) => (action === "add" ? item.tags.add(key) : item.tags.delete(key))));
-    $("status").textContent = `Updated tags on ${countOf(items.length)}.`;
-    close(true);
-    followPlayingItem();
-    renderStats();
-  });
-  cancel.focus();
 }
 
 // Admin actions ask for the control token from another machine, as the admin view does.
@@ -2668,15 +3491,7 @@ function statRow(list, label, value) {
   list.append(dt, dd);
 }
 const yesNo = (value) => (value ? "Yes" : "No");
-function renderStats() {
-  const host = $("stats-body");
-  if (!host) return;
-  const item = playback.item;
-  host.textContent = "";
-
-  const file = document.createElement("section");
-  file.className = "stats-section";
-  file.innerHTML = "<h3>Current file</h3>";
+function fileStats(item) {
   const name = document.createElement("p");
   name.className = "stats-file-name";
   name.textContent = item.name;
@@ -2718,12 +3533,24 @@ function renderStats() {
     tags.append(tag);
   });
   statRow(table, "Tags", tags.childElementCount ? tags : "None");
-  file.append(name, path, table);
+  return [name, path, table];
+}
+function renderStats() {
+  const host = $("stats-body");
+  if (!host) return;
+  const item = playback.item;
+  host.textContent = "";
+
+  const file = document.createElement("section");
+  file.className = "stats-section";
+  file.innerHTML = "<h3>Current file</h3>";
+  if (item) file.append(...fileStats(item));
+  else file.append(Object.assign(document.createElement("p"), { className: "filter-hint", textContent: "Nothing is playing yet." }));
 
   const library = document.createElement("section");
   library.className = "stats-section";
   library.innerHTML = "<h3>Library</h3>";
-  const live = ITEMS.filter((x) => !x.removed);
+  const live = state.situation === "empty" ? [] : ITEMS.filter((x) => !x.removed);
   const videos = live.filter((x) => !isPhoto(x));
   const cards = [
     ["Videos", videos.length],
@@ -2795,12 +3622,59 @@ function initSettings() {
       applyTheme();
     });
   });
+  // Ambient mode settings: each control shows its value, applies as it moves, and is kept on this device.
+  const ambientControls = [
+    ["rate", (value) => `${value} per second`],
+    ["fade", (value) => `${value} s`],
+    ["blur", (value) => `${value} px`],
+    ["dark", (value) => `${value}%`],
+    ["light", (value) => `${value}%`],
+    ["saturation", (value) => `${value}%`]
+  ];
+  const renderAmbientSettings = () => {
+    ambientControls.forEach(([key, format]) => {
+      $(`set-ambient-${key}`).value = String(tuning[key]);
+      $(`set-ambient-${key}-out`).textContent = format(tuning[key]);
+    });
+    renderAmbient();
+  };
+  ambientControls.forEach(([key]) => {
+    $(`set-ambient-${key}`).addEventListener("input", () => {
+      tuning[key] = Number($(`set-ambient-${key}`).value);
+      store.set("ambientSettings", tuning);
+      renderAmbientSettings();
+      if (key === "rate") scheduleAmbient();
+    });
+  });
+  $("set-ambient-reset").addEventListener("click", () => {
+    Object.assign(tuning, AMBIENT_DEFAULTS);
+    store.remove("ambientSettings");
+    renderAmbientSettings();
+    scheduleAmbient();
+  });
+  renderAmbientSettings();
+  $("set-ambient").checked = state.ambient;
+  $("set-ambient").addEventListener("change", () => {
+    state.ambient = $("set-ambient").checked;
+    store.set("ambient", state.ambient);
+    renderAmbient();
+  });
+  $("set-tile-names").checked = state.tileNames;
+  $("set-tile-names").addEventListener("change", () => {
+    state.tileNames = $("set-tile-names").checked;
+    store.set("tileNames", state.tileNames);
+    layoutGrid(true);
+  });
   $("set-status").checked = state.showStatus;
   $("set-status").addEventListener("change", () => {
     state.showStatus = $("set-status").checked;
     store.set("showStatus", state.showStatus);
     applyLayout();
   });
+  // Today's client type and device name, which the WebUI reads from the user agent.
+  const mobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+  $("diag-type").textContent = mobile ? "mobile-web" : "web";
+  $("diag-device").textContent = mobile ? "Mobile Browser" : "Web Browser";
   const list = $("shortcut-list");
   SHORTCUTS.forEach(([keys, action]) => {
     const dt = document.createElement("dt");
@@ -2821,7 +3695,7 @@ function initSettings() {
 
 // ---- Keyboard shortcuts: the desktop's keys, plus proposed keys for the tabs and fullscreen ----
 const SHORTCUTS = [
-  ["K", "Play or pause"],
+  ["K / Space", "Play or pause, or pause and resume a photo's timer"],
   ["J / L", "Seek back or forward by the seek step"],
   ["← / →", "Previous or next"],
   ["R", "Random"],
@@ -2842,42 +3716,41 @@ const TAB_KEYS = { 1: "library", 2: "filter", 3: "tags", 4: "stats", 5: "setting
 const isTextField = (el) =>
   el && (el.isContentEditable || el.tagName === "TEXTAREA" || el.tagName === "SELECT" ||
     (el.tagName === "INPUT" && !["checkbox", "radio", "button", "submit"].includes(el.type)));
+// The volume keys move the slider without a status line message.
 function setVolume(value) {
   state.volume = Math.max(0, Math.min(100, value));
   store.set("volume", state.volume);
   $("volume").value = String(state.volume);
-  $("status").textContent = `Volume ${state.volume}%`;
 }
 document.addEventListener("keydown", (event) => {
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
-  if (isTextField(event.target) || document.querySelector("dialog[open]")) return;
+  if (isTextField(event.target) || document.querySelector("dialog[open]") || state.autoTag) return;
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
   const item = playback.item;
+  const video = !!item && !isPhoto(item) && !playback.failed;
   const handled = () => event.preventDefault();
   if (event.shiftKey && key === "f") return handled(), $("fullscreen-btn").click();
   if (event.shiftKey) return;
-  if (key === "k") return handled(), $("play-btn").click();
-  if ((key === "j" || key === "l") && !isPhoto(item) && !playback.failed) {
+  // Space plays or pauses as K does, unless focus is on something Space already activates, such as a button or a tile.
+  if (key === " " && event.target !== document.body && event.target.closest("button, a, input, select, textarea, summary, [tabindex]")) return;
+  if (key === "k" || key === " ") return handled(), $("play-btn").click();
+  if ((key === "j" || key === "l") && video) {
     handled();
     playback.time = Math.max(0, Math.min(item.duration, playback.time + (key === "l" ? 1 : -1) * state.seekStep));
     return renderTime();
   }
   // Arrow keys keep their own job on radio buttons and checkboxes.
   if ((key === "ArrowLeft" || key === "ArrowRight") && event.target.tagName === "INPUT") return;
-  if (key === "ArrowLeft") return handled(), play(nextItem(-1), "next", -1);
-  if (key === "ArrowRight") return handled(), play(nextItem(), "next");
-  if (key === "r") {
-    handled();
-    const pool = ITEMS.filter((x) => !x.removed && (!applied.playable || isPlayable(x)));
-    return play(pool[Math.floor(Math.random() * pool.length)], "random");
-  }
+  if (key === "ArrowLeft") return handled(), goPrevious();
+  if (key === "ArrowRight") return handled(), goNext();
+  if (key === "r") return handled(), pickRandom();
   if (key === "f") return handled(), toggleFlag("favorite");
   if (key === "b") return handled(), toggleFlag("blacklisted");
   if (key === "a") return handled(), $("autoplay-btn").click();
   if (key === "m") return handled(), toggleMute();
   // Frame stepping, as YouTube does: the mockup assumes 30 frames a second; the WebUI uses the browser's frame
   // timings (requestVideoFrameCallback) where it provides them.
-  if ((key === "," || key === ".") && !isPhoto(item) && !playback.failed && !playback.playing) {
+  if ((key === "," || key === ".") && video && !playback.playing) {
     handled();
     playback.time = Math.max(0, Math.min(item.duration, playback.time + (key === "." ? 1 : -1) / 30));
     playback.frameStep = key === "." ? "forward" : "back";
@@ -2903,16 +3776,22 @@ holdAction($("pair-btn"), () => [pairField], { reason: () => "Enter the pairing 
 $("pair").addEventListener("submit", (event) => {
   event.preventDefault();
   if (pairField.holds) return;
+  if (state.situation === "incompatible") return void noticeDialog({ message: "Pairing blocked by server compatibility check." });
+  if (pairField.input.value.trim().toLowerCase() === "wrong") return void noticeDialog({ message: "Pairing failed." });
   state.pairing = false;
   store.set("pairing", false);
   $("mock-pairing").checked = false;
+  pairField.reset("");
   applyMockOptions();
+  applyLayout();
   $("status").textContent = "Paired.";
 });
 
 // ---- Mockup options ----
 function applyMockOptions() {
   $("pair").hidden = !state.pairing;
+  // On a phone on its side, the header shows while the server asks for pairing, so its prompt can be reached.
+  document.body.classList.toggle("pairing", state.pairing);
   $("volume-wrap").hidden = state.iosVolume;
   renderStats();
   placeAllTips();
@@ -2942,21 +3821,44 @@ $("lib-collapse").addEventListener("click", () => {
   store.set("libCollapsed", state.libCollapsed);
   applyCollapse();
 });
-applyCollapse();
 
-// For build/check.mjs only: lets the check start playback at a given item.
-window.mockup = { play: (id) => play(ITEMS[id]), items: ITEMS };
+// For build/check.mjs only: random picks take queued item ids first, and the history can be read.
+window.mockup = {
+  items: ITEMS,
+  tags: TAGS,
+  queue: mockHooks.queue,
+  choose: (id) => chooseItem(ITEMS[id]),
+  history: () => ({ ids: history.map((item) => item.id), index: historyIndex }),
+  ambientSamples: () => ambientSamples,
+  situation: applySituation
+};
 
 // ---- Start ----
-readApplied();
-renderStats();
+// The library and presets load after a moment, as they do from the server.
 initSettings();
+restoreFilterState();
+readApplied();
+renderPresets();
+renderFilterTags();
+renderFilterEmpty();
+takeSnapshot();
+renderSortControls();
+applyCollapse();
+renderTags();
 applyMockOptions();
 showTab(state.tab);
 $("mock-hint").hidden = state.open;
 renderPlayback();
 renderApply();
+applySituation("connected");
+renderLibPresets();
 applyLayout();
+setTimeout(() => {
+  libLoading = false;
+  presetsLoading = false;
+  renderLibPresets();
+  layoutGrid(true);
+}, mockHooks.instant ? 0 : 400);
 </script>
 </body>
 </html>

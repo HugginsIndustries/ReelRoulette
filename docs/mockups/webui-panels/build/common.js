@@ -455,3 +455,17 @@ function noticeDialog({ title, message }) {
     ok.focus();
   });
 }
+
+/** "Hide mockup notes": one option, kept on this device, for every page that offers it. */
+function initHideMock() {
+  const box = document.getElementById("mock-hide-notes");
+  const apply = () => document.documentElement.classList.toggle("hide-mock", store.get("hideMock", false));
+  if (box) {
+    box.checked = store.get("hideMock", false);
+    box.addEventListener("change", () => {
+      store.set("hideMock", box.checked);
+      apply();
+    });
+  }
+  apply();
+}

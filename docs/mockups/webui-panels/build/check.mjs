@@ -10,9 +10,9 @@ const dir = fileURLToPath(new URL("..", import.meta.url));
 let failures = 0;
 const windows = [];
 
-async function load(name, width) {
+async function load(name, width, query = "") {
   console.log(`  loading ${name}@${width}`);
-  const window = new Window({ width, height: 800, url: "https://mockup.test/" + name, settings: { enableJavaScriptEvaluation: true, suppressInsecureJavaScriptEnvironmentWarning: true } });
+  const window = new Window({ width, height: 800, url: "https://mockup.test/" + name + query, settings: { enableJavaScriptEvaluation: true, suppressInsecureJavaScriptEnvironmentWarning: true } });
   const errors = [];
   window.addEventListener("error", (event) => errors.push(String(event.error?.stack || event.message)));
   window.console.error = (...args) => errors.push(args.join(" "));
@@ -27,7 +27,7 @@ function check(label, ok) {
   console.log(`${ok ? "PASS" : "FAIL"} ${label}`);
 }
 
-for (const name of ["index", "validation", "desktop-notice"]) {
+for (const name of ["index", "validation", "recovery", "desktop-notice"]) {
   const { errors } = await load(name, 1280);
   check(`${name}: no script errors ${errors.join("; ")}`, errors.length === 0);
 }
@@ -57,64 +57,104 @@ for (const name of ["index", "validation", "desktop-notice"]) {
 }
 
 for (const width of [1280, 390]) {
-  const { document, errors, window } = await load("layout", width);
+  // "?instant" skips the mockup's waits: random picks, loading, and Auto Tag's scan finish at once.
+  const { document, errors, window } = await load("layout", width, "?instant");
   const $ = (id) => document.getElementById(id);
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
   const input = (el, value) => {
     el.value = value;
     el.dispatchEvent(new window.Event("input"));
   };
+  const change = (el, value) => {
+    if (typeof value === "boolean") el.checked = value;
+    else el.value = value;
+    el.dispatchEvent(new window.Event("change", { bubbles: true }));
+  };
   const key = (el, k) => el.dispatchEvent(new window.KeyboardEvent("keydown", { key: k, bubbles: true }));
+  const press = (k, target = document.body, extra = {}) =>
+    target.dispatchEvent(new window.KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...extra }));
   const nativeCalls = [];
   for (const name of ["confirm", "prompt", "alert"]) window[name] = () => nativeCalls.push(name);
   const openDialogs = () => [...document.querySelectorAll("dialog.app-dialog")];
   const topDialog = () => openDialogs().at(-1);
   const button = (root, label) => [...root.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith(label));
   const pressEscape = (dialog) => dialog.dispatchEvent(new window.Event("cancel", { cancelable: true }));
-  // Next can land on a file this browser can't play, whose notice then needs its OK.
+  const notice = () => topDialog()?.querySelector(".dialog-message")?.textContent || "";
   const dismissNotices = () => {
-    for (const dialog of openDialogs().reverse()) {
-      if (dialog.textContent.includes("isn't supported") || dialog.textContent.includes("not found")) button(dialog, "OK").click();
-    }
+    for (const dialog of openDialogs().reverse()) button(dialog, "OK")?.click();
   };
-  const next = () => {
-    $("next-btn").click();
-    dismissNotices();
+  const items = window.mockup.items;
+  const queue = window.mockup.queue;
+  const np = () => $("np-name").textContent;
+  const chip = () => $("play-chip").textContent;
+  const status = () => $("status").textContent;
+  const situation = (value) => document.querySelector(`input[name="mock-situation"][value="${value}"]`).click();
+  const tiles = () => [...$("lib-grid").querySelectorAll(".lib-tile")];
+  const gridText = () => $("lib-grid").textContent;
+  const openTab = (tab) => {
+    if ($("panel").hidden) $("panel-btn").click();
+    $(`tab-btn-${tab}`).click();
   };
+  const closePanel = () => {
+    if (!$("panel").hidden) $("panel-close").click();
+  };
+  const playable = (item) => !item.missing && !item.removed && (item.type === "photo" || /\.(mp4|mkv)$/.test(item.name));
+
   check(`layout@${width}: no script errors on load ${errors.join("; ")}`, errors.length === 0);
-  check(`layout@${width}: panel starts closed and playing`, $("panel").hidden && $("play-chip").textContent.includes("Playing"));
+  // Nothing plays until a tap or Play.
+  check(`layout@${width}: nothing plays at first, and the player shows the start hint`,
+    !$("empty-state").hidden && $("empty-state").textContent === "Tap to play, or open the panel to choose a preset or filter." && $("panel").hidden && $("np-name").parentElement.hidden && chip().includes("Nothing playing"));
+  check(`layout@${width}: the status line says Ready (API 1) (${status()})`, status() === "Ready (API 1)");
   const corner = [...document.querySelectorAll(".overlay-corner-btn")].map((b) => b.id).join(",");
   check(`layout@${width}: the player's corner buttons are ${corner}`, corner === "panel-btn,favorite-btn,blacklist-btn");
   check(`layout@${width}: the header has no settings icon`, !$("header-settings") && !!$("header-admin"));
+  press("4");
+  check(`layout@${width}: with nothing playing, Stats says so`, !$("tab-stats").hidden && $("stats-body").textContent.includes("Nothing is playing yet."));
+  press("3");
+  check(`layout@${width}: and the Tags tab's chips can't add or remove`,
+    [...document.querySelectorAll('#tags-body [title="Add tag"], #tags-body [title="Remove tag"]')].every((b) => b.disabled) && $("tags-target").hidden);
+  press("1");
+  check(`layout@${width}: the library loads its tiles`, tiles().length > 20 && $("lib-summary").textContent.startsWith("Showing"));
+  press("1");
+  check(`layout@${width}: the open tab's key closes the panel`, $("panel").hidden);
+
+  // A tap starts a random pick; Next picks at random at the end of the history, and both skip what can't play.
+  queue.push(0);
+  $("media").click();
+  await tick();
+  check(`layout@${width}: a tap starts a random pick (${np()}, ${status()})`, np() === items[0].name && chip().includes("Playing") && $("empty-state").hidden && status() === "Playing");
+  queue.push(2);
   $("next-btn").click();
+  check(`layout@${width}: Next at the end of the history picks at random (a photo, scrub bar disabled)`, np() === items[2].name && $("seek").disabled);
+  queue.push(4, 3);
   $("next-btn").click();
-  check(`layout@${width}: Next moves from videos to a photo (${$("np-name").textContent})`, $("np-name").textContent.endsWith(".jpg") && $("seek").disabled);
-  $("next-btn").click();
-  check(`layout@${width}: and back to a video`, $("np-name").textContent.endsWith(".mp4") && !$("seek").disabled);
-  $("next-btn").click();
-  check(`layout@${width}: Next skips a file this browser can't play, saying so on the status line (${$("np-name").textContent})`,
-    $("status").textContent === "Skipped a file this browser can't play." && $("np-name").textContent.endsWith(".jpg") && openDialogs().length === 0);
+  check(`layout@${width}: a random pick skips a file this browser can't play, saying so (${status()})`,
+    np() === items[3].name && status() === "Skipped a file this browser can't play." && openDialogs().length === 0);
   $("prev-btn").click();
-  check(`layout@${width}: Previous skips a file this browser can't play too (${$("np-name").textContent})`,
-    $("status").textContent === "Skipped a file this browser can't play." && $("np-name").textContent.endsWith(".mp4") && openDialogs().length === 0);
-  // A missing file is skipped too, with its own message.
-  const missing = window.mockup.items.find((item) => item.missing);
-  window.mockup.play(missing.id - 1);
+  check(`layout@${width}: Previous steps back through the history`, np() === items[2].name);
+  $("prev-btn").click();
+  $("prev-btn").click();
+  check(`layout@${width}: and does nothing at its start`, np() === items[0].name && window.mockup.history().index === 0);
   $("next-btn").click();
-  check(`layout@${width}: Next skips a missing file, saying so on the status line`,
-    $("status").textContent === "Skipped a missing file." && $("np-name").textContent !== missing.name && openDialogs().length === 0);
-  window.mockup.play(missing.id);
-  check(`layout@${width}: choosing the missing file itself shows the notice`, topDialog()?.textContent.includes("Video file not found."));
+  check(`layout@${width}: Next steps forward through the history before picking`, np() === items[2].name && window.mockup.history().index === 1);
+  const missing = items.find((item) => item.missing);
+  window.mockup.choose(missing.id);
+  check(`layout@${width}: choosing a missing file says so and changes nothing (${notice()})`, notice() === "Media not found. The file may have moved or been deleted." && np() === items[2].name);
   dismissNotices();
-  window.mockup.play(3);
+  queue.push(missing.id, 0);
+  press("r");
+  check(`layout@${width}: R picks at random and skips a missing file, saying so (${status()})`, status() === "Skipped a missing file." && np() === items[0].name);
+  window.mockup.choose(4);
+  check(`layout@${width}: an .avi chosen from the library shows the format notice`, notice().includes("format (.avi) isn't supported in this browser") && chip().includes("Can't play"));
+  dismissNotices();
   // Swipes on the media area: left plays the next item, and the click that follows a swipe is ignored.
   const touch = (type, x) => $("media").dispatchEvent(Object.assign(new window.Event(type, { bubbles: true }), { touches: [{ clientX: x, clientY: 200 }], changedTouches: [{ clientX: x, clientY: 200 }] }));
-  const beforeSwipe = $("np-name").textContent;
   const controlsBefore = $("media").classList.contains("controls-visible");
+  queue.push(3);
   touch("touchstart", 400);
   touch("touchend", 250);
   $("media").click();
-  check(`layout@${width}: a swipe left plays the next item and swallows its click`, $("np-name").textContent !== beforeSwipe && $("media").classList.contains("controls-visible") === controlsBefore);
-  dismissNotices();
+  check(`layout@${width}: a swipe left plays the next item and swallows its click`, np() === items[3].name && $("media").classList.contains("controls-visible") === controlsBefore);
   // Favorite and Blacklist clear each other.
   $("favorite-btn").click();
   $("blacklist-btn").click();
@@ -122,15 +162,61 @@ for (const width of [1280, 390]) {
   $("favorite-btn").click();
   check(`layout@${width}: Favorite clears Blacklist`, $("favorite-btn").classList.contains("active") && !$("blacklist-btn").classList.contains("active"));
   $("favorite-btn").click();
+
+  // The server's situations.
+  situation("reconnecting");
+  check(`layout@${width}: reconnecting shows on the status line (${status()})`, status() === "SSE reconnecting..." && $("conn-indicator").hidden);
+  press("r");
+  check(`layout@${width}: a random pick then fails with a notice (${notice()})`, notice() === "Random selection failed: Failed to fetch");
+  dismissNotices();
+  $("favorite-btn").click();
+  check(`layout@${width}: and so does Favorite (${notice()})`, notice() === "Favorite update failed (503)." && !$("favorite-btn").classList.contains("active"));
+  dismissNotices();
+  $("set-status").click();
+  check(`layout@${width}: with the status line hidden, the player shows the reconnecting indicator`, $("status").hidden && !$("conn-indicator").hidden);
+  $("set-status").click();
+  situation("connected");
+  check(`layout@${width}: reconnecting says SSE connected (${status()})`, status() === "SSE connected" && $("conn-indicator").hidden);
+  situation("noanswer");
+  press("r");
+  check(`layout@${width}: a server that doesn't answer gives up with a notice (${notice()})`, notice() === "No response from the server. Try again.");
+  dismissNotices();
+  situation("nolibrary");
+  openTab("library");
+  check(`layout@${width}: without a library the grid shows the server's message (${gridText().slice(0, 40)})`,
+    gridText().startsWith("Running without a library.") && !!$("lib-grid").querySelector(".lib-empty.is-error") && $("lib-preset").disabled && $("lib-preset").textContent === "Error loading presets");
+  press("r");
+  check(`layout@${width}: and random picks fail with a notice (${notice()})`, notice() === "Random selection failed (503).");
+  dismissNotices();
+  situation("incompatible");
+  check(`layout@${width}: a failed compatibility check opens the panel and shows its message in the Library tab (${gridText()})`,
+    !$("panel").hidden && gridText() === "Unsupported server API version: 2." && status() === "Unsupported server API version: 2.");
+  press("r");
+  check(`layout@${width}: and Play shows its notice (${notice()})`, notice() === "Cannot play: server compatibility check failed.");
+  dismissNotices();
+  situation("empty");
+  check(`layout@${width}: an empty library says No media in library.`, gridText() === "No media in library.");
+  openTab("filter");
+  document.querySelector('[data-sub="tags"]').click();
+  check(`layout@${width}: the Filter tab names the Tags tab when there are no tags`, $("filter-tag-categories").textContent === "No tags yet. Add them in the Tags tab.");
+  document.querySelector('[data-sub="presets"]').click();
+  check(`layout@${width}: and says No presets, and no sources`, $("filter-preset-list").textContent === "No presets" && !$("no-sources").hidden);
+  document.querySelector('[data-sub="general"]').click();
+  press("r");
+  check(`layout@${width}: with nothing to pick, a notice says so (${notice()})`, notice() === "No eligible media for current filters.");
+  dismissNotices();
+  situation("connected");
+  press("1");
+  closePanel();
+
   // The Auto-Pause checks below need a video playing.
-  while ($("np-name").textContent.endsWith(".jpg")) next();
+  window.mockup.choose(3);
   $("panel-btn").click();
   const overlay = $("stage").classList.contains("is-overlay");
   check(`layout@${width}: the panel button opens the panel on its last tab (Library) as ${overlay ? "overlay" : "side panel"}`,
     !$("panel").hidden && !$("tab-library").hidden && overlay === (width < 800) && $("panel-btn").getAttribute("aria-expanded") === "true");
   check(`layout@${width}: open state remembered`, window.localStorage.getItem("rr-mockup.open") === "true");
-  check(`layout@${width}: Responsive Auto-Pause ${overlay ? "pauses" : "keeps playing"}`,
-    $("play-chip").textContent.includes(overlay ? "Auto-Paused" : "Playing"));
+  check(`layout@${width}: Responsive Auto-Pause ${overlay ? "pauses" : "keeps playing"} (${chip()})`, chip().includes(overlay ? "Auto-Paused" : "Playing"));
   $("tab-btn-filter").click();
   const min = $("filter-min");
   input(min, "1:7x");
@@ -140,18 +226,19 @@ for (const width of [1280, 390]) {
     min.getAttribute("aria-invalid") === "true" && apply.getAttribute("aria-disabled") === "true" && applyKids === "btn-label,btn-problem");
   check(`layout@${width}: the tooltip sits inside the field`, min.closest(".vfield").contains(document.getElementById(min.getAttribute("aria-describedby"))));
   document.querySelector('[data-sub="presets"]').click();
-  const statusBeforeApply = $("status").textContent;
+  const statusBeforeApply = status();
   apply.click();
   check(`layout@${width}: held Apply goes to the field, keeps the panel open, and writes no status`,
-    !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === min && !$("panel").hidden && $("status").textContent === statusBeforeApply);
+    !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === min && !$("panel").hidden && status() === statusBeforeApply);
   input(min, "1:30");
   document.querySelector('[data-sub="presets"]').click();
   const presetNames = () => [...document.querySelectorAll(".filter-preset-row")].map((r) => r.dataset.key).join(",");
   const rowButtons = [...document.querySelector(".filter-preset-row").querySelectorAll("button")].map((b) => b.title).join(",");
   check(`layout@${width}: preset rows have a handle and Edit only (${rowButtons})`, rowButtons === "Drag to reorder,Edit preset");
+  check(`layout@${width}: the mockup has many presets (${document.querySelectorAll(".filter-preset-row").length})`, document.querySelectorAll(".filter-preset-row").length >= 12);
   key(document.querySelector(".filter-preset-row .drag-handle"), "ArrowDown");
-  check(`layout@${width}: ArrowDown on a preset's handle moves it (${presetNames()}) and keeps focus on it`,
-    presetNames() === "Short clips,Favorites,Photos only,Long videos" && document.activeElement?.closest(".filter-preset-row")?.dataset.key === "Favorites" && $("filter-apply-label").textContent === "Apply*");
+  check(`layout@${width}: ArrowDown on a preset's handle moves it and keeps focus on it`,
+    presetNames().startsWith("Short clips,Favorites,Photos only,Long videos,") && document.activeElement?.closest(".filter-preset-row")?.dataset.key === "Favorites" && $("filter-apply-label").textContent === "Apply*");
   document.querySelector('.filter-preset-row[data-key="Long videos"] [title="Edit preset"]').click();
   const presetDialog = topDialog();
   const presetName = presetDialog?.querySelector("input");
@@ -167,35 +254,133 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: Escape closes only the confirmation`, openDialogs().length === 1 && presetNames().includes("Long videos"));
   button(presetDialog, "Delete").click();
   button(topDialog(), "Delete").click();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  check(`layout@${width}: confirming deletes the preset and closes both dialogs (${presetNames()})`, openDialogs().length === 0 && !presetNames().includes("Long videos"));
+  await tick();
+  check(`layout@${width}: confirming deletes the preset and closes both dialogs`, openDialogs().length === 0 && !presetNames().includes("Long videos"));
   const dot = (id) => !$(id).querySelector(".unsaved-dot").hidden;
   check(`layout@${width}: unsaved Filter changes mark the Filter tab and the panel button`,
     dot("tab-btn-filter") && dot("panel-btn") && !dot("tab-btn-tags") && $("tab-btn-filter").getAttribute("aria-label") === "Filter, unsaved changes" && $("panel-btn").getAttribute("aria-label").endsWith(", unsaved changes"));
   apply.click();
   check(`layout@${width}: Apply clears the dots`, !dot("tab-btn-filter") && !dot("panel-btn"));
   check(`layout@${width}: valid Apply applies${overlay ? " and closes the overlay" : " and stays open"}`,
-    $("status").textContent === "Filters applied." && $("panel").hidden === overlay);
-  check(`layout@${width}: closing resumes playback`, overlay ? $("play-chip").textContent.includes("Playing") : true);
+    status() === "Filters applied." && $("panel").hidden === overlay);
+  check(`layout@${width}: closing resumes playback`, overlay ? chip().includes("Playing") : true);
   if ($("panel").hidden) $("panel-btn").click();
   check(`layout@${width}: reopening comes back on the last tab (Filter)`, !$("tab-filter").hidden);
-  $("tab-btn-tags").click();
+
+  // Favorites and Blacklisted each choose only or excluded.
+  document.querySelector('[data-sub="general"]').click();
+  $("filter-clear").click();
+  check(`layout@${width}: Favorites starts off, its dropdown disabled; Blacklisted starts on, excluded`,
+    !$("filter-fav").checked && $("filter-fav-mode").disabled && $("filter-bl").checked && $("filter-bl-mode").value === "excluded" && !$("filter-bl-mode").disabled);
+  const applyFilter = async (fav, favMode, bl, blMode) => {
+    openTab("filter");
+    document.querySelector('[data-sub="general"]').click();
+    change($("filter-fav"), fav);
+    change($("filter-fav-mode"), favMode);
+    change($("filter-bl"), bl);
+    change($("filter-bl-mode"), blMode);
+    $("filter-apply").click();
+    await tick();
+    openTab("library");
+  };
+  const badged = (icon) => tiles().filter((tile) => tile.querySelector(`.lib-tile-badge [data-icon="${icon}"]`)).length;
+  await applyFilter(true, "excluded", true, "excluded");
+  check(`layout@${width}: Favorites excluded leaves out every favorite (${$("lib-filters").textContent})`,
+    tiles().length > 0 && badged("favorite") === 0 && $("lib-filters").textContent === "Filters: Favorites excluded");
+  await applyFilter(true, "only", true, "excluded");
+  check(`layout@${width}: Favorites only shows only favorites (${tiles().length})`, tiles().length > 0 && badged("favorite") === tiles().length);
+  await applyFilter(false, "only", true, "only");
+  check(`layout@${width}: Blacklisted only shows only blacklisted items, badged (${tiles().length})`,
+    tiles().length > 0 && badged("thumb_down") === tiles().length && $("lib-filters").textContent === "Filters: Blacklisted only");
+  press("r");
+  check(`layout@${width}: random picks follow it`, $("blacklist-btn").classList.contains("active"));
+  dismissNotices();
+  await applyFilter(false, "only", true, "excluded");
+  check(`layout@${width}: the default leaves out blacklisted items and shows no Filters line`, badged("thumb_down") === 0 && $("lib-filters").hidden);
+  await applyFilter(false, "only", false, "excluded");
+  check(`layout@${width}: Blacklisted off includes them (${badged("thumb_down")} badged)`, badged("thumb_down") > 0);
+  await applyFilter(false, "only", true, "excluded");
+
+  // Choosing a preset applies its filter, and a change to that filter stars it.
+  const choosePreset = (value) => change($("lib-preset"), value);
+  choosePreset("Photos only");
+  await tick();
+  check(`layout@${width}: choosing a preset in the Library tab applies its filter (${tiles().length} tiles)`,
+    tiles().length > 0 && tiles().every((t) => t.getAttribute("aria-label").endsWith(".jpg")) && $("lib-filters").textContent === "Filters: Photos only" && document.querySelectorAll('input[name="media"]')[2].checked);
+  await applyFilter(true, "only", true, "excluded");
+  check(`layout@${width}: changing its filter stars it (${$("lib-preset").selectedOptions[0]?.textContent}, ${$("filter-heading").textContent})`,
+    $("lib-preset").value === "*" && $("lib-preset").selectedOptions[0].textContent === "Photos only*" && $("filter-heading").textContent === "Preset: Photos only*");
+  choosePreset("");
+  await tick();
+  check(`layout@${width}: None goes back to the default filter`, $("lib-filters").hidden && !$("filter-fav").checked);
+  openTab("filter");
+  document.querySelector('[data-sub="presets"]').click();
+  change($("filter-preset-select"), "Favorites");
+  document.querySelector('[data-sub="general"]').click();
+  check(`layout@${width}: choosing a preset in the Filter tab loads its filter into the tab`, $("filter-fav").checked && $("filter-fav-mode").value === "only" && $("filter-heading").textContent === "Preset: Favorites");
+  $("filter-cancel").click();
+  check(`layout@${width}: and Cancel puts the applied filter back`, !$("filter-fav").checked);
+  // While the server is unreachable, a browse keeps the tiles already loaded and Apply can't save the presets.
+  situation("reconnecting");
+  openTab("library");
+  const tileCount = tiles().length;
+  input($("lib-search"), "beach");
+  check(`layout@${width}: a browse while reconnecting keeps the loaded tiles (${status()})`, status() === "Library browse failed. Showing the tiles already loaded." && tiles().length === tileCount);
+  input($("lib-search"), "");
+  openTab("filter");
+  $("filter-apply").click();
+  check(`layout@${width}: Apply while reconnecting says it couldn't save the presets (${notice()})`, notice() === "Saving presets failed: Failed to fetch");
+  dismissNotices();
+  $("filter-cancel").click();
+  situation("connected");
+  openTab("library");
+
+  // Tiles: the playing tile's icon in the middle, filled badges without a dark rectangle, and names only by setting.
+  const tileToPlay = tiles().find((tile) => tile.getAttribute("aria-label").endsWith(".mp4"));
+  const playingId = Number(tileToPlay.dataset.id);
+  tileToPlay.click();
+  openTab("library");
+  const shown = (el) => !!el && window.getComputedStyle(el).display !== "none";
+  const playingMarks = tiles().filter((tile) => shown(tile.querySelector(".playing-mark")));
+  check(`layout@${width}: only the playing tile shows the playing icon (${playingMarks.length})`,
+    playingMarks.length === 1 && Number(playingMarks[0].dataset.id) === playingId && playingMarks[0].querySelector(".playing-mark .material-symbol-icon").classList.contains("is-filled"));
+  check(`layout@${width}: the mockup has no playing marker option`, !document.querySelector('input[name="mock-marker"]'));
+  const badge = $("lib-grid").querySelector(".lib-tile-badge");
+  const badgeIcon = badge.querySelector(".material-symbol-icon");
+  check(`layout@${width}: tile badges are filled icons with a drop shadow and no dark rectangle (${window.getComputedStyle(badge).backgroundColor || "none"})`,
+    badgeIcon.classList.contains("is-filled") && /drop-shadow/.test(window.getComputedStyle(badgeIcon).filter) && !/rgba\(0, 0, 0, 0\.6\)/.test(window.getComputedStyle(badge).backgroundColor));
+  const firstTile = tiles()[0];
+  check(`layout@${width}: file names are hidden on tiles by default, and a tile's tooltip is its name`,
+    !shown(firstTile.querySelector(".lib-tile-name")) && firstTile.title === items[Number(firstTile.dataset.id)].name && !$("set-tile-names").checked);
+  change($("set-tile-names"), true);
+  check(`layout@${width}: Show file names on tiles shows them and is remembered`,
+    shown(tiles()[0].querySelector(".lib-tile-name")) && window.localStorage.getItem("rr-mockup.tileNames") === "true" && tiles()[0].title !== "");
+  change($("set-tile-names"), false);
+  openTab("library");
+
+  // Tags.
+  openTab("tags");
   const chipButtons = [...document.querySelector("#tags-body .tag-chip").querySelectorAll("button")].map((b) => b.title).join(",");
   check(`layout@${width}: chips have no delete (${chipButtons})`, chipButtons === "Add tag,Remove tag,Edit tag");
+  const categoryOrder = () => [...document.querySelectorAll("#tags-body .tag-category")].map((c) => c.dataset.key).join(",");
+  check(`layout@${width}: the mockup has many tag categories (${categoryOrder()})`, document.querySelectorAll("#tags-body .tag-category").length >= 10 && document.querySelectorAll("#tags-body .tag-chip").length >= 60);
   const header = document.querySelector('#tags-body [data-key="people"] .tag-category-header');
   const headerButtons = [...header.querySelectorAll("button")].map((b) => b.className.split(" ")[0]).join(",");
   check(`layout@${width}: category headers hold a handle, the name, and Edit, with no arrows (${headerButtons})`,
     headerButtons === "drag-handle,tag-category-toggle,icon-btn" && !header.querySelector('[title="Move category up"]'));
+  const uncategorized = document.querySelector('#tags-body [data-key="uncategorized"] .drag-handle');
+  check(`layout@${width}: Uncategorized shows a disabled handle and no Edit`,
+    uncategorized?.disabled === true && !document.querySelector('#tags-body [data-key="uncategorized"] [title="Edit category"]'));
   header.querySelector(".tag-category-toggle").click();
   const peopleGrid = document.querySelector('#tags-body [data-key="people"] .tag-grid');
   check(`layout@${width}: clicking the header's name collapses the category`, peopleGrid.hidden && header.querySelector(".tag-category-toggle").getAttribute("aria-expanded") === "false");
   header.click();
   check(`layout@${width}: clicking the header itself expands it again`, !peopleGrid.hidden);
-  const categoryOrder = () => [...document.querySelectorAll("#tags-body .tag-category")].map((c) => c.dataset.key).join(",");
-  key(document.querySelector('#tags-body [data-key="events"] .drag-handle'), "ArrowDown");
-  check(`layout@${width}: Uncategorized stays last (${categoryOrder()})`, categoryOrder() === "people,places,events,uncategorized");
+  const orderBefore = categoryOrder();
+  key(document.querySelector('#tags-body [data-key="trips"] .drag-handle'), "ArrowDown");
+  check(`layout@${width}: the last category can't move below Uncategorized`, categoryOrder() === orderBefore && categoryOrder().endsWith(",trips,uncategorized"));
   key(document.querySelector('#tags-body [data-key="events"] .drag-handle'), "ArrowUp");
-  check(`layout@${width}: ArrowUp moves a category (${categoryOrder()}) and Save turns on`, categoryOrder() === "people,events,places,uncategorized" && !$("tags-save").disabled);
+  check(`layout@${width}: ArrowUp moves a category (${categoryOrder().split(",").slice(0, 3)}) and Save turns on`, categoryOrder().startsWith("people,events,places,") && !$("tags-save").disabled);
   document.querySelector('#tags-body [data-key="places"] [title="Edit category"]').click();
   const categoryDialog = topDialog();
   const categoryName = categoryDialog.querySelector("input");
@@ -205,8 +390,8 @@ for (const width of [1280, 390]) {
   button(categoryDialog, "Delete").click();
   check(`layout@${width}: category Delete asks with today's wording`, topDialog().textContent.includes('Delete category "Places"? Tags will become Uncategorized.'));
   button(topDialog(), "Delete").click();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  check(`layout@${width}: confirming removes it (${categoryOrder()})`, !categoryOrder().includes("places") && openDialogs().length === 0);
+  await tick();
+  check(`layout@${width}: confirming removes it`, !categoryOrder().includes("places") && openDialogs().length === 0);
   document.querySelector('#tags-body [title="Edit tag"]').click();
   const tagDialog = topDialog();
   const name = tagDialog.querySelector("input");
@@ -215,18 +400,25 @@ for (const width of [1280, 390]) {
     name.getAttribute("aria-invalid") === "true" && button(tagDialog, "Save").getAttribute("aria-disabled") === "true");
   button(tagDialog, "Delete").click();
   button(topDialog(), "Delete").click();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await tick();
   check(`layout@${width}: Delete in Edit Tag removes the chip`, ![...document.querySelectorAll("#tags-body .tag-chip-label")].some((l) => l.textContent === "Alice"));
   $("tags-add-category").click();
   check(`layout@${width}: New Category opens as an in-app dialog`, topDialog()?.querySelector("h3")?.textContent === "New Category");
   pressEscape(topDialog());
   // The Tags tab follows the playing item unless it has unsaved changes to its item's tags.
+  const playOther = () => {
+    const other = items.find((item) => playable(item) && item.name !== np());
+    window.mockup.choose(other.id);
+    dismissNotices();
+    if (!$("tab-tags").hidden) return;
+    openTab("tags");
+  };
   const line = $("tags-target");
-  const edited = $("np-name").textContent;
+  const edited = np();
   document.querySelector('#tags-body .tag-chip [title="Add tag"]').click();
-  next();
+  playOther();
   check(`layout@${width}: with unsaved tag changes the tab stays on its item and names it ("${line.textContent}")`,
-    !line.hidden && line.textContent === `Editing tags for ${edited}` && $("np-name").textContent !== edited);
+    !line.hidden && line.textContent === `Editing tags for ${edited}` && np() !== edited);
   $("panel-close").click();
   check(`layout@${width}: closing the panel keeps them, without asking, and the panel button shows the dot`,
     $("panel").hidden && openDialogs().length === 0 && dot("panel-btn") && $("panel-btn").getAttribute("aria-label") === "Open panel, unsaved changes");
@@ -236,43 +428,127 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: reopening and switching tabs keeps them (Tags dot, Save lit, line shown)`,
     dot("tab-btn-tags") && !$("tags-save").disabled && !line.hidden);
   $("tags-save").click();
-  check(`layout@${width}: after Save it follows the playing item, and the dots go`, line.hidden && !dot("tab-btn-tags") && !dot("panel-btn"));
-  next();
+  check(`layout@${width}: after Save it follows the playing item, and the dots go (${status()})`,
+    line.hidden && !dot("tab-btn-tags") && !dot("panel-btn") && status() === "Tag editor changes applied");
+  playOther();
   check(`layout@${width}: with no unsaved changes it follows`, line.hidden);
   document.querySelector('#tags-body .tag-chip [title="Remove tag"]').click();
-  next();
+  playOther();
   $("tags-refresh").click();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await tick();
   check(`layout@${width}: Refresh asks "Discard changes?" with Cancel focused`,
     topDialog()?.textContent.includes("Discard changes?") && document.activeElement?.textContent.trim() === "Cancel" && !line.hidden);
   button(topDialog(), "Discard").click();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await tick();
   check(`layout@${width}: after discarding it follows and nothing is pending`, line.hidden && $("tags-save").disabled);
   check(`layout@${width}: no browser dialog was used (${nativeCalls.join(",")})`, nativeCalls.length === 0);
+
+  // Auto Tag: a scan runs with today's indeterminate bar, then lists matches; Close and Cancel wait for it.
+  const autoTagText = () => $("autotag-results").querySelector(".autotag-empty")?.textContent;
   $("open-autotag").click();
-  check(`layout@${width}: Auto Tag opens`, !$("autotag").hidden);
+  const footerButtons = [...document.querySelectorAll("#autotag .autotag-footer button")].map((b) => b.id).join(",");
+  check(`layout@${width}: Auto Tag opens with its before-scan placeholder, and Cancel then Apply at the footer's end (${autoTagText()}; ${footerButtons})`,
+    !$("autotag").hidden && autoTagText() === "Scan results show here." && $("autotag-apply").disabled && footerButtons === "autotag-cancel,autotag-apply");
+  change($("autotag-full"), true);
+  $("autotag-scan").click();
+  check(`layout@${width}: Scan shows the indeterminate bar and disables Close and Cancel`,
+    !$("autotag-progress").hidden && $("autotag-close").disabled && $("autotag-cancel").disabled && $("autotag-status").textContent === "Scanning…");
+  press("Escape");
+  check(`layout@${width}: Escape doesn't close it while scanning`, !$("autotag").hidden);
+  await tick();
+  const autoRows = $("autotag-results").querySelectorAll(".autotag-result").length;
+  check(`layout@${width}: then it lists matching tags (${autoRows} rows, ${$("autotag-status").textContent})`,
+    $("autotag-progress").hidden && !$("autotag-close").disabled && autoRows > 0 && $("autotag-status").textContent.startsWith("Scan complete:") && !$("autotag-apply").disabled);
+  const autoHead = $("autotag-results").querySelector(".autotag-table-head");
+  const autoRow = $("autotag-results").querySelector(".autotag-row-main");
+  const columns = (el) => window.getComputedStyle(el).gridTemplateColumns;
+  const countCells = (el) => [...el.children].slice(3).every((cell) => cell.classList.contains("autotag-count"));
+  check(`layout@${width}: the header and the rows share one column template, so each count sits under its header (${columns(autoHead)})`,
+    columns(autoHead) === columns(autoRow) && !/\bauto\b/.test(columns(autoHead)) && countCells(autoHead) && countCells(autoRow) &&
+    window.getComputedStyle(autoRow.children[3]).textAlign === window.getComputedStyle(autoHead.children[3]).textAlign);
+  $("autotag-results").querySelector(".autotag-row-main .icon-btn").click();
+  check(`layout@${width}: a row expands to its files`, $("autotag-results").querySelectorAll(".autotag-file").length > 0);
+  // With View all matches, files that already have the tag show checked and can't be unchecked.
+  change($("autotag-all"), true);
+  const resultRows = () => [...$("autotag-results").querySelectorAll(".autotag-result")];
+  const counts = (row) => [...row.querySelectorAll(".autotag-row-main .autotag-count")].map((cell) => Number(cell.textContent));
+  const tagged = resultRows().find((row) => counts(row)[0] > counts(row)[1]);
+  const tagNameOf = (row) => row.querySelector(".autotag-row-main").children[2].textContent;
+  const taggedName = tagNameOf(tagged);
+  if (!tagged.querySelector(".autotag-files")) tagged.querySelector(".autotag-row-main .icon-btn").click();
+  const taggedRow = resultRows().find((row) => tagNameOf(row) === taggedName);
+  const lockedBoxes = [...taggedRow.querySelectorAll(".autotag-file input")].filter((box) => box.disabled);
+  check(`layout@${width}: with View all matches, files that already have the tag are checked and disabled (${lockedBoxes.length} in ${taggedName})`,
+    lockedBoxes.length > 0 && lockedBoxes.every((box) => box.checked));
+  change($("autotag-all"), false);
+  $("autotag-apply").click();
+  check(`layout@${width}: its own Apply applies the checked changes (${$("autotag-status").textContent})`,
+    status() === "Tag editor changes applied" && $("autotag-apply").disabled && $("autotag-status").textContent.endsWith("0/0 selected changes."));
   $("autotag-close").click();
-  $("panel-btn").click();
-  // A photo: the scrub bar stays visible and disabled, and fills only with Autoplay on.
-  $("tab-btn-library").click();
-  $("lib-preset").value = "Photos only";
-  $("lib-preset").dispatchEvent(new window.Event("change"));
-  await new Promise((resolve) => setTimeout(resolve, 520));
-  $("lib-grid").querySelector(".lib-tile").click();
-  if (!$("panel").hidden) $("panel-close").click();
-  await new Promise((resolve) => setTimeout(resolve, 600));
+  check(`layout@${width}: and the X closes it`, $("autotag").hidden);
+  $("open-autotag").click();
+  check(`layout@${width}: reopening it after the X keeps the last scan`, $("autotag-status").textContent.startsWith("Scan complete:") && !autoTagText());
+  $("autotag-cancel").click();
+  check(`layout@${width}: Cancel closes it`, $("autotag").hidden);
+  $("open-autotag").click();
+  check(`layout@${width}: and clears the scan (${autoTagText()})`, autoTagText() === "Scan results show here." && $("autotag-status").textContent === "");
+  situation("empty");
+  $("autotag-scan").click();
+  await tick();
+  check(`layout@${width}: a scan that finds nothing shows its own placeholder (${autoTagText()})`, autoTagText() === "No file names contain a tag's name.");
+  situation("connected");
+  $("autotag-close").click();
+
+  // A photo: Play and the scrub bar work while its timer runs (Autoplay on, Loop off), and are disabled otherwise.
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const playIcon = () => $("play-btn").querySelector(".material-symbol-icon").dataset.icon;
+  closePanel();
+  if ($("autoplay-btn").classList.contains("active")) $("autoplay-btn").click();
+  window.mockup.choose(2);
   const seek = $("seek");
-  check(`layout@${width}: on a photo the scrub bar shows, disabled, filling with Autoplay (${seek.value} / ${seek.max}, "${$("time-display").textContent}")`,
-    seek.disabled && Number(seek.value) > 0 && $("time-display").textContent.includes("/ 00:05") && $("mute-btn").disabled);
+  check(`layout@${width}: with Autoplay off, a photo's Play and scrub bar are disabled and the time is blank`,
+    $("play-btn").disabled && seek.disabled && $("time-display").textContent === "" && $("mute-btn").disabled);
   $("autoplay-btn").click();
-  check(`layout@${width}: with Autoplay off it stays empty`, Number(seek.value) === 0 && $("time-display").textContent === "");
+  check(`layout@${width}: turning Autoplay on starts the photo's full time from then (${$("time-display").textContent})`,
+    !seek.disabled && !$("play-btn").disabled && Number(seek.value) === 0 && $("time-display").textContent === "0:00 / 0:05" && playIcon() === "pause");
+  await sleep(600);
+  check(`layout@${width}: the bar fills as the timer runs (${seek.value})`, Number(seek.value) > 0);
+  $("play-btn").click();
+  const heldAt = Number(seek.value);
+  await sleep(500);
+  check(`layout@${width}: Play pauses the timer and keeps the time left (${chip()}, ${seek.value})`, Number(seek.value) === heldAt && chip().includes("Timer paused") && playIcon() === "play_arrow");
+  $("play-btn").click();
+  await sleep(300);
+  check(`layout@${width}: and resumes it from there (${seek.value})`, Number(seek.value) > heldAt && chip().includes("Photo timer"));
+  press(" ");
+  check(`layout@${width}: Space pauses the timer too`, chip().includes("Timer paused"));
+  press(" ");
+  check(`layout@${width}: and resumes it`, chip().includes("Photo timer"));
+  input(seek, 2);
+  check(`layout@${width}: dragging the scrub bar moves the timer's position (${$("time-display").textContent})`, $("time-display").textContent === "0:02 / 0:05");
+  $("loop-btn").click();
+  check(`layout@${width}: with Loop on, Play and the scrub bar are disabled`, $("play-btn").disabled && seek.disabled);
+  $("loop-btn").click();
   $("autoplay-btn").click();
-  dismissNotices();
+  check(`layout@${width}: turning Autoplay off clears the timer, and Autoplay is remembered`,
+    Number(seek.value) === 0 && $("time-display").textContent === "" && $("play-btn").disabled && window.localStorage.getItem("rr-mockup.autoplay") === "false");
+  $("autoplay-btn").click();
+  check(`layout@${width}: turning it on again starts the full time, not where the timer was (${$("time-display").textContent})`, $("time-display").textContent === "0:00 / 0:05");
+  $("autoplay-btn").click();
+  // Space plays or pauses a video as K does, and leaves a focused button to its own action.
+  window.mockup.choose(3);
+  press(" ");
+  check(`layout@${width}: Space pauses a video (${chip()})`, chip().includes("Paused"));
+  press(" ");
+  check(`layout@${width}: and plays it again`, chip().includes("Playing"));
+  press(" ", $("loop-btn"));
+  check(`layout@${width}: Space on a focused button doesn't also play or pause (${chip()})`, chip().includes("Playing"));
 
   // Stats: the file name opens it; Copy Path off the server machine, Show in File Manager on it.
   $("np-name").click();
   check(`layout@${width}: the file name opens the Stats tab on the current file`,
-    !$("panel").hidden && !$("tab-stats").hidden && $("stats-body").textContent.includes($("np-name").textContent) && $("stats-body").textContent.includes("Copy Path"));
+    !$("panel").hidden && !$("tab-stats").hidden && $("stats-body").textContent.includes(np()) && $("stats-body").textContent.includes("Copy Path"));
+  check(`layout@${width}: its tooltip shows the full name, then Show stats`, $("np-name").title === `${np()}\nShow stats`);
   $("mock-server-machine").click();
   check(`layout@${width}: on the server machine it offers Show in File Manager`, $("stats-body").textContent.includes("Show in File Manager"));
   $("mock-server-machine").click();
@@ -286,6 +562,7 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: Advance after keeps 8`, !advance.hasAttribute("aria-invalid") && window.localStorage.getItem("rr-mockup.advanceAfter") === "8");
   check(`layout@${width}: the shortcut reference lists the bindings`, $("shortcut-list").querySelectorAll("dt").length === 16);
   check(`layout@${width}: v0.15.0 has no loudness normalization settings`, !$("settings-body").textContent.includes("Loudness"));
+  check(`layout@${width}: Diagnostics show today's client type and device name`, $("diag-type").textContent === "web" && $("diag-device").textContent === "Web Browser");
   document.querySelector('input[name="set-theme"][value="light"]').click();
   check(`layout@${width}: the Theme setting switches to Light`, document.documentElement.classList.contains("theme-light"));
   document.querySelector('input[name="set-theme"][value="dark"]').click();
@@ -294,114 +571,313 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: the status line can be hidden`, $("status").hidden);
   $("set-status").click();
 
+  // Ambient mode: on by default, with its settings in an expandable section beside the toggle. It samples at the
+  // update rate while a video plays, holds while the video is paused or the tab is hidden, and samples a photo once.
+  const samples = () => window.mockup.ambientSamples();
+  const wait = sleep;
+  const setSlider = (key, value) => {
+    $(`set-ambient-${key}`).value = String(value);
+    $(`set-ambient-${key}`).dispatchEvent(new window.Event("input"));
+  };
+  const out = (key) => $(`set-ambient-${key}-out`).textContent;
+  closePanel();
+  window.mockup.choose(3);
+  const ambientCanvas = $("ambient").querySelector("canvas");
+  const ambientFilter = () => window.getComputedStyle(ambientCanvas).filter;
+  check(`layout@${width}: ambient mode starts on, behind the playing video`,
+    $("set-ambient").checked && !$("ambient").hidden && !!($("ambient").compareDocumentPosition($("video")) & window.Node.DOCUMENT_POSITION_FOLLOWING) &&
+    window.getComputedStyle($("ambient")).zIndex === "0");
+  const more = $("set-ambient-more");
+  check(`layout@${width}: its settings are an expandable section beside the toggle, and the Mockup tab has no tuning (${more.querySelector("summary").textContent})`,
+    more.tagName === "DETAILS" && more.querySelector("summary").lastChild.textContent === "Ambient mode settings" && more.closest(".setting") === $("set-ambient").closest(".setting") &&
+    !document.querySelector('#mock-sheet input[type="range"]'));
+  // Its chevron points right while closed and turns down when open. happy-dom keeps an element's computed style after an
+  // ancestor's attribute changes, so the chevron is measured on a fresh copy beside it.
+  const chevron = more.querySelector("summary .setting-more-chevron");
+  const chevronTurn = () => {
+    const copy = chevron.cloneNode(true);
+    chevron.after(copy);
+    const transform = window.getComputedStyle(copy).transform;
+    copy.remove();
+    return transform;
+  };
+  more.removeAttribute("open");
+  const closedTurn = chevronTurn();
+  more.setAttribute("open", "");
+  const openTurn = chevronTurn();
+  more.removeAttribute("open");
+  check(`layout@${width}: its header has a chevron that turns when it opens (${closedTurn || "none"} to ${openTurn})`,
+    chevron?.dataset.icon === "chevron_right" && openTurn === "rotate(90deg)" && closedTurn !== openTurn);
+  const settingNames = [...more.querySelectorAll("label span")].map((el) => el.textContent).join(", ");
+  check(`layout@${width}: with plain labels and today's defaults (${settingNames}: ${["rate", "fade", "blur", "dark", "light", "saturation"].map(out).join(", ")})`,
+    settingNames === "Update rate, Fade time, Blur, Strength in the dark theme, Strength in the light theme, Saturation" &&
+    out("rate") === "1 per second" && out("fade") === "2 s" && out("blur") === "64 px" && out("dark") === "50%" && out("light") === "75%" && out("saturation") === "100%" &&
+    ambientFilter() === "blur(64px) brightness(0.5) saturate(1)" && !!button(more, "Reset to defaults"));
+  setSlider("rate", 4);
+  let ambientBefore = samples();
+  await wait(900);
+  check(`layout@${width}: at 4 per second it samples while the video plays (${samples() - ambientBefore} in 0.9 s)`, samples() - ambientBefore >= 2);
+  $("play-btn").click();
+  ambientBefore = samples();
+  await wait(700);
+  check(`layout@${width}: and holds while the video is paused (${samples() - ambientBefore})`, samples() === ambientBefore && chip().includes("Paused"));
+  $("play-btn").click();
+  Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
+  ambientBefore = samples();
+  await wait(700);
+  check(`layout@${width}: and while the tab is hidden (${samples() - ambientBefore})`, samples() === ambientBefore);
+  delete document.hidden;
+  window.mockup.choose(2);
+  ambientBefore = samples();
+  await wait(700);
+  check(`layout@${width}: a photo is sampled once (${samples() - ambientBefore})`, samples() - ambientBefore === 1 && !$("ambient").hidden);
+  change($("set-ambient"), false);
+  check(`layout@${width}: turning it off leaves the plain black background, and is remembered`, $("ambient").hidden && window.localStorage.getItem("rr-mockup.ambient") === "false");
+  change($("set-ambient"), true);
+  window.mockup.choose(3);
+  setSlider("rate", 0.5);
+  await wait(300);
+  ambientBefore = samples();
+  await wait(1200);
+  check(`layout@${width}: a slower update rate applies at once (${samples() - ambientBefore} in 1.2 s at ${out("rate")})`, samples() - ambientBefore <= 1 && out("rate") === "0.5 per second");
+  setSlider("fade", 3);
+  setSlider("blur", 40);
+  setSlider("dark", 30);
+  setSlider("saturation", 150);
+  check(`layout@${width}: blur, the dark theme's strength, and saturation apply as set (${ambientFilter()})`,
+    ambientFilter() === "blur(40px) brightness(0.3) saturate(1.5)" && out("fade") === "3 s" && out("saturation") === "150%" &&
+    JSON.parse(window.localStorage.getItem("rr-mockup.ambientSettings")).blur === 40);
+  document.querySelector('input[name="set-theme"][value="light"]').click();
+  setSlider("light", 60);
+  check(`layout@${width}: the light theme uses full color at its own strength (${ambientFilter()})`, ambientFilter() === "blur(40px) brightness(0.6) saturate(1.5)");
+  check(`layout@${width}: the time display stays light in the light theme (${window.getComputedStyle($("time-display")).color})`, window.getComputedStyle($("time-display")).color === "#ffffff");
+  document.querySelector('input[name="set-theme"][value="dark"]').click();
+  check(`layout@${width}: and in the dark theme`, window.getComputedStyle($("time-display")).color === "#ffffff");
+  setSlider("rate", 0.25);
+  button(more, "Reset to defaults").click();
+  check(`layout@${width}: Reset to defaults restores each setting`,
+    ambientFilter() === "blur(64px) brightness(0.5) saturate(1)" && out("rate") === "1 per second" && out("light") === "75%" && window.localStorage.getItem("rr-mockup.ambientSettings") === null);
+  ambientBefore = samples();
+  await wait(1300);
+  check(`layout@${width}: and the default rate applies at once (${samples() - ambientBefore} in 1.3 s)`, samples() - ambientBefore >= 1);
+  // Native controls use the orange accent in both themes, and the panel side reads Left, then Right.
+  const accent = window.getComputedStyle(document.documentElement).getPropertyValue("--huggins-orange").trim();
+  const accented = [$("seek"), $("volume"), $("set-ambient"), document.querySelector('input[name="set-theme"]'), $("set-ambient-rate")];
+  check(`layout@${width}: the scrub bar, volume, checkboxes, radio buttons, and sliders use the orange accent (${window.getComputedStyle($("seek")).accentColor})`,
+    accented.every((el) => window.getComputedStyle(el).accentColor === accent));
+  const sides = [...document.querySelectorAll('input[name="set-side"]')].map((radio) => radio.parentElement.textContent.trim()).join(", ");
+  check(`layout@${width}: the panel side options read ${sides}`, sides === "Left, Right");
+
   // Keyboard shortcuts, ignored while typing.
-  const press = (k, target = document.body, extra = {}) =>
-    target.dispatchEvent(new window.KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...extra }));
-  $("panel-close").click();
-  dismissNotices();
+  closePanel();
   press("2");
   check(`layout@${width}: 2 opens the Filter tab`, !$("panel").hidden && !$("tab-filter").hidden);
   press("2");
   check(`layout@${width}: 2 again closes the panel`, $("panel").hidden);
   const volumeBefore = Number($("volume").value);
+  const statusBeforeVolume = status();
   press("[");
-  check(`layout@${width}: [ lowers the volume by the step (${volumeBefore} to ${$("volume").value})`, Number($("volume").value) === volumeBefore - 5);
+  check(`layout@${width}: [ lowers the volume by the step (${volumeBefore} to ${$("volume").value}), with no status message`,
+    Number($("volume").value) === volumeBefore - 5 && status() === statusBeforeVolume);
   // Frame stepping on comma and period, only while a video is paused.
-  while ($("np-name").textContent.endsWith(".jpg") || $("play-chip").textContent.includes("Can't")) next();
-  if (!$("play-chip").textContent.includes("Paused")) $("play-btn").click();
+  window.mockup.choose(3);
+  $("play-btn").click();
   const frameBefore = Number($("seek").value);
   press(".");
-  check(`layout@${width}: . steps one frame while paused (${$("play-chip").textContent})`, $("play-chip").textContent.includes("stepped a frame forward") && Math.abs(Number($("seek").value) - frameBefore - 1 / 30) < 0.02);
+  check(`layout@${width}: . steps one frame while paused (${chip()})`, chip().includes("stepped a frame forward") && Math.abs(Number($("seek").value) - frameBefore - 1 / 30) < 0.02);
   $("play-btn").click();
   press(",");
-  check(`layout@${width}: , does nothing while playing`, $("play-chip").textContent.includes("Playing"));
-  $("panel-btn").click();
-  $("tab-btn-library").click();
-  const before = $("play-chip").textContent;
+  check(`layout@${width}: , does nothing while playing`, chip().includes("Playing"));
+  openTab("library");
+  const before = chip();
   press("k", $("lib-search"));
-  check(`layout@${width}: K in the search box types instead of pausing`, $("play-chip").textContent === before);
+  check(`layout@${width}: K in the search box types instead of pausing`, chip() === before);
+
+  // Selection, as Google Photos does it: one check icon at each tile's top left.
+  const markOf = (tile) => tile.querySelector(".select-mark");
+  check(`layout@${width}: outside selection the check icons stay hidden until a tile is hovered`, tiles().every((tile) => !shown(markOf(tile))));
+  const firstId = tiles()[0].dataset.id;
+  const playingBefore = np();
+  markOf(tiles()[0]).click();
+  const picked = $("lib-grid").querySelector(`.lib-tile[data-id="${firstId}"]`);
+  check(`layout@${width}: clicking a tile's check icon selects it and starts selection, and plays nothing (${$("bulk-count").textContent})`,
+    picked.classList.contains("is-selected") && $("bulk-count").textContent === "1 selected" && !$("bulk-bar").hidden && np() === playingBefore);
+  const others = tiles().filter((tile) => tile !== picked);
+  check(`layout@${width}: during selection every tile shows the icon, faded`,
+    others.every((tile) => shown(markOf(tile)) && window.getComputedStyle(markOf(tile)).opacity === "0.6"));
+  check(`layout@${width}: a selected tile's icon is filled orange and its thumbnail shrinks inside the tile`,
+    window.getComputedStyle(markOf(picked)).opacity === "1" && window.getComputedStyle(markOf(picked)).color === window.getComputedStyle(document.documentElement).getPropertyValue("--huggins-orange").trim() &&
+    /scale\(0\.86\)/.test(window.getComputedStyle(picked.querySelector(".lib-tile-frame")).transform) && markOf(picked).querySelector(".material-symbol-icon").dataset.icon === "check_circle");
+  markOf(picked).click();
+  check(`layout@${width}: clicking it again deselects the tile`, !$("lib-grid").querySelector(`.lib-tile[data-id="${firstId}"]`).classList.contains("is-selected") && $("bulk-count").textContent === "0 selected");
+  $("bulk-exit").click();
+  check(`layout@${width}: leaving selection hides the icons again`, tiles().every((tile) => !shown(markOf(tile))));
 
   // Multi-select and bulk actions; removing from the library is an admin action.
-  $("lib-preset").value = "";
-  $("lib-preset").dispatchEvent(new window.Event("change"));
-  await new Promise((resolve) => setTimeout(resolve, 520));
   $("lib-select").click();
-  const tiles = () => [...$("lib-grid").querySelectorAll(".lib-tile")];
   check(`layout@${width}: selection marks the tiles as checkboxes`, tiles()[0].getAttribute("role") === "checkbox" && !$("bulk-bar").hidden);
   tiles()[0].click();
   tiles()[1].click();
   check(`layout@${width}: two taps select two (${$("bulk-count").textContent})`, $("bulk-count").textContent === "2 selected" && tiles()[0].classList.contains("is-selected"));
+  // Edit tags opens the Tags tab on the selected items: green for a tag every one has, orange for one only some have.
+  const pair = [Number(tiles()[0].dataset.id), Number(tiles()[1].dataset.id)];
+  const [both, one, none] = window.mockup.tags.flatMap((category) => category.chips).slice(0, 3);
+  pair.forEach((id) => [both, one, none].forEach((tag) => items[id].tags.delete(tag.key)));
+  pair.forEach((id) => items[id].tags.add(both.key));
+  items[pair[0]].tags.add(one.key);
   $("bulk-actions").click();
   $("bulk-menu").querySelector('[data-bulk="tags"]').click();
-  check(`layout@${width}: Edit tags for 2 items opens`, topDialog()?.textContent.includes("Edit tags for 2 items"));
-  pressEscape(topDialog());
+  await tick();
+  const tagLine = $("tags-target");
+  const chipFor = (tag) => [...document.querySelectorAll("#tags-body .tag-chip")].find((el) => el.querySelector(".tag-chip-label").textContent === tag.name);
+  check(`layout@${width}: Edit tags opens the Tags tab on the selection, with no dialog ("${tagLine.textContent}")`,
+    !$("panel").hidden && !$("tab-tags").hidden && !tagLine.hidden && tagLine.textContent === "Editing tags for 2 items" && openDialogs().length === 0);
+  check(`layout@${width}: a tag both items have is green, one only one has is orange, and one neither has is plain`,
+    chipFor(both).classList.contains("state-all") && chipFor(one).classList.contains("state-some") && !/state-/.test(chipFor(none).className));
+  chipFor(none).querySelector('[title="Add tag"]').click();
+  chipFor(one).querySelector('[title="Remove tag"]').click();
+  $("tags-save").click();
+  check(`layout@${width}: Save applies the changes to every selected item (${status()})`,
+    pair.every((id) => items[id].tags.has(none.key) && !items[id].tags.has(one.key)) && status() === "Updated tags on 2 items." &&
+    tagLine.textContent === "Editing tags for 2 items" && chipFor(none).classList.contains("state-all") && !/state-/.test(chipFor(one).className));
+  // The tab follows the selection while selection lasts.
+  openTab("library");
+  const thirdId = tiles().find((tile) => !tile.classList.contains("is-selected")).dataset.id;
+  $("lib-grid").querySelector(`.lib-tile[data-id="${thirdId}"]`).click();
+  openTab("tags");
+  check(`layout@${width}: selecting a third tile makes it 3 items ("${tagLine.textContent}")`, tagLine.textContent === "Editing tags for 3 items");
+  openTab("library");
+  $("lib-grid").querySelector(`.lib-tile[data-id="${thirdId}"]`).click();
   const removedName = tiles()[0].getAttribute("aria-label");
   $("bulk-actions").click();
   $("bulk-menu").querySelector('[data-bulk="remove"]').click();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await tick();
   check(`layout@${width}: Remove from library asks for the control token first`, topDialog()?.querySelector("h3")?.textContent === "Control token");
   input(topDialog().querySelector("input"), "secret-token");
   topDialog().querySelector('button[type="submit"]').click();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await tick();
   check(`layout@${width}: then asks to remove, with deleting files off by default`, topDialog()?.textContent.includes("Remove 2 items from the library? Their files stay on disk.") && !topDialog().querySelector('input[type="checkbox"]').checked);
-  topDialog().querySelector('input[type="checkbox"]').click();
-  topDialog().querySelector('input[type="checkbox"]').dispatchEvent(new window.Event("change"));
+  change(topDialog().querySelector('input[type="checkbox"]'), true);
   check(`layout@${width}: turning deletion on says the files are deleted from disk`, topDialog().textContent.includes("permanently delete their 2 files from disk") && !!button(topDialog(), "Remove and Delete"));
-  topDialog().querySelector('input[type="checkbox"]').click();
-  topDialog().querySelector('input[type="checkbox"]').dispatchEvent(new window.Event("change"));
+  change(topDialog().querySelector('input[type="checkbox"]'), false);
   button(topDialog(), "Remove").click();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  check(`layout@${width}: the items leave the grid (${$("status").textContent})`, !tiles().some((t) => t.getAttribute("aria-label") === removedName) && $("status").textContent === "Removed 2 items from the library.");
+  await tick();
+  check(`layout@${width}: the items leave the grid (${status()})`, !tiles().some((t) => t.getAttribute("aria-label") === removedName) && status() === "Removed 2 items from the library.");
   $("bulk-exit").click();
+  check(`layout@${width}: when selection ends without unsaved changes, the Tags tab follows the playing item again`, tagLine.hidden);
+  // Selection ending with unsaved changes keeps its items in the Tags tab until the changes are saved or discarded.
+  $("lib-select").click();
+  tiles()[0].click();
+  $("bulk-actions").click();
+  $("bulk-menu").querySelector('[data-bulk="tags"]').click();
+  await tick();
+  chipFor(one).querySelector('[title="Add tag"]').click();
+  $("bulk-exit").click();
+  check(`layout@${width}: after selection ends with unsaved changes the tab keeps its items ("${tagLine.textContent}")`,
+    tagLine.textContent === "Editing tags for 1 item" && !$("tags-save").disabled);
+  $("tags-refresh").click();
+  await tick();
+  button(topDialog(), "Discard").click();
+  await tick();
+  check(`layout@${width}: discarding them returns it to the playing item`, tagLine.hidden && $("tags-save").disabled);
+  // Shift+click selects a range and no text; Ctrl+click is an ordinary click.
+  openTab("library");
+  check(`layout@${width}: the grid's text can't be selected (${window.getComputedStyle($("lib-grid")).userSelect})`, window.getComputedStyle($("lib-grid")).userSelect === "none");
+  $("lib-select").click();
+  tiles()[0].click();
+  tiles()[3].dispatchEvent(new window.MouseEvent("click", { bubbles: true, shiftKey: true }));
+  check(`layout@${width}: Shift+click selects the range (${$("bulk-count").textContent})`, $("bulk-count").textContent === "4 selected");
+  $("bulk-exit").click();
+  const ctrlTile = tiles().find((tile) => playable(items[Number(tile.dataset.id)]) && items[Number(tile.dataset.id)].name !== np());
+  const ctrlName = items[Number(ctrlTile.dataset.id)].name;
+  ctrlTile.dispatchEvent(new window.MouseEvent("click", { bubbles: true, ctrlKey: true }));
+  dismissNotices();
+  check(`layout@${width}: Ctrl+click plays the tile and selects nothing`, $("bulk-bar").hidden && np() === ctrlName);
+  openTab("library");
 
   // The browser-playable option and the format notice.
   const avi = tiles().find((t) => t.getAttribute("aria-label").endsWith(".avi"));
   avi.click();
-  check(`layout@${width}: an .avi says its format isn't supported (${topDialog()?.textContent.slice(0, 60)})`,
-    topDialog()?.textContent.includes("format (.avi) isn't supported in this browser") && $("play-chip").textContent.includes("Can't play"));
-  button(topDialog(), "OK").click();
-  if ($("panel").hidden) $("panel-btn").click();
-  $("tab-btn-filter").click();
+  check(`layout@${width}: an .avi says its format isn't supported (${notice().slice(0, 60)})`,
+    notice().includes("format (.avi) isn't supported in this browser") && chip().includes("Can't play"));
+  dismissNotices();
+  openTab("filter");
   document.querySelector('[data-sub="general"]').click();
-  $("filter-playable").click();
-  $("filter-playable").dispatchEvent(new window.Event("change", { bubbles: true }));
+  change($("filter-playable"), true);
   $("filter-apply").click();
-  await new Promise((resolve) => setTimeout(resolve, 520));
-  if ($("panel").hidden) $("panel-btn").click();
-  $("tab-btn-library").click();
-  await new Promise((resolve) => setTimeout(resolve, 520));
+  await tick();
+  openTab("library");
   check(`layout@${width}: with it on, no .avi or .wmv tiles show, and the filter line says so (${$("lib-filters").textContent})`,
     !tiles().some((t) => /\.(avi|wmv)$/.test(t.getAttribute("aria-label"))) && $("lib-filters").textContent.includes("Only files this browser can play"));
 
   // Pairing prompt and read-only volume.
   $("mock-pairing").click();
-  check(`layout@${width}: the pairing prompt shows in the header`, !$("pair").hidden);
+  check(`layout@${width}: the pairing prompt shows in the header, labeled`, !$("pair").hidden && document.body.classList.contains("pairing") && $("pair").querySelector("label").textContent === "Pairing token" && $("pair-token").placeholder === "Enter token");
   input($("pair-token"), "x");
   input($("pair-token"), "");
   check(`layout@${width}: an emptied pairing token is flagged and Pair held`, $("pair-token").getAttribute("aria-invalid") === "true" && $("pair-btn").getAttribute("aria-disabled") === "true");
+  input($("pair-token"), "wrong");
+  $("pair").dispatchEvent(new window.Event("submit", { cancelable: true }));
+  check(`layout@${width}: a wrong token says Pairing failed. and keeps the prompt`, notice() === "Pairing failed." && !$("pair").hidden);
+  dismissNotices();
   input($("pair-token"), "abc123");
   $("pair").dispatchEvent(new window.Event("submit", { cancelable: true }));
-  check(`layout@${width}: Pair hides the prompt`, $("pair").hidden && $("status").textContent === "Paired.");
+  check(`layout@${width}: Pair hides the prompt`, $("pair").hidden && status() === "Paired." && !document.body.classList.contains("pairing"));
   $("mock-ios-volume").click();
   check(`layout@${width}: a read-only volume hides the slider`, $("volume-wrap").hidden);
   // Library controls collapse, and the preset and randomization dropdowns share a row.
-  if ($("panel").hidden) $("panel-btn").click();
-  $("tab-btn-library").click();
+  openTab("library");
   check(`layout@${width}: preset and randomization sit in one row`, $("lib-preset").parentElement === $("lib-mode").parentElement && $("lib-preset").parentElement.classList.contains("lib-pair"));
   $("lib-collapse").click();
   check(`layout@${width}: the controls and the Filters line collapse, stay collapsed on this device, and say so (${$("lib-collapse").title})`,
     $("lib-controls").classList.contains("is-collapsed") && $("lib-filters").classList.contains("is-collapsed") && window.localStorage.getItem("rr-mockup.libCollapsed") === "true" && $("lib-collapse").title === "Show controls & filters");
   $("lib-collapse").click();
-  // A phone on its side: the header and status line hide and the panel opens as the overlay.
+  // A phone on its side: the header and status line hide, the panel opens as the overlay, and the reconnecting
+  // indicator stands in for the status line.
   $("mock-short").click();
   check(`layout@${width}: a short touch screen gets the full-screen player layout and the overlay`, document.body.classList.contains("short-screen") && $("stage").classList.contains("is-overlay"));
+  situation("reconnecting");
+  check(`layout@${width}: there the player shows the reconnecting indicator`, !$("conn-indicator").hidden);
+  situation("connected");
   $("mock-short").click();
+
+  // Hide mockup notes: every mockup-only element goes except the Mockup tab and its options. happy-dom keeps an
+  // element's computed style after a class changes on <html>, so each is measured on a fresh copy in its place.
+  const displayed = (el) => {
+    const copy = el.cloneNode(true);
+    copy.removeAttribute("id");
+    el.after(copy);
+    const shown = window.getComputedStyle(copy).display !== "none";
+    copy.remove();
+    return shown;
+  };
+  $("mock-toggle").click();
+  check(`layout@${width}: mockup notes show by default`, displayed($("play-chip")) && !document.documentElement.classList.contains("hide-mock"));
+  change($("mock-hide-notes"), true);
+  const notes = [$("play-chip"), $("mock-hint"), document.querySelector("#autotag .mock-note"), document.querySelector("#startup-error .mock-note")];
+  const kept = [$("mock-toggle"), $("mock-sheet"), document.querySelector("#mock-sheet .mock-label"), $("startup-error-back")];
+  check(`layout@${width}: Hide mockup notes hides the notes and keeps the Mockup tab, its options, and the way back from the error page (${notes.map(displayed)} / ${kept.map(displayed)})`,
+    notes.every((el) => !displayed(el)) && displayed($("mock-toggle")) && displayed($("mock-sheet")) && displayed(document.querySelector("#mock-sheet .mock-label")) &&
+    displayed($("startup-error-back")) && window.localStorage.getItem("rr-mockup.hideMock") === "true");
+  change($("mock-hide-notes"), false);
+  check(`layout@${width}: and turning it off shows them again`, notes.filter((el) => !el.hidden).every(displayed));
+  $("mock-close").click();
+
+  // Events from the server, and the runtime config failing.
+  $("mock-sync").click();
+  check(`layout@${width}: a favorite from another device shows a sync notice (${status().slice(0, 40)})`, /^Synced: (Added to|Removed from) favorites: /.test(status()));
+  $("mock-refresh").click();
+  await tick();
+  check(`layout@${width}: a library refresh ends with its summary`, status().startsWith("Core refresh complete | Source: "));
+  $("mock-startup").click();
+  check(`layout@${width}: a runtime config failure shows today's error page`, !$("startup-error").hidden && $("startup-error").textContent.includes("Runtime Configuration Error"));
+  $("startup-error-back").click();
   check(`layout@${width}: no browser dialog was used anywhere (${nativeCalls.join(",")})`, nativeCalls.length === 0);
   check(`layout@${width}: no script errors anywhere ${errors.join("; ")}`, errors.length === 0);
 }
 
 for (const width of [1280, 390]) {
-  const { document, errors, window } = await load("admin", width);
+  const { document, errors, window } = await load("admin", width, "?instant");
   const $ = (id) => document.getElementById(id);
   const input = (el, value) => {
     el.value = value;
@@ -461,7 +937,62 @@ for (const width of [1280, 390]) {
   check(`admin@${width}: a row expands to its full line in today's format`, /^\[2026-10-08 10:20:05\.214\] \[server\] \[error\] /.test($("log-rows").querySelector(".log-raw").textContent));
   $("mock-no-library").click();
   check(`admin@${width}: without a library the server card says why and Refresh is off`, !$("no-library").hidden && $("refresh-now").disabled);
+  $("mock-no-library").click();
+  check(`admin@${width}: the server card has Refresh Status`, !!$("refresh-status") && $("running-version").textContent === "0.15.0");
+  $("mock-dev-run").click();
+  check(`admin@${width}: a dev run says so in today's words (${$("running-version").textContent})`, $("running-version").textContent === "0.15.0 (dev run — not a Velopack install)");
+  $("mock-dev-run").click();
+  const counts = $("client-counts").textContent;
+  check(`admin@${width}: clients show the three counts, their types and connection times, and no session id (${counts})`,
+    counts.includes("API sessions: 3") && counts.includes("Control sessions: 1") && counts.includes("Event streams: 4") &&
+    clients.includes("mobile-web · 192.168.1.31 · connected 09:47") && !/session/i.test(clients));
+  $("mock-bad-import").click();
+  check(`admin@${width}: an import shows its upload progress (${$("import-state").textContent})`, !$("import-upload").hidden && $("import-state").textContent === "Uploading notes.db: 0%");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  check(`admin@${width}: a file that isn't a library is rejected with a notice (${topDialog()?.textContent.slice(0, 50)})`,
+    $("import-upload").hidden && topDialog()?.querySelector(".dialog-message")?.textContent === "notes.db isn't a ReelRoulette library. The library wasn't changed.");
+  button(topDialog(), "OK").click();
+  $("mock-short").click();
+  check(`admin@${width}: a phone on its side hides the app header and keeps the admin bar`, document.body.classList.contains("short-screen") && !$("admin").hidden);
+  $("mock-short").click();
+  $("mock-hide-notes").click();
+  const freshDisplay = (el) => {
+    const copy = el.cloneNode(true);
+    copy.removeAttribute("id");
+    el.after(copy);
+    const display = window.getComputedStyle(copy).display;
+    copy.remove();
+    return display;
+  };
+  check(`admin@${width}: Hide mockup notes hides the notes and keeps the mockup bar`,
+    freshDisplay(document.querySelector("#logs .mock-note")) === "none" && freshDisplay(document.querySelector(".mock-bar")) !== "none" && document.documentElement.classList.contains("hide-mock"));
+  $("mock-hide-notes").click();
   check(`admin@${width}: no script errors anywhere ${errors.join("; ")}`, errors.length === 0);
+}
+
+for (const width of [1280, 390]) {
+  const { document, errors, window } = await load("recovery", width);
+  const $ = (id) => document.getElementById(id);
+  const topDialog = () => [...document.querySelectorAll("dialog.app-dialog")].at(-1);
+  check(`recovery@${width}: no script errors on load ${errors.join("; ")}`, errors.length === 0);
+  check(`recovery@${width}: titled ReelRoulette Recovery, with restart, stop, updates, and the Log Viewer`,
+    document.title === "ReelRoulette Recovery" && document.querySelector("h1").textContent === "ReelRoulette Recovery" && !!$("restart") && !!$("stop") && !!$("update-check") &&
+    [...document.querySelectorAll("h2")].some((h) => h.textContent === "Log Viewer") && $("tail").textContent.split("\n").length === 7);
+  $("mock-remote").click();
+  check(`recovery@${width}: from another machine the control token gate shows first`, !$("gate").hidden && $("recovery").hidden);
+  const token = $("gate-token");
+  token.value = "secret";
+  token.dispatchEvent(new window.Event("input"));
+  $("gate").dispatchEvent(new window.Event("submit", { cancelable: true }));
+  check(`recovery@${width}: the token opens it`, $("gate").hidden && !$("recovery").hidden);
+  $("update-check").click();
+  $("update-download").click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  check(`recovery@${width}: Download asks first, with Cancel focused`, topDialog()?.textContent.includes("Download update 0.15.1 now?") && window.document.activeElement?.textContent.trim() === "Cancel");
+  [...topDialog().querySelectorAll("button")].find((b) => b.textContent.trim() === "Download").click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  check(`recovery@${width}: then offers Apply & Restart`, !$("update-apply").hidden && $("update-download").hidden);
+  check(`recovery@${width}: no script errors anywhere ${errors.join("; ")}`, errors.length === 0);
 }
 
 {

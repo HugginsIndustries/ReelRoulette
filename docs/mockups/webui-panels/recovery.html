@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1a1a1a">
-<title>Field Validation Mockup</title>
+<title>ReelRoulette Recovery</title>
 <style>
 /* Shared by the mockup pages. Tokens and control styles are copied from the WebUI's styles.css. */
 * { box-sizing: border-box; }
@@ -398,265 +398,75 @@ html.hide-mock .mock-small:not(.mock-keep) { display: none !important; }
 }
 
 
+/* The server's built-in recovery page: plain, in the WebUI's theme colors, and without the WebUI's files. */
 [hidden] { display: none !important; }
-body {
-  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
-  line-height: 1.45;
-}
-.page { max-width: 1120px; margin: 0 auto; }
-.page-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-h1 { font-size: 1.4rem; margin: 0; }
-.lede { color: var(--muted-fg); margin: 4px 0 0; max-width: 72ch; }
-.theme-switch { display: flex; gap: 6px; padding: 6px 8px; }
-.theme-switch button {
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 1px dashed var(--mock);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-.theme-switch button[aria-pressed="true"] { background: var(--mock); color: #fff; }
-.group { border-top: 1px solid var(--panel-border); padding: 18px 0 8px; }
-.group h2 { font-size: 1.1rem; margin: 0 0 4px; }
-.group-note { color: var(--muted-fg); font-size: 0.9rem; margin: 0 0 14px; max-width: 80ch; }
-.specimens { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px; }
-.specimen {
-  margin: 0;
-  padding: 60px 14px 12px;
-  background: var(--surface);
-  border: 1px solid var(--surface-border);
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-}
-.specimen figcaption { font-size: 0.88rem; }
-.specimen figcaption b { display: block; margin-bottom: 2px; }
-.attrs {
-  margin: 0;
-  padding: 6px 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.75rem;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.field-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.field-row > .vfield { flex: 1 1 180px; }
-.dialog-card {
-  background: var(--surface-raised);
-  border: 1px solid var(--control-border);
-  border-radius: 10px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.dialog-card h3 { margin: 0 0 4px; }
-.dialog-card .vfield, .dialog-card select { width: 100%; }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
-
-.minis { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 16px; }
-.mini {
-  height: 540px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  background: var(--surface);
-  border: 1px solid var(--surface-border);
-  border-radius: 8px;
-  min-width: 0;
-}
-.mini-title { margin: 0; font-size: 1.15rem; }
-.mini-body { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--surface-border); border-radius: 8px; padding: 12px; }
-.mini-caption { margin: 8px 0 0; font-size: 0.88rem; }
+body { padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+main { max-width: 760px; margin: 0 auto; }
+h1 { margin: 0 0 4px; font-size: 1.5rem; }
+.lede { margin: 0 0 16px; color: var(--muted-fg); }
+section { border-top: 1px solid var(--surface-border); padding: 12px 0; }
+h2 { margin: 0 0 8px; font-size: 1.1rem; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 10px; }
+.facts dt { color: var(--muted-fg); }
+.facts dd { margin: 0; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.hint { margin: 0 0 8px; color: var(--muted-fg); }
+.tail { height: 260px; overflow: auto; margin: 8px 0 0; padding: 8px; border: 1px solid var(--surface-border); border-radius: 6px; background: var(--surface); font: 0.8rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
+.gate { max-width: 380px; }
+.gate .vfield { width: 100%; margin: 4px 0 10px; }
+.status { min-height: 1.3em; margin-top: 8px; color: var(--muted-fg); }
+.mock-bar { padding: 6px 10px; margin: 0 auto 14px; max-width: 760px; display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; }
+.mock-bar label { display: flex; gap: 6px; align-items: center; }
 </style>
 </head>
 <body>
-<div class="page">
-  <div class="page-head">
-    <div>
-      <h1>Field validation pattern</h1>
-      <p class="lede">Every field below is live. Point at a red icon, or put the cursor in a flagged field, to see its tooltip; on a touch screen tap the icon. Magenta dashed boxes are mockup notes, not part of the WebUI.</p>
-    </div>
-    <div class="theme-switch mock-note" role="group" aria-label="Mockup theme">
-      <button type="button" data-theme="system">System</button>
-      <button type="button" data-theme="dark">Dark</button>
-      <button type="button" data-theme="light">Light</button>
-    </div>
-  </div>
-
-  <section class="group">
-    <h2>Duration (Filter tab, General)</h2>
-    <p class="group-note">Empty means no duration, so an empty field is never flagged. Anything other than whole MM:SS or HH:MM:SS (minutes and seconds under 60) or a number of seconds is flagged as it is typed: “1:7x”, “12abc”, and “1:75” all are. Today the WebUI reads “1:7x” as 1:07 and “12abc” as 12 seconds.</p>
-    <div class="specimens">
-      <figure class="specimen">
-        <div class="filter-row"><span style="min-width:3rem">Min</span><span class="vfield duration-field"><input class="ctl" type="text" placeholder="HH:MM:SS or MM:SS" aria-label="Minimum duration" data-check="duration" value=""><span class="vfield-icon material-symbol-icon">error</span></span></div>
-        <figcaption><b>Empty</b>Valid: no minimum.</figcaption>
-        <p class="attrs mock-note"></p>
-      </figure>
-      <figure class="specimen">
-        <div class="filter-row"><span style="min-width:3rem">Min</span><span class="vfield duration-field"><input class="ctl" type="text" placeholder="HH:MM:SS or MM:SS" aria-label="Minimum duration" data-check="duration" data-pinned data-touched value="1:7x"><span class="vfield-icon material-symbol-icon">error</span></span></div>
-        <figcaption><b>Typed “1:7x”</b>Flagged with the icon; tooltip held open here so it shows.</figcaption>
-        <p class="attrs mock-note"></p>
-      </figure>
-      <figure class="specimen">
-        <div class="filter-row"><span style="min-width:3rem">Min</span><span class="vfield duration-field"><input class="ctl" type="text" placeholder="HH:MM:SS or MM:SS" aria-label="Minimum duration" data-check="duration" data-touched value="1:30"><span class="vfield-icon material-symbol-icon">error</span></span></div>
-        <figcaption><b>Corrected to “1:30”</b>Icon, tooltip, and description gone.</figcaption>
-        <p class="attrs mock-note"></p>
-      </figure>
-    </div>
-  </section>
-
-  <section class="group">
-    <h2>New preset name (Filter tab, Presets)</h2>
-    <p class="group-note">Required: an empty name is flagged only once the user has typed in it, but Add Preset can't proceed meanwhile. A name a saved preset already has, ignoring case, is flagged as it is typed. Saved presets here: Favorites, Short clips, Long videos.</p>
-    <div class="specimens">
-      <figure class="specimen">
-        <div class="field-row"><span class="vfield"><input class="ctl" type="text" placeholder="Enter preset name" aria-label="New preset name" data-check="preset" value=""><span class="vfield-icon material-symbol-icon">error</span></span><button class="btn" type="button" data-action><span class="btn-label">Add Preset</span><span class="btn-problem material-symbol-icon">error</span></button></div>
-        <figcaption><b>Not typed in yet</b>Not flagged. Add Preset is dimmed; pressing it puts the cursor in the field.</figcaption>
-        <p class="attrs mock-note"></p>
-      </figure>
-      <figure class="specimen">
-        <div class="field-row"><span class="vfield"><input class="ctl" type="text" placeholder="Enter preset name" aria-label="New preset name" data-check="preset" data-pinned data-touched value=""><span class="vfield-icon material-symbol-icon">error</span></span><button class="btn" type="button" data-action><span class="btn-label">Add Preset</span><span class="btn-problem material-symbol-icon">error</span></button></div>
-        <figcaption><b>Typed, then emptied</b>Flagged. Add Preset dimmed with the red icon.</figcaption>
-        <p class="attrs mock-note"></p>
-      </figure>
-      <figure class="specimen">
-        <div class="field-row"><span class="vfield"><input class="ctl" type="text" placeholder="Enter preset name" aria-label="New preset name" data-check="preset" data-pinned data-touched value="favorites"><span class="vfield-icon material-symbol-icon">error</span></span><button class="btn" type="button" data-action><span class="btn-label">Add Preset</span><span class="btn-problem material-symbol-icon">error</span></button></div>
-        <figcaption><b>A saved preset's name</b>Flagged as typed, ignoring case.</figcaption>
-        <p class="attrs mock-note"></p>
-      </figure>
-    </div>
-  </section>
-
-  <section class="group">
-    <h2>Edit Tag dialog: tag name</h2>
-    <p class="group-note">The name opens filled in. Emptying it flags it, and Save can't proceed until it has a name. Delete moves here from the chip, and asks first.</p>
-    <div class="specimens">
-      <figure class="specimen">
-        <div class="dialog-card">
-          <h3>Edit Tag</h3>
-          <label>Tag Name</label>
-          <span class="vfield"><input class="ctl" type="text" aria-label="Tag name" data-check="tag" value="Beach"><span class="vfield-icon material-symbol-icon">error</span></span>
-          <label>Category</label>
-          <select class="ctl" aria-label="Category"><option>Places</option><option>People</option></select>
-          <div class="dialog-actions"><button class="btn btn-danger" type="button">Delete</button><span style="flex:1"></span><button class="btn" type="button">Cancel</button><button class="btn" type="button" data-action><span class="btn-label">Save</span><span class="btn-problem material-symbol-icon">error</span></button></div>
-        </div>
-        <figcaption><b>As opened</b>Valid.</figcaption>
-        <p class="attrs mock-note"></p>
-      </figure>
-      <figure class="specimen">
-        <div class="dialog-card">
-          <h3>Edit Tag</h3>
-          <label>Tag Name</label>
-          <span class="vfield"><input class="ctl" type="text" aria-label="Tag name" data-check="tag" data-pinned data-touched value=""><span class="vfield-icon material-symbol-icon">error</span></span>
-          <label>Category</label>
-          <select class="ctl" aria-label="Category"><option>Places</option><option>People</option></select>
-          <div class="dialog-actions"><button class="btn btn-danger" type="button">Delete</button><span style="flex:1"></span><button class="btn" type="button">Cancel</button><button class="btn" type="button" data-action><span class="btn-label">Save</span><span class="btn-problem material-symbol-icon">error</span></button></div>
-        </div>
-        <figcaption><b>Name emptied</b>Flagged; Save dimmed with the red icon.</figcaption>
-        <p class="attrs mock-note"></p>
-      </figure>
-    </div>
-  </section>
-
-  <section class="group">
-    <h2>Edit Category dialog: category name</h2>
-    <p class="group-note">New: the category's edit button opens this in place of today's rename prompt, and Delete moves here from the category row, asking first. The name is flagged when emptied, or when another category has it, ignoring case. Categories here: People, Places, Events; editing People.</p>
-    <div class="specimens">
-      <figure class="specimen">
-        <div class="dialog-card">
-          <h3>Edit Category</h3>
-          <label>Category Name</label>
-          <span class="vfield"><input class="ctl" type="text" aria-label="Category name" data-check="category" data-pinned data-touched value=""><span class="vfield-icon material-symbol-icon">error</span></span>
-          <div class="dialog-actions"><button class="btn btn-danger" type="button">Delete</button><span style="flex:1"></span><button class="btn" type="button">Cancel</button><button class="btn" type="button" data-action><span class="btn-label">Save</span><span class="btn-problem material-symbol-icon">error</span></button></div>
-        </div>
-        <figcaption><b>Name emptied</b>Flagged; Save dimmed with the red icon.</figcaption>
-        <p class="attrs mock-note"></p>
-      </figure>
-      <figure class="specimen">
-        <div class="dialog-card">
-          <h3>Edit Category</h3>
-          <label>Category Name</label>
-          <span class="vfield"><input class="ctl" type="text" aria-label="Category name" data-check="category" data-pinned data-touched value="places"><span class="vfield-icon material-symbol-icon">error</span></span>
-          <div class="dialog-actions"><button class="btn btn-danger" type="button">Delete</button><span style="flex:1"></span><button class="btn" type="button">Cancel</button><button class="btn" type="button" data-action><span class="btn-label">Save</span><span class="btn-problem material-symbol-icon">error</span></button></div>
-        </div>
-        <figcaption><b>Another category's name</b>Flagged as typed, ignoring case.</figcaption>
-        <p class="attrs mock-note"></p>
-      </figure>
-    </div>
-  </section>
-
-  <section class="group">
-    <h2>Apply while the field that is not valid is out of view</h2>
-    <p class="group-note">The minimum duration below is not valid and sits at the bottom of General, out of view. The General tab carries the red icon, so the problem can be found from Tags or Presets too.</p>
-    <div class="minis">
-      <div>
-        <div class="mini" data-mini="jump"></div>
-        <p class="mini-caption">Apply's label dims and the red icon shows on its right. Pressing it applies nothing: it switches to General, scrolls the field into view, puts the cursor in it, and shows its tooltip.</p>
-      </div>
-    </div>
-  </section>
+<div class="mock-bar mock-note mock-keep">
+  <span class="mock-label mock-keep">Mockup</span>
+  <label><input type="checkbox" id="mock-hide-notes"> Hide mockup notes</label>
+  <label><input type="checkbox" id="mock-remote"> Opened from another machine</label>
+  <span>The server serves this page itself, at a fixed path such as /recovery, and it loads none of the WebUI's files, so it works when they are missing or broken.</span>
 </div>
+<main>
+  <h1>ReelRoulette Recovery</h1>
+  <p class="lede">Restart or stop the server, check its logs, and apply updates when the WebUI can't load.</p>
 
-<template id="mini-template">
-  <h2 class="mini-title">Preset: None</h2>
-  <div class="filter-tabstrip" role="tablist" aria-label="Filter sections">
-    <button class="filter-tab is-active" type="button" role="tab" aria-selected="true" data-sub="general">General<span class="tab-problem material-symbol-icon">error</span></button>
-    <button class="filter-tab" type="button" role="tab" aria-selected="false" data-sub="tags">Tags</button>
-    <button class="filter-tab" type="button" role="tab" aria-selected="false" data-sub="presets">Presets</button>
-  </div>
-  <div class="mini-body scroll-y themed-scrollbar">
-    <div data-subpanel="general">
-      <div class="filter-section">
-        <h3>Basic Filters</h3>
-        <div class="filter-stack">
-          <label><input type="checkbox"> Favorites only</label>
-          <label><input type="checkbox" checked> Exclude blacklisted</label>
-          <label><input type="checkbox"> Only never played</label>
-          <label><input type="checkbox"> Only videos with known duration</label>
-          <label><input type="checkbox"> Only videos with known loudness</label>
-        </div>
-      </div>
-      <div class="filter-section">
-        <h3>Media Type</h3>
-        <div class="filter-stack">
-          <label><input type="radio" checked> All (Videos and Photos)</label>
-          <label><input type="radio"> Videos only</label>
-          <label><input type="radio"> Photos only</label>
-        </div>
-      </div>
-      <div class="filter-section">
-        <h3>Audio Filter</h3>
-        <div class="filter-stack">
-          <label><input type="radio" checked> All videos</label>
-          <label><input type="radio"> Only videos with audio</label>
-          <label><input type="radio"> Only videos without audio</label>
-        </div>
-      </div>
-      <div class="filter-section">
-        <h3>Duration Filter</h3>
-        <div class="filter-stack">
-          <div class="filter-row"><span style="min-width:3rem">Min</span><span class="vfield duration-field"><input class="ctl" type="text" placeholder="HH:MM:SS or MM:SS" aria-label="Minimum duration" value="2:75" data-min><span class="vfield-icon material-symbol-icon">error</span></span></div>
-          <div class="filter-row"><span style="min-width:3rem">Max</span><span class="vfield duration-field"><input class="ctl" type="text" placeholder="HH:MM:SS or MM:SS" aria-label="Maximum duration" value="" data-max><span class="vfield-icon material-symbol-icon">error</span></span></div>
-        </div>
-      </div>
-    </div>
-    <div data-subpanel="tags" hidden><p class="filter-hint">Tag chips as today.</p></div>
-    <div data-subpanel="presets" hidden><p class="filter-hint">Presets as today.</p></div>
-  </div>
-  <div class="filter-footer">
-    <button class="btn" type="button">Clear all filters</button>
-    <button class="btn" type="button">Cancel</button>
-    <button class="btn has-pending" type="button" data-apply><span class="btn-label">Apply*</span><span class="btn-problem material-symbol-icon">error</span></button>
-  </div>
-</template>
+  <form class="gate" id="gate" novalidate hidden>
+    <h2>Control token required</h2>
+    <p class="hint">From another machine, recovery needs the server's control token, as admin does.</p>
+    <label for="gate-token">Control token</label>
+    <span class="vfield"><input class="ctl" type="password" id="gate-token" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
+    <div class="row"><button class="btn" type="submit" id="gate-continue"><span class="btn-label">Continue</span><span class="btn-problem material-symbol-icon">error</span></button></div>
+  </form>
 
+  <div id="recovery">
+    <section>
+      <h2>Server</h2>
+      <dl class="facts">
+        <dt>Version</dt><dd>0.15.0</dd>
+        <dt>Running for</dt><dd>3 days, 4 hours</dd>
+        <dt>Library</dt><dd>49,055 items in 3 sources</dd>
+      </dl>
+      <div class="row">
+        <button class="btn" type="button" id="restart">Restart</button>
+        <button class="btn" type="button" id="stop">Stop</button>
+      </div>
+    </section>
+    <section>
+      <h2>Updates</h2>
+      <p class="hint" id="update-state">Up to date: 0.15.0.</p>
+      <div class="row">
+        <button class="btn" type="button" id="update-check">Check for Updates</button>
+        <button class="btn" type="button" id="update-download" hidden>Download Update</button>
+        <button class="btn" type="button" id="update-apply" hidden>Apply &amp; Restart</button>
+      </div>
+    </section>
+    <section>
+      <div class="row"><h2 style="flex:1;margin:0">Log Viewer</h2><button class="btn" type="button" id="log-refresh">Refresh</button></div>
+      <pre class="tail" id="tail" tabindex="0" aria-label="The newest log lines, newest first"></pre>
+    </section>
+    <p class="status" id="status" role="status"></p>
+  </div>
+</main>
 <script>
 // Shared by the mockup pages.
 "use strict";
@@ -1130,117 +940,67 @@ function initHideMock() {
   apply();
 }
 
-
 hydrateIcons();
-
-const PRESETS = ["Favorites", "Short clips", "Long videos"];
-const CHECKS = {
-  duration: checkDuration,
-  preset: (value) => {
-    const name = value.trim();
-    if (!name) return { message: "Enter a preset name.", empty: true };
-    if (PRESETS.some((preset) => preset.toLowerCase() === name.toLowerCase())) return { message: "Use a name no other preset has." };
-    return null;
-  },
-  tag: (value) => (value.trim() ? null : { message: "Enter a tag name.", empty: true }),
-  category: (value) => {
-    const name = value.trim();
-    if (!name) return { message: "Enter a category name.", empty: true };
-    if (["Places", "Events"].some((other) => other.toLowerCase() === name.toLowerCase())) return { message: "Use a name no other category has." };
-    return null;
-  }
-};
-const REASONS = {
-  duration: () => "Correct the duration first.",
-  preset: (field) => (field.problem.empty ? "Enter a preset name first." : "Use a name no other preset has."),
-  tag: () => "Enter a tag name first.",
-  category: (field) => (field.problem.empty ? "Enter a category name first." : "Use a name no other category has.")
-};
-
-function showAttrs(field, out) {
-  const invalid = field.input.getAttribute("aria-invalid");
-  const describedBy = field.input.getAttribute("aria-describedby");
-  const description = describedBy ? document.getElementById(describedBy).textContent : "";
-  out.textContent =
-    `aria-invalid: ${invalid || "(not set)"}\n` +
-    `accessible description: ${description ? `“${description}”` : "(none)"}`;
+initHideMock();
+const $ = (id) => document.getElementById(id);
+const status = (text) => ($("status").textContent = text);
+let unlocked = false;
+function applyGate() {
+  const gated = $("mock-remote").checked && !unlocked;
+  $("gate").hidden = !gated;
+  $("recovery").hidden = gated;
+  placeAllTips();
 }
+$("mock-remote").checked = store.get("recoveryRemote", false);
+$("mock-remote").addEventListener("change", () => {
+  store.set("recoveryRemote", $("mock-remote").checked);
+  unlocked = false;
+  applyGate();
+});
+const gateField = new ValidatedField($("gate-token"), (value) => (value.trim() ? null : { message: "Enter the control token.", empty: true }));
+holdAction($("gate-continue"), () => [gateField], { reason: () => "Enter the control token first." });
+$("gate").addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (gateField.holds) return;
+  unlocked = true;
+  applyGate();
+});
 
-document.querySelectorAll(".specimen").forEach((specimen) => {
-  const input = specimen.querySelector("input[data-check]");
-  const kind = input.dataset.check;
-  const field = new ValidatedField(input, CHECKS[kind], { pinned: input.hasAttribute("data-pinned"), touched: input.hasAttribute("data-touched") });
-  const out = specimen.querySelector(".attrs");
-  field.onChange(() => showAttrs(field, out));
-  showAttrs(field, out);
-  // A pinned tooltip stays pinned only until the user works with the field.
-  input.addEventListener("focus", () => {
-    field.pinned = false;
-  });
-  const action = specimen.querySelector("[data-action]");
-  if (action) {
-    holdAction(action, () => [field], { reason: REASONS[kind] });
-    action.addEventListener("click", () => {
-      action.querySelector(".btn-label").textContent += " ✓";
-      setTimeout(() => (action.querySelector(".btn-label").textContent = action.querySelector(".btn-label").textContent.replace(" ✓", "")), 900);
-    });
+$("restart").addEventListener("click", () => status("Restarting the server…"));
+$("stop").addEventListener("click", () => status("Stopping the server…"));
+// Download and apply ask first, as admin does.
+$("update-check").addEventListener("click", () => {
+  $("update-state").textContent = "0.15.1 is available.";
+  $("update-download").hidden = false;
+});
+$("update-download").addEventListener("click", async () => {
+  if (!(await confirmDialog({ message: "Download update 0.15.1 now? The server will not restart until you choose Apply & Restart.", confirmLabel: "Download" }))) return;
+  $("update-state").textContent = "0.15.1 is downloaded and ready to apply.";
+  $("update-download").hidden = true;
+  $("update-apply").hidden = false;
+});
+$("update-apply").addEventListener("click", async () => {
+  if (await confirmDialog({ message: "Apply 0.15.1 and restart the server now? This page will disconnect while the server restarts.", confirmLabel: "Apply & Restart" })) {
+    status("Applying the update and restarting…");
   }
 });
 
-document.querySelectorAll("[data-mini]").forEach((mini) => {
-  mini.append(document.getElementById("mini-template").content.cloneNode(true));
-  hydrateIcons(mini);
-  const style = mini.dataset.mini;
-  const body = mini.querySelector(".mini-body");
-  mini.querySelectorAll('input[type="radio"]').forEach((radio) => {
-    radio.name = `${style}-${radio.closest(".filter-section").querySelector("h3").textContent}`;
-  });
-  const minField = new ValidatedField(mini.querySelector("[data-min]"), checkDuration, { touched: true });
-  const maxField = new ValidatedField(mini.querySelector("[data-max]"), checkDuration, { touched: true });
-  const generalTab = mini.querySelector('[data-sub="general"]');
-  function showSub(sub) {
-    mini.querySelectorAll(".filter-tab").forEach((tab) => {
-      tab.classList.toggle("is-active", tab.dataset.sub === sub);
-      tab.setAttribute("aria-selected", String(tab.dataset.sub === sub));
-    });
-    mini.querySelectorAll("[data-subpanel]").forEach((panel) => (panel.hidden = panel.dataset.subpanel !== sub));
-    body.scrollTop = 0;
-    placeAllTips();
-  }
-  mini.querySelectorAll(".filter-tab").forEach((tab) => tab.addEventListener("click", () => showSub(tab.dataset.sub)));
-  function badge() {
-    const problem = minField.flagged || maxField.flagged;
-    generalTab.classList.toggle("has-problem", problem);
-    generalTab.title = problem ? "A field here is not valid" : "";
-  }
-  [minField, maxField].forEach((field) => field.onChange(badge));
-  badge();
-  const apply = mini.querySelector("[data-apply]");
-  holdAction(apply, () => [minField, maxField], {
-    reason: (field) => `Correct the ${field === minField ? "minimum" : "maximum"} duration to apply.`,
-    beforeReveal: () => showSub("general")
-  });
-  apply.addEventListener("click", () => {
-    apply.querySelector(".btn-label").textContent = "Applied ✓";
-    apply.classList.remove("has-pending");
-    setTimeout(() => (apply.querySelector(".btn-label").textContent = "Apply"), 1200);
-  });
-});
-
-function syncThemeButtons() {
-  const pref = store.get("theme", "system");
-  document.querySelectorAll("[data-theme]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.theme === pref)));
+// The newest lines of last.log in today's format, newest first, written as text.
+const TAIL = [
+  "[2026-10-08 10:20:05.214] [server] [error] WebUI files missing: index.html not found under wwwroot.",
+  "[2026-10-08 10:20:05.210] [server] [info] Serving the recovery page.",
+  "[2026-10-08 10:19:40.020] [server] [warn] Static file request failed: /assets/index.js (404)",
+  "[2026-10-08 10:16:30.801] [server] [info] Core refresh complete | 2 added, 0 removed, 0 renamed",
+  "[2026-10-08 10:15:40.002] [server] [info] Core refresh started",
+  "[2026-10-08 10:02:12.300] [server] [info] Catalog opened: 49055 items",
+  "[2026-10-08 10:02:11.090] [server] [info] Server started on port 45123"
+];
+function renderTail() {
+  $("tail").textContent = TAIL.join("\n");
 }
-document.querySelectorAll("[data-theme]").forEach((button) => {
-  button.addEventListener("click", () => {
-    store.set("theme", button.dataset.theme);
-    applyTheme();
-    syncThemeButtons();
-    placeAllTips();
-  });
-});
-syncThemeButtons();
-placeAllTips();
+$("log-refresh").addEventListener("click", renderTail);
+renderTail();
+applyGate();
 </script>
 </body>
 </html>

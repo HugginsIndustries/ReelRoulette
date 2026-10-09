@@ -134,6 +134,14 @@ a.icon-btn { text-decoration: none; }
 .status { font-size: 0.9rem; color: var(--muted-fg); margin-top: 10px; min-height: 1.2em; flex-shrink: 0; }
 .mock-bar { padding: 6px 10px; margin: 0 0 10px; display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; flex: 0 0 auto; }
 .mock-bar label { display: flex; gap: 6px; align-items: center; }
+.mock-bar button { font: inherit; }
+.client-counts { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; }
+
+/* A phone on its side: the app's header and status line hide, as on the main page; the admin bar stays. */
+body.short-screen #app { padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); }
+body.short-screen .top-bar, body.short-screen .status { display: none; }
+body.short-screen .admin { border-radius: 0; }
+body.short-screen .admin-nav { padding: 4px 8px; }
 </style>
 </head>
 <body>
@@ -143,10 +151,14 @@ a.icon-btn { text-decoration: none; }
     <span class="muted">Admin</span>
   </header>
 
-  <div class="mock-bar mock-note">
-    <span class="mock-label">Mockup</span>
+  <div class="mock-bar mock-note mock-keep">
+    <span class="mock-label mock-keep">Mockup</span>
+    <label><input type="checkbox" id="mock-hide-notes"> Hide mockup notes</label>
     <label><input type="checkbox" id="mock-remote"> Opened from another machine</label>
     <label><input type="checkbox" id="mock-no-library"> Server running without a library</label>
+    <label><input type="checkbox" id="mock-dev-run"> A dev run, not a Velopack install</label>
+    <label><input type="checkbox" id="mock-short"> A phone on its side</label>
+    <button type="button" id="mock-bad-import">Import a file that isn't a library</button>
     <span>The admin view covers the player, so Always and Responsive Auto-Pause pause playback until it closes.</span>
   </div>
 
@@ -177,11 +189,12 @@ a.icon-btn { text-decoration: none; }
           <h3><span class="material-symbol-icon">dns</span>Server</h3>
           <p class="notice-box" id="no-library" hidden><span class="material-symbol-icon">warning</span><span>Running without a library: the catalog was saved by a newer version of ReelRoulette and was left unchanged. Restore a backup or import a library, or update the server.</span></p>
           <dl class="facts">
-            <dt>Version</dt><dd>0.15.0</dd>
+            <dt>Version</dt><dd id="running-version">0.15.0</dd>
             <dt>Running for</dt><dd>3 days, 4 hours</dd>
             <dt>Library</dt><dd id="library-state">49,055 items in 3 sources</dd>
           </dl>
           <div class="row">
+            <button class="btn" type="button" id="refresh-status"><span class="material-symbol-icon">refresh</span>Refresh Status</button>
             <button class="btn" type="button" id="restart"><span class="material-symbol-icon">restart_alt</span>Restart</button>
             <button class="btn" type="button" id="stop"><span class="material-symbol-icon">power_settings_new</span>Stop</button>
           </div>
@@ -271,6 +284,10 @@ a.icon-btn { text-decoration: none; }
             <label class="btn" for="import-file"><span class="material-symbol-icon">upload</span>Import Library…</label>
             <input type="file" id="import-file" accept=".db" hidden>
           </div>
+          <div id="import-upload" hidden>
+            <p class="hint" id="import-state" style="margin:10px 0 0"></p>
+            <div class="progress" id="import-progress" role="progressbar" aria-labelledby="import-state" aria-valuemin="0" aria-valuemax="100"><span></span></div>
+          </div>
         </section>
 
         <section class="card half" id="backups">
@@ -338,6 +355,7 @@ a.icon-btn { text-decoration: none; }
 
         <section class="card half" id="clients">
           <h3><span class="material-symbol-icon">group</span>Connected clients</h3>
+          <div class="client-counts" id="client-counts"></div>
           <div class="list mono" id="client-list"></div>
           <div class="row" style="margin-top:8px"><button class="btn" type="button" id="clients-copy"><span class="material-symbol-icon">content_copy</span>Copy</button></div>
         </section>
@@ -394,11 +412,14 @@ a.icon-btn { text-decoration: none; }
 /*@COMMON_JS@*/
 
 hydrateIcons();
+initHideMock();
 const $ = (id) => document.getElementById(id);
 const status = (text) => ($("status").textContent = text);
 const state = {
   remote: store.get("adminRemote", false),
   noLibrary: store.get("adminNoLibrary", false),
+  devRun: store.get("adminDevRun", false),
+  mockShort: store.get("adminShort", false),
   dupDefault: store.get("dupDefault", "keep-all")
 };
 
@@ -409,15 +430,19 @@ function applyGate() {
   $("admin").hidden = gated || !$("review").hidden;
   $("no-library").hidden = !state.noLibrary;
   $("library-state").textContent = state.noLibrary ? "None (newer catalog version)" : "49,055 items in 3 sources";
+  // Today's wording for a server that wasn't installed by Velopack, such as one run from the repository.
+  $("running-version").textContent = state.devRun ? "0.15.0 (dev run — not a Velopack install)" : "0.15.0";
+  const coarse = window.matchMedia("(pointer: coarse)").matches;
+  document.body.classList.toggle("short-screen", state.mockShort || (coarse && window.innerHeight < 500));
   $("refresh-now").disabled = state.noLibrary;
   $("dup-scan").disabled = state.noLibrary;
   placeAllTips();
 }
-[["mock-remote", "remote", "adminRemote"], ["mock-no-library", "noLibrary", "adminNoLibrary"]].forEach(([id, key, storeKey]) => {
+[["mock-remote", "remote", "adminRemote"], ["mock-no-library", "noLibrary", "adminNoLibrary"], ["mock-dev-run", "devRun", "adminDevRun"], ["mock-short", "mockShort", "adminShort"]].forEach(([id, key, storeKey]) => {
   $(id).checked = state[key];
   $(id).addEventListener("change", () => {
     state[key] = $(id).checked;
-    state.unlocked = false;
+    if (key === "remote") state.unlocked = false;
     store.set(storeKey, state[key]);
     applyGate();
   });
@@ -479,6 +504,9 @@ $("control-copy").addEventListener("click", () => {
 });
 
 // ---- Server and updates; download and apply ask first, as the Operator page does ----
+// Refresh Status reads the server's status again, as the Operator page's button does.
+$("refresh-status").addEventListener("click", applyGate);
+window.addEventListener("resize", applyGate);
 $("restart").addEventListener("click", () => status("Restarting the server…"));
 $("stop").addEventListener("click", () => status("Stopping the server…"));
 $("update-check").addEventListener("click", () => {
@@ -525,15 +553,41 @@ $("clear-all-stats").addEventListener("click", async () => {
 // A plain download in every browser, with no save picker.
 $("export").addEventListener("click", () => status("Downloaded library-2026-10-08.db."));
 $("import-file").addEventListener("change", () => {
-  if ($("import-file").files.length) importLibrary($("import-file").files[0].name);
+  if ($("import-file").files.length) uploadLibrary($("import-file").files[0].name, true);
   $("import-file").value = "";
 });
+$("mock-bad-import").addEventListener("click", () => uploadLibrary("notes.db", false));
+// For build/check.mjs: "?instant" in the address skips the upload's wait.
+const instant = new URLSearchParams(location.search).has("instant");
+// The file uploads first, with a progress bar in this section. The server then reads its source folders, or rejects
+// a file that isn't a library and leaves the library as it is.
+function uploadLibrary(fileName, isLibrary) {
+  const box = $("import-upload");
+  const bar = $("import-progress");
+  let percent = 0;
+  box.hidden = false;
+  const step = () => {
+    $("import-state").textContent = `Uploading ${fileName}: ${percent}%`;
+    bar.setAttribute("aria-valuenow", String(percent));
+    bar.firstElementChild.style.width = `${percent}%`;
+    if (percent >= 100) {
+      box.hidden = true;
+      if (isLibrary) importLibrary(fileName);
+      else noticeDialog({ message: `${fileName} isn't a ReelRoulette library. The library wasn't changed.` });
+      return;
+    }
+    percent += 20;
+    setTimeout(step, instant ? 0 : 250);
+  };
+  step();
+}
 function importLibrary(fileName) {
   const body = document.createElement("form");
   body.className = "dialog-body";
   body.noValidate = true;
-  body.innerHTML = `<h3 id="import-title">Import ${fileName}</h3>
+  body.innerHTML = `<h3 id="import-title"></h3>
     <p class="dialog-message">Its source folders were on another machine. Point each one at its folder on this server, or leave it to keep the path.</p>`;
+  body.querySelector("h3").textContent = `Import ${fileName}`;
   const fields = [["/Volumes/Media/videos", "/media/videos"], ["D:\\Phone", "/media/phone"]].map(([from, to], i) => {
     const wrap = document.createElement("div");
     wrap.className = "field";
@@ -793,18 +847,25 @@ function osFromUserAgent(ua) {
   if (/Linux/.test(ua)) return "Linux";
   return null;
 }
+// Today's client types: web and mobile-web from the WebUI, by user agent, and desktop.
 const CLIENTS = [
-  ["web-3f9c2e81", "desktop-web", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36", "192.168.1.20", "now"],
-  ["web-a71d09c4", "mobile-web", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 Version/18.1 Mobile/15E148 Safari/604.1", "192.168.1.31", "4 s ago"],
-  ["web-55be2f10", "mobile-web", "Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36", "192.168.1.44", "9 s ago"],
-  ["desktop-0c9e7a22", "desktop", "ReelRoulette.Desktop/0.15.0", "127.0.0.1", "12 s ago"]
+  ["web-3f9c2e81", "web", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36", "192.168.1.20", "08:02"],
+  ["web-a71d09c4", "mobile-web", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 Version/18.1 Mobile/15E148 Safari/604.1", "192.168.1.31", "09:47"],
+  ["web-55be2f10", "mobile-web", "Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36", "192.168.1.44", "10:12"],
+  ["desktop-0c9e7a22", "desktop", "ReelRoulette.Desktop/0.15.0", "127.0.0.1", "yesterday 21:30"]
 ];
-CLIENTS.forEach(([id, type, ua, address, seen]) => {
+[["API sessions", 3], ["Control sessions", 1], ["Event streams", CLIENTS.length]].forEach(([label, count]) => {
+  const chip = document.createElement("span");
+  chip.className = "chip";
+  chip.textContent = `${label}: ${count}`;
+  $("client-counts").append(chip);
+});
+CLIENTS.forEach(([id, type, ua, address, connected]) => {
   const row = document.createElement("div");
   row.className = "list-row";
   row.innerHTML = '<div class="grow"><div class="name"></div><div class="sub"></div></div>';
   row.querySelector(".name").textContent = `${id} · ${osFromUserAgent(ua) || "OS not reported"}`;
-  row.querySelector(".sub").textContent = `${type} · ${address} · last seen ${seen}`;
+  row.querySelector(".sub").textContent = `${type} · ${address} · connected ${connected}`;
   $("client-list").append(row);
 });
 $("clients-copy").addEventListener("click", () => status("Client list copied."));
