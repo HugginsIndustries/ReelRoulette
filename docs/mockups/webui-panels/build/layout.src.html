@@ -19,7 +19,8 @@ body { height: 100dvh; overflow: hidden; display: flex; flex-direction: column; 
   padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
 }
 
-/* Header: app name and file name, and at the right photo duration (later: Settings and Admin icons). */
+/* Header: the logo and the file name, the pairing prompt while the server asks for it, and at the right the admin icon.
+   It has no settings icon, since the panel's tab row reaches Settings. */
 .top-bar {
   display: flex;
   flex-wrap: wrap;
@@ -554,6 +555,12 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
 .setting-sliders output { color: var(--muted-fg); font-variant-numeric: tabular-nums; }
 .setting-sliders input[type="range"] { width: 100%; margin: 0; }
 .setting-sliders .btn { justify-self: start; margin-top: 6px; }
+/* A setting's own fields in its expandable section, disabled together while the setting can't apply. */
+.setting-fields { border: 0; margin: 0; padding: 4px 0 0; min-width: 0; display: grid; gap: 4px; }
+.setting-fields .setting-label { margin: 4px 0 0; font-weight: 400; font-size: 0.88rem; }
+.setting-fields .setting-sub { margin-left: 26px; }
+.setting-fields .btn { justify-self: start; margin-top: 6px; }
+.setting-fields:disabled, .choice-row label:has(input:disabled) { opacity: 0.55; }
 .choice-row { display: flex; flex-wrap: wrap; gap: 0 16px; }
 .choice-row label, .choice-stack label { display: flex; align-items: center; gap: 8px; min-height: 36px; }
 .choice-stack { display: flex; flex-direction: column; }
@@ -1003,7 +1010,31 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
             </div>
             <div class="setting">
               <div class="choice-row"><label><input type="checkbox" id="set-enhanced-audio"> Enhanced audio</label></div>
-              <p class="setting-hint">Processes audio in the app, so in-app volume works on iPhone and iPad.</p>
+              <p class="setting-hint">Processes audio in the app, for in-app volume on iPhone and iPad and loudness normalization.</p>
+            </div>
+            <div class="setting" id="set-loudness-setting">
+              <div class="choice-row"><label><input type="checkbox" id="set-loudness"> Loudness normalization</label></div>
+              <p class="setting-hint" id="set-loudness-hint">Evens out loudness between videos.</p>
+              <details class="setting-more" id="set-loudness-more">
+                <summary><span class="material-symbol-icon setting-more-chevron">chevron_right</span>Loudness normalization settings</summary>
+                <fieldset class="setting-fields" id="set-loudness-fields">
+                  <label class="setting-label" for="set-loud-reduction">Maximum reduction</label>
+                  <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="numeric" id="set-loud-reduction" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>dB</span></div>
+                  <label class="setting-label" for="set-loud-boost">Maximum boost</label>
+                  <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="numeric" id="set-loud-boost" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>dB</span></div>
+                  <span class="setting-label" id="set-loud-baseline-label">Baseline</span>
+                  <div class="choice-stack" role="radiogroup" aria-labelledby="set-loud-baseline-label">
+                    <label><input type="radio" name="set-loud-baseline" value="auto"><span>Automatic<small id="set-loud-auto-value"></small></span></label>
+                    <label><input type="radio" name="set-loud-baseline" value="manual"><span>Manual target</span></label>
+                  </div>
+                  <div class="setting-sub" id="set-loud-manual">
+                    <label class="setting-label" for="set-loud-target">Target</label>
+                    <!-- The full keyboard, since the numeric keypads on iOS have no minus key. -->
+                    <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" id="set-loud-target" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>LUFS</span></div>
+                  </div>
+                  <button class="btn" type="button" id="set-loud-reset">Reset to defaults</button>
+                </fieldset>
+              </details>
             </div>
           </div>
           <div class="settings-section">
@@ -1230,6 +1261,7 @@ const state = {
   tileNames: store.get("tileNames", false),
   hideControls: store.get("hideControls", "timeout"),
   enhancedAudio: store.get("enhancedAudio", true),
+  loudness: store.get("loudness", false),
   audioFails: store.get("audioFails", false),
   hideAfter: store.get("hideAfter", 3),
   keepWhilePaused: store.get("keepWhilePaused", true),
@@ -1292,6 +1324,24 @@ ITEMS.forEach((item) => {
   item.path = `${isPhoto(item) ? "/media/phone" : "/media/videos"}/${item.year}/${item.name}`;
 });
 const BASELINE = -20.4;
+// Loudness normalization's settings, with the desktop's defaults: off, at most 15 dB quieter and 5 dB louder, against
+// the library's baseline or a manual target.
+const LOUDNESS_DEFAULTS = { reduction: 15, boost: 5, baseline: "auto", target: -23 };
+const loudnessTuning = { ...LOUDNESS_DEFAULTS, ...store.get("loudnessSettings", {}) };
+// The desktop's formula: the baseline minus the item's loudness, limited to the boost and the reduction. It is the
+// adjustment in dB that normalization applies, or null while normalization or Enhanced audio is off. An item without
+// loudness plays at the volume, an adjustment of 0 dB.
+function loudnessAdjustment(item) {
+  if (!state.loudness || !state.enhancedAudio) return null;
+  if (!item || item.loudness == null) return 0;
+  const baseline = loudnessTuning.baseline === "manual" ? loudnessTuning.target : BASELINE;
+  return Math.max(-loudnessTuning.reduction, Math.min(loudnessTuning.boost, baseline - item.loudness));
+}
+// As a linear gain on the volume; the result is limited to twice full volume where it is applied.
+function loudnessGain(item) {
+  const db = loudnessAdjustment(item);
+  return db == null ? 1 : Math.pow(10, db / 20);
+}
 const NO_LIBRARY_MESSAGE = "Running without a library. The catalog was saved by a newer version of ReelRoulette and was left unchanged.";
 
 // Many tags across many categories, to see long lists and try reordering them.
@@ -2061,6 +2111,7 @@ function setEnhancedAudio(on) {
   state.enhancedAudio = on;
   store.set("enhancedAudio", on);
   $("set-enhanced-audio").checked = on;
+  renderLoudness();
   if (on) {
     stopDirectSound();
     audio.failed = false;
@@ -2089,7 +2140,7 @@ const FADE_OUT_MS = 60;
 let fadeOutTimer = 0;
 const glideGain = (level) => audio.gain.gain.setTargetAtTime(level, audio.context.currentTime, GAIN_GLIDE_SECONDS);
 function syncStandInSound() {
-  const level = playback.muted ? 0 : state.volume / 100;
+  const level = playback.muted ? 0 : Math.min(2, (state.volume / 100) * loudnessGain(playback.item));
   const audible = state.sound && !!playback.item && !isPhoto(playback.item) && playback.playing && !playback.failed;
   try {
     if (!state.enhancedAudio) {
@@ -4003,8 +4054,11 @@ function fileStats(item) {
   if (!isPhoto(item)) {
     statRow(table, "Duration", fmt(item.duration));
     statRow(table, "Has audio", yesNo(item.hasAudio));
-    statRow(table, "Loudness", `${item.loudness.toFixed(1)} LUFS`);
-    statRow(table, "Adjustment", `${(BASELINE - item.loudness).toFixed(1)} dB`);
+    // What normalization applies, as the desktop shows it: the baseline difference limited by its settings, signed, or
+    // Off while it or Enhanced audio is off, and N/A for a file without loudness data, which plays at the volume.
+    const adjustment = loudnessAdjustment(item);
+    statRow(table, "Loudness", item.loudness == null ? "Unknown" : `${item.loudness.toFixed(1)} LUFS`);
+    statRow(table, "Adjustment", item.loudness == null ? "N/A" : adjustment == null ? "Off" : `${adjustment >= 0 ? "+" : ""}${adjustment.toFixed(1)} dB`);
     statRow(table, "Peak", `${item.peak.toFixed(1)} dBFS`);
   }
   const tags = document.createElement("div");
@@ -4082,12 +4136,70 @@ function rangeCheck(min, max, unit, whole) {
     return ok && n >= min && n <= max ? null : { message: `Use a ${whole ? "whole " : ""}number from ${min} to ${max}${unit}.` };
   };
 }
+// Loudness normalization: its option and its settings are disabled while Enhanced audio is off, since the sound then
+// plays directly. The target shows only while Manual is chosen, as Hide after shows only under Timeout.
+function renderLoudness() {
+  const off = !state.enhancedAudio;
+  $("set-loudness").checked = state.loudness;
+  $("set-loudness").disabled = off;
+  $("set-loudness-fields").disabled = off;
+  $("set-loudness-hint").textContent = off ? "Needs Enhanced audio." : "Evens out loudness between videos.";
+  $("set-loud-manual").hidden = loudnessTuning.baseline !== "manual";
+  document.querySelectorAll('input[name="set-loud-baseline"]').forEach((radio) => (radio.checked = radio.value === loudnessTuning.baseline));
+  // The Stats tab's Adjustment shows what is applied, so it follows these settings.
+  renderStats();
+}
+function initLoudnessSettings() {
+  $("set-loud-auto-value").textContent = `The library's baseline, ${BASELINE} LUFS.`;
+  $("set-loudness").addEventListener("change", () => {
+    state.loudness = $("set-loudness").checked;
+    store.set("loudness", state.loudness);
+    renderLoudness();
+    syncStandInSound();
+  });
+  const save = () => {
+    store.set("loudnessSettings", loudnessTuning);
+    renderLoudness();
+    syncStandInSound();
+  };
+  // A value that is not valid is flagged and not kept; the one in use stays.
+  const fields = [
+    ["set-loud-reduction", "reduction", rangeCheck(1, 30, " dB", true)],
+    ["set-loud-boost", "boost", rangeCheck(0, 10, " dB", true)],
+    ["set-loud-target", "target", rangeCheck(-50, -10, " LUFS", false)]
+  ].map(([id, key, check]) => {
+    const field = new ValidatedField($(id), check);
+    field.input.value = String(loudnessTuning[key]);
+    field.update();
+    field.onChange(() => {
+      if (field.holds) return;
+      loudnessTuning[key] = Number(field.input.value);
+      save();
+    });
+    return [field, key];
+  });
+  document.querySelectorAll('input[name="set-loud-baseline"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      loudnessTuning.baseline = radio.value;
+      save();
+    });
+  });
+  $("set-loud-reset").addEventListener("click", () => {
+    Object.assign(loudnessTuning, LOUDNESS_DEFAULTS);
+    fields.forEach(([field, key]) => field.reset(String(loudnessTuning[key])));
+    store.remove("loudnessSettings");
+    renderLoudness();
+    syncStandInSound();
+  });
+  renderLoudness();
+}
 function initSettings() {
   bindChoice("set-autoplay", "autoplayMode", String, renderTime);
   bindChoice("set-seek", "seekStep", Number);
   bindChoice("set-volstep", "volumeStep", Number);
   $("set-enhanced-audio").checked = state.enhancedAudio;
   $("set-enhanced-audio").addEventListener("change", () => setEnhancedAudio($("set-enhanced-audio").checked));
+  initLoudnessSettings();
   // Hide player controls: Hide after and Keep visible while paused show only while Timeout is chosen.
   const renderHideSettings = () => ($("set-hide-timeout").hidden = state.hideControls !== "timeout");
   bindChoice("set-hide-controls", "hideControls", String, () => {

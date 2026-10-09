@@ -734,7 +734,8 @@ for (const width of [1280, 390]) {
     !settingsText.includes("photo duration, renamed") && !settingsText.includes("as on the desktop") && !settingsText.includes("desktop's player view") &&
     !$("settings-body").querySelector(".setting-label kbd") && !settingsText.includes("step one frame"));
   check(`layout@${width}: Keyboard shortcuts starts collapsed, with a chevron`, !$("set-shortcuts").open && !!$("set-shortcuts").querySelector("summary .setting-more-chevron"));
-  check(`layout@${width}: v0.15.0 has no loudness normalization settings`, !$("settings-body").textContent.includes("Loudness"));
+  check(`layout@${width}: Loudness normalization sits in Audio, right under Enhanced audio`,
+    sectionOf("set-loudness") === "Audio" && $("set-loudness").closest(".setting").previousElementSibling === $("set-enhanced-audio").closest(".setting"));
   check(`layout@${width}: Diagnostics show today's client type and device name`, $("diag-type").textContent === "web" && $("diag-device").textContent === "Web Browser");
   document.querySelector('input[name="set-theme"][value="light"]').click();
   check(`layout@${width}: the Theme setting switches to Light`, document.documentElement.classList.contains("theme-light"));
@@ -1280,7 +1281,7 @@ for (const width of [1280, 390]) {
   const toggle = $("set-enhanced-audio");
   check(`enhanced: Enhanced audio starts on, in Playback, with its description (${toggle.closest(".setting").querySelector(".setting-hint").textContent})`,
     toggle.checked && toggle.closest(".settings-section").querySelector("h3").textContent === "Audio" &&
-    toggle.closest(".setting").querySelector(".setting-hint").textContent === "Processes audio in the app, so in-app volume works on iPhone and iPad.");
+    toggle.closest(".setting").querySelector(".setting-hint").textContent === "Processes audio in the app, for in-app volume on iPhone and iPad and loudness normalization.");
   document.body.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 5));
   window.mockup.choose(3);
@@ -1322,6 +1323,126 @@ for (const width of [1280, 390]) {
   check("audio-fails: its button turns Enhanced audio off for this device, and the sound then plays directly",
     !$("set-enhanced-audio").checked && window.localStorage.getItem("rr-mockup.enhancedAudio") === "false" && !document.querySelector("dialog.app-dialog") && playedBy.length === 1 && !playedBy[0].paused);
   check(`audio-fails: no script errors ${errors.join("; ")}`, errors.length === 0);
+}
+
+{
+  // Loudness normalization, off by default: its settings sit in an expandable section like Ambient mode's, with the
+  // desktop's defaults, and are disabled while Enhanced audio is off. On, it sets the gain stage by the desktop's formula:
+  // the baseline minus the item's loudness, limited to the boost and the reduction, as a linear gain on the volume.
+  const { setup, gains, playedBy } = standInAudio();
+  const { document, errors, window } = await load("layout", 1280, "?instant", setup);
+  const $ = (id) => document.getElementById(id);
+  const change = (el, value) => {
+    el.checked = value;
+    el.dispatchEvent(new window.Event("change", { bubbles: true }));
+  };
+  const input = (el, value) => {
+    el.value = value;
+    el.dispatchEvent(new window.Event("input"));
+  };
+  const stored = (key) => JSON.parse(window.localStorage.getItem("rr-mockup." + key) ?? "null");
+  const toggle = $("set-loudness");
+  const more = $("set-loudness-more");
+  const baseline = (value) => document.querySelector(`input[name="set-loud-baseline"][value="${value}"]`);
+  const labels = [...more.querySelectorAll(".setting-label")].map((el) => el.textContent).join(", ");
+  check(`loudness: the option starts off, with its hint (${$("set-loudness-hint").textContent})`,
+    !toggle.checked && !toggle.disabled && $("set-loudness-hint").textContent === "Evens out loudness between videos.");
+  check(`loudness: its settings are an expandable section with the desktop's defaults (${labels})`,
+    more.tagName === "DETAILS" && !more.open && more.querySelector("summary").lastChild.textContent === "Loudness normalization settings" &&
+    !!more.querySelector("summary .setting-more-chevron") && labels === "Maximum reduction, Maximum boost, Baseline, Target" &&
+    $("set-loud-reduction").value === "15" && $("set-loud-boost").value === "5" && baseline("auto").checked && $("set-loud-manual").hidden &&
+    $("set-loud-target").value === "-23" && $("set-loud-auto-value").textContent === "The library's baseline, -20.4 LUFS.");
+  check("loudness: the target field uses the full keyboard, since the numeric keypads on iOS have no minus key",
+    !$("set-loud-target").hasAttribute("inputmode") && $("set-loud-reduction").getAttribute("inputmode") === "numeric");
+  document.body.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  window.mockup.choose(3);
+  const param = gains.at(-1).gain;
+  const volume = Number($("volume").value) / 100;
+  const close = (a, b) => Math.abs(a - b) < 1e-6;
+  // The Stats tab's Adjustment shows what normalization applies: the baseline difference limited by its settings.
+  const adjustment = () => {
+    const dt = [...$("stats-body").querySelectorAll("dt")].find((el) => el.textContent === "Adjustment");
+    return dt?.nextElementSibling.textContent;
+  };
+  check(`loudness: off, the gain is the volume (${param.level}), and Stats shows the Adjustment as ${adjustment()}`, close(param.level, volume) && adjustment() === "Off");
+  change(toggle, true);
+  const loudness = window.mockup.items[3].loudness;
+  const limitedDb = Math.max(-15, Math.min(5, -20.4 - loudness));
+  const expected = Math.min(2, volume * Math.pow(10, limitedDb / 20));
+  check(`loudness: on, the gain follows the item's loudness against the library's baseline (${param.level.toFixed(4)} for ${loudness} LUFS)`,
+    close(param.level, expected) && param.calls.at(-1)[0] === "glide" && stored("loudness") === true);
+  check(`loudness: and Stats shows the limited adjustment it applies (${adjustment()} for a difference of ${(-20.4 - loudness).toFixed(1)} dB)`,
+    adjustment() === `${limitedDb >= 0 ? "+" : ""}${limitedDb.toFixed(1)} dB`);
+  change(baseline("manual"), true);
+  check("loudness: Manual shows the target", !$("set-loud-manual").hidden && stored("loudnessSettings").baseline === "manual");
+  input($("set-loud-target"), "-50");
+  check(`loudness: a target far below the item is limited to the maximum reduction (${param.level.toFixed(4)}, ${adjustment()})`,
+    close(param.level, volume * Math.pow(10, -15 / 20)) && stored("loudnessSettings").target === -50 && adjustment() === "-15.0 dB");
+  input($("set-loud-reduction"), "31");
+  check("loudness: a reduction outside 1 to 30 is flagged and not kept, and the gain stays",
+    $("set-loud-reduction").getAttribute("aria-invalid") === "true" && stored("loudnessSettings").reduction === 15 && close(param.level, volume * Math.pow(10, -15 / 20)));
+  input($("set-loud-reduction"), "6");
+  check(`loudness: a reduction of 6 dB applies at once (${param.level.toFixed(4)}, ${adjustment()})`,
+    close(param.level, volume * Math.pow(10, -6 / 20)) && stored("loudnessSettings").reduction === 6 && adjustment() === "-6.0 dB");
+  input($("set-loud-target"), "-5");
+  input($("set-loud-boost"), "11");
+  check("loudness: a target above -10 LUFS and a boost above 10 dB are flagged",
+    $("set-loud-target").getAttribute("aria-invalid") === "true" && $("set-loud-boost").getAttribute("aria-invalid") === "true" && stored("loudnessSettings").target === -50);
+  change($("set-enhanced-audio"), false);
+  check(`loudness: with Enhanced audio off, the option and its settings are disabled, with "${$("set-loudness-hint").textContent}"`,
+    toggle.disabled && toggle.checked && $("set-loudness-fields").disabled && $("set-loudness-hint").textContent === "Needs Enhanced audio." &&
+    !!playedBy.at(-1) && !playedBy.at(-1).paused && adjustment() === "Off");
+  change($("set-enhanced-audio"), true);
+  check("loudness: turning Enhanced audio back on enables them", !toggle.disabled && !$("set-loudness-fields").disabled && $("set-loudness-hint").textContent === "Evens out loudness between videos.");
+  $("set-loud-reset").click();
+  check("loudness: Reset to defaults restores each setting, and forgets the stored ones",
+    $("set-loud-reduction").value === "15" && $("set-loud-boost").value === "5" && $("set-loud-target").value === "-23" && baseline("auto").checked &&
+    $("set-loud-manual").hidden && !$("set-loud-boost").hasAttribute("aria-invalid") && stored("loudnessSettings") === null && toggle.checked);
+  check(`loudness: no script errors ${errors.join("; ")}`, errors.length === 0);
+}
+
+for (const width of [1280, 390]) {
+  // Daily retention starts off, at 0 days, so upgrading keeps today's rotation, and the restore list shows daily
+  // backups only while it is on.
+  const { document, errors, window } = await load("admin", width, "?instant");
+  const $ = (id) => document.getElementById(id);
+  const rows = () => [...$("backup-list").querySelectorAll(".list-row")].map((row) => row.firstChild.textContent);
+  const save = (days) => {
+    $("backup-days").value = days;
+    $("backup-days").dispatchEvent(new window.Event("input"));
+    $("backup-form").dispatchEvent(new window.Event("submit", { cancelable: true }));
+  };
+  check(`backups@${width}: daily backups kept start at 0, with the hint that 0 turns it off (${$("backup-days").closest(".field").querySelector(".hint").textContent})`,
+    $("backup-days").value === "0" && $("backup-days").closest(".field").querySelector(".hint").textContent === "One backup per day for this many days, on top of the count above. 0, the default, turns it off.");
+  check(`backups@${width}: with it off, the restore list has no daily backups (${rows().join(", ")})`, rows().length === 3 && !rows().some((label) => label.includes("(daily)")));
+  save("7");
+  check(`backups@${width}: saving 7 days lists the daily backups (${rows().length})`, rows().length === 5 && rows().filter((label) => label.includes("(daily)")).length === 2);
+  save("400");
+  check(`backups@${width}: a value outside 0 to 365 isn't kept, and the list stays`, rows().length === 5);
+  save("0");
+  check(`backups@${width}: saving 0 again hides them`, rows().length === 3);
+  // Before an import or a restore replaces the library, the current one is backed up and listed first.
+  const topDialog = () => [...document.querySelectorAll("dialog.app-dialog")].at(-1);
+  const button = (root, label) => [...root.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith(label));
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 20));
+  // Import Library…: the file input gets a library, as a browser's picker gives it.
+  Object.defineProperty($("import-file"), "files", { configurable: true, value: [{ name: "library-2026-10-01.db" }] });
+  $("import-file").dispatchEvent(new window.Event("change"));
+  await tick();
+  topDialog().querySelector("form").dispatchEvent(new window.Event("submit", { cancelable: true }));
+  await tick();
+  button(topDialog(), "Replace").click();
+  await tick();
+  check(`backups@${width}: an import first backs up the current library, listed first (${rows()[0]})`,
+    /^Today \d\d:\d\d \(before import\)$/.test(rows()[0]) && rows().length === 4 && !topDialog());
+  button($("backup-list").querySelectorAll(".list-row")[2], "Restore").click();
+  await tick();
+  button(topDialog(), "Restore").click();
+  await tick();
+  check(`backups@${width}: so does a restore, listed above it (${rows().slice(0, 2).join(", ")})`,
+    /^Today \d\d:\d\d \(before restore\)$/.test(rows()[0]) && /\(before import\)$/.test(rows()[1]) && rows().length === 5);
+  check(`backups@${width}: no script errors ${errors.join("; ")}`, errors.length === 0);
 }
 
 for (const width of [1280, 390]) {

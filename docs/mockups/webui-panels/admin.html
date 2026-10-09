@@ -509,7 +509,7 @@ a.icon-btn { text-decoration: none; }
 .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 .card-head h3 { margin: 0; flex: 1 1 auto; }
 
-/* The Log Viewer, as Admin Log Viewer builds it. */
+/* The Log Viewer, as Log Viewer Redesign builds it on today's log format. */
 .log-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .chip { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--control-border); font-size: 0.8rem; white-space: nowrap; }
@@ -713,8 +713,8 @@ body.short-screen .admin-nav { padding: 4px 8px; }
             </div>
             <div class="field">
               <label for="backup-days">Days of daily backups kept</label>
-              <span class="vfield short"><input class="ctl" type="text" inputmode="numeric" id="backup-days" value="14" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
-              <p class="hint">One backup per day for this many days, on top of the count above; 0 to 365, where 0 keeps none by date.</p>
+              <span class="vfield short"><input class="ctl" type="text" inputmode="numeric" id="backup-days" value="0" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
+              <p class="hint">One backup per day for this many days, on top of the count above. 0, the default, turns it off.</p>
             </div>
             <div class="row"><span class="grow"></span><button class="btn" type="submit" id="backup-save"><span class="btn-label">Save</span><span class="btn-problem material-symbol-icon">error</span></button></div>
           </form>
@@ -1513,25 +1513,48 @@ function importLibrary(fileName) {
     if (validated.some((field) => field.holds)) return;
     if (!(await confirmDialog({ message: `Replace the library with ${fileName}? The current library is kept aside until the new one opens.`, confirmLabel: "Replace", danger: true }))) return;
     close(true);
+    addSafetyBackup("import");
     status(`Imported ${fileName}. Connected clients reload the library.`);
   });
 }
 
-// ---- Backups: restoring is an import of one of the server's own backups ----
-const BACKUPS = ["Today 06:00", "Yesterday 18:00", "Yesterday 06:00", "3 days ago (daily)", "10 days ago (daily)"];
-BACKUPS.forEach((label) => {
-  const row = document.createElement("div");
-  row.className = "list-row";
-  row.innerHTML = '<span class="grow"></span>';
-  row.firstChild.textContent = label;
-  const restore = dialogButton("Restore…");
-  restore.addEventListener("click", async () => {
-    if (await confirmDialog({ message: `Restore the backup from ${label.toLowerCase()}? The current library is kept aside until the backup opens.`, confirmLabel: "Restore", danger: true })) {
-      status(`Restored the backup from ${label.toLowerCase()}.`);
-    }
+// ---- Backups: restoring is an import of one of the server's own backups. Daily backups, kept by date beyond the
+// count, are listed only while daily retention is on; it starts off, at 0 days, so upgrading keeps today's rotation.
+// Before an import or a restore replaces the library, the server backs up the current one, even with backups off, so
+// a mistake can be undone; that backup is listed first, labeled by what it came before. ----
+const BACKUPS = ["Today 06:00", "Yesterday 18:00", "Yesterday 06:00"];
+const DAILY_BACKUPS = ["3 days ago (daily)", "10 days ago (daily)"];
+const SAFETY_BACKUPS = [];
+function addSafetyBackup(reason) {
+  const now = new Date();
+  const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  SAFETY_BACKUPS.unshift(`Today ${time} (before ${reason})`);
+  renderBackups();
+}
+let savedBackupDays = Number($("backup-days").value);
+function renderBackups() {
+  $("backup-list").replaceChildren();
+  [...SAFETY_BACKUPS, ...BACKUPS, ...(savedBackupDays > 0 ? DAILY_BACKUPS : [])].forEach((label) => {
+    const row = document.createElement("div");
+    row.className = "list-row";
+    row.innerHTML = '<span class="grow"></span>';
+    row.firstChild.textContent = label;
+    const restore = dialogButton("Restore…");
+    restore.addEventListener("click", async () => {
+      if (await confirmDialog({ message: `Restore the backup from ${label.toLowerCase()}? The current library is kept aside until the backup opens.`, confirmLabel: "Restore", danger: true })) {
+        addSafetyBackup("restore");
+        status(`Restored the backup from ${label.toLowerCase()}.`);
+      }
+    });
+    row.append(restore);
+    $("backup-list").append(row);
   });
-  row.append(restore);
-  $("backup-list").append(row);
+}
+renderBackups();
+$("backup-form").addEventListener("submit", () => {
+  if (rangeCheck(0, 365, " days")($("backup-days").value)) return;
+  savedBackupDays = Number($("backup-days").value);
+  renderBackups();
 });
 
 // ---- Sources: an Edit dialog holds rename and Remove, as tags, categories, and presets hold rename and Delete.

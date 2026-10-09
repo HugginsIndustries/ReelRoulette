@@ -43,6 +43,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
   - `dotnet build ReelRoulette.sln` and `dotnet test ReelRoulette.sln`; stop if the build fails.
   - `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose`
   - In `src/clients/web/ReelRoulette.WebUI`: `npm run generate:contracts`, `npm run verify`, and the scripts `verify` runs.
+  - `python3 docs/mockups/webui-panels/build/build_pages.py` and `node docs/mockups/webui-panels/build/check.mjs`, which rebuild the design mockup's pages from their sources and check them.
   - `pwsh ./tools/scripts/reset-checklist.ps1`
   - `pwsh ./tools/scripts/check-milestones.ps1`, which only reads.
   - `pwsh ./tools/scripts/cut-changelog.ps1`, which edits `CHANGELOG.md` and changes nothing if a check fails.

@@ -19,9 +19,13 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan a desktop app shell around the WebUI
+Docs: Split the v0.15.0 milestones and apply the release review
 
-- Add Desktop App Shell (P50) to the unscheduled backlog, for after the planned releases once the new UI has been in daily use: an Electron app that wraps the WebUI as-is, starts the server when it isn't running or connects to a remote one, and offers native features through a bridge the WebUI detects.
-- Its features: Browse for a source folder, shown only when the app and server share a machine, and Save as for the library export, which works with any server.
-- Record why Electron over Tauri: one Chromium engine on every platform, matching what's tested in Chrome.
-- Point Admin Source and Item Management and Admin Library Catalog Transfer at it with Not included lines.
+- Split WebUI Responsive Layout and Panels into seven milestones (M12f1-M12f7: field validation, in-app dialogs merged with WebUI In-App Dialogs, drag reordering, the panel host, the Library tab, the Tags and Filter tabs, Auto-Pause and the photo scrub bar), WebUI Admin Section into three (M12h1-M12h3, adding Log Viewer Redesign and Recovery Page and Operator Retirement), WebUI Keyboard Shortcuts and Player Controls into four, and WebUI Grid Rendering into two; Settings Panel becomes M12g.
+- Pull WebUI Loudness Normalization (P49) into v0.15.0 as M12n2, after the audio part and only if its audio spike passes, locked to the desktop's formula by a shared fixture, with its settings approved in the mockup, and move the server settings findings from P35 into a new Server Settings Robustness (M12i).
+- Add report-first steps: the audio spike, a catalog-state report before running-server import, measured testing-suite runs, and a design note before grid scrollbar seek.
+- Contract decisions: a FilterState schema covering every filter field, a nullable browser-playable field and settings fields that keep the stored value when omitted, an ids-only query and one bulk favorite and blacklist route with one event for Select all, and loudness and peak named in OpenAPI.
+- Other decisions: daily backups default to 0 (off), import and restore back up the current library first and list it as "(before import)" or "(before restore)", the Stats tab's Adjustment shows what normalization applies or Off, as the desktop does, the not-found message asks the server whether the file exists, skipping stops after ten files, the app's version comes from .version, Clear All Playback Stats moves to the admin refresh card and the filter summary line to the Library tab.
+- Fix stale and untestable lines from the review, label every Release Specific item, fold four Client Robustness WebUI findings into the milestones that touch their code, note the backup retention interplay in P33, and correct P4's schema version.
+- Mockup: daily backups start at 0 and the restore list shows daily backups only once they're on, an import or restore lists its safety backup first, Loudness normalization and its settings are in Settings with the shorter Enhanced audio hint, the Stats tab's Adjustment follows them, two stale comments are fixed, and 672 checks pass.
+- AGENTS.md: the mockup's build and check commands run without approval.
