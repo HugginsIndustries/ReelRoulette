@@ -598,6 +598,75 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: the status line can be hidden`, $("status").hidden);
   $("set-status").click();
 
+  // Hide player controls: Timeout by default, with its two settings under it; On click/tap; Never.
+  const hideChoice = (value) => document.querySelector(`input[name="set-hide-controls"][value="${value}"]`);
+  const controlsUp = () => $("media").classList.contains("controls-visible");
+  const moveOverPlayer = () => $("media").dispatchEvent(new window.PointerEvent("pointermove", { bubbles: true }));
+  check(`layout@${width}: Hide player controls starts on Timeout, hiding after 3 s and kept while paused`,
+    hideChoice("timeout").checked && !$("set-hide-timeout").hidden && $("set-hide-after").value === "3" && $("set-keep-paused").checked &&
+    hideChoice("timeout").closest(".settings-section").querySelector("h3").textContent === "Playback");
+  input($("set-hide-after"), "31");
+  check(`layout@${width}: Hide after flags 31 and keeps 3`, $("set-hide-after").getAttribute("aria-invalid") === "true" && window.localStorage.getItem("rr-mockup.hideAfter") === null);
+  input($("set-hide-after"), "1");
+  check(`layout@${width}: and keeps 1`, window.localStorage.getItem("rr-mockup.hideAfter") === "1");
+  closePanel();
+  window.mockup.choose(3);
+  moveOverPlayer();
+  check(`layout@${width}: moving the mouse over the player shows the controls`, controlsUp());
+  await sleep(1300);
+  const hiddenPlay = (() => {
+    const copy = $("play-btn").cloneNode(true);
+    copy.removeAttribute("id");
+    $("play-btn").after(copy);
+    const events = window.getComputedStyle(copy).pointerEvents;
+    copy.remove();
+    return events;
+  })();
+  check(`layout@${width}: with no activity they hide after the time set, and hidden they can't be pressed (${hiddenPlay})`, !controlsUp() && hiddenPlay === "none");
+  moveOverPlayer();
+  await sleep(700);
+  moveOverPlayer();
+  await sleep(700);
+  check(`layout@${width}: each movement restarts the countdown`, controlsUp());
+  await sleep(600);
+  check(`layout@${width}: and they hide once it runs out`, !controlsUp());
+  moveOverPlayer();
+  $("play-btn").dispatchEvent(new window.PointerEvent("pointerover", { bubbles: true }));
+  await sleep(1300);
+  check(`layout@${width}: they stay while the pointer is over them`, controlsUp());
+  $("play-btn").dispatchEvent(new window.PointerEvent("pointerout", { bubbles: true, relatedTarget: $("media") }));
+  await sleep(1300);
+  check(`layout@${width}: and hide after it leaves`, !controlsUp());
+  moveOverPlayer();
+  $("seek").dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true }));
+  await sleep(1300);
+  check(`layout@${width}: they stay while the scrub bar is dragged`, controlsUp());
+  document.dispatchEvent(new window.PointerEvent("pointerup", { bubbles: true }));
+  await sleep(1300);
+  check(`layout@${width}: and hide after the drag ends`, !controlsUp());
+  moveOverPlayer();
+  $("play-btn").click();
+  await sleep(1300);
+  check(`layout@${width}: with Keep visible while paused, they stay while paused (${chip()})`, controlsUp() && chip().includes("Paused"));
+  change($("set-keep-paused"), false);
+  await sleep(1300);
+  check(`layout@${width}: without it, they hide while paused too`, !controlsUp() && window.localStorage.getItem("rr-mockup.keepWhilePaused") === "false");
+  change($("set-keep-paused"), true);
+  $("play-btn").click();
+  hideChoice("click").click();
+  check(`layout@${width}: On click/tap shows the controls and hides Timeout's settings`, controlsUp() && $("set-hide-timeout").hidden);
+  $("media").click();
+  check(`layout@${width}: a click on the player hides them`, !controlsUp());
+  $("media").click();
+  await sleep(1300);
+  check(`layout@${width}: and another shows them, with no countdown`, controlsUp());
+  hideChoice("never").click();
+  $("media").click();
+  await sleep(1300);
+  check(`layout@${width}: Never keeps them visible through clicks and time`, controlsUp() && $("set-hide-timeout").hidden && window.localStorage.getItem("rr-mockup.hideControls") === '"never"');
+  hideChoice("timeout").click();
+  input($("set-hide-after"), "3");
+
   // Ambient mode: on by default, with its settings in an expandable section beside the toggle. It samples at the
   // update rate while a video plays, holds while the video is paused or the tab is hidden, and samples a photo once.
   const samples = () => window.mockup.ambientSamples();

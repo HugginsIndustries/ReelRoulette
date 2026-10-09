@@ -19,10 +19,8 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan keyboard navigation and focus, and settle selection and Auto Tag details
+Docs: Add the Hide player controls setting to the plan and the mockup
 
-- Add WebUI Keyboard Navigation and Focus to v0.15.0, after WebUI Multi-Select and Bulk Actions and before Desktop Retirement Notice: keyboard focus in the brand orange throughout, the Library grid as one tab stop with arrow keys and a focusable check icon on each tile, and full keyboard operation of every screen.
-- Record in WebUI Multi-Select and Bulk Actions that the Library tab loses its Select button, selection starts from a tile's check icon or a long press, and it ends when its last tile is deselected.
-- Record in WebUI Responsive Layout and Panels that Auto Tag starts every scan with nothing checked, as today, and its two placeholders' wording, which leaves the pending list.
-- Mockup: orange keyboard focus everywhere, Google Photos' focus on tiles and check icons, the grid's keyboard navigation, selection updates in place so focus stays put, no Select button, selection ending with its last tile, and Auto Tag's new defaults and wording; extend the happy-dom check to cover them.
-- Fix the mockup's invisible focused-tile border by drawing it on its own layer above the thumbnail, make the filled tile icons flat by cutting them at optical size 20, where the font's fill closes its outline, and start the check icon's focus ring at its edge; record both traps in the milestones that build them.
+- Record Hide player controls in WebUI Keyboard Shortcuts and Player Controls: Timeout by default, hiding the controls after 1 to 30 seconds with no activity (3 by default) and keeping them while the pointer is on them, while the scrub bar or volume is dragged, and, by default, while paused; On click/tap, today's behavior; and Never.
+- Record its place in the Settings tab's Playback section in WebUI Settings Panel, and list the mockup's own additions, inert hidden controls, a key press as activity, and keyboard focus keeping the controls shown, as pending approval.
+- Mockup: the setting with Hide after and Keep visible while paused under Timeout, and the player following each mode; extend the happy-dom check to cover them.

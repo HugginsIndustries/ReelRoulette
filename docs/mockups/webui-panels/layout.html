@@ -548,6 +548,8 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
   z-index: 10;
 }
 .media-container.controls-visible .overlay-controls { opacity: 1; }
+/* Hidden controls can't be pressed, so the first tap or click on them only shows them. */
+.media-container:not(.controls-visible) .overlay-controls * { pointer-events: none; }
 .overlay-controls-row { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
 .overlay-controls-transport {
   width: fit-content;
@@ -955,6 +957,8 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
 .choice-stack label input { margin-top: 3px; }
 .choice-stack small { display: block; color: var(--muted-fg); font-size: 0.82rem; }
 .number-field { width: 8rem; }
+/* A choice's own settings, under it while it is chosen. */
+.setting-sub { display: grid; gap: 4px; margin: 0 0 6px 26px; }
 .shortcut-list, .diag { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 0.9rem; }
 .shortcut-list dt { white-space: nowrap; }
 .shortcut-list dd, .diag dd { margin: 0; }
@@ -1389,6 +1393,19 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
                 <label><input type="radio" name="set-volstep" value="1"> 1%</label>
                 <label><input type="radio" name="set-volstep" value="2"> 2%</label>
                 <label><input type="radio" name="set-volstep" value="5"> 5%</label>
+              </div>
+            </div>
+            <div class="setting">
+              <span class="setting-label" id="set-hide-controls-label">Hide player controls</span>
+              <div class="choice-stack" role="radiogroup" aria-labelledby="set-hide-controls-label">
+                <label><input type="radio" name="set-hide-controls" value="timeout"><span>Timeout<small>They hide after a time with no activity. Moving the mouse or tapping shows them again.</small></span></label>
+                <div class="setting-sub" id="set-hide-timeout">
+                  <label class="setting-label" for="set-hide-after">Hide after</label>
+                  <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="numeric" id="set-hide-after" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>seconds</span></div>
+                  <div class="choice-row"><label><input type="checkbox" id="set-keep-paused"> Keep visible while paused</label></div>
+                </div>
+                <label><input type="radio" name="set-hide-controls" value="click"><span>On click/tap<small>Clicking or tapping the player shows or hides them.</small></span></label>
+                <label><input type="radio" name="set-hide-controls" value="never"><span>Never<small>They stay visible.</small></span></label>
               </div>
             </div>
           </div>
@@ -2064,6 +2081,9 @@ const state = {
   showStatus: store.get("showStatus", true),
   libCollapsed: store.get("libCollapsed", false),
   tileNames: store.get("tileNames", false),
+  hideControls: store.get("hideControls", "timeout"),
+  hideAfter: store.get("hideAfter", 3),
+  keepWhilePaused: store.get("keepWhilePaused", true),
   ambient: store.get("ambient", true),
   // Mockup option: the server's situation.
   situation: null,
@@ -2267,6 +2287,7 @@ function setPlaying(playing, by) {
   playback.autoPaused = !playing && by === "auto";
   playback.pausedBy = playing ? null : by;
   renderPlayback();
+  syncControlsToPlayback();
 }
 
 function skipNotice(item) {
@@ -2699,7 +2720,68 @@ media.addEventListener("click", () => {
     return;
   }
   if (!playback.item) return void pickRandom();
-  media.classList.toggle("controls-visible");
+  if (state.hideControls === "click") media.classList.toggle("controls-visible");
+  else controlsActivity();
+});
+
+// ---- When the player's controls hide ----
+// Timeout, the default: they hide after a time with no activity, and moving the mouse, tapping, or a key shows them
+// and restarts the countdown. They stay while the pointer or keyboard focus is on them, while the scrub bar or volume
+// is dragged, and, with Keep visible while paused, while nothing plays. On click/tap: a click or tap on the player
+// shows or hides them, as today. Never: they stay.
+const overlayControls = $("overlay-controls");
+const CONTROL_PARTS = ".overlay-btn, .overlay-seek-row";
+let hideTimer = 0;
+let pointerOnControls = false;
+let draggingControl = false;
+const setControlsShown = (shown) => media.classList.toggle("controls-visible", shown);
+function controlsHeld() {
+  return pointerOnControls || draggingControl || overlayControls.contains(document.activeElement) || (state.keepWhilePaused && !playback.playing);
+}
+function restartHideCountdown() {
+  clearTimeout(hideTimer);
+  if (state.hideControls !== "timeout") return;
+  hideTimer = setTimeout(() => {
+    if (!controlsHeld()) setControlsShown(false);
+  }, state.hideAfter * 1000);
+}
+function controlsActivity() {
+  if (state.hideControls !== "timeout") return;
+  setControlsShown(true);
+  restartHideCountdown();
+}
+function syncControlsToPlayback() {
+  if (state.hideControls !== "timeout") return;
+  if (!playback.playing && state.keepWhilePaused) setControlsShown(true);
+  restartHideCountdown();
+}
+// A new mode starts with the controls shown.
+function applyControlsMode() {
+  clearTimeout(hideTimer);
+  setControlsShown(true);
+  restartHideCountdown();
+}
+media.addEventListener("pointermove", controlsActivity);
+overlayControls.addEventListener("pointerover", (event) => {
+  if (event.target.closest(CONTROL_PARTS)) pointerOnControls = true;
+});
+overlayControls.addEventListener("pointerout", (event) => {
+  if (event.relatedTarget?.closest?.(CONTROL_PARTS)) return;
+  pointerOnControls = false;
+  controlsActivity();
+});
+["seek", "volume"].forEach((id) => $(id).addEventListener("pointerdown", () => (draggingControl = true)));
+const endControlDrag = () => {
+  if (!draggingControl) return;
+  draggingControl = false;
+  controlsActivity();
+};
+document.addEventListener("pointerup", endControlDrag);
+document.addEventListener("pointercancel", endControlDrag);
+overlayControls.addEventListener("focusin", () => state.hideControls === "timeout" && setControlsShown(true));
+overlayControls.addEventListener("focusout", () => setTimeout(controlsActivity));
+document.addEventListener("keydown", (event) => {
+  if (!isTextField(event.target)) controlsActivity();
 });
 $("overlay-controls").addEventListener("click", (event) => event.stopPropagation());
 // Play starts a random pick while nothing plays, and does nothing on a photo, as today.
@@ -4561,6 +4643,28 @@ function initSettings() {
   bindChoice("set-autoplay", "autoplayMode", String, renderTime);
   bindChoice("set-seek", "seekStep", Number);
   bindChoice("set-volstep", "volumeStep", Number);
+  // Hide player controls: Hide after and Keep visible while paused show only while Timeout is chosen.
+  const renderHideSettings = () => ($("set-hide-timeout").hidden = state.hideControls !== "timeout");
+  bindChoice("set-hide-controls", "hideControls", String, () => {
+    renderHideSettings();
+    applyControlsMode();
+  });
+  renderHideSettings();
+  const hideAfter = new ValidatedField($("set-hide-after"), rangeCheck(1, 30, " seconds", true));
+  hideAfter.input.value = String(state.hideAfter);
+  hideAfter.update();
+  hideAfter.onChange(() => {
+    if (hideAfter.holds) return;
+    state.hideAfter = Number(hideAfter.input.value);
+    store.set("hideAfter", state.hideAfter);
+    restartHideCountdown();
+  });
+  $("set-keep-paused").checked = state.keepWhilePaused;
+  $("set-keep-paused").addEventListener("change", () => {
+    state.keepWhilePaused = $("set-keep-paused").checked;
+    store.set("keepWhilePaused", state.keepWhilePaused);
+    syncControlsToPlayback();
+  });
   bindChoice("set-side", "side", String, applyLayout);
   bindChoice("set-autopause", "autoPause", String, applyLayout);
   // A value that is not valid is flagged and not kept; the one in use stays.
@@ -4811,6 +4915,7 @@ renderApply();
 applySituation("connected");
 renderLibPresets();
 applyLayout();
+applyControlsMode();
 setTimeout(() => {
   libLoading = false;
   presetsLoading = false;
