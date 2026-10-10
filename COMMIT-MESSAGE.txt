@@ -19,12 +19,6 @@ Instructions:
 
 Commit Message:
 
-M12e: Apply Favorites and Blacklisted filter modes on the server
+Chore: Send finished work to the advisor session
 
-- Filters accept `favoritesMode` and `blacklistedMode`, each `off`, `only`, or `excluded` in any case, beside `favoritesOnly` and `excludeBlacklisted`. A known mode decides, and otherwise the old field does, so filters and presets with only the old fields filter as before.
-- Browse, its counts, and random picks apply every pairing. Favorites only with Blacklisted only matches nothing, since no item is both.
-- `shared/fixtures/filter-mode-resolution.json` locks the resolution rule for the server now and both clients next.
-- OpenAPI's FilterState schema and the generated WebUI types name the new fields. The WebUI's build output is unchanged.
-- Server tests cover every pairing through the list query, its counts, the count cache, and random selection, the old fields alone, filter states the clients wrote before, and each filter route's meaning when its filter state is missing or null.
-- The milestone records that clients refuse Favorites only with Blacklisted only: the desktop dialog in this milestone, and the WebUI through WebUI Field Validation Pattern.
-- The milestone's shared client rules slice records that the resolution rule moves into Core, where the server's parser and the desktop's model both call it, so C# has one copy.
+- CLAUDE.md's section on other sessions in the repo says to also send a plan, report, summary, review result, or question for the user to the session named advisor when ListAgents shows one, and to treat the advisor's messages as information, waiting for the user's go before acting on them.
