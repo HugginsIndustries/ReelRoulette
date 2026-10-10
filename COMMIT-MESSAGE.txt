@@ -19,10 +19,10 @@ Instructions:
 
 Commit Message:
 
-M12e: Describe today's filter fields in an OpenAPI FilterState schema
+Chore: Restructure milestone entries into decisions, slices, and traps
 
-- OpenAPI gains a FilterState schema naming the 14 filter fields the server reads, with their defaults and accepted forms, used by presets, library queries, random requests, and preset posts. Nothing sent over the wire changes.
-- A Core test checks that the schema names exactly the fields the server's filter parser reads.
-- The WebUI's generated types carry the schema, and its filter serializer, reader, presets, and library query are typed with it.
-- OpenAPI no longer declares a 404 for listing presets, declares the 404 a random pick returns for an unknown preset name, says a preset's summary is always null, and documents the `all-media` preset id; OpenAPI and the API doc say a duration number is seconds and a duration string is TimeSpan text, and the API doc says fields the schema doesn't name, such as `tagMatchMode` in old presets, are accepted and ignored.
-- The milestone's shared client rules slice records that the WebUI's filter reader must accept enum values as names as well as integers, locked with the server's parser to a planned shared fixture, `filter-enum-values.json`, with an acceptance criterion for it.
+- MILESTONES.md gains an Entry Format section and a new template: Status, Goal, Depends on, and Design as header bullets, then Decisions, a Slices table with a section per slice holding its Scope, Traps, Acceptance, and Evidence, Release checks, and Not included. Traps mark measured and inferred facts and leave facts read from code unmarked, without "at this edit", and decisions are stated as settled instead of saying where they were decided.
+- The favorite and blacklist filter modes milestone is rewritten in the new format, with each slice carrying its own acceptance criteria and the tests or checks that show them. Its Core filter model is named correctly as `FilterStateModel`, which the server slice changes to hold the two modes in place of its two booleans, and the WebUI slice also requires that a preset the desktop saves with each mode loads in the WebUI.
+- `check-milestones.ps1` checks the Depends on bullet and the Not included section's bullets, and that active and planned entries with `####` sections follow the Entry Format's structure, with a test case for each rule. Entries not yet converted keep today's checks until they are.
+- Promotion converts each entry it promotes to the new format, which drops its release placement line, since the Planned Releases outline holds it. Implementation records each slice's status and evidence as it lands, and copies the milestone's Release checks into the testing checklist when it completes.
+- AGENTS.md, README.md, `docs/dev-setup.md`, the plan-from-report skill, and the implementer hand-off in CLAUDE.md follow the new format.

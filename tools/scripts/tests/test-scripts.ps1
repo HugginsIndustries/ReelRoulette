@@ -119,13 +119,13 @@ function Get-CheckArgs {
 try {
     Write-Host "check-milestones.ps1"
 
-    Test-Case "valid files pass, including MP3 and P2P in prose and IDs in completed history" {
+    Test-Case "valid files pass, including MP3 and P2P in prose, IDs in completed history, old- and new-format entries, and the template's sections" {
         Assert-Check (Invoke-Tool $checker (Get-CheckArgs $validMilestones)) 0 @("OK: valid.md and valid-completed.md passed")
     }
 
     Test-Case "a bare milestone ID in prose fails on its line, and MP3 and P2P beside it are not flagged" {
         $path = New-FixtureCopy $validMilestones "bare-id.md" @(, @("Plays MP3 files and talks P2P", "Plays MP3 files like M1c and talks P2P"))
-        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("bare-id.md:35: milestone ID 'M1c' outside") 1
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("bare-id.md:75: milestone ID 'M1c' outside") 1
     }
 
     Test-Case "an outline ID with no section fails" {
@@ -158,12 +158,12 @@ try {
         $path = New-FixtureCopy $validMilestones "duplicate-completed.md" @(
             @("### M1b - Widget Build", "### M1a - Widget Build"),
             @("Ship the widget. M1a, M1b, M1c.", "Ship the widget. M1a, M1c."))
-        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("valid-completed.md:7: milestone ID 'M1a' heads more than one section (first at duplicate-completed.md:30)") 1
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("valid-completed.md:7: milestone ID 'M1a' heads more than one section (first at duplicate-completed.md:70)") 1
     }
 
     Test-Case "a Depends on reference that matches no title fails" {
         $path = New-FixtureCopy $validMilestones "depends-unknown.md" @(, @("Depends on: Lay the Groundwork.", "Depends on: Lay the Foundations."))
-        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("depends-unknown.md:34: Depends on: no milestone title matches 'lay the foundations'") 1
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("depends-unknown.md:74: Depends on: no milestone title matches 'lay the foundations'") 1
     }
 
     Test-Case "a Depends on title followed by text that is not a list or an explanation fails" {
@@ -178,17 +178,173 @@ try {
 
     Test-Case "a Not included line naming no milestone after 'which is' fails" {
         $path = New-FixtureCopy $validMilestones "not-included-unknown.md" @(, @("which is Lay the Groundwork,", "which is Lay the Foundations,"))
-        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("not-included-unknown.md:50: Not included: no milestone title matches 'lay the foundations") 1
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("not-included-unknown.md:148: Not included: no milestone title matches 'lay the foundations") 1
     }
 
     Test-Case "a Not included title followed by text that is not an explanation fails" {
         $path = New-FixtureCopy $validMilestones "not-included-trailing.md" @(, @("Export, and Import. Sharing", "Export, and Import twice. Sharing"))
-        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("not-included-trailing.md:63: Not included: unexpected text after a milestone title: ' twice. sharing ships first'") 1
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("not-included-trailing.md:161: Not included: unexpected text after a milestone title: ' twice. sharing ships first'") 1
+    }
+
+    Test-Case "a Depends on bullet that matches no title fails" {
+        $path = New-FixtureCopy $validMilestones "depends-bullet-unknown.md" @(, @("- **Depends on**: Widget Build,", "- **Depends on**: Widget Assembly,"))
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("depends-bullet-unknown.md:87: Depends on: no milestone title matches 'widget assembly, whose parts the themes restyle'") 1
+    }
+
+    Test-Case "a Not included section bullet naming no milestone after 'which is' fails" {
+        $path = New-FixtureCopy $validMilestones "not-included-section-unknown.md" @(, @("which is Widget Search.", "which is Widget Finder."))
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("not-included-section-unknown.md:138: Not included: no milestone title matches 'widget finder'") 1
+    }
+
+    Test-Case "a Not included section bullet that keeps the old 'Not included:' prefix is reported once" {
+        $path = New-FixtureCopy $validMilestones "not-included-section-prefix.md" @(, @("- Searching by theme, which is Widget Search.", "- Not included: searching by theme, which is Widget Finder."))
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("not-included-section-prefix.md:138: Not included: no milestone title matches 'widget finder'") 1
+    }
+
+    # Entry Format cases, on the new-format entries M1e (with slices) and P4 (without).
+    $formatCases = @(
+        @{ Name = "a new-format entry without a Goal bullet fails"
+            Replacements = @(, @("- **Goal**: The widget offers light and dark themes, picked in its settings.`n", ""))
+            Message = "format-1.md:83: 'M1e - Widget Themes': has no Goal bullet" },
+        @{ Name = "header bullets out of order fail"
+            Replacements = @(, @("- **Depends on**: Widget Build, whose parts the themes restyle.`n- **Design**: ``docs/mockups/widget/``, including its theme picker page.", "- **Design**: ``docs/mockups/widget/``, including its theme picker page.`n- **Depends on**: Widget Build, whose parts the themes restyle."))
+            Message = "format-2.md:88: 'M1e - Widget Themes': the Depends on bullet is out of order; header bullets go Status, Goal, Depends on, Design" },
+        @{ Name = "an unknown Status value fails"
+            Replacements = @(, @("- **Status**: 🚧 In Progress`n- **Goal**: The widget", "- **Status**: 🚧 Underway`n- **Goal**: The widget"))
+            Message = "format-3.md:85: 'M1e - Widget Themes': unknown Status '🚧 Underway'; use ⏳ Planned, 🚧 In Progress, or ✅ Complete" },
+        @{ Name = "text between the header bullets and the first section fails"
+            Replacements = @(, @("including its theme picker page.`n", "including its theme picker page.`n`nThemes ship one at a time.`n"))
+            Message = "format-4.md:90: 'M1e - Widget Themes': only the Status, Goal, Depends on, and Design bullets go before the first section" },
+        @{ Name = "an unknown section name fails"
+            Replacements = @(, @("#### Decisions`n`n- Themes change", "#### Choices`n`n- Themes change"))
+            Message = "format-5.md:90: 'M1e - Widget Themes': unknown section 'Choices'" },
+        @{ Name = "sections out of order fail"
+            Replacements = @(, @("#### Release checks`n`n- Agent: The release notes name both themes.`n- Manual: The dark theme is readable on a real phone.`n`n#### Not included`n`n- Searching by theme, which is Widget Search.`n- Themes that change fonts.`n", "#### Not included`n`n- Searching by theme, which is Widget Search.`n- Themes that change fonts.`n`n#### Release checks`n`n- Agent: The release notes name both themes.`n- Manual: The dark theme is readable on a real phone.`n"))
+            Message = "format-6.md:136: 'M1e - Widget Themes': the 'Release checks' section is out of order" },
+        @{ Name = "an empty section fails"
+            Replacements = @(, @("- Themes change colors only, so every theme keeps the same layout.`n  - Fonts stay the same in every theme too.`n- The server stores the picked theme, so every device shows the same one.`n", ""))
+            Message = "format-7.md:90: 'M1e - Widget Themes': the 'Decisions' section is empty" },
+        @{ Name = "a Slices table row with no slice section fails"
+            Replacements = @(, @("| Picker | ⏳ Planned | The theme picker in the widget's settings. |`n", "| Picker | ⏳ Planned | The theme picker in the widget's settings. |`n| Sharing | ⏳ Planned | Themes shared between widgets. |`n"))
+            Message = "format-8.md:102: 'M1e - Widget Themes': slice 'Sharing' in the Slices table has no 'Sharing slice' section" },
+        @{ Name = "a slice section with no Slices table row fails"
+            Replacements = @(, @("#### Release checks`n`n- Agent: The release", "#### Sharing slice`n`n**Scope**`n`n- Themes shared between widgets.`n`n**Acceptance**`n`n- A shared theme applies on the other widget.`n`n#### Release checks`n`n- Agent: The release"))
+            Message = "format-9.md:131: 'M1e - Widget Themes': the 'Sharing slice' section has no row in the Slices table" },
+        @{ Name = "slice sections in a different order from the Slices table fail"
+            Replacements = @(, @("| Palette | ✅ Complete | The light and dark color sets and the code that applies them. |`n| Picker | ⏳ Planned | The theme picker in the widget's settings. |", "| Picker | ⏳ Planned | The theme picker in the widget's settings. |`n| Palette | ✅ Complete | The light and dark color sets and the code that applies them. |"))
+            Message = "format-10.md:103: 'M1e - Widget Themes': the 'Palette slice' section is out of the Slices table's order, which lists 'Picker' here" },
+        @{ Name = "an unknown status in the Slices table fails"
+            Replacements = @(, @("| Picker | ⏳ Planned |", "| Picker | Planned |"))
+            Message = "format-11.md:101: 'M1e - Widget Themes': slice 'Picker' has unknown status 'Planned' in the Slices table" },
+        @{ Name = "a slice without an Acceptance part fails"
+            Replacements = @(, @("**Acceptance**`n`n- Picking a theme changes the widget's colors at once, in picker tests.`n", ""))
+            Message = "format-12.md:121: 'M1e - Widget Themes': slice 'Picker' has no Acceptance part" },
+        @{ Name = "an unknown part in a slice fails"
+            Replacements = @(, @("**Acceptance**`n`n- Picking a theme", "**Notes**`n`n- The picker is small.`n`n**Acceptance**`n`n- Picking a theme"))
+            Message = "format-13.md:127: 'M1e - Widget Themes': slice 'Picker' has an unknown part 'Notes'" },
+        @{ Name = "a complete slice without Evidence fails"
+            Replacements = @(, @("**Evidence**`n`n- The palette tests ran and passed.`n`n", ""))
+            Message = "format-14.md:103: 'M1e - Widget Themes': slice 'Palette' is ✅ Complete but has no Evidence part" },
+        @{ Name = "a planned slice with Evidence fails"
+            Replacements = @(, @("in picker tests.`n", "in picker tests.`n`n**Evidence**`n`n- The picker tests passed.`n"))
+            Message = "format-15.md:131: 'M1e - Widget Themes': slice 'Picker' is ⏳ Planned but has an Evidence part" },
+        @{ Name = "an entry Status that disagrees with its slices fails"
+            Replacements = @(, @("- **Status**: 🚧 In Progress`n- **Goal**: The widget", "- **Status**: ⏳ Planned`n- **Goal**: The widget"))
+            Message = "format-16.md:85: 'M1e - Widget Themes': Status is ⏳ Planned but its slices make it 🚧 In Progress" },
+        @{ Name = "a top-level Scope section in an entry with slices fails"
+            Replacements = @(, @("#### Release checks`n`n- Agent: The release", "#### Scope`n`n- Two themes.`n`n#### Release checks`n`n- Agent: The release"))
+            Message = "format-17.md:131: 'M1e - Widget Themes': has slices, so its Scope belongs in the slice sections" },
+        @{ Name = "an entry without slices and without an Acceptance section fails"
+            Replacements = @(, @("#### Acceptance`n`n- Typing part of a name shows only the widgets whose names contain it, in search tests.`n`n", ""))
+            Message = "format-18.md:163: 'P4 - Widget Search': has no Slices section, so it needs a top-level Acceptance section" },
+        @{ Name = "a Release checks bullet without Agent or Manual fails"
+            Replacements = @(, @("- Manual: The dark theme", "- The dark theme"))
+            Message = "format-19.md:134: 'M1e - Widget Themes': a Release checks bullet does not start with 'Agent: ' or 'Manual: '" },
+        @{ Name = "'at this edit' fails in a new-format entry, in any case, and not in an old-format one"
+            Replacements = @(
+                @("applied at startup.`n", "applied at startup, as read At This Edit.`n"),
+                @("talks P2P to other widgets.", "talks P2P to other widgets, as read at this edit."))
+            Message = "format-20.md:107: 'M1e - Widget Themes': 'at this edit' is not allowed; state facts and decisions as settled" },
+        @{ Name = "'(decided in' fails in a new-format entry"
+            Replacements = @(, @("filters it by name.`n", "filters it by name (decided in the planning report).`n"))
+            Message = "format-21.md:170: 'P4 - Widget Search': '(decided in' is not allowed; state facts and decisions as settled" },
+        @{ Name = "'(decided while' fails in a new-format entry"
+            Replacements = @(, @("- Themes that change fonts.`n", "- Themes that change fonts (decided while planning).`n"))
+            Message = "format-22.md:139: 'M1e - Widget Themes': '(decided while' is not allowed; state facts and decisions as settled" },
+        @{ Name = "a header bullet that appears twice fails"
+            Replacements = @(, @("including its theme picker page.`n", "including its theme picker page.`n- **Goal**: Two themes.`n"))
+            Message = "format-23.md:89: 'M1e - Widget Themes': the Goal bullet appears more than once" },
+        @{ Name = "an empty header bullet fails"
+            Replacements = @(, @("- **Design**: ``docs/mockups/widget/``, including its theme picker page.", "- **Design**:"))
+            Message = "format-24.md:88: 'M1e - Widget Themes': the Design bullet is empty" },
+        @{ Name = "a section that appears twice fails"
+            Replacements = @(, @("#### Not included`n`n- Searching by theme", "#### Release checks`n`n- Agent: The changelog names both themes.`n`n#### Not included`n`n- Searching by theme"))
+            Message = "format-25.md:136: 'M1e - Widget Themes': the 'Release checks' section appears more than once" },
+        @{ Name = "a complete entry without slices and without an Evidence section fails"
+            Replacements = @(, @("- **Status**: ⏳ Planned`n- **Goal**: Find a widget", "- **Status**: ✅ Complete`n- **Goal**: Find a widget"))
+            Message = "format-26.md:163: 'P4 - Widget Search': is ✅ Complete but has no Evidence section" },
+        @{ Name = "a planned entry without slices and with an Evidence section fails"
+            Replacements = @(, @("in search tests.`n`n#### Not included", "in search tests.`n`n#### Evidence`n`n- The search tests passed.`n`n#### Not included"))
+            Message = "format-27.md:180: 'P4 - Widget Search': is ⏳ Planned but has an Evidence section" },
+        @{ Name = "slice sections without a Slices section fail"
+            Replacements = @(, @("#### Slices`n`n| Slice | Status | Delivers |`n| --- | --- | --- |`n| Palette | ✅ Complete | The light and dark color sets and the code that applies them. |`n| Picker | ⏳ Planned | The theme picker in the widget's settings. |`n`n", ""))
+            Message = @("format-28.md:96: 'M1e - Widget Themes': the 'Palette slice' section needs a Slices section listing it",
+                "format-28.md:114: 'M1e - Widget Themes': the 'Picker slice' section needs a Slices section listing it")
+            Problems = 2 },
+        @{ Name = "text in the Slices section besides its table fails"
+            Replacements = @(, @("| Picker | ⏳ Planned | The theme picker in the widget's settings. |`n", "| Picker | ⏳ Planned | The theme picker in the widget's settings. |`n`nSlices land in table order.`n"))
+            Message = "format-29.md:103: 'M1e - Widget Themes': the Slices section holds only its table" },
+        @{ Name = "a Slices table with the wrong header fails"
+            Replacements = @(, @("| Slice | Status | Delivers |`n| --- | --- | --- |`n| Palette", "| Slice | State | Delivers |`n| --- | --- | --- |`n| Palette"))
+            Message = "format-30.md:98: 'M1e - Widget Themes': the Slices table's header must be '| Slice | Status | Delivers |'" },
+        @{ Name = "a Slices table without a separator row fails"
+            Replacements = @(, @("| --- | --- | --- |`n| Palette", "| Palette"))
+            Message = "format-31.md:99: 'M1e - Widget Themes': the Slices table has no separator row under its header" },
+        @{ Name = "a Slices table row with the wrong number of cells fails"
+            Replacements = @(, @("| Picker | ⏳ Planned | The theme picker in the widget's settings. |`n", "| Picker | ⏳ Planned | The theme picker in the widget's settings. |`n| Sharing | ⏳ Planned |`n"))
+            Message = "format-32.md:102: 'M1e - Widget Themes': a Slices table row has 2 cells; rows have Slice, Status, and Delivers cells" },
+        @{ Name = "a Slices table row without a slice name fails"
+            Replacements = @(, @("| Picker | ⏳ Planned | The theme picker in the widget's settings. |`n", "| Picker | ⏳ Planned | The theme picker in the widget's settings. |`n|  | ⏳ Planned | Themes shared between widgets. |`n"))
+            Message = "format-33.md:102: 'M1e - Widget Themes': a Slices table row has no slice name" },
+        @{ Name = "a Slices table row without Delivers text fails"
+            Replacements = @(, @("| Picker | ⏳ Planned | The theme picker in the widget's settings. |", "| Picker | ⏳ Planned |  |"))
+            Message = "format-34.md:101: 'M1e - Widget Themes': slice 'Picker' has no Delivers text in the Slices table" },
+        @{ Name = "a slice listed twice in the Slices table fails"
+            Replacements = @(, @("| Picker | ⏳ Planned | The theme picker in the widget's settings. |`n", "| Picker | ⏳ Planned | The theme picker in the widget's settings. |`n| Picker | ⏳ Planned | The theme picker, listed again. |`n"))
+            Message = "format-35.md:102: 'M1e - Widget Themes': slice 'Picker' is in the Slices table more than once" },
+        @{ Name = "a Slices table without rows fails"
+            Replacements = @(, @("| Palette | ✅ Complete | The light and dark color sets and the code that applies them. |`n| Picker | ⏳ Planned | The theme picker in the widget's settings. |`n", ""))
+            Message = @("format-36.md:96: 'M1e - Widget Themes': the Slices table has no rows",
+                "format-36.md:101: 'M1e - Widget Themes': the 'Palette slice' section has no row in the Slices table",
+                "format-36.md:119: 'M1e - Widget Themes': the 'Picker slice' section has no row in the Slices table")
+            Problems = 3 },
+        @{ Name = "a slice part that appears twice fails"
+            Replacements = @(, @("- A theme picker in the settings dialog that saves the choice on the server.`n", "- A theme picker in the settings dialog that saves the choice on the server.`n`n**Scope**`n`n- It also previews the theme.`n"))
+            Message = "format-37.md:127: 'M1e - Widget Themes': slice 'Picker' has the Scope part more than once" },
+        @{ Name = "slice parts out of order fail"
+            Replacements = @(, @("in picker tests.`n", "in picker tests.`n`n**Traps**`n`n- The settings dialog is modal.`n"))
+            Message = "format-38.md:131: 'M1e - Widget Themes': slice 'Picker' has its Traps part out of order; parts go Scope, Traps, Acceptance, Evidence" },
+        @{ Name = "text before a slice's first part fails"
+            Replacements = @(, @("#### Picker slice`n`n**Scope**", "#### Picker slice`n`nThe picker is small.`n`n**Scope**"))
+            Message = "format-39.md:123: 'M1e - Widget Themes': slice 'Picker' has text before its first part" },
+        @{ Name = "an empty slice part fails"
+            Replacements = @(, @("**Traps**`n`n- The widget reads ``palette.json`` only once, at startup (measured).`n`n", "**Traps**`n`n"))
+            Message = "format-40.md:109: 'M1e - Widget Themes': slice 'Palette' has an empty Traps part" }
+    )
+    # Each case expects exactly one problem unless it gives Problems, and every message it lists.
+    $caseNumber = 0
+    foreach ($formatCase in $formatCases) {
+        $caseNumber++
+        Test-Case $formatCase.Name {
+            $path = New-FixtureCopy $validMilestones "format-$caseNumber.md" $formatCase.Replacements
+            $expected = if ($formatCase.Problems) { $formatCase.Problems } else { 1 }
+            Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @($formatCase.Message) $expected
+        }
     }
 
     Test-Case "a Completed Milestones section left in MILESTONES.md fails" {
         $path = New-FixtureCopy $validMilestones "leftover-section.md" @(, @("Sharing ships first.`n", "Sharing ships first.`n`n## Completed Milestones`n`nNewest completions first.`n"))
-        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("leftover-section.md:65: the Completed Milestones section belongs in MILESTONES-COMPLETED.md")
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("leftover-section.md:163: the Completed Milestones section belongs in MILESTONES-COMPLETED.md")
     }
 
     Test-Case "a completed history without its section fails" {

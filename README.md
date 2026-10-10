@@ -200,7 +200,7 @@ Manual test guide:
 
 - `docs/checklists/testing-checklist.md`
 - `pwsh ./tools/scripts/reset-checklist.ps1` resets testing-checklist metadata/checklist state, including `Failed:`, `Skipped:`, and `Pending:` notes, for a new pass, and fills Release version from `.version` without its `-dev.N` suffix.
-- `pwsh ./tools/scripts/check-milestones.ps1` checks `MILESTONES.md` and `MILESTONES-COMPLETED.md` against their maintenance rules (ID placement, release outline, `Depends on` titles). Add `-BaseRef <ref>` to also check that `MILESTONES-COMPLETED.md` only grew by moved entries, with `-Release` when the base is a release tag.
+- `pwsh ./tools/scripts/check-milestones.ps1` checks `MILESTONES.md` and `MILESTONES-COMPLETED.md` against their maintenance rules (ID placement, release outline, `Depends on` and `Not included` titles, and the structure of entries in the Entry Format). Add `-BaseRef <ref>` to also check that `MILESTONES-COMPLETED.md` only grew by moved entries, with `-Release` when the base is a release tag.
 - `pwsh ./tools/scripts/tests/test-scripts.ps1` runs the milestones checker, changelog cut script, and checklist reset script against their fixtures.
 
 ## Packaging and releases

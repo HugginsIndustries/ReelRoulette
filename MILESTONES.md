@@ -42,18 +42,18 @@ Do not use this file for detailed architecture explanation or current capability
 - Keep entries **current-state accurate**: update statuses and evidence as work progresses.
 - Keep scope locked to milestone intent.
 - Record future work found during a milestone as its own backlog item in `## Planned Milestones`, or as an addition to the existing milestone that will do it. Check existing items first so the work is not recorded twice.
-- Record scope boundaries in Scope as a `Not included:` line. When another milestone covers the boundary, name it by its exact title after "which is" (for example `Not included: rebinding, which is Customizable Keyboard Shortcuts.`), which `check-milestones.ps1` enforces.
+- Record scope boundaries as bullets in the entry's Not included section. When another milestone covers the boundary, name it by its exact title after "which is" (for example `- Rebinding, which is Customizable Keyboard Shortcuts.`), which `check-milestones.ps1` enforces.
 - Organize milestone sections as:
   - `## Planned Releases`: the release outline at the top of this file; keep it in sync when milestones are added, moved, promoted, completed, or removed.
   - `## Active Milestones`: milestones currently being worked, using `M*` IDs in historical order.
   - `## Planned Milestones`: backlog candidates not yet started, using `P*` IDs in numerical order (for example base phases and lettered sub-slices).
-- Finished milestones live in `MILESTONES-COMPLETED.md` under `## Completed Milestones`, newest completions first. These rules apply there too, except that completed entries keep their `Deferrals / Follow-ups` sections as historical record.
+- Finished milestones live in `MILESTONES-COMPLETED.md` under `## Completed Milestones`, newest completions first. These rules apply there too, except that completed entries keep the format they were completed in, including any `Deferrals / Follow-ups` sections, as historical record.
 - Keep `## Active Milestones` updated with `Last milestone completed: Mx` so the next `M*` assignment is unambiguous.
 - When promoting planned work to active work, assign the next `M*` ID at promotion time and keep planned `P*` IDs stable until then. Promote a planned release as a new `M*` series, with lettered milestones in its outline order.
-- When a milestone is completed, move it to the top of `MILESTONES-COMPLETED.md` as-is: keep existing scope/acceptance/evidence detail unchanged except final-state corrections, and preserve newest completions first.
-- In milestone body content (scope/acceptance/evidence), do not reference milestone IDs; use milestone names/descriptions (or "this milestone"/"this series") so ID reassignment does not require copy edits.
+- When a milestone is completed, move it to the top of `MILESTONES-COMPLETED.md` as-is: keep its body unchanged except final-state corrections, and preserve newest completions first.
+- In an entry's body, do not reference milestone IDs; use milestone names/descriptions (or "this milestone"/"this series") so ID reassignment does not require copy edits.
 - ID references are allowed only in milestone section headers, the `Last milestone completed: Mx` tracker line, and the `## Planned Releases` outline.
-- `Depends on` lines name milestones by their exact titles, which `check-milestones.ps1` enforces.
+- The Depends on bullet names milestones by their exact titles, which `check-milestones.ps1` enforces.
 - Keep acceptance criteria testable and outcome-focused (avoid implementation-narrative bloat).
 - Keep verification evidence concrete:
   - commands/checks run,
@@ -64,43 +64,69 @@ Do not use this file for detailed architecture explanation or current capability
 - Keep historical entries intact except for final-state correction of inaccurate facts.
 - If script names/paths/contracts change, update milestone references to avoid stale guidance.
 
+## Entry Format
+
+Every active and planned entry uses this shape. `check-milestones.ps1` enforces its structure in every entry that has `####` sections: the header bullets, the sections and their order, the Slices table and how it matches the slice sections, each slice's parts, and how the statuses agree. The rules it can't check, such as one fact per bullet, each acceptance criterion naming its tests, and the Traps marks, need a read-through. Entries in `MILESTONES-COMPLETED.md` keep the format they were completed in. Entries not yet converted, which have no `####` sections, keep their Scope, Acceptance criteria, and Verification evidence bullets until they are, and the checker accepts them until then.
+
+- **Header bullets**, one line each, in this order: Status and Goal, then Depends on when the entry depends on other milestones, and Design when it is built to a mockup or design doc. Which release an entry ships in, and in what order, is the Planned Releases outline's job; entries don't repeat it.
+- **Decisions**: settled choices that shape more than one slice, each with its reason when it isn't obvious. Write them as settled, without saying where or when they were decided. A choice that shapes only one slice is stated in that slice's Scope.
+- **Slices**: a table of each slice, its status, and one line on what it delivers, in the order they land. Each row has a `#### {Slice} slice` section, in the same order, with these parts:
+  - **Scope**: what the slice builds, naming the files, routes, and contracts it changes.
+  - **Traps**: facts the implementer would otherwise trip on. Mark a fact that was run or measured "(measured)", one measured earlier that promotion couldn't measure again "(measured before promotion)", and one reasoned but not checked "(inferred)"; an unmarked fact was read from the code or docs. Never write "at this edit"; promotion re-checks every fact.
+  - **Acceptance**: testable outcomes, each naming the tests or checks that show it. Automated tests plus at most a quick spot check.
+  - **Evidence**: added when the slice lands, never while it is planned: what ran and its result, measured figures, docs updated, and waivers.
+- A slice's status moves on its own. The entry's Status is ⏳ Planned while every slice is, ✅ Complete only when every slice is, and 🚧 In Progress otherwise.
+- An entry without slices has `#### Scope`, `#### Traps`, `#### Acceptance`, and `#### Evidence` sections in place of the table and slice sections, with the same rules.
+- **Release checks**: one-line checks for the release's testing pass, as `Agent:` or `Manual:` bullets, as `AGENTS.md` describes. They are added to the Release Specific section of `docs/checklists/testing-checklist.md` when the milestone completes.
+- **Not included**: one bullet per scope boundary. When another milestone covers it, name that milestone by its exact title after "which is".
+- Every entry has Status and Goal, and every slice, or an entry without slices, has Scope and Acceptance. Decisions, Traps, Release checks, and Not included are left out when there is nothing to put in them, and Evidence is left out until the slice lands.
+- One fact, decision, or criterion per bullet. Nest a list only under the bullet it belongs to.
+
 ## Milestone Template
 
 ### Mx - {Milestone Title}
 
 - **Status**: ⏳ Planned | 🚧 In Progress | ✅ Complete
-- **Goal**: {one concise outcome statement}
-- **Scope**:
-  - {key deliverable 1}
-  - {key deliverable 2}
-  - {key deliverable 3}
-  - Not included: {scope boundary}, which is {covering milestone title}. Leave out the "which is" part when no milestone covers it.
-- **Acceptance criteria**:
-  - {testable outcome 1}
-  - {testable outcome 2}
-  - {testable outcome 3}
-- **Verification evidence**:
-  - {automated checks run}
-  - {manual checks/evidence notes}
-  - {docs/artifacts updated}
+- **Goal**: {one outcome, in a sentence}
+- **Depends on**: {exact milestone titles}. Leave out when it depends on none.
+- **Design**: {the mockup or design doc it is built to}. Leave out when there is none.
 
-### Px - {Planned Milestone Title}
+#### Decisions
 
-- **Status**: ⏳ Planned
-- **Goal**: {one concise outcome statement}
-- **Scope**:
-  - {key deliverable 1}
-  - {key deliverable 2}
-  - {key deliverable 3}
-  - Not included: {scope boundary}, which is {covering milestone title}. Leave out the "which is" part when no milestone covers it.
-- **Acceptance criteria**:
-  - {testable outcome 1}
-  - {testable outcome 2}
-  - {testable outcome 3}
-- **Verification evidence**:
-  - {automated checks run}
-  - {manual checks/evidence notes}
-  - {docs/artifacts updated}
+- {a settled choice that shapes more than one slice, and why}
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| {Name} | ⏳ Planned | {one line} |
+
+#### {Name} slice
+
+**Scope**
+
+- {what this slice builds, and where}
+
+**Traps**
+
+- {a fact that would trip up the implementer} (measured)
+
+**Acceptance**
+
+- {a testable outcome, and the tests that show it}
+
+**Evidence**
+
+- {added when the slice lands}
+
+#### Release checks
+
+- Agent: {a check an agent can verify from the repo, its docs, or the release workflow's runs}
+- Manual: {a check that needs a person, real devices, or the Windows VM}
+
+#### Not included
+
+- {a scope boundary}, which is {covering milestone title}. Leave out the "which is" part when no milestone covers it.
 
 ---
 
@@ -112,64 +138,186 @@ Last milestone completed: M12d
 
 - **Status**: 🚧 In Progress
 - **Goal**: The Favorites and Blacklisted filters each choose only or excluded, in the server and both clients, so a filter such as Favorites excluded or Blacklisted only works the same in browse, random picks, and presets.
-- **Scope**:
-  - Ships in v0.15.0, after the new logo and icons milestone and before WebUI Responsive Layout and Panels builds the Filter tab. Depends on: WebUI Design Mockup, whose mockup approves its look.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
-  - Read from code at this edit: the filter state has two booleans, `favoritesOnly` (off by default) and `excludeBlacklisted` (on by default). They are in Core (`FilterState` in `FilteringContracts.cs`), the server's parser (`LibraryListFilterParser`) and list query (`LibraryCatalogListQuery`), the desktop (`FilterState.cs`, and the Favorites only and Exclude blacklisted checkboxes in `FilterDialog.axaml`), and the WebUI (`filterStateModel.ts`). Browse, its counts, and random picks all filter through them.
-  - Each filter becomes a checkbox with a small dropdown to its right offering only and excluded, and the dropdown is disabled while its checkbox is off (decided in WebUI Design Mockup). Favorites starts off; Blacklisted starts on and excluded, which is today's Exclude blacklisted. Both clients offer the same options, so a preset behaves identically in each.
-  - Slice order: the contract slice, the server slice, the shared client rules slice, then the desktop and WebUI slices in parallel, then the records (decided in this milestone's planning report).
-  - New fields (decided in this milestone's planning report): `favoritesMode` and `blacklistedMode`, each `"off"`, `"only"`, or `"excluded"`, written as these names on the wire. One three-value field per filter, so two settings that filter alike can't differ in a preset. They sit beside the old fields, a contract change that only adds, and Desktop Client Removal drops the old fields.
-  - Resolution rule (decided in this milestone's planning report): the server's parser, the desktop's model, and the WebUI's reader resolve each filter on its own, the same way. A new field with a known value decides. Otherwise the old field does: `favoritesOnly` true is Favorites only and anything else is off; `excludeBlacklisted` false is Blacklisted off and anything else, including a missing field, is excluded, as today. When both are present and disagree, the new field wins, and a new field with an unknown value counts as missing. A filter or preset with only the old fields therefore reads as before, and so does the desktop's saved filter in `desktop-settings.json`. Locked to a new shared fixture, `filter-mode-resolution.json`, of filter inputs and the modes they resolve to, read by Core, desktop, and WebUI tests.
-  - Old-field projection (decided in this milestone's planning report): both clients write the new fields and the old ones together in every filter they send or save, so a reader that knows only the old fields sees a wider set of files, never a narrower or contradictory one. Favorites only is `favoritesOnly: true`, and Favorites off or excluded is `false`; Blacklisted excluded is `excludeBlacklisted: true`, and Blacklisted off or only is `false`. The server stores presets as posted and writes nothing into them. Read from code at this edit: both clients read filters into a typed model and drop fields they don't know (measured on the desktop with a probe against its build; the WebUI's `filterStateFromApiObject` reads only known keys), so a desktop older than this milestone drops the new fields from every preset it posts.
-  - Desktop and server are updated together for v0.15.0 (decided in this milestone's planning report). Read from code at this edit: they are separate Velopack packages, and the desktop checks for updates only from its Settings dialog. Add a Release Specific checklist item, under Agent checks: "The v0.15.0 release notes tell desktop users to update the desktop along with the server."
-  - Contract slice: a FilterState schema covering every field that exists today. OpenAPI names no filter state field today. Read from OpenAPI and code at this edit: every `filterState` is a free-form object (`additionalProperties: true`), neither OpenAPI nor `docs/api.md` names `favoritesOnly` or `excludeBlacklisted`, and the WebUI types them by hand (`filterStateModel.ts`). The slice adds a FilterState schema covering every existing field, used wherever a filter state is sent or returned, so the generated WebUI types carry it (decided in the v0.15.0 milestone review). The new fields enter it in the server slice, together with the parser that reads them (decided in this milestone's planning report). What goes over the wire doesn't change. Browser-Playable Filter adds its field to the same schema.
-    - Read from code and measured at this edit: four schemas carry a filter state, `PresetResponse`, `LibraryQueryRequest`, `RandomRequest`, and `FilterPresetSnapshot`, where it is required. No SSE event carries one. The server reads filters only through `LibraryListFilterParser`, so the parser is the schema's reference: 14 fields. The schema leaves out the legacy `tagMatchMode`, since nothing reads or sends it and `additionalProperties: true` tolerates it in any old stored preset.
-    - The schema keeps `additionalProperties: true`, since stored presets can still carry `tagMatchMode`, and every property is optional, since `{}` is a valid preset.
-    - No `default:` keywords; defaults go in descriptions. Measured: openapi-typescript makes a property with a default required, which breaks the typecheck of `randomPick.ts`.
-    - `audioFilter`, `mediaTypeFilter`, and the values of `categoryLocalMatchModes` accept an integer or a name. Measured: the desktop sends integers in random requests and presets but names in library queries, which it serializes with `CoreServerApiClient.LibraryItemJsonOptions` and its `JsonStringEnumConverter`.
-    - `minDuration` and `maxDuration` are a string, a number, or null, and `globalMatchMode`, `categoryLocalMatchModes`, and the tag and source arrays are nullable (the equality fixture has null arrays).
-    - The filter state is nullable through `anyOf` with `{type: "null"}` wherever it is optional, and stays required in `FilterPresetSnapshot`. Measured: `$ref` with a sibling `nullable: true` loses the null in the generated types, and `openapi.yaml` is OpenAPI 3.1.
-    - Each use keeps its own meaning of null in its description. Measured: a library query without a filter applies no filter predicates, so blacklisted files show, while a random request without one falls back to `presetId`, and its parsed filter excludes blacklisted files.
-    - The generated type describes the wire shape. In the WebUI it types `serializeFilterStateForApi`'s output, `filterStateFromApiObject`'s input, `ApiPreset.filterState`, and the library query's `filterState`. The WebUI's internal `FilterState` interface, which holds durations as seconds, stays.
-    - A Core test checks that the schema's property names equal the names the parser reads, using `ReadSchemaProperties` in `OpenApiSpec.cs`, so the two agree from the start. Measured: `npm run verify:contracts` only checks that the generated types are fresh.
-    - OpenAPI fixes, read from code at this edit: `GET /api/presets` declares a 404 its handler never returns, which goes. `PresetResponse.summary` is never filled and is described as always null; Desktop Client Removal removes it. The random request's `presetId` value `"all-media"`, which picks with the default filter when no preset has that name, is documented in OpenAPI and `docs/api.md`. `POST /api/random` returns a 404 it doesn't declare, for a `presetId` that names no preset when `filterState` is omitted or null, which it declares (decided while landing this slice).
-    - Duration wording in OpenAPI and `docs/api.md`: a JSON number is seconds, and a string is .NET TimeSpan text, such as `HH:MM:SS` or the desktop's `d.HH:MM:SS.fffffff`. Measured: `docs/api.md` says "a numeric duration in seconds", but the string `"90"` reads as 90 days. Neither client sends a numeric string.
-  - Server slice: the new fields enter the FilterState schema with the parser that reads them, in OpenAPI and the generated WebUI types. The parser applies the resolution rule, and the list query, its counts, and random selection apply Favorites only or excluded and Blacklisted only or excluded, in any combination. Read from code at this edit: the parser reads the fields case-sensitively (`LibraryListFilterParser.cs`), and `LibraryCatalogListSql.AppendFilter` applies them as two fixed SQL conditions; random selection goes through the same parser and WHERE builder as browse (parity measured). Nothing that caches by filter needs a change: the count cache is keyed by the generated WHERE text and its arguments and is cleared on every catalog write, the shuffle bag rebuilds when its set of eligible items changes, and random selection caches nothing, so the new conditions only need to be in the SQL text or its arguments.
-  - Shared client rules slice: both clients' models gain the two modes, read them through the resolution rule, and write the old-field projection.
-    - Presets: saved filters carry the new fields, and preset matching compares resolved modes, not raw fields, so `{"favoritesOnly": true}` and `{"favoritesMode": "only"}` match. Locked to `preset-filter-equality.json` (read from code at this edit: the desktop's `PresetFilterEqualityFixtureTests` and the WebUI's `presetFilterEquality.test.ts` both read its 39 cases), with cases for old fields against new ones, Favorites excluded against an unset filter, Blacklisted only against `excludeBlacklisted: false`, and the new fields with Blacklisted off. Read from code at this edit: equality also gates behavior, such as the WebUI's header preset pick, which reloads only when equality says the filter changed (`pickHeaderPreset` in `appStore.ts`), and the Apply star in both filter dialogs. A preset saved before this milestone reads through its old fields.
-    - The patch-or-reload rule, which decides whether a favorite or blacklist change patches a loaded tile or reloads the library window, learns the new modes on both clients, locked to `library-tile-effect.json` (read from code at this edit: the desktop's `LibraryPanelBrowse.cs` and the WebUI's `libraryQuerySession.ts` both follow it, line for line). For example, favoriting a loaded tile under Favorites excluded reloads, and so does removing one from the blacklist under Blacklisted only. Trap, read from code at this edit: the desktop's fixture runner (`LibraryTileEffectFixtureTests`) reads each filter key with `GetProperty`, which throws on a missing key, so new cases keep the old keys or the runner changes.
-    - The WebUI's filter reader accepts `audioFilter`, `mediaTypeFilter`, and the values of `categoryLocalMatchModes` as names in any case as well as integers, as the FilterState schema and the server's parser do, locked to a new shared fixture, `filter-enum-values.json`, run by a Core test of the parser and by the WebUI reader test (decided while landing the contract slice). The desktop doesn't run it, since it never receives names. Read from code at this edit: `readEnumInt` in `filterStateModel.ts` reads only integers, so a name such as `"VideosOnly"` reads as the default.
-  - Desktop slice:
-    - The filter dialog gains the two dropdowns, a small change matching the server's, which the desktop's freeze allows. Read from code at this edit: `FilterDialog.axaml.cs` copies fields one by one in three places, each needing the new fields: the change notifications on preset load, Clear All, and Apply's copy back to the main window.
-    - The new modes are written as names through a converter on each property, such as `JsonStringEnumMemberName`. Measured: the desktop reads presets with default JSON options (`ParseCorePresetFilterState` in `MainWindow.axaml.cs`), so an enum written as a name throws, and the catch turns the whole preset into the default filter. A converter on the property also overrides the library query's `JsonStringEnumConverter`, so the desktop sends one form everywhere.
-    - The filter summary line above the library panel names "Favorites only", "Favorites excluded", and "Blacklisted only" (decided in this milestone's planning report). Blacklisted excluded, the default, isn't named, as in the mockup. Read from code at this edit: it shows "Favorites" for Favorites only and never names Blacklisted (`UpdateFilterSummaryText` in `MainWindow.axaml.cs`).
-    - Preset posts (decided in this milestone's planning report): a header preset pick, None included, posts no presets, and a filter dialog Apply posts presets only when they changed, compared with the preset list comparison in `LibraryPresetSelection`. Read from code at this edit: `SyncPresetsToCoreAsync` posts the desktop's cached preset list to `POST /api/presets`, which replaces the server's whole catalog, on every header preset pick and every Apply, and that cache is refreshed only on connect, reconnect, resync, and filter dialog open. Picking a preset on the desktop therefore deletes any preset the WebUI added since. Apart from the server raising its catalog revision, nothing else was found to depend on the post; before removing it from header picks, the implementation confirms what it does today and reports anything besides saving the list that depends on it.
-  - WebUI slice: today's filter dialog gains the two controls, and WebUI Responsive Layout and Panels carries them into the Filter tab as the mockup shows. The mockup's field validation page (`build/validation.src.html`), whose filter dialog specimen still shows the Favorites only and Exclude blacklisted checkboxes, gets the new controls.
-  - Add a Release Specific checklist item, under Manual checks: "In the WebUI and the desktop, Favorites excluded and Blacklisted only each limit browse and random play as named, and a preset saved in one client shows the same filter in the other."
-  - Not included: keeping a preset's stored modes when a desktop older than this milestone posts it without the new fields, since desktop and server are updated together for v0.15.0 (decided in this milestone's planning report). Browser-Playable Filter still builds its own name match for its field.
-- **Acceptance criteria**:
-  - For each combination of the two filters, the list query, its counts, and random selection return exactly the matching items, and the defaults give today's results (Favorites off, Blacklisted excluded).
-  - A filter or preset with only the old fields gives the same results as before this milestone.
-  - The server, the desktop, and the WebUI resolve the same modes for every case in `filter-mode-resolution.json`: old fields only, new fields only, both agreeing and disagreeing, and an unknown new value.
-  - Every filter either client sends or saves carries the new fields and the old fields' projection.
-  - Both clients show a checkbox and an only-or-excluded dropdown for Favorites and for Blacklisted, and a preset saved in one shows the same filter in the other. A preset the WebUI saves with each mode loads in the desktop with that mode.
-  - Preset matching compares resolved modes, so old and new fields that resolve alike match, and both clients pass `preset-filter-equality.json` with cases for them.
-  - Both clients pass `library-tile-effect.json` with cases for the new modes.
-  - The server's filter parser and the WebUI's filter reader read `audioFilter`, `mediaTypeFilter`, and the values of `categoryLocalMatchModes` alike, as names in any case or as integers, and both pass `filter-enum-values.json`.
-  - OpenAPI has a FilterState schema that names every existing filter field and the new ones, keeps `additionalProperties: true`, and has no `default:` keyword; every filter state in the contract uses it, the generated WebUI types carry it, a Core test checks that its property names equal the parser's, and `npm run verify:contracts` passes.
-  - OpenAPI declares no 404 for `GET /api/presets`, declares the 404 `POST /api/random` returns for a `presetId` that names no preset, describes `PresetResponse.summary` as always null, and documents the `presetId` value `"all-media"`, and OpenAPI and `docs/api.md` say a duration number is seconds and a duration string is TimeSpan text.
-  - A desktop header preset pick posts no presets, and a desktop filter dialog Apply posts presets only when they changed.
-  - The desktop's filter summary line names Favorites only, Favorites excluded, and Blacklisted only.
-  - The mockup, including its field validation page, matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- **Verification evidence**:
-  - Completion evidence must include server tests for each combination in the list query, its counts, and random selection, contract tests, including that a filter state written before this milestone still parses and that the schema's property names equal the parser's, `filter-mode-resolution.json` run by Core, desktop, and WebUI tests, `filter-enum-values.json` run by a Core test of the parser and by the WebUI reader test, the new cases in both shared fixtures run by both clients, desktop tests that a WebUI-saved preset with each mode loads, that a header pick and an Apply without preset changes post no presets, and of the summary line, desktop and WebUI filter dialog tests, `dotnet test ReelRoulette.sln`, `npm run verify`, `node docs/mockups/reelroulette/build/check.mjs`, and one quick spot check in each client.
-  - Contract slice:
-    - OpenAPI has a `FilterState` schema with the 14 fields the parser reads, `additionalProperties: true`, every property optional, and no `default:` keyword. `PresetResponse`, `LibraryQueryRequest`, and `RandomRequest` use it through `anyOf` with null, and `FilterPresetSnapshot` requires it. `GET /api/presets` declares no 404, `PresetResponse.summary` is described as always null, `RandomRequest.presetId` documents `all-media`, and `POST /api/random` declares its 404 for a `presetId` that names no preset, which `docs/api.md` names too. OpenAPI's duration fields and `docs/api.md` say a number is seconds and a string is TimeSpan text, and `docs/api.md` says fields the schema doesn't name, such as `tagMatchMode` in old presets, are accepted and ignored by filtering and by both clients' preset matching.
-    - `FilterStateSchema_NamesEveryFieldTheParserReads` compares `ReadSchemaProperties("FilterState")` with the field names `LibraryListFilterParser.cs` reads. It fails when `onlyNeverPlayed` is removed from the schema and when a `favoritesMode` property is added to it, naming the field each time, and passes when the schema is restored.
-    - In the generated WebUI types, `FilterState` has every property optional and an index signature, and each of its four uses keeps its null. A null assigned to each of the 76 nullable properties under `components.schemas` typechecks against the generated types, and a null assigned to a non-nullable one fails. The 6 nullable query parameters elsewhere in the file also keep `| null`.
-    - The WebUI types `serializeFilterStateForApi`'s output, `filterStateFromApiObject`'s input, `ApiPreset` (now the generated `PresetResponse`), the library query's `filterState`, and the preset post body with the generated types. Two tests' default-filter presets now hold `serializeFilterStateForApi(createDefaultFilterState())` instead of the internal model, which the wire type no longer accepts; both read back as the same filter.
-    - The WebUI's built `dist` is byte-identical before and after the change (16 files, same SHA-256), so what the WebUI sends is unchanged. The server's runtime code is unchanged.
-    - `dotnet build ReelRoulette.sln` has no warnings. `dotnet test ReelRoulette.sln` ran 467 Core, 275 DesktopApp, and 7 ServerApp tests, all passing. `npm run verify` passed with 595 tests in 43 files.
+- **Depends on**: WebUI Design Mockup, whose mockup approves its look.
+- **Design**: `docs/mockups/reelroulette/`, including the filter dialog specimen on its field validation page (`build/validation.src.html`).
+
+#### Decisions
+
+- Each filter is a checkbox with a small dropdown to its right offering only and excluded, and the dropdown is disabled while its checkbox is off. Favorites starts off. Blacklisted starts on and excluded, which is today's Exclude blacklisted.
+- Both clients offer the same options, so a preset behaves identically in each.
+- New fields `favoritesMode` and `blacklistedMode`, each `"off"`, `"only"`, or `"excluded"`, written as these names on the wire. One three-value field per filter, so two settings that filter alike can't differ in a preset.
+- The new fields sit beside the old `favoritesOnly` and `excludeBlacklisted`, so the contract change only adds. Desktop Client Removal drops the old fields.
+- Resolution rule: the server's parser, the desktop's model, and the WebUI's reader resolve each filter on its own, the same way.
+  - A new field with a known value decides. A new field with an unknown value counts as missing.
+  - Otherwise the old field decides: `favoritesOnly` true is Favorites only, and anything else is off; `excludeBlacklisted` false is Blacklisted off, and anything else, including a missing field, is excluded, as today.
+  - When both are present and disagree, the new field wins.
+  - A filter or preset with only the old fields therefore reads as before, and so does the desktop's saved filter in `desktop-settings.json`.
+  - Locked to a new shared fixture, `shared/fixtures/filter-mode-resolution.json`, of filter inputs and the modes they resolve to, read by Core, desktop, and WebUI tests.
+- Old-field projection: both clients write the new fields and the old ones together in every filter they send or save, so a reader that knows only the old fields sees a wider set of files, never a narrower or contradictory one.
+  - Favorites only is `favoritesOnly: true`, and Favorites off or excluded is `false`.
+  - Blacklisted excluded is `excludeBlacklisted: true`, and Blacklisted off or only is `false`.
+  - The server stores presets as posted and writes nothing into them.
+- Desktop and server are updated together for v0.15.0, since a desktop older than this milestone drops the new fields from every preset it posts (see the shared client rules slice's Traps). They are separate Velopack packages, and the desktop checks for updates only from its Settings dialog, so the release notes tell desktop users to update it.
+- Slices land in table order, except that the desktop and WebUI slices land in parallel after the shared client rules slice; the records (docs and the tracker) come last.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Contract | ✅ Complete | An OpenAPI FilterState schema naming today's filter fields, used by every filter state in the contract, and small OpenAPI fixes. |
+| Server | ⏳ Planned | The new fields in the schema and the parser, applied by browse, its counts, and random selection. |
+| Shared client rules | ⏳ Planned | Both clients read the modes by the resolution rule, write the old-field projection, and match presets and patch tiles by resolved modes. |
+| Desktop | ⏳ Planned | The filter dialog's dropdowns, the summary line's new names, and no preset posts on header picks or unchanged Applies. |
+| WebUI | ⏳ Planned | The filter dialog's two controls, and the mockup updated to match. |
+
+#### Contract slice
+
+**Scope**
+
+- A FilterState schema in OpenAPI covering every filter field that exists today, so the generated WebUI types carry it. What goes over the wire doesn't change. The new fields enter it in the server slice, with the parser that reads them, and Browser-Playable Filter adds its field to it.
+- `PresetResponse`, `LibraryQueryRequest`, and `RandomRequest` use it, nullable through `anyOf` with `{type: "null"}`, and `FilterPresetSnapshot` requires it.
+- The server's parser, `LibraryListFilterParser`, is the schema's reference: 14 fields. The schema leaves out the legacy `tagMatchMode`, since nothing reads or sends it.
+- The schema keeps `additionalProperties: true`, since stored presets can still carry `tagMatchMode`, and every property is optional, since `{}` is a valid preset.
+- Defaults go in descriptions, never in `default:` keywords.
+- `audioFilter`, `mediaTypeFilter`, and the values of `categoryLocalMatchModes` accept an integer or a name.
+- `minDuration` and `maxDuration` are a string, a number, or null. `globalMatchMode`, `categoryLocalMatchModes`, and the tag and source arrays are nullable, since the equality fixture has null arrays.
+- Each use keeps its own meaning of null in its description.
+- The generated type describes the wire shape. In the WebUI it types `serializeFilterStateForApi`'s output, `filterStateFromApiObject`'s input, `ApiPreset.filterState`, and the library query's `filterState`. The WebUI's internal `FilterState` interface, which holds durations as seconds, stays.
+- A Core test checks that the schema's property names equal the names the parser reads, using `ReadSchemaProperties` in `OpenApiSpec.cs`.
+- OpenAPI fixes:
+  - `GET /api/presets` loses the 404 its handler never returns.
+  - `PresetResponse.summary`, which is never filled, is described as always null. Desktop Client Removal removes it.
+  - The random request's `presetId` value `"all-media"`, which picks with the default filter when no preset has that name, is documented in OpenAPI and `docs/api.md`.
+  - `POST /api/random` declares the 404 it returns for a `presetId` that names no preset when `filterState` is omitted or null.
+- OpenAPI and `docs/api.md` say a duration number is seconds and a duration string is .NET TimeSpan text, such as `HH:MM:SS` or the desktop's `d.HH:MM:SS.fffffff`.
+
+**Traps**
+
+- Before this slice, every `filterState` in OpenAPI was a free-form object (`additionalProperties: true`), neither OpenAPI nor `docs/api.md` named `favoritesOnly` or `excludeBlacklisted`, and the WebUI typed them by hand in `filterStateModel.ts`.
+- Four schemas carry a filter state, and no SSE event carries one (measured).
+- openapi-typescript makes a property with a default required, which breaks the typecheck of `randomPick.ts` (measured).
+- The desktop sends enum fields as integers in random requests and presets, but as names in library queries, which it serializes with `CoreServerApiClient.LibraryItemJsonOptions` and its `JsonStringEnumConverter` (measured).
+- `$ref` with a sibling `nullable: true` loses the null in the generated types, and `openapi.yaml` is OpenAPI 3.1 (measured).
+- A library query without a filter applies no filter predicates, so blacklisted files show, while a random request without one falls back to `presetId`, and its parsed filter excludes blacklisted files (measured).
+- `npm run verify:contracts` only checks that the generated types are fresh, so it can't tell the schema and the parser apart (measured).
+- `docs/api.md` said "a numeric duration in seconds", but the string `"90"` reads as 90 days. Neither client sends a numeric string (measured).
+
+**Acceptance**
+
+- OpenAPI has a FilterState schema that names every existing filter field, keeps `additionalProperties: true`, and has no `default:` keyword. Every filter state in the contract uses it, the generated WebUI types carry it, and `npm run verify:contracts` passes.
+- A Core test checks that the schema's property names equal the parser's.
+- OpenAPI declares no 404 for `GET /api/presets`, declares the 404 `POST /api/random` returns for a `presetId` that names no preset, describes `PresetResponse.summary` as always null, and documents the `presetId` value `"all-media"`, checked by reading `openapi.yaml`.
+- OpenAPI and `docs/api.md` say a duration number is seconds and a duration string is TimeSpan text, checked by reading both.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- OpenAPI has a `FilterState` schema with the 14 fields the parser reads, `additionalProperties: true`, every property optional, and no `default:` keyword. `PresetResponse`, `LibraryQueryRequest`, and `RandomRequest` use it through `anyOf` with null, and `FilterPresetSnapshot` requires it. `GET /api/presets` declares no 404, `PresetResponse.summary` is described as always null, `RandomRequest.presetId` documents `all-media`, and `POST /api/random` declares its 404 for a `presetId` that names no preset, which `docs/api.md` names too. OpenAPI's duration fields and `docs/api.md` say a number is seconds and a string is TimeSpan text, and `docs/api.md` says fields the schema doesn't name, such as `tagMatchMode` in old presets, are accepted and ignored by filtering and by both clients' preset matching.
+- `FilterStateSchema_NamesEveryFieldTheParserReads` compares `ReadSchemaProperties("FilterState")` with the field names `LibraryListFilterParser.cs` reads. It fails when `onlyNeverPlayed` is removed from the schema and when a `favoritesMode` property is added to it, naming the field each time, and passes when the schema is restored.
+- In the generated WebUI types, `FilterState` has every property optional and an index signature, and each of its four uses keeps its null. A null assigned to each of the 76 nullable properties under `components.schemas` typechecks against the generated types, and a null assigned to a non-nullable one fails. The 6 nullable query parameters elsewhere in the file also keep `| null`.
+- The WebUI types `serializeFilterStateForApi`'s output, `filterStateFromApiObject`'s input, `ApiPreset` (now the generated `PresetResponse`), the library query's `filterState`, and the preset post body with the generated types. Two tests' default-filter presets now hold `serializeFilterStateForApi(createDefaultFilterState())` instead of the internal model, which the wire type no longer accepts; both read back as the same filter.
+- The WebUI's built `dist` is byte-identical before and after the change (16 files, same SHA-256), so what the WebUI sends is unchanged. The server's runtime code is unchanged.
+- `dotnet build ReelRoulette.sln` has no warnings. `dotnet test ReelRoulette.sln` ran 467 Core, 275 DesktopApp, and 7 ServerApp tests, all passing. `npm run verify` passed with 595 tests in 43 files.
+
+#### Server slice
+
+**Scope**
+
+- The new fields enter the FilterState schema, in OpenAPI and the generated WebUI types, with the parser that reads them.
+- Core's `FilterStateModel` (`FilteringContracts.cs`) carries the two modes in place of its two booleans.
+- `LibraryListFilterParser` applies the resolution rule. A Core test reads `filter-mode-resolution.json`, which this slice adds.
+- `LibraryCatalogListSql.AppendFilter` (`LibraryCatalogListQuery.cs`) applies Favorites only or excluded and Blacklisted only or excluded, in any combination, so the list query, its counts, and random selection all apply them.
+
+**Traps**
+
+- The parser reads field names case-sensitively.
+- `AppendFilter` applies today's two booleans as two fixed SQL conditions.
+- Random selection goes through the same parser and WHERE builder as browse (measured).
+- Nothing that caches by filter needs a change, so the new conditions only need to be in the SQL text or its arguments: the count cache is keyed by the generated WHERE text and its arguments and is cleared on every catalog write, the shuffle bag rebuilds when its set of eligible items changes, and random selection caches nothing.
+
+**Acceptance**
+
+- For each combination of the two filters, the list query, its counts, and random selection return exactly the matching items, and the defaults (Favorites off, Blacklisted excluded) give today's results, in server tests of each combination.
+- A filter or preset with only the old fields gives the same results as before this milestone, and a contract test shows a filter state written before this milestone still parses.
+- The server resolves every case in `filter-mode-resolution.json` as the fixture says, in a Core test: old fields only, new fields only, both agreeing and disagreeing, and an unknown new value.
+- The FilterState schema names the new fields, the Core test that its property names equal the parser's passes, and `npm run verify:contracts` passes.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Shared client rules slice
+
+**Scope**
+
+- Both clients' filter models gain the two modes, read them through the resolution rule, and write the old-field projection: the desktop's `FilterState.cs` and the WebUI's `filterStateModel.ts`. Desktop and WebUI tests read `filter-mode-resolution.json`.
+- Saved filters carry the new fields. A preset saved before this milestone reads through its old fields.
+- Preset matching compares resolved modes, not raw fields, so `{"favoritesOnly": true}` and `{"favoritesMode": "only"}` match. `preset-filter-equality.json` gains cases for old fields against new ones, Favorites excluded against an unset filter, Blacklisted only against `excludeBlacklisted: false`, and the new fields with Blacklisted off.
+- The patch-or-reload rule, which decides whether a favorite or blacklist change patches a loaded tile or reloads the library window, learns the new modes on both clients, with new cases in `library-tile-effect.json`. For example, favoriting a loaded tile under Favorites excluded reloads, and so does removing one from the blacklist under Blacklisted only.
+- The WebUI's filter reader accepts `audioFilter`, `mediaTypeFilter`, and the values of `categoryLocalMatchModes` as names in any case as well as integers, as the FilterState schema and the server's parser do. A new shared fixture, `filter-enum-values.json`, locks the two together, run by a Core test of the parser and by the WebUI reader test. The desktop doesn't run it, since it never receives names.
+
+**Traps**
+
+- Both clients read filters into a typed model and drop fields they don't know, so a desktop older than this milestone drops the new fields from every preset it posts (measured on the desktop with a probe against its build). The WebUI's `filterStateFromApiObject` reads only known keys.
+- Preset equality also gates behavior: the WebUI's header preset pick reloads only when equality says the filter changed (`pickHeaderPreset` in `appStore.ts`), and equality decides whether Apply shows its star in both filter dialogs.
+- Both clients run `preset-filter-equality.json`'s 39 cases: the desktop's `PresetFilterEqualityFixtureTests` and the WebUI's `presetFilterEquality.test.ts`.
+- The desktop's `LibraryPanelBrowse.cs` and the WebUI's `libraryQuerySession.ts` follow the patch-or-reload rule line for line.
+- The desktop's `LibraryTileEffectFixtureTests` reads each filter key with `GetProperty`, which throws on a missing key, so new cases keep the old keys or the runner changes.
+- `readEnumInt` in `filterStateModel.ts` reads only integers, so a name such as `"VideosOnly"` reads as the default.
+
+**Acceptance**
+
+- The desktop and the WebUI resolve every case in `filter-mode-resolution.json` as the server does, in desktop and WebUI tests.
+- Every filter either client sends or saves carries the new fields and the old fields' projection, in desktop filter serialization tests and the WebUI's `filterStateModel.test.ts`.
+- Preset matching compares resolved modes, so old and new fields that resolve alike match, and both clients pass `preset-filter-equality.json` with its new cases.
+- Both clients pass `library-tile-effect.json` with cases for the new modes.
+- The server's filter parser and the WebUI's filter reader read `audioFilter`, `mediaTypeFilter`, and the values of `categoryLocalMatchModes` alike, as names in any case or as integers, and both pass `filter-enum-values.json`.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Desktop slice
+
+**Scope**
+
+- The filter dialog (`FilterDialog.axaml`) replaces its Favorites only and Exclude blacklisted checkboxes with the two checkboxes and their dropdowns, a small change matching the server's, which the desktop's freeze allows.
+- `FilterDialog.axaml.cs` copies the new fields in each of the three places it copies fields one by one: the change notifications on preset load, Clear All, and Apply's copy back to the main window.
+- The new modes are written as names through a converter on each property, such as `JsonStringEnumMemberName`. A converter on the property also overrides the library query's `JsonStringEnumConverter`, so the desktop sends one form everywhere.
+- The filter summary line above the library panel (`UpdateFilterSummaryText` in `MainWindow.axaml.cs`) names "Favorites only", "Favorites excluded", and "Blacklisted only". Blacklisted excluded, the default, isn't named, as in the mockup. Today it shows "Favorites" for Favorites only and never names Blacklisted.
+- A header preset pick, None included, posts no presets, and a filter dialog Apply posts presets only when they changed, compared with the preset list comparison in `LibraryPresetSelection`. Before removing the post from header picks, confirm what it does today and report anything besides saving the list that depends on it.
+
+**Traps**
+
+- The desktop reads presets with default JSON options (`ParseCorePresetFilterState` in `MainWindow.axaml.cs`), so an enum written as a name throws, and the catch turns the whole preset into the default filter (measured).
+- `SyncPresetsToCoreAsync` posts the desktop's cached preset list to `POST /api/presets`, which replaces the server's whole catalog, on every header preset pick and every Apply, and the cache is refreshed only on connect, reconnect, resync, and filter dialog open. Picking a preset on the desktop therefore deletes any preset the WebUI added since.
+- Apart from the server raising its catalog revision, nothing else was found to depend on the post.
+
+**Acceptance**
+
+- The desktop's filter dialog shows a checkbox and an only-or-excluded dropdown for Favorites and for Blacklisted, in desktop filter dialog tests.
+- A preset the WebUI saves with each mode loads in the desktop with that mode, in desktop tests.
+- A header preset pick posts no presets, and a filter dialog Apply posts presets only when they changed, in desktop tests.
+- The filter summary line names Favorites only, Favorites excluded, and Blacklisted only, in desktop tests.
+- `dotnet test ReelRoulette.sln` passes, and one quick spot check in the desktop.
+
+#### WebUI slice
+
+**Scope**
+
+- Today's filter dialog gains the two controls. WebUI Responsive Layout and Panels carries them into the Filter tab as the mockup shows.
+- The mockup's field validation page (`build/validation.src.html`), whose filter dialog specimen still shows the Favorites only and Exclude blacklisted checkboxes, gets the new controls.
+
+**Acceptance**
+
+- The WebUI's filter dialog shows a checkbox and an only-or-excluded dropdown for Favorites and for Blacklisted, in WebUI filter dialog tests.
+- A preset the desktop saves with each mode loads in the WebUI with that mode, in WebUI tests.
+- The mockup, including its field validation page, matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check in the WebUI.
+
+#### Release checks
+
+- Agent: The v0.15.0 release notes tell desktop users to update the desktop along with the server.
+- Manual: In the WebUI and the desktop, Favorites excluded and Blacklisted only each limit browse and random play as named, and a preset saved in one client shows the same filter in the other.
+
+#### Not included
+
+- Keeping a preset's stored modes when a desktop older than this milestone posts it without the new fields, since desktop and server are updated together for v0.15.0.
+- Name matching for the browser-playable field's values, which is Browser-Playable Filter.
 
 ### M12f1 - WebUI Field Validation Pattern
 

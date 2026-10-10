@@ -252,7 +252,7 @@ Reset testing checklist state, including `Failed:` and `Skipped:` notes, for a f
 
 Check `MILESTONES.md` and `MILESTONES-COMPLETED.md` against their maintenance rules:
 
-- `pwsh ./tools/scripts/check-milestones.ps1` checks that milestone IDs appear only in section headers, the tracker line, and the Planned Releases outline; that the outline and the sections agree; and that every `Depends on`, and every milestone a `Not included` line names after "which is", is an existing milestone title.
+- `pwsh ./tools/scripts/check-milestones.ps1` checks that milestone IDs appear only in section headers, the tracker line, and the Planned Releases outline; that the outline and the sections agree; that every `Depends on`, and every milestone a `Not included` line or bullet names after "which is", is an existing milestone title; and that active and planned entries with `####` sections follow the structure of the Entry Format in `MILESTONES.md`.
 - `-BaseRef HEAD` also checks that `MILESTONES-COMPLETED.md` only grew by entries moved in from Active or Planned, newest on top. `-Staged` checks the staged files instead of the working tree.
 - `-BaseRef <previous release tag> -Release` does the same across a release, allowing completed entries that were planned after the tag. A base without `MILESTONES-COMPLETED.md` is refused.
 - `pwsh ./tools/scripts/tests/test-scripts.ps1` runs the milestones checker, changelog cut script, and checklist reset script against the fixtures in `tools/scripts/tests/fixtures/`.

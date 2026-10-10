@@ -19,10 +19,10 @@ Both groups of the Release Specific section of `docs/checklists/testing-checklis
 
 Read every milestone in the release in full, and the release's outline line. Old entries drift: later work lands, code moves, and figures go stale. For each milestone:
 
-- **Scope**: find the code, routes, settings, scripts, and tests the entry names, and confirm they still exist and behave as it says. Check git history since the entry was last changed (`git log` on the files it names, `git log -S` for names it relies on) for later work that did part of it or changed what it touches.
-- **Measurements**: where a claim depends on a number, such as a timing, a size, a count, or a limit, measure it again; don't carry an old figure forward. Follow `AGENTS.md` for which commands you may run and ask before anything it says needs approval. Throwaway experiments go in a temp folder and change no tracked file. If you can't measure something, say so.
+- **Scope and Traps**: find the code, routes, settings, scripts, and tests the entry names, and confirm they still exist and behave as it says. Check git history since the entry was last changed (`git log` on the files it names, `git log -S` for names it relies on) for later work that did part of it or changed what it touches.
+- **Measurements**: measure again every fact marked "(measured)", or labeled "Measured" in an entry not yet converted, and every claim that depends on a number, such as a timing, a size, a count, or a limit; don't carry an old figure forward. Follow `AGENTS.md` for which commands you may run and ask before anything it says needs approval. Throwaway experiments go in a temp folder and change no tracked file. If you can't measure something, say so.
 - **Assumptions**: check each thing the entry states as fact, such as what a client reads, what a route returns, or what an earlier milestone delivered. For a completed dependency, check what its entry in `MILESTONES-COMPLETED.md` and the code say actually landed, not what was planned.
-- **Dependencies and order**: each `Depends on` milestone is complete or earlier in this release's outline, and each `Not included` line still names a milestone that covers the boundary.
+- **Dependencies and order**: each `Depends on` milestone is complete or earlier in this release's outline, and each Not included bullet that names a milestone still names one that covers the boundary.
 
 Reasoning about code is a hypothesis; running it is a finding. Say which of your claims are measured and which are inferred.
 
@@ -42,7 +42,7 @@ Then show the corrections you plan for each entry and the new IDs as a P-to-M ta
 ## After confirmation
 
 1. Remove the released version's items from both groups of the Release Specific section of the testing checklist, keeping the section's note and each group's heading and note. Remove an unticked item only if the user agreed.
-2. Correct the entries as agreed, following the template and the Writing entries rules in `.claude/skills/plan-from-report/SKILL.md`. Replace stale figures with the new measurements and say in the entry which figures were re-measured at promotion and which were not. Change each `Planned for v{VERSION}.` line to say where the milestone ships in the series, such as `Ships in v0.15.0, first in the series.`, `after the {title} milestone`, or `last in the series`.
+2. Convert each entry to the Entry Format in `MILESTONES.md` if it isn't already, and correct it as agreed, following the Writing entries rules in `.claude/skills/plan-from-report/SKILL.md`. Converting drops its `Planned for v…` line, since the Planned Releases outline holds the release, and turns its "Measured:" and "Read from code at this edit:" labels into the Traps marks. Replace stale figures with the new measurements, and mark a measured fact you couldn't measure again "(measured before promotion)".
 3. Assign IDs by the promotion rules in `MILESTONES.md`: the release becomes the next `M*` series after the highest one in Active Milestones and `MILESTONES-COMPLETED.md`, with lettered milestones in outline order.
 4. Move the entries from Planned Milestones to Active Milestones in outline order, below the `Last milestone completed` line and after any milestone already active. Status stays ⏳ Planned.
 5. Update the release's Planned Releases line: replace each `P*` ID with its `M*` ID, and update its summary if a correction changed what the release ships. Move any milestone that left the release to where the user decided, on its new release's line or the backlog line.

@@ -16,16 +16,17 @@ For each finding, check whether an existing milestone or backlog item already co
 - Fit each new item to the release whose theme it matches, using the Planned Releases outline. If it fits none, put it in the unscheduled backlog and say why it waits.
 - Keep contract changes (OpenAPI and generated client types) in their own slices.
 - Group related small items into one milestone with slices, each with its own acceptance criteria, rather than many tiny milestones or one milestone with many unrelated slices.
-- Note dependencies and order: if one item must land before another, say so in both.
+- Note dependencies and order: if one item must land before another, name the earlier one in the later one's Depends on, and keep them in that order in the Planned Releases outline.
 
 ## Writing entries
 
-- Use the file's template: Status, Goal, Scope (with a `Depends on:` line, and `Not included:` lines for scope boundaries), Acceptance criteria, Verification evidence.
-- Write `Depends on:` as exact milestone titles joined by commas or "and". An explanation may follow a title after ", which", ", whose", or ", so".
+- Follow the Entry Format and Milestone Template in `MILESTONES.md`: Status, Goal, Depends on, and Design as header bullets; Decisions; a Slices table with a section per slice holding its Scope, Traps, and Acceptance; Release checks; and Not included. Evidence is added when a slice lands, never while planning.
+- Write the Depends on bullet as exact milestone titles joined by commas or "and". An explanation may follow a title after ", which", ", whose", or ", so".
 - Refer to other milestones by name, never by ID, except in section headers, the tracker line, and the Planned Releases outline.
-- Carry over the report's measured numbers and evidence, and keep its measured-versus-inferred labels. Record known traps (an approach measured to be slow or wrong) in the entry that will hit them.
-- Verification is automated tests plus at most a quick spot check. Longer manual checks, repeated runs, and Windows VM passes become one-line notes for the release's Release Specific checklist, not milestone steps.
-- Record anything out of scope, never silently: future work as its own backlog item or as an addition to the existing milestone that will do it, after checking existing items so nothing is recorded twice, and scope boundaries as a `Not included:` line naming the covering milestone by its exact title after "which is".
+- Record a settled choice under Decisions when it shapes more than one slice, and in the slice's Scope when it shapes only that one. Write it as settled, without saying where it was decided.
+- Carry the report's facts and measured numbers into the Traps of the slice that will hit them, including known traps such as an approach measured to be slow or wrong. Mark them "(measured)" or "(inferred)" as the report does, and leave a fact read from code or docs unmarked.
+- Give each slice its own acceptance criteria, each naming the tests that show it. Verification is automated tests plus at most a quick spot check. Longer manual checks, repeated runs, and Windows VM passes become one-line `Agent:` or `Manual:` bullets in the entry's Release checks, not milestone steps.
+- Record anything out of scope, never silently: future work as its own backlog item or as an addition to the existing milestone that will do it, after checking existing items so nothing is recorded twice, and scope boundaries as a bullet in Not included, naming the covering milestone by its exact title after "which is".
 
 ## IDs and renumbering
 
@@ -37,6 +38,6 @@ Present it and stop. Show: each finding and where it goes (existing item or new 
 
 ## After confirmation
 
-Make the edits, then run `pwsh ./tools/scripts/check-milestones.ps1 -BaseRef HEAD` and fix everything it reports. It checks that milestone IDs appear only in section headers, the tracker line, and the Planned Releases outline; that the outline and the sections agree; that every `Depends on` names an existing milestone title; and that `MILESTONES-COMPLETED.md` only grew by entries moved in. It cannot check milestone names mentioned in other prose, so check any name reference you added or changed by reading. Say what you ran and its result.
+Make the edits, then run `pwsh ./tools/scripts/check-milestones.ps1 -BaseRef HEAD` and fix everything it reports. It checks that milestone IDs appear only in section headers, the tracker line, and the Planned Releases outline; that the outline and the sections agree; that active and planned entries with `####` sections follow the Entry Format's structure; that every Depends on and Not included reference names an existing milestone title; and that `MILESTONES-COMPLETED.md` only grew by entries moved in. It cannot check milestone names mentioned in other prose, or the Entry Format's rules for what entries say: one fact, decision, or criterion per bullet, each acceptance criterion naming its tests, the Traps marks, and decisions written as settled. Check those, and any name reference you added or changed, by reading. Say what you ran and its result.
 
 Start or update the `COMMIT-MESSAGE.txt` entry per `AGENTS.md`. No changelog entry; planning changes nothing user-visible.

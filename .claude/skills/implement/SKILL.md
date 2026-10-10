@@ -41,14 +41,14 @@ Do not edit `AGENTS.md` unless the user explicitly asks you to. If a rule there 
 
 Keep `MILESTONES.md` and docs in the state `AGENTS.md` (and any docs it points at) require — complete what this change finishes (a completed milestone moves to the top of `MILESTONES-COMPLETED.md`), record future work and scope boundaries as the maintenance rules in `MILESTONES.md` describe, and update current-state docs the project says to keep in sync. Do not invent extra docs.
 
-A check for the pre-release pass goes in the Release Specific section of the testing checklist: under Agent checks when an agent can verify it from the repo, its docs, or the release workflow's runs, and under Manual checks when it needs a person, real devices, or the Windows VM.
+For milestone work, when a slice lands, set its row in the Slices table to its new status, keep the entry's Status in step with its slices, and add the slice's Evidence part. List a check for the pre-release pass in the entry's Release checks: an `Agent:` bullet when an agent can verify it from the repo, its docs, or the release workflow's runs, and a `Manual:` bullet when it needs a person, real devices, or the Windows VM. When the milestone completes, copy its Release checks into the Release Specific section of the testing checklist, under Agent checks or Manual checks, before moving the entry. Outside a milestone, such a check goes straight into that section.
 
 ## Delegating
 
 Delegation never replaces the plan stop: nothing goes to a subagent that writes until I've confirmed the plan.
 
 - Before planning, measurements that don't depend on each other's results go to `investigator` subagents in parallel rather than running one after another in this session. Keep a measurement here only when the next step depends on its result or it's a single quick command.
-- After confirmation, parts of the plan that are independent and touch disjoint files may go to `implementer` subagents, each given its slice verbatim, the exact files it owns, and how to verify it. Parallel implementers never share a file. Keep sequential or tightly coupled work, and anything small, in this session.
+- After confirmation, parts of the plan that are independent and touch disjoint files may go to `implementer` subagents, each given its slice verbatim, with the milestone entry's Decisions when the work is a milestone, the exact files it owns, and how to verify it. Parallel implementers never share a file. Keep sequential or tightly coupled work, and anything small, in this session.
 - An implementer that stops on a problem is a blocker under "During implementation": stop and bring it to me.
 - This session alone edits the tracker, changelog, commit message, and docs, and writes the final summary. Read each implementer's report, review its changes in the diff, and carry its deviations into the summary.
 - Use `verifier` for verification runs, and check what it reports before fixing anything.

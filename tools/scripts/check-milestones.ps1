@@ -1,5 +1,6 @@
 #!/usr/bin/env pwsh
-# Checks MILESTONES.md and MILESTONES-COMPLETED.md against their maintenance rules. Read-only.
+# Checks MILESTONES.md and MILESTONES-COMPLETED.md against their maintenance rules, and that active
+# and planned entries in the new format follow MILESTONES.md's Entry Format. Read-only.
 #   -Path <file>               check another file instead of the repo's MILESTONES.md
 #   -CompletedPath <file>      the completed history to check with it; defaults to the repo's
 #                              MILESTONES-COMPLETED.md only when -Path is not given
@@ -28,6 +29,14 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $idPattern = '(?<![A-Za-z0-9_])[MP]\d+[a-z]?\d*(?![A-Za-z0-9_])'
 $headerPattern = '^### ([MP]\d+[a-z]?\d*) - (.+?)\s*$'
 $completedSectionName = "Completed Milestones"
+
+# The Entry Format's vocabulary, in its order.
+$statusValues = @("⏳ Planned", "🚧 In Progress", "✅ Complete")
+$headerBulletNames = @("Status", "Goal", "Depends on", "Design")
+$sliceSectionName = "{Name} slice"
+$sectionNames = @("Decisions", "Slices", $sliceSectionName, "Scope", "Traps", "Acceptance", "Evidence", "Release checks", "Not included")
+$partNames = @("Scope", "Traps", "Acceptance", "Evidence")
+$bannedPhrases = @("at this edit", "(decided in", "(decided while")
 
 if (($Path -or $CompletedPath) -and $Staged.IsPresent) {
     throw "Use either -Path and -CompletedPath or -Staged, not both."
@@ -104,6 +113,7 @@ function Get-Document {
             $last--
         }
         $milestone | Add-Member -NotePropertyName Body -NotePropertyValue (($lines[$milestone.Index..$last]) -join "`n")
+        $milestone | Add-Member -NotePropertyName Last -NotePropertyValue $last
     }
 
     return [pscustomobject]@{
@@ -212,6 +222,321 @@ function Test-NotIncluded {
     return $null
 }
 
+# Splits a markdown table row into its trimmed cells.
+function Get-TableCells {
+    param([string]$Line)
+
+    $text = $Line.Trim()
+    if ($text.StartsWith("|")) {
+        $text = $text.Substring(1)
+    }
+    if ($text.EndsWith("|")) {
+        $text = $text.Substring(0, $text.Length - 1)
+    }
+    return @($text -split '\|' | ForEach-Object { $_.Trim() })
+}
+
+# Checks one entry, from its header at $From to its last line at $To, against the Entry Format.
+# Returns the problems as objects with the line index and the message.
+function Get-EntryFormatProblems {
+    param([string[]]$Lines, [int]$From, [int]$To)
+
+    $found = New-Object System.Collections.Generic.List[object]
+    function Add-Found {
+        param([int]$Index, [string]$Message)
+        $found.Add([pscustomobject]@{ Index = $Index; Message = $Message })
+    }
+
+    # A --- separator after the entry is not part of it.
+    while ($To -gt $From -and ($Lines[$To] -eq "---" -or [string]::IsNullOrWhiteSpace($Lines[$To]))) {
+        $To--
+    }
+
+    for ($i = $From; $i -le $To; $i++) {
+        foreach ($phrase in $bannedPhrases) {
+            if ($Lines[$i].IndexOf($phrase, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                Add-Found $i "'$phrase' is not allowed; state facts and decisions as settled"
+            }
+        }
+    }
+
+    # Header bullets: Status and Goal, then Depends on and Design when present, and nothing else.
+    $first = $From + 1
+    while ($first -le $To -and $Lines[$first] -notmatch '^#### ') {
+        $first++
+    }
+    $bullets = @{}
+    $lastRank = -1
+    for ($i = $From + 1; $i -lt $first; $i++) {
+        $line = $Lines[$i]
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+        $rank = -1
+        if ($line -match '^- \*\*(.+?)\*\*:\s*(.*)$') {
+            $name = $Matches[1]
+            $value = $Matches[2].Trim()
+            $rank = [Array]::IndexOf($headerBulletNames, $name)
+        }
+        if ($rank -lt 0) {
+            Add-Found $i "only the Status, Goal, Depends on, and Design bullets go before the first section"
+            continue
+        }
+        if ($bullets.ContainsKey($name)) {
+            Add-Found $i "the $name bullet appears more than once"
+            continue
+        }
+        $bullets[$name] = [pscustomobject]@{ Index = $i; Value = $value }
+        if ($rank -lt $lastRank) {
+            Add-Found $i "the $name bullet is out of order; header bullets go Status, Goal, Depends on, Design"
+        }
+        $lastRank = [Math]::Max($lastRank, $rank)
+        if (-not $value) {
+            Add-Found $i "the $name bullet is empty"
+        }
+        elseif ($name -eq "Status" -and $statusValues -cnotcontains $value) {
+            Add-Found $i "unknown Status '$value'; use ⏳ Planned, 🚧 In Progress, or ✅ Complete"
+        }
+    }
+    foreach ($name in @("Status", "Goal")) {
+        if (-not $bullets.ContainsKey($name)) {
+            Add-Found $From "has no $name bullet"
+        }
+    }
+    $status = if ($bullets.ContainsKey("Status") -and $statusValues -ccontains $bullets["Status"].Value) { $bullets["Status"].Value } else { $null }
+
+    # Sections: allowed names, in the template's order, each once and none empty.
+    $sections = New-Object System.Collections.Generic.List[object]
+    for ($i = $first; $i -le $To; $i++) {
+        if ($Lines[$i] -match '^#### (.+?)\s*$') {
+            $sections.Add([pscustomobject]@{ Name = $Matches[1]; Index = $i; End = $To; Slice = $null })
+        }
+    }
+    for ($k = 0; $k -lt $sections.Count - 1; $k++) {
+        $sections[$k].End = $sections[$k + 1].Index - 1
+    }
+    $seen = @{}
+    $lastRank = -1
+    foreach ($section in $sections) {
+        if ($section.Name -cmatch '^(.+) slice$') {
+            $section.Slice = $Matches[1]
+            $rank = [Array]::IndexOf($sectionNames, $sliceSectionName)
+        }
+        else {
+            $rank = [Array]::IndexOf($sectionNames, $section.Name)
+        }
+        if ($rank -lt 0) {
+            Add-Found $section.Index "unknown section '$($section.Name)'"
+            continue
+        }
+        if ($seen.ContainsKey($section.Name)) {
+            Add-Found $section.Index "the '$($section.Name)' section appears more than once"
+            continue
+        }
+        $seen[$section.Name] = $section
+        if ($rank -lt $lastRank) {
+            Add-Found $section.Index "the '$($section.Name)' section is out of order; sections go Decisions, Slices, the slice sections (or Scope, Traps, Acceptance, Evidence), Release checks, Not included"
+        }
+        $lastRank = [Math]::Max($lastRank, $rank)
+        $hasContent = $false
+        for ($i = $section.Index + 1; $i -le $section.End; $i++) {
+            if (-not [string]::IsNullOrWhiteSpace($Lines[$i])) {
+                $hasContent = $true
+                break
+            }
+        }
+        if (-not $hasContent) {
+            Add-Found $section.Index "the '$($section.Name)' section is empty"
+        }
+        if ($section.Name -ceq "Release checks") {
+            for ($i = $section.Index + 1; $i -le $section.End; $i++) {
+                if ($Lines[$i] -match '^- ' -and $Lines[$i] -cnotmatch '^- (Agent|Manual): ') {
+                    Add-Found $i "a Release checks bullet does not start with 'Agent: ' or 'Manual: '"
+                }
+            }
+        }
+    }
+
+    $slicesSection = if ($seen.ContainsKey("Slices")) { $seen["Slices"] } else { $null }
+    $sliceSections = @($seen.Values | Where-Object { $_.Slice } | Sort-Object Index)
+    if (-not $slicesSection -and $sliceSections.Count -eq 0) {
+        # An entry without slices: Scope, Traps, Acceptance, and Evidence sections, with the Evidence rule on the entry's Status.
+        foreach ($name in @("Scope", "Acceptance")) {
+            if (-not $seen.ContainsKey($name)) {
+                Add-Found $From "has no Slices section, so it needs a top-level $name section"
+            }
+        }
+        if ($status -ceq "✅ Complete" -and -not $seen.ContainsKey("Evidence")) {
+            Add-Found $From "is ✅ Complete but has no Evidence section"
+        }
+        if ($status -ceq "⏳ Planned" -and $seen.ContainsKey("Evidence")) {
+            Add-Found $seen["Evidence"].Index "is ⏳ Planned but has an Evidence section"
+        }
+        return $found
+    }
+
+    foreach ($name in @("Scope", "Traps", "Acceptance", "Evidence")) {
+        if ($seen.ContainsKey($name)) {
+            Add-Found $seen[$name].Index "has slices, so its $name belongs in the slice sections"
+        }
+    }
+    if (-not $slicesSection) {
+        foreach ($section in $sliceSections) {
+            Add-Found $section.Index "the '$($section.Name)' section needs a Slices section listing it"
+        }
+    }
+
+    # The Slices table: a header, a separator, then one valid row per slice.
+    $rows = New-Object System.Collections.Generic.List[object]
+    if ($slicesSection) {
+        $tableLines = 0
+        $statusesKnown = $true
+        for ($i = $slicesSection.Index + 1; $i -le $slicesSection.End; $i++) {
+            $line = $Lines[$i]
+            if ([string]::IsNullOrWhiteSpace($line)) {
+                continue
+            }
+            if ($line -notmatch '^\s*\|') {
+                Add-Found $i "the Slices section holds only its table"
+                continue
+            }
+            $cells = Get-TableCells $line
+            $tableLines++
+            if ($tableLines -eq 1) {
+                if (($cells -join "|") -cne "Slice|Status|Delivers") {
+                    Add-Found $i "the Slices table's header must be '| Slice | Status | Delivers |'"
+                }
+                continue
+            }
+            if ($tableLines -eq 2) {
+                if ($cells.Count -eq 3 -and -not ($cells | Where-Object { $_ -notmatch '^:?-+:?$' })) {
+                    continue
+                }
+                Add-Found $i "the Slices table has no separator row under its header"
+            }
+            if ($cells.Count -ne 3) {
+                Add-Found $i "a Slices table row has $($cells.Count) cells; rows have Slice, Status, and Delivers cells"
+                $statusesKnown = $false
+                continue
+            }
+            $name, $rowStatus, $delivers = $cells
+            if (-not $name) {
+                Add-Found $i "a Slices table row has no slice name"
+                $statusesKnown = $false
+                continue
+            }
+            if ($statusValues -cnotcontains $rowStatus) {
+                Add-Found $i "slice '$name' has unknown status '$rowStatus' in the Slices table; use ⏳ Planned, 🚧 In Progress, or ✅ Complete"
+                $rowStatus = $null
+                $statusesKnown = $false
+            }
+            if (-not $delivers) {
+                Add-Found $i "slice '$name' has no Delivers text in the Slices table"
+            }
+            if ($rows | Where-Object { $_.Name -ceq $name }) {
+                Add-Found $i "slice '$name' is in the Slices table more than once"
+                continue
+            }
+            $rows.Add([pscustomobject]@{ Name = $name; Status = $rowStatus; Index = $i })
+        }
+        if ($tableLines -gt 0 -and $rows.Count -eq 0 -and $statusesKnown) {
+            Add-Found $slicesSection.Index "the Slices table has no rows"
+        }
+
+        # Rows and slice sections match by name and order.
+        $rowNames = @($rows | ForEach-Object { $_.Name })
+        $sectionSlices = @($sliceSections | ForEach-Object { $_.Slice })
+        foreach ($row in $rows) {
+            if ($sectionSlices -cnotcontains $row.Name) {
+                Add-Found $row.Index "slice '$($row.Name)' in the Slices table has no '$($row.Name) slice' section"
+            }
+        }
+        foreach ($section in $sliceSections) {
+            if ($rowNames -cnotcontains $section.Slice) {
+                Add-Found $section.Index "the '$($section.Name)' section has no row in the Slices table"
+            }
+        }
+        $listed = @($rows | Where-Object { $sectionSlices -ccontains $_.Name })
+        $present = @($sliceSections | Where-Object { $rowNames -ccontains $_.Slice })
+        for ($k = 0; $k -lt $present.Count; $k++) {
+            if ($present[$k].Slice -cne $listed[$k].Name) {
+                Add-Found $present[$k].Index "the '$($present[$k].Name)' section is out of the Slices table's order, which lists '$($listed[$k].Name)' here"
+                break
+            }
+        }
+
+        # The entry's Status agrees with its slices.
+        if ($status -and $rows.Count -gt 0 -and $statusesKnown) {
+            $expected = if (-not ($rows | Where-Object { $_.Status -cne "⏳ Planned" })) { "⏳ Planned" }
+                elseif (-not ($rows | Where-Object { $_.Status -cne "✅ Complete" })) { "✅ Complete" }
+                else { "🚧 In Progress" }
+            if ($status -cne $expected) {
+                Add-Found $bullets["Status"].Index "Status is $status but its slices make it $expected"
+            }
+        }
+    }
+
+    # Each slice section: Scope, Traps, Acceptance, and Evidence parts, in that order, each with content.
+    foreach ($section in $sliceSections) {
+        $slice = $section.Slice
+        $parts = @{}
+        $current = $null
+        $reportedText = $false
+        $lastRank = -1
+        for ($i = $section.Index + 1; $i -le $section.End; $i++) {
+            $line = $Lines[$i]
+            if ($line -match '^\*\*(.+?)\*\*\s*$') {
+                $label = $Matches[1]
+                $rank = [Array]::IndexOf($partNames, $label)
+                # Content under an unknown or repeated label is not counted toward another part.
+                $current = [pscustomobject]@{ Index = $i; HasContent = $false }
+                if ($rank -lt 0) {
+                    Add-Found $i "slice '$slice' has an unknown part '$label'"
+                    continue
+                }
+                if ($parts.ContainsKey($label)) {
+                    Add-Found $i "slice '$slice' has the $label part more than once"
+                    continue
+                }
+                if ($rank -lt $lastRank) {
+                    Add-Found $i "slice '$slice' has its $label part out of order; parts go Scope, Traps, Acceptance, Evidence"
+                }
+                $lastRank = [Math]::Max($lastRank, $rank)
+                $parts[$label] = $current
+                continue
+            }
+            if ([string]::IsNullOrWhiteSpace($line)) {
+                continue
+            }
+            if ($current) {
+                $current.HasContent = $true
+            }
+            elseif (-not $reportedText) {
+                Add-Found $i "slice '$slice' has text before its first part"
+                $reportedText = $true
+            }
+        }
+        foreach ($label in $partNames) {
+            if ($parts.ContainsKey($label) -and -not $parts[$label].HasContent) {
+                Add-Found $parts[$label].Index "slice '$slice' has an empty $label part"
+            }
+        }
+        foreach ($label in @("Scope", "Acceptance")) {
+            if (-not $parts.ContainsKey($label)) {
+                Add-Found $section.Index "slice '$slice' has no $label part"
+            }
+        }
+        $row = $rows | Where-Object { $_.Name -ceq $slice } | Select-Object -First 1
+        if ($row -and $row.Status -ceq "✅ Complete" -and -not $parts.ContainsKey("Evidence")) {
+            Add-Found $section.Index "slice '$slice' is ✅ Complete but has no Evidence part"
+        }
+        if ($row -and $row.Status -ceq "⏳ Planned" -and $parts.ContainsKey("Evidence")) {
+            Add-Found $parts["Evidence"].Index "slice '$slice' is ⏳ Planned but has an Evidence part"
+        }
+    }
+
+    return $found
+}
 
 function Test-GitFile {
     param([string]$Spec)
@@ -374,12 +699,29 @@ foreach ($milestone in $doc.Milestones) {
     }
 }
 
-# 4. Every Depends on reference, and every milestone a Not included line names after "which is", in
-# Active and Planned names an existing milestone, completed ones included.
+# 4. Every Depends on reference, and every milestone a Not included line or a Not included section's
+# bullet names after "which is", in Active and Planned names an existing milestone, completed ones included.
 $titles = @($allMilestones | ForEach-Object { Get-NormalizedTitle $_.Milestone.Title } | Sort-Object -Unique | Sort-Object Length -Descending)
+$inNotIncluded = $false
 for ($i = 0; $i -lt $doc.Lines.Count; $i++) {
+    if ($doc.Lines[$i] -match '^#{1,4} ') {
+        $inNotIncluded = $doc.Lines[$i] -cmatch '^#### Not included\s*$'
+    }
     if ($doc.LineSections[$i] -notin $trackedSections) {
         continue
+    }
+    if ($doc.Lines[$i] -match '^- \*\*Depends on\*\*: (.+)$') {
+        $problem = Test-DependsOn -Value $Matches[1].Trim() -Titles $titles
+        if ($problem) {
+            Add-Problem $i "Depends on: $problem"
+        }
+    }
+    $isNotIncludedBullet = $inNotIncluded -and $doc.Lines[$i] -match '^- (.+)$'
+    if ($isNotIncludedBullet) {
+        $problem = Test-NotIncluded -Value $Matches[1].Trim() -Titles $titles
+        if ($problem) {
+            Add-Problem $i "Not included: $problem"
+        }
     }
     $at = $doc.Lines[$i].IndexOf("Depends on:")
     if ($at -ge 0) {
@@ -389,8 +731,9 @@ for ($i = 0; $i -lt $doc.Lines.Count; $i++) {
             Add-Problem $i "Depends on: $problem"
         }
     }
+    # A section bullet that keeps the old "Not included:" prefix was checked above.
     $at = $doc.Lines[$i].IndexOf("Not included:")
-    if ($at -ge 0) {
+    if ($at -ge 0 -and -not $isNotIncludedBullet) {
         $value = $doc.Lines[$i].Substring($at + "Not included:".Length).Trim()
         $problem = Test-NotIncluded -Value $value -Titles $titles
         if ($problem) {
@@ -399,7 +742,21 @@ for ($i = 0; $i -lt $doc.Lines.Count; $i++) {
     }
 }
 
-# 5. Against a base, the completed history only grew by entries moved in from MILESTONES.md.
+# 5. Active and planned entries in the new format, those with #### sections, follow the Entry Format.
+# Entries still in the old format get only the checks above until they are converted.
+foreach ($milestone in $doc.Milestones) {
+    if ($milestone.Section -notin $trackedSections -or $milestone.Last -le $milestone.Index) {
+        continue
+    }
+    if (-not ($doc.Lines[($milestone.Index + 1)..$milestone.Last] | Where-Object { $_ -match '^#### ' })) {
+        continue
+    }
+    foreach ($found in (Get-EntryFormatProblems -Lines $doc.Lines -From $milestone.Index -To $milestone.Last)) {
+        Add-Problem $found.Index "'$($milestone.Id) - $($milestone.Title)': $($found.Message)"
+    }
+}
+
+# 6. Against a base, the completed history only grew by entries moved in from MILESTONES.md.
 if ($base) {
     $baseIntro = Get-CompletedIntro $baseCompleted
     $intro = Get-CompletedIntro $completedDoc
