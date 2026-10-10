@@ -72,6 +72,7 @@ These need a person, real devices, or the Windows VM.
 - [ ] With the server paused (`kill -STOP` on its process) while the WebUI plays, pressing Next several times shows "Loading..." and, about 10 seconds after the first press, "No response from the server. Try again."; after `kill -CONT`, `last.log` has one `playback=random-pick-timeout` line and no more than one random pick from those presses, and the next Next plays one item.
 - [ ] After the Preact migration, the player, library overlay, filter dialog, presets, tag editor, and Auto Tag look and work as in the previous release, in and out of fullscreen, on a desktop browser, an iPhone or iPad in Safari, an Android phone, and as an installed app.
 - [ ] With the dev release installed on Windows and Linux, the server's executable, shortcut, tray, and Linux menu icons show the new logo, the WebUI's tab icon and its installed app icon on Android and iOS show it too, and the desktop app keeps its old icon. On Windows, check the server executable's icon in Explorer at small, medium, large, and extra large icon views, and the tray icon, since `app.ico` stores every size as PNG.
+- [ ] On the Windows VM, measure whether folder import and refresh see paths in a different casing from the stored ones: add a source typed in a casing that differs from the folder on disk, import it, rename a file by case only, and refresh. Record the result in the Ordinal Path Identity on Linux entry's Traps in `MILESTONES.md`.
 
 ## Release Flow
 

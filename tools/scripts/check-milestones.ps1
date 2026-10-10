@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 # Checks MILESTONES.md and MILESTONES-COMPLETED.md against their maintenance rules, and that active
-# and planned entries in the new format follow MILESTONES.md's Entry Format. Read-only.
+# and planned entries follow MILESTONES.md's Entry Format. Read-only.
 #   -Path <file>               check another file instead of the repo's MILESTONES.md
 #   -CompletedPath <file>      the completed history to check with it; defaults to the repo's
 #                              MILESTONES-COMPLETED.md only when -Path is not given
@@ -699,8 +699,8 @@ foreach ($milestone in $doc.Milestones) {
     }
 }
 
-# 4. Every Depends on reference, and every milestone a Not included line or a Not included section's
-# bullet names after "which is", in Active and Planned names an existing milestone, completed ones included.
+# 4. Every reference in a Depends on bullet, and every milestone a Not included section's bullet names
+# after "which is", in Active and Planned names an existing milestone, completed ones included.
 $titles = @($allMilestones | ForEach-Object { Get-NormalizedTitle $_.Milestone.Title } | Sort-Object -Unique | Sort-Object Length -Descending)
 $inNotIncluded = $false
 for ($i = 0; $i -lt $doc.Lines.Count; $i++) {
@@ -716,39 +716,17 @@ for ($i = 0; $i -lt $doc.Lines.Count; $i++) {
             Add-Problem $i "Depends on: $problem"
         }
     }
-    $isNotIncludedBullet = $inNotIncluded -and $doc.Lines[$i] -match '^- (.+)$'
-    if ($isNotIncludedBullet) {
+    if ($inNotIncluded -and $doc.Lines[$i] -match '^- (.+)$') {
         $problem = Test-NotIncluded -Value $Matches[1].Trim() -Titles $titles
-        if ($problem) {
-            Add-Problem $i "Not included: $problem"
-        }
-    }
-    $at = $doc.Lines[$i].IndexOf("Depends on:")
-    if ($at -ge 0) {
-        $value = $doc.Lines[$i].Substring($at + "Depends on:".Length).Trim()
-        $problem = Test-DependsOn -Value $value -Titles $titles
-        if ($problem) {
-            Add-Problem $i "Depends on: $problem"
-        }
-    }
-    # A section bullet that keeps the old "Not included:" prefix was checked above.
-    $at = $doc.Lines[$i].IndexOf("Not included:")
-    if ($at -ge 0 -and -not $isNotIncludedBullet) {
-        $value = $doc.Lines[$i].Substring($at + "Not included:".Length).Trim()
-        $problem = Test-NotIncluded -Value $value -Titles $titles
         if ($problem) {
             Add-Problem $i "Not included: $problem"
         }
     }
 }
 
-# 5. Active and planned entries in the new format, those with #### sections, follow the Entry Format.
-# Entries still in the old format get only the checks above until they are converted.
+# 5. Every active and planned entry follows the Entry Format, including one with only its header.
 foreach ($milestone in $doc.Milestones) {
-    if ($milestone.Section -notin $trackedSections -or $milestone.Last -le $milestone.Index) {
-        continue
-    }
-    if (-not ($doc.Lines[($milestone.Index + 1)..$milestone.Last] | Where-Object { $_ -match '^#### ' })) {
+    if ($milestone.Section -notin $trackedSections) {
         continue
     }
     foreach ($found in (Get-EntryFormatProblems -Lines $doc.Lines -From $milestone.Index -To $milestone.Last)) {

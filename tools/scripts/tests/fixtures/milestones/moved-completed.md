@@ -7,11 +7,20 @@ Newest completions first.
 ### M1b - Widget Build
 
 - **Status**: ✅ Complete
-- **Scope**:
-  - Depends on: Lay the Groundwork.
-  - Plays MP3 files and talks P2P to other widgets.
-- **Verification evidence**:
-  - Tests pass.
+- **Goal**: A widget that plays audio and connects to its neighbors.
+- **Depends on**: Lay the Groundwork.
+
+#### Scope
+
+- Plays MP3 files and talks P2P to other widgets.
+
+#### Acceptance
+
+- A sample file plays to the end, in playback tests.
+
+#### Evidence
+
+- The playback tests ran and passed.
 
 ### M1a - Lay the Groundwork
 

@@ -70,8 +70,16 @@ Last milestone completed: M1b
 ### M1c - Polish the Widget
 
 - **Status**: ⏳ Planned
-- **Scope**:
-  - Depends on: the widget build, which defines the parts this polishes, and `Plan.json` Format Cleanup.
+- **Goal**: Every part of the widget looks finished.
+- **Depends on**: the widget build, which defines the parts this polishes, and `Plan.json` Format Cleanup.
+
+#### Scope
+
+- Tidies the widget's spacing and labels.
+
+#### Acceptance
+
+- The widget's layout matches its mockup, in layout tests.
 
 ### M1e - Widget Themes
 
@@ -136,20 +144,51 @@ Last milestone completed: M1b
 ### P2a - Plan.json Format Cleanup
 
 - **Status**: ⏳ Planned
-- **Scope**:
-  - Planned for v1.1.0.
+- **Goal**: `Plan.json` uses one consistent layout.
+
+#### Scope
+
+- Rewrites `Plan.json` in the cleaned-up layout.
+
+#### Acceptance
+
+- Every sample `Plan.json` loads, in format tests.
+
+#### Not included
+
+- Changes to the groundwork, which is Lay the Groundwork, already complete.
 
 ### P2b - Widget Sharing, Export, and Import
 
 - **Status**: ⏳ Planned
-- **Scope**:
-  - Planned for v1.1.0. Depends on: Polish the Widget, and Plan.json Format Cleanup.
+- **Goal**: A widget can be shared, exported, and imported.
+- **Depends on**: Polish the Widget, and Plan.json Format Cleanup.
+
+#### Scope
+
+- Share, export, and import buttons on each widget.
+
+#### Acceptance
+
+- An exported widget imports unchanged, in sharing tests.
 
 ### P3 - Someday Feature
 
 - **Status**: ⏳ Planned
-- **Scope**:
-  - Unscheduled. Depends on: Widget Sharing, Export, and Import, so sharing exists first.
+- **Goal**: A feature built on sharing, for later.
+- **Depends on**: Widget Sharing, Export, and Import, so sharing exists first.
+
+#### Scope
+
+- A feature that works with shared widgets.
+
+#### Acceptance
+
+- The feature works with a shared widget, in feature tests.
+
+#### Not included
+
+- Sharing changes, which is Widget Sharing, Export, and Import. Sharing ships first.
 
 ### P4 - Widget Search
 

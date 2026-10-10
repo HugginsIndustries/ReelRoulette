@@ -70,15 +70,30 @@ Last milestone completed: M1a
 ### M1b - Widget Build
 
 - **Status**: 🚧 In Progress
-- **Scope**:
-  - Depends on: Lay the Groundwork.
-  - Plays MP3 files and talks P2P to other widgets.
+- **Goal**: A widget that plays audio and connects to its neighbors.
+- **Depends on**: Lay the Groundwork.
+
+#### Scope
+
+- Plays MP3 files and talks P2P to other widgets.
+
+#### Acceptance
+
+- A sample file plays to the end, in playback tests.
 
 ### M1c - Polish the Widget
 
 - **Status**: ⏳ Planned
-- **Scope**:
-  - Depends on: the widget build, which defines the parts this polishes, and `Plan.json` Format Cleanup.
+- **Goal**: Every part of the widget looks finished.
+- **Depends on**: the widget build, which defines the parts this polishes, and `Plan.json` Format Cleanup.
+
+#### Scope
+
+- Tidies the widget's spacing and labels.
+
+#### Acceptance
+
+- The widget's layout matches its mockup, in layout tests.
 
 ### M1e - Widget Themes
 
@@ -143,22 +158,51 @@ Last milestone completed: M1a
 ### P2a - Plan.json Format Cleanup
 
 - **Status**: ⏳ Planned
-- **Scope**:
-  - Planned for v1.1.0.
-  - Not included: changes to the groundwork, which is Lay the Groundwork, already complete.
+- **Goal**: `Plan.json` uses one consistent layout.
+
+#### Scope
+
+- Rewrites `Plan.json` in the cleaned-up layout.
+
+#### Acceptance
+
+- Every sample `Plan.json` loads, in format tests.
+
+#### Not included
+
+- Changes to the groundwork, which is Lay the Groundwork, already complete.
 
 ### P2b - Widget Sharing, Export, and Import
 
 - **Status**: ⏳ Planned
-- **Scope**:
-  - Planned for v1.1.0. Depends on: Polish the Widget, and Plan.json Format Cleanup.
+- **Goal**: A widget can be shared, exported, and imported.
+- **Depends on**: Polish the Widget, and Plan.json Format Cleanup.
+
+#### Scope
+
+- Share, export, and import buttons on each widget.
+
+#### Acceptance
+
+- An exported widget imports unchanged, in sharing tests.
 
 ### P3 - Someday Feature
 
 - **Status**: ⏳ Planned
-- **Scope**:
-  - Unscheduled. Depends on: Widget Sharing, Export, and Import, so sharing exists first.
-  - Not included: sharing changes, which is Widget Sharing, Export, and Import. Sharing ships first.
+- **Goal**: A feature built on sharing, for later.
+- **Depends on**: Widget Sharing, Export, and Import, so sharing exists first.
+
+#### Scope
+
+- A feature that works with shared widgets.
+
+#### Acceptance
+
+- The feature works with a shared widget, in feature tests.
+
+#### Not included
+
+- Sharing changes, which is Widget Sharing, Export, and Import. Sharing ships first.
 
 ### P4 - Widget Search
 

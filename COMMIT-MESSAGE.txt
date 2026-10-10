@@ -19,7 +19,11 @@ Instructions:
 
 Commit Message:
 
-Chore: Refer to the human only as the user in agent instructions
+Chore: Convert every active and planned milestone to the Entry Format
 
-- CLAUDE.md and the implement skill call the human "the user" instead of using a name or "I" and "me". AGENTS.md's commit rule addresses the agent directly instead of describing agents in the third person, and its verification rules say "the user's" settings and `run-server.ps1` instance instead of "the developer's".
-- AGENTS.md gains a rule that agent-facing instructions refer to the human only as "the user", never by name or in the first person, and address the agent directly, in the imperative or as "you".
+- Every active and planned entry in MILESTONES.md now follows the Entry Format, with the same IDs, titles, statuses, and order. Release placement and where facts came from are dropped, facts carry the measured and inferred marks, choices are stated as settled, and each acceptance criterion names the tests or checks that show it.
+- Entries whose old text named slices keep them, with the scope it left unassigned in the slice that builds it. A report or design note that had to come first is now the entry's first slice. Other entries, the backlog included, use the form without slices, converted as written without new scope or tighter criteria. Ordinal Path Identity on Linux has its Windows casing measured on the VM in the v0.15.0 release pass, a new Manual check in the testing checklist, so no VM pass falls mid-milestone.
+- A criterion that needs real devices, a person, a dev release, or the Windows VM moves to the entry's Release checks, and Acceptance keeps an automated stand-in so the outcome stays tested. Where only a device shows the outcome (loudness normalization across browsers, ambient mode's rounded corners on iOS, and the library grid's flicker), the spot check also runs the device check on the user's own browsers and phone.
+- Slices that each repeat the mockup criterion check it against what that slice shipped. Admin Log Viewer gains the mockup criterion and a Design bullet saying what the mockup shows of it today and what it doesn't yet.
+- `check-milestones.ps1` checks every active and planned entry, so an entry in the old format now fails, and drops the inline Depends on and Not included checks only the old format used. Its fixtures use the new format, with cases for an old-format entry and an entry with only its header.
+- The Entry Format no longer describes entries waiting to be converted, and the promote-milestones and plan-from-report skills and `docs/dev-setup.md` follow.
