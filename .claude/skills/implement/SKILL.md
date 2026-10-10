@@ -45,11 +45,11 @@ For milestone work, when a slice lands, set its row in the Slices table to its n
 
 ## Delegating
 
-Delegation never replaces the plan stop: nothing goes to a subagent that writes until I've confirmed the plan.
+Delegation never replaces the plan stop: nothing goes to a subagent that writes until the user has confirmed the plan.
 
 - Before planning, measurements that don't depend on each other's results go to `investigator` subagents in parallel rather than running one after another in this session. Keep a measurement here only when the next step depends on its result or it's a single quick command.
 - After confirmation, parts of the plan that are independent and touch disjoint files may go to `implementer` subagents, each given its slice verbatim, with the milestone entry's Decisions when the work is a milestone, the exact files it owns, and how to verify it. Parallel implementers never share a file. Keep sequential or tightly coupled work, and anything small, in this session.
-- An implementer that stops on a problem is a blocker under "During implementation": stop and bring it to me.
+- An implementer that stops on a problem is a blocker under "During implementation": stop and bring it to the user.
 - This session alone edits the tracker, changelog, commit message, and docs, and writes the final summary. Read each implementer's report, review its changes in the diff, and carry its deviations into the summary.
 - Use `verifier` for verification runs, and check what it reports before fixing anything.
 

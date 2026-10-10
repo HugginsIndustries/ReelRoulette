@@ -23,7 +23,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 
 ## Commit + Docs Discipline
 
-- Agents do not commit or push; the user does. A best-effort hook asks for approval before any `git commit` or `git push`.
+- Do not commit or push; the user does. A best-effort hook asks for approval before any `git commit` or `git push`.
 - Determine commit state from git rather than assuming. Before editing `COMMIT-MESSAGE.txt` or the `[Unreleased]` changelog, run `git status` and `git log -1`: if `COMMIT-MESSAGE.txt` has no uncommitted changes and its current entry matches the HEAD commit message, that entry is committed, so start a new entry. Otherwise, update the uncommitted entry in place (final state only). If the result is ambiguous, ask.
 - Keep the existing entry style in `COMMIT-MESSAGE.txt` unless the user asks to replace it.
 - Changelog: follow the style note at the top of `CHANGELOG.md`. Fixes to work that hasn't been released yet get no entry. After any follow-up change, re-check `[Unreleased]` against the style note.
@@ -37,6 +37,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
   - Keep `docs/checklists/testing-checklist.md` current: update its Smoke and Release Flow items when the workflows they check change, and put checks for one release's changes in Release Specific, under Agent checks or Manual checks. Feature behavior is covered by automated tests, not standing checklist items.
 - When documenting current behavior, do not rewrite historical `CHANGELOG.md` sections or `MILESTONES-COMPLETED.md` entries. Change only active surfaces (`[Unreleased]`, Active Milestones, the tracker line, and evidence you are landing) unless the user asks to correct historical text.
 - Milestone IDs (for example `M8f`) may appear only in `MILESTONES.md` section headers, its tracker line, and its Planned Releases outline, `MILESTONES-COMPLETED.md`, `CHANGELOG.md`, and `COMMIT-MESSAGE.txt`. Never put them in current-state docs, code, comments, log messages, or user-facing text.
+- In agent-facing instructions (this file, `CLAUDE.md`, skills, and agent definitions), refer to the human only as "the user", never by name or in the first person (I, me, my), and address the agent directly, in the imperative or as "you".
 
 ## Commands + Communication
 
@@ -65,8 +66,8 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 
 - Scripts under `tools/scripts/` that start a server for automated verification or smoke testing must isolate application data in a fresh temporary directory per run and remove it afterward, including on failure paths. Set `REELROULETTE_DATA_DIR` to the temporary directory on every OS, and on Linux also set both `XDG_CONFIG_HOME` and `XDG_DATA_HOME`, since desktop integration such as autostart and menu entries uses those locations rather than the data folder.
 - Those scripts must stop the server process they started (by started handle/PID, not broad name matching) before removing the isolated directory, using graceful shutdown with a short timeout then force kill if needed, including on failure and interrupt paths.
-- Do not point verification or smoke servers at the developer's real `%ApplicationData%/ReelRoulette` / `~/.config/ReelRoulette` tree.
+- Do not point verification or smoke servers at the user's real `%ApplicationData%/ReelRoulette` / `~/.config/ReelRoulette` tree.
 - Dev-run helpers such as `run-server.ps1` intentionally use real settings and must not be isolated.
-- Tests must not read or write the developer's real settings or send logs to a running server. Desktop tests get this from the shared test-isolation initializer; new test projects need the same.
+- Tests must not read or write the user's real settings or send logs to a running server. Desktop tests get this from the shared test-isolation initializer; new test projects need the same.
 - Tests that resolve a path with `Path.GetFullPath` or remap it must root it under the test's temp directory with `Path.Combine`, never hard-code Unix-style roots like `/media`. CI runs on Windows, where such paths become drive paths. Literals that are only stored and compared as text are fine.
-- When validating process-lifecycle or smoke-script changes, never send stop signals to processes the task did not start (for example a developer's `run-server.ps1` instance). Confirm liveness and cleanup with non-destructive checks only, such as `kill -0`, `Get-Process` without stopping, or a port/listener query scoped to the verification port.
+- When validating process-lifecycle or smoke-script changes, never send stop signals to processes the task did not start (for example the user's `run-server.ps1` instance). Confirm liveness and cleanup with non-destructive checks only, such as `kill -0`, `Get-Process` without stopping, or a port/listener query scoped to the verification port.
