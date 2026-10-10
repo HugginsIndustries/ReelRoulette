@@ -29,6 +29,8 @@ If the work is split, plan only the first part and record the rest in `MILESTONE
 
 If the user provided a plan file, execute that plan as written. Do not edit the plan file.
 
+The plan has a **Delegation** section: which subagents ran during planning and what each settled, or that none ran and why; and for implementation, which parts go to which subagents (each implementer slice with the files it owns, verifier runs, investigators), or that everything stays in this session and why.
+
 ## During implementation
 
 Follow the plan. If you hit something that makes it wrong — an assumption that does not hold, a conflict with existing behaviour, a fork nobody anticipated — **stop**. Describe the problem, give the options with their costs, recommend one, and wait.
@@ -45,7 +47,7 @@ A check for the pre-release pass goes in the Release Specific section of the tes
 
 Delegation never replaces the plan stop: nothing goes to a subagent that writes until I've confirmed the plan.
 
-- Before planning, measuring that spans many files can go to `investigator` subagents.
+- Before planning, measurements that don't depend on each other's results go to `investigator` subagents in parallel rather than running one after another in this session. Keep a measurement here only when the next step depends on its result or it's a single quick command.
 - After confirmation, parts of the plan that are independent and touch disjoint files may go to `implementer` subagents, each given its slice verbatim, the exact files it owns, and how to verify it. Parallel implementers never share a file. Keep sequential or tightly coupled work, and anything small, in this session.
 - An implementer that stops on a problem is a blocker under "During implementation": stop and bring it to me.
 - This session alone edits the tracker, changelog, commit message, and docs, and writes the final summary. Read each implementer's report, review its changes in the diff, and carry its deviations into the summary.
@@ -68,3 +70,5 @@ What changed, and what now behaves differently.
 Anything learned along the way that was not part of the task — a bug found in passing, an assumption that turned out wrong, something adjacent that looks fragile.
 
 The outcome of verification — what was run, what passed, and the measured result where a claim was proven rather than merely tested.
+
+Which subagents ran and for what, and anything they reported that changed the work.

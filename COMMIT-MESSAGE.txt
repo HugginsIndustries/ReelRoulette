@@ -19,8 +19,8 @@ Instructions:
 
 Commit Message:
 
-Chore: Delegate large skill work to subagents
+Chore: Have implement and report say which subagents ran
 
-- CLAUDE.md now says when to use the investigator, verifier, reviewer, and implementer subagents, keeps every edit to shared planning and docs files in the main session, and has sessions in the same repo tell each other when they change one.
-- report fans broad investigations out to parallel investigators, implement may hand approved, independent slices to implementers on separate files, review-staged reviews larger diffs through parallel lenses, and pre-release runs its automated checks through the verifier.
-- Every skill keeps its own approval stops, docs, and summary; subagents only do the legwork.
+- implement sends independent pre-planning measurements to parallel investigators instead of running them one after another.
+- implement's plan gains a Delegation section covering subagents used during planning and how implementation will be split, and its final summary says which subagents ran and what changed because of them.
+- report ends by saying which subagents ran and what each covered, or why none did.

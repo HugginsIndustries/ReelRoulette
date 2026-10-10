@@ -21,6 +21,8 @@ For a question that means searching or tracing across many files, or that has mo
 
 Their reports are inputs, not the answer. Check anything surprising yourself, keep their measured and inferred marks, resolve disagreements between them, and write the report. A small question is answered directly, without subagents.
 
+Say at the end of the report which subagents ran and what each covered, or that none ran and why.
+
 ## Shape the answer to the question
 
 Any question about the project is in scope — how something should be done, why it is the way it is, whether an approach would work, what a change would cost, what the tradeoffs are, what a piece of code actually does. The two shapes below cover most of them; use whichever parts fit and ignore the rest.
