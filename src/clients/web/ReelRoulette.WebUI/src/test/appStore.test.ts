@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createDefaultFilterState, HEADER_PRESET_STARRED_VALUE } from "../filter/filterStateModel";
+import { createDefaultFilterState, HEADER_PRESET_STARRED_VALUE, serializeFilterStateForApi } from "../filter/filterStateModel";
 import { createAppStore, type AppStoreOptions, type PlayingItem } from "../state/appStore";
 
 const FAVORITES = {
@@ -7,7 +7,11 @@ const FAVORITES = {
   name: "Favorites",
   filterState: { ...createDefaultFilterState(), favoritesOnly: true }
 };
-const EVERYTHING = { id: "preset-everything", name: "Everything", filterState: createDefaultFilterState() };
+const EVERYTHING = {
+  id: "preset-everything",
+  name: "Everything",
+  filterState: serializeFilterStateForApi(createDefaultFilterState())
+};
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial));

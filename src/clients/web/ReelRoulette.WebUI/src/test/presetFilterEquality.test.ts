@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { filterStateFromApiObject, filterStatesEqualForPresetMatch } from "../filter/filterStateModel";
+import { filterStateFromApiObject, filterStatesEqualForPresetMatch, type ApiFilterState } from "../filter/filterStateModel";
 
 interface PresetEqualityCase {
   name: string;
-  left: unknown;
-  right: unknown;
+  left: ApiFilterState;
+  right: ApiFilterState;
   same: boolean;
 }
 

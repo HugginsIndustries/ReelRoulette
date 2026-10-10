@@ -193,7 +193,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
 - `src/clients/web/ReelRoulette.WebUI/src/library/library.ts`
   - the library overlay's state and actions: the first page once the server is ready, open and close (shows the overlay, then flushes the grid's deferred layout), the toolbar, totals, direction label, and body as signals, search with its wait, sort, fill from the grid's coverage while open, favorite, playback, refresh, resync, and header filter events, and tile play through `POST /api/play/{itemId}`, which joins history, closes the overlay, and hands the item to the player.
 - `src/clients/web/ReelRoulette.WebUI/src/filter/filterStateModel.ts`
-  - filter JSON serialize/parse aligned with desktop/server `FilterState`.
+  - filter JSON serialize/parse aligned with desktop/server `FilterState`, with the wire shape typed by OpenAPI's generated `FilterState` schema.
 - `src/clients/web/ReelRoulette.WebUI/src/filter/filterDialog.ts`
   - the filter dialog's state and actions: open (loads sources, the tag model, and presets, then starts from the applied filter, the header's preset, and its None hold), the working copy with the heading and Apply's pending star worked out after each change, General, Tags, and preset edits, collapsed categories kept in `sessionStorage`, Refresh, Clear all, a header preset change while open, and Apply, which saves a changed preset list, applies the filter, updates the header, and starts the library over.
 - `src/clients/web/ReelRoulette.WebUI/src/filter/filterDialogModel.ts`

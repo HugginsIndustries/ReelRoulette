@@ -572,12 +572,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: No playable media available for current request or testing scenario
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "503":
           $ref: "#/components/responses/LibraryUnavailable"
     post:
@@ -818,6 +812,13 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: |
+            `filterState` is omitted or null and no preset has the `presetId` name. `all-media` never returns 404.
           content:
             application/json:
               schema:
@@ -2085,6 +2086,95 @@ components:
         state:
           $ref: "#/components/schemas/OperatorTestingStateSnapshot"
 
+    FilterState:
+      type: object
+      additionalProperties: true
+      description: |
+        A library filter, as clients send it and presets store it. Browse, its counts, and random picks apply
+        it the same way. Every field is optional, so `{}` is a valid filter, and each field's default applies
+        when it is missing, or null where the field allows it. Fields not listed here are allowed and ignored.
+      properties:
+        favoritesOnly:
+          type: boolean
+          description: Only favorites. Defaults to false.
+        excludeBlacklisted:
+          type: boolean
+          description: Leaves out blacklisted items. Defaults to true.
+        onlyNeverPlayed:
+          type: boolean
+          description: Only items never played. Defaults to false.
+        onlyKnownDuration:
+          type: boolean
+          description: Only videos with a known duration. Photos always pass. Defaults to false.
+        onlyKnownLoudness:
+          type: boolean
+          description: Only videos with a known loudness. Photos always pass. Defaults to false.
+        audioFilter:
+          oneOf:
+            - type: integer
+            - type: string
+          description: |
+            `PlayAll` (0), `WithAudioOnly` (1), or `WithoutAudioOnly` (2), as a number or a name in any case.
+            Photos always pass. Defaults to `PlayAll`.
+        mediaTypeFilter:
+          oneOf:
+            - type: integer
+            - type: string
+          description: |
+            `All` (0), `VideosOnly` (1), or `PhotosOnly` (2), as a number or a name in any case. Defaults to
+            `All`.
+        globalMatchMode:
+          type: boolean
+          nullable: true
+          description: How selected tags from different categories combine. True is AND, false is OR, and null is AND.
+        categoryLocalMatchModes:
+          type: object
+          nullable: true
+          additionalProperties:
+            oneOf:
+              - type: integer
+              - type: string
+          description: |
+            How selected tags in one category combine, keyed by category id: `And` (0) or `Or` (1), as a number
+            or a name in any case. A category not listed is `And`.
+        selectedTags:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: |
+            Tag names an item must match, ignoring case, combined by `globalMatchMode` and
+            `categoryLocalMatchModes`. Defaults to none.
+        excludedTags:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: Tag names, ignoring case, that leave out any item holding one. Defaults to none.
+        includedSourceIds:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: Source ids to limit the filter to. Empty or missing means every enabled source.
+        minDuration:
+          anyOf:
+            - type: string
+            - type: number
+            - type: "null"
+          description: |
+            Shortest video duration. A number is seconds, and a string is .NET TimeSpan text, such as
+            `HH:MM:SS` or the desktop's `d.HH:MM:SS.fffffff`, so `"90"` is 90 days and `"1:30"` is 1 hour 30
+            minutes. Videos without a known duration are left out, and photos always pass. Defaults to no limit.
+        maxDuration:
+          anyOf:
+            - type: string
+            - type: number
+            - type: "null"
+          description: |
+            Longest video duration, written as `minDuration` is. Videos without a known duration are left out,
+            and photos always pass. Defaults to no limit.
+
     PresetResponse:
       type: object
       required:
@@ -2098,10 +2188,12 @@ components:
         summary:
           type: string
           nullable: true
+          description: Always null. The server never fills it.
         filterState:
-          type: object
-          nullable: true
-          additionalProperties: true
+          anyOf:
+            - $ref: "#/components/schemas/FilterState"
+            - type: "null"
+          description: The filter the preset was saved with, as it was posted, with later tag renames and deletions applied.
 
     SourceResponse:
       type: object
@@ -2160,12 +2252,13 @@ components:
       type: object
       properties:
         filterState:
-          type: object
-          nullable: true
-          additionalProperties: true
+          anyOf:
+            - $ref: "#/components/schemas/FilterState"
+            - type: "null"
           description: |
-            Omitted or null applies no filter predicates. A present object uses the same field defaults as
-            playback filters, including `excludeBlacklisted` true when that field is omitted.
+            Omitted or null applies no filter predicates, so blacklisted items are listed. A present object uses
+            the same field defaults as playback filters, including `excludeBlacklisted` true when that field is
+            omitted.
         search:
           type: string
           nullable: true
@@ -2272,10 +2365,16 @@ components:
       properties:
         presetId:
           type: string
+          description: |
+            A saved preset's name, ignoring case, used only when `filterState` is omitted or null. `all-media`
+            picks with the default filter when no preset has that name.
         filterState:
-          type: object
-          nullable: true
-          additionalProperties: true
+          anyOf:
+            - $ref: "#/components/schemas/FilterState"
+            - type: "null"
+          description: |
+            The filter to pick with. Omitted or null falls back to `presetId`, whose filter uses the same field
+            defaults, so blacklisted items are left out unless it says otherwise.
         clientId:
           type: string
           nullable: true
@@ -2576,8 +2675,7 @@ components:
         name:
           type: string
         filterState:
-          type: object
-          additionalProperties: true
+          $ref: "#/components/schemas/FilterState"
 
     TagCategorySnapshot:
       type: object

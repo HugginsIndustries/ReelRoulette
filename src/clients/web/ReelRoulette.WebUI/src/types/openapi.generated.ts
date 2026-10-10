@@ -1150,13 +1150,71 @@ export interface components {
             message: string;
             state: components["schemas"]["OperatorTestingStateSnapshot"];
         };
+        /**
+         * @description A library filter, as clients send it and presets store it. Browse, its counts, and random picks apply
+         *     it the same way. Every field is optional, so `{}` is a valid filter, and each field's default applies
+         *     when it is missing, or null where the field allows it. Fields not listed here are allowed and ignored.
+         */
+        FilterState: {
+            /** @description Only favorites. Defaults to false. */
+            favoritesOnly?: boolean;
+            /** @description Leaves out blacklisted items. Defaults to true. */
+            excludeBlacklisted?: boolean;
+            /** @description Only items never played. Defaults to false. */
+            onlyNeverPlayed?: boolean;
+            /** @description Only videos with a known duration. Photos always pass. Defaults to false. */
+            onlyKnownDuration?: boolean;
+            /** @description Only videos with a known loudness. Photos always pass. Defaults to false. */
+            onlyKnownLoudness?: boolean;
+            /**
+             * @description `PlayAll` (0), `WithAudioOnly` (1), or `WithoutAudioOnly` (2), as a number or a name in any case.
+             *     Photos always pass. Defaults to `PlayAll`.
+             */
+            audioFilter?: number | string;
+            /**
+             * @description `All` (0), `VideosOnly` (1), or `PhotosOnly` (2), as a number or a name in any case. Defaults to
+             *     `All`.
+             */
+            mediaTypeFilter?: number | string;
+            /** @description How selected tags from different categories combine. True is AND, false is OR, and null is AND. */
+            globalMatchMode?: boolean | null;
+            /**
+             * @description How selected tags in one category combine, keyed by category id: `And` (0) or `Or` (1), as a number
+             *     or a name in any case. A category not listed is `And`.
+             */
+            categoryLocalMatchModes?: {
+                [key: string]: number | string;
+            } | null;
+            /**
+             * @description Tag names an item must match, ignoring case, combined by `globalMatchMode` and
+             *     `categoryLocalMatchModes`. Defaults to none.
+             */
+            selectedTags?: string[] | null;
+            /** @description Tag names, ignoring case, that leave out any item holding one. Defaults to none. */
+            excludedTags?: string[] | null;
+            /** @description Source ids to limit the filter to. Empty or missing means every enabled source. */
+            includedSourceIds?: string[] | null;
+            /**
+             * @description Shortest video duration. A number is seconds, and a string is .NET TimeSpan text, such as
+             *     `HH:MM:SS` or the desktop's `d.HH:MM:SS.fffffff`, so `"90"` is 90 days and `"1:30"` is 1 hour 30
+             *     minutes. Videos without a known duration are left out, and photos always pass. Defaults to no limit.
+             */
+            minDuration?: string | number | null;
+            /**
+             * @description Longest video duration, written as `minDuration` is. Videos without a known duration are left out,
+             *     and photos always pass. Defaults to no limit.
+             */
+            maxDuration?: string | number | null;
+        } & {
+            [key: string]: unknown;
+        };
         PresetResponse: {
             id: string;
             name: string;
+            /** @description Always null. The server never fills it. */
             summary?: string | null;
-            filterState?: {
-                [key: string]: unknown;
-            } | null;
+            /** @description The filter the preset was saved with, as it was posted, with later tag renames and deletions applied. */
+            filterState?: components["schemas"]["FilterState"] | null;
         };
         SourceResponse: {
             id: string;
@@ -1182,12 +1240,11 @@ export interface components {
         };
         LibraryQueryRequest: {
             /**
-             * @description Omitted or null applies no filter predicates. A present object uses the same field defaults as
-             *     playback filters, including `excludeBlacklisted` true when that field is omitted.
+             * @description Omitted or null applies no filter predicates, so blacklisted items are listed. A present object uses
+             *     the same field defaults as playback filters, including `excludeBlacklisted` true when that field is
+             *     omitted.
              */
-            filterState?: {
-                [key: string]: unknown;
-            } | null;
+            filterState?: components["schemas"]["FilterState"] | null;
             /** @description Filename or relative-path substring. Blank or whitespace matches every enabled-source item. */
             search?: string | null;
             /**
@@ -1261,10 +1318,16 @@ export interface components {
             [key: string]: unknown;
         };
         RandomRequest: {
+            /**
+             * @description A saved preset's name, ignoring case, used only when `filterState` is omitted or null. `all-media`
+             *     picks with the default filter when no preset has that name.
+             */
             presetId?: string;
-            filterState?: {
-                [key: string]: unknown;
-            } | null;
+            /**
+             * @description The filter to pick with. Omitted or null falls back to `presetId`, whose filter uses the same field
+             *     defaults, so blacklisted items are left out unless it says otherwise.
+             */
+            filterState?: components["schemas"]["FilterState"] | null;
             clientId?: string | null;
             sessionId?: string | null;
             /** @default true */
@@ -1400,9 +1463,7 @@ export interface components {
         };
         FilterPresetSnapshot: {
             name: string;
-            filterState: {
-                [key: string]: unknown;
-            };
+            filterState: components["schemas"]["FilterState"];
         };
         TagCategorySnapshot: {
             id: string;
@@ -2554,15 +2615,6 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description No playable media available for current request or testing scenario */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
             503: components["responses"]["LibraryUnavailable"];
         };
     };
@@ -2866,6 +2918,15 @@ export interface operations {
             };
             /** @description Unauthorized when auth is required and request is not paired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `filterState` is omitted or null and no preset has the `presetId` name. `all-media` never returns 404. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

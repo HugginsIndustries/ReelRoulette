@@ -19,10 +19,10 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan the favorite and blacklist filter modes from the report
+M12e: Describe today's filter fields in an OpenAPI FilterState schema
 
-- The filter modes milestone names its new fields, `favoritesMode` and `blacklistedMode`, and records the rule for reading old and new fields together, locked to a new shared fixture, and the old fields each client writes beside the new ones.
-- Its contract slice describes today's filter fields in an OpenAPI FilterState schema, with the constraints that keep the wire unchanged, a test that the schema matches the server's parser, and small OpenAPI and API doc fixes. The new fields enter the schema with the parser in the server slice.
-- Both clients compare resolved modes for preset matching and the patch-or-reload rule; the desktop stops posting presets on header picks and on an Apply without preset changes, and its filter summary names the new modes.
-- Desktop and server are updated together for v0.15.0, and a release-notes agent check is added to the plan.
-- The preset write, browser-playable filter, desktop removal, and retirement notice milestones are updated to match what the report found.
+- OpenAPI gains a FilterState schema naming the 14 filter fields the server reads, with their defaults and accepted forms, used by presets, library queries, random requests, and preset posts. Nothing sent over the wire changes.
+- A Core test checks that the schema names exactly the fields the server's filter parser reads.
+- The WebUI's generated types carry the schema, and its filter serializer, reader, presets, and library query are typed with it.
+- OpenAPI no longer declares a 404 for listing presets, declares the 404 a random pick returns for an unknown preset name, says a preset's summary is always null, and documents the `all-media` preset id; OpenAPI and the API doc say a duration number is seconds and a duration string is TimeSpan text, and the API doc says fields the schema doesn't name, such as `tagMatchMode` in old presets, are accepted and ignored.
+- The milestone's shared client rules slice records that the WebUI's filter reader must accept enum values as names as well as integers, locked with the server's parser to a planned shared fixture, `filter-enum-values.json`, with an acceptance criterion for it.

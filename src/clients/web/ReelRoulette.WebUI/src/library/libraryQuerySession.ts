@@ -1,4 +1,4 @@
-import type { FilterState } from "../filter/filterStateModel";
+import type { ApiFilterState, FilterState } from "../filter/filterStateModel";
 import { cloneFilterState, createDefaultFilterState, serializeFilterStateForApi } from "../filter/filterStateModel";
 import {
   createDefaultBrowseControls,
@@ -22,7 +22,7 @@ export type LibraryQueryTileEffect = "patch" | "reload";
 export type LibraryWindowPhase = "idle" | "loading" | "ready" | "empty" | "error";
 
 export interface LibraryQueryRequest {
-  filterState: Record<string, unknown>;
+  filterState: ApiFilterState;
   search: string;
   sortMode: LibrarySortMode;
   sortDescending: boolean;

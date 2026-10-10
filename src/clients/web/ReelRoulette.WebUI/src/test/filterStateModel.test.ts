@@ -231,7 +231,7 @@ describe("filterStateModel", () => {
     const everything = {
       id: "all",
       name: "Everything",
-      filterState: createDefaultFilterState()
+      filterState: serializeFilterStateForApi(createDefaultFilterState())
     };
     const heldNone = headerPresetListAfterPick(dirty, [everything], null, "");
     expect(heldNone.baseName).toBeNull();

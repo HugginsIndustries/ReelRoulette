@@ -5,6 +5,7 @@ import {
   filterStateFromApiObject,
   formatDurationForDisplay,
   parseDurationInputToSeconds,
+  type ApiFilterState,
   type AudioFilterMode,
   type FilterState,
   type MediaTypeFilter,
@@ -222,7 +223,9 @@ export function filterTagCategories(
 }
 
 /** The dialog's preset rows from the presets `GET /api/presets` returned. */
-export function presetRowsFromApi(presets: readonly { id?: string; name?: string; filterState?: unknown }[]): PresetRow[] {
+export function presetRowsFromApi(
+  presets: readonly { id?: string; name?: string; filterState?: ApiFilterState | null }[]
+): PresetRow[] {
   return (Array.isArray(presets) ? presets : [])
     .map((preset) => ({
       name: String(preset.name || preset.id || "").trim() || String(preset.id || ""),

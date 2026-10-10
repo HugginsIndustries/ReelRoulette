@@ -38,11 +38,7 @@ export const PRESET_MENU_BLOCKED = "Server compatibility check failed";
 export type PlayingItem = components["schemas"]["RandomResponse"];
 
 /** A saved preset as `GET /api/presets` returns it. */
-export interface ApiPreset {
-  id: string;
-  name: string;
-  filterState?: unknown;
-}
+export type ApiPreset = components["schemas"]["PresetResponse"];
 
 /** What the header preset dropdown lists and which entry it shows. */
 export interface PresetMenu {

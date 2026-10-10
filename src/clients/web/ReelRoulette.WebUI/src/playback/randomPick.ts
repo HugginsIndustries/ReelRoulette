@@ -3,6 +3,7 @@ import {
   filterStatesEqualForPresetMatch,
   headerPresetPick,
   serializeFilterStateForApi,
+  type ApiFilterState,
   type FilterState
 } from "../filter/filterStateModel";
 import type { components } from "../types/openapi.generated";
@@ -15,7 +16,7 @@ export interface RandomPickInputs {
   sessionId: string;
   randomizationMode: string;
   appliedFilter: FilterState;
-  presets: readonly { id: string; filterState?: unknown }[];
+  presets: readonly { id: string; filterState?: ApiFilterState | null }[];
   /** The header preset dropdown's value: a preset id, empty for None, or the starred row. */
   selectedPresetValue: string;
 }

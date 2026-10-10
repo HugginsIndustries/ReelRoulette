@@ -20,6 +20,10 @@ public sealed class OpenApiRouteContractTests : IDisposable
         @"\.Map(Get|Post|Put|Patch|Delete)\(\s*""([^""]+)""",
         RegexOptions.Compiled);
 
+    private static readonly Regex FilterFieldRead = new(
+        @"\(element, ""([^""]+)""",
+        RegexOptions.Compiled);
+
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), "reelroulette-openapi-contract-tests", Guid.NewGuid().ToString("N"));
 
     [Fact]
@@ -37,6 +41,22 @@ public sealed class OpenApiRouteContractTests : IDisposable
         Assert.True(
             missingFromSpec.Count == 0 && notServed.Count == 0,
             $"Missing from openapi.yaml: [{string.Join(", ", missingFromSpec)}]. In openapi.yaml but not served: [{string.Join(", ", notServed)}].");
+    }
+
+    [Fact]
+    public void FilterStateSchema_NamesEveryFieldTheParserReads()
+    {
+        var read = ReadFilterParserFields();
+        Assert.Contains("favoritesOnly", read);
+        Assert.Contains("categoryLocalMatchModes", read);
+
+        var specified = OpenApiSpec.ReadSchemaProperties("FilterState");
+
+        var missingFromSpec = read.Except(specified).ToList();
+        var notRead = specified.Except(read).ToList();
+        Assert.True(
+            missingFromSpec.Count == 0 && notRead.Count == 0,
+            $"Read by the filter parser but missing from FilterState: [{string.Join(", ", missingFromSpec)}]. In FilterState but not read: [{string.Join(", ", notRead)}].");
     }
 
     [Fact]
@@ -119,5 +139,19 @@ public sealed class OpenApiRouteContractTests : IDisposable
         }
 
         return routes;
+    }
+
+    // Scans the field names LibraryListFilterParser reads, which it passes beside the JSON element, as in
+    // Bool(element, "favoritesOnly", false). A read written any other way is not seen.
+    private static SortedSet<string> ReadFilterParserFields()
+    {
+        var source = OpenApiSpec.RepoPath("src", "core", "ReelRoulette.Server", "Services", "LibraryListFilterParser.cs");
+        var fields = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (Match match in FilterFieldRead.Matches(File.ReadAllText(source)))
+        {
+            fields.Add(match.Groups[1].Value);
+        }
+
+        return fields;
     }
 }

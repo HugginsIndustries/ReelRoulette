@@ -3,6 +3,11 @@
  * Enums use numeric values (System.Text.Json default for C# enums).
  */
 
+import type { components } from "../types/openapi.generated";
+
+/** A filter state as it goes over the wire, holding durations as text. */
+export type ApiFilterState = components["schemas"]["FilterState"];
+
 export const AUDIO_FILTER = { PlayAll: 0, WithAudioOnly: 1, WithoutAudioOnly: 2 } as const;
 export const MEDIA_TYPE_FILTER = { All: 0, VideosOnly: 1, PhotosOnly: 2 } as const;
 export const TAG_MATCH_MODE = { And: 0, Or: 1 } as const;
@@ -50,7 +55,7 @@ export function createDefaultFilterState(): FilterState {
 
 /** Header preset dropdown. None selects the default filter; a named preset selects that preset's filter. */
 export function filterStateForHeaderPresetSelection(
-  preset: { filterState?: unknown } | null | undefined
+  preset: { filterState?: ApiFilterState | null } | null | undefined
 ): FilterState {
   if (!preset) {
     return createDefaultFilterState();
@@ -180,7 +185,7 @@ export interface HeaderPresetList {
 }
 
 function presetRowsFromHeaderPresets(
-  presets: readonly { id?: string; name?: string; filterState?: unknown }[]
+  presets: readonly { id?: string; name?: string; filterState?: ApiFilterState | null }[]
 ): { name: string; filterState: FilterState }[] {
   const rows: { name: string; filterState: FilterState }[] = [];
   for (const preset of presets) {
@@ -195,7 +200,7 @@ function presetRowsFromHeaderPresets(
 
 export function headerPresetListForFilter(
   filter: FilterState,
-  presets: readonly { id: string; name: string; filterState?: unknown }[],
+  presets: readonly { id: string; name: string; filterState?: ApiFilterState | null }[],
   previousBase: string | null | undefined,
   holdNone = false
 ): HeaderPresetList {
@@ -212,7 +217,7 @@ export function headerPresetListForFilter(
 /** None and a named preset replace the filter. The starred row keeps it. The returned list matches that filter. */
 export function headerPresetListAfterPick(
   filter: FilterState,
-  presets: readonly { id: string; name: string; filterState?: unknown }[],
+  presets: readonly { id: string; name: string; filterState?: ApiFilterState | null }[],
   previousBase: string | null | undefined,
   pickedValue: string | null | undefined
 ): HeaderPresetList {
@@ -320,8 +325,8 @@ function durationToApiValue(seconds: number): string {
 }
 
 /** Serialize for POST /api/random and preset snapshots (matches desktop JsonSerializer shape). */
-export function serializeFilterStateForApi(state: FilterState): Record<string, unknown> {
-  const out: Record<string, unknown> = {
+export function serializeFilterStateForApi(state: FilterState): ApiFilterState {
+  const out: ApiFilterState = {
     favoritesOnly: state.favoritesOnly,
     excludeBlacklisted: state.excludeBlacklisted,
     onlyNeverPlayed: state.onlyNeverPlayed,
@@ -383,8 +388,8 @@ function readEnumInt(value: unknown, fallback: number): number {
   return fallback;
 }
 
-/** Hydrate from API preset filterState object (partial). */
-export function filterStateFromApiObject(raw: unknown): FilterState {
+/** Hydrate from an API filter state. Each field is still checked, since a stored preset holds whatever was posted. */
+export function filterStateFromApiObject(raw: ApiFilterState | null | undefined): FilterState {
   const base = createDefaultFilterState();
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return base;
@@ -485,7 +490,7 @@ export interface PresetRow {
   filterState: FilterState;
 }
 
-export function presetsToPostBody(rows: PresetRow[]): { name: string; filterState: Record<string, unknown> }[] {
+export function presetsToPostBody(rows: PresetRow[]): components["schemas"]["FilterPresetSnapshot"][] {
   return rows.map((r) => ({
     name: r.name,
     filterState: serializeFilterStateForApi(r.filterState)
