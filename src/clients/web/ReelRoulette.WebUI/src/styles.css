@@ -185,10 +185,17 @@ body {
   gap: 16px;
   margin-bottom: 16px;
 }
-.top-bar-title {
-  flex: 0 0 auto;
+/* The logo in the header: the lockup with light text in the dark theme and dark text in the light theme, and the icon
+   alone on a phone. Its images carry the name "ReelRoulette", so the heading keeps it. */
+.brand { display: flex; align-items: center; margin: 0; line-height: 0; }
+.brand img { display: block; height: 30px; width: auto; }
+.brand .brand-on-dark, .brand .brand-on-light { display: none; }
+@media (min-width: 601px) {
+  .brand img.brand-icon { display: none; }
+  .brand img.brand-on-dark { display: block; }
+  html.theme-light .brand img.brand-on-dark { display: none; }
+  html.theme-light .brand img.brand-on-light { display: block; }
 }
-.top-bar-title h1 { margin: 0; font-size: 1.5rem; }
 .status { font-size: 0.9rem; color: var(--muted-fg); }
 .pair-section {
   display: flex;
@@ -1301,11 +1308,6 @@ main {
   .top-bar {
     flex-direction: column;
     align-items: stretch;
-  }
-  .top-bar-title {
-    flex: 0 0 auto;
-    width: 100%;
-    max-width: 100%;
   }
   .pair-section {
     flex: 0 0 auto;

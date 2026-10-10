@@ -14,6 +14,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 ### Changed
 
 - **Allow remote connections:** The Operator's **Bind on LAN** setting and the desktop's **Allow LAN access** setting are now **Allow remote connections**. Turned off, the server answers only the server machine and refuses other devices, including requests through a proxy. Turned on, other devices connect directly over the LAN or through a proxy.
+- **New logo and icons:** The WebUI's header shows the new ReelRoulette logo in place of the app name, or the icon alone on a phone, and its browser tab, installed app, and home screen icons are the new icon. Its page title and installed app name are now just ReelRoulette. The server's executable, tray, installer, and Linux menu icons are the new icon too. The desktop app keeps its old icon until it is removed.
 
 ### Deprecated
 

@@ -3,13 +3,18 @@ import { nowPlayingView } from "../playback/nowPlaying";
 import { RANDOMIZATION_MODES } from "../state/appStore";
 import { useApp } from "./appContext";
 
-/** The top bar: pairing prompt, preset, randomization mode, photo duration, and the playing file. */
+/**
+ * The top bar: logo, pairing prompt, preset, randomization mode, photo duration, and the playing file. The stylesheet
+ * shows one of the logo's images, by theme and width, and each carries the name "ReelRoulette" for the heading.
+ */
 export function Header() {
   return (
     <header class="top-bar">
-      <div class="top-bar-title">
-        <h1>ReelRoulette</h1>
-      </div>
+      <h1 class="brand">
+        <img class="brand-on-dark" src="/icons/logo-lockup.svg" alt="ReelRoulette" />
+        <img class="brand-on-light" src="/icons/logo-lockup-dark.svg" alt="ReelRoulette" />
+        <img class="brand-icon" src="/icons/logo-icon.svg" alt="ReelRoulette" />
+      </h1>
       <PairingPrompt />
       <PresetSelect />
       <RandomizationModeSelect />

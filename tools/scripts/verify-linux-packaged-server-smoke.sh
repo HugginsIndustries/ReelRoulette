@@ -74,7 +74,7 @@ build_velopack_server_appimage() {
     --runtime linux-x64 \
     --mainExe ReelRoulette.ServerApp \
     --packTitle "ReelRoulette Server" \
-    --icon "$REPO_ROOT/assets/HI-256.png"
+    --icon "$REPO_ROOT/assets/logo/png/icon-256.png"
 
   shopt -s nullglob
   local built=("$out_dir"/ReelRoulette.Server*.AppImage)
@@ -136,7 +136,7 @@ real_applications_dir="${HOME}/.local/share/applications"
 real_icons_root="${HOME}/.local/share/icons"
 {
   find "$real_applications_dir" -maxdepth 1 -name 'reelroulette-*.desktop' 2>/dev/null | sort || true
-  find "$real_icons_root" -path '*/reelroulette-*.png' 2>/dev/null | sort || true
+  find "$real_icons_root" -path '*/reelroulette-*' 2>/dev/null | sort || true
 } >"$real_user_data_snapshot"
 
 server_pid=""
@@ -254,7 +254,7 @@ done
 
 {
   find "$real_applications_dir" -maxdepth 1 -name 'reelroulette-*.desktop' 2>/dev/null | sort || true
-  find "$real_icons_root" -path '*/reelroulette-*.png' 2>/dev/null | sort || true
+  find "$real_icons_root" -path '*/reelroulette-*' 2>/dev/null | sort || true
 } >"$work/real-user-data-after.txt"
 
 if ! diff -q "$real_user_data_snapshot" "$work/real-user-data-after.txt" >/dev/null 2>&1; then
@@ -265,6 +265,20 @@ fi
 
 if [[ ! -f "$isolated_data_home/applications/reelroulette-server.desktop" ]]; then
   echo "Expected isolated menu entry at $isolated_data_home/applications/reelroulette-server.desktop" >&2
+  exit 1
+fi
+
+# Registration installs the icons before writing the .desktop entry, so they are in place once the entry exists.
+isolated_hicolor="$isolated_data_home/icons/hicolor"
+for expected in 256x256/apps/reelroulette-server.png scalable/apps/reelroulette-server.svg; do
+  if [[ ! -f "$isolated_hicolor/$expected" ]]; then
+    echo "Expected isolated menu icon at $isolated_hicolor/$expected" >&2
+    exit 1
+  fi
+done
+
+if [[ -e "$isolated_hicolor/512x512/apps/reelroulette-server.png" ]]; then
+  echo "Unexpected 512 px menu icon at $isolated_hicolor/512x512/apps/reelroulette-server.png" >&2
   exit 1
 fi
 

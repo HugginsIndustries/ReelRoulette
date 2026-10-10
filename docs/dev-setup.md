@@ -94,8 +94,8 @@ From `src/clients/web/ReelRoulette.WebUI`:
 - `npm install` (first run)
 - `npm run verify`
 - `npm run dev`/`npm run build` auto-sync shared assets into WebUI `public/`:
-  - `assets/HI.ico` -> `public/HI.ico`
-  - PWA icons: `scripts/sync-shared-icon.mjs` uses **`sharp`** to write `public/icons/icon-192.png` (192×192), `public/icons/icon-512.png` (512×512), and `public/icons/apple-touch-icon.png` (180×180) from `assets/HI-256.png` / `HI-512.png` (manifest `sizes` must match pixel dimensions)
+  - `assets/logo/favicon.ico` -> `public/favicon.ico`
+  - Logo and PWA icons: `scripts/sync-shared-icon.mjs` copies `logo-icon.svg`, `logo-lockup.svg`, `logo-lockup-dark.svg`, `png/pwa-192.png`, `png/pwa-512.png`, `png/pwa-maskable-192.png`, `png/pwa-maskable-512.png`, and `png/apple-touch-icon.png` from `assets/logo/` into `public/icons/` as they are. `scripts/verify-build-output.mjs` checks that each manifest icon's pixel size matches its `sizes`, and checks `dist/runtime-config.json` with the app's own `parseRuntimeConfig`
   - PWA service worker: `public/sw.js` (copied to `dist/` root) is registered from `src/main.ts` in secure contexts. Its fetch handler intercepts document navigations only, which satisfies Chromium installability for standalone install on Android Chrome. API calls, the event stream, and media are not intercepted. `ServerApp` sets `Cache-Control: no-store` for `sw.js` when serving WebUI static files.
   - `assets/fonts/MaterialSymbolsOutlined.var.ttf` -> `public/assets/fonts/MaterialSymbolsOutlined.var.ttf`
 

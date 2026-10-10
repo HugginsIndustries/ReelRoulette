@@ -291,13 +291,13 @@ static string BuildOperatorUrl(string listenUrl, string operatorPath)
 
 static string ResolveSharedIconPath(string contentRootPath)
 {
-        var localPath = Path.Combine(AppContext.BaseDirectory, "HI.ico");
+        var localPath = Path.Combine(AppContext.BaseDirectory, "app.ico");
         if (File.Exists(localPath))
         {
             return localPath;
         }
 
-        return Path.GetFullPath(Path.Combine(contentRootPath, "..", "..", "..", "assets", "HI.ico"));
+        return Path.GetFullPath(Path.Combine(contentRootPath, "..", "..", "..", "assets", "logo", "app.ico"));
 }
 
 static string NormalizeOperatorPath(string operatorPath)
@@ -343,7 +343,7 @@ static void MapOperatorUi(WebApplication app, ServerAppOptions options, bool web
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="/HI.ico" sizes="any" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
   <title>ReelRoulette Server</title>
   <style>
     :root {

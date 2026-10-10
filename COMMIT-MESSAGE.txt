@@ -19,8 +19,11 @@ Instructions:
 
 Commit Message:
 
-Chore: Have implement and report say which subagents ran
+M12d: Roll out the new logo and icons to the server and WebUI
 
-- implement sends independent pre-planning measurements to parallel investigators instead of running them one after another.
-- implement's plan gains a Delegation section covering subagents used during planning and how implementation will be split, and its final summary says which subagents ran and what changed because of them.
-- report ends by saying which subagents ran and what each covered, or why none did.
+- The WebUI header shows the logo lockup for the theme, or the icon alone on a phone, in place of the app name; the page title, manifest name, and startup error heading say ReelRoulette.
+- The WebUI's favicon, SVG tab icon, manifest `any` and `maskable` icons, and Apple touch icon come from `assets/logo/` as they are, so `sharp` leaves the dev dependencies.
+- The build output check confirms each manifest icon's pixel size and checks `runtime-config.json` with the app's own `parseRuntimeConfig`.
+- The server's executable and tray icon is `app.ico`, the Operator page uses the new favicon, and Linux menu registration installs the 256 px PNG and scalable SVG and removes an old 512 px icon.
+- Release packaging gives each Velopack leg its own icon: the server's legs use the new icons and the desktop's keep the old ones; the packaged-server smoke packs with the new icon and checks the isolated menu icons.
+- Docs, the changelog, and the Release Specific manual check for the installed icons are updated, and the milestone moves to completed.

@@ -69,7 +69,7 @@ flowchart LR
 ### Client Layers
 
 - Desktop client (`src/clients/desktop/ReelRoulette.DesktopApp/`, Avalonia) and WebUI (`src/clients/web/ReelRoulette.WebUI`) are orchestration/render layers.
-- WebUI ships a small **PWA** surface (`manifest.webmanifest`, `index.html` install meta, `public/icons/*`, root `public/sw.js` registered in secure contexts for Chromium installability). The worker intercepts document navigations only. Build-time sync resizes shared PNG sources so declared icon sizes match shipped assets (see `scripts/sync-shared-icon.mjs`).
+- WebUI ships a small **PWA** surface (`manifest.webmanifest`, `index.html` install meta, `public/icons/*`, root `public/sw.js` registered in secure contexts for Chromium installability). The worker intercepts document navigations only. Build-time sync copies the logo and icons from `assets/logo/` at their sizes (see `scripts/sync-shared-icon.mjs`), and the build output check confirms the manifest's declared sizes match the PNGs.
 - Playback filtering and preset catalogs are edited through API-backed UIs on both clients (no client-authoritative filter catalogs).
 - Clients issue command/query calls through APIs and project state from API plus SSE.
 - Desktop library activation (grid) is server-authoritative via `POST /api/play/{itemId}`; local LibVLC render only, with no duplicate client `record-playback` for that start. Desktop library browse is an infinite-scrolling grid fed by `POST /api/library/query`. Connect and resync use library stats, the sources API, and the tag catalog. Now-playing reads the loaded tile or `POST /api/library/item`. The loudness baseline comes from library stats.

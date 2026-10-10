@@ -1,34 +1,48 @@
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import sharp from "sharp";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const webUiRoot = resolve(scriptDir, "..");
-const sourceIcon = resolve(webUiRoot, "..", "..", "..", "..", "assets", "HI.ico");
-const targetIcon = resolve(webUiRoot, "public", "HI.ico");
-const sourcePwaSource = resolve(webUiRoot, "..", "..", "..", "..", "assets", "HI-256.png");
-const targetPwaIcon192 = resolve(webUiRoot, "public", "icons", "icon-192.png");
-const sourcePwa512Source = resolve(webUiRoot, "..", "..", "..", "..", "assets", "HI-512.png");
-const targetPwaIcon512 = resolve(webUiRoot, "public", "icons", "icon-512.png");
-const targetAppleTouchIcon = resolve(webUiRoot, "public", "icons", "apple-touch-icon.png");
-const sourceMaterialSymbolsFont = resolve(
-  webUiRoot,
-  "..",
-  "..",
-  "..",
-  "..",
-  "assets",
-  "fonts",
-  "MaterialSymbolsOutlined.var.ttf"
-);
-const targetMaterialSymbolsFont = resolve(
-  webUiRoot,
-  "public",
-  "assets",
-  "fonts",
-  "MaterialSymbolsOutlined.var.ttf"
-);
+const repoAssets = resolve(webUiRoot, "..", "..", "..", "..", "assets");
+const logoDir = resolve(repoAssets, "logo");
+const publicDir = resolve(webUiRoot, "public");
+const publicIconsDir = resolve(publicDir, "icons");
+
+/**
+ * The logo files the WebUI serves, copied as they are: the favicon, the header's logos, and the PWA and Apple
+ * touch icons. Each PNG is already drawn at the size the manifest and index.html declare for it.
+ */
+const logoFiles = [
+  { source: resolve(logoDir, "favicon.ico"), target: resolve(publicDir, "favicon.ico"), label: "favicon" },
+  { source: resolve(logoDir, "logo-icon.svg"), target: resolve(publicIconsDir, "logo-icon.svg"), label: "logo icon" },
+  { source: resolve(logoDir, "logo-lockup.svg"), target: resolve(publicIconsDir, "logo-lockup.svg"), label: "logo lockup (dark theme)" },
+  {
+    source: resolve(logoDir, "logo-lockup-dark.svg"),
+    target: resolve(publicIconsDir, "logo-lockup-dark.svg"),
+    label: "logo lockup (light theme)"
+  },
+  { source: resolve(logoDir, "png", "pwa-192.png"), target: resolve(publicIconsDir, "pwa-192.png"), label: "PWA icon 192" },
+  { source: resolve(logoDir, "png", "pwa-512.png"), target: resolve(publicIconsDir, "pwa-512.png"), label: "PWA icon 512" },
+  {
+    source: resolve(logoDir, "png", "pwa-maskable-192.png"),
+    target: resolve(publicIconsDir, "pwa-maskable-192.png"),
+    label: "PWA maskable icon 192"
+  },
+  {
+    source: resolve(logoDir, "png", "pwa-maskable-512.png"),
+    target: resolve(publicIconsDir, "pwa-maskable-512.png"),
+    label: "PWA maskable icon 512"
+  },
+  {
+    source: resolve(logoDir, "png", "apple-touch-icon.png"),
+    target: resolve(publicIconsDir, "apple-touch-icon.png"),
+    label: "Apple touch icon"
+  }
+];
+
+const sourceMaterialSymbolsFont = resolve(repoAssets, "fonts", "MaterialSymbolsOutlined.var.ttf");
+const targetMaterialSymbolsFont = resolve(publicDir, "assets", "fonts", "MaterialSymbolsOutlined.var.ttf");
 
 function copyRequiredAsset(sourcePath, targetPath, label) {
   if (!existsSync(sourcePath)) {
@@ -40,31 +54,7 @@ function copyRequiredAsset(sourcePath, targetPath, label) {
   console.log(`Synced ${label}: ${sourcePath} -> ${targetPath}`);
 }
 
-/**
- * Writes a square PNG at exact pixel dimensions (manifest `sizes` must match file dimensions).
- */
-async function writeResizedPng(sourcePath, targetPath, width, height, label) {
-  if (!existsSync(sourcePath)) {
-    throw new Error(`${label} source not found: ${sourcePath}`);
-  }
-  mkdirSync(dirname(targetPath), { recursive: true });
-  await sharp(sourcePath)
-    .resize(width, height, { fit: "cover", position: "centre" })
-    .png()
-    .toFile(targetPath);
-  const meta = await sharp(targetPath).metadata();
-  if (meta.width !== width || meta.height !== height) {
-    throw new Error(`${label}: expected ${width}x${height}, got ${meta.width}x${meta.height}`);
-  }
-  console.log(`Generated ${label}: ${sourcePath} -> ${targetPath} (${width}x${height})`);
+for (const file of logoFiles) {
+  copyRequiredAsset(file.source, file.target, file.label);
 }
-
-async function main() {
-  copyRequiredAsset(sourceIcon, targetIcon, "shared icon");
-  await writeResizedPng(sourcePwaSource, targetPwaIcon192, 192, 192, "PWA icon 192");
-  await writeResizedPng(sourcePwa512Source, targetPwaIcon512, 512, 512, "PWA icon 512");
-  await writeResizedPng(sourcePwa512Source, targetAppleTouchIcon, 180, 180, "Apple touch icon");
-  copyRequiredAsset(sourceMaterialSymbolsFont, targetMaterialSymbolsFont, "Material Symbols font");
-}
-
-await main();
+copyRequiredAsset(sourceMaterialSymbolsFont, targetMaterialSymbolsFont, "Material Symbols font");

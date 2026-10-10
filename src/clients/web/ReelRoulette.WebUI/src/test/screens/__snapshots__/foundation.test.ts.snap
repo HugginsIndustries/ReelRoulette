@@ -3,9 +3,10 @@
 exports[`page structure > keeps the starting markup 1`] = `
 "<div id="app">
   <header class="top-bar">
-    <div class="top-bar-title">
-      <h1>
-        "ReelRoulette"
+    <h1 class="brand">
+      <img alt="ReelRoulette" class="brand-on-dark" src="/icons/logo-lockup.svg">
+      <img alt="ReelRoulette" class="brand-on-light" src="/icons/logo-lockup-dark.svg">
+      <img alt="ReelRoulette" class="brand-icon" src="/icons/logo-icon.svg">
     <div class="pair-section" id="pair-section" style="display: none">
       <label class="pair-section-label">
         <span class="pair-section-label-hint">

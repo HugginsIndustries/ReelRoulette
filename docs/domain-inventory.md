@@ -75,7 +75,7 @@ Boundary:
 - `src/core/ReelRoulette.ServerApp/Hosting/IHostUi.cs`
   - host-UI abstraction boundary keeping server runtime tray-agnostic.
 - `src/core/ReelRoulette.ServerApp/Hosting/AvaloniaTrayHostUi.cs`
-  - Cross-platform tray runtime controls (Open Operator UI, Launch Server on Startup, Refresh Library, Restart Server, Stop Server / Exit) using shared `assets/HI.ico`, with deterministic headless fallback when tray is unavailable. The tray ends only when shut down explicitly, on its UI thread, and an unrequested end is written to `last.log`. It loads the Fluent theme so the menu window Avalonia draws on Windows renders, and writes tray clicks, Windows menu opens and closes, failed menu actions, tray UI errors, and Avalonia warnings and errors (each once per run) to `last.log`.
+  - Cross-platform tray runtime controls (Open Operator UI, Launch Server on Startup, Refresh Library, Restart Server, Stop Server / Exit) using `assets/logo/app.ico`, with deterministic headless fallback when tray is unavailable. The tray ends only when shut down explicitly, on its UI thread, and an unrequested end is written to `last.log`. It loads the Fluent theme so the menu window Avalonia draws on Windows renders, and writes tray clicks, Windows menu opens and closes, failed menu actions, tray UI errors, and Avalonia warnings and errors (each once per run) to `last.log`.
 - `src/core/ReelRoulette.ServerApp/Hosting/HeadlessHostUi.cs`
   - headless host path, used on any OS when no tray can be created.
 - `src/core/ReelRoulette.ServerApp/Hosting/WindowsStartupLaunchService.cs`
@@ -262,7 +262,8 @@ Boundary:
 - Web generated contracts/tooling:
   - `src/clients/web/ReelRoulette.WebUI/src/types/openapi.generated.ts`
   - `src/clients/web/ReelRoulette.WebUI/scripts/verify-openapi-contracts-fresh.mjs`
-  - `src/clients/web/ReelRoulette.WebUI/scripts/sync-shared-icon.mjs` (copies shared `HI.ico` + font; uses **`sharp`** to resize `HI-256.png` / `HI-512.png` into manifest-accurate PWA PNGs under `public/icons/`)
+  - `src/clients/web/ReelRoulette.WebUI/scripts/sync-shared-icon.mjs` (copies `favicon.ico` to `public/`, the logo SVGs and PWA PNGs from `assets/logo/` to `public/icons/` as they are, and the font)
+  - `src/clients/web/ReelRoulette.WebUI/scripts/verify-build-output.mjs` (checks the build output's icons and their manifest sizes, and checks `dist/runtime-config.json` with the app's `parseRuntimeConfig`)
   - `src/clients/web/ReelRoulette.WebUI/public/sw.js` + `src/main.ts` service worker registration (Chromium PWA installability; document navigations only)
   - package scripts (`generate:contracts`, `verify:contracts`, `verify`).
 
@@ -303,13 +304,13 @@ Runtime scripts:
 Web verification:
 
 - `tools/scripts/verify-web-deploy.ps1`
-- `./tools/scripts/verify-linux-packaged-server-smoke.sh` (headless Velopack Linux server AppImage: curls `/health`, `/api/version`, `/control/status`, `/operator`; builds an AppImage locally when no path is passed)
+- `./tools/scripts/verify-linux-packaged-server-smoke.sh` (headless Velopack Linux server AppImage: curls `/health`, `/api/version`, `/control/status`, `/operator`; checks the isolated menu entry and its icons; builds an AppImage locally when no path is passed)
 
 Packaging and release:
 
 - `.github/workflows/release.yml` (Velopack matrix build/pack/upload to B2; stable GitHub mirror of `Setup.exe` / `.AppImage` only; sole shipping pipeline)
 - `tools/scripts/stage-webui-assets.ps1`
-- shared icon assets: `assets/HI.ico`, `assets/HI-256.png`, `assets/HI-512.png`
+- logo and icon assets: `assets/logo/` (the server, its release legs, and the WebUI); the desktop and its release legs keep `assets/HI.ico`, `assets/HI-256.png`, and `assets/HI-512.png` until it is removed
 
 CI:
 

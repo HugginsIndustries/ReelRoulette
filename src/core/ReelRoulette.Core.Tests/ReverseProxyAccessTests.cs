@@ -170,9 +170,10 @@ public sealed class ReverseProxyAccessTests : IDisposable
     [InlineData("/index.html")]
     [InlineData("/manifest.webmanifest")]
     [InlineData("/sw.js")]
-    [InlineData("/icons/icon-192.png")]
+    [InlineData("/icons/pwa-192.png")]
+    [InlineData("/icons/pwa-maskable-192.png")]
     [InlineData("/assets/index-abc123.js")]
-    [InlineData("/HI.ico")]
+    [InlineData("/favicon.ico")]
     [InlineData("/runtime-config.json")]
     [InlineData("/operator")]
     public async Task WebUiFiles_LoadForADeviceThatIsNotPaired(string path)

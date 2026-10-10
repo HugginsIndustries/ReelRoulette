@@ -106,49 +106,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 ## Active Milestones
 
-Last milestone completed: M12c
-
-### M12d - New Logo and Icons
-
-- **Status**: ⏳ Planned
-- **Goal**: The server and the WebUI carry the new logo and icons from `assets/logo/` everywhere they show the app's mark, while the desktop client keeps its old icons until it is removed.
-- **Scope**:
-  - Placed first after the mockup so the milestones after it build on the new marks instead of replacing old ones later: WebUI Responsive Layout and Panels reworks the header, Recovery Page and Operator Retirement builds the recovery page and renames the tray item, and Desktop Retirement Notice shows the icon in its notice. It is small and independent, so dev releases carry the new icons for the rest of the series.
-  - Ships in v0.15.0, right after the WebUI design mockup milestone. Depends on: WebUI Design Mockup, whose mockup approves the header's logo.
-  - Built to the mockup approved in WebUI Design Mockup (`docs/mockups/reelroulette/`), the reference for its settled design.
-  - The files in `assets/logo/`, read from them at this edit: `logo-lockup.svg` (the icon with light text, for the dark theme) and `logo-lockup-dark.svg` (dark text, for the light theme); `logo-icon.svg` (the orange icon alone, on transparency); `logo-icon-tile.svg` (the icon on a rounded orange tile) and `logo-icon-maskable.svg` (on a full-bleed orange square); `app.ico` (16 to 256 px) and `favicon.ico` (16, 32, and 48 px); and in `png/`, the plain icon at 16 to 256 px (`icon-*.png`), the tile at 192 and 512 px (`pwa-*.png`), the maskable square at 192 and 512 px (`pwa-maskable-*.png`), and `apple-touch-icon.png` (180 px, full bleed).
-  - WebUI slice. Its copies live in `src/clients/web/ReelRoulette.WebUI/public/`, which the WebUI build copies into its output and `tools/scripts/stage-webui-assets.ps1` stages into the server's web root:
-    - The header shows `logo-lockup.svg` in the dark theme and `logo-lockup-dark.svg` in the light theme in place of the "ReelRoulette" text, and `logo-icon.svg` alone on a phone, with "ReelRoulette" as its accessible name (decided in WebUI Design Mockup). Read from code at this edit: the header shows the name as text (`ui/Header.tsx`).
-    - The page title and the manifest's `name` say "ReelRoulette" in place of "ReelRoulette WebUI", and so does the startup error page's heading, since text users see doesn't say WebUI (decided in WebUI Design Mockup). Read from code at this edit: `index.html`'s title, `public/manifest.webmanifest`'s `name`, and `StartupError` in `src/ui/App.tsx` say "ReelRoulette WebUI"; the manifest's `short_name` and the Apple web app title already say "ReelRoulette".
-    - The favicon is `favicon.ico`, with `logo-icon.svg` for browsers that take an SVG icon, in place of `/HI.ico` in `index.html`.
-    - The manifest's icons are `pwa-192.png` and `pwa-512.png` with purpose `any`, and `pwa-maskable-192.png` and `pwa-maskable-512.png` with purpose `maskable`, in place of `icons/icon-192.png` and `icons/icon-512.png`. The Apple touch icon is `apple-touch-icon.png`.
-    - `scripts/sync-shared-icon.mjs`, which runs before dev and build, copies these files. Read from code at this edit: it copies `HI.ico` and resizes `HI-256.png` and `HI-512.png` with `sharp`, its only user, so `sharp` leaves the dev dependencies now that the files come at their sizes. `scripts/verify-build-output.mjs` checks the new files, and the tracked `public/HI.ico` and old `public/icons/` PNGs go.
-    - Weak build check, moved here from Client Robustness Findings in the v0.15.0 milestone review, since this milestone changes what `scripts/verify-build-output.mjs` checks: it only checks that `apiBaseUrl` in `dist/runtime-config.json` is a non-empty string, while `parseRuntimeConfig` rejects more. Validate with the same rules the app uses at runtime.
-  - Server slice. Its copies sit next to the executable, copied there by `ReelRoulette.ServerApp.csproj`:
-    - The Windows executable icon (`ApplicationIcon`) and the tray icon are `app.ico`, in place of `HI.ico` (`ResolveSharedIconPath` in `Program.cs`, which `AvaloniaTrayHostUi` loads).
-    - The Linux desktop entry (`LinuxAppImageRegistrationService`, `reelroulette-server.desktop`) installs `png/icon-256.png` as its 256 px icon and `logo-icon.svg` as its scalable icon, in place of `HI-256.png` and `HI-512.png`, since the new set has no plain 512 px PNG.
-      - Trap, inferred: an install that registered the old icons keeps `icons/hicolor/512x512/apps/reelroulette-server.png` in the user's data folder, and a desktop environment may prefer it to the scalable icon, so registration removes it.
-    - The Operator page's icon link (`/HI.ico` in `Program.cs`) points at the new favicon until Recovery Page and Operator Retirement retires the page.
-  - Release packaging slice. Read from code at this edit: `release.yml` passes one `--icon` to every Velopack leg, `assets/HI.ico` on Windows and `assets/HI-256.png` on Linux, which sets the Windows installer's and the Linux AppImage's icon (inferred from Velopack's `--icon` option, not checked against its docs at this edit). Each leg gets its own: the server's use `assets/logo/app.ico` and `assets/logo/png/icon-256.png`, and the desktop's keep the old ones. `verify-linux-packaged-server-smoke.sh` packs with `icon-256.png`.
-  - The desktop client keeps its old icons, since Desktop Client Removal removes it in v0.16.0: its executable and window icon, its Avalonia resource, its Linux menu registration, and its release legs' `--icon`.
-  - Where the old icons are used, read from code at this edit:
-    - `assets/HI.ico`: the server's `ApplicationIcon`, tray icon, and Operator page icon link; the WebUI's favicon, through `sync-shared-icon.mjs` and the tracked `public/HI.ico`; `stage-webui-assets.ps1`; `release.yml`'s Windows `--icon`; `ReverseProxyAccessTests`' list of files an unpaired device may load; and the desktop's `ApplicationIcon`, window icon (`MainWindow.axaml`), and Avalonia resource.
-    - `assets/HI-256.png`: the server's and the desktop's Linux menu registration, the WebUI's 192 px PWA icon and Apple touch icon, `release.yml`'s Linux `--icon`, and `verify-linux-packaged-server-smoke.sh`.
-    - `assets/HI-512.png`: the server's and the desktop's Linux menu registration, and the WebUI's 512 px PWA icon.
-    - After this milestone only the desktop project and its release legs use them, and Desktop Client Removal deletes them.
-  - Tests: `ReverseProxyAccessTests`' list of files an unpaired device may load swaps `/HI.ico` and `/icons/icon-192.png` for the new favicon and manifest icons.
-  - Docs: `README.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, and `CONTEXT.md`, which describe the old icons and their pipeline.
-  - Add a Release Specific checklist item, under Manual checks: "With the dev release installed on Windows and Linux, the server's executable, shortcut, tray, and Linux menu icons show the new logo, the WebUI's tab icon and its installed app icon on Android and iOS show it too, and the desktop app keeps its old icon."
-- **Acceptance criteria**:
-  - The WebUI's header shows the lockup for the theme, or the icon alone on a phone, named "ReelRoulette", and no "ReelRoulette" text.
-  - The favicon, the manifest's `any` and `maskable` icons, and the Apple touch icon are the new files, and the manifest's sizes match them.
-  - The page title, the manifest's `name`, and the startup error page's heading say "ReelRoulette".
-  - The server's executable and tray icon are `app.ico`, its Linux menu entry uses the new icons and leaves no old 512 px icon behind, and its Velopack legs use the new icons while the desktop's keep the old ones.
-  - Outside the desktop project and its release legs, nothing refers to `HI.ico`, `HI-256.png`, or `HI-512.png`.
-  - `verify-build-output.mjs` checks `dist/runtime-config.json` with the rules `parseRuntimeConfig` uses.
-  - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- **Verification evidence**:
-  - Completion evidence must include `npm run verify` with `verify-build-output.mjs` checking the new files and the runtime config, a server test that Linux registration installs the new icons and removes the old 512 px one, `dotnet test ReelRoulette.sln`, `./tools/scripts/verify-linux-packaged-server-smoke.sh`, a search showing only the desktop project and its release legs use the old icons, and the Release Specific checklist item for the installed icons.
+Last milestone completed: M12d
 
 ### M12e - Favorite and Blacklist Filter Modes
 

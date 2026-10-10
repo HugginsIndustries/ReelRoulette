@@ -542,6 +542,7 @@ describe("startup error", () => {
     document.body.appendChild(root);
     renderStartupError(root, "Runtime config '<b>apiBaseUrl</b>' is required.");
 
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("ReelRoulette");
     expect(screen.getByText("Runtime Configuration Error")).toBeTruthy();
     expect(screen.getByText("Runtime config '<b>apiBaseUrl</b>' is required.")).toBeTruthy();
     expect(root.querySelector("b")).toBeNull();

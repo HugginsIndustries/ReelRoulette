@@ -11,8 +11,8 @@ internal static class LinuxAppImageRegistrationService
     private const string ApplicationName = "ReelRoulette Server";
     private const string ApplicationComment = "ReelRoulette media server";
     private const string Categories = "AudioVideo;Video;";
-    private const string Icon256FileName = "HI-256.png";
-    private const string Icon512FileName = "HI-512.png";
+    private const string Icon256FileName = "icon-256.png";
+    private const string IconSvgFileName = "logo-icon.svg";
 
     public static void TryRegisterInBackground(ILogger? logger = null)
     {
@@ -53,39 +53,55 @@ internal static class LinuxAppImageRegistrationService
             return;
         }
 
-        var icon256Source = Path.Combine(AppContext.BaseDirectory, Icon256FileName);
-        var icon512Source = Path.Combine(AppContext.BaseDirectory, Icon512FileName);
-        if (!File.Exists(icon256Source) || !File.Exists(icon512Source))
+        var dataHome = ResolveXdgDataHome();
+        var changes = ReconcileRegistration(appImagePath, AppContext.BaseDirectory, dataHome, logger);
+
+        if (changes.AnyChanged)
+        {
+            logger?.LogInformation(
+                "Linux AppImage menu registration updated (desktop={DesktopChanged}, icon256={Icon256Changed}, iconSvg={IconSvgChanged}, legacyIcon512Removed={LegacyIcon512Removed}).",
+                changes.DesktopChanged,
+                changes.Icon256Changed,
+                changes.IconSvgChanged,
+                changes.LegacyIcon512Removed);
+            NotifyDesktopEnvironment(dataHome, logger);
+        }
+    }
+
+    internal static RegistrationChanges ReconcileRegistration(
+        string appImagePath,
+        string sourceDirectory,
+        string dataHome,
+        ILogger? logger = null)
+    {
+        var icon256Source = Path.Combine(sourceDirectory, Icon256FileName);
+        var iconSvgSource = Path.Combine(sourceDirectory, IconSvgFileName);
+        if (!File.Exists(icon256Source) || !File.Exists(iconSvgSource))
         {
             logger?.LogDebug(
-                "Skipping Linux menu registration: missing {Icon256} or {Icon512} under {BaseDirectory}.",
+                "Skipping Linux menu registration: missing {Icon256} or {IconSvg} under {BaseDirectory}.",
                 Icon256FileName,
-                Icon512FileName,
-                AppContext.BaseDirectory);
-            return;
+                IconSvgFileName,
+                sourceDirectory);
+            return default;
         }
 
-        var dataHome = ResolveXdgDataHome();
         var applicationsDir = Path.Combine(dataHome, "applications");
         var desktopEntryPath = Path.Combine(applicationsDir, DesktopEntryFileName);
-        var icon256Dest = Path.Combine(dataHome, "icons", "hicolor", "256x256", "apps", $"{IconStem}.png");
-        var icon512Dest = Path.Combine(dataHome, "icons", "hicolor", "512x512", "apps", $"{IconStem}.png");
+        var hicolorDir = Path.Combine(dataHome, "icons", "hicolor");
+        var icon256Dest = Path.Combine(hicolorDir, "256x256", "apps", $"{IconStem}.png");
+        var iconSvgDest = Path.Combine(hicolorDir, "scalable", "apps", $"{IconStem}.svg");
+        // Earlier versions installed a 512 px icon; a desktop environment may prefer it to the scalable one, so remove it.
+        var legacyIcon512Dest = Path.Combine(hicolorDir, "512x512", "apps", $"{IconStem}.png");
 
         var desiredDesktop = BuildDesktopEntryContent(appImagePath);
         // Install hicolor icons before writing the .desktop entry so a partial run never leaves a menu item without its icon files.
         var icon256Changed = ReconcileBinaryFile(icon256Dest, icon256Source);
-        var icon512Changed = ReconcileBinaryFile(icon512Dest, icon512Source);
+        var iconSvgChanged = ReconcileBinaryFile(iconSvgDest, iconSvgSource);
+        var legacyIcon512Removed = DeleteIfExists(legacyIcon512Dest);
         var desktopChanged = ReconcileTextFile(desktopEntryPath, desiredDesktop);
 
-        if (desktopChanged || icon256Changed || icon512Changed)
-        {
-            logger?.LogInformation(
-                "Linux AppImage menu registration updated (desktop={DesktopChanged}, icon256={Icon256Changed}, icon512={Icon512Changed}).",
-                desktopChanged,
-                icon256Changed,
-                icon512Changed);
-            NotifyDesktopEnvironment(dataHome, logger);
-        }
+        return new RegistrationChanges(desktopChanged, icon256Changed, iconSvgChanged, legacyIcon512Removed);
     }
 
     private static string ResolveAppImagePath()
@@ -177,6 +193,17 @@ internal static class LinuxAppImageRegistrationService
         return true;
     }
 
+    private static bool DeleteIfExists(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
+        File.Delete(path);
+        return true;
+    }
+
     private static string NormalizeTextContent(string content)
     {
         var normalized = content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
@@ -231,5 +258,14 @@ internal static class LinuxAppImageRegistrationService
         {
             logger?.LogDebug(ex, "Optional desktop helper {Helper} failed or is unavailable (non-fatal).", fileName);
         }
+    }
+
+    internal readonly record struct RegistrationChanges(
+        bool DesktopChanged,
+        bool Icon256Changed,
+        bool IconSvgChanged,
+        bool LegacyIcon512Removed)
+    {
+        public bool AnyChanged => DesktopChanged || Icon256Changed || IconSvgChanged || LegacyIcon512Removed;
     }
 }

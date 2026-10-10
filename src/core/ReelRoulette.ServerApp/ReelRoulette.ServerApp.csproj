@@ -4,7 +4,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <Version>0.15.0-dev.1</Version>
-    <ApplicationIcon>..\..\..\assets\HI.ico</ApplicationIcon>
+    <ApplicationIcon>..\..\..\assets\logo\app.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup Condition="'$(TargetFramework)'=='net10.0'">
     <OutputType>Exe</OutputType>
@@ -20,9 +20,9 @@
     <InternalsVisibleTo Include="ReelRoulette.ServerApp.Tests" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\..\assets\HI.ico" Link="HI.ico" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\..\assets\HI-256.png" Link="HI-256.png" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\..\assets\HI-512.png" Link="HI-512.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\assets\logo\app.ico" Link="app.ico" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\assets\logo\png\icon-256.png" Link="icon-256.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\assets\logo\logo-icon.svg" Link="logo-icon.svg" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.3" />

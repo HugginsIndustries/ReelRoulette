@@ -33,7 +33,7 @@ export function App({ services }: { services: AppServices }) {
 export function StartupError({ message }: { message: string }) {
   return (
     <main>
-      <h1>ReelRoulette WebUI</h1>
+      <h1>ReelRoulette</h1>
       <section class="card error">
         <h2>Runtime Configuration Error</h2>
         <p>{message}</p>
