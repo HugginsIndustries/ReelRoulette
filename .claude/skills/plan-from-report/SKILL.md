@@ -21,7 +21,7 @@ For each finding, check whether an existing milestone or backlog item already co
 ## Writing entries
 
 - Follow the Entry Format and Milestone Template in `MILESTONES.md`: Status, Goal, Depends on, and Design as header bullets; Decisions; a Slices table with a section per slice holding its Scope, Traps, and Acceptance; Release checks; and Not included. Evidence is added when a slice lands, never while planning.
-- Write the Depends on bullet as exact milestone titles joined by commas or "and". An explanation may follow a title after ", which", ", whose", or ", so".
+- Write the Depends on bullet as exact milestone titles joined by commas or "and". An explanation may follow a title after ", which", ", whose", or ", so". A condition on starting may close the bullet as a clause after ", and" that starts with a lowercase word, such as ", and it starts only once the new UI has been in daily use". After an explanation, a clause there that starts with a capital letter is read as a milestone title, so it must be one.
 - Refer to other milestones by name, never by ID, except in section headers, the tracker line, and the Planned Releases outline.
 - Record a settled choice under Decisions when it shapes more than one slice, and in the slice's Scope when it shapes only that one. Write it as settled, without saying where it was decided.
 - Carry the report's facts and measured numbers into the Traps of the slice that will hit them, including known traps such as an approach measured to be slow or wrong. Mark them "(measured)" or "(inferred)" as the report does, and leave a fact read from code or docs unmarked.

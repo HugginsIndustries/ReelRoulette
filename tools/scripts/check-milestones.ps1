@@ -148,12 +148,19 @@ function Get-TitleMatchLength {
 }
 
 # A Depends on value is one or more titles joined by ", ", " and ", or ", and ". A title may be
-# followed by an explanation starting ", which", ", whose", or ", so". Returns $null when every
-# reference resolves, otherwise the problem.
+# followed by an explanation starting ", which", ", whose", or ", so". After an explanation, each
+# ", and" is read by the word that follows it, with backticks ignored: a known title resumes the
+# list; a capital letter, or "the" and a capital, starts a title reference that must match a
+# milestone; and a lowercase word continues the explanation or states a condition on starting,
+# such as ", and it starts only once the new UI has been in daily use", which is not checked. So
+# a title written in lowercase after an explanation, or joined there by ", " alone, is read as
+# prose. Returns $null when every reference resolves, otherwise the problem.
 function Test-DependsOn {
     param([string]$Value, [string[]]$Titles)
 
     $text = (Get-NormalizedTitle $Value).TrimEnd('.')
+    # The same text with its case kept, so a position in $text can be checked for a capital letter.
+    $cased = (($Value -replace '`', '') -replace '\s+', ' ').Trim().TrimEnd('.')
     $position = 0
     while ($true) {
         $length = Get-TitleMatchLength -Text $text -Position $position -Titles $Titles
@@ -177,7 +184,8 @@ function Test-DependsOn {
             }
         }
         if ($rest -match '^, (which|whose|so) ') {
-            # Skip the explanation up to a following ", and <title>", or to the end.
+            # Skip the explanation up to a following ", and <title>", or to the end. A capitalized
+            # word after ", and" that is no title is a misspelled title, not more explanation.
             $searchFrom = $position + $Matches[0].Length
             $resumeAt = -1
             while ($true) {
@@ -185,9 +193,17 @@ function Test-DependsOn {
                 if ($separator -lt 0) {
                     break
                 }
-                if ((Get-TitleMatchLength -Text $text -Position ($separator + 6) -Titles $Titles) -ge 0) {
-                    $resumeAt = $separator + 6
+                $next = $separator + 6
+                if ((Get-TitleMatchLength -Text $text -Position $next -Titles $Titles) -ge 0) {
+                    $resumeAt = $next
                     break
+                }
+                $word = $cased.Substring($next)
+                if ($word.StartsWith("the ")) {
+                    $word = $word.Substring(4)
+                }
+                if ($word.Length -gt 0 -and [char]::IsUpper($word[0])) {
+                    return "no milestone title matches '$($text.Substring($next))'"
                 }
                 $searchFrom = $separator + 1
             }

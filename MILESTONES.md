@@ -53,7 +53,7 @@ Do not use this file for detailed architecture explanation or current capability
 - When a milestone is completed, move it to the top of `MILESTONES-COMPLETED.md` as-is: keep its body unchanged except final-state corrections, and preserve newest completions first.
 - In an entry's body, do not reference milestone IDs; use milestone names/descriptions (or "this milestone"/"this series") so ID reassignment does not require copy edits.
 - ID references are allowed only in milestone section headers, the `Last milestone completed: Mx` tracker line, and the `## Planned Releases` outline.
-- The Depends on bullet names milestones by their exact titles, which `check-milestones.ps1` enforces.
+- The Depends on bullet names milestones by their exact titles, which `check-milestones.ps1` enforces, and may end with a condition on starting, as the Entry Format describes.
 - Keep acceptance criteria testable and outcome-focused (avoid implementation-narrative bloat).
 - Keep verification evidence concrete:
   - commands/checks run,
@@ -69,6 +69,7 @@ Do not use this file for detailed architecture explanation or current capability
 Every active and planned entry uses this shape. `check-milestones.ps1` enforces its structure in every active and planned entry: the header bullets, the sections and their order, the Slices table and how it matches the slice sections, each slice's parts, and how the statuses agree. The rules it can't check, such as one fact per bullet, each acceptance criterion naming its tests, and the Traps marks, need a read-through. Entries in `MILESTONES-COMPLETED.md` keep the format they were completed in.
 
 - **Header bullets**, one line each, in this order: Status and Goal, then Depends on when the entry depends on other milestones, and Design when it is built to a mockup or design doc. Which release an entry ships in, and in what order, is the Planned Releases outline's job; entries don't repeat it.
+  - Depends on names those milestones by their exact titles, joined by commas or "and", each optionally followed by an explanation after ", which", ", whose", or ", so". A condition on starting may close it as a clause after ", and" that starts with a lowercase word, such as ", and it starts only once the new UI has been in daily use". After an explanation, a clause there that starts with a capital letter is read as a milestone title, so it must be one.
 - **Decisions**: settled choices that shape more than one slice, each with its reason when it isn't obvious. Write them as settled, without saying where or when they were decided. A choice that shapes only one slice is stated in that slice's Scope.
 - **Slices**: a table of each slice, its status, and one line on what it delivers, in the order they land. Each row has a `#### {Slice} slice` section, in the same order, with these parts:
   - **Scope**: what the slice builds, naming the files, routes, and contracts it changes.
@@ -88,7 +89,7 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 - **Status**: ⏳ Planned | 🚧 In Progress | ✅ Complete
 - **Goal**: {one outcome, in a sentence}
-- **Depends on**: {exact milestone titles}. Leave out when it depends on none.
+- **Depends on**: {exact milestone titles}, then any condition on starting. Leave out when it depends on none.
 - **Design**: {the mockup or design doc it is built to}. Leave out when there is none.
 
 #### Decisions

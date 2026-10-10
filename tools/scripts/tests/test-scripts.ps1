@@ -176,6 +176,23 @@ try {
         Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("depends-second.md:179: Depends on: no milestone title matches 'plan cleanup'") 1
     }
 
+    # Desktop App Shell's Depends on line from MILESTONES.md, with its two milestones added to a copy
+    # of the completed history so their titles resolve.
+    $appShellDependsOn = "- **Depends on**: Admin Source and Item Management, whose add-folder field gets Browse, and Admin Library Catalog Transfer, whose export gets Save as, and it starts only once the new UI has been in daily use."
+    $appShellCompleted = @(, @("  - The first prototype.`n", "  - The first prototype.`n`n### M0y - Admin Source and Item Management`n`n- **Status**: ✅ Complete`n- **Scope**:`n  - Sources.`n`n### M0x - Admin Library Catalog Transfer`n`n- **Status**: ✅ Complete`n- **Scope**:`n  - Transfer.`n"))
+
+    Test-Case "Desktop App Shell's Depends on line, with a condition on starting after its last explanation, passes" {
+        $completed = New-FixtureCopy $validCompleted "depends-app-shell-completed.md" $appShellCompleted
+        $path = New-FixtureCopy $validMilestones "depends-app-shell.md" @(, @("- **Depends on**: Widget Sharing, Export, and Import, so sharing exists first.", $appShellDependsOn))
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path -Completed $completed)) 0 @("OK: depends-app-shell.md and depends-app-shell-completed.md passed")
+    }
+
+    Test-Case "a misspelled title after a ', whose …' clause fails" {
+        $completed = New-FixtureCopy $validCompleted "depends-after-whose-completed.md" $appShellCompleted
+        $path = New-FixtureCopy $validMilestones "depends-after-whose.md" @(, @("- **Depends on**: Widget Sharing, Export, and Import, so sharing exists first.", $appShellDependsOn.Replace("Catalog Transfer,", "Catalog Transfr,")))
+        Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path -Completed $completed)) 1 @("depends-after-whose.md:193: Depends on: no milestone title matches 'admin library catalog transfr, whose export gets save as, and it starts only once the new ui has been in daily use'") 1
+    }
+
     Test-Case "a Not included bullet naming no milestone after 'which is' fails" {
         $path = New-FixtureCopy $validMilestones "not-included-unknown.md" @(, @("- Changes to the groundwork, which is Lay the Groundwork,", "- Changes to the groundwork, which is Lay the Foundations,"))
         Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("not-included-unknown.md:173: Not included: no milestone title matches 'lay the foundations") 1

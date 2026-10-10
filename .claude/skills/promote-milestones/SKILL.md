@@ -22,7 +22,7 @@ Read every milestone in the release in full, and the release's outline line. Old
 - **Scope and Traps**: find the code, routes, settings, scripts, and tests the entry names, and confirm they still exist and behave as it says. Check git history since the entry was last changed (`git log` on the files it names, `git log -S` for names it relies on) for later work that did part of it or changed what it touches.
 - **Measurements**: measure again every fact marked "(measured)" and every claim that depends on a number, such as a timing, a size, a count, or a limit; don't carry an old figure forward. Follow `AGENTS.md` for which commands you may run and ask before anything it says needs approval. Throwaway experiments go in a temp folder and change no tracked file. If you can't measure something, say so.
 - **Assumptions**: check each thing the entry states as fact, such as what a client reads, what a route returns, or what an earlier milestone delivered. For a completed dependency, check what its entry in `MILESTONES-COMPLETED.md` and the code say actually landed, not what was planned.
-- **Dependencies and order**: each `Depends on` milestone is complete or earlier in this release's outline, and each Not included bullet that names a milestone still names one that covers the boundary.
+- **Dependencies and order**: each `Depends on` milestone is complete or earlier in this release's outline, a condition on starting that the bullet ends with holds, and each Not included bullet that names a milestone still names one that covers the boundary.
 
 Reasoning about code is a hypothesis; running it is a finding. Say which of your claims are measured and which are inferred.
 
