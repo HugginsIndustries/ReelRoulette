@@ -4,6 +4,7 @@ import {
   sourceLabel,
   type FilterTagCategory,
   type FilterTagChip,
+  type FlagFilterChoice,
   type GeneralDraft
 } from "../filter/filterDialogModel";
 import { AUDIO_FILTER, MEDIA_TYPE_FILTER, TAG_MATCH_MODE } from "../filter/filterStateModel";
@@ -19,36 +20,30 @@ const TABS: readonly { tab: FilterDialogTab; label: string; display: string }[] 
 
 type BasicField = "onlyNeverPlayed" | "onlyKnownDuration" | "onlyKnownLoudness";
 
-interface BasicFilter {
+const BASIC_FILTERS: readonly { id: string; field: BasicField; label: string }[] = [
+  { id: "filter-never-played", field: "onlyNeverPlayed", label: "Only never played" },
+  { id: "filter-known-dur", field: "onlyKnownDuration", label: "Only videos with known duration" },
+  { id: "filter-known-loud", field: "onlyKnownLoudness", label: "Only videos with known loudness" }
+];
+
+/** The Favorites and Blacklisted filters, each a checkbox with an only-or-excluded dropdown that works while it is on. */
+interface FlagFilter {
   id: string;
   label: string;
-  checked(draft: GeneralDraft): boolean;
-  change(checked: boolean): Partial<Omit<GeneralDraft, "sourceChecked">>;
+  on: "favoritesOn" | "blacklistedOn";
+  choice: "favoritesChoice" | "blacklistedChoice";
 }
 
-function booleanFilter(id: string, field: BasicField, label: string): BasicFilter {
-  return { id, label, checked: (draft) => draft[field], change: (checked) => ({ [field]: checked }) };
-}
-
-// The two flag checkboxes show one mode each. A mode they cannot show leaves its checkbox clear, and stays in the
-// draft until the checkbox is used.
-const BASIC_FILTERS: readonly BasicFilter[] = [
-  {
-    id: "filter-fav-only",
-    label: "Favorites only",
-    checked: (draft) => draft.favoritesMode === "only",
-    change: (checked) => ({ favoritesMode: checked ? "only" : "off" })
-  },
-  {
-    id: "filter-excl-bl",
-    label: "Exclude blacklisted",
-    checked: (draft) => draft.blacklistedMode === "excluded",
-    change: (checked) => ({ blacklistedMode: checked ? "excluded" : "off" })
-  },
-  booleanFilter("filter-never-played", "onlyNeverPlayed", "Only never played"),
-  booleanFilter("filter-known-dur", "onlyKnownDuration", "Only videos with known duration"),
-  booleanFilter("filter-known-loud", "onlyKnownLoudness", "Only videos with known loudness")
+const FLAG_FILTERS: readonly FlagFilter[] = [
+  { id: "filter-fav", label: "Favorites", on: "favoritesOn", choice: "favoritesChoice" },
+  { id: "filter-bl", label: "Blacklisted", on: "blacklistedOn", choice: "blacklistedChoice" }
 ];
+
+const FLAG_CHOICES: readonly FlagFilterChoice[] = ["only", "excluded"];
+
+function isFlagChoice(value: string): value is FlagFilterChoice {
+  return (FLAG_CHOICES as readonly string[]).includes(value);
+}
 
 const MEDIA_TYPES = [
   { value: MEDIA_TYPE_FILTER.All, label: "All (Videos and Photos)" },
@@ -116,8 +111,11 @@ function GeneralPanel({ view }: { view: FilterDialogView }) {
       <div class="filter-section">
         <h3>Basic Filters</h3>
         <div class="filter-stack">
-          {BASIC_FILTERS.map(({ id, label, checked, change }) => (
-            <label key={id}><input type="checkbox" id={id} checked={checked(draft)} onChange={(event) => filterDialog.changeGeneral(change(event.currentTarget.checked))} /> {label}</label>
+          {FLAG_FILTERS.map((flag) => (
+            <FlagFilterRow key={flag.id} flag={flag} draft={draft} />
+          ))}
+          {BASIC_FILTERS.map(({ id, field, label }) => (
+            <label key={id}><input type="checkbox" id={id} checked={draft[field]} onChange={(event) => filterDialog.changeGeneral({ [field]: event.currentTarget.checked })} /> {label}</label>
           ))}
         </div>
       </div>
@@ -158,6 +156,34 @@ function GeneralPanel({ view }: { view: FilterDialogView }) {
         </div>
       </div>
     </>
+  );
+}
+
+/** A flag filter's checkbox and dropdown. The dropdown keeps its choice while the checkbox is off. */
+function FlagFilterRow({ flag, draft }: { flag: FlagFilter; draft: GeneralDraft }) {
+  const { filterDialog } = useApp();
+  const on = draft[flag.on];
+  return (
+    <div class="mode-row">
+      <label><input type="checkbox" id={flag.id} checked={on} onChange={(event) => filterDialog.changeGeneral({ [flag.on]: event.currentTarget.checked })} /> {flag.label}</label>
+      <select
+        class="mode-select"
+        id={`${flag.id}-mode`}
+        aria-label={`${flag.label} filter`}
+        value={draft[flag.choice]}
+        disabled={!on}
+        onChange={(event) => {
+          const value = event.currentTarget.value;
+          if (isFlagChoice(value)) {
+            filterDialog.changeGeneral({ [flag.choice]: value });
+          }
+        }}
+      >
+        {FLAG_CHOICES.map((choice) => (
+          <option key={choice} value={choice}>{choice}</option>
+        ))}
+      </select>
+    </div>
   );
 }
 

@@ -135,7 +135,7 @@ Desktop flows that still run locally:
 
 - Server-owned work still done on the desktop:
   - Library database import: `LibraryArchiveMigration.ImportDatabase` writes the server's `library.db` from the desktop process while the server is stopped, including source remap and skip.
-  - Preset writes: the filter dialog edits the whole preset list and `POST /api/presets` replaces it.
+  - Preset writes: the filter dialog edits the whole preset list and `POST /api/presets` replaces it. Apply posts the list only when the dialog changed it, and a library preset pick posts nothing.
   - Preset-match heading: `LibraryPresetSelection.FiltersEqual` decides which saved preset the current filter equals, comparing the Favorites and Blacklisted modes the desktop's filter model resolves through Core's `FlagFilterModes`, locked to the WebUI by `shared/fixtures/preset-filter-equality.json`.
   - Refresh status summary: `MainWindow` parses refresh stage messages into the status line summary (`BuildSourceRefreshSummary` and the stage counts).
 - Client-owned flows that stay local by design:

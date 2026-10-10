@@ -1,4 +1,5 @@
 using ReelRoulette;
+using ReelRoulette.Core.Filtering;
 using Xunit;
 
 namespace ReelRoulette.DesktopApp.Tests;
@@ -14,6 +15,20 @@ public sealed class FilterSummaryFormatTests
         var filter = new FilterState { SelectedTags = ["Ann", "Bob"], GlobalMatchMode = globalMatchMode };
 
         Assert.Equal(expected, FilterSummaryFormat.IncludedTags(filter));
+    }
+
+    [Theory]
+    [InlineData(FlagFilterModeValue.Only, FlagFilterModeValue.Excluded, new[] { "Favorites only" })]
+    [InlineData(FlagFilterModeValue.Excluded, FlagFilterModeValue.Excluded, new[] { "Favorites excluded" })]
+    [InlineData(FlagFilterModeValue.Off, FlagFilterModeValue.Only, new[] { "Blacklisted only" })]
+    [InlineData(FlagFilterModeValue.Excluded, FlagFilterModeValue.Only, new[] { "Favorites excluded", "Blacklisted only" })]
+    [InlineData(FlagFilterModeValue.Off, FlagFilterModeValue.Excluded, new string[0])]
+    [InlineData(FlagFilterModeValue.Off, FlagFilterModeValue.Off, new string[0])]
+    public void FlagFilters_NameEachModeButTheDefault(FlagFilterModeValue favorites, FlagFilterModeValue blacklisted, string[] expected)
+    {
+        var filter = new FilterState { FavoritesMode = favorites, BlacklistedMode = blacklisted };
+
+        Assert.Equal(expected, FilterSummaryFormat.FlagFilters(filter));
     }
 
     [Fact]

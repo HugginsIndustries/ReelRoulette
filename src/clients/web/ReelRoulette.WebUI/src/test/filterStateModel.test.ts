@@ -20,8 +20,10 @@ import {
   parseDurationInputToSeconds,
   presetsToPostBody,
   serializeFilterStateForApi,
+  MEDIA_TYPE_FILTER,
   TAG_MATCH_MODE,
   type ApiFilterState,
+  type FilterState,
   type FlagFilterMode
 } from "../filter/filterStateModel";
 
@@ -319,5 +321,47 @@ describe("filter enum values shared fixture", () => {
     expect(read.mediaTypeFilter).toBe(mediaTypeFilter);
     // The fixture writes none as {}, which the reader holds as null.
     expect(read.categoryLocalMatchModes).toEqual(Object.keys(categoryLocalMatchModes).length ? categoryLocalMatchModes : null);
+  });
+});
+
+interface WrittenFilterFixture {
+  desktop: ApiFilterState;
+  webui: ApiFilterState;
+}
+
+// One filter as each client writes it in full. The desktop's tests read the same fixture.
+const writtenFilters = readFixture<WrittenFilterFixture>("filter-state-written.json");
+
+/** The fixture's filter: Favorites excluded, Blacklisted only, and a value in every other field. */
+function writtenFixtureFilter(): FilterState {
+  return {
+    ...createDefaultFilterState(),
+    favoritesMode: "excluded",
+    blacklistedMode: "only",
+    onlyNeverPlayed: true,
+    audioFilter: AUDIO_FILTER.WithAudioOnly,
+    mediaTypeFilter: MEDIA_TYPE_FILTER.VideosOnly,
+    minDurationSeconds: 90,
+    maxDurationSeconds: 5400,
+    selectedTags: ["Beach"],
+    excludedTags: ["Spoiler"],
+    categoryLocalMatchModes: { people: TAG_MATCH_MODE.Or },
+    globalMatchMode: false,
+    includedSourceIds: ["source-1"],
+    onlyKnownDuration: false,
+    onlyKnownLoudness: false
+  };
+}
+
+describe("filter state written shared fixture", () => {
+  it("writes the filter as its webui entry", () => {
+    expect(serializeFilterStateForApi(writtenFixtureFilter())).toEqual(writtenFilters.webui);
+  });
+
+  it.each(projectionCases)("reads its desktop entry with $name", ({ favoritesMode, blacklistedMode, written }) => {
+    const read = filterStateFromApiObject({ ...writtenFilters.desktop, ...written });
+    expect(read.favoritesMode).toBe(favoritesMode);
+    expect(read.blacklistedMode).toBe(blacklistedMode);
+    expect(filterStatesEqualForPresetMatch(read, { ...writtenFixtureFilter(), favoritesMode, blacklistedMode })).toBe(true);
   });
 });

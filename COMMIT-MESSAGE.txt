@@ -19,13 +19,12 @@ Instructions:
 
 Commit Message:
 
-M12e: Read and write filter modes the same way in both clients
+M12e: Choose only or excluded for Favorites and Blacklisted in both clients
 
-- Core's `FlagFilterModes` holds the Favorites and Blacklisted mode rule: the mode names, the fallback to `favoritesOnly` and `excludeBlacklisted`, and the booleans each mode writes. The server's parser and the desktop's filter model both call it, so C# has one copy.
-- Both clients' filter models hold the two modes in place of the booleans, read them by that rule, and write each mode beside its older boolean in every filter they send or save. A preset or saved filter with only the older fields reads as before.
-- The desktop writes the modes as names through a converter on each property, the same in random requests, preset posts, library queries, and `desktop-settings.json`, and resolves them once the whole filter is read.
-- Preset matching and the patch-or-reload rule for favorite and blacklist changes follow the resolved modes on both clients.
-- The WebUI reads `audioFilter`, `mediaTypeFilter`, and category match modes given as names in any case, as the server does, and drops a category entry it can't read.
-- Until their own slices replace them, both filter dialogs' two checkboxes map onto the modes and keep a mode they can't show.
-- New shared fixtures `filter-mode-projection.json` and `filter-enum-values.json`, with new cases in `preset-filter-equality.json` and `library-tile-effect.json`, lock both clients to the server, read by Core, desktop, and WebUI tests.
-- `docs/api.md`, `CONTEXT.md`, and `docs/domain-inventory.md` describe the rule, and the milestone's desktop slice hands its converter and Apply's copy back to this slice.
+- Both filter dialogs show Favorites and Blacklisted as a checkbox with an only-or-excluded dropdown, disabled while the checkbox is off, as the mockup shows. A dropdown keeps its choice while its checkbox is off, and a filter that is off shows the default choice when the dialog opens again.
+- The desktop's filter dialog won't apply Favorites only with Blacklisted only, or save it into a preset, and its filter summary names Favorites only, Favorites excluded, and Blacklisted only.
+- A desktop library preset pick no longer posts the preset list, which replaced the server's presets with the desktop's copy, and the filter dialog's Apply posts it only when the dialog changed it.
+- `shared/fixtures/filter-state-written.json` holds one filter as each client writes it. Each client's tests show it writes its own copy exactly and reads the other's with every Favorites and Blacklisted pairing.
+- The mockup's validation page shows the new controls, the controls' styles move into its shared stylesheet, and the Filter tab shows an unchecked filter's dropdown at its default once applied, as the app does.
+- `CHANGELOG.md`, `CONTEXT.md`, and `docs/domain-inventory.md` describe the controls and when the desktop posts presets.
+- The milestone is complete: its entry moves to `MILESTONES-COMPLETED.md`, and its release checks join the testing checklist's Release Specific section.

@@ -99,7 +99,7 @@ describe("opening", () => {
     expect(dialog.isOpen.value).toBe(true);
     expect(dialog.tab.value).toBe("general");
     expect(view().working.favoritesMode).toBe("only");
-    expect(view().general.favoritesMode).toBe("only");
+    expect(view().general).toMatchObject({ favoritesOn: true, favoritesChoice: "only" });
     expect(view().sources.map((source) => source.id)).toEqual(["source-1", "source-2"]);
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites"]);
     expect(view().heading).toBe("Preset: Favorites");
@@ -271,7 +271,7 @@ describe("Presets tab", () => {
     expect(statuses.at(-1)).toBe("Select a preset to update.");
 
     dialog.choosePreset("Recent");
-    dialog.changeGeneral({ favoritesMode: "only" });
+    dialog.changeGeneral({ favoritesOn: true });
     expect(view().heading).toBe("Preset: Recent*");
     dialog.updatePreset();
     expect(statuses.at(-1)).toBe('Updated preset "Recent" locally — Apply to save.');
@@ -284,7 +284,7 @@ describe("applying", () => {
   it("saves changed presets, applies the filter, reloads presets, closes, and then starts the library over", async () => {
     const { dialog, store, server, steps, statuses } = setup([FAVORITES]);
     await dialog.open();
-    dialog.changeGeneral({ favoritesMode: "only", onlyNeverPlayed: true });
+    dialog.changeGeneral({ favoritesOn: true, onlyNeverPlayed: true });
     dialog.typeNewPresetName("Unplayed favorites");
     dialog.addPreset();
     steps.length = 0;
@@ -311,7 +311,7 @@ describe("applying", () => {
     expect(store.activePresetName.value).toBeNull();
 
     await dialog.open();
-    dialog.changeGeneral({ favoritesMode: "only" });
+    dialog.changeGeneral({ favoritesOn: true });
     await dialog.apply();
     expect(store.headerExplicitNone.value).toBe(false);
   });
@@ -343,7 +343,7 @@ describe("applying", () => {
     dialog.clearAll();
 
     expect(view().working).toEqual(createDefaultFilterState());
-    expect(view().general.favoritesMode).toBe("off");
+    expect(view().general).toMatchObject({ favoritesOn: false, favoritesChoice: "only" });
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites"]);
     expect(view().pending).toBe(false);
     expect(view().heading).toBe("Preset: None");
@@ -358,7 +358,7 @@ describe("header changes", () => {
 
     store.pickHeaderPreset("preset-favorites");
     expect(view().working).toMatchObject({ favoritesMode: "only", onlyNeverPlayed: false });
-    expect(view().general.favoritesMode).toBe("only");
+    expect(view().general).toMatchObject({ favoritesOn: true, favoritesChoice: "only" });
     expect(view().pending).toBe(false);
     expect(view().heading).toBe("Preset: Favorites");
 

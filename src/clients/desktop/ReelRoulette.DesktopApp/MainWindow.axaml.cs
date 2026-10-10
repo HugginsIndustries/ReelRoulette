@@ -1789,9 +1789,7 @@ namespace ReelRoulette
                 return;
             }
 
-            var filterParts = new List<string>();
-            if (_currentFilterState.FavoritesMode == FlagFilterModeValue.Only)
-                filterParts.Add("Favorites");
+            var filterParts = new List<string>(FilterSummaryFormat.FlagFilters(_currentFilterState));
             if (_currentFilterState.OnlyNeverPlayed)
                 filterParts.Add("Never played");
             if (_currentFilterState.MediaTypeFilter == MediaTypeFilter.VideosOnly)
@@ -4044,7 +4042,6 @@ namespace ReelRoulette
                 RefreshLibraryPanelFromServiceState();
                 StatusTextBlock.Text = "Reset filters to defaults";
                 SaveSettings();
-                _ = SyncPresetsToCoreAsync();
                 return;
             }
             
@@ -4072,7 +4069,6 @@ namespace ReelRoulette
             // Update library panel and rebuild queue
             UpdateLibraryPanel();
             StatusTextBlock.Text = $"Applied filter preset: {selectedPresetName}";
-            _ = SyncPresetsToCoreAsync();
         }
 
 
@@ -7276,7 +7272,7 @@ namespace ReelRoulette
                     .Select(p => new FilterPreset
                     {
                         Name = p.Name.Trim(),
-                        FilterState = ParseCorePresetFilterState(p.FilterState)
+                        FilterState = LibraryPresetSelection.FilterStateFromServer(p.FilterState)
                     })
                     .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
                     .Select(group => group.First())
@@ -7292,25 +7288,6 @@ namespace ReelRoulette
             catch (Exception ex)
             {
                 Log($"CorePresetSync: Failed to fetch presets ({ex.Message})");
-            }
-        }
-
-        private static FilterState ParseCorePresetFilterState(JsonElement? filterState)
-        {
-            if (!filterState.HasValue ||
-                filterState.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
-            {
-                return new FilterState();
-            }
-
-            try
-            {
-                var parsed = JsonSerializer.Deserialize<FilterState>(filterState.Value.GetRawText());
-                return parsed ?? new FilterState();
-            }
-            catch
-            {
-                return new FilterState();
             }
         }
 
@@ -9793,13 +9770,21 @@ namespace ReelRoulette
             {
                 Log("UI ACTION: FilterDialog was applied - saving filter state and updating panel");
                 
-                // Save presets and active preset name to local fields
-                _filterPresets = dialog.GetPresets();
+                // Save the active preset name, and the presets only when the dialog changed them.
+                // The dialog compares against its opening copy, since a reconnect can replace the cache while it is open.
+                var presetsChanged = dialog.PresetsChanged;
+                if (presetsChanged)
+                {
+                    _filterPresets = dialog.GetPresets();
+                }
                 _activePresetName = dialog.GetActivePresetName();
                 _libraryExplicitNone = dialog.KeepsExplicitNone;
                 
-                Log($"FilterMenuItem: Saved {_filterPresets?.Count ?? 0} presets, active preset: {_activePresetName ?? "None"}");
-                _ = SyncPresetsToCoreAsync();
+                Log($"FilterMenuItem: Saved {_filterPresets?.Count ?? 0} presets (changed: {presetsChanged}), active preset: {_activePresetName ?? "None"}");
+                if (presetsChanged)
+                {
+                    _ = SyncPresetsToCoreAsync();
+                }
                 
                 // Update preset dropdown in library panel
                 UpdateLibraryPresetComboBox();

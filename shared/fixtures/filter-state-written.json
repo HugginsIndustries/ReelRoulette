@@ -1,0 +1,38 @@
+{
+  "desktop": {
+    "favoritesMode": "excluded",
+    "favoritesOnly": false,
+    "blacklistedMode": "only",
+    "excludeBlacklisted": false,
+    "onlyNeverPlayed": true,
+    "audioFilter": 1,
+    "minDuration": "00:01:30",
+    "maxDuration": "01:30:00",
+    "selectedTags": ["Beach"],
+    "excludedTags": ["Spoiler"],
+    "categoryLocalMatchModes": { "people": 1 },
+    "globalMatchMode": false,
+    "onlyKnownDuration": false,
+    "onlyKnownLoudness": false,
+    "mediaTypeFilter": 1,
+    "includedSourceIds": ["source-1"]
+  },
+  "webui": {
+    "favoritesMode": "excluded",
+    "favoritesOnly": false,
+    "blacklistedMode": "only",
+    "excludeBlacklisted": false,
+    "onlyNeverPlayed": true,
+    "onlyKnownDuration": false,
+    "onlyKnownLoudness": false,
+    "audioFilter": 1,
+    "mediaTypeFilter": 1,
+    "globalMatchMode": false,
+    "selectedTags": ["Beach"],
+    "excludedTags": ["Spoiler"],
+    "includedSourceIds": ["source-1"],
+    "categoryLocalMatchModes": { "people": 1 },
+    "minDuration": "00:01:30",
+    "maxDuration": "01:30:00"
+  }
+}

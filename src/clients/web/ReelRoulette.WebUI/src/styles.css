@@ -914,6 +914,22 @@ html.theme-light .tag-editor .tag-chip .chip-btn.icon-glyph-base.is-selected {
   gap: 8px;
   min-height: 44px;
 }
+/* The Favorites and Blacklisted filters: a checkbox and an only-or-excluded dropdown, usable while it is checked. */
+.mode-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+}
+.mode-row > label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 7.5rem;
+}
+.mode-select:disabled {
+  opacity: 0.5;
+}
 .filter-dialog input[type="text"],
 .filter-dialog input[type="number"],
 .filter-dialog select {
@@ -924,6 +940,11 @@ html.theme-light .tag-editor .tag-chip .chip-btn.icon-glyph-base.is-selected {
   color: #fff;
   border: 1px solid #555;
   border-radius: 8px;
+}
+/* The flag filters' dropdown is the small one the mockup shows. */
+.filter-dialog .mode-select {
+  min-height: 36px;
+  padding: 0 8px;
 }
 .filter-dialog button:not(.icon-glyph-base) {
   min-height: 44px;

@@ -255,6 +255,11 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 .filter-hint { font-size: 0.85rem; opacity: 0.75; margin: 0 0 8px; }
 .filter-stack { display: flex; flex-direction: column; gap: 4px; }
 .filter-stack label { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+/* The Favorites and Blacklisted filters: a checkbox and an only-or-excluded dropdown. */
+.mode-row { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.mode-row > label { display: flex; align-items: center; gap: 8px; min-width: 7.5rem; }
+.mode-select { min-height: 36px; padding: 0 8px; }
+.mode-select:disabled { opacity: 0.5; }
 .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .filter-row > label { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .duration-field { width: 14rem; max-width: 100%; }
@@ -1044,11 +1049,6 @@ body.short-screen .dialog-body { padding: 10px 12px; gap: 6px; }
 .pair-label { white-space: nowrap; }
 body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
 
-/* The Favorites and Blacklisted filters: a checkbox and an only-or-excluded dropdown. */
-.mode-row { display: flex; align-items: center; gap: 10px; min-height: 40px; }
-.mode-row > label { display: flex; align-items: center; gap: 8px; min-width: 7.5rem; }
-.mode-select { min-height: 36px; padding: 0 8px; }
-.mode-select:disabled { opacity: 0.5; }
 .drag-handle:disabled { opacity: 0.3; cursor: not-allowed; color: var(--muted-fg); }
 
 /* Today's startup error page, when the runtime configuration doesn't load. */
@@ -3664,6 +3664,12 @@ function syncModeSelects() {
 }
 $("filter-fav").addEventListener("change", syncModeSelects);
 $("filter-bl").addEventListener("change", syncModeSelects);
+// A filter that is off holds no choice, so the app keeps an unchecked dropdown's choice only while the filter is
+// edited, and the applied filter shows it at its default.
+function resetUncheckedModes() {
+  if (!$("filter-fav").checked) $("filter-fav-mode").value = "only";
+  if (!$("filter-bl").checked) $("filter-bl-mode").value = "excluded";
+}
 
 function renderApply() {
   const apply = $("filter-apply");
@@ -3757,6 +3763,7 @@ $("filter-apply").addEventListener("click", () => {
   presetPicked = false;
   filterEdited = false;
   filterPending = false;
+  resetUncheckedModes();
   takeSnapshot();
   saveFilterState();
   saveLibState();

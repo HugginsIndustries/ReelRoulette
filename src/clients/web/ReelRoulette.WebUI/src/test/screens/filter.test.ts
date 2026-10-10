@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -40,6 +43,11 @@ const FAVORITES_PRESET = { id: "preset-favorites", name: "Favorites", filterStat
 const BEACH_PRESET = { id: "preset-beach", name: "Beach days", filterState: { selectedTags: ["Beach"] } };
 const RECENT_PRESET = { id: "preset-recent", name: "Recent", filterState: { onlyNeverPlayed: true } };
 const EVERYTHING_PRESET = { id: "preset-everything", name: "Everything", filterState: {} };
+
+/** One filter as the desktop writes it, with Favorites excluded and Blacklisted only. The desktop's tests read it too. */
+const DESKTOP_WRITTEN_FILTER = JSON.parse(
+  readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../../../shared/fixtures/filter-state-written.json"), "utf8")
+).desktop as Record<string, unknown>;
 
 /** A preset that sets something in every part of the dialog, with "Ghost", a tag the catalog does not have. */
 const RICH_PRESET = {
@@ -178,6 +186,37 @@ function heading(): string {
 function box(label: string): HTMLInputElement {
   return within(dialog()).getByLabelText(label) as HTMLInputElement;
 }
+
+type FlagFilterName = "Favorites" | "Blacklisted";
+type FlagMode = "off" | "only" | "excluded";
+
+/** Found while its tab is hidden too, as `box` finds checkboxes. */
+function flagSelect(name: FlagFilterName): HTMLSelectElement {
+  return within(dialog()).getByRole("combobox", { name: `${name} filter`, hidden: true }) as HTMLSelectElement;
+}
+
+/** What a flag filter's row shows: its checkbox, its dropdown's choice, and whether the dropdown can be used. */
+function flagRow(name: FlagFilterName): { checked: boolean; choice: string; disabled: boolean } {
+  return { checked: box(name).checked, choice: flagSelect(name).value, disabled: flagSelect(name).disabled };
+}
+
+async function chooseFlag(name: FlagFilterName, choice: "only" | "excluded"): Promise<void> {
+  fireEvent.change(flagSelect(name), { target: { value: choice } });
+  await settle();
+}
+
+/** Sets a flag filter to a mode through its checkbox and dropdown. */
+async function setFlag(name: FlagFilterName, mode: FlagMode): Promise<void> {
+  if (box(name).checked !== (mode !== "off")) {
+    await click(box(name));
+  }
+  if (mode !== "off") {
+    await chooseFlag(name, mode);
+  }
+}
+
+const FAVORITES_DEFAULT = { checked: false, choice: "only", disabled: true };
+const BLACKLISTED_DEFAULT = { checked: true, choice: "excluded", disabled: false };
 
 function chip(name: string): HTMLElement {
   const found = Array.from(dialog().querySelectorAll<HTMLElement>(".tag-chip")).find(
@@ -364,7 +403,7 @@ describe("opening and closing", () => {
 
     for (const button of ["Close", "Cancel"]) {
       await openDialog();
-      await click(box("Favorites only"));
+      await click(box("Favorites"));
       expect(applyButton().textContent).toBe("Apply*");
       await showTab("Presets");
       expect(presetRows()).toEqual(["Favorites", "Beach days", "Recent"]);
@@ -380,7 +419,7 @@ describe("opening and closing", () => {
     expect(libraryQueries(server)).toHaveLength(queries);
     expect((await nextPick(server)).filterState.favoritesOnly).toBe(false);
     await openDialog();
-    expect(box("Favorites only").checked).toBe(false);
+    expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
     expect(applyButton().textContent).toBe("Apply");
     await showTab("Presets");
     expect(presetRows()).toEqual(presets.list.map((preset) => preset.name));
@@ -454,8 +493,8 @@ describe("General tab", () => {
     await openDialog();
 
     expect(heading()).toBe("Preset: Rich");
-    expect(box("Favorites only").checked).toBe(true);
-    expect(box("Exclude blacklisted").checked).toBe(true);
+    expect(flagRow("Favorites")).toEqual({ checked: true, choice: "only", disabled: false });
+    expect(flagRow("Blacklisted")).toEqual(BLACKLISTED_DEFAULT);
     expect(box("Only never played").checked).toBe(false);
     expect(box("Videos only").checked).toBe(true);
     expect(box("All (Videos and Photos)").checked).toBe(false);
@@ -475,12 +514,12 @@ describe("General tab", () => {
     await mountFilter();
     await openDialog();
 
-    await click(box("Favorites only"));
+    await click(box("Favorites"));
     expect(applyButton().textContent).toBe("Apply*");
     expect(applyButton().classList.contains("has-pending")).toBe(true);
     expect(heading()).toBe("Preset: None*");
 
-    await click(box("Favorites only"));
+    await click(box("Favorites"));
     expect(applyButton().textContent).toBe("Apply");
     expect(applyButton().classList.contains("has-pending")).toBe(false);
     expect(heading()).toBe("Preset: None");
@@ -490,7 +529,7 @@ describe("General tab", () => {
     const { server } = await mountFilter();
     await openDialog();
 
-    await click(box("Favorites only"));
+    await click(box("Favorites"));
     await click(box("Only never played"));
     await click(box("Photos only"));
     await click(box("Only videos with audio"));
@@ -578,6 +617,136 @@ describe("General tab", () => {
     expect(box("Movies").checked).toBe(false);
     await click(box("Movies"));
     expect((await applyAndWait(server)).includedSourceIds).toEqual([]);
+  });
+});
+
+describe("Favorites and Blacklisted filters", () => {
+  const MODES: readonly FlagMode[] = ["off", "only", "excluded"];
+  const FILTERS: readonly FlagFilterName[] = ["Favorites", "Blacklisted"];
+
+  /** The mode fields and their older booleans, as both clients write them. */
+  function written(favorites: FlagMode, blacklisted: FlagMode) {
+    return {
+      favoritesMode: favorites,
+      favoritesOnly: favorites === "only",
+      blacklistedMode: blacklisted,
+      excludeBlacklisted: blacklisted === "excluded"
+    };
+  }
+
+  it("shows each as a checkbox and an only-or-excluded dropdown, Favorites off and Blacklisted excluded", async () => {
+    await mountFilter();
+    await openDialog();
+
+    const stack = dialog().querySelector("#filter-panel-general .filter-stack") as HTMLElement;
+    expect(Array.from(stack.children).slice(0, 2).map((row) => row.className)).toEqual(["mode-row", "mode-row"]);
+    for (const [name, id] of [["Favorites", "filter-fav"], ["Blacklisted", "filter-bl"]] as const) {
+      expect(box(name).id).toBe(id);
+      expect(box(name).type).toBe("checkbox");
+      expect(flagSelect(name).id).toBe(`${id}-mode`);
+      expect(Array.from(flagSelect(name).options).map((option) => [option.value, option.textContent])).toEqual([
+        ["only", "only"],
+        ["excluded", "excluded"]
+      ]);
+    }
+    expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
+    expect(flagRow("Blacklisted")).toEqual(BLACKLISTED_DEFAULT);
+  });
+
+  it("turns each dropdown off with its checkbox, keeping its choice until the checkbox is on again", async () => {
+    const { server } = await mountFilter();
+    await openDialog();
+
+    await click(box("Favorites"));
+    expect(flagRow("Favorites")).toEqual({ checked: true, choice: "only", disabled: false });
+    await chooseFlag("Favorites", "excluded");
+    await click(box("Favorites"));
+    expect(flagRow("Favorites")).toEqual({ checked: false, choice: "excluded", disabled: true });
+    expect(applyButton().textContent).toBe("Apply");
+
+    await chooseFlag("Blacklisted", "only");
+    await click(box("Blacklisted"));
+    expect(flagRow("Blacklisted")).toEqual({ checked: false, choice: "only", disabled: true });
+    expect(applyButton().textContent).toBe("Apply*");
+
+    await click(box("Favorites"));
+    await click(box("Blacklisted"));
+    expect(flagRow("Favorites")).toEqual({ checked: true, choice: "excluded", disabled: false });
+    expect(flagRow("Blacklisted")).toEqual({ checked: true, choice: "only", disabled: false });
+    expect(await applyAndWait(server)).toMatchObject(written("excluded", "only"));
+  });
+
+  it.each(FILTERS.flatMap((name) => MODES.map((mode) => [name, mode] as const)))(
+    "applies and saves %s %s",
+    async (name, mode) => {
+      const { server, presets } = await mountFilter();
+      const expected = name === "Favorites" ? written(mode, "excluded") : written("off", mode);
+      await openDialog();
+
+      // Set another mode first, so each mode is reached from a different one.
+      await setFlag(name, mode === "only" ? "excluded" : "only");
+      await setFlag(name, mode);
+      expect(await applyAndWait(server)).toMatchObject(expected);
+      expect((await nextPick(server)).filterState).toMatchObject(expected);
+
+      await openDialog();
+      await showTab("Presets");
+      await addPreset("Flags");
+      await applyAndWait(server);
+      expect(presets.saves()).toHaveLength(1);
+      expect(presets.saves()[0][0]).toMatchObject({ name: "Flags", filterState: expected });
+    }
+  );
+
+  it("Clear all filters shows Favorites off with only and Blacklisted on with excluded", async () => {
+    await mountFilter();
+    await openDialog();
+    await setFlag("Favorites", "excluded");
+    await setFlag("Blacklisted", "only");
+
+    await click(dialogButton("Clear all filters"));
+    expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
+    expect(flagRow("Blacklisted")).toEqual(BLACKLISTED_DEFAULT);
+  });
+
+  it("choosing a preset shows its modes, with the default choice for a filter that is off", async () => {
+    const pairs = MODES.flatMap((favorites) => MODES.map((blacklisted) => [favorites, blacklisted] as const));
+    const list = pairs.map(([favorites, blacklisted]) => ({
+      id: `preset-${favorites}-${blacklisted}`,
+      name: `Favorites ${favorites}, Blacklisted ${blacklisted}`,
+      filterState: { favoritesMode: favorites, blacklistedMode: blacklisted }
+    }));
+    await mountFilter(list);
+    await openDialog();
+
+    for (const [favorites, blacklisted] of pairs) {
+      // A choice left with its checkbox off is not kept when a preset loads.
+      await setFlag("Favorites", "excluded");
+      await click(box("Favorites"));
+      await setFlag("Blacklisted", "only");
+      await click(box("Blacklisted"));
+      await showTab("Presets");
+      await chooseInDialog(`Favorites ${favorites}, Blacklisted ${blacklisted}`);
+      await showTab("General");
+      expect(flagRow("Favorites")).toEqual(
+        favorites === "off" ? FAVORITES_DEFAULT : { checked: true, choice: favorites, disabled: false }
+      );
+      expect(flagRow("Blacklisted")).toEqual(
+        blacklisted === "off" ? { checked: false, choice: "excluded", disabled: true } : { checked: true, choice: blacklisted, disabled: false }
+      );
+    }
+  });
+
+  it("shows a preset the desktop saved with Favorites excluded and Blacklisted only", async () => {
+    await mountFilter([{ id: "preset-desktop", name: "Desktop", filterState: DESKTOP_WRITTEN_FILTER }]);
+    await pickHeaderPreset("preset-desktop");
+    await openDialog();
+
+    expect(heading()).toBe("Preset: Desktop");
+    expect(flagRow("Favorites")).toEqual({ checked: true, choice: "excluded", disabled: false });
+    expect(flagRow("Blacklisted")).toEqual({ checked: true, choice: "only", disabled: false });
+    expect(box("Only never played").checked).toBe(true);
+    expect(applyButton().textContent).toBe("Apply");
   });
 });
 
@@ -711,25 +880,25 @@ describe("Presets tab", () => {
 
     await chooseInDialog("Beach days");
     expect(heading()).toBe("Preset: Beach days");
-    expect(box("Favorites only").checked).toBe(false);
+    expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
     expect(chipState("Beach")).toBe("include");
     expect(applyButton().textContent).toBe("Apply*");
 
-    await click(box("Favorites only"));
+    await click(box("Favorites"));
     expect(heading()).toBe("Preset: Beach days*");
     expect(presetSelectInDialog().value).toBe("Beach days");
-    await click(box("Favorites only"));
+    await click(box("Favorites"));
     expect(heading()).toBe("Preset: Beach days");
 
     await chooseInDialog("");
     expect(heading()).toBe("Preset: Beach days");
     expect(presetSelectInDialog().value).toBe("Beach days");
 
-    await click(box("Favorites only"));
+    await click(box("Favorites"));
     await chooseInDialog("");
     expect(heading()).toBe("Preset: None*");
     expect(presetSelectInDialog().value).toBe("");
-    expect(box("Favorites only").checked).toBe(true);
+    expect(flagRow("Favorites")).toEqual({ checked: true, choice: "only", disabled: false });
     expect(chipState("Beach")).toBe("include");
   });
 
@@ -786,7 +955,7 @@ describe("Presets tab", () => {
     expect(statusLine()).toBe("Select a preset to update.");
 
     await chooseInDialog("Favorites");
-    await click(box("Exclude blacklisted"));
+    await click(box("Blacklisted"));
     expect(heading()).toBe("Preset: Favorites*");
     await click(dialogButton("Update Preset"));
     expect(statusLine()).toBe('Updated preset "Favorites" locally — Apply to save.');
@@ -840,8 +1009,8 @@ describe("Presets tab", () => {
     await openDialog();
     await showTab("Presets");
     await chooseInDialog("Beach days");
-    await click(box("Favorites only"));
-    await click(box("Favorites only"));
+    await click(box("Favorites"));
+    await click(box("Favorites"));
 
     await click(rowButton("Beach days", "Delete"));
     expect(confirmDelete).toHaveBeenCalledWith('Delete preset "Beach days"?');
@@ -951,7 +1120,7 @@ describe("header, refresh, and clear all", () => {
 
     await pickHeaderPreset("preset-favorites");
     expect(isOpen()).toBe(true);
-    expect(box("Favorites only").checked).toBe(true);
+    expect(flagRow("Favorites")).toEqual({ checked: true, choice: "only", disabled: false });
     expect(box("Only never played").checked).toBe(false);
     expect(heading()).toBe("Preset: Favorites");
     expect(applyButton().textContent).toBe("Apply");
@@ -1003,7 +1172,7 @@ describe("header, refresh, and clear all", () => {
     expect(applyButton().textContent).toBe("Apply");
     expect(presetRows()).toEqual(["Rich", "Favorites"]);
     expect(presetSelectInDialog().value).toBe("");
-    expect(box("Favorites only").checked).toBe(false);
+    expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
     expect(box("All (Videos and Photos)").checked).toBe(true);
     expect(box("Movies").checked && box("C:\\media\\photos").checked && box("Archive").checked).toBe(true);
     expect(box("No minimum").checked).toBe(true);
@@ -1042,7 +1211,7 @@ describe("names and storage", () => {
   it("adds only the collapsed categories key to browser storage", async () => {
     const { server } = await mountFilter([FAVORITES_PRESET]);
     await openDialog();
-    await click(box("Favorites only"));
+    await click(box("Favorites"));
     await showTab("Tags");
     await includeTag("Beach");
     await click(categoryToggle("Mood"));

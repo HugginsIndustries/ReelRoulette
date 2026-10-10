@@ -10,6 +10,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 ### Added
 
 - **Install the WebUI as an app on Android:** The server now works behind an HTTPS reverse proxy on the server machine, such as Tailscale Serve or Caddy, so Chrome on Android can install the WebUI as an app that opens without browser bars. The README shows how to set one up.
+- **Favorites and Blacklisted filters choose only or excluded:** In the filter dialog of the WebUI and the desktop, Favorites and Blacklisted are each a checkbox with an only-or-excluded choice, so a filter can leave favorites out or show only blacklisted files, in browse, random play, and presets. A preset saved in one client shows the same filter in the other, and presets saved before keep their filter. The desktop doesn't apply or save Favorites only with Blacklisted only, which matches nothing.
 
 ### Changed
 
@@ -24,6 +25,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 
 - **Pairing a new device:** A phone or computer that is not paired yet now loads the WebUI and its pairing prompt instead of an "Unauthorized" error.
 - **Tag filters stay fast:** Browsing the library and random picks no longer slow down with each tag in the filter. On a 49,000-item library, a 27-tag preset picks in about 45 ms instead of 700 ms, and its first library page loads in about 90 ms instead of 1.5 seconds.
+- **Desktop preset picks keep the WebUI's presets:** Picking a preset in the desktop's library panel no longer saves the desktop's copy of the preset list, which removed presets the WebUI had added since the desktop last loaded them. The desktop's filter dialog saves the list only when Apply changed it.
 - **One random pick at a time:** Pressing Next again in the WebUI while a random pick is loading no longer sends more picks that each play briefly and count as a play. A pick the server doesn't answer within 10 seconds is cancelled with "No response from the server. Try again.", and the next press starts a fresh one.
 
 ### Security

@@ -639,8 +639,8 @@ describe("starting over", () => {
 
     await click(screen.getByRole("button", { name: "Select filters", hidden: true }));
     await waitFor(() => expect((document.getElementById("filter-dialog") as HTMLElement).style.display).toBe("flex"));
-    fireEvent.click(screen.getByLabelText("Favorites only"));
-    fireEvent.change(screen.getByLabelText("Favorites only"));
+    fireEvent.click(screen.getByLabelText("Favorites"));
+    fireEvent.change(screen.getByLabelText("Favorites"));
     await click(screen.getByRole("button", { name: /^Apply/ }));
 
     await waitFor(() => expect(library.queries()).toHaveLength(2));

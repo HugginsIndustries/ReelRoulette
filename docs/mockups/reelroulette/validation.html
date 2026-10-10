@@ -255,6 +255,11 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 .filter-hint { font-size: 0.85rem; opacity: 0.75; margin: 0 0 8px; }
 .filter-stack { display: flex; flex-direction: column; gap: 4px; }
 .filter-stack label { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+/* The Favorites and Blacklisted filters: a checkbox and an only-or-excluded dropdown. */
+.mode-row { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.mode-row > label { display: flex; align-items: center; gap: 8px; min-width: 7.5rem; }
+.mode-select { min-height: 36px; padding: 0 8px; }
+.mode-select:disabled { opacity: 0.5; }
 .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .filter-row > label { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .duration-field { width: 14rem; max-width: 100%; }
@@ -635,8 +640,8 @@ h1 { font-size: 1.4rem; margin: 0; }
       <div class="filter-section">
         <h3>Basic Filters</h3>
         <div class="filter-stack">
-          <label><input type="checkbox"> Favorites only</label>
-          <label><input type="checkbox" checked> Exclude blacklisted</label>
+          <div class="mode-row"><label><input type="checkbox" data-mode-box> Favorites</label><select class="ctl mode-select" aria-label="Favorites filter" disabled><option value="only">only</option><option value="excluded">excluded</option></select></div>
+          <div class="mode-row"><label><input type="checkbox" data-mode-box checked> Blacklisted</label><select class="ctl mode-select" aria-label="Blacklisted filter"><option value="only">only</option><option value="excluded" selected>excluded</option></select></div>
           <label><input type="checkbox"> Only never played</label>
           <label><input type="checkbox"> Only videos with known duration</label>
           <label><input type="checkbox"> Only videos with known loudness</label>
@@ -1218,6 +1223,11 @@ document.querySelectorAll("[data-mini]").forEach((mini) => {
   const body = mini.querySelector(".mini-body");
   mini.querySelectorAll('input[type="radio"]').forEach((radio) => {
     radio.name = `${style}-${radio.closest(".filter-section").querySelector("h3").textContent}`;
+  });
+  // Each mode dropdown applies only while its checkbox is on.
+  mini.querySelectorAll("[data-mode-box]").forEach((box) => {
+    const select = box.closest(".mode-row").querySelector("select");
+    box.addEventListener("change", () => (select.disabled = !box.checked));
   });
   const minField = new ValidatedField(mini.querySelector("[data-min]"), checkDuration, { touched: true });
   const maxField = new ValidatedField(mini.querySelector("[data-max]"), checkDuration, { touched: true });

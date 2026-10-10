@@ -31,14 +31,23 @@ export interface FilterTagModel {
   tags?: Array<{ name: string; categoryId: string }>;
 }
 
+/** What the Favorites or Blacklisted dropdown offers: the mode its filter takes while its checkbox is on. */
+export type FlagFilterChoice = Exclude<FlagFilterMode, "off">;
+
+/** The dropdown's choice for a filter that is off: Favorites shows only, and Blacklisted shows excluded. */
+const DEFAULT_FAVORITES_CHOICE: FlagFilterChoice = "only";
+const DEFAULT_BLACKLISTED_CHOICE: FlagFilterChoice = "excluded";
+
 /**
  * What the General tab's fields show. It is filled from the working filter when the dialog opens or starts over,
- * and otherwise keeps what the user left, such as a duration that is not valid or an unchecked No minimum with an
- * empty field, which the working filter cannot hold.
+ * and otherwise keeps what the user left, such as a duration that is not valid, an unchecked No minimum with an
+ * empty field, or a Favorites or Blacklisted choice whose checkbox is off, which the working filter cannot hold.
  */
 export interface GeneralDraft {
-  favoritesMode: FlagFilterMode;
-  blacklistedMode: FlagFilterMode;
+  favoritesOn: boolean;
+  favoritesChoice: FlagFilterChoice;
+  blacklistedOn: boolean;
+  blacklistedChoice: FlagFilterChoice;
   onlyNeverPlayed: boolean;
   onlyKnownDuration: boolean;
   onlyKnownLoudness: boolean;
@@ -91,10 +100,20 @@ export function sourceLabel(source: FilterSource): string {
   return source.displayName || source.rootPath || source.id;
 }
 
+function flagChoice(mode: FlagFilterMode, fallback: FlagFilterChoice): FlagFilterChoice {
+  return mode === "off" ? fallback : mode;
+}
+
+function flagMode(on: boolean, choice: FlagFilterChoice): FlagFilterMode {
+  return on ? choice : "off";
+}
+
 export function generalDraftFromFilter(filter: FilterState, sources: readonly FilterSource[]): GeneralDraft {
   return {
-    favoritesMode: filter.favoritesMode,
-    blacklistedMode: filter.blacklistedMode,
+    favoritesOn: filter.favoritesMode !== "off",
+    favoritesChoice: flagChoice(filter.favoritesMode, DEFAULT_FAVORITES_CHOICE),
+    blacklistedOn: filter.blacklistedMode !== "off",
+    blacklistedChoice: flagChoice(filter.blacklistedMode, DEFAULT_BLACKLISTED_CHOICE),
     onlyNeverPlayed: filter.onlyNeverPlayed,
     onlyKnownDuration: filter.onlyKnownDuration,
     onlyKnownLoudness: filter.onlyKnownLoudness,
@@ -126,8 +145,8 @@ export function filterWithGeneralDraft(
   sources: readonly FilterSource[]
 ): FilterState {
   const next = cloneFilterState(filter);
-  next.favoritesMode = draft.favoritesMode;
-  next.blacklistedMode = draft.blacklistedMode;
+  next.favoritesMode = flagMode(draft.favoritesOn, draft.favoritesChoice);
+  next.blacklistedMode = flagMode(draft.blacklistedOn, draft.blacklistedChoice);
   next.onlyNeverPlayed = draft.onlyNeverPlayed;
   next.onlyKnownDuration = draft.onlyKnownDuration;
   next.onlyKnownLoudness = draft.onlyKnownLoudness;

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using ReelRoulette;
 using ReelRoulette.Core.Filtering;
 using ReelRoulette.Core.Storage;
@@ -91,6 +92,65 @@ public sealed class FilterModeJsonTests : IDisposable
 
         var reload = CreateStorage(settingsPath).Load();
         AssertReadsBack($"{name} (desktop settings)", filter, Assert.IsType<FilterState>(reload.FilterState));
+    }
+
+    [Fact]
+    public void DesktopWrittenFilter_MatchesTheCrossClientFixture()
+    {
+        using var fixture = JsonDocument.Parse(File.ReadAllText(FixturePath("filter-state-written.json")));
+        var expected = fixture.RootElement.GetProperty("desktop");
+
+        // Preset posts write the filter with default options.
+        var actual = JsonSerializer.SerializeToElement(WrittenFixtureFilter());
+
+        Assert.True(JsonElement.DeepEquals(expected, actual), $"The desktop wrote {actual.GetRawText()}");
+    }
+
+    [Theory]
+    [MemberData(nameof(ProjectionCases))]
+    public void WebUiWrittenFilter_ReadsAsThatFilter(string name, string favoritesMode, string blacklistedMode, string writtenJson)
+    {
+        using var fixture = JsonDocument.Parse(File.ReadAllText(FixturePath("filter-state-written.json")));
+        var webui = JsonNode.Parse(fixture.RootElement.GetProperty("webui").GetRawText())!.AsObject();
+        foreach (var field in JsonNode.Parse(writtenJson)!.AsObject())
+        {
+            webui[field.Key] = field.Value?.DeepClone();
+        }
+
+        using var posted = JsonDocument.Parse(webui.ToJsonString());
+        var read = LibraryPresetSelection.FilterStateFromServer(posted.RootElement);
+
+        Assert.True(Mode(favoritesMode) == read.FavoritesMode, $"{name}: favorites read as {read.FavoritesMode}");
+        Assert.True(Mode(blacklistedMode) == read.BlacklistedMode, $"{name}: blacklisted read as {read.BlacklistedMode}");
+
+        var expected = WrittenFixtureFilter();
+        expected.FavoritesMode = Mode(favoritesMode);
+        expected.BlacklistedMode = Mode(blacklistedMode);
+        Assert.True(LibraryPresetSelection.FiltersEqual(expected, read), $"{name}: read as {JsonSerializer.Serialize(read)}");
+    }
+
+    /// <summary>
+    /// The filter in filter-state-written.json.
+    /// </summary>
+    private static FilterState WrittenFixtureFilter()
+    {
+        return new FilterState
+        {
+            FavoritesMode = FlagFilterModeValue.Excluded,
+            BlacklistedMode = FlagFilterModeValue.Only,
+            OnlyNeverPlayed = true,
+            AudioFilter = AudioFilterMode.WithAudioOnly,
+            MediaTypeFilter = MediaTypeFilter.VideosOnly,
+            MinDuration = TimeSpan.FromSeconds(90),
+            MaxDuration = TimeSpan.FromSeconds(5400),
+            SelectedTags = ["Beach"],
+            ExcludedTags = ["Spoiler"],
+            CategoryLocalMatchModes = new Dictionary<string, TagMatchMode> { ["people"] = TagMatchMode.Or },
+            GlobalMatchMode = false,
+            IncludedSourceIds = ["source-1"],
+            OnlyKnownDuration = false,
+            OnlyKnownLoudness = false
+        };
     }
 
     private static void AssertWritten(string name, JsonElement expected, JsonElement actual)

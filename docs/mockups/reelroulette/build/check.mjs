@@ -405,6 +405,9 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: the default leaves out blacklisted items and shows no Filters line`, badged("thumb_down") === 0 && $("lib-filters").hidden);
   await applyFilter(false, "only", false, "excluded");
   check(`layout@${width}: Blacklisted off includes them (${badged("thumb_down")} badged)`, badged("thumb_down") > 0);
+  await applyFilter(false, "excluded", true, "excluded");
+  check(`layout@${width}: once applied, an unchecked filter's dropdown shows its default`,
+    $("filter-fav-mode").value === "only" && $("filter-fav-mode").disabled);
   await applyFilter(false, "only", true, "excluded");
 
   // Choosing a preset applies its filter, and a change to that filter stars it.

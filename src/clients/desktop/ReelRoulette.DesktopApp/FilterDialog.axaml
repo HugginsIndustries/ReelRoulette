@@ -31,12 +31,34 @@
                                        FontWeight="SemiBold" 
                                        FontSize="13"
                                        Margin="0,0,0,4"/>
-                            <CheckBox x:Name="FavoritesOnlyCheckBox"
-                                      Content="Favorites only"
-                                      IsChecked="{Binding FavoritesOnly}"/>
-                            <CheckBox x:Name="ExcludeBlacklistedCheckBox"
-                                      Content="Exclude blacklisted"
-                                      IsChecked="{Binding ExcludeBlacklisted}"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <CheckBox x:Name="FavoritesFilterCheckBox"
+                                          Content="Favorites"
+                                          IsChecked="{Binding FavoritesFilterOn}"
+                                          VerticalAlignment="Center"/>
+                                <ComboBox x:Name="FavoritesFilterComboBox"
+                                          AutomationProperties.Name="Favorites filter"
+                                          SelectedIndex="{Binding FavoritesChoiceIndex}"
+                                          IsEnabled="{Binding FavoritesFilterOn}"
+                                          VerticalAlignment="Center">
+                                    <ComboBoxItem Content="only"/>
+                                    <ComboBoxItem Content="excluded"/>
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <CheckBox x:Name="BlacklistedFilterCheckBox"
+                                          Content="Blacklisted"
+                                          IsChecked="{Binding BlacklistedFilterOn}"
+                                          VerticalAlignment="Center"/>
+                                <ComboBox x:Name="BlacklistedFilterComboBox"
+                                          AutomationProperties.Name="Blacklisted filter"
+                                          SelectedIndex="{Binding BlacklistedChoiceIndex}"
+                                          IsEnabled="{Binding BlacklistedFilterOn}"
+                                          VerticalAlignment="Center">
+                                    <ComboBoxItem Content="only"/>
+                                    <ComboBoxItem Content="excluded"/>
+                                </ComboBox>
+                            </StackPanel>
                             <CheckBox x:Name="OnlyNeverPlayedCheckBox"
                                       Content="Only never played"
                                       IsChecked="{Binding OnlyNeverPlayed}"/>

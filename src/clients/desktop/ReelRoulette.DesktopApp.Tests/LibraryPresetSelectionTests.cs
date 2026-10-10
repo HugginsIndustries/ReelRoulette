@@ -207,6 +207,31 @@ public sealed class LibraryPresetSelectionTests
         Assert.True(LibraryPresetSelection.PresetsEqual([], []));
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("null")]
+    [InlineData("{\"audioFilter\": \"WithAudioOnly\", \"favoritesMode\": \"only\"}")]
+    public void FilterStateFromServer_ReadsAMissingNullOrUnreadableFilterAsTheDefault(string? json)
+    {
+        JsonElement? filterState = json == null ? null : JsonDocument.Parse(json).RootElement;
+
+        var read = LibraryPresetSelection.FilterStateFromServer(filterState);
+
+        Assert.True(LibraryPresetSelection.FiltersEqual(new FilterState(), read));
+    }
+
+    [Fact]
+    public void FilterStateFromServer_ReadsTheModes()
+    {
+        using var json = JsonDocument.Parse("{\"favoritesMode\": \"excluded\", \"blacklistedMode\": \"only\", \"onlyNeverPlayed\": true}");
+
+        var read = LibraryPresetSelection.FilterStateFromServer(json.RootElement);
+
+        Assert.Equal(FlagFilterModeValue.Excluded, read.FavoritesMode);
+        Assert.Equal(FlagFilterModeValue.Only, read.BlacklistedMode);
+        Assert.True(read.OnlyNeverPlayed);
+    }
+
     private static FilterPreset Youtube()
     {
         return new FilterPreset

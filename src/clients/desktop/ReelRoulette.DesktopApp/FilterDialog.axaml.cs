@@ -39,6 +39,8 @@ namespace ReelRoulette
         private bool _hasPendingChanges;
         private bool _holdNone;
         private bool _isApplyingSourceSelection;
+        private FlagFilterModeValue _favoritesChoice = FlagFilterModeValue.Only;
+        private FlagFilterModeValue _blacklistedChoice = FlagFilterModeValue.Excluded;
 
         private static void Log(string message)
         {
@@ -54,6 +56,7 @@ namespace ReelRoulette
             // Create a working copy to avoid modifying the original until Apply is clicked
             var json = JsonSerializer.Serialize(_originalFilterState);
             _filterState = JsonSerializer.Deserialize<FilterState>(json) ?? new FilterState();
+            LoadFlagChoices();
             
             _libraryIndex = libraryIndex;
             
@@ -190,27 +193,117 @@ namespace ReelRoulette
 
         public bool HasSourceOptions => SourceOptions.Count > 0;
 
-        // Basic flags
-        public bool FavoritesOnly
+        // Basic flags. Each flag filter is a checkbox and a choice of only or excluded.
+        // The choice is kept while its checkbox is off, so checking it again restores it.
+        public bool FavoritesFilterOn
         {
-            get => _filterState.FavoritesMode == FlagFilterModeValue.Only;
+            get => _filterState.FavoritesMode != FlagFilterModeValue.Off;
             set
             {
-                _filterState.FavoritesMode = value ? FlagFilterModeValue.Only : FlagFilterModeValue.Off;
+                if (value == FavoritesFilterOn)
+                {
+                    return;
+                }
+
+                _filterState.FavoritesMode = value ? _favoritesChoice : FlagFilterModeValue.Off;
                 OnPropertyChanged();
                 MarkPresetModified();
             }
         }
 
-        public bool ExcludeBlacklisted
+        // 0 = only, 1 = excluded
+        public int FavoritesChoiceIndex
         {
-            get => _filterState.BlacklistedMode == FlagFilterModeValue.Excluded;
+            get => ChoiceIndex(_favoritesChoice);
             set
             {
-                _filterState.BlacklistedMode = value ? FlagFilterModeValue.Excluded : FlagFilterModeValue.Off;
+                if (value < 0 || value == FavoritesChoiceIndex)
+                {
+                    return;
+                }
+
+                _favoritesChoice = ChoiceFromIndex(value);
+                OnPropertyChanged();
+                if (FavoritesFilterOn)
+                {
+                    _filterState.FavoritesMode = _favoritesChoice;
+                    MarkPresetModified();
+                }
+            }
+        }
+
+        public bool BlacklistedFilterOn
+        {
+            get => _filterState.BlacklistedMode != FlagFilterModeValue.Off;
+            set
+            {
+                if (value == BlacklistedFilterOn)
+                {
+                    return;
+                }
+
+                _filterState.BlacklistedMode = value ? _blacklistedChoice : FlagFilterModeValue.Off;
                 OnPropertyChanged();
                 MarkPresetModified();
             }
+        }
+
+        // 0 = only, 1 = excluded
+        public int BlacklistedChoiceIndex
+        {
+            get => ChoiceIndex(_blacklistedChoice);
+            set
+            {
+                if (value < 0 || value == BlacklistedChoiceIndex)
+                {
+                    return;
+                }
+
+                _blacklistedChoice = ChoiceFromIndex(value);
+                OnPropertyChanged();
+                if (BlacklistedFilterOn)
+                {
+                    _filterState.BlacklistedMode = _blacklistedChoice;
+                    MarkPresetModified();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Favorites only with Blacklisted only can't be applied or saved, since no item is both favorite and blacklisted.
+        /// Every other pairing is allowed.
+        /// </summary>
+        public static bool FlagModesAllowed(FilterState filter)
+        {
+            return !(filter.FavoritesMode == FlagFilterModeValue.Only && filter.BlacklistedMode == FlagFilterModeValue.Only);
+        }
+
+        private static int ChoiceIndex(FlagFilterModeValue choice)
+        {
+            return choice == FlagFilterModeValue.Excluded ? 1 : 0;
+        }
+
+        private static FlagFilterModeValue ChoiceFromIndex(int index)
+        {
+            return index == 1 ? FlagFilterModeValue.Excluded : FlagFilterModeValue.Only;
+        }
+
+        /// <summary>
+        /// Takes each flag filter's choice from the working filter, or its default while that filter is off:
+        /// only for Favorites and excluded for Blacklisted.
+        /// </summary>
+        private void LoadFlagChoices()
+        {
+            _favoritesChoice = _filterState.FavoritesMode == FlagFilterModeValue.Off ? FlagFilterModeValue.Only : _filterState.FavoritesMode;
+            _blacklistedChoice = _filterState.BlacklistedMode == FlagFilterModeValue.Off ? FlagFilterModeValue.Excluded : _filterState.BlacklistedMode;
+        }
+
+        private void RaiseFlagFilterChanges()
+        {
+            OnPropertyChanged(nameof(FavoritesFilterOn));
+            OnPropertyChanged(nameof(FavoritesChoiceIndex));
+            OnPropertyChanged(nameof(BlacklistedFilterOn));
+            OnPropertyChanged(nameof(BlacklistedChoiceIndex));
         }
 
         public bool OnlyNeverPlayed
@@ -478,7 +571,7 @@ namespace ReelRoulette
         private void RefreshPendingState()
         {
             var hasFilterChanges = !LibraryPresetSelection.FiltersEqual(_filterState, _initialFilterState);
-            var hasPresetChanges = !LibraryPresetSelection.PresetsEqual(_presets, _initialPresets);
+            var hasPresetChanges = PresetsChanged;
             var hasActivePresetChanges = !string.Equals(_activePresetName, _initialActivePresetName, StringComparison.Ordinal);
             var next = hasFilterChanges || hasPresetChanges || hasActivePresetChanges;
             if (_hasPendingChanges != next)
@@ -1022,10 +1115,10 @@ namespace ReelRoulette
             // Store original state for comparison
             _originalPresetState = JsonSerializer.Deserialize<FilterState>(json) ?? new FilterState();
             _presetModified = false;
+            LoadFlagChoices();
             
             // Update all UI bindings
-            OnPropertyChanged(nameof(FavoritesOnly));
-            OnPropertyChanged(nameof(ExcludeBlacklisted));
+            RaiseFlagFilterChanges();
             OnPropertyChanged(nameof(OnlyNeverPlayed));
             OnPropertyChanged(nameof(OnlyKnownDuration));
             OnPropertyChanged(nameof(OnlyKnownLoudness));
@@ -1094,6 +1187,12 @@ namespace ReelRoulette
             {
                 Log($"FilterDialog: Preset '{presetName}' already exists (case-insensitive)");
                 // TODO: Show error message to user
+                return;
+            }
+
+            if (!FlagModesAllowed(_filterState))
+            {
+                Log($"FilterDialog: Cannot add preset '{presetName}' - Favorites only and Blacklisted only can't be combined");
                 return;
             }
             
@@ -1268,6 +1367,12 @@ namespace ReelRoulette
                 Log($"FilterDialog: Preset '{_activePresetName}' not found in presets list");
                 return;
             }
+
+            if (!FlagModesAllowed(_filterState))
+            {
+                Log($"FilterDialog: Cannot update preset '{_activePresetName}' - Favorites only and Blacklisted only can't be combined");
+                return;
+            }
             
             Log($"FilterDialog: Updating preset '{_activePresetName}' with current filter state");
             
@@ -1291,8 +1396,8 @@ namespace ReelRoulette
         {
             Log("FilterDialog: Clearing all filters");
             _filterState = new FilterState();
-            FavoritesOnly = false;
-            ExcludeBlacklisted = true;
+            LoadFlagChoices();
+            RaiseFlagFilterChanges();
             OnlyNeverPlayed = false;
             OnlyKnownDuration = false;
             OnlyKnownLoudness = false;
@@ -1333,6 +1438,12 @@ namespace ReelRoulette
 
         private void ApplyButton_Click(object? sender, RoutedEventArgs e)
         {
+            if (!FlagModesAllowed(_filterState))
+            {
+                Log("FilterDialog: Cannot apply - Favorites only and Blacklisted only can't be combined");
+                return;
+            }
+
             // Copy all properties from working copy back to original
             _originalFilterState.FavoritesMode = _filterState.FavoritesMode;
             _originalFilterState.BlacklistedMode = _filterState.BlacklistedMode;
@@ -1402,6 +1513,11 @@ namespace ReelRoulette
         }
 
         public bool WasApplied => _applyClicked;
+
+        /// <summary>
+        /// True when the preset list differs from the one the dialog opened with: a preset added, updated, renamed, deleted, or moved.
+        /// </summary>
+        public bool PresetsChanged => !LibraryPresetSelection.PresetsEqual(_presets, _initialPresets);
 
         /// <summary>
         /// Returns the current list of presets (for saving to settings).

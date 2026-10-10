@@ -11,13 +11,16 @@ import {
   type FilterSource,
   type GeneralDraft
 } from "../filter/filterDialogModel";
-import { TAG_MATCH_MODE, createDefaultFilterState, type FilterState } from "../filter/filterStateModel";
+import { TAG_MATCH_MODE, createDefaultFilterState, type FilterState, type FlagFilterMode } from "../filter/filterStateModel";
 
 const SOURCES: FilterSource[] = [
   { id: "Source-1", displayName: "Movies", rootPath: "C:\\movies" },
   { id: "source-2", displayName: null, rootPath: "C:\\photos" },
   { id: "source-3", isEnabled: false }
 ];
+
+const FLAG_MODES: readonly FlagFilterMode[] = ["off", "only", "excluded"];
+const FLAG_MODE_PAIRS = FLAG_MODES.flatMap((favorites) => FLAG_MODES.map((blacklisted) => [favorites, blacklisted] as const));
 
 function filter(change: Partial<FilterState> = {}): FilterState {
   return { ...createDefaultFilterState(), ...change };
@@ -37,6 +40,30 @@ describe("generalDraftFromFilter", () => {
     expect(none).toMatchObject({ minText: "", noMin: true, maxText: "", noMax: true });
   });
 
+  it("shows each flag mode as its checkbox and choice, with the default choice for a filter that is off", () => {
+    const shown = (favoritesMode: FlagFilterMode, blacklistedMode: FlagFilterMode) => {
+      const { favoritesOn, favoritesChoice, blacklistedOn, blacklistedChoice } = generalDraftFromFilter(
+        filter({ favoritesMode, blacklistedMode }),
+        SOURCES
+      );
+      return { favoritesOn, favoritesChoice, blacklistedOn, blacklistedChoice };
+    };
+    expect(generalDraftFromFilter(filter(), SOURCES)).toMatchObject({
+      favoritesOn: false,
+      favoritesChoice: "only",
+      blacklistedOn: true,
+      blacklistedChoice: "excluded"
+    });
+    expect(shown("off", "off")).toEqual({ favoritesOn: false, favoritesChoice: "only", blacklistedOn: false, blacklistedChoice: "excluded" });
+    expect(shown("only", "only")).toEqual({ favoritesOn: true, favoritesChoice: "only", blacklistedOn: true, blacklistedChoice: "only" });
+    expect(shown("excluded", "excluded")).toEqual({
+      favoritesOn: true,
+      favoritesChoice: "excluded",
+      blacklistedOn: true,
+      blacklistedChoice: "excluded"
+    });
+  });
+
   it("checks the stored sources, ignoring case", () => {
     expect(generalDraftFromFilter(filter({ includedSourceIds: ["source-1"] }), SOURCES).sourceChecked).toEqual([true, false, false]);
   });
@@ -47,7 +74,7 @@ describe("filterWithGeneralDraft", () => {
     const working = filter({ selectedTags: ["Beach"], globalMatchMode: false });
     const read = filterWithGeneralDraft(
       working,
-      draft({ favoritesMode: "only", mediaTypeFilter: 2, audioFilter: 1, noMin: false, minText: "1:00:00" }),
+      draft({ favoritesOn: true, mediaTypeFilter: 2, audioFilter: 1, noMin: false, minText: "1:00:00" }),
       SOURCES
     );
     expect(read).toMatchObject({
@@ -62,10 +89,38 @@ describe("filterWithGeneralDraft", () => {
     expect(working.favoritesMode).toBe("off");
   });
 
-  it("keeps a flag mode the checkboxes cannot show", () => {
-    const working = filter({ favoritesMode: "excluded", blacklistedMode: "only" });
+  it.each(FLAG_MODE_PAIRS)("keeps Favorites %s and Blacklisted %s through the draft", (favoritesMode, blacklistedMode) => {
+    const working = filter({ favoritesMode, blacklistedMode });
     const read = filterWithGeneralDraft(working, generalDraftFromFilter(working, SOURCES), SOURCES);
-    expect(read).toMatchObject({ favoritesMode: "excluded", blacklistedMode: "only" });
+    expect(read).toMatchObject({ favoritesMode, blacklistedMode });
+  });
+
+  it("reads a checked filter as its choice and an unchecked one as off, whatever its choice", () => {
+    const read = (change: Partial<GeneralDraft>) => {
+      const { favoritesMode, blacklistedMode } = filterWithGeneralDraft(filter(), draft(change), SOURCES);
+      return { favoritesMode, blacklistedMode };
+    };
+    expect(read({ favoritesOn: true, favoritesChoice: "excluded", blacklistedOn: true, blacklistedChoice: "only" })).toEqual({
+      favoritesMode: "excluded",
+      blacklistedMode: "only"
+    });
+    expect(read({ favoritesOn: false, favoritesChoice: "excluded", blacklistedOn: false, blacklistedChoice: "only" })).toEqual({
+      favoritesMode: "off",
+      blacklistedMode: "off"
+    });
+  });
+
+  it("keeps a choice while its filter is unchecked, and the filter takes it again once checked", () => {
+    const sources: FilterSource[] = [];
+    let current = filter({ favoritesMode: "excluded", blacklistedMode: "only" });
+    let shown = generalDraftFromFilter(current, sources);
+    shown = { ...shown, favoritesOn: false, blacklistedOn: false };
+    current = filterWithGeneralDraft(current, shown, sources);
+    expect(current).toMatchObject({ favoritesMode: "off", blacklistedMode: "off" });
+    expect(shown).toMatchObject({ favoritesChoice: "excluded", blacklistedChoice: "only" });
+
+    shown = { ...shown, favoritesOn: true, blacklistedOn: true };
+    expect(filterWithGeneralDraft(current, shown, sources)).toMatchObject({ favoritesMode: "excluded", blacklistedMode: "only" });
   });
 
   it("stores no duration for a checked none box or text that is not valid", () => {

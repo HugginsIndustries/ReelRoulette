@@ -40,6 +40,28 @@ public static class LibraryPresetSelection
     }
 
     /// <summary>
+    /// Reads a preset's filter as the server returns it. A missing or null filter, or one that can't be read, is the default filter.
+    /// </summary>
+    public static FilterState FilterStateFromServer(JsonElement? filterState)
+    {
+        if (!filterState.HasValue ||
+            filterState.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return new FilterState();
+        }
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<FilterState>(filterState.Value.GetRawText());
+            return parsed ?? new FilterState();
+        }
+        catch
+        {
+            return new FilterState();
+        }
+    }
+
+    /// <summary>
     /// Preset comparison. An unset global match mode means AND, so it equals an explicit AND.
     /// Tags compare as case-insensitive sets and source IDs as sets; a missing tag or source list
     /// equals an empty one, and empty names are ignored. Category modes compare by key in any order,

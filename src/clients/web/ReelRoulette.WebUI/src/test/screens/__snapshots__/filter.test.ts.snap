@@ -25,12 +25,24 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
         <h3>
           "Basic Filters"
         <div class="filter-stack">
-          <label>
-            <input checked="true" id="filter-fav-only" type="checkbox">
-            "Favorites only"
-          <label>
-            <input checked="true" id="filter-excl-bl" type="checkbox">
-            "Exclude blacklisted"
+          <div class="mode-row">
+            <label>
+              <input checked="true" id="filter-fav" type="checkbox">
+              "Favorites"
+            <select aria-label="Favorites filter" class="mode-select" id="filter-fav-mode">
+              <option selected="true" value="only">
+                "only"
+              <option selected="false" value="excluded">
+                "excluded"
+          <div class="mode-row">
+            <label>
+              <input checked="true" id="filter-bl" type="checkbox">
+              "Blacklisted"
+            <select aria-label="Blacklisted filter" class="mode-select" id="filter-bl-mode">
+              <option selected="false" value="only">
+                "only"
+              <option selected="true" value="excluded">
+                "excluded"
           <label>
             <input checked="false" id="filter-never-played" type="checkbox">
             "Only never played"
@@ -327,12 +339,24 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
         <h3>
           "Basic Filters"
         <div class="filter-stack">
-          <label>
-            <input checked="true" id="filter-fav-only" type="checkbox">
-            "Favorites only"
-          <label>
-            <input checked="true" id="filter-excl-bl" type="checkbox">
-            "Exclude blacklisted"
+          <div class="mode-row">
+            <label>
+              <input checked="true" id="filter-fav" type="checkbox">
+              "Favorites"
+            <select aria-label="Favorites filter" class="mode-select" id="filter-fav-mode">
+              <option selected="true" value="only">
+                "only"
+              <option selected="false" value="excluded">
+                "excluded"
+          <div class="mode-row">
+            <label>
+              <input checked="true" id="filter-bl" type="checkbox">
+              "Blacklisted"
+            <select aria-label="Blacklisted filter" class="mode-select" id="filter-bl-mode">
+              <option selected="false" value="only">
+                "only"
+              <option selected="true" value="excluded">
+                "excluded"
           <label>
             <input checked="false" id="filter-never-played" type="checkbox">
             "Only never played"
@@ -629,12 +653,24 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
         <h3>
           "Basic Filters"
         <div class="filter-stack">
-          <label>
-            <input checked="true" id="filter-fav-only" type="checkbox">
-            "Favorites only"
-          <label>
-            <input checked="true" id="filter-excl-bl" type="checkbox">
-            "Exclude blacklisted"
+          <div class="mode-row">
+            <label>
+              <input checked="true" id="filter-fav" type="checkbox">
+              "Favorites"
+            <select aria-label="Favorites filter" class="mode-select" id="filter-fav-mode">
+              <option selected="true" value="only">
+                "only"
+              <option selected="false" value="excluded">
+                "excluded"
+          <div class="mode-row">
+            <label>
+              <input checked="true" id="filter-bl" type="checkbox">
+              "Blacklisted"
+            <select aria-label="Blacklisted filter" class="mode-select" id="filter-bl-mode">
+              <option selected="false" value="only">
+                "only"
+              <option selected="true" value="excluded">
+                "excluded"
           <label>
             <input checked="false" id="filter-never-played" type="checkbox">
             "Only never played"
