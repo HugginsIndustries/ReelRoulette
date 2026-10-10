@@ -19,9 +19,10 @@ Instructions:
 
 Commit Message:
 
-Chore: Strip embedded metadata from the logo files
+Docs: Plan the favorite and blacklist filter modes from the report
 
-- The logo SVGs in `assets/logo/` drop their content-credentials (C2PA) block and its namespace declaration, which made up most of each file.
-- The logo PNGs drop the background-color chunk their encoder added; their image data is copied unchanged. The ICOs had no metadata and are untouched.
-- The WebUI's copies are re-synced and the design mockup's pages are rebuilt with the stripped logos.
-- Every image is pixel-identical to before: PNG and ICO frames by decoded pixels, and SVGs by renders at several sizes.
+- The filter modes milestone names its new fields, `favoritesMode` and `blacklistedMode`, and records the rule for reading old and new fields together, locked to a new shared fixture, and the old fields each client writes beside the new ones.
+- Its contract slice describes today's filter fields in an OpenAPI FilterState schema, with the constraints that keep the wire unchanged, a test that the schema matches the server's parser, and small OpenAPI and API doc fixes. The new fields enter the schema with the parser in the server slice.
+- Both clients compare resolved modes for preset matching and the patch-or-reload rule; the desktop stops posting presets on header picks and on an Apply without preset changes, and its filter summary names the new modes.
+- Desktop and server are updated together for v0.15.0, and a release-notes agent check is added to the plan.
+- The preset write, browser-playable filter, desktop removal, and retirement notice milestones are updated to match what the report found.
