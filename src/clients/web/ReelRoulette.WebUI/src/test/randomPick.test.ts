@@ -142,12 +142,12 @@ describe("randomPick", () => {
 });
 
 describe("randomPickRequest", () => {
-  const favorites = { id: " preset-favorites ", name: "Favorites", filterState: { ...createDefaultFilterState(), favoritesOnly: true } };
+  const favorites = { id: " preset-favorites ", name: "Favorites", filterState: { ...createDefaultFilterState(), favoritesMode: "only" as const } };
   const inputs: RandomPickInputs = {
     clientId: "client-1",
     sessionId: "session-1",
     randomizationMode: "WeightedRandom",
-    appliedFilter: { ...createDefaultFilterState(), favoritesOnly: true },
+    appliedFilter: { ...createDefaultFilterState(), favoritesMode: "only" },
     presets: [favorites],
     selectedPresetValue: " preset-favorites "
   };
@@ -170,7 +170,7 @@ describe("randomPickRequest", () => {
     for (const selectedPresetValue of ["", HEADER_PRESET_STARRED_VALUE]) {
       expect(randomPickRequest({ ...inputs, selectedPresetValue }).presetId).toBeUndefined();
     }
-    const changed = randomPickRequest({ ...inputs, appliedFilter: { ...createDefaultFilterState(), favoritesOnly: true, onlyNeverPlayed: true } });
+    const changed = randomPickRequest({ ...inputs, appliedFilter: { ...createDefaultFilterState(), favoritesMode: "only", onlyNeverPlayed: true } });
     expect(changed.presetId).toBeUndefined();
     expect(changed.filterState?.onlyNeverPlayed).toBe(true);
   });

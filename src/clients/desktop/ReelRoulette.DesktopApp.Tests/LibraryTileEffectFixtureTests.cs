@@ -27,15 +27,8 @@ public sealed class LibraryTileEffectFixtureTests
     {
         using var document = JsonDocument.Parse(entryJson);
         var entry = document.RootElement;
-        var filterJson = entry.GetProperty("filter");
-        var filter = new FilterState
-        {
-            FavoritesOnly = filterJson.GetProperty("favoritesOnly").GetBoolean(),
-            ExcludeBlacklisted = filterJson.GetProperty("excludeBlacklisted").GetBoolean(),
-            OnlyNeverPlayed = filterJson.GetProperty("onlyNeverPlayed").GetBoolean(),
-            SelectedTags = Strings(filterJson, "selectedTags"),
-            ExcludedTags = Strings(filterJson, "excludedTags")
-        };
+        // The filter is read the way presets loaded from the server are, so its flag filters resolve as they would there.
+        var filter = JsonSerializer.Deserialize<FilterState>(entry.GetProperty("filter").GetRawText());
         var change = new LibraryTileChange
         {
             Kind = entry.GetProperty("event").GetString() switch

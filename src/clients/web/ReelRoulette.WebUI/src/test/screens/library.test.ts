@@ -644,7 +644,7 @@ describe("starting over", () => {
     await click(screen.getByRole("button", { name: /^Apply/ }));
 
     await waitFor(() => expect(library.queries()).toHaveLength(2));
-    expect(library.queries()[1]).toMatchObject({ filterState: { favoritesOnly: true }, search: "", offset: 0, limit: 200 });
+    expect(library.queries()[1]).toMatchObject({ filterState: { favoritesMode: "only", favoritesOnly: true }, search: "", offset: 0, limit: 200 });
   });
 });
 

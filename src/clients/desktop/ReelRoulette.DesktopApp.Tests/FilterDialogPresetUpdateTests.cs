@@ -4,6 +4,7 @@ using Avalonia.LogicalTree;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ReelRoulette;
+using ReelRoulette.Core.Filtering;
 using Xunit;
 
 namespace ReelRoulette.DesktopApp.Tests;
@@ -168,7 +169,7 @@ public sealed class FilterDialogPresetUpdateTests
         var steps = Run(() =>
         {
             var presets = Presets(false);
-            presets.Add(new FilterPreset { Name = "Q", FilterState = new FilterState { FavoritesOnly = true } });
+            presets.Add(new FilterPreset { Name = "Q", FilterState = new FilterState { FavoritesMode = FlagFilterModeValue.Only } });
             var dialog = Open(Filter(true), presets);
             var opened = (dialog.HeaderText, UpdatePresetButton(dialog).IsEnabled);
             ClickPresetRowButton(dialog, "Q", "Delete");
@@ -188,7 +189,7 @@ public sealed class FilterDialogPresetUpdateTests
         var steps = Run(() =>
         {
             var presets = Presets(false);
-            presets.Insert(0, new FilterPreset { Name = "Q0", FilterState = new FilterState { FavoritesOnly = true } });
+            presets.Insert(0, new FilterPreset { Name = "Q0", FilterState = new FilterState { FavoritesMode = FlagFilterModeValue.Only } });
             presets.Add(new FilterPreset { Name = "Q1", FilterState = new FilterState { OnlyNeverPlayed = true } });
             var dialog = Open(Filter(true), presets);
             var opened = (dialog.HeaderText, UpdatePresetButton(dialog).IsEnabled);

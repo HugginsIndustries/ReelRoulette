@@ -37,5 +37,16 @@
   { "name": "null duration equals none", "left": { "minDuration": null, "maxDuration": null }, "right": {}, "same": true },
   { "name": "minimum and maximum are not interchangeable", "left": { "minDuration": "00:05:00" }, "right": { "maxDuration": "00:05:00" }, "same": false },
   { "name": "default exclude blacklisted written out equals unset", "left": { "excludeBlacklisted": true }, "right": {}, "same": true },
-  { "name": "favorites only differs from unset", "left": { "favoritesOnly": true }, "right": {}, "same": false }
+  { "name": "favorites only differs from unset", "left": { "favoritesOnly": true }, "right": {}, "same": false },
+  { "name": "old favorites only equals the favorites only mode", "left": { "favoritesOnly": true }, "right": { "favoritesMode": "only" }, "same": true },
+  { "name": "old favorites only equals a mixed-case mode", "left": { "favoritesOnly": true }, "right": { "favoritesMode": "Only" }, "same": true },
+  { "name": "old blacklisted off equals the blacklisted off mode", "left": { "excludeBlacklisted": false }, "right": { "blacklistedMode": "off" }, "same": true },
+  { "name": "favorites excluded differs from unset", "left": { "favoritesMode": "excluded" }, "right": {}, "same": false },
+  { "name": "blacklisted only differs from old blacklisted off", "left": { "blacklistedMode": "only" }, "right": { "excludeBlacklisted": false }, "same": false },
+  { "name": "blacklisted off differs from unset", "left": { "blacklistedMode": "off" }, "right": {}, "same": false },
+  { "name": "new fields with blacklisted off equal the old fields", "left": { "favoritesMode": "only", "blacklistedMode": "off" }, "right": { "favoritesOnly": true, "excludeBlacklisted": false }, "same": true },
+  { "name": "modes written with their old fields equal the modes alone", "left": { "favoritesMode": "excluded", "favoritesOnly": false, "blacklistedMode": "only", "excludeBlacklisted": false }, "right": { "favoritesMode": "excluded", "blacklistedMode": "only" }, "same": true },
+  { "name": "favorites excluded differs from its old field alone", "left": { "favoritesMode": "excluded", "favoritesOnly": false }, "right": { "favoritesOnly": false }, "same": false },
+  { "name": "favorites only differs from favorites excluded", "left": { "favoritesMode": "only" }, "right": { "favoritesMode": "excluded" }, "same": false },
+  { "name": "blacklisted only differs from unset", "left": { "blacklistedMode": "only" }, "right": {}, "same": false }
 ]

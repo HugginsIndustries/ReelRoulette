@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ReelRoulette.Core.Filtering;
 
 namespace ReelRoulette;
 
@@ -243,11 +244,11 @@ public static class LibraryPanelBrowse
     /// </summary>
     public static LibraryPanelBrowseEffect EffectFor(LibraryTileChange change, FilterState? filter, string? sortMode)
     {
-        var favoritesOnly = filter?.FavoritesOnly ?? false;
-        var excludeBlacklisted = filter?.ExcludeBlacklisted ?? false;
+        var favoritesMode = filter?.FavoritesMode ?? FlagFilterModeValue.Off;
+        var blacklistedMode = filter?.BlacklistedMode ?? FlagFilterModeValue.Off;
         var reload = change.Kind switch
         {
-            LibraryPanelBrowseEvent.FavoriteOrBlacklist => FlagChangeReloads(change, favoritesOnly, excludeBlacklisted),
+            LibraryPanelBrowseEvent.FavoriteOrBlacklist => FlagChangeReloads(change, favoritesMode, blacklistedMode),
             LibraryPanelBrowseEvent.Playback => IsPlaybackOrderSort(sortMode) ||
                                                 (change.Loaded && (filter?.OnlyNeverPlayed ?? false)),
             LibraryPanelBrowseEvent.ItemTags => TagChangeReloads(change, filter),
@@ -264,9 +265,9 @@ public static class LibraryPanelBrowse
         return hasTagFilter ? LibraryPanelBrowseEffect.ReloadLoaded : LibraryPanelBrowseEffect.Patch;
     }
 
-    private static bool FlagChangeReloads(LibraryTileChange change, bool favoritesOnly, bool excludeBlacklisted)
+    private static bool FlagChangeReloads(LibraryTileChange change, FlagFilterModeValue favoritesMode, FlagFilterModeValue blacklistedMode)
     {
-        if (!favoritesOnly && !excludeBlacklisted)
+        if (favoritesMode == FlagFilterModeValue.Off && blacklistedMode == FlagFilterModeValue.Off)
         {
             return false;
         }
@@ -277,14 +278,14 @@ public static class LibraryPanelBrowse
         }
 
         bool Matches(LibraryTileFlags flags) =>
-            (!favoritesOnly || flags.IsFavorite) && (!excludeBlacklisted || !flags.IsBlacklisted);
+            FlagAllowed(favoritesMode, flags.IsFavorite) && FlagAllowed(blacklistedMode, flags.IsBlacklisted);
 
         if (change.Before is LibraryTileFlags before)
         {
             if (change.Loaded)
             {
-                return (favoritesOnly && before.IsFavorite != after.IsFavorite) ||
-                       (excludeBlacklisted && before.IsBlacklisted != after.IsBlacklisted);
+                return (favoritesMode != FlagFilterModeValue.Off && before.IsFavorite != after.IsFavorite) ||
+                       (blacklistedMode != FlagFilterModeValue.Off && before.IsBlacklisted != after.IsBlacklisted);
             }
 
             // With the previous values known, an item that is not loaded reloads only when it enters the filter.
@@ -292,6 +293,19 @@ public static class LibraryPanelBrowse
         }
 
         return Matches(after);
+    }
+
+    /// <summary>
+    /// A flag filter allows an item when it is off, when the flag is set under only, or when it is clear under excluded.
+    /// </summary>
+    private static bool FlagAllowed(FlagFilterModeValue mode, bool flag)
+    {
+        return mode switch
+        {
+            FlagFilterModeValue.Only => flag,
+            FlagFilterModeValue.Excluded => !flag,
+            _ => true
+        };
     }
 
     /// <summary>

@@ -17,14 +17,37 @@ const TABS: readonly { tab: FilterDialogTab; label: string; display: string }[] 
   { tab: "presets", label: "Presets", display: "flex" }
 ];
 
-type BasicField = "favoritesOnly" | "excludeBlacklisted" | "onlyNeverPlayed" | "onlyKnownDuration" | "onlyKnownLoudness";
+type BasicField = "onlyNeverPlayed" | "onlyKnownDuration" | "onlyKnownLoudness";
 
-const BASIC_FILTERS: readonly { id: string; field: BasicField; label: string }[] = [
-  { id: "filter-fav-only", field: "favoritesOnly", label: "Favorites only" },
-  { id: "filter-excl-bl", field: "excludeBlacklisted", label: "Exclude blacklisted" },
-  { id: "filter-never-played", field: "onlyNeverPlayed", label: "Only never played" },
-  { id: "filter-known-dur", field: "onlyKnownDuration", label: "Only videos with known duration" },
-  { id: "filter-known-loud", field: "onlyKnownLoudness", label: "Only videos with known loudness" }
+interface BasicFilter {
+  id: string;
+  label: string;
+  checked(draft: GeneralDraft): boolean;
+  change(checked: boolean): Partial<Omit<GeneralDraft, "sourceChecked">>;
+}
+
+function booleanFilter(id: string, field: BasicField, label: string): BasicFilter {
+  return { id, label, checked: (draft) => draft[field], change: (checked) => ({ [field]: checked }) };
+}
+
+// The two flag checkboxes show one mode each. A mode they cannot show leaves its checkbox clear, and stays in the
+// draft until the checkbox is used.
+const BASIC_FILTERS: readonly BasicFilter[] = [
+  {
+    id: "filter-fav-only",
+    label: "Favorites only",
+    checked: (draft) => draft.favoritesMode === "only",
+    change: (checked) => ({ favoritesMode: checked ? "only" : "off" })
+  },
+  {
+    id: "filter-excl-bl",
+    label: "Exclude blacklisted",
+    checked: (draft) => draft.blacklistedMode === "excluded",
+    change: (checked) => ({ blacklistedMode: checked ? "excluded" : "off" })
+  },
+  booleanFilter("filter-never-played", "onlyNeverPlayed", "Only never played"),
+  booleanFilter("filter-known-dur", "onlyKnownDuration", "Only videos with known duration"),
+  booleanFilter("filter-known-loud", "onlyKnownLoudness", "Only videos with known loudness")
 ];
 
 const MEDIA_TYPES = [
@@ -93,8 +116,8 @@ function GeneralPanel({ view }: { view: FilterDialogView }) {
       <div class="filter-section">
         <h3>Basic Filters</h3>
         <div class="filter-stack">
-          {BASIC_FILTERS.map(({ id, field, label }) => (
-            <label key={id}><input type="checkbox" id={id} checked={draft[field]} onChange={(event) => filterDialog.changeGeneral({ [field]: event.currentTarget.checked })} /> {label}</label>
+          {BASIC_FILTERS.map(({ id, label, checked, change }) => (
+            <label key={id}><input type="checkbox" id={id} checked={checked(draft)} onChange={(event) => filterDialog.changeGeneral(change(event.currentTarget.checked))} /> {label}</label>
           ))}
         </div>
       </div>

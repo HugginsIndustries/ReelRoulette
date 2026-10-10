@@ -5,7 +5,7 @@ import { createAppStore, type AppStoreOptions, type PlayingItem } from "../state
 const FAVORITES = {
   id: "preset-favorites",
   name: "Favorites",
-  filterState: { ...createDefaultFilterState(), favoritesOnly: true }
+  filterState: { ...createDefaultFilterState(), favoritesMode: "only" as const }
 };
 const EVERYTHING = {
   id: "preset-everything",
@@ -122,7 +122,7 @@ describe("createAppStore", () => {
     });
     expect(store.activePresetName.value).toBeNull();
 
-    store.appliedFilter.value = { ...createDefaultFilterState(), favoritesOnly: true };
+    store.appliedFilter.value = { ...createDefaultFilterState(), favoritesMode: "only" };
     store.syncHeaderPresets();
     expect(store.selectedPresetValue()).toBe("preset-favorites");
     expect(store.activePresetName.value).toBe("Favorites");
@@ -136,7 +136,7 @@ describe("createAppStore", () => {
     store.syncHeaderPresets();
 
     store.pickHeaderPreset("preset-favorites");
-    expect(store.appliedFilter.value.favoritesOnly).toBe(true);
+    expect(store.appliedFilter.value.favoritesMode).toBe("only");
     expect(store.selectedPresetValue()).toBe("preset-favorites");
     expect(changed).toHaveBeenCalledTimes(1);
 
@@ -175,7 +175,7 @@ describe("createAppStore", () => {
     store.syncHeaderPresets();
     expect(store.selectedPresetValue()).toBe("");
 
-    store.appliedFilter.value = { ...createDefaultFilterState(), favoritesOnly: true };
+    store.appliedFilter.value = { ...createDefaultFilterState(), favoritesMode: "only" };
     store.syncHeaderPresets();
     expect(store.headerExplicitNone.value).toBe(false);
     store.appliedFilter.value = createDefaultFilterState();

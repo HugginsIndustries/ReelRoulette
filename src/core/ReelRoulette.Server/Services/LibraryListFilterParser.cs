@@ -22,13 +22,10 @@ internal static class LibraryListFilterParser
         }
 
         var element = state.Value;
-        // Each mode field with a known value decides. Otherwise its older boolean does, read as before the modes.
         var model = new FilterStateModel
         {
-            FavoritesMode = FlagMode(element, "favoritesMode") ??
-                            (Bool(element, "favoritesOnly", false) ? FlagFilterModeValue.Only : FlagFilterModeValue.Off),
-            BlacklistedMode = FlagMode(element, "blacklistedMode") ??
-                              (Bool(element, "excludeBlacklisted", true) ? FlagFilterModeValue.Excluded : FlagFilterModeValue.Off),
+            FavoritesMode = FlagFilterModes.ResolveFavorites(FlagMode(element, "favoritesMode"), NullableBool(element, "favoritesOnly")),
+            BlacklistedMode = FlagFilterModes.ResolveBlacklisted(FlagMode(element, "blacklistedMode"), NullableBool(element, "excludeBlacklisted")),
             OnlyNeverPlayed = Bool(element, "onlyNeverPlayed", false),
             OnlyKnownDuration = Bool(element, "onlyKnownDuration", false),
             OnlyKnownLoudness = Bool(element, "onlyKnownLoudness", false),
@@ -84,29 +81,12 @@ internal static class LibraryListFilterParser
             : null;
     }
 
-    /// <summary>
-    /// A mode is one of the names <c>off</c>, <c>only</c>, or <c>excluded</c> in any case. Any other value, including
-    /// null or a number, counts as missing. Locked to shared/fixtures/filter-mode-resolution.json.
-    /// </summary>
+    /// <summary>A mode that is not a string, such as null or a number, counts as missing.</summary>
     private static FlagFilterModeValue? FlagMode(JsonElement element, string name)
     {
-        if (!element.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.String)
-        {
-            return null;
-        }
-
-        var value = property.GetString();
-        if (string.Equals(value, "off", StringComparison.OrdinalIgnoreCase))
-        {
-            return FlagFilterModeValue.Off;
-        }
-
-        if (string.Equals(value, "only", StringComparison.OrdinalIgnoreCase))
-        {
-            return FlagFilterModeValue.Only;
-        }
-
-        return string.Equals(value, "excluded", StringComparison.OrdinalIgnoreCase) ? FlagFilterModeValue.Excluded : null;
+        return element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String
+            ? FlagFilterModes.Parse(property.GetString())
+            : null;
     }
 
     private static string? Token(JsonElement element, string name)

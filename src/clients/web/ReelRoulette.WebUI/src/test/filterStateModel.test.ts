@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   AUDIO_FILTER,
@@ -19,7 +20,9 @@ import {
   parseDurationInputToSeconds,
   presetsToPostBody,
   serializeFilterStateForApi,
-  TAG_MATCH_MODE
+  TAG_MATCH_MODE,
+  type ApiFilterState,
+  type FlagFilterMode
 } from "../filter/filterStateModel";
 
 describe("filterStateModel", () => {
@@ -100,7 +103,7 @@ describe("filterStateModel", () => {
     const a = createDefaultFilterState();
     const b = createDefaultFilterState();
     expect(filterStatesEqualForPresetMatch(a, b)).toBe(true);
-    b.favoritesOnly = true;
+    b.favoritesMode = "only";
     expect(filterStatesEqualForPresetMatch(a, b)).toBe(false);
   });
 
@@ -159,12 +162,12 @@ describe("filterStateModel", () => {
     const named = filterStateForHeaderPresetSelection({
       filterState: { favoritesOnly: true, excludeBlacklisted: false }
     });
-    expect(named.favoritesOnly).toBe(true);
-    expect(named.excludeBlacklisted).toBe(false);
+    expect(named.favoritesMode).toBe("only");
+    expect(named.blacklistedMode).toBe("off");
   });
 
   it("classifies None, a named preset, a starred base, and a missing base", () => {
-    const youtube = { name: "YouTube", filterState: { ...createDefaultFilterState(), favoritesOnly: true } };
+    const youtube = { name: "YouTube", filterState: { ...createDefaultFilterState(), favoritesMode: "only" as const } };
     const presets = [youtube];
     const cleanNone = resolvePresetAnchor(createDefaultFilterState(), presets, "YouTube");
     expect(cleanNone.label).toBe("None");
@@ -178,7 +181,7 @@ describe("filterStateModel", () => {
     expect(cleanNamed.label).toBe("YouTube");
     expect(presetHeading(cleanNamed)).toBe("Preset: YouTube");
 
-    const dirty = { ...createDefaultFilterState(), favoritesOnly: true, onlyNeverPlayed: true };
+    const dirty = { ...createDefaultFilterState(), favoritesMode: "only" as const, onlyNeverPlayed: true };
     const starred = resolvePresetAnchor(dirty, presets, "YouTube");
     expect(starred.label).toBe("YouTube*");
     expect(presetHeading(starred)).toBe("Preset: YouTube*");
@@ -194,10 +197,10 @@ describe("filterStateModel", () => {
   });
 
   it("keeps the dialog base on a dirty edit and adopts a preset the filter comes to match", () => {
-    const youtube = { name: "YouTube", filterState: { ...createDefaultFilterState(), favoritesOnly: true } };
+    const youtube = { name: "YouTube", filterState: { ...createDefaultFilterState(), favoritesMode: "only" as const } };
     const favorites = { name: "Favorites", filterState: { ...createDefaultFilterState(), onlyNeverPlayed: true } };
     const presets = [youtube, favorites];
-    const dirty = { ...favorites.filterState, favoritesOnly: true };
+    const dirty = { ...favorites.filterState, favoritesMode: "only" as const };
 
     expect(dialogPresetBase(dirty, presets, "Favorites")).toBe("Favorites");
     expect(dialogPresetBase(dirty, presets, "YouTube")).toBe("YouTube");
@@ -209,9 +212,9 @@ describe("filterStateModel", () => {
     const youtube = {
       id: "yt",
       name: "YouTube",
-      filterState: { ...createDefaultFilterState(), favoritesOnly: true }
+      filterState: { ...createDefaultFilterState(), favoritesMode: "only" as const }
     };
-    const dirty = { ...createDefaultFilterState(), favoritesOnly: true, onlyNeverPlayed: true };
+    const dirty = { ...createDefaultFilterState(), favoritesMode: "only" as const, onlyNeverPlayed: true };
     const before = headerPresetListForFilter(dirty, [youtube], "YouTube");
     expect(before.selectedValue).toBe(HEADER_PRESET_STARRED_VALUE);
 
@@ -219,7 +222,7 @@ describe("filterStateModel", () => {
     expect(named.entries.some((entry) => entry.value === HEADER_PRESET_STARRED_VALUE)).toBe(false);
     expect(named.selectedValue).toBe("yt");
     expect(named.baseName).toBe("YouTube");
-    expect(named.filter.favoritesOnly).toBe(true);
+    expect(named.filter.favoritesMode).toBe("only");
     expect(named.filter.onlyNeverPlayed).toBe(false);
 
     const none = headerPresetListAfterPick(dirty, [youtube], "YouTube", "");
@@ -252,5 +255,69 @@ describe("filterStateModel", () => {
     const unknown = headerPresetListAfterPick(dirty, [youtube], "YouTube", "missing");
     expect(unknown.filter.onlyNeverPlayed).toBe(true);
     expect(unknown.selectedValue).toBe(HEADER_PRESET_STARRED_VALUE);
+  });
+});
+
+function readFixture<T>(name: string): T {
+  return JSON.parse(readFileSync(new URL(`../../../../../../shared/fixtures/${name}`, import.meta.url), "utf8")) as T;
+}
+
+interface FlagModeResolutionCase {
+  name: string;
+  filter: ApiFilterState;
+  favoritesMode: FlagFilterMode;
+  blacklistedMode: FlagFilterMode;
+}
+
+interface FlagModeProjectionCase {
+  name: string;
+  favoritesMode: FlagFilterMode;
+  blacklistedMode: FlagFilterMode;
+  written: Pick<ApiFilterState, "favoritesMode" | "favoritesOnly" | "blacklistedMode" | "excludeBlacklisted">;
+}
+
+interface EnumValuesCase {
+  name: string;
+  filter: ApiFilterState;
+  audioFilter: number;
+  mediaTypeFilter: number;
+  categoryLocalMatchModes: Record<string, number>;
+}
+
+// Core and the desktop read the same fixtures.
+const resolutionCases = readFixture<FlagModeResolutionCase[]>("filter-mode-resolution.json");
+const projectionCases = readFixture<FlagModeProjectionCase[]>("filter-mode-projection.json");
+const enumCases = readFixture<EnumValuesCase[]>("filter-enum-values.json");
+
+describe("flag filter mode resolution shared fixture", () => {
+  it.each(resolutionCases)("$name", ({ filter, favoritesMode, blacklistedMode }) => {
+    const read = filterStateFromApiObject(filter);
+    expect(read.favoritesMode).toBe(favoritesMode);
+    expect(read.blacklistedMode).toBe(blacklistedMode);
+  });
+});
+
+describe("flag filter mode projection shared fixture", () => {
+  it.each(projectionCases)("$name", ({ favoritesMode, blacklistedMode, written }) => {
+    const json = serializeFilterStateForApi({ ...createDefaultFilterState(), favoritesMode, blacklistedMode });
+    expect({
+      favoritesMode: json.favoritesMode,
+      favoritesOnly: json.favoritesOnly,
+      blacklistedMode: json.blacklistedMode,
+      excludeBlacklisted: json.excludeBlacklisted
+    }).toEqual(written);
+    const read = filterStateFromApiObject(json);
+    expect(read.favoritesMode).toBe(favoritesMode);
+    expect(read.blacklistedMode).toBe(blacklistedMode);
+  });
+});
+
+describe("filter enum values shared fixture", () => {
+  it.each(enumCases)("$name", ({ filter, audioFilter, mediaTypeFilter, categoryLocalMatchModes }) => {
+    const read = filterStateFromApiObject(filter);
+    expect(read.audioFilter).toBe(audioFilter);
+    expect(read.mediaTypeFilter).toBe(mediaTypeFilter);
+    // The fixture writes none as {}, which the reader holds as null.
+    expect(read.categoryLocalMatchModes).toEqual(Object.keys(categoryLocalMatchModes).length ? categoryLocalMatchModes : null);
   });
 });

@@ -1,25 +1,77 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
+using ReelRoulette.Core.Filtering;
 
 namespace ReelRoulette
 {
     /// <summary>
     /// Represents the current filter configuration. This is the single source of truth for all filtering.
     /// </summary>
-    public class FilterState
+    public class FilterState : IJsonOnDeserialized
     {
-        /// <summary>
-        /// Show only favorite items.
-        /// </summary>
-        [JsonPropertyName("favoritesOnly")]
-        public bool FavoritesOnly { get; set; }
+        private FlagFilterModeValue? _readFavoritesMode;
+        private bool? _readFavoritesOnly;
+        private FlagFilterModeValue? _readBlacklistedMode;
+        private bool? _readExcludeBlacklisted;
 
         /// <summary>
-        /// Exclude blacklisted items. Default is true.
+        /// Favorites filter mode. Default is off.
         /// </summary>
+        [JsonIgnore]
+        public FlagFilterModeValue FavoritesMode { get; set; } = FlagFilterModeValue.Off;
+
+        /// <summary>
+        /// Blacklisted filter mode. Default is excluded.
+        /// </summary>
+        [JsonIgnore]
+        public FlagFilterModeValue BlacklistedMode { get; set; } = FlagFilterModeValue.Excluded;
+
+        /// <summary>
+        /// Favorites mode on the wire, written as its name. A read value is resolved once the whole filter is read.
+        /// </summary>
+        [JsonInclude]
+        [JsonPropertyName("favoritesMode")]
+        [JsonConverter(typeof(FlagFilterModeJsonConverter))]
+        private FlagFilterModeValue? FavoritesModeWire
+        {
+            get => FavoritesMode;
+            set => _readFavoritesMode = value;
+        }
+
+        /// <summary>
+        /// Older favorites field, written as the projection of <see cref="FavoritesMode"/>.
+        /// </summary>
+        [JsonInclude]
+        [JsonPropertyName("favoritesOnly")]
+        private bool? FavoritesOnlyWire
+        {
+            get => FlagFilterModes.FavoritesOnly(FavoritesMode);
+            set => _readFavoritesOnly = value;
+        }
+
+        /// <summary>
+        /// Blacklisted mode on the wire, written as its name. A read value is resolved once the whole filter is read.
+        /// </summary>
+        [JsonInclude]
+        [JsonPropertyName("blacklistedMode")]
+        [JsonConverter(typeof(FlagFilterModeJsonConverter))]
+        private FlagFilterModeValue? BlacklistedModeWire
+        {
+            get => BlacklistedMode;
+            set => _readBlacklistedMode = value;
+        }
+
+        /// <summary>
+        /// Older blacklisted field, written as the projection of <see cref="BlacklistedMode"/>.
+        /// </summary>
+        [JsonInclude]
         [JsonPropertyName("excludeBlacklisted")]
-        public bool ExcludeBlacklisted { get; set; } = true;
+        private bool? ExcludeBlacklistedWire
+        {
+            get => FlagFilterModes.ExcludeBlacklisted(BlacklistedMode);
+            set => _readExcludeBlacklisted = value;
+        }
 
         /// <summary>
         /// Show only items that have never been played (PlayCount == 0).
@@ -97,6 +149,19 @@ namespace ReelRoulette
         /// </summary>
         [JsonPropertyName("includedSourceIds")]
         public List<string> IncludedSourceIds { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Resolves each flag filter from what was read, so the result does not depend on property order.
+        /// </summary>
+        void IJsonOnDeserialized.OnDeserialized()
+        {
+            FavoritesMode = FlagFilterModes.ResolveFavorites(_readFavoritesMode, _readFavoritesOnly);
+            BlacklistedMode = FlagFilterModes.ResolveBlacklisted(_readBlacklistedMode, _readExcludeBlacklisted);
+            _readFavoritesMode = null;
+            _readFavoritesOnly = null;
+            _readBlacklistedMode = null;
+            _readExcludeBlacklisted = null;
+        }
     }
 }
 

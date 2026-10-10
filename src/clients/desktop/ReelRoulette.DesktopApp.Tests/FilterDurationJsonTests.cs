@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ReelRoulette;
+using ReelRoulette.Core.Filtering;
 using Xunit;
 
 namespace ReelRoulette.DesktopApp.Tests;
@@ -13,7 +14,7 @@ public sealed class FilterDurationJsonTests
         var filter = JsonSerializer.Deserialize<FilterState>(
             """{"favoritesOnly":true,"selectedTags":["Ann"],"minDuration":60,"maxDuration":90.5}""")!;
 
-        Assert.True(filter.FavoritesOnly);
+        Assert.Equal(FlagFilterModeValue.Only, filter.FavoritesMode);
         Assert.Equal(["Ann"], filter.SelectedTags);
         Assert.Equal(TimeSpan.FromSeconds(60), filter.MinDuration);
         Assert.Equal(TimeSpan.FromSeconds(90.5), filter.MaxDuration);
@@ -32,7 +33,7 @@ public sealed class FilterDurationJsonTests
     {
         var filter = JsonSerializer.Deserialize<FilterState>($$"""{"favoritesOnly":true,"minDuration":{{json}}}""")!;
 
-        Assert.True(filter.FavoritesOnly);
+        Assert.Equal(FlagFilterModeValue.Only, filter.FavoritesMode);
         Assert.Equal(expectedSeconds.HasValue ? TimeSpan.FromSeconds(expectedSeconds.Value) : null, filter.MinDuration);
     }
 

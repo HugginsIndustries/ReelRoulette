@@ -8,6 +8,7 @@ import {
   type ApiFilterState,
   type AudioFilterMode,
   type FilterState,
+  type FlagFilterMode,
   type MediaTypeFilter,
   type PresetRow,
   type TagMatchMode
@@ -36,8 +37,8 @@ export interface FilterTagModel {
  * empty field, which the working filter cannot hold.
  */
 export interface GeneralDraft {
-  favoritesOnly: boolean;
-  excludeBlacklisted: boolean;
+  favoritesMode: FlagFilterMode;
+  blacklistedMode: FlagFilterMode;
   onlyNeverPlayed: boolean;
   onlyKnownDuration: boolean;
   onlyKnownLoudness: boolean;
@@ -92,8 +93,8 @@ export function sourceLabel(source: FilterSource): string {
 
 export function generalDraftFromFilter(filter: FilterState, sources: readonly FilterSource[]): GeneralDraft {
   return {
-    favoritesOnly: filter.favoritesOnly,
-    excludeBlacklisted: filter.excludeBlacklisted,
+    favoritesMode: filter.favoritesMode,
+    blacklistedMode: filter.blacklistedMode,
     onlyNeverPlayed: filter.onlyNeverPlayed,
     onlyKnownDuration: filter.onlyKnownDuration,
     onlyKnownLoudness: filter.onlyKnownLoudness,
@@ -125,8 +126,8 @@ export function filterWithGeneralDraft(
   sources: readonly FilterSource[]
 ): FilterState {
   const next = cloneFilterState(filter);
-  next.favoritesOnly = draft.favoritesOnly;
-  next.excludeBlacklisted = draft.excludeBlacklisted;
+  next.favoritesMode = draft.favoritesMode;
+  next.blacklistedMode = draft.blacklistedMode;
   next.onlyNeverPlayed = draft.onlyNeverPlayed;
   next.onlyKnownDuration = draft.onlyKnownDuration;
   next.onlyKnownLoudness = draft.onlyKnownLoudness;

@@ -1,4 +1,4 @@
-import type { ApiFilterState, FilterState } from "../filter/filterStateModel";
+import type { ApiFilterState, FilterState, FlagFilterMode } from "../filter/filterStateModel";
 import { cloneFilterState, createDefaultFilterState, serializeFilterStateForApi } from "../filter/filterStateModel";
 import {
   createDefaultBrowseControls,
@@ -84,7 +84,7 @@ export interface LibraryTileChange {
 
 export type LibraryTileEffectFilter = Pick<
   FilterState,
-  "favoritesOnly" | "excludeBlacklisted" | "onlyNeverPlayed" | "selectedTags" | "excludedTags"
+  "favoritesMode" | "blacklistedMode" | "onlyNeverPlayed" | "selectedTags" | "excludedTags"
 >;
 
 export type LibraryQueryFn = (request: LibraryQueryRequest, signal: AbortSignal) => Promise<LibraryQueryPage>;
@@ -179,9 +179,14 @@ export function libraryQueryTagSaveEffect(filter: LibraryTileEffectFilter): Libr
   return filter.selectedTags.length > 0 || filter.excludedTags.length > 0 ? "reload" : "patch";
 }
 
+/** Off allows any value, only requires the flag, and excluded requires it clear. */
+function modeAllows(mode: FlagFilterMode, flag: boolean): boolean {
+  return mode === "off" || (mode === "only" ? flag : !flag);
+}
+
 function flagChangeReloads(change: LibraryTileChange, filter: LibraryTileEffectFilter): boolean {
-  const { favoritesOnly, excludeBlacklisted } = filter;
-  if (!favoritesOnly && !excludeBlacklisted) {
+  const { favoritesMode, blacklistedMode } = filter;
+  if (favoritesMode === "off" && blacklistedMode === "off") {
     return false;
   }
   const after = change.after;
@@ -189,13 +194,13 @@ function flagChangeReloads(change: LibraryTileChange, filter: LibraryTileEffectF
     return true;
   }
   const matches = (flags: LibraryTileFlags) =>
-    (!favoritesOnly || flags.isFavorite) && (!excludeBlacklisted || !flags.isBlacklisted);
+    modeAllows(favoritesMode, flags.isFavorite) && modeAllows(blacklistedMode, flags.isBlacklisted);
   const before = change.before;
   if (before) {
     if (change.loaded) {
       return (
-        (favoritesOnly && before.isFavorite !== after.isFavorite) ||
-        (excludeBlacklisted && before.isBlacklisted !== after.isBlacklisted)
+        (favoritesMode !== "off" && before.isFavorite !== after.isFavorite) ||
+        (blacklistedMode !== "off" && before.isBlacklisted !== after.isBlacklisted)
       );
     }
     // With the previous values known, an item that is not loaded reloads only when it enters the filter.

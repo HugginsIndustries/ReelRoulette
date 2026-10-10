@@ -30,6 +30,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ReelRoulette.LibraryArchive;
 using System.Timers;
+using ReelRoulette.Core.Filtering;
 using ReelRoulette.Core.Library;
 using ReelRoulette.Core.Storage;
 using ReelRoulette.Core.Tags;
@@ -1789,7 +1790,7 @@ namespace ReelRoulette
             }
 
             var filterParts = new List<string>();
-            if (_currentFilterState.FavoritesOnly)
+            if (_currentFilterState.FavoritesMode == FlagFilterModeValue.Only)
                 filterParts.Add("Favorites");
             if (_currentFilterState.OnlyNeverPlayed)
                 filterParts.Add("Never played");
@@ -7705,7 +7706,7 @@ namespace ReelRoulette
             _currentFilterState = settings.FilterState ?? new FilterState();
             if (previousFilterState != _currentFilterState)
             {
-                Log($"STATE CHANGE: Filter state loaded from settings - FavoritesOnly={_currentFilterState.FavoritesOnly}, ExcludeBlacklisted={_currentFilterState.ExcludeBlacklisted}, AudioFilter={_currentFilterState.AudioFilter}");
+                Log($"STATE CHANGE: Filter state loaded from settings - FavoritesMode={_currentFilterState.FavoritesMode}, BlacklistedMode={_currentFilterState.BlacklistedMode}, AudioFilter={_currentFilterState.AudioFilter}");
             }
             
             // Preset catalog is API-owned; no local preset fallback.
@@ -7866,7 +7867,7 @@ namespace ReelRoulette
                 Log($"SaveSettings: Created DesktopAppSettings object. FilterState is null: {settings.FilterState == null}");
                 if (settings.FilterState != null)
                 {
-                    Log($"SaveSettings: FilterState details - FavoritesOnly: {settings.FilterState.FavoritesOnly}, ExcludeBlacklisted: {settings.FilterState.ExcludeBlacklisted}, AudioFilter: {settings.FilterState.AudioFilter}");
+                    Log($"SaveSettings: FilterState details - FavoritesMode: {settings.FilterState.FavoritesMode}, BlacklistedMode: {settings.FilterState.BlacklistedMode}, AudioFilter: {settings.FilterState.AudioFilter}");
                 }
 
                 // Settings backup safety net (separate policy from library backups).
@@ -9802,18 +9803,18 @@ namespace ReelRoulette
                 
                 // Update preset dropdown in library panel
                 UpdateLibraryPresetComboBox();
-                var oldFavoritesOnly = _currentFilterState?.FavoritesOnly ?? false;
-                var oldExcludeBlacklisted = _currentFilterState?.ExcludeBlacklisted ?? false;
+                var oldFavoritesMode = _currentFilterState?.FavoritesMode ?? FlagFilterModeValue.Off;
+                var oldBlacklistedMode = _currentFilterState?.BlacklistedMode ?? FlagFilterModeValue.Off;
                 var oldAudioFilter = _currentFilterState?.AudioFilter ?? AudioFilterMode.PlayAll;
-                Log($"  Current FilterState before save: FavoritesOnly={_currentFilterState?.FavoritesOnly}, ExcludeBlacklisted={_currentFilterState?.ExcludeBlacklisted}, AudioFilter={_currentFilterState?.AudioFilter}");
+                Log($"  Current FilterState before save: FavoritesMode={_currentFilterState?.FavoritesMode}, BlacklistedMode={_currentFilterState?.BlacklistedMode}, AudioFilter={_currentFilterState?.AudioFilter}");
                 
                 // Log state change if filter values changed
                 if (_currentFilterState != null && 
-                    (oldFavoritesOnly != _currentFilterState.FavoritesOnly ||
-                     oldExcludeBlacklisted != _currentFilterState.ExcludeBlacklisted ||
+                    (oldFavoritesMode != _currentFilterState.FavoritesMode ||
+                     oldBlacklistedMode != _currentFilterState.BlacklistedMode ||
                      oldAudioFilter != _currentFilterState.AudioFilter))
                 {
-                    Log($"STATE CHANGE: Filter state updated - FavoritesOnly: {oldFavoritesOnly} -> {_currentFilterState.FavoritesOnly}, ExcludeBlacklisted: {oldExcludeBlacklisted} -> {_currentFilterState.ExcludeBlacklisted}, AudioFilter: {oldAudioFilter} -> {_currentFilterState.AudioFilter}");
+                    Log($"STATE CHANGE: Filter state updated - FavoritesMode: {oldFavoritesMode} -> {_currentFilterState.FavoritesMode}, BlacklistedMode: {oldBlacklistedMode} -> {_currentFilterState.BlacklistedMode}, AudioFilter: {oldAudioFilter} -> {_currentFilterState.AudioFilter}");
                 }
                 
                 // Capture UI values on UI thread before saving

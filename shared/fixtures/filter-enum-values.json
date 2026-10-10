@@ -1,0 +1,11 @@
+[
+  { "name": "missing fields read as the defaults", "filter": {}, "audioFilter": 0, "mediaTypeFilter": 0, "categoryLocalMatchModes": {} },
+  { "name": "integers", "filter": { "audioFilter": 1, "mediaTypeFilter": 2, "categoryLocalMatchModes": { "people": 1, "places": 0 } }, "audioFilter": 1, "mediaTypeFilter": 2, "categoryLocalMatchModes": { "people": 1, "places": 0 } },
+  { "name": "names as the desktop's library query writes them", "filter": { "audioFilter": "WithAudioOnly", "mediaTypeFilter": "VideosOnly", "categoryLocalMatchModes": { "people": "Or", "places": "And" } }, "audioFilter": 1, "mediaTypeFilter": 1, "categoryLocalMatchModes": { "people": 1, "places": 0 } },
+  { "name": "lower-case names", "filter": { "audioFilter": "withoutaudioonly", "mediaTypeFilter": "photosonly", "categoryLocalMatchModes": { "people": "or" } }, "audioFilter": 2, "mediaTypeFilter": 2, "categoryLocalMatchModes": { "people": 1 } },
+  { "name": "upper-case names", "filter": { "audioFilter": "PLAYALL", "mediaTypeFilter": "ALL", "categoryLocalMatchModes": { "people": "OR" } }, "audioFilter": 0, "mediaTypeFilter": 0, "categoryLocalMatchModes": { "people": 1 } },
+  { "name": "default names written out", "filter": { "audioFilter": "PlayAll", "mediaTypeFilter": "All" }, "audioFilter": 0, "mediaTypeFilter": 0, "categoryLocalMatchModes": {} },
+  { "name": "unknown names read as the defaults", "filter": { "audioFilter": "Loud", "mediaTypeFilter": "GifsOnly" }, "audioFilter": 0, "mediaTypeFilter": 0, "categoryLocalMatchModes": {} },
+  { "name": "null reads as the default", "filter": { "audioFilter": null, "mediaTypeFilter": null, "categoryLocalMatchModes": null }, "audioFilter": 0, "mediaTypeFilter": 0, "categoryLocalMatchModes": {} },
+  { "name": "an unknown or null category mode is dropped", "filter": { "categoryLocalMatchModes": { "people": "Xor", "places": null, "moods": "Or", "eras": 0 } }, "audioFilter": 0, "mediaTypeFilter": 0, "categoryLocalMatchModes": { "moods": 1, "eras": 0 } }
+]

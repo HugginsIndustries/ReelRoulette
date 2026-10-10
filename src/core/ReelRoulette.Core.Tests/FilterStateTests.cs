@@ -37,6 +37,54 @@ public sealed class FilterStateTests : IDisposable
         };
     }
 
+    // The clients write these fields; the server writes none, so Core's projection is what the desktop calls.
+    [Fact]
+    public void FlagModes_WriteEachPairing_AsTheSharedFixtureSays()
+    {
+        using var fixture = JsonDocument.Parse(File.ReadAllText(OpenApiSpec.RepoPath("shared", "fixtures", "filter-mode-projection.json")));
+        var cases = fixture.RootElement.EnumerateArray().ToList();
+        Assert.Equal(9, cases.Count);
+        foreach (var testCase in cases)
+        {
+            var name = testCase.GetProperty("name").GetString();
+            var favorites = FlagFilterModes.Parse(testCase.GetProperty("favoritesMode").GetString())!.Value;
+            var blacklisted = FlagFilterModes.Parse(testCase.GetProperty("blacklistedMode").GetString())!.Value;
+            var expected = testCase.GetProperty("written").GetRawText();
+            var written = JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                ["favoritesMode"] = FlagFilterModes.Name(favorites),
+                ["favoritesOnly"] = FlagFilterModes.FavoritesOnly(favorites),
+                ["blacklistedMode"] = FlagFilterModes.Name(blacklisted),
+                ["excludeBlacklisted"] = FlagFilterModes.ExcludeBlacklisted(blacklisted)
+            });
+            Assert.True(JsonElement.DeepEquals(JsonDocument.Parse(expected).RootElement, JsonDocument.Parse(written).RootElement),
+                $"{name}: expected {expected}, got {written}.");
+
+            // What a client writes reads back as the same pairing.
+            Assert.True(LibraryListFilterParser.TryParse(JsonDocument.Parse(written).RootElement, out var parsed, out _));
+            Assert.Equal((favorites, blacklisted), (parsed!.FavoritesMode, parsed.BlacklistedMode));
+        }
+    }
+
+    [Fact]
+    public void Parser_ReadsEnumFields_AsTheSharedFixtureSays()
+    {
+        using var fixture = JsonDocument.Parse(File.ReadAllText(OpenApiSpec.RepoPath("shared", "fixtures", "filter-enum-values.json")));
+        var cases = fixture.RootElement.EnumerateArray().ToList();
+        Assert.NotEmpty(cases);
+        foreach (var testCase in cases)
+        {
+            var name = testCase.GetProperty("name").GetString();
+            Assert.True(LibraryListFilterParser.TryParse(testCase.GetProperty("filter"), out var parsed, out var error), $"{name}: {error}");
+            Assert.True(testCase.GetProperty("audioFilter").GetInt32() == (int)parsed!.AudioFilter, $"{name}: audioFilter is {parsed.AudioFilter}.");
+            Assert.True(testCase.GetProperty("mediaTypeFilter").GetInt32() == (int)parsed.MediaTypeFilter, $"{name}: mediaTypeFilter is {parsed.MediaTypeFilter}.");
+            var expectedModes = testCase.GetProperty("categoryLocalMatchModes").EnumerateObject()
+                .Select(property => $"{property.Name}={property.Value.GetInt32()}").Order(StringComparer.Ordinal);
+            var actualModes = (parsed.CategoryLocalMatchModes ?? []).Select(pair => $"{pair.Key}={(int)pair.Value}").Order(StringComparer.Ordinal);
+            Assert.True(expectedModes.SequenceEqual(actualModes), $"{name}: categoryLocalMatchModes are {string.Join(", ", actualModes)}.");
+        }
+    }
+
     // Each route that takes a filter state, with its body read as the server binds it: the library query, the
     // random pick, and the preset catalog, whose presets a random pick reads by name.
     [Fact]

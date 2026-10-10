@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ReelRoulette;
+using ReelRoulette.Core.Filtering;
 using Xunit;
 
 namespace ReelRoulette.DesktopApp.Tests;
@@ -11,8 +12,8 @@ public sealed class LibraryPresetSelectionTests
     {
         var selected = LibraryPresetSelection.FilterStateForSelection(null);
 
-        Assert.False(selected.FavoritesOnly);
-        Assert.True(selected.ExcludeBlacklisted);
+        Assert.Equal(FlagFilterModeValue.Off, selected.FavoritesMode);
+        Assert.Equal(FlagFilterModeValue.Excluded, selected.BlacklistedMode);
         Assert.False(selected.OnlyNeverPlayed);
         Assert.False(selected.OnlyKnownDuration);
         Assert.False(selected.OnlyKnownLoudness);
@@ -35,18 +36,18 @@ public sealed class LibraryPresetSelectionTests
             Name = "Favorites",
             FilterState = new FilterState
             {
-                FavoritesOnly = true,
-                ExcludeBlacklisted = false,
+                FavoritesMode = FlagFilterModeValue.Only,
+                BlacklistedMode = FlagFilterModeValue.Off,
                 SelectedTags = ["kept"]
             }
         };
 
         var selected = LibraryPresetSelection.FilterStateForSelection(preset);
-        selected.FavoritesOnly = false;
+        selected.FavoritesMode = FlagFilterModeValue.Off;
         selected.SelectedTags.Add("added");
 
-        Assert.False(selected.ExcludeBlacklisted);
-        Assert.True(preset.FilterState.FavoritesOnly);
+        Assert.Equal(FlagFilterModeValue.Off, selected.BlacklistedMode);
+        Assert.Equal(FlagFilterModeValue.Only, preset.FilterState.FavoritesMode);
         Assert.Equal(["kept"], preset.FilterState.SelectedTags);
     }
 
@@ -80,7 +81,7 @@ public sealed class LibraryPresetSelectionTests
     public void DirtyNamedBase_PutsTheStarredRowFirstAndKeepsTheCleanPreset()
     {
         var presets = new[] { Youtube() };
-        var dirty = new FilterState { FavoritesOnly = true, OnlyNeverPlayed = true };
+        var dirty = new FilterState { FavoritesMode = FlagFilterModeValue.Only, OnlyNeverPlayed = true };
         var anchor = LibraryPresetSelection.Resolve(dirty, presets, "YouTube");
 
         Assert.Equal("YouTube*", anchor.Label);
@@ -114,7 +115,7 @@ public sealed class LibraryPresetSelectionTests
     public void HeldNone_DropsWhenTheFilterIsNoLongerTheDefault()
     {
         var presets = new[] { Youtube() };
-        var dirty = new FilterState { FavoritesOnly = true, OnlyNeverPlayed = true };
+        var dirty = new FilterState { FavoritesMode = FlagFilterModeValue.Only, OnlyNeverPlayed = true };
         var anchor = LibraryPresetSelection.Resolve(dirty, presets, "YouTube", holdNone: true);
 
         Assert.Equal("YouTube*", anchor.Label);
@@ -129,7 +130,7 @@ public sealed class LibraryPresetSelectionTests
         Assert.Equal("YouTube", matched.ActivePresetName);
         Assert.Equal("YouTube", matched.SelectedPresetName);
 
-        var dirty = new FilterState { FavoritesOnly = true, OnlyNeverPlayed = true };
+        var dirty = new FilterState { FavoritesMode = FlagFilterModeValue.Only, OnlyNeverPlayed = true };
         var cleared = LibraryPresetSelection.AfterDialogNone(dirty, presets);
         Assert.Null(cleared.ActivePresetName);
         Assert.Equal("None", cleared.SelectedPresetName);
@@ -143,7 +144,7 @@ public sealed class LibraryPresetSelectionTests
     public void MissingBase_ShowsNoneStarFirst()
     {
         var presets = new[] { Youtube() };
-        var dirty = new FilterState { FavoritesOnly = true, OnlyNeverPlayed = true };
+        var dirty = new FilterState { FavoritesMode = FlagFilterModeValue.Only, OnlyNeverPlayed = true };
         var anchor = LibraryPresetSelection.Resolve(dirty, presets, "Gone");
 
         Assert.Equal("None*", anchor.Label);
@@ -161,7 +162,7 @@ public sealed class LibraryPresetSelectionTests
         var stored = JsonSerializer.Deserialize<FilterState>(
             $$"""{"selectedTags":["Ann","Bob"],"globalMatchMode":false,"tagMatchMode":{{tagMatchMode}},"favoritesOnly":true}""")!;
         var preset = new FilterPreset { Name = "Any person", FilterState = stored };
-        var current = new FilterState { SelectedTags = ["Ann", "Bob"], GlobalMatchMode = false, FavoritesOnly = true };
+        var current = new FilterState { SelectedTags = ["Ann", "Bob"], GlobalMatchMode = false, FavoritesMode = FlagFilterModeValue.Only };
 
         Assert.DoesNotContain("tagMatchMode", LibraryPresetSelection.FilterSnapshot(stored));
         Assert.True(LibraryPresetSelection.FiltersEqual(current, stored));
@@ -211,7 +212,7 @@ public sealed class LibraryPresetSelectionTests
         return new FilterPreset
         {
             Name = "YouTube",
-            FilterState = new FilterState { FavoritesOnly = true }
+            FilterState = new FilterState { FavoritesMode = FlagFilterModeValue.Only }
         };
     }
 }

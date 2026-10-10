@@ -172,7 +172,7 @@ Last milestone completed: M12d
 | --- | --- | --- |
 | Contract | ✅ Complete | An OpenAPI FilterState schema naming today's filter fields, used by every filter state in the contract, and small OpenAPI fixes. |
 | Server | ✅ Complete | The new fields in the schema and the parser, applied by browse, its counts, and random selection. |
-| Shared client rules | ⏳ Planned | Both clients read the modes by the resolution rule, write the old-field projection, and match presets and patch tiles by resolved modes. |
+| Shared client rules | ✅ Complete | Both clients read the modes by the resolution rule, write the old-field projection, and match presets and patch tiles by resolved modes. |
 | Desktop | ⏳ Planned | The filter dialog's dropdowns, the summary line's new names, and no preset posts on header picks or unchanged Applies. |
 | WebUI | ⏳ Planned | The filter dialog's two controls, and the mockup updated to match. |
 
@@ -269,6 +269,9 @@ Last milestone completed: M12d
 
 - Both clients' filter models gain the two modes, read them through the resolution rule, and write the old-field projection: the desktop's `FilterState.cs` and the WebUI's `filterStateModel.ts`. Desktop and WebUI tests read `filter-mode-resolution.json`.
 - The resolution rule, the mode names and the old-field fallback, moves from `LibraryListFilterParser` into Core, and the server's parser and the desktop's model both call it, so C# has one copy.
+- The old-field projection is locked to a new shared fixture, `filter-mode-projection.json`, of the nine pairings and the fields each writes, read by Core's projection test and both clients' serialization tests.
+- The desktop writes the new modes as names through a converter on each property. A converter on the property also overrides the library query's `JsonStringEnumConverter`, so the desktop sends one form everywhere.
+- Until the desktop and WebUI slices replace them, each filter dialog's Favorites only and Exclude blacklisted checkboxes map onto the modes, a mode they can't show stays until its checkbox is used, and the desktop dialog's Apply copies the modes back to the main window.
 - Saved filters carry the new fields. A preset saved before this milestone reads through its old fields.
 - Preset matching compares resolved modes, not raw fields, so `{"favoritesOnly": true}` and `{"favoritesMode": "only"}` match. `preset-filter-equality.json` gains cases for old fields against new ones, Favorites excluded against an unset filter, Blacklisted only against `excludeBlacklisted: false`, and the new fields with Blacklisted off.
 - The patch-or-reload rule, which decides whether a favorite or blacklist change patches a loaded tile or reloads the library window, learns the new modes on both clients, with new cases in `library-tile-effect.json`. For example, favoriting a loaded tile under Favorites excluded reloads, and so does removing one from the blacklist under Blacklisted only.
@@ -283,6 +286,7 @@ Last milestone completed: M12d
 - The desktop's `LibraryTileEffectFixtureTests` reads each filter key with `GetProperty`, which throws on a missing key, so new cases keep the old keys or the runner changes.
 - `readEnumInt` in `filterStateModel.ts` reads only integers, so a name such as `"VideosOnly"` reads as the default.
 - `filter-mode-resolution.json` has mode names in mixed case, and numbers, null, and unknown names that count as missing. System.Text.Json's `JsonStringEnumConverter` reads integers and throws on an unknown name by default (inferred), so the desktop needs its own reading of the modes to pass it.
+- The desktop reads presets with default JSON options (`ParseCorePresetFilterState` in `MainWindow.axaml.cs`), so an enum written as a name throws, and the catch turns the whole preset into the default filter (measured).
 
 **Acceptance**
 
@@ -293,20 +297,52 @@ Last milestone completed: M12d
 - The server's filter parser and the WebUI's filter reader read `audioFilter`, `mediaTypeFilter`, and the values of `categoryLocalMatchModes` alike, as names in any case or as integers, and both pass `filter-enum-values.json`.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
+**Evidence**
+
+- Core's `FlagFilterModes` (`Filtering/FlagFilterModes.cs`) holds the mode names, the old-field fallback, and the projection. `LibraryListFilterParser` calls it, and `Parser_ResolvesFlagModes_AsTheSharedFixtureSays` still passes all 36 cases. It fails when `Parse` reads `only` in exact case.
+- New fixtures: `filter-mode-projection.json` has the nine pairings, and `filter-enum-values.json` has 9 cases. `preset-filter-equality.json` gains 11 cases, for 50 in all, including only against excluded for each filter. `library-tile-effect.json` gains 15, for 49, using only flag changes the server sends. For example, favoriting a loaded tile under Blacklisted only reloads, since a favorite clears the blacklist.
+- `FlagModes_WriteEachPairing_AsTheSharedFixtureSays` fails when Blacklisted only writes `excludeBlacklisted: true`. `Parser_ReadsEnumFields_AsTheSharedFixtureSays` fails when audio names are read in exact case.
+- The desktop's `FilterState` holds `FavoritesMode` and `BlacklistedMode` in place of its two booleans.
+  - Private `[JsonInclude]` wire properties write the modes as names through `FlagFilterModeJsonConverter`, beside their projection.
+  - An `IJsonOnDeserialized` hook resolves the modes through Core once the whole filter is read.
+- `FilterModeJsonTests` checks the desktop's reading and writing of the modes.
+  - It reads the 36 resolution cases as presets are read.
+  - It writes the nine pairings with default options, with `LibraryItemJsonOptions`, and through the `desktop-settings.json` storage. Each carries the fixture's fields and reads back to the same modes.
+  - Each break fails its test:
+    - Ignoring the read Favorites mode fails 9 resolution cases.
+    - `favoritesOnly` written true for Favorites excluded fails those 3 pairings.
+    - The tile rule treating excluded as off fails 8 tile cases.
+    - A tile rule that skips the check whenever Favorites isn't only and Blacklisted is off fails the loaded favorite case under Favorites excluded with Blacklisted off, on both clients.
+    - Preset comparison that blanks the modes fails 7 equality cases.
+    - Preset comparison that treats only and excluded as one fails the 2 only-against-excluded cases, on both clients.
+- The WebUI's `FilterState` holds `favoritesMode` and `blacklistedMode`.
+  - Its reader resolves them by the rule.
+  - Its serializer writes them beside their projection.
+  - Its enum reader takes names in any case, and drops a category entry whose value is unknown or null.
+- `filterStateModel.test.ts` runs the resolution, projection, and enum fixtures. Each break fails its run:
+  - A reader that ignores `favoritesMode` fails the resolution and projection runs.
+  - An inverted projection fails the 3 Blacklisted only pairings.
+  - A serializer that omits the modes fails 3 equality cases.
+  - An integer-only enum reader fails 4 enum cases.
+  - A loaded tile rule that ignores Blacklisted only fails the 2 loaded Blacklisted only cases.
+- Both filter dialogs look as before, so the mockup is unchanged.
+- A mode the checkboxes can't show survives the WebUI dialog's draft round trip, in `keeps a flag mode the checkboxes cannot show` in `filterDialogModel.test.ts`.
+- The WebUI screen tests that click Favorites only or Exclude blacklisted check the mode in what is applied or saved. Unchecking Exclude blacklisted as Blacklisted only, which writes the same old fields as off, fails `Update Preset saves the working filter into the chosen preset`.
+- `docs/api.md`, `CONTEXT.md`, and `docs/domain-inventory.md` describe the clients' resolution, projection, and preset matching. `docs/api.md` also describes the enum reading.
+- `dotnet build ReelRoulette.sln` has no warnings. `dotnet test ReelRoulette.sln` ran 477 Core, 346 DesktopApp, and 7 ServerApp tests, all passing. SystemChecks passed. `npm run verify` passed with 676 tests in 43 files.
+
 #### Desktop slice
 
 **Scope**
 
 - The filter dialog (`FilterDialog.axaml`) replaces its Favorites only and Exclude blacklisted checkboxes with the two checkboxes and their dropdowns, a small change matching the server's, which the desktop's freeze allows.
-- `FilterDialog.axaml.cs` copies the new fields in each of the three places it copies fields one by one: the change notifications on preset load, Clear All, and Apply's copy back to the main window.
-- The new modes are written as names through a converter on each property, such as `JsonStringEnumMemberName`. A converter on the property also overrides the library query's `JsonStringEnumConverter`, so the desktop sends one form everywhere.
+- `FilterDialog.axaml.cs` covers the new controls in the two places besides Apply's copy back that copy fields one by one: the change notifications on preset load, and Clear All.
 - The filter summary line above the library panel (`UpdateFilterSummaryText` in `MainWindow.axaml.cs`) names "Favorites only", "Favorites excluded", and "Blacklisted only". Blacklisted excluded, the default, isn't named, as in the mockup. Today it shows "Favorites" for Favorites only and never names Blacklisted.
 - A header preset pick, None included, posts no presets, and a filter dialog Apply posts presets only when they changed, compared with the preset list comparison in `LibraryPresetSelection`. Before removing the post from header picks, confirm what it does today and report anything besides saving the list that depends on it.
 - The filter dialog won't apply Favorites only with Blacklisted only, or save it into a preset through Add Preset or Update Preset, through what the dialog already does for invalid input.
 
 **Traps**
 
-- The desktop reads presets with default JSON options (`ParseCorePresetFilterState` in `MainWindow.axaml.cs`), so an enum written as a name throws, and the catch turns the whole preset into the default filter (measured).
 - `SyncPresetsToCoreAsync` posts the desktop's cached preset list to `POST /api/presets`, which replaces the server's whole catalog, on every header preset pick and every Apply, and the cache is refreshed only on connect, reconnect, resync, and filter dialog open. Picking a preset on the desktop therefore deletes any preset the WebUI added since.
 - Apart from the server raising its catalog revision, nothing else was found to depend on the post.
 - The filter dialog shows no message for invalid input. Add Preset with an empty or taken name writes a `last.log` line and returns (`AddPreset` in `FilterDialog.axaml.cs`, with a TODO to show an error), duration text that doesn't parse leaves the previous duration in place, and `ApplyButton_Click` checks nothing. Refusing the pairing the same way gives no visible sign.

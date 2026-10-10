@@ -496,7 +496,7 @@ describe("General tab", () => {
     await click(box("Only videos with audio"));
     const applied = await applyAndWait(server);
 
-    const expected = { favoritesOnly: true, onlyNeverPlayed: true, mediaTypeFilter: 2, audioFilter: 1 };
+    const expected = { favoritesMode: "only", favoritesOnly: true, onlyNeverPlayed: true, mediaTypeFilter: 2, audioFilter: 1 };
     expect(applied).toMatchObject(expected);
     expect(libraryQueries(server).at(-1)).toMatchObject({ offset: 0, search: "" });
     const pick = await nextPick(server);
@@ -798,7 +798,10 @@ describe("Presets tab", () => {
     expect(applyButton().textContent).toBe("Apply*");
 
     await applyAndWait(server);
-    expect(presets.saves()[0][0]).toMatchObject({ name: "Favorites", filterState: { favoritesOnly: true, excludeBlacklisted: false } });
+    expect(presets.saves()[0][0]).toMatchObject({
+      name: "Favorites",
+      filterState: { favoritesMode: "only", favoritesOnly: true, blacklistedMode: "off", excludeBlacklisted: false }
+    });
     expect(presets.saves()[0][1]).toMatchObject({ name: "Beach days", filterState: { selectedTags: ["Beach"] } });
     await waitFor(() => expect(headerSelectedLabel()).toBe("Favorites"));
   });

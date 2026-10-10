@@ -1,3 +1,4 @@
+using ReelRoulette.Core.Filtering;
 using ReelRoulette.Core.Storage;
 using System.Text.Json;
 using Xunit;
@@ -138,8 +139,8 @@ public sealed class DesktopAppSettingsTests : IDisposable
         Assert.True(reload.DevChannelEnabled);
         Assert.Equal("Any person", reload.ActivePresetName);
         var filter = Assert.IsType<FilterState>(reload.FilterState);
-        Assert.True(filter.FavoritesOnly);
-        Assert.False(filter.ExcludeBlacklisted);
+        Assert.Equal(FlagFilterModeValue.Only, filter.FavoritesMode);
+        Assert.Equal(FlagFilterModeValue.Off, filter.BlacklistedMode);
         Assert.Equal(AudioFilterMode.WithAudioOnly, filter.AudioFilter);
         Assert.Equal(["Ann", "Bob"], filter.SelectedTags);
         Assert.Equal(["Spoiler"], filter.ExcludedTags);

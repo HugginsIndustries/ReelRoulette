@@ -1,0 +1,11 @@
+[
+  { "name": "favorites off, blacklisted off", "favoritesMode": "off", "blacklistedMode": "off", "written": { "favoritesMode": "off", "favoritesOnly": false, "blacklistedMode": "off", "excludeBlacklisted": false } },
+  { "name": "favorites off, blacklisted only", "favoritesMode": "off", "blacklistedMode": "only", "written": { "favoritesMode": "off", "favoritesOnly": false, "blacklistedMode": "only", "excludeBlacklisted": false } },
+  { "name": "favorites off, blacklisted excluded", "favoritesMode": "off", "blacklistedMode": "excluded", "written": { "favoritesMode": "off", "favoritesOnly": false, "blacklistedMode": "excluded", "excludeBlacklisted": true } },
+  { "name": "favorites only, blacklisted off", "favoritesMode": "only", "blacklistedMode": "off", "written": { "favoritesMode": "only", "favoritesOnly": true, "blacklistedMode": "off", "excludeBlacklisted": false } },
+  { "name": "favorites only, blacklisted only", "favoritesMode": "only", "blacklistedMode": "only", "written": { "favoritesMode": "only", "favoritesOnly": true, "blacklistedMode": "only", "excludeBlacklisted": false } },
+  { "name": "favorites only, blacklisted excluded", "favoritesMode": "only", "blacklistedMode": "excluded", "written": { "favoritesMode": "only", "favoritesOnly": true, "blacklistedMode": "excluded", "excludeBlacklisted": true } },
+  { "name": "favorites excluded, blacklisted off", "favoritesMode": "excluded", "blacklistedMode": "off", "written": { "favoritesMode": "excluded", "favoritesOnly": false, "blacklistedMode": "off", "excludeBlacklisted": false } },
+  { "name": "favorites excluded, blacklisted only", "favoritesMode": "excluded", "blacklistedMode": "only", "written": { "favoritesMode": "excluded", "favoritesOnly": false, "blacklistedMode": "only", "excludeBlacklisted": false } },
+  { "name": "favorites excluded, blacklisted excluded", "favoritesMode": "excluded", "blacklistedMode": "excluded", "written": { "favoritesMode": "excluded", "favoritesOnly": false, "blacklistedMode": "excluded", "excludeBlacklisted": true } }
+]

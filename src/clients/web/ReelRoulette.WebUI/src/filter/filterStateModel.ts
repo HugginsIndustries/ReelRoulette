@@ -16,9 +16,12 @@ export type AudioFilterMode = (typeof AUDIO_FILTER)[keyof typeof AUDIO_FILTER];
 export type MediaTypeFilter = (typeof MEDIA_TYPE_FILTER)[keyof typeof MEDIA_TYPE_FILTER];
 export type TagMatchMode = (typeof TAG_MATCH_MODE)[keyof typeof TAG_MATCH_MODE];
 
+/** How the Favorites or Blacklisted filter treats its flag: ignored, required, or excluded. */
+export type FlagFilterMode = NonNullable<ApiFilterState["favoritesMode"]>;
+
 export interface FilterState {
-  favoritesOnly: boolean;
-  excludeBlacklisted: boolean;
+  favoritesMode: FlagFilterMode;
+  blacklistedMode: FlagFilterMode;
   onlyNeverPlayed: boolean;
   onlyKnownDuration: boolean;
   onlyKnownLoudness: boolean;
@@ -36,8 +39,8 @@ export interface FilterState {
 
 export function createDefaultFilterState(): FilterState {
   return {
-    favoritesOnly: false,
-    excludeBlacklisted: true,
+    favoritesMode: "off",
+    blacklistedMode: "excluded",
     onlyNeverPlayed: false,
     onlyKnownDuration: false,
     onlyKnownLoudness: false,
@@ -324,11 +327,17 @@ function durationToApiValue(seconds: number): string {
   return formatDurationForApi(seconds);
 }
 
-/** Serialize for POST /api/random and preset snapshots (matches desktop JsonSerializer shape). */
+/**
+ * Serialize for POST /api/random and preset snapshots (matches desktop JsonSerializer shape). Each flag filter is
+ * written as its mode and as the older boolean projected from it, so a reader that knows only the booleans sees a
+ * wider set of files, never a narrower one.
+ */
 export function serializeFilterStateForApi(state: FilterState): ApiFilterState {
   const out: ApiFilterState = {
-    favoritesOnly: state.favoritesOnly,
-    excludeBlacklisted: state.excludeBlacklisted,
+    favoritesMode: state.favoritesMode,
+    favoritesOnly: state.favoritesMode === "only",
+    blacklistedMode: state.blacklistedMode,
+    excludeBlacklisted: state.blacklistedMode === "excluded",
     onlyNeverPlayed: state.onlyNeverPlayed,
     onlyKnownDuration: state.onlyKnownDuration,
     onlyKnownLoudness: state.onlyKnownLoudness,
@@ -375,17 +384,51 @@ function readDurationFromUnknown(value: unknown): number | null {
   return null;
 }
 
-function readEnumInt(value: unknown, fallback: number): number {
+/**
+ * An enum value is a name from `names` in any case, or an integer. Anything else, including null, is null. Matches
+ * the server's list filter parser. Locked to shared/fixtures/filter-enum-values.json.
+ */
+function readEnumValue(value: unknown, names: Readonly<Record<string, number>>): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Math.trunc(value);
   }
-  if (typeof value === "string" && value.trim()) {
-    const n = Number.parseInt(value, 10);
-    if (Number.isFinite(n)) {
-      return n;
+  if (typeof value !== "string") {
+    return null;
+  }
+  const text = value.trim();
+  if (!text) {
+    return null;
+  }
+  const lower = text.toLowerCase();
+  for (const [name, code] of Object.entries(names)) {
+    if (name.toLowerCase() === lower) {
+      return code;
     }
   }
-  return fallback;
+  const n = Number.parseInt(text, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** A mode is one of the names `off`, `only`, or `excluded` in any case. Anything else counts as missing. */
+function readFlagMode(value: unknown): FlagFilterMode | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const lower = value.toLowerCase();
+  return lower === "off" || lower === "only" || lower === "excluded" ? lower : null;
+}
+
+/**
+ * Each flag filter resolves on its own: a known mode decides, and otherwise its older boolean does. Without a mode,
+ * `favoritesOnly` true is only and anything else is off, and `excludeBlacklisted` false is off and anything else,
+ * including none, is excluded. Core's FlagFilterModes is the C# copy. Locked to
+ * shared/fixtures/filter-mode-resolution.json and filter-mode-projection.json.
+ */
+function resolveFlagModes(o: Record<string, unknown>): { favoritesMode: FlagFilterMode; blacklistedMode: FlagFilterMode } {
+  return {
+    favoritesMode: readFlagMode(o.favoritesMode) ?? (o.favoritesOnly === true ? "only" : "off"),
+    blacklistedMode: readFlagMode(o.blacklistedMode) ?? (o.excludeBlacklisted === false ? "off" : "excluded")
+  };
 }
 
 /** Hydrate from an API filter state. Each field is still checked, since a stored preset holds whatever was posted. */
@@ -396,12 +439,9 @@ export function filterStateFromApiObject(raw: ApiFilterState | null | undefined)
   }
   const o = raw as Record<string, unknown>;
 
-  if (typeof o.favoritesOnly === "boolean") {
-    base.favoritesOnly = o.favoritesOnly;
-  }
-  if (typeof o.excludeBlacklisted === "boolean") {
-    base.excludeBlacklisted = o.excludeBlacklisted;
-  }
+  const modes = resolveFlagModes(o);
+  base.favoritesMode = modes.favoritesMode;
+  base.blacklistedMode = modes.blacklistedMode;
   if (typeof o.onlyNeverPlayed === "boolean") {
     base.onlyNeverPlayed = o.onlyNeverPlayed;
   }
@@ -412,8 +452,8 @@ export function filterStateFromApiObject(raw: ApiFilterState | null | undefined)
     base.onlyKnownLoudness = o.onlyKnownLoudness;
   }
 
-  base.audioFilter = readEnumInt(o.audioFilter, base.audioFilter) as AudioFilterMode;
-  base.mediaTypeFilter = readEnumInt(o.mediaTypeFilter, base.mediaTypeFilter) as MediaTypeFilter;
+  base.audioFilter = (readEnumValue(o.audioFilter, AUDIO_FILTER) ?? base.audioFilter) as AudioFilterMode;
+  base.mediaTypeFilter = (readEnumValue(o.mediaTypeFilter, MEDIA_TYPE_FILTER) ?? base.mediaTypeFilter) as MediaTypeFilter;
 
   if (typeof o.globalMatchMode === "boolean") {
     base.globalMatchMode = o.globalMatchMode;
@@ -432,9 +472,13 @@ export function filterStateFromApiObject(raw: ApiFilterState | null | undefined)
   }
 
   if (o.categoryLocalMatchModes && typeof o.categoryLocalMatchModes === "object" && !Array.isArray(o.categoryLocalMatchModes)) {
+    // An entry whose mode is unknown or null is dropped, as the server's parser drops it.
     const cm: Record<string, TagMatchMode> = {};
     for (const [k, v] of Object.entries(o.categoryLocalMatchModes as Record<string, unknown>)) {
-      cm[k] = readEnumInt(v, TAG_MATCH_MODE.And) as TagMatchMode;
+      const mode = readEnumValue(v, TAG_MATCH_MODE);
+      if (mode !== null) {
+        cm[k] = mode as TagMatchMode;
+      }
     }
     base.categoryLocalMatchModes = Object.keys(cm).length ? cm : null;
   }

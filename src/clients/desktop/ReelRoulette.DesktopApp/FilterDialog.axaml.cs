@@ -4,6 +4,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using ReelRoulette.Core.Filtering;
 using ReelRoulette.Core.Storage;
 using System;
 using System.Collections.Generic;
@@ -192,10 +193,10 @@ namespace ReelRoulette
         // Basic flags
         public bool FavoritesOnly
         {
-            get => _filterState.FavoritesOnly;
+            get => _filterState.FavoritesMode == FlagFilterModeValue.Only;
             set
             {
-                _filterState.FavoritesOnly = value;
+                _filterState.FavoritesMode = value ? FlagFilterModeValue.Only : FlagFilterModeValue.Off;
                 OnPropertyChanged();
                 MarkPresetModified();
             }
@@ -203,10 +204,10 @@ namespace ReelRoulette
 
         public bool ExcludeBlacklisted
         {
-            get => _filterState.ExcludeBlacklisted;
+            get => _filterState.BlacklistedMode == FlagFilterModeValue.Excluded;
             set
             {
-                _filterState.ExcludeBlacklisted = value;
+                _filterState.BlacklistedMode = value ? FlagFilterModeValue.Excluded : FlagFilterModeValue.Off;
                 OnPropertyChanged();
                 MarkPresetModified();
             }
@@ -1333,8 +1334,8 @@ namespace ReelRoulette
         private void ApplyButton_Click(object? sender, RoutedEventArgs e)
         {
             // Copy all properties from working copy back to original
-            _originalFilterState.FavoritesOnly = _filterState.FavoritesOnly;
-            _originalFilterState.ExcludeBlacklisted = _filterState.ExcludeBlacklisted;
+            _originalFilterState.FavoritesMode = _filterState.FavoritesMode;
+            _originalFilterState.BlacklistedMode = _filterState.BlacklistedMode;
             _originalFilterState.OnlyNeverPlayed = _filterState.OnlyNeverPlayed;
             _originalFilterState.OnlyKnownDuration = _filterState.OnlyKnownDuration;
             _originalFilterState.OnlyKnownLoudness = _filterState.OnlyKnownLoudness;

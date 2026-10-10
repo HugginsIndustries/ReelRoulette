@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { createDefaultFilterState } from "../filter/filterStateModel";
+import { createDefaultFilterState, filterStateFromApiObject, type ApiFilterState } from "../filter/filterStateModel";
 import { createDefaultBrowseControls, type LibraryBrowseControls } from "../library/libraryBrowseModel";
 import type { LibraryProjectionItem } from "../library/libraryProjectionModel";
 import {
@@ -14,8 +14,7 @@ import {
   libraryQueryTileEffect,
   type LibraryQueryPage,
   type LibraryQueryRequest,
-  type LibraryTileChange,
-  type LibraryTileEffectFilter
+  type LibraryTileChange
 } from "../library/libraryQuerySession";
 
 interface TileEffectCase {
@@ -26,7 +25,8 @@ interface TileEffectCase {
   after?: LibraryTileChange["after"];
   addedTags?: string[];
   removedTags?: string[];
-  filter: LibraryTileEffectFilter;
+  /** A filter as the wire carries it, read the way the WebUI reads one. */
+  filter: ApiFilterState;
   sortMode: string;
   expected: "patch" | "reload";
 }
@@ -205,7 +205,7 @@ describe("libraryQuerySession", () => {
     session.setOverlayVisible(false);
     session.noteScroll(250);
 
-    await session.resetQuery({ ...createDefaultFilterState(), favoritesOnly: true }, controls());
+    await session.resetQuery({ ...createDefaultFilterState(), favoritesMode: "only" }, controls());
     session.setOverlayVisible(true);
 
     expect(calls.map((call) => call.favoritesOnly)).toEqual([false, true]);
@@ -221,7 +221,7 @@ describe("libraryQuerySession", () => {
       calls += 1;
       return page([item("a")], 1, 1);
     });
-    const filter = { ...createDefaultFilterState(), excludeBlacklisted: false };
+    const filter = { ...createDefaultFilterState(), blacklistedMode: "off" as const };
     await session.ensureLoaded(filter, controls());
     session.setOverlayVisible(false);
 
@@ -574,7 +574,7 @@ describe("library query decisions", () => {
       addedTags: entry.addedTags ?? [],
       removedTags: entry.removedTags ?? []
     };
-    expect(libraryQueryTileEffect(change, entry.filter, entry.sortMode)).toBe(entry.expected);
+    expect(libraryQueryTileEffect(change, filterStateFromApiObject(entry.filter), entry.sortMode)).toBe(entry.expected);
   });
 
   it("reloads a tag save made here under any tag filter", () => {

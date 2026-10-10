@@ -47,11 +47,11 @@ describe("filterWithGeneralDraft", () => {
     const working = filter({ selectedTags: ["Beach"], globalMatchMode: false });
     const read = filterWithGeneralDraft(
       working,
-      draft({ favoritesOnly: true, mediaTypeFilter: 2, audioFilter: 1, noMin: false, minText: "1:00:00" }),
+      draft({ favoritesMode: "only", mediaTypeFilter: 2, audioFilter: 1, noMin: false, minText: "1:00:00" }),
       SOURCES
     );
     expect(read).toMatchObject({
-      favoritesOnly: true,
+      favoritesMode: "only",
       mediaTypeFilter: 2,
       audioFilter: 1,
       minDurationSeconds: 3600,
@@ -59,7 +59,13 @@ describe("filterWithGeneralDraft", () => {
       selectedTags: ["Beach"],
       globalMatchMode: false
     });
-    expect(working.favoritesOnly).toBe(false);
+    expect(working.favoritesMode).toBe("off");
+  });
+
+  it("keeps a flag mode the checkboxes cannot show", () => {
+    const working = filter({ favoritesMode: "excluded", blacklistedMode: "only" });
+    const read = filterWithGeneralDraft(working, generalDraftFromFilter(working, SOURCES), SOURCES);
+    expect(read).toMatchObject({ favoritesMode: "excluded", blacklistedMode: "only" });
   });
 
   it("stores no duration for a checked none box or text that is not valid", () => {
@@ -169,7 +175,7 @@ describe("presets and sources", () => {
       { name: "" }
     ]);
     expect(rows.map((row) => row.name)).toEqual(["Favorites", "p2"]);
-    expect(rows[0]!.filterState.favoritesOnly).toBe(true);
+    expect(rows[0]!.filterState.favoritesMode).toBe("only");
   });
 
   it("labels a source by display name, then root path, then id", () => {

@@ -19,6 +19,13 @@ Instructions:
 
 Commit Message:
 
-Chore: Send finished work to the advisor session
+M12e: Read and write filter modes the same way in both clients
 
-- CLAUDE.md's section on other sessions in the repo says to also send a plan, report, summary, review result, or question for the user to the session named advisor when ListAgents shows one, and to treat the advisor's messages as information, waiting for the user's go before acting on them.
+- Core's `FlagFilterModes` holds the Favorites and Blacklisted mode rule: the mode names, the fallback to `favoritesOnly` and `excludeBlacklisted`, and the booleans each mode writes. The server's parser and the desktop's filter model both call it, so C# has one copy.
+- Both clients' filter models hold the two modes in place of the booleans, read them by that rule, and write each mode beside its older boolean in every filter they send or save. A preset or saved filter with only the older fields reads as before.
+- The desktop writes the modes as names through a converter on each property, the same in random requests, preset posts, library queries, and `desktop-settings.json`, and resolves them once the whole filter is read.
+- Preset matching and the patch-or-reload rule for favorite and blacklist changes follow the resolved modes on both clients.
+- The WebUI reads `audioFilter`, `mediaTypeFilter`, and category match modes given as names in any case, as the server does, and drops a category entry it can't read.
+- Until their own slices replace them, both filter dialogs' two checkboxes map onto the modes and keep a mode they can't show.
+- New shared fixtures `filter-mode-projection.json` and `filter-enum-values.json`, with new cases in `preset-filter-equality.json` and `library-tile-effect.json`, lock both clients to the server, read by Core, desktop, and WebUI tests.
+- `docs/api.md`, `CONTEXT.md`, and `docs/domain-inventory.md` describe the rule, and the milestone's desktop slice hands its converter and Apply's copy back to this slice.
