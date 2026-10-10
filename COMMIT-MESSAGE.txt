@@ -19,9 +19,12 @@ Instructions:
 
 Commit Message:
 
-Chore: Check every milestone title in a Depends on bullet
+M12e: Apply Favorites and Blacklisted filter modes on the server
 
-- `check-milestones.ps1` now checks a milestone title that follows another title's ", which", ", whose", or ", so" explanation. Before, everything after an explanation was skipped up to the next known title, so a misspelled title there passed.
-- After an explanation, the word after each ", and" decides how it is read: a capital letter starts a milestone title, which must exist, and a lowercase word continues the explanation or states a condition on starting, such as Desktop App Shell's ", and it starts only once the new UI has been in daily use".
-- The script tests gain a case for Desktop App Shell's line, which passes, and one with its second title misspelled, which fails.
-- The Entry Format, its maintenance rule, and the template in MILESTONES.md, the plan-from-report and promote-milestones skills, and `docs/dev-setup.md` describe the Depends on bullet's condition on starting the same way, and promotion checks that such a condition holds.
+- Filters accept `favoritesMode` and `blacklistedMode`, each `off`, `only`, or `excluded` in any case, beside `favoritesOnly` and `excludeBlacklisted`. A known mode decides, and otherwise the old field does, so filters and presets with only the old fields filter as before.
+- Browse, its counts, and random picks apply every pairing. Favorites only with Blacklisted only matches nothing, since no item is both.
+- `shared/fixtures/filter-mode-resolution.json` locks the resolution rule for the server now and both clients next.
+- OpenAPI's FilterState schema and the generated WebUI types name the new fields. The WebUI's build output is unchanged.
+- Server tests cover every pairing through the list query, its counts, the count cache, and random selection, the old fields alone, filter states the clients wrote before, and each filter route's meaning when its filter state is missing or null.
+- The milestone records that clients refuse Favorites only with Blacklisted only: the desktop dialog in this milestone, and the WebUI through WebUI Field Validation Pattern.
+- The milestone's shared client rules slice records that the resolution rule moves into Core, where the server's parser and the desktop's model both call it, so C# has one copy.

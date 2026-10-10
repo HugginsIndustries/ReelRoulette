@@ -27,7 +27,7 @@ public sealed class LibraryListQueryTests
         var page = session.QueryList(new LibraryListRequest
         {
             Search = "ALPHA",
-            Filter = new FilterStateModel { FavoritesOnly = true, ExcludeBlacklisted = false },
+            Filter = new FilterStateModel { FavoritesMode = FlagFilterModeValue.Only, BlacklistedMode = FlagFilterModeValue.Off },
             Limit = 50
         });
 
@@ -193,7 +193,7 @@ public sealed class LibraryListQueryTests
         {
             Filter = new FilterStateModel
             {
-                ExcludeBlacklisted = true,
+                BlacklistedMode = FlagFilterModeValue.Excluded,
                 SelectedTags = ["Ann", "Bob", "Home"],
                 GlobalMatchMode = true,
                 CategoryLocalMatchModes = new Dictionary<string, TagMatchModeValue>(StringComparer.OrdinalIgnoreCase)
@@ -210,7 +210,7 @@ public sealed class LibraryListQueryTests
         {
             Filter = new FilterStateModel
             {
-                ExcludeBlacklisted = false,
+                BlacklistedMode = FlagFilterModeValue.Off,
                 SelectedTags = ["Ann", "Bob", "Home"],
                 GlobalMatchMode = false,
                 CategoryLocalMatchModes = new Dictionary<string, TagMatchModeValue>
@@ -229,7 +229,7 @@ public sealed class LibraryListQueryTests
         {
             Filter = new FilterStateModel
             {
-                ExcludeBlacklisted = false,
+                BlacklistedMode = FlagFilterModeValue.Off,
                 MinDuration = TimeSpan.FromMinutes(1),
                 AudioFilter = AudioFilterModeValue.WithAudioOnly,
                 IncludedSourceIds = ["ON"]
@@ -263,8 +263,8 @@ public sealed class LibraryListQueryTests
 
         var filter = new FilterStateModel
         {
-            FavoritesOnly = true,
-            ExcludeBlacklisted = true,
+            FavoritesMode = FlagFilterModeValue.Only,
+            BlacklistedMode = FlagFilterModeValue.Excluded,
             SelectedTags = ["Ann"]
         };
         var listed = session.QueryList(new LibraryListRequest { Filter = filter, Limit = 50 });
@@ -281,8 +281,8 @@ public sealed class LibraryListQueryTests
 
         var videosOnly = new FilterStateModel
         {
-            FavoritesOnly = true,
-            ExcludeBlacklisted = true,
+            FavoritesMode = FlagFilterModeValue.Only,
+            BlacklistedMode = FlagFilterModeValue.Excluded,
             SelectedTags = ["Ann"],
             MediaTypeFilter = MediaTypeFilterValue.VideosOnly
         };
@@ -560,7 +560,7 @@ public sealed class LibraryListQueryTests
 
             var filter = new FilterStateModel
             {
-                ExcludeBlacklisted = false,
+                BlacklistedMode = FlagFilterModeValue.Off,
                 SelectedTags = Enumerable.Range(0, random.Next(0, 7)).Select(_ => RandomTag(random)).ToList(),
                 ExcludedTags = Enumerable.Range(0, random.Next(0, 3)).Select(_ => RandomTag(random)).ToList(),
                 CategoryLocalMatchModes = random.Next(4) == 0 ? null : modes,
@@ -986,7 +986,7 @@ public sealed class LibraryListQueryTests
         Add(session, "a", "on", "Alpha.mp4", "Alpha.mp4");
         Add(session, "b", "on", "Beta.mp4", "Beta.mp4", favorite: true);
         Add(session, "c", "on", "Gamma.mp4", "Gamma.mp4");
-        var favorites = new FilterStateModel { FavoritesOnly = true };
+        var favorites = new FilterStateModel { FavoritesMode = FlagFilterModeValue.Only };
         var counted = session.ListCountQueries;
 
         var first = session.QueryList(new LibraryListRequest { Filter = favorites, Limit = 1 });
@@ -1010,6 +1010,154 @@ public sealed class LibraryListQueryTests
 
         Assert.Equal(counted + 5, session.ListCountQueries);
         Assert.Equal((2, 3), (afterWrite.TotalCount, afterWrite.SearchBaselineCount));
+    }
+
+    // The app never lets an item be both favorite and blacklisted, so two of the nine pairings repeat another's result:
+    // Favorites only is the same with Blacklisted off or excluded, and Blacklisted only is the same with Favorites off
+    // or excluded. Favorites only with Blacklisted only is always empty. With 1 plain, 2 favorite, and 4 blacklisted
+    // items, the seven distinct results each have their own count, so a count can't match another's set.
+    [Fact]
+    public void FlagModes_ListCountAndRandomCandidates_MatchEachPairing()
+    {
+        using var dir = new TempDirectory();
+        var session = SeedFlagModeItems(dir);
+        var counts = new HashSet<int>();
+        foreach (var favorites in FlagModes)
+        {
+            foreach (var blacklisted in FlagModes)
+            {
+                var expected = FlagModeItemIds(item => FlagMatches(favorites, item.Favorite) && FlagMatches(blacklisted, item.Blacklisted));
+                AssertListedAndEligible(session, FlagModeFilter(favorites, blacklisted), expected);
+                counts.Add(expected.Length);
+            }
+        }
+
+        Assert.Equal(7, counts.Count);
+
+        // The defaults, Favorites off and Blacklisted excluded, are today's results.
+        AssertListedAndEligible(session, "{}", FlagModeItemIds(item => !item.Blacklisted));
+    }
+
+    // Each old field alone, true, false, or missing, as the parser read them before the modes: favoritesOnly true keeps
+    // only favorites, and excludeBlacklisted anything but false leaves out blacklisted items.
+    [Fact]
+    public void FlagModes_OldFieldsAlone_GiveTheirOldResults()
+    {
+        using var dir = new TempDirectory();
+        var session = SeedFlagModeItems(dir);
+        foreach (var favoritesOnly in new bool?[] { true, false, null })
+        {
+            foreach (var excludeBlacklisted in new bool?[] { true, false, null })
+            {
+                var fields = new List<string>();
+                if (favoritesOnly is bool favorites)
+                {
+                    fields.Add($"\"favoritesOnly\":{(favorites ? "true" : "false")}");
+                }
+
+                if (excludeBlacklisted is bool exclude)
+                {
+                    fields.Add($"\"excludeBlacklisted\":{(exclude ? "true" : "false")}");
+                }
+
+                var expected = FlagModeItemIds(item => (favoritesOnly != true || item.Favorite) && (excludeBlacklisted == false || !item.Blacklisted));
+                AssertListedAndEligible(session, "{" + string.Join(",", fields) + "}", expected);
+            }
+        }
+    }
+
+    // Every count a filtered query returns, its total and its search baseline, at one catalog revision. Each pairing
+    // after the first runs with the cache warm from the others and counts its own total, then every count is cached.
+    // Favorites off with Blacklisted off adds no condition, so its total is the same query as the baseline and shares
+    // its count: nine count queries for nine totals and one baseline.
+    [Fact]
+    public void FlagModes_CountCache_KeepsEachPairingsCounts()
+    {
+        using var dir = new TempDirectory();
+        var session = SeedFlagModeItems(dir);
+        var pairings = FlagModes.SelectMany(favorites => FlagModes.Select(blacklisted => (favorites, blacklisted))).ToList();
+        var counted = session.ListCountQueries;
+
+        AssertCounts(pairings);
+        Assert.Equal(counted + pairings.Count, session.ListCountQueries);
+
+        pairings.Reverse();
+        AssertCounts(pairings);
+        Assert.Equal(counted + pairings.Count, session.ListCountQueries);
+
+        void AssertCounts(IEnumerable<(FlagFilterModeValue Favorites, FlagFilterModeValue Blacklisted)> sequence)
+        {
+            foreach (var (favorites, blacklisted) in sequence)
+            {
+                var filterJson = FlagModeFilter(favorites, blacklisted);
+                var page = session.QueryList(new LibraryListRequest { Filter = ParseFilter(filterJson), Limit = 1 });
+                var expected = FlagModeItemIds(item => FlagMatches(favorites, item.Favorite) && FlagMatches(blacklisted, item.Blacklisted)).Length;
+                Assert.True(
+                    (page.TotalCount, page.SearchBaselineCount) == (expected, FlagModeItems.Length),
+                    $"{filterJson}: expected ({expected}, {FlagModeItems.Length}), got ({page.TotalCount}, {page.SearchBaselineCount}).");
+            }
+        }
+    }
+
+    private static readonly FlagFilterModeValue[] FlagModes = [FlagFilterModeValue.Off, FlagFilterModeValue.Only, FlagFilterModeValue.Excluded];
+
+    private static readonly (string Id, bool Favorite, bool Blacklisted)[] FlagModeItems =
+    [
+        ("plain", false, false),
+        ("favorite-1", true, false),
+        ("favorite-2", true, false),
+        ("blacklisted-1", false, true),
+        ("blacklisted-2", false, true),
+        ("blacklisted-3", false, true),
+        ("blacklisted-4", false, true)
+    ];
+
+    private static LibraryCatalogSession SeedFlagModeItems(TempDirectory dir)
+    {
+        var session = Open(dir);
+        session.InsertSource("on", "/media", "On", true);
+        foreach (var item in FlagModeItems)
+        {
+            Add(session, item.Id, "on", item.Id + ".mp4", item.Id + ".mp4", favorite: item.Favorite, blacklisted: item.Blacklisted);
+        }
+
+        return session;
+    }
+
+    private static string[] FlagModeItemIds(Func<(string Id, bool Favorite, bool Blacklisted), bool> matches)
+    {
+        return FlagModeItems.Where(matches).Select(item => item.Id).Order(StringComparer.Ordinal).ToArray();
+    }
+
+    private static bool FlagMatches(FlagFilterModeValue mode, bool flag) => mode switch
+    {
+        FlagFilterModeValue.Only => flag,
+        FlagFilterModeValue.Excluded => !flag,
+        _ => true
+    };
+
+    private static string FlagModeFilter(FlagFilterModeValue favorites, FlagFilterModeValue blacklisted)
+    {
+        return $$"""{"favoritesMode":"{{favorites.ToString().ToLowerInvariant()}}","blacklistedMode":"{{blacklisted.ToString().ToLowerInvariant()}}"}""";
+    }
+
+    private static FilterStateModel ParseFilter(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        Assert.True(LibraryListFilterParser.TryParse(document.RootElement, out var filter, out var error), error);
+        return filter!;
+    }
+
+    // The list query's items and total, and random selection's candidates, which come back in ordinal id order.
+    private static void AssertListedAndEligible(LibraryCatalogSession session, string filterJson, string[] expected)
+    {
+        var filter = ParseFilter(filterJson);
+        var listed = session.QueryList(new LibraryListRequest { Filter = filter, Limit = 50 });
+        var listedIds = listed.Items.Select(item => item.Id).Order(StringComparer.Ordinal).ToArray();
+        var eligibleIds = session.QueryRandomCandidates(filter).Select(item => item.Id).ToArray();
+        Assert.True(
+            expected.SequenceEqual(listedIds) && listed.TotalCount == expected.Length && expected.SequenceEqual(eligibleIds),
+            $"{filterJson}: expected [{string.Join(", ", expected)}], listed [{string.Join(", ", listedIds)}] of {listed.TotalCount}, eligible [{string.Join(", ", eligibleIds)}].");
     }
 
     private static RefreshPipelineService CreateRefresh(string appData)

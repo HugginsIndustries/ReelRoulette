@@ -26,10 +26,17 @@ public enum TagMatchModeValue
     Or = 1
 }
 
+public enum FlagFilterModeValue
+{
+    Off = 0,
+    Only = 1,
+    Excluded = 2
+}
+
 public sealed class FilterStateModel
 {
-    public bool FavoritesOnly { get; set; }
-    public bool ExcludeBlacklisted { get; set; } = true;
+    public FlagFilterModeValue FavoritesMode { get; set; } = FlagFilterModeValue.Off;
+    public FlagFilterModeValue BlacklistedMode { get; set; } = FlagFilterModeValue.Excluded;
     public bool OnlyNeverPlayed { get; set; }
     public AudioFilterModeValue AudioFilter { get; set; } = AudioFilterModeValue.PlayAll;
     public TimeSpan? MinDuration { get; set; }

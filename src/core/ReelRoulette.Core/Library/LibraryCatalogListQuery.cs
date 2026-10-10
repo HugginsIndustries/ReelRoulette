@@ -121,15 +121,8 @@ internal static class LibraryCatalogListSql
             where.Append(')');
         }
 
-        if (filter.ExcludeBlacklisted)
-        {
-            where.Append(" AND items.is_blacklisted = 0");
-        }
-
-        if (filter.FavoritesOnly)
-        {
-            where.Append(" AND items.is_favorite != 0");
-        }
+        AppendFlag(where, "items.is_blacklisted", filter.BlacklistedMode);
+        AppendFlag(where, "items.is_favorite", filter.FavoritesMode);
 
         if (filter.OnlyNeverPlayed)
         {
@@ -177,6 +170,18 @@ internal static class LibraryCatalogListSql
         else if (filter.MediaTypeFilter == MediaTypeFilterValue.PhotosOnly)
         {
             where.Append(CultureInfo.InvariantCulture, $" AND items.media_type = {PhotoMediaType}");
+        }
+    }
+
+    private static void AppendFlag(StringBuilder where, string column, FlagFilterModeValue mode)
+    {
+        if (mode == FlagFilterModeValue.Only)
+        {
+            where.Append(CultureInfo.InvariantCulture, $" AND {column} != 0");
+        }
+        else if (mode == FlagFilterModeValue.Excluded)
+        {
+            where.Append(CultureInfo.InvariantCulture, $" AND {column} = 0");
         }
     }
 

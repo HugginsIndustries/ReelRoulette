@@ -1156,9 +1156,32 @@ export interface components {
          *     when it is missing, or null where the field allows it. Fields not listed here are allowed and ignored.
          */
         FilterState: {
-            /** @description Only favorites. Defaults to false. */
+            /**
+             * @description How the filter treats favorites: `off` ignores them, `only` keeps only favorites, and `excluded` leaves
+             *     them out. Read in any case. Another value, including null or a number, counts as missing. When
+             *     missing, `favoritesOnly` decides.
+             * @enum {string}
+             */
+            favoritesMode?: "off" | "only" | "excluded";
+            /**
+             * @description How the filter treats blacklisted items: `off` ignores them, `only` keeps only blacklisted items, and
+             *     `excluded` leaves them out. Read in any case. Another value, including null or a number, counts as
+             *     missing. When missing, `excludeBlacklisted` decides. An item is never both favorite and blacklisted, so
+             *     `favoritesMode` `only` with `only` here matches nothing.
+             * @enum {string}
+             */
+            blacklistedMode?: "off" | "only" | "excluded";
+            /**
+             * @description The older form of `favoritesMode`, used only when that field is missing: true is `only`, and false or
+             *     missing is `off`. Write it beside `favoritesMode`, true only for `only`, so a reader that knows only
+             *     this field matches more items, never fewer.
+             */
             favoritesOnly?: boolean;
-            /** @description Leaves out blacklisted items. Defaults to true. */
+            /**
+             * @description The older form of `blacklistedMode`, used only when that field is missing: false is `off`, and true
+             *     or missing is `excluded`. Write it beside `blacklistedMode`, true only for `excluded`, so a reader
+             *     that knows only this field matches more items, never fewer.
+             */
             excludeBlacklisted?: boolean;
             /** @description Only items never played. Defaults to false. */
             onlyNeverPlayed?: boolean;
@@ -1241,8 +1264,8 @@ export interface components {
         LibraryQueryRequest: {
             /**
              * @description Omitted or null applies no filter predicates, so blacklisted items are listed. A present object uses
-             *     the same field defaults as playback filters, including `excludeBlacklisted` true when that field is
-             *     omitted.
+             *     the same field defaults as playback filters, so blacklisted items are left out when neither
+             *     `blacklistedMode` nor `excludeBlacklisted` says otherwise.
              */
             filterState?: components["schemas"]["FilterState"] | null;
             /** @description Filename or relative-path substring. Blank or whitespace matches every enabled-source item. */

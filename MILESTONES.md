@@ -146,6 +146,11 @@ Last milestone completed: M12d
 
 - Each filter is a checkbox with a small dropdown to its right offering only and excluded, and the dropdown is disabled while its checkbox is off. Favorites starts off. Blacklisted starts on and excluded, which is today's Exclude blacklisted.
 - Both clients offer the same options, so a preset behaves identically in each.
+- Favorites only and Blacklisted only can't be chosen together, since the app doesn't allow an item to be both favorite and blacklisted. Every other pairing stays allowed, including Favorites only with Blacklisted excluded, the blacklist filter's default.
+  - The server doesn't reject the pairing: a filter with it matches nothing.
+  - The clients refuse it. The desktop dialog won't apply or save it, through what the dialog already does for invalid input.
+  - The WebUI flags it with the field validation pattern, so Apply and saving a preset can't proceed until it's corrected. WebUI Field Validation Pattern, which builds the pattern after this milestone, adds it.
+  - Both ship in v0.15.0, so no release allows the pairing.
 - New fields `favoritesMode` and `blacklistedMode`, each `"off"`, `"only"`, or `"excluded"`, written as these names on the wire. One three-value field per filter, so two settings that filter alike can't differ in a preset.
 - The new fields sit beside the old `favoritesOnly` and `excludeBlacklisted`, so the contract change only adds. Desktop Client Removal drops the old fields.
 - Resolution rule: the server's parser, the desktop's model, and the WebUI's reader resolve each filter on its own, the same way.
@@ -166,7 +171,7 @@ Last milestone completed: M12d
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Contract | ✅ Complete | An OpenAPI FilterState schema naming today's filter fields, used by every filter state in the contract, and small OpenAPI fixes. |
-| Server | ⏳ Planned | The new fields in the schema and the parser, applied by browse, its counts, and random selection. |
+| Server | ✅ Complete | The new fields in the schema and the parser, applied by browse, its counts, and random selection. |
 | Shared client rules | ⏳ Planned | Both clients read the modes by the resolution rule, write the old-field projection, and match presets and patch tiles by resolved modes. |
 | Desktop | ⏳ Planned | The filter dialog's dropdowns, the summary line's new names, and no preset posts on header picks or unchanged Applies. |
 | WebUI | ⏳ Planned | The filter dialog's two controls, and the mockup updated to match. |
@@ -241,14 +246,29 @@ Last milestone completed: M12d
 - For each combination of the two filters, the list query, its counts, and random selection return exactly the matching items, and the defaults (Favorites off, Blacklisted excluded) give today's results, in server tests of each combination.
 - A filter or preset with only the old fields gives the same results as before this milestone, and a contract test shows a filter state written before this milestone still parses.
 - The server resolves every case in `filter-mode-resolution.json` as the fixture says, in a Core test: old fields only, new fields only, both agreeing and disagreeing, and an unknown new value.
+- With the count cache warm from one pairing, another pairing returns its own counts, for both counts a filtered query returns, in a server test of the count cache.
+- Each route that takes a filter state keeps its meaning when the filter state is missing or null, in a server test of the library query, the random pick, and the preset catalog.
 - The FilterState schema names the new fields, the Core test that its property names equal the parser's passes, and `npm run verify:contracts` passes.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- `FilterStateModel` carries `FavoritesMode` and `BlacklistedMode`, of a new `FlagFilterModeValue` (Off, Only, Excluded), in place of its two booleans. `LibraryListFilterParser` reads `favoritesMode` and `blacklistedMode` as `off`, `only`, or `excluded` in any case, and anything else, including null and numbers, falls back to the old fields as they were read before. `AppendFilter` writes `!= 0` for only and `= 0` for excluded on each flag column, in the old order, so a filter without the new fields generates the same WHERE text as before.
+- `shared/fixtures/filter-mode-resolution.json` has 36 cases, and `Parser_ResolvesFlagModes_AsTheSharedFixtureSays` passes them all. It fails when the parser ignores the mode fields and when it reads `only` in exact case only.
+- `FlagModes_ListCountAndRandomCandidates_MatchEachPairing` seeds 1 plain, 2 favorite, and 4 blacklisted items and checks the list query's items and total and random selection's candidates for all nine pairings, parsed from JSON, against a reference. As the test notes, no item is both favorite and blacklisted, so two of the nine pairings repeat another's result, and Favorites only with Blacklisted only is always empty. The seven distinct results have seven different counts. `{}` gives today's default. `FlagModes_OldFieldsAlone_GiveTheirOldResults` checks `favoritesOnly` and `excludeBlacklisted` each true, false, and missing. `LibraryQueryAndRandomPick_ApplyFlagModes` runs Favorites excluded, Blacklisted only, and mixed-case modes beside an old field through the library query and random pick services. `FlagModes_ListCountAndRandomCandidates_MatchEachPairing` and `LibraryQueryAndRandomPick_ApplyFlagModes` fail when the SQL ignores Favorites excluded.
+- `FlagModes_CountCache_KeepsEachPairingsCounts` runs all nine pairings twice at one catalog revision and checks the total and the search baseline each time. The first pass makes nine count queries, since Favorites off with Blacklisted off is the same query as the baseline, and the second makes none (measured). It fails when the cache key drops the Favorites excluded condition.
+- `MissingOrNullFilterState_KeepsEachRoutesMeaning` reads request bodies as the server binds them. A library query with no filter state, or null, lists blacklisted items. A random pick falls back to `presetId`: a named preset's filter, `all-media` as the default filter, 400 with no preset id, and 404 for an unknown one. A preset posted without a filter state, or with null, picks with the default filter, before and after a restart. It passed on the code before this slice, and fails when a null filter state reads as the default filter.
+- `FilterState_WithOnlyTheOldFields_StillParses` parses full filter states in the desktop's and the WebUI's shapes from before this milestone to the same modes and fields as before. `FilterStateSchema_NamesEveryFieldTheParserReads` failed until the schema named the new fields.
+- OpenAPI's `FilterState` names `favoritesMode` and `blacklistedMode` with the values `off`, `only`, and `excluded`, quoted since `off` is a boolean in YAML 1.1, and its descriptions give the resolution rule and say Favorites only with Blacklisted only matches nothing. The generated WebUI type has `favoritesMode?: "off" | "only" | "excluded"` and the same for `blacklistedMode`. The WebUI's built `dist` is byte-identical before and after the change (16 files, same SHA-256). `docs/api.md` and `CONTEXT.md` describe the modes.
+- SystemChecks references neither old boolean nor `FilterStateModel`, and it is in `ReelRoulette.sln`, so the solution build covers it.
+- `dotnet build ReelRoulette.sln` has no warnings. `dotnet test ReelRoulette.sln` ran 475 Core, 275 DesktopApp, and 7 ServerApp tests, all passing. SystemChecks passed. `npm run verify` passed with 595 tests in 43 files.
 
 #### Shared client rules slice
 
 **Scope**
 
 - Both clients' filter models gain the two modes, read them through the resolution rule, and write the old-field projection: the desktop's `FilterState.cs` and the WebUI's `filterStateModel.ts`. Desktop and WebUI tests read `filter-mode-resolution.json`.
+- The resolution rule, the mode names and the old-field fallback, moves from `LibraryListFilterParser` into Core, and the server's parser and the desktop's model both call it, so C# has one copy.
 - Saved filters carry the new fields. A preset saved before this milestone reads through its old fields.
 - Preset matching compares resolved modes, not raw fields, so `{"favoritesOnly": true}` and `{"favoritesMode": "only"}` match. `preset-filter-equality.json` gains cases for old fields against new ones, Favorites excluded against an unset filter, Blacklisted only against `excludeBlacklisted: false`, and the new fields with Blacklisted off.
 - The patch-or-reload rule, which decides whether a favorite or blacklist change patches a loaded tile or reloads the library window, learns the new modes on both clients, with new cases in `library-tile-effect.json`. For example, favoriting a loaded tile under Favorites excluded reloads, and so does removing one from the blacklist under Blacklisted only.
@@ -262,6 +282,7 @@ Last milestone completed: M12d
 - The desktop's `LibraryPanelBrowse.cs` and the WebUI's `libraryQuerySession.ts` follow the patch-or-reload rule line for line.
 - The desktop's `LibraryTileEffectFixtureTests` reads each filter key with `GetProperty`, which throws on a missing key, so new cases keep the old keys or the runner changes.
 - `readEnumInt` in `filterStateModel.ts` reads only integers, so a name such as `"VideosOnly"` reads as the default.
+- `filter-mode-resolution.json` has mode names in mixed case, and numbers, null, and unknown names that count as missing. System.Text.Json's `JsonStringEnumConverter` reads integers and throws on an unknown name by default (inferred), so the desktop needs its own reading of the modes to pass it.
 
 **Acceptance**
 
@@ -281,12 +302,14 @@ Last milestone completed: M12d
 - The new modes are written as names through a converter on each property, such as `JsonStringEnumMemberName`. A converter on the property also overrides the library query's `JsonStringEnumConverter`, so the desktop sends one form everywhere.
 - The filter summary line above the library panel (`UpdateFilterSummaryText` in `MainWindow.axaml.cs`) names "Favorites only", "Favorites excluded", and "Blacklisted only". Blacklisted excluded, the default, isn't named, as in the mockup. Today it shows "Favorites" for Favorites only and never names Blacklisted.
 - A header preset pick, None included, posts no presets, and a filter dialog Apply posts presets only when they changed, compared with the preset list comparison in `LibraryPresetSelection`. Before removing the post from header picks, confirm what it does today and report anything besides saving the list that depends on it.
+- The filter dialog won't apply Favorites only with Blacklisted only, or save it into a preset through Add Preset or Update Preset, through what the dialog already does for invalid input.
 
 **Traps**
 
 - The desktop reads presets with default JSON options (`ParseCorePresetFilterState` in `MainWindow.axaml.cs`), so an enum written as a name throws, and the catch turns the whole preset into the default filter (measured).
 - `SyncPresetsToCoreAsync` posts the desktop's cached preset list to `POST /api/presets`, which replaces the server's whole catalog, on every header preset pick and every Apply, and the cache is refreshed only on connect, reconnect, resync, and filter dialog open. Picking a preset on the desktop therefore deletes any preset the WebUI added since.
 - Apart from the server raising its catalog revision, nothing else was found to depend on the post.
+- The filter dialog shows no message for invalid input. Add Preset with an empty or taken name writes a `last.log` line and returns (`AddPreset` in `FilterDialog.axaml.cs`, with a TODO to show an error), duration text that doesn't parse leaves the previous duration in place, and `ApplyButton_Click` checks nothing. Refusing the pairing the same way gives no visible sign.
 
 **Acceptance**
 
@@ -294,6 +317,7 @@ Last milestone completed: M12d
 - A preset the WebUI saves with each mode loads in the desktop with that mode, in desktop tests.
 - A header preset pick posts no presets, and a filter dialog Apply posts presets only when they changed, in desktop tests.
 - The filter summary line names Favorites only, Favorites excluded, and Blacklisted only, in desktop tests.
+- The filter dialog doesn't apply Favorites only with Blacklisted only or save it into a preset, and applies and saves every other pairing, in desktop filter dialog tests.
 - `dotnet test ReelRoulette.sln` passes, and one quick spot check in the desktop.
 
 #### WebUI slice
@@ -319,12 +343,13 @@ Last milestone completed: M12d
 
 - Keeping a preset's stored modes when a desktop older than this milestone posts it without the new fields, since desktop and server are updated together for v0.15.0.
 - Name matching for the browser-playable field's values, which is Browser-Playable Filter.
+- Flagging Favorites only with Blacklisted only in the WebUI, its mockup included, which is WebUI Field Validation Pattern.
 
 ### M12f1 - WebUI Field Validation Pattern
 
 - **Status**: ⏳ Planned
 - **Goal**: A field that holds a value that is not valid says so as it is typed, through one reusable pattern for the whole WebUI, and typed durations are parsed strictly.
-- **Depends on**: WebUI Preact Migration and WebUI Design Mockup.
+- **Depends on**: WebUI Preact Migration, WebUI Design Mockup, and Favorite and Blacklist Filter Modes, whose Favorites and Blacklisted controls the pattern checks as a pair.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
@@ -346,6 +371,8 @@ Last milestone completed: M12d
 - The pattern replaces today's duration check at Apply: Apply no longer writes either invalid-duration message to the status line or to `last.log`.
 - The filter dialog's new preset name is flagged as it is typed, and Add Preset can't proceed while it is empty or taken. The pattern replaces both of Add Preset's status line messages.
 - The Edit Tag dialog's emptied tag name is flagged, and Save can't proceed while it is empty. The pattern replaces "Tag name is required.".
+- The filter dialog's Favorites and Blacklisted controls use the pattern as a pair: Favorites only with Blacklisted only is flagged as it is chosen, since the app doesn't allow an item to be both favorite and blacklisted, and Apply, Add Preset, and Update Preset can't proceed until either changes. Every other pairing stays allowed, including Favorites only with Blacklisted excluded. The server doesn't reject the pairing, and the desktop dialog refuses it too.
+- The mockup shows the pairing flagged, on its field validation page (`build/validation.src.html`) and in the Filter tab (`build/layout.src.html`). Where its icon sits and its tooltip's text are settled in that mockup update.
 - The filter dialog's Refresh keeps unsaved preset changes: while the preset list has changes Apply hasn't saved, Refresh reloads sources and tags but keeps the edited list and Apply's star, and Apply then saves it.
 
 #### Traps
@@ -370,6 +397,7 @@ Last milestone completed: M12d
 - A typed duration such as "1:7x", "12abc", or "1:75" is flagged, and a preset whose duration the server sends with fractional seconds, such as "00:01:30.5000000", loads as it does today, in WebUI tests of strict typed durations and of a server preset with fractional seconds.
 - A new preset name that is emptied after typing, or that matches a saved preset's name ignoring case, is flagged with the field validation pattern; Add Preset can't proceed while the name is empty or taken; and neither "Enter a preset name." nor "A preset with that name already exists." shows on the status line. Shown by WebUI tests of the pattern on the new preset name.
 - An Edit Tag dialog tag name that is emptied is flagged with the field validation pattern, its Save can't proceed while the name is empty, and "Tag name is required." no longer shows, in WebUI tests of the pattern on the Edit Tag name.
+- Favorites only with Blacklisted only is flagged with the field validation pattern, and Apply, Add Preset, and Update Preset can't proceed until either changes, while every other pairing, including Favorites only with Blacklisted excluded, is not flagged. Shown by WebUI tests of the pattern on the Favorites and Blacklisted controls.
 - After an unsaved preset change in the filter dialog, Refresh keeps the change and Apply's star, and Apply then saves it, in a WebUI test of Refresh after an unsaved preset change.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check.

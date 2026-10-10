@@ -1,4 +1,6 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
+using ReelRoulette.Core.Filtering;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
@@ -57,6 +59,36 @@ public sealed class OpenApiRouteContractTests : IDisposable
         Assert.True(
             missingFromSpec.Count == 0 && notRead.Count == 0,
             $"Read by the filter parser but missing from FilterState: [{string.Join(", ", missingFromSpec)}]. In FilterState but not read: [{string.Join(", ", notRead)}].");
+    }
+
+    // Full filter states in the shapes the desktop and the WebUI wrote before the flag modes, with no mode fields.
+    [Theory]
+    [InlineData(
+        """{"favoritesOnly":true,"excludeBlacklisted":false,"onlyNeverPlayed":true,"audioFilter":1,"minDuration":"00:01:30","maxDuration":null,"selectedTags":["Ann"],"excludedTags":["Bob"],"categoryLocalMatchModes":{"people":1},"globalMatchMode":null,"tagMatchMode":0,"onlyKnownDuration":true,"onlyKnownLoudness":false,"mediaTypeFilter":1,"includedSourceIds":["s1"]}""",
+        FlagFilterModeValue.Only,
+        FlagFilterModeValue.Off)]
+    [InlineData(
+        """{"favoritesOnly":false,"excludeBlacklisted":true,"onlyNeverPlayed":true,"onlyKnownDuration":true,"onlyKnownLoudness":false,"audioFilter":1,"mediaTypeFilter":1,"globalMatchMode":null,"selectedTags":["Ann"],"excludedTags":["Bob"],"includedSourceIds":["s1"],"categoryLocalMatchModes":{"people":1},"minDuration":"00:01:30"}""",
+        FlagFilterModeValue.Off,
+        FlagFilterModeValue.Excluded)]
+    public void FilterState_WithOnlyTheOldFields_StillParses(string json, FlagFilterModeValue favorites, FlagFilterModeValue blacklisted)
+    {
+        using var document = JsonDocument.Parse(json);
+        Assert.True(LibraryListFilterParser.TryParse(document.RootElement, out var filter, out var error), error);
+
+        Assert.Equal((favorites, blacklisted), (filter!.FavoritesMode, filter.BlacklistedMode));
+        Assert.True(filter.OnlyNeverPlayed);
+        Assert.Equal(AudioFilterModeValue.WithAudioOnly, filter.AudioFilter);
+        Assert.Equal(TimeSpan.FromSeconds(90), filter.MinDuration);
+        Assert.Null(filter.MaxDuration);
+        Assert.Equal(["Ann"], filter.SelectedTags);
+        Assert.Equal(["Bob"], filter.ExcludedTags);
+        Assert.Equal(TagMatchModeValue.Or, Assert.Single(filter.CategoryLocalMatchModes!, pair => pair.Key == "people").Value);
+        Assert.Null(filter.GlobalMatchMode);
+        Assert.True(filter.OnlyKnownDuration);
+        Assert.False(filter.OnlyKnownLoudness);
+        Assert.Equal(MediaTypeFilterValue.VideosOnly, filter.MediaTypeFilter);
+        Assert.Equal(["s1"], filter.IncludedSourceIds);
     }
 
     [Fact]
