@@ -19,6 +19,6 @@ Instructions:
 
 Commit Message:
 
-Chore: Send the advisor session the full text the user sees
+Chore: Keep showing the user results that also go to the advisor
 
-- CLAUDE.md's section on other sessions in the repo now says to send a plan, report, summary, review result, or question to the session named advisor in full: the same text the user sees, including any recommendation such as running the review again, not a shortened version.
+- CLAUDE.md's section on other sessions in the repo now says a plan, report, summary, review result, or question goes to the user in full as usual, with an identical copy to the session named advisor in addition, never instead, and that the user is told when no advisor session exists to receive it.
