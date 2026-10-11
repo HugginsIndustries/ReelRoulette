@@ -851,7 +851,7 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
               <h3>Basic Filters</h3>
               <div class="filter-stack">
                 <div class="mode-row"><label><input type="checkbox" id="filter-fav"> Favorites</label><select class="ctl mode-select" id="filter-fav-mode" aria-label="Favorites filter"><option value="only">only</option><option value="excluded">excluded</option></select></div>
-                <div class="mode-row"><label><input type="checkbox" id="filter-bl" checked> Blacklisted</label><select class="ctl mode-select" id="filter-bl-mode" aria-label="Blacklisted filter"><option value="only">only</option><option value="excluded" selected>excluded</option></select></div>
+                <div class="mode-row"><label><input type="checkbox" id="filter-bl" checked> Blacklisted</label><span class="vfield vfield-after"><select class="ctl mode-select" id="filter-bl-mode" aria-label="Blacklisted filter"><option value="only">only</option><option value="excluded" selected>excluded</option></select><span class="vfield-icon material-symbol-icon">error</span></span></div>
                 <label><input type="checkbox"> Only never played</label>
                 <label><input type="checkbox"> Only videos with known duration</label>
                 <label><input type="checkbox"> Only videos with known loudness</label>
@@ -886,16 +886,14 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
             </div>
             <div class="filter-section">
               <h3>Duration Filter</h3>
-              <div class="filter-stack">
+              <div class="filter-stack duration-stack">
                 <div class="filter-row">
                   <span style="min-width:3rem">Min</span>
-                  <span class="vfield duration-field"><input class="ctl" type="text" id="filter-min" placeholder="HH:MM:SS or MM:SS" aria-label="Minimum duration" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
-                  <label><input type="checkbox" id="filter-no-min"> No minimum</label>
+                  <span class="vfield duration-field"><input class="ctl" type="text" id="filter-min" placeholder="No minimum" aria-label="Minimum duration" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
                 </div>
                 <div class="filter-row">
                   <span style="min-width:3rem">Max</span>
-                  <span class="vfield duration-field"><input class="ctl" type="text" id="filter-max" placeholder="HH:MM:SS or MM:SS" aria-label="Maximum duration" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
-                  <label><input type="checkbox" id="filter-no-max"> No maximum</label>
+                  <span class="vfield duration-field"><input class="ctl" type="text" id="filter-max" placeholder="No maximum" aria-label="Maximum duration" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
                 </div>
               </div>
             </div>
@@ -918,7 +916,7 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
               <h3>Choose Preset</h3>
               <div class="filter-row">
                 <select class="ctl grow" id="filter-preset-select"></select>
-                <button class="btn" type="button" id="filter-update-preset">Update Preset</button>
+                <button class="btn" type="button" id="filter-update-preset"><span class="btn-label">Update Preset</span><span class="btn-problem material-symbol-icon">error</span></button>
               </div>
             </div>
             <div class="filter-section">
@@ -2757,20 +2755,13 @@ document.querySelectorAll(".filter-tab").forEach((tab) => tab.addEventListener("
 const minField = new ValidatedField($("filter-min"), checkDuration);
 const maxField = new ValidatedField($("filter-max"), checkDuration);
 const nameField = new ValidatedField($("filter-new-preset"), (value) => checkPresetName(value, null));
-
-function noneBox(box, field) {
-  box.addEventListener("change", () => {
-    field.input.disabled = box.checked;
-    if (box.checked) field.input.value = "";
-    field.update();
-  });
-}
-noneBox($("filter-no-min"), minField);
-noneBox($("filter-no-max"), maxField);
+const flagModesField = flagPairField($("filter-fav"), $("filter-fav-mode"), $("filter-bl"), $("filter-bl-mode"));
+// An empty duration field means no limit, and its placeholder says so.
 // Each mode dropdown applies only while its checkbox is on.
 function syncModeSelects() {
   $("filter-fav-mode").disabled = !$("filter-fav").checked;
   $("filter-bl-mode").disabled = !$("filter-bl").checked;
+  flagModesField.update();
 }
 $("filter-fav").addEventListener("change", syncModeSelects);
 $("filter-bl").addEventListener("change", syncModeSelects);
@@ -2788,22 +2779,34 @@ function renderApply() {
   renderUnsaved();
   apply.classList.toggle("has-pending", filterPending);
   const generalTab = document.querySelector('.filter-tab[data-sub="general"]');
-  const generalProblem = minField.flagged || maxField.flagged;
+  const generalProblem = flagModesField.flagged || minField.flagged || maxField.flagged;
   generalTab.classList.toggle("has-problem", generalProblem);
   generalTab.title = generalProblem ? "A field here is not valid" : "";
   const presetsTab = document.querySelector('.filter-tab[data-sub="presets"]');
   presetsTab.classList.toggle("has-problem", nameField.flagged);
   presetsTab.title = nameField.flagged ? "A field here is not valid" : "";
 }
-const durationName = (field) => (field === minField ? "minimum" : "maximum");
-holdAction($("filter-apply"), () => [minField, maxField], {
-  reason: (field) => `Correct the ${durationName(field)} duration to apply.`,
+// Apply, Add Preset, and Update Preset all use the General section's pair and durations; Add Preset uses the name too.
+function generalReason(field, ending) {
+  if (field === flagModesField) return `Change Favorites or Blacklisted ${ending}.`;
+  return `Correct the ${field === minField ? "minimum" : "maximum"} duration ${ending}.`;
+}
+holdAction($("filter-apply"), () => [flagModesField, minField, maxField], {
+  reason: (field) => generalReason(field, "to apply"),
   beforeReveal: () => showSub("general")
 });
-holdAction($("filter-add-preset"), () => [nameField], {
-  reason: (field) => (field.problem.empty ? "Enter a preset name first." : "Use a name no other preset has.")
+holdAction($("filter-add-preset"), () => [nameField, flagModesField, minField, maxField], {
+  reason: (field) => {
+    if (field !== nameField) return generalReason(field, "first");
+    return field.problem.empty ? "Enter a preset name first." : "Use a name no other preset has.";
+  },
+  beforeReveal: (field) => field !== nameField && showSub("general")
 });
-[minField, maxField, nameField].forEach((field) => field.onChange(renderApply));
+holdAction($("filter-update-preset"), () => [flagModesField, minField, maxField], {
+  reason: (field) => generalReason(field, "first"),
+  beforeReveal: () => showSub("general")
+});
+[flagModesField, minField, maxField, nameField].forEach((field) => field.onChange(renderApply));
 
 filterBody.addEventListener("change", (event) => {
   if (event.target.closest('[data-subpanel="presets"]') && event.target.id !== "filter-preset-select") return;
@@ -2839,7 +2842,7 @@ function restoreSnapshot() {
   tagSnapshot.forEach((value, key) => filterTagState.set(key, value));
   renderPresets();
   renderFilterTags();
-  [minField, maxField, nameField].forEach((field) => field.reset());
+  [flagModesField, minField, maxField, nameField].forEach((field) => field.reset());
 }
 // The applied filter is remembered on this device, as the per-device store keeps it.
 function saveFilterState() {
@@ -2856,10 +2859,8 @@ function restoreFilterState() {
     });
   }
   store.get("filterTags", []).forEach(([key, value]) => filterTagState.set(key, value));
-  $("filter-min").disabled = $("filter-no-min").checked;
-  $("filter-max").disabled = $("filter-no-max").checked;
   syncModeSelects();
-  [minField, maxField].forEach((field) => field.update());
+  [flagModesField, minField, maxField].forEach((field) => field.update());
 }
 
 $("filter-apply").addEventListener("click", () => {
@@ -2905,10 +2906,7 @@ function resetGeneral() {
   general.querySelectorAll('input[type="radio"]').forEach((radio) => {
     radio.checked = radio === radio.closest(".filter-stack").querySelector('input[type="radio"]');
   });
-  [minField, maxField].forEach((field) => {
-    field.input.disabled = false;
-    field.reset("");
-  });
+  [minField, maxField].forEach((field) => field.reset(""));
   filterTagState.clear();
   syncModeSelects();
 }

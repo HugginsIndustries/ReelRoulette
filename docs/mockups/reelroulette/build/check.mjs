@@ -139,6 +139,47 @@ for (const name of ["index", "validation", "recovery", "desktop-notice", "layout
   jumpApply.click();
   check("validation: Apply switches to General and focuses the field, applying nothing",
     mini.querySelector('[data-sub="general"]').classList.contains("is-active") && document.activeElement === mini.querySelector("[data-min]") && !jumpApply.textContent.includes("Applied"));
+
+  const placeholders = (name) => [...document.querySelectorAll(`input[aria-label="${name} duration"]`)].map((field) => field.placeholder);
+  const miniStack = document.querySelector('[data-mini="jump"] [data-min]').closest(".filter-stack");
+  check(`validation: the Min and Max fields stack 10px apart (${window.getComputedStyle(miniStack).gap})`, window.getComputedStyle(miniStack).gap === "10px");
+  check(`validation: empty durations say No minimum and No maximum (${placeholders("Minimum")} / ${placeholders("Maximum")})`,
+    placeholders("Minimum").length === 4 && placeholders("Minimum").every((text) => text === "No minimum") && placeholders("Maximum").every((text) => text === "No maximum"));
+
+  const pairs = [...document.querySelectorAll(".specimen[data-pair]")];
+  const modes = (root) => [root.querySelector("[data-fav-mode]"), root.querySelector("[data-bl-mode]")];
+  const pairStates = pairs.map((specimen) => modes(specimen).map((select) => select.getAttribute("aria-invalid") || "-").join("/"));
+  check(`validation: only Favorites only with Blacklisted only is flagged (${pairStates.join(" ")})`, pairStates.join(" ") === "-/- true/true");
+  const [favMode, blMode] = modes(pairs[1]);
+  const pairTip = document.getElementById(favMode.getAttribute("aria-describedby") || "none");
+  check("validation: both dropdowns are described by one tooltip, whose icon follows the Blacklisted dropdown",
+    pairTip?.textContent === "Nothing is both a favorite and blacklisted. Use excluded for one of them." && blMode.getAttribute("aria-describedby") === pairTip.id &&
+    blMode.closest(".vfield").contains(pairTip) && blMode.nextElementSibling?.classList.contains("vfield-icon"));
+  blMode.value = "excluded";
+  blMode.dispatchEvent(new window.Event("change"));
+  check("validation: choosing excluded clears both dropdowns", !favMode.hasAttribute("aria-invalid") && !blMode.hasAttribute("aria-invalid"));
+  blMode.value = "only";
+  blMode.dispatchEvent(new window.Event("change"));
+  const favBox = pairs[1].querySelector("[data-fav]");
+  favBox.checked = false;
+  favBox.dispatchEvent(new window.Event("change"));
+  check("validation: turning Favorites off clears both dropdowns", !favMode.hasAttribute("aria-invalid") && !blMode.hasAttribute("aria-invalid") && favMode.disabled);
+
+  const miniMin = mini.querySelector("[data-min]");
+  miniMin.value = "2:15";
+  miniMin.dispatchEvent(new window.Event("input"));
+  const [miniFav, miniBl] = mini.querySelectorAll("[data-mode-box]");
+  miniFav.checked = true;
+  miniFav.dispatchEvent(new window.Event("change"));
+  const miniBlMode = miniBl.closest(".mode-row").querySelector("select");
+  miniBlMode.value = "only";
+  miniBlMode.dispatchEvent(new window.Event("change"));
+  check("validation: the pair holds Apply and marks General",
+    jumpApply.getAttribute("aria-disabled") === "true" && mini.querySelector('[data-sub="general"]').classList.contains("has-problem") && jumpApply.title === "Change Favorites or Blacklisted to apply.");
+  mini.querySelector('[data-sub="presets"]').click();
+  jumpApply.click();
+  check("validation: Apply held by the pair moves to the Blacklisted dropdown, applying nothing",
+    mini.querySelector('[data-sub="general"]').classList.contains("is-active") && document.activeElement === miniBlMode && !jumpApply.textContent.includes("Applied"));
   check(`validation: no script errors after interaction ${errors.join("; ")}`, errors.length === 0);
 }
 
@@ -409,6 +450,65 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: once applied, an unchecked filter's dropdown shows its default`,
     $("filter-fav-mode").value === "only" && $("filter-fav-mode").disabled);
   await applyFilter(false, "only", true, "excluded");
+
+  // Favorites only with Blacklisted only matches nothing: the pair is flagged and holds every action that uses it.
+  openTab("filter");
+  document.querySelector('[data-sub="general"]').click();
+  change($("filter-fav"), true);
+  change($("filter-fav-mode"), "only");
+  change($("filter-bl-mode"), "only");
+  const pairTip = document.getElementById($("filter-fav-mode").getAttribute("aria-describedby") || "none");
+  check(`layout@${width}: Favorites only with Blacklisted only flags both dropdowns, with one icon after Blacklisted, and marks General`,
+    $("filter-fav-mode").getAttribute("aria-invalid") === "true" && $("filter-bl-mode").getAttribute("aria-invalid") === "true" &&
+    pairTip?.textContent === "Nothing is both a favorite and blacklisted. Use excluded for one of them." && $("filter-bl-mode").closest(".vfield").contains(pairTip) &&
+    document.querySelector('.filter-tab[data-sub="general"]').classList.contains("has-problem"));
+  const heldWithIcon = (id) => $(id).getAttribute("aria-disabled") === "true" && $(id).classList.contains("shows-problem");
+  check(`layout@${width}: the pair holds Apply, Add Preset, and Update Preset`,
+    heldWithIcon("filter-apply") && heldWithIcon("filter-add-preset") && heldWithIcon("filter-update-preset") && $("filter-update-preset").title === "Change Favorites or Blacklisted first.");
+  document.querySelector('[data-sub="presets"]').click();
+  const statusBeforePair = status();
+  $("filter-update-preset").click();
+  check(`layout@${width}: held Update Preset goes to the Blacklisted dropdown and writes no status`,
+    !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === $("filter-bl-mode") && status() === statusBeforePair);
+  change($("filter-bl"), false);
+  check(`layout@${width}: turning Blacklisted off clears the pair and lets Apply proceed`,
+    !$("filter-fav-mode").hasAttribute("aria-invalid") && !$("filter-bl-mode").hasAttribute("aria-invalid") && !$("filter-apply").hasAttribute("aria-disabled"));
+  input($("filter-min"), "1:7x");
+  check(`layout@${width}: a duration that is not valid holds Add Preset and Update Preset too`,
+    heldWithIcon("filter-add-preset") && heldWithIcon("filter-update-preset") && $("filter-update-preset").title === "Correct the minimum duration first.");
+  document.querySelector('[data-sub="presets"]').click();
+  $("filter-new-preset").focus();
+  input($("filter-new-preset"), "Unique name");
+  $("filter-add-preset").click();
+  check(`layout@${width}: held Add Preset goes to the duration and adds nothing`,
+    !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === $("filter-min") && $("filter-new-preset").value === "Unique name");
+  input($("filter-min"), "");
+  input($("filter-new-preset"), "");
+  await applyFilter(false, "only", true, "excluded");
+
+  // An empty duration field means no limit: the rows have no boxes, and the placeholders say so.
+  openTab("filter");
+  document.querySelector('[data-sub="general"]').click();
+  const durationRows = [$("filter-min"), $("filter-max")].map((field) => field.closest(".filter-row"));
+  check(`layout@${width}: the duration rows have no boxes, and their placeholders say No minimum and No maximum`,
+    durationRows.every((row) => !row.querySelector('input[type="checkbox"]')) && $("filter-min").placeholder === "No minimum" && $("filter-max").placeholder === "No maximum");
+  const durationStack = $("filter-min").closest(".filter-stack");
+  const durationGap = window.getComputedStyle(durationStack).gap;
+  check(`layout@${width}: the Min and Max fields stack 10px apart, as the WebUI's filter rows do (${durationGap})`,
+    durationGap === "10px" && $("filter-max").closest(".filter-stack") === durationStack);
+  input($("filter-min"), "2:00");
+  $("filter-apply").click();
+  await tick();
+  check(`layout@${width}: a typed minimum applies (${$("lib-filters").textContent})`, !$("lib-filters").hidden && $("lib-filters").textContent.includes("Min 2:00"));
+  openTab("filter");
+  document.querySelector('[data-sub="general"]').click();
+  input($("filter-min"), "");
+  check(`layout@${width}: an emptied minimum is not flagged and doesn't hold Apply`,
+    !$("filter-min").hasAttribute("aria-invalid") && !$("filter-apply").hasAttribute("aria-disabled"));
+  $("filter-apply").click();
+  await tick();
+  check(`layout@${width}: applying it empty removes the minimum`, $("lib-filters").hidden || !$("lib-filters").textContent.includes("Min"));
+  openTab("library");
 
   // Choosing a preset applies its filter, and a change to that filter stars it.
   const choosePreset = (value) => change($("lib-preset"), value);

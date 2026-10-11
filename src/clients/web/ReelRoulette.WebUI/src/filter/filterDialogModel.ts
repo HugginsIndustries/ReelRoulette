@@ -1,10 +1,11 @@
 import { compareTagNames } from "../library/tagNameOrder";
+import type { FieldProblem } from "../validation/fieldValidation";
 import {
   TAG_MATCH_MODE,
   cloneFilterState,
   filterStateFromApiObject,
   formatDurationForDisplay,
-  parseDurationInputToSeconds,
+  parseTypedDuration,
   type ApiFilterState,
   type AudioFilterMode,
   type FilterState,
@@ -40,8 +41,8 @@ const DEFAULT_BLACKLISTED_CHOICE: FlagFilterChoice = "excluded";
 
 /**
  * What the General tab's fields show. It is filled from the working filter when the dialog opens or starts over,
- * and otherwise keeps what the user left, such as a duration that is not valid, an unchecked No minimum with an
- * empty field, or a Favorites or Blacklisted choice whose checkbox is off, which the working filter cannot hold.
+ * and otherwise keeps what the user left, such as a duration that is not valid, or a Favorites or Blacklisted choice
+ * whose checkbox is off, which the working filter cannot hold. An empty duration means no limit.
  */
 export interface GeneralDraft {
   favoritesOn: boolean;
@@ -54,9 +55,7 @@ export interface GeneralDraft {
   mediaTypeFilter: MediaTypeFilter;
   audioFilter: AudioFilterMode;
   minText: string;
-  noMin: boolean;
   maxText: string;
-  noMax: boolean;
   /** Whether each source is checked, in the order of the sources list. */
   sourceChecked: boolean[];
 }
@@ -120,21 +119,19 @@ export function generalDraftFromFilter(filter: FilterState, sources: readonly Fi
     mediaTypeFilter: filter.mediaTypeFilter,
     audioFilter: filter.audioFilter,
     minText: filter.minDurationSeconds != null ? formatDurationForDisplay(filter.minDurationSeconds) : "",
-    noMin: filter.minDurationSeconds == null,
     maxText: filter.maxDurationSeconds != null ? formatDurationForDisplay(filter.maxDurationSeconds) : "",
-    noMax: filter.maxDurationSeconds == null,
     sourceChecked: sources.map(
       (source) => filter.includedSourceIds.length === 0 || containsIgnoringCase(filter.includedSourceIds, source.id)
     )
   };
 }
 
-/** A duration that is not valid counts as none until Apply refuses it. */
-function draftDuration(text: string, none: boolean): number | null {
-  if (none) {
-    return null;
-  }
-  const seconds = parseDurationInputToSeconds(text);
+/**
+ * An empty duration is no limit. One that is not valid counts as none too: it holds the actions that would use it,
+ * so none of them takes it.
+ */
+function draftDuration(text: string): number | null {
+  const seconds = parseTypedDuration(text);
   return seconds === "invalid" ? null : seconds;
 }
 
@@ -152,22 +149,77 @@ export function filterWithGeneralDraft(
   next.onlyKnownLoudness = draft.onlyKnownLoudness;
   next.mediaTypeFilter = draft.mediaTypeFilter;
   next.audioFilter = draft.audioFilter;
-  next.minDurationSeconds = draftDuration(draft.minText, draft.noMin);
-  next.maxDurationSeconds = draftDuration(draft.maxText, draft.noMax);
+  next.minDurationSeconds = draftDuration(draft.minText);
+  next.maxDurationSeconds = draftDuration(draft.maxText);
   const checked = sources.filter((_, index) => draft.sourceChecked[index]).map((source) => source.id);
   next.includedSourceIds = checked.length === sources.length ? [] : checked;
   return next;
 }
 
-/** The message that stops Apply when a duration in use is not valid, or null. */
-export function generalDraftDurationError(draft: GeneralDraft): string | null {
-  if (!draft.noMin && parseDurationInputToSeconds(draft.minText) === "invalid") {
-    return "Minimum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.";
+/**
+ * The filter dialog's fields that can hold a value that is not valid. The flag modes are the Favorites and Blacklisted
+ * filters, checked as a pair.
+ */
+export type FilterField = "flagModes" | "minDuration" | "maxDuration" | "newPresetName";
+
+/** The filter dialog's actions that use those fields. */
+export type FilterAction = "apply" | "addPreset" | "updatePreset";
+
+/** The fields each action uses, in the order a held action moves to them. Add Preset's name sits beside it, so it is first. */
+export const FILTER_ACTION_FIELDS: Readonly<Record<FilterAction, readonly FilterField[]>> = {
+  apply: ["flagModes", "minDuration", "maxDuration"],
+  addPreset: ["newPresetName", "flagModes", "minDuration", "maxDuration"],
+  updatePreset: ["flagModes", "minDuration", "maxDuration"]
+};
+
+/** The dialog section each field is in. */
+export const FILTER_FIELD_SECTION: Readonly<Record<FilterField, "general" | "presets">> = {
+  flagModes: "general",
+  minDuration: "general",
+  maxDuration: "general",
+  newPresetName: "presets"
+};
+
+export const DURATION_PROBLEM = "Use MM:SS, HH:MM:SS, or seconds.";
+
+/** Favorites only with Blacklisted only matches nothing, since the app never lets an item be both. */
+export const FLAG_MODES_PROBLEM = "Nothing is both a favorite and blacklisted. Use excluded for one of them.";
+
+function durationProblem(text: string): FieldProblem | null {
+  return parseTypedDuration(text) === "invalid" ? { message: DURATION_PROBLEM } : null;
+}
+
+/** Each field's problem, or null while its value is valid. An empty duration is valid: it means no limit. */
+export function filterFieldProblems(
+  draft: GeneralDraft,
+  newPresetName: string,
+  presets: readonly PresetRow[]
+): Record<FilterField, FieldProblem | null> {
+  const name = newPresetName.trim();
+  const bothOnly =
+    draft.favoritesOn && draft.favoritesChoice === "only" && draft.blacklistedOn && draft.blacklistedChoice === "only";
+  return {
+    flagModes: bothOnly ? { message: FLAG_MODES_PROBLEM } : null,
+    minDuration: durationProblem(draft.minText),
+    maxDuration: durationProblem(draft.maxText),
+    newPresetName: !name
+      ? { message: "Enter a preset name.", empty: true }
+      : presets.some((row) => namesEqualIgnoringCase(row.name, name))
+        ? { message: "Use a name no other preset has." }
+        : null
+  };
+}
+
+/** Why a field holds an action, which the action's title and accessible description say. */
+export function filterHeldReason(action: FilterAction, field: FilterField, problem: FieldProblem): string {
+  if (field === "newPresetName") {
+    return problem.empty ? "Enter a preset name first." : "Use a name no other preset has.";
   }
-  if (!draft.noMax && parseDurationInputToSeconds(draft.maxText) === "invalid") {
-    return "Maximum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.";
+  const ending = action === "apply" ? "to apply" : "first";
+  if (field === "flagModes") {
+    return `Change Favorites or Blacklisted ${ending}.`;
   }
-  return null;
+  return `Correct the ${field === "minDuration" ? "minimum" : "maximum"} duration ${ending}.`;
 }
 
 /** Includes or excludes a tag, or clears it when it already is. Including takes it out of the excluded tags, and the other way round. */

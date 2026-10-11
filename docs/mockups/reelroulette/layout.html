@@ -187,7 +187,7 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
   display: inline-flex;
   min-width: 0;
 }
-.vfield > .ctl {
+.vfield:not(.vfield-after) > .ctl {
   width: 100%;
   padding-right: 40px;
 }
@@ -202,6 +202,9 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
   cursor: help;
 }
 .vfield.is-invalid .vfield-icon { display: inline-flex; }
+/* A dropdown keeps its arrow on the right, so its icon sits just after it. */
+.vfield-after { align-items: center; gap: 6px; }
+.vfield-after > .vfield-icon { position: static; transform: none; }
 .vfield-tip {
   position: fixed;
   z-index: 3000;
@@ -255,6 +258,8 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 .filter-hint { font-size: 0.85rem; opacity: 0.75; margin: 0 0 8px; }
 .filter-stack { display: flex; flex-direction: column; gap: 4px; }
 .filter-stack label { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+/* Stacked text fields sit 10px apart, as the WebUI's filter rows do. */
+.duration-stack { gap: 10px; }
 /* The Favorites and Blacklisted filters: a checkbox and an only-or-excluded dropdown. */
 .mode-row { display: flex; align-items: center; gap: 10px; min-height: 40px; }
 .mode-row > label { display: flex; align-items: center; gap: 8px; min-width: 7.5rem; }
@@ -1265,7 +1270,7 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
               <h3>Basic Filters</h3>
               <div class="filter-stack">
                 <div class="mode-row"><label><input type="checkbox" id="filter-fav"> Favorites</label><select class="ctl mode-select" id="filter-fav-mode" aria-label="Favorites filter"><option value="only">only</option><option value="excluded">excluded</option></select></div>
-                <div class="mode-row"><label><input type="checkbox" id="filter-bl" checked> Blacklisted</label><select class="ctl mode-select" id="filter-bl-mode" aria-label="Blacklisted filter"><option value="only">only</option><option value="excluded" selected>excluded</option></select></div>
+                <div class="mode-row"><label><input type="checkbox" id="filter-bl" checked> Blacklisted</label><span class="vfield vfield-after"><select class="ctl mode-select" id="filter-bl-mode" aria-label="Blacklisted filter"><option value="only">only</option><option value="excluded" selected>excluded</option></select><span class="vfield-icon material-symbol-icon">error</span></span></div>
                 <label><input type="checkbox"> Only never played</label>
                 <label><input type="checkbox"> Only videos with known duration</label>
                 <label><input type="checkbox"> Only videos with known loudness</label>
@@ -1300,16 +1305,14 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
             </div>
             <div class="filter-section">
               <h3>Duration Filter</h3>
-              <div class="filter-stack">
+              <div class="filter-stack duration-stack">
                 <div class="filter-row">
                   <span style="min-width:3rem">Min</span>
-                  <span class="vfield duration-field"><input class="ctl" type="text" id="filter-min" placeholder="HH:MM:SS or MM:SS" aria-label="Minimum duration" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
-                  <label><input type="checkbox" id="filter-no-min"> No minimum</label>
+                  <span class="vfield duration-field"><input class="ctl" type="text" id="filter-min" placeholder="No minimum" aria-label="Minimum duration" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
                 </div>
                 <div class="filter-row">
                   <span style="min-width:3rem">Max</span>
-                  <span class="vfield duration-field"><input class="ctl" type="text" id="filter-max" placeholder="HH:MM:SS or MM:SS" aria-label="Maximum duration" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
-                  <label><input type="checkbox" id="filter-no-max"> No maximum</label>
+                  <span class="vfield duration-field"><input class="ctl" type="text" id="filter-max" placeholder="No maximum" aria-label="Maximum duration" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
                 </div>
               </div>
             </div>
@@ -1332,7 +1335,7 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
               <h3>Choose Preset</h3>
               <div class="filter-row">
                 <select class="ctl grow" id="filter-preset-select"></select>
-                <button class="btn" type="button" id="filter-update-preset">Update Preset</button>
+                <button class="btn" type="button" id="filter-update-preset"><span class="btn-label">Update Preset</span><span class="btn-problem material-symbol-icon">error</span></button>
               </div>
             </div>
             <div class="filter-section">
@@ -1718,6 +1721,8 @@ function checkDuration(value) {
 /**
  * A field using the validation pattern. `check(value)` returns null when the value is valid, or `{ message, empty }`.
  * An empty required field (`empty: true`) is flagged only once the user has typed in it, but still holds its action.
+ * `partners` are other controls checked with this one, such as the other dropdown of a pair: they are marked and
+ * described with it, and focusing one shows the tooltip too. The icon and tooltip stay with `input`.
  */
 const allFields = new Set();
 let tipCounter = 0;
@@ -1729,6 +1734,7 @@ class ValidatedField {
     this.check = check;
     this.pinned = !!opts.pinned;
     this.touched = !!opts.touched;
+    this.partners = opts.partners || [];
     this.hover = false;
     this.wrap = input.closest(".vfield");
     this.icon = this.wrap.querySelector(".vfield-icon");
@@ -1744,8 +1750,10 @@ class ValidatedField {
       this.touched = true;
       this.update();
     });
-    input.addEventListener("focus", () => this.place());
-    input.addEventListener("blur", () => this.place());
+    [input, ...this.partners].forEach((control) => {
+      control.addEventListener("focus", () => this.place());
+      control.addEventListener("blur", () => this.place());
+    });
     this.icon.addEventListener("pointerenter", (event) => {
       if (event.pointerType === "mouse") {
         this.hover = true;
@@ -1799,14 +1807,16 @@ class ValidatedField {
     const problem = this.problem;
     const flagged = this.flagged;
     this.wrap.classList.toggle("is-invalid", flagged);
-    if (flagged) {
-      this.tip.textContent = problem.message;
-      this.input.setAttribute("aria-invalid", "true");
-      this.input.setAttribute("aria-describedby", this.tip.id);
-    } else {
-      this.input.removeAttribute("aria-invalid");
-      this.input.removeAttribute("aria-describedby");
-    }
+    if (flagged) this.tip.textContent = problem.message;
+    [this.input, ...this.partners].forEach((control) => {
+      if (flagged) {
+        control.setAttribute("aria-invalid", "true");
+        control.setAttribute("aria-describedby", this.tip.id);
+      } else {
+        control.removeAttribute("aria-invalid");
+        control.removeAttribute("aria-describedby");
+      }
+    });
     this.place();
     this.listeners.forEach((listener) => listener());
   }
@@ -1821,7 +1831,7 @@ class ValidatedField {
   place() {
     const shown =
       this.flagged &&
-      (this.pinned || this.hover || document.activeElement === this.input) &&
+      (this.pinned || this.hover || [this.input, ...this.partners].includes(document.activeElement)) &&
       this.wrap.offsetParent !== null &&
       this.inScrollView();
     this.tip.classList.toggle("is-shown", shown);
@@ -1847,6 +1857,19 @@ class ValidatedField {
     const icon = this.icon.getBoundingClientRect();
     return icon.bottom > view.top && icon.top < view.bottom;
   }
+}
+
+/**
+ * The Filter tab's Favorites and Blacklisted filters, checked as a pair: Favorites only with Blacklisted only matches
+ * nothing, since no item is both. The icon sits after the Blacklisted dropdown, which a held action moves to. A
+ * dropdown's change updates it; call `update()` after a checkbox changes and the dropdowns' disabled state follows.
+ */
+const FLAG_PAIR_PROBLEM = "Nothing is both a favorite and blacklisted. Use excluded for one of them.";
+function flagPairField(favBox, favMode, blBox, blMode, options) {
+  const check = () => (favBox.checked && favMode.value === "only" && blBox.checked && blMode.value === "only" ? { message: FLAG_PAIR_PROBLEM } : null);
+  const field = new ValidatedField(blMode, check, { ...options, partners: [favMode] });
+  [favMode, blMode].forEach((select) => select.addEventListener("change", () => field.update()));
+  return field;
 }
 
 let placeQueued = false;
@@ -3647,20 +3670,13 @@ document.querySelectorAll(".filter-tab").forEach((tab) => tab.addEventListener("
 const minField = new ValidatedField($("filter-min"), checkDuration);
 const maxField = new ValidatedField($("filter-max"), checkDuration);
 const nameField = new ValidatedField($("filter-new-preset"), (value) => checkPresetName(value, null));
-
-function noneBox(box, field) {
-  box.addEventListener("change", () => {
-    field.input.disabled = box.checked;
-    if (box.checked) field.input.value = "";
-    field.update();
-  });
-}
-noneBox($("filter-no-min"), minField);
-noneBox($("filter-no-max"), maxField);
+const flagModesField = flagPairField($("filter-fav"), $("filter-fav-mode"), $("filter-bl"), $("filter-bl-mode"));
+// An empty duration field means no limit, and its placeholder says so.
 // Each mode dropdown applies only while its checkbox is on.
 function syncModeSelects() {
   $("filter-fav-mode").disabled = !$("filter-fav").checked;
   $("filter-bl-mode").disabled = !$("filter-bl").checked;
+  flagModesField.update();
 }
 $("filter-fav").addEventListener("change", syncModeSelects);
 $("filter-bl").addEventListener("change", syncModeSelects);
@@ -3678,22 +3694,34 @@ function renderApply() {
   renderUnsaved();
   apply.classList.toggle("has-pending", filterPending);
   const generalTab = document.querySelector('.filter-tab[data-sub="general"]');
-  const generalProblem = minField.flagged || maxField.flagged;
+  const generalProblem = flagModesField.flagged || minField.flagged || maxField.flagged;
   generalTab.classList.toggle("has-problem", generalProblem);
   generalTab.title = generalProblem ? "A field here is not valid" : "";
   const presetsTab = document.querySelector('.filter-tab[data-sub="presets"]');
   presetsTab.classList.toggle("has-problem", nameField.flagged);
   presetsTab.title = nameField.flagged ? "A field here is not valid" : "";
 }
-const durationName = (field) => (field === minField ? "minimum" : "maximum");
-holdAction($("filter-apply"), () => [minField, maxField], {
-  reason: (field) => `Correct the ${durationName(field)} duration to apply.`,
+// Apply, Add Preset, and Update Preset all use the General section's pair and durations; Add Preset uses the name too.
+function generalReason(field, ending) {
+  if (field === flagModesField) return `Change Favorites or Blacklisted ${ending}.`;
+  return `Correct the ${field === minField ? "minimum" : "maximum"} duration ${ending}.`;
+}
+holdAction($("filter-apply"), () => [flagModesField, minField, maxField], {
+  reason: (field) => generalReason(field, "to apply"),
   beforeReveal: () => showSub("general")
 });
-holdAction($("filter-add-preset"), () => [nameField], {
-  reason: (field) => (field.problem.empty ? "Enter a preset name first." : "Use a name no other preset has.")
+holdAction($("filter-add-preset"), () => [nameField, flagModesField, minField, maxField], {
+  reason: (field) => {
+    if (field !== nameField) return generalReason(field, "first");
+    return field.problem.empty ? "Enter a preset name first." : "Use a name no other preset has.";
+  },
+  beforeReveal: (field) => field !== nameField && showSub("general")
 });
-[minField, maxField, nameField].forEach((field) => field.onChange(renderApply));
+holdAction($("filter-update-preset"), () => [flagModesField, minField, maxField], {
+  reason: (field) => generalReason(field, "first"),
+  beforeReveal: () => showSub("general")
+});
+[flagModesField, minField, maxField, nameField].forEach((field) => field.onChange(renderApply));
 
 filterBody.addEventListener("change", (event) => {
   if (event.target.closest('[data-subpanel="presets"]') && event.target.id !== "filter-preset-select") return;
@@ -3729,7 +3757,7 @@ function restoreSnapshot() {
   tagSnapshot.forEach((value, key) => filterTagState.set(key, value));
   renderPresets();
   renderFilterTags();
-  [minField, maxField, nameField].forEach((field) => field.reset());
+  [flagModesField, minField, maxField, nameField].forEach((field) => field.reset());
 }
 // The applied filter is remembered on this device, as the per-device store keeps it.
 function saveFilterState() {
@@ -3746,10 +3774,8 @@ function restoreFilterState() {
     });
   }
   store.get("filterTags", []).forEach(([key, value]) => filterTagState.set(key, value));
-  $("filter-min").disabled = $("filter-no-min").checked;
-  $("filter-max").disabled = $("filter-no-max").checked;
   syncModeSelects();
-  [minField, maxField].forEach((field) => field.update());
+  [flagModesField, minField, maxField].forEach((field) => field.update());
 }
 
 $("filter-apply").addEventListener("click", () => {
@@ -3795,10 +3821,7 @@ function resetGeneral() {
   general.querySelectorAll('input[type="radio"]').forEach((radio) => {
     radio.checked = radio === radio.closest(".filter-stack").querySelector('input[type="radio"]');
   });
-  [minField, maxField].forEach((field) => {
-    field.input.disabled = false;
-    field.reset("");
-  });
+  [minField, maxField].forEach((field) => field.reset(""));
   filterTagState.clear();
   syncModeSelects();
 }

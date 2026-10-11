@@ -175,8 +175,46 @@ async function showTab(name: "General" | "Tags" | "Presets"): Promise<void> {
   await click(within(dialog()).getByRole("tab", { name }));
 }
 
+/** The shown tab's name, without the red icon a flagged field adds. */
 function selectedTab(): string {
-  return within(dialog()).getByRole("tab", { selected: true }).textContent ?? "";
+  const tab = within(dialog()).getByRole("tab", { selected: true });
+  return Array.from(tab.childNodes)
+    .filter((node) => node.nodeType === Node.TEXT_NODE)
+    .map((node) => node.textContent)
+    .join("");
+}
+
+/** Whether a section's tab shows the red icon of a flagged field. */
+function tabMarked(name: "General" | "Tags" | "Presets"): boolean {
+  const tab = within(dialog()).getByRole("tab", { name });
+  const marked = tab.querySelector(".section-problem") !== null;
+  expect(tab.title).toBe(marked ? "A field here is not valid" : "");
+  return marked;
+}
+
+/** A field's red icon, or null while it is not flagged. */
+function fieldIcon(field: HTMLElement): HTMLElement | null {
+  return field.closest(".vfield")?.querySelector<HTMLElement>(".vfield-icon") ?? null;
+}
+
+/** The tooltip that describes a flagged field. */
+function tooltipOf(field: HTMLElement): HTMLElement | null {
+  const id = field.getAttribute("aria-describedby");
+  return id ? document.getElementById(id) : null;
+}
+
+function tooltipShown(field: HTMLElement): boolean {
+  return tooltipOf(field)?.classList.contains("is-shown") ?? false;
+}
+
+/** An action's label, without its red icon. */
+function label(button: HTMLButtonElement): string {
+  return button.querySelector(".btn-label")?.textContent ?? "";
+}
+
+/** Whether a field holds the action, and whether the action shows the red icon of a flagged field. */
+function heldState(button: HTMLButtonElement): { held: boolean; icon: boolean } {
+  return { held: button.getAttribute("aria-disabled") === "true", icon: button.querySelector(".btn-problem") !== null };
 }
 
 function heading(): string {
@@ -504,10 +542,7 @@ describe("General tab", () => {
     expect(box("Archive").checked).toBe(false);
     expect(box("Archive").disabled).toBe(true);
     expect(byId<HTMLInputElement>("filter-min-dur-text").value).toBe("01:30");
-    expect(byId<HTMLInputElement>("filter-min-dur-text").disabled).toBe(false);
-    expect(box("No minimum").checked).toBe(false);
     expect(byId<HTMLInputElement>("filter-max-dur-text").value).toBe("01:01:40");
-    expect(box("No maximum").checked).toBe(false);
   });
 
   it("marks Apply as pending after a change, and not once the change is undone", async () => {
@@ -544,61 +579,155 @@ describe("General tab", () => {
     expect(headerSelectedLabel()).toBe("None*");
   });
 
-  it("No minimum and No maximum clear and turn off their duration", async () => {
+  it("has no No minimum or No maximum boxes: an empty duration means no limit, as its placeholder says", async () => {
     const { server } = await mountFilter([RICH_PRESET]);
     await pickHeaderPreset("preset-rich");
     await openDialog();
+    const min = byId<HTMLInputElement>("filter-min-dur-text");
+    const max = byId<HTMLInputElement>("filter-max-dur-text");
+    expect(min.placeholder).toBe("No minimum");
+    expect(max.placeholder).toBe("No maximum");
+    expect(within(dialog()).queryByLabelText("No minimum")).toBeNull();
+    expect(within(dialog()).queryByLabelText("No maximum")).toBeNull();
+    for (const field of [min, max]) {
+      expect(field.closest(".filter-row")?.querySelector('input[type="checkbox"]')).toBeNull();
+    }
 
-    await click(box("No minimum"));
-    expect(byId<HTMLInputElement>("filter-min-dur-text").value).toBe("");
-    expect(byId<HTMLInputElement>("filter-min-dur-text").disabled).toBe(true);
-    expect(applyButton().textContent).toBe("Apply*");
+    await type(min, "");
+    expect(min.hasAttribute("aria-invalid")).toBe(false);
+    expect(heldState(applyButton()).held).toBe(false);
+    expect(label(applyButton())).toBe("Apply*");
     const applied = await applyAndWait(server);
     expect(applied.minDuration).toBeUndefined();
     expect(applied.maxDuration).toBe("01:01:40");
 
     await openDialog();
-    await click(box("No maximum"));
-    await click(box("No maximum"));
-    expect(byId<HTMLInputElement>("filter-max-dur-text").value).toBe("");
-    expect(byId<HTMLInputElement>("filter-max-dur-text").disabled).toBe(false);
-    expect(box("No maximum").checked).toBe(false);
-    await type(byId("filter-max-dur-text"), "2:00");
+    expect(min.value).toBe("");
+    await type(max, "");
+    await type(max, "2:00");
     expect((await applyAndWait(server)).maxDuration).toBe("00:02:00");
   });
 
-  it("stops Apply on the General tab when a duration is not valid", async () => {
+  it("flags a duration that is not valid as it is typed, with its tooltip as the field's description", async () => {
+    await mountFilter();
+    await openDialog();
+    const min = byId<HTMLInputElement>("filter-min-dur-text");
+    expect(min.hasAttribute("aria-invalid")).toBe(false);
+    expect(fieldIcon(min)).toBeNull();
+
+    for (const text of ["1:7x", "12abc", "1:75"]) {
+      fireEvent.input(min, { target: { value: text } });
+      await settle();
+      expect(min.getAttribute("aria-invalid"), text).toBe("true");
+      expect(tooltipOf(min)?.textContent, text).toBe("Use MM:SS, HH:MM:SS, or seconds.");
+      expect(tooltipOf(min)?.getAttribute("role")).toBe("tooltip");
+      expect(fieldIcon(min)?.getAttribute("aria-hidden")).toBe("true");
+    }
+    expect(min.closest(".vfield")?.contains(tooltipOf(min))).toBe(true);
+    expect(within(dialog()).getAllByText("Use MM:SS, HH:MM:SS, or seconds.")).toHaveLength(1);
+    expect(tabMarked("General")).toBe(true);
+
+    fireEvent.input(min, { target: { value: "1:07" } });
+    await settle();
+    expect(min.hasAttribute("aria-invalid")).toBe(false);
+    expect(min.hasAttribute("aria-describedby")).toBe(false);
+    expect(fieldIcon(min)).toBeNull();
+    expect(tabMarked("General")).toBe(false);
+  });
+
+  it("shows the tooltip while the field has focus, while the pointer is on the icon, and after a tap on the icon", async () => {
+    await mountFilter();
+    await openDialog();
+    const max = byId<HTMLInputElement>("filter-max-dur-text");
+    fireEvent.input(max, { target: { value: "abc" } });
+    await settle();
+    expect(tooltipShown(max)).toBe(false);
+
+    max.focus();
+    await settle();
+    expect(tooltipShown(max)).toBe(true);
+    max.blur();
+    await settle();
+    expect(tooltipShown(max)).toBe(false);
+
+    fireEvent.pointerEnter(fieldIcon(max)!, { pointerType: "mouse" });
+    await settle();
+    expect(tooltipShown(max)).toBe(true);
+    fireEvent.pointerLeave(fieldIcon(max)!, { pointerType: "mouse" });
+    await settle();
+    expect(tooltipShown(max)).toBe(false);
+
+    fireEvent.pointerDown(fieldIcon(max)!, { pointerType: "touch" });
+    await settle();
+    expect(document.activeElement).toBe(max);
+    expect(tooltipShown(max)).toBe(true);
+  });
+
+  it("holds Apply while a duration is not valid, with or without other changes, and moves to it without a status or log line", async () => {
     const { server } = await mountFilter();
     await openDialog();
     const queries = libraryQueries(server).length;
+    const statusBefore = statusLine();
+    const logsBefore = server.logLines().length;
+    const min = byId<HTMLInputElement>("filter-min-dur-text");
+    const max = byId<HTMLInputElement>("filter-max-dur-text");
 
-    await click(box("No minimum"));
-    await type(byId("filter-min-dur-text"), "abc");
+    await type(min, "abc");
+    expect(label(applyButton())).toBe("Apply");
+    expect(heldState(applyButton())).toEqual({ held: true, icon: true });
+    expect(applyButton().title).toBe("Correct the minimum duration to apply.");
+    expect(document.getElementById(applyButton().getAttribute("aria-describedby")!)?.textContent).toBe("Correct the minimum duration to apply.");
     await showTab("Tags");
     await apply();
-    expect(statusLine()).toBe("Minimum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.");
     expect(selectedTab()).toBe("General");
+    expect(document.activeElement).toBe(min);
     expect(isOpen()).toBe(true);
-    expect(byId<HTMLInputElement>("filter-min-dur-text").value).toBe("abc");
+    expect(min.value).toBe("abc");
 
-    await type(byId("filter-min-dur-text"), "90");
-    await click(box("No maximum"));
-    await type(byId("filter-max-dur-text"), "1:75");
+    await click(box("Only never played"));
+    expect(label(applyButton())).toBe("Apply*");
+    await type(max, "1:75");
+    await type(min, "90");
+    expect(applyButton().title).toBe("Correct the maximum duration to apply.");
+    await showTab("Presets");
     await apply();
-    expect(statusLine()).toBe("Maximum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.");
+    expect(selectedTab()).toBe("General");
+    expect(document.activeElement).toBe(max);
     expect(libraryQueries(server)).toHaveLength(queries);
+    expect(statusLine()).toBe(statusBefore);
+    expect(server.logLines().slice(logsBefore)).toEqual([]);
 
-    await type(byId("filter-max-dur-text"), "");
+    await type(max, "");
+    expect(heldState(applyButton())).toEqual({ held: false, icon: false });
+    expect(applyButton().title).toBe("");
     const applied = await applyAndWait(server);
     expect(applied.minDuration).toBe("00:01:30");
     expect(applied.maxDuration).toBeUndefined();
+  });
+
+  it("loads a preset whose durations the server sends with fractional seconds as before", async () => {
+    const fractional = {
+      id: "preset-fraction",
+      name: "Fraction",
+      filterState: { minDuration: "00:01:30.5000000", maxDuration: "01:00:00.2500000" }
+    };
+    const { server } = await mountFilter([fractional]);
+    await pickHeaderPreset("preset-fraction");
+    await openDialog();
+    expect(byId<HTMLInputElement>("filter-min-dur-text").value).toBe("01:30");
+    expect(byId<HTMLInputElement>("filter-max-dur-text").value).toBe("01:00:00");
+    expect(byId("filter-min-dur-text").hasAttribute("aria-invalid")).toBe(false);
+    expect(heldState(applyButton()).held).toBe(false);
+    expect(heading()).toBe("Preset: Fraction");
+
+    const applied = await applyAndWait(server);
+    expect(applied).toMatchObject({ minDuration: "00:01:30", maxDuration: "01:00:00" });
   });
 
   it("applies a duration typed just before Apply", async () => {
     const { server } = await mountFilter();
     await openDialog();
 
-    await click(box("No maximum"));
     fireEvent.input(byId("filter-max-dur-text"), { target: { value: "1:00:00" } });
     expect((await applyAndWait(server)).maxDuration).toBe("01:00:00");
   });
@@ -747,6 +876,71 @@ describe("Favorites and Blacklisted filters", () => {
     expect(flagRow("Blacklisted")).toEqual({ checked: true, choice: "only", disabled: false });
     expect(box("Only never played").checked).toBe(true);
     expect(applyButton().textContent).toBe("Apply");
+  });
+});
+
+describe("Favorites only with Blacklisted only", () => {
+  it("is flagged on both dropdowns, with one icon after Blacklisted, and holds Apply, Add Preset, and Update Preset", async () => {
+    const { server, presets } = await mountFilter([FAVORITES_PRESET]);
+    await openDialog();
+    await showTab("Presets");
+    await chooseInDialog("Favorites");
+    fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Mine" } });
+    await showTab("General");
+    const queries = libraryQueries(server).length;
+    const statusBefore = statusLine();
+
+    expect(flagRow("Favorites")).toMatchObject({ checked: true, choice: "only" });
+    expect(flagSelect("Blacklisted").hasAttribute("aria-invalid")).toBe(false);
+    await chooseFlag("Blacklisted", "only");
+    for (const name of ["Favorites", "Blacklisted"] as const) {
+      expect(flagSelect(name).getAttribute("aria-invalid"), name).toBe("true");
+      expect(tooltipOf(flagSelect(name))?.textContent, name).toBe("Nothing is both a favorite and blacklisted. Use excluded for one of them.");
+    }
+    expect(flagSelect("Blacklisted").nextElementSibling?.classList.contains("vfield-icon")).toBe(true);
+    expect(dialog().querySelectorAll(".vfield-icon")).toHaveLength(1);
+    expect(tabMarked("General")).toBe(true);
+    const presetButton = (name: string) => within(dialog()).getByRole("button", { name, hidden: true }) as HTMLButtonElement;
+    for (const button of [applyButton(), presetButton("Add Preset"), presetButton("Update Preset")]) {
+      expect(heldState(button), label(button)).toEqual({ held: true, icon: true });
+    }
+    expect(presetButton("Update Preset").title).toBe("Change Favorites or Blacklisted first.");
+
+    flagSelect("Favorites").focus();
+    await settle();
+    expect(tooltipShown(flagSelect("Blacklisted"))).toBe(true);
+
+    for (const button of ["Update Preset", "Add Preset"]) {
+      await showTab("Presets");
+      await click(dialogButton(button));
+      expect(selectedTab(), button).toBe("General");
+      expect(document.activeElement, button).toBe(flagSelect("Blacklisted"));
+    }
+    await showTab("Tags");
+    await apply();
+    expect(selectedTab()).toBe("General");
+    expect(presetRows()).toEqual(["Favorites"]);
+    expect(presets.saves()).toHaveLength(0);
+    expect(libraryQueries(server)).toHaveLength(queries);
+    expect(statusLine()).toBe(statusBefore);
+
+    await chooseFlag("Favorites", "excluded");
+    expect(flagSelect("Favorites").hasAttribute("aria-invalid")).toBe(false);
+    expect(flagSelect("Blacklisted").hasAttribute("aria-invalid")).toBe(false);
+    expect(heldState(applyButton()).held).toBe(false);
+    expect(await applyAndWait(server)).toMatchObject({ favoritesMode: "excluded", blacklistedMode: "only" });
+  });
+
+  it("is not flagged while either filter is off", async () => {
+    await mountFilter();
+    await openDialog();
+    await setFlag("Favorites", "only");
+    await chooseFlag("Blacklisted", "only");
+    expect(flagSelect("Blacklisted").getAttribute("aria-invalid")).toBe("true");
+    await setFlag("Blacklisted", "off");
+    expect(flagSelect("Blacklisted").hasAttribute("aria-invalid")).toBe(false);
+    expect(flagSelect("Favorites").hasAttribute("aria-invalid")).toBe(false);
+    expect(heldState(applyButton()).held).toBe(false);
   });
 });
 
@@ -920,15 +1114,35 @@ describe("Presets tab", () => {
     await openDialog();
     await click(box("Only never played"));
     await showTab("Presets");
+    const statusBefore = statusLine();
+    const name = byId<HTMLInputElement>("filter-new-preset-name");
+    const addButton = () => dialogButton("Add Preset");
 
-    await addPreset("");
-    expect(statusLine()).toBe("Enter a preset name.");
-    await addPreset("FAVORITES");
-    expect(statusLine()).toBe("A preset with that name already exists.");
+    expect(name.hasAttribute("aria-invalid")).toBe(false);
+    expect(heldState(addButton())).toEqual({ held: true, icon: false });
+    expect(addButton().title).toBe("Enter a preset name first.");
+    await click(addButton());
+    expect(document.activeElement).toBe(name);
     expect(presetRows()).toEqual(["Favorites", "Beach days"]);
-    expect(byId<HTMLInputElement>("filter-new-preset-name").value).toBe("FAVORITES");
+    expect(tabMarked("Presets")).toBe(false);
+
+    fireEvent.input(name, { target: { value: "x" } });
+    fireEvent.input(name, { target: { value: "" } });
+    await settle();
+    expect(name.getAttribute("aria-invalid")).toBe("true");
+    expect(tooltipOf(name)?.textContent).toBe("Enter a preset name.");
+    expect(heldState(addButton())).toEqual({ held: true, icon: true });
+    expect(tabMarked("Presets")).toBe(true);
+
+    await addPreset("FAVORITES");
+    expect(tooltipOf(name)?.textContent).toBe("Use a name no other preset has.");
+    expect(addButton().title).toBe("Use a name no other preset has.");
+    expect(presetRows()).toEqual(["Favorites", "Beach days"]);
+    expect(name.value).toBe("FAVORITES");
+    expect(statusLine()).toBe(statusBefore);
 
     await addPreset("  Unplayed  ");
+    expect(name.hasAttribute("aria-invalid")).toBe(false);
     expect(presetRows()).toEqual(["Favorites", "Beach days", "Unplayed"]);
     expect(Array.from(presetSelectInDialog().options).map((option) => option.textContent)).toContain("Unplayed");
     expect(byId<HTMLInputElement>("filter-new-preset-name").value).toBe("");
@@ -1160,6 +1374,24 @@ describe("header, refresh, and clear all", () => {
     expect(isOpen()).toBe(true);
   });
 
+  it("Refresh keeps unsaved preset changes and Apply's star, and Apply then saves them", async () => {
+    const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
+    await openDialog();
+    await showTab("Presets");
+    await click(rowButton("Favorites", "Move down"));
+    expect(presetRows()).toEqual(["Beach days", "Favorites"]);
+
+    presets.list = [...presets.list, RECENT_PRESET];
+    await click(dialogButton("Refresh"));
+    expect(statusLine()).toBe("Filter data refreshed.");
+    expect(presetRows()).toEqual(["Beach days", "Favorites"]);
+    expect(label(applyButton())).toBe("Apply*");
+
+    await applyAndWait(server);
+    expect(presets.saves()).toHaveLength(1);
+    expect(presets.saves()[0].map((preset: any) => preset.name)).toEqual(["Beach days", "Favorites"]);
+  });
+
   it("Clear all filters goes back to the default filter and drops unsaved preset changes", async () => {
     const { server, presets } = await mountFilter([RICH_PRESET, FAVORITES_PRESET]);
     await pickHeaderPreset("preset-rich");
@@ -1175,7 +1407,6 @@ describe("header, refresh, and clear all", () => {
     expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
     expect(box("All (Videos and Photos)").checked).toBe(true);
     expect(box("Movies").checked && box("C:\\media\\photos").checked && box("Archive").checked).toBe(true);
-    expect(box("No minimum").checked).toBe(true);
     expect(byId<HTMLInputElement>("filter-min-dur-text").value).toBe("");
     await showTab("Tags");
     expect(chipState("Beach")).toBe("none");

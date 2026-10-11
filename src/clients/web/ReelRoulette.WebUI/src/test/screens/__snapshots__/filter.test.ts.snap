@@ -38,11 +38,12 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
             <label>
               <input checked="true" id="filter-bl" type="checkbox">
               "Blacklisted"
-            <select aria-label="Blacklisted filter" class="mode-select" id="filter-bl-mode">
-              <option selected="false" value="only">
-                "only"
-              <option selected="true" value="excluded">
-                "excluded"
+            <span class="vfield vfield-after">
+              <select aria-label="Blacklisted filter" class="mode-select" id="filter-bl-mode">
+                <option selected="false" value="only">
+                  "only"
+                <option selected="true" value="excluded">
+                  "excluded"
           <label>
             <input checked="false" id="filter-never-played" type="checkbox">
             "Only never played"
@@ -100,17 +101,13 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
           <div class="filter-row">
             <span style="min-width: 3rem">
               "Min"
-            <input id="filter-min-dur-text" placeholder="HH:MM:SS or MM:SS" type="text" value="01:30">
-            <label>
-              <input checked="false" id="filter-no-min-dur" type="checkbox">
-              "No minimum"
+            <span class="vfield duration-field">
+              <input aria-label="Minimum duration" id="filter-min-dur-text" placeholder="No minimum" type="text" value="01:30">
           <div class="filter-row">
             <span style="min-width: 3rem">
               "Max"
-            <input id="filter-max-dur-text" placeholder="HH:MM:SS or MM:SS" type="text" value="01:01:40">
-            <label>
-              <input checked="false" id="filter-no-max-dur" type="checkbox">
-              "No maximum"
+            <span class="vfield duration-field">
+              <input aria-label="Maximum duration" id="filter-max-dur-text" placeholder="No maximum" type="text" value="01:01:40">
     <div class="filter-panel" id="filter-panel-tags" style="display: none">
       <div class="filter-section">
         <h3>
@@ -261,15 +258,20 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
               "Rich"
             <option selected="false" value="Favorites">
               "Favorites"
-          <button id="filter-update-preset-btn" type="button">
-            "Update Preset"
+          <button class="held-action" id="filter-update-preset-btn" type="button">
+            <span class="btn-label">
+              "Update Preset"
       <div class="filter-section">
         <h3>
           "Create New Preset From Current Filter"
         <div class="filter-row">
-          <input id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
-          <button id="filter-add-preset-btn" type="button">
-            "Add Preset"
+          <span class="vfield">
+            <input aria-label="New preset name" id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
+          <button aria-describedby="P0-8" aria-disabled="true" class="held-action" id="filter-add-preset-btn" title="Enter a preset name first." type="button">
+            <span class="btn-label">
+              "Add Preset"
+          <span class="visually-hidden" id="P0-8">
+            "Enter a preset name first."
       <div class="filter-section filter-section-manage">
         <h3>
           "Manage Presets"
@@ -309,8 +311,9 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
       "Clear all filters"
     <button id="filter-cancel-btn" type="button">
       "Cancel"
-    <button id="filter-apply-btn" type="button">
-      "Apply"
+    <button class="held-action" id="filter-apply-btn" type="button">
+      <span class="btn-label">
+        "Apply"
 "
 `;
 
@@ -352,11 +355,12 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
             <label>
               <input checked="true" id="filter-bl" type="checkbox">
               "Blacklisted"
-            <select aria-label="Blacklisted filter" class="mode-select" id="filter-bl-mode">
-              <option selected="false" value="only">
-                "only"
-              <option selected="true" value="excluded">
-                "excluded"
+            <span class="vfield vfield-after">
+              <select aria-label="Blacklisted filter" class="mode-select" id="filter-bl-mode">
+                <option selected="false" value="only">
+                  "only"
+                <option selected="true" value="excluded">
+                  "excluded"
           <label>
             <input checked="false" id="filter-never-played" type="checkbox">
             "Only never played"
@@ -414,17 +418,13 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
           <div class="filter-row">
             <span style="min-width: 3rem">
               "Min"
-            <input id="filter-min-dur-text" placeholder="HH:MM:SS or MM:SS" type="text" value="01:30">
-            <label>
-              <input checked="false" id="filter-no-min-dur" type="checkbox">
-              "No minimum"
+            <span class="vfield duration-field">
+              <input aria-label="Minimum duration" id="filter-min-dur-text" placeholder="No minimum" type="text" value="01:30">
           <div class="filter-row">
             <span style="min-width: 3rem">
               "Max"
-            <input id="filter-max-dur-text" placeholder="HH:MM:SS or MM:SS" type="text" value="01:01:40">
-            <label>
-              <input checked="false" id="filter-no-max-dur" type="checkbox">
-              "No maximum"
+            <span class="vfield duration-field">
+              <input aria-label="Maximum duration" id="filter-max-dur-text" placeholder="No maximum" type="text" value="01:01:40">
     <div class="filter-panel" id="filter-panel-tags" style="display: none">
       <div class="filter-section">
         <h3>
@@ -575,15 +575,20 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
               "Rich"
             <option selected="false" value="Favorites">
               "Favorites"
-          <button id="filter-update-preset-btn" type="button">
-            "Update Preset"
+          <button class="held-action" id="filter-update-preset-btn" type="button">
+            <span class="btn-label">
+              "Update Preset"
       <div class="filter-section">
         <h3>
           "Create New Preset From Current Filter"
         <div class="filter-row">
-          <input id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
-          <button id="filter-add-preset-btn" type="button">
-            "Add Preset"
+          <span class="vfield">
+            <input aria-label="New preset name" id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
+          <button aria-describedby="P0-8" aria-disabled="true" class="held-action" id="filter-add-preset-btn" title="Enter a preset name first." type="button">
+            <span class="btn-label">
+              "Add Preset"
+          <span class="visually-hidden" id="P0-8">
+            "Enter a preset name first."
       <div class="filter-section filter-section-manage">
         <h3>
           "Manage Presets"
@@ -623,8 +628,9 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
       "Clear all filters"
     <button id="filter-cancel-btn" type="button">
       "Cancel"
-    <button id="filter-apply-btn" type="button">
-      "Apply"
+    <button class="held-action" id="filter-apply-btn" type="button">
+      <span class="btn-label">
+        "Apply"
 "
 `;
 
@@ -666,11 +672,12 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
             <label>
               <input checked="true" id="filter-bl" type="checkbox">
               "Blacklisted"
-            <select aria-label="Blacklisted filter" class="mode-select" id="filter-bl-mode">
-              <option selected="false" value="only">
-                "only"
-              <option selected="true" value="excluded">
-                "excluded"
+            <span class="vfield vfield-after">
+              <select aria-label="Blacklisted filter" class="mode-select" id="filter-bl-mode">
+                <option selected="false" value="only">
+                  "only"
+                <option selected="true" value="excluded">
+                  "excluded"
           <label>
             <input checked="false" id="filter-never-played" type="checkbox">
             "Only never played"
@@ -728,17 +735,13 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
           <div class="filter-row">
             <span style="min-width: 3rem">
               "Min"
-            <input id="filter-min-dur-text" placeholder="HH:MM:SS or MM:SS" type="text" value="01:30">
-            <label>
-              <input checked="false" id="filter-no-min-dur" type="checkbox">
-              "No minimum"
+            <span class="vfield duration-field">
+              <input aria-label="Minimum duration" id="filter-min-dur-text" placeholder="No minimum" type="text" value="01:30">
           <div class="filter-row">
             <span style="min-width: 3rem">
               "Max"
-            <input id="filter-max-dur-text" placeholder="HH:MM:SS or MM:SS" type="text" value="01:01:40">
-            <label>
-              <input checked="false" id="filter-no-max-dur" type="checkbox">
-              "No maximum"
+            <span class="vfield duration-field">
+              <input aria-label="Maximum duration" id="filter-max-dur-text" placeholder="No maximum" type="text" value="01:01:40">
     <div class="filter-panel" id="filter-panel-tags" style="display: block">
       <div class="filter-section">
         <h3>
@@ -889,15 +892,20 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
               "Rich"
             <option selected="false" value="Favorites">
               "Favorites"
-          <button id="filter-update-preset-btn" type="button">
-            "Update Preset"
+          <button class="held-action" id="filter-update-preset-btn" type="button">
+            <span class="btn-label">
+              "Update Preset"
       <div class="filter-section">
         <h3>
           "Create New Preset From Current Filter"
         <div class="filter-row">
-          <input id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
-          <button id="filter-add-preset-btn" type="button">
-            "Add Preset"
+          <span class="vfield">
+            <input aria-label="New preset name" id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
+          <button aria-describedby="P0-8" aria-disabled="true" class="held-action" id="filter-add-preset-btn" title="Enter a preset name first." type="button">
+            <span class="btn-label">
+              "Add Preset"
+          <span class="visually-hidden" id="P0-8">
+            "Enter a preset name first."
       <div class="filter-section filter-section-manage">
         <h3>
           "Manage Presets"
@@ -937,7 +945,8 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
       "Clear all filters"
     <button id="filter-cancel-btn" type="button">
       "Cancel"
-    <button id="filter-apply-btn" type="button">
-      "Apply"
+    <button class="held-action" id="filter-apply-btn" type="button">
+      <span class="btn-label">
+        "Apply"
 "
 `;

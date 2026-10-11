@@ -4,13 +4,23 @@ import type { AppApi } from "../state/appApi";
 import type { AppStore, StorageLike } from "../state/appStore";
 import type { ServerConnection } from "../state/serverConnection";
 import {
-  filterTagCategories,
+  createFieldReveal,
+  firstHoldingField,
+  isFlagged,
+  type FieldProblem,
+  type FieldReveal
+} from "../validation/fieldValidation";
+import {
+  FILTER_ACTION_FIELDS,
+  FILTER_FIELD_SECTION,
+  filterFieldProblems,
   filterWithGeneralDraft,
-  generalDraftDurationError,
   generalDraftFromFilter,
   namesEqualIgnoringCase,
   presetRowsFromApi,
   toggleFilterTag,
+  type FilterAction,
+  type FilterField,
   type FilterSource,
   type FilterTagModel,
   type GeneralDraft,
@@ -52,6 +62,8 @@ interface FilterDialogState {
   /** The tag categories collapsed on the Tags tab, kept for the browser session. */
   collapsed: ReadonlySet<string>;
   newPresetName: string;
+  /** The user has typed in the new preset name since it was last emptied for them, so an empty one is flagged. */
+  newPresetNameTyped: boolean;
 }
 
 /** What the dialog shows. Each change replaces it. */
@@ -59,6 +71,12 @@ export interface FilterDialogView extends FilterDialogState {
   heading: string;
   /** Apply shows a star while there is something to apply. */
   pending: boolean;
+  /** Each field's problem, or null while its value is valid. */
+  problems: Record<FilterField, FieldProblem | null>;
+  /** Whether each field shows its problem. */
+  flagged: Record<FilterField, boolean>;
+  /** The first field that holds each action, or null while it can proceed. */
+  held: Record<FilterAction, FilterField | null>;
 }
 
 /**
@@ -71,6 +89,8 @@ export interface FilterDialog {
   readonly tab: ReadonlySignal<FilterDialogTab | null>;
   /** The working copy, or null before the dialog first opens. It stays while the dialog is closed. */
   readonly view: ReadonlySignal<FilterDialogView | null>;
+  /** Asks a field to scroll into view and take focus, when a held action moves to it. */
+  readonly reveal: FieldReveal<FilterField>;
 
   /**
    * Loads the sources, tags, and presets, then shows the dialog on General with the applied filter. Unless the
@@ -80,16 +100,20 @@ export interface FilterDialog {
   /** Hides the dialog without applying anything. */
   close(): void;
   showTab(tab: FilterDialogTab): void;
-  /** Loads the sources, tags, and presets again, keeping the working filter. */
+  /**
+   * Loads the sources, tags, and presets again, keeping the working filter, and the preset list while it has
+   * changes Apply hasn't saved.
+   */
   refresh(): Promise<void>;
   /**
    * Saves a changed preset list, applies the working filter, closes the dialog, and starts the library over.
-   * A duration that is not valid, or a save that fails, keeps the dialog open and applies nothing.
+   * While a field it uses is not valid, it moves to that field instead. A save that fails keeps the dialog open and
+   * applies nothing.
    */
   apply(): Promise<void>;
   /** Goes back to the default filter and the saved presets. */
   clearAll(): void;
-  /** Takes General tab fields the user changed. Checking No minimum or No maximum clears its duration. */
+  /** Takes General tab fields the user changed. An empty duration means no limit. */
   changeGeneral(change: Partial<Omit<GeneralDraft, "sourceChecked">>): void;
   checkSource(index: number, checked: boolean): void;
   /** Takes a duration's text while it is typed. The working filter takes it when the field changes. */
@@ -102,10 +126,10 @@ export interface FilterDialog {
   toggleCategory(collapseKey: string): void;
   /** Loads a preset's filter by name. An empty name chooses None, which keeps the working filter. */
   choosePreset(name: string): void;
-  /** Saves the working filter into the chosen preset, until Apply saves the list. */
+  /** Saves the working filter into the chosen preset, until Apply saves the list. Held like Apply. */
   updatePreset(): void;
   typeNewPresetName(text: string): void;
-  /** Adds the working filter as a preset with the typed name, until Apply saves the list. */
+  /** Adds the working filter as a preset with the typed name, until Apply saves the list. Held while the name is empty or taken, and like Apply. */
   addPreset(): void;
   movePreset(index: number, step: -1 | 1): void;
   /** Asks first. */
@@ -139,21 +163,49 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
   const isOpen = signal(false);
   const tab = signal<FilterDialogTab | null>(null);
   const view = signal<FilterDialogView | null>(null);
+  const reveal = createFieldReveal<FilterField>();
 
   /**
-   * Works out the heading and Apply's star. The dialog's preset follows the working filter: a saved preset
-   * with the same filter, None for the default filter, or else the last preset with a star.
+   * Works out the heading, Apply's star, and the fields' problems. The dialog's preset follows the working filter:
+   * a saved preset with the same filter, None for the default filter, or else the last preset with a star.
    */
   function settled(state: FilterDialogState): FilterDialogView {
     const holdNone = state.holdNone && filterStatesEqualForPresetMatch(state.working, createDefaultFilterState());
     const presetName = holdNone ? null : dialogPresetBase(state.working, state.presets, state.presetName);
+    const problems = filterFieldProblems(state.general, state.newPresetName, state.presets);
     return {
       ...state,
       holdNone,
       presetName,
       heading: presetHeading(presetAnchorForDisplay(state.working, state.presets, presetName, holdNone)),
-      pending: filterDialogHasPendingChanges(state.working, state.original, state.presetsChanged)
+      pending: filterDialogHasPendingChanges(state.working, state.original, state.presetsChanged),
+      problems,
+      flagged: {
+        flagModes: isFlagged(problems.flagModes, true),
+        minDuration: isFlagged(problems.minDuration, true),
+        maxDuration: isFlagged(problems.maxDuration, true),
+        newPresetName: isFlagged(problems.newPresetName, state.newPresetNameTyped)
+      },
+      held: {
+        apply: firstHoldingField(FILTER_ACTION_FIELDS.apply, problems),
+        addPreset: firstHoldingField(FILTER_ACTION_FIELDS.addPreset, problems),
+        updatePreset: firstHoldingField(FILTER_ACTION_FIELDS.updatePreset, problems)
+      }
     };
+  }
+
+  /**
+   * Moves to the first field that holds the action, showing its section, and says whether there was one. Nothing
+   * goes to the status line: the field's icon and tooltip say what it expects.
+   */
+  function heldBy(action: FilterAction): boolean {
+    const field = view.peek()?.held[action];
+    if (!field) {
+      return false;
+    }
+    tab.value = FILTER_FIELD_SECTION[field];
+    reveal.reveal(field);
+    return true;
   }
 
   function update(change: Partial<FilterDialogState>): void {
@@ -216,6 +268,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     isOpen,
     tab,
     view,
+    reveal,
 
     async open() {
       if (store.compatibilityBlocked.peek()) {
@@ -237,7 +290,8 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         presets: remote.presets,
         presetsChanged: false,
         collapsed: readCollapsed(),
-        newPresetName: ""
+        newPresetName: "",
+        newPresetNameTyped: false
       });
       tab.value = "general";
       isOpen.value = true;
@@ -259,7 +313,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
           update({
             sources: remote.sources,
             tagModel: remote.tagModel,
-            presets: remote.presets,
+            presets: current.presetsChanged ? current.presets : remote.presets,
             general: generalDraftFromFilter(current.working, remote.sources)
           });
         }
@@ -271,16 +325,10 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
 
     async apply() {
       const before = view.peek();
-      if (!before) {
+      if (!before || heldBy("apply")) {
         return;
       }
       update({ working: readGeneral(before) });
-      const error = generalDraftDurationError(before.general);
-      if (error) {
-        store.setStatus(error);
-        tab.value = "general";
-        return;
-      }
       if (view.peek()!.presetsChanged) {
         try {
           const response = await api.post("/api/presets", presetsToPostBody(view.peek()!.presets));
@@ -335,12 +383,6 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         return;
       }
       const general = { ...current.general, ...change };
-      if (change.noMin) {
-        general.minText = "";
-      }
-      if (change.noMax) {
-        general.maxText = "";
-      }
       update({ general, working: filterWithGeneralDraft(current.working, general, current.sources) });
     },
 
@@ -420,7 +462,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
 
     updatePreset() {
       const current = view.peek();
-      if (!current) {
+      if (!current || heldBy("updatePreset")) {
         return;
       }
       const name = current.presetName;
@@ -441,29 +483,22 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     },
 
     typeNewPresetName(text) {
-      update({ newPresetName: text });
+      update({ newPresetName: text, newPresetNameTyped: true });
     },
 
     addPreset() {
       const current = view.peek();
-      if (!current) {
+      if (!current || heldBy("addPreset")) {
         return;
       }
       const name = current.newPresetName.trim();
-      if (!name) {
-        store.setStatus("Enter a preset name.");
-        return;
-      }
-      if (current.presets.some((row) => namesEqualIgnoringCase(row.name, name))) {
-        store.setStatus("A preset with that name already exists.");
-        return;
-      }
       const working = readGeneral(current);
       update({
         working,
         presets: [...current.presets, { name, filterState: cloneFilterState(working) }],
         presetsChanged: true,
-        newPresetName: ""
+        newPresetName: "",
+        newPresetNameTyped: false
       });
       tab.value = "presets";
     },

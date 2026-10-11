@@ -3,6 +3,7 @@ import type { TagEditorTab, TagEditorView } from "../tags/tagEditor";
 import type { AutoTagResults, AutoTagRowView } from "../tags/autoTagModel";
 import type { TagCategory, TagCategoryRow, TagChipRow } from "../tags/tagEditorModel";
 import { useApp } from "./appContext";
+import { HeldButton, ValidatedField } from "./FieldValidation";
 
 // The `data-*` attributes keep the markup as it was before the editor moved to a component; nothing reads them.
 
@@ -218,14 +219,18 @@ function EditTagDialog({ view }: { view: TagEditorView | null }) {
       <div class="tag-edit-modal-card">
         <h3>Edit Tag</h3>
         <label for="tag-edit-name">Tag Name</label>
-        <input id="tag-edit-name" type="text" autocomplete="off" ref={name} value={edit?.name ?? ""} onInput={(event) => tagEditor.typeEditName(event.currentTarget.value)} />
+        <ValidatedField problem={view?.editNameProblem ?? null} flagged={view?.editNameFlagged ?? false} reveal={{ from: tagEditor.reveal, field: "editTagName" }} controlRef={name}>
+          {(control) => (
+            <input {...control} id="tag-edit-name" type="text" autocomplete="off" value={edit?.name ?? ""} onInput={(event) => tagEditor.typeEditName(event.currentTarget.value)} />
+          )}
+        </ValidatedField>
         <label for="tag-edit-category">Category</label>
         <select id="tag-edit-category" value={edit?.categoryId} onChange={(event) => tagEditor.chooseEditCategory(event.currentTarget.value)}>
           {edit ? <CategoryOptions options={view?.categoryOptions ?? []} /> : null}
         </select>
         <div class="tag-edit-modal-actions">
           <button id="tag-edit-cancel-btn" type="button" onClick={() => tagEditor.cancelEdit()}>Cancel</button>
-          <button id="tag-edit-save-btn" type="button" onClick={() => tagEditor.saveEdit()}>Save</button>
+          <HeldButton id="tag-edit-save-btn" held={!!view?.editNameProblem} flagged={view?.editNameFlagged ?? false} reason={view?.editNameProblem ? "Enter a tag name first." : null} onClick={() => tagEditor.saveEdit()}>Save</HeldButton>
         </div>
       </div>
     </div>

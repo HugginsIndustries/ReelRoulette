@@ -76,6 +76,7 @@ These need a person, real devices, or the Windows VM.
 - [ ] With the dev release installed on Windows and Linux, the server's executable, shortcut, tray, and Linux menu icons show the new logo, the WebUI's tab icon and its installed app icon on Android and iOS show it too, and the desktop app keeps its old icon. On Windows, check the server executable's icon in Explorer at small, medium, large, and extra large icon views, and the tray icon, since `app.ico` stores every size as PNG.
 - [ ] On the Windows VM, measure whether folder import and refresh see paths in a different casing from the stored ones: add a source typed in a casing that differs from the folder on disk, import it, rename a file by case only, and refresh. Record the result in the Ordinal Path Identity on Linux entry's Traps in `MILESTONES.md`.
 - [ ] In the WebUI and the desktop, Favorites excluded and Blacklisted only each limit browse and random play as named, and a preset saved in one client shows the same filter in the other.
+- [ ] In the WebUI's filter dialog, on a desktop browser and a phone in both themes, a flagged duration's tooltip shows beside its red icon and inside the screen while the pointer is on the icon, after a tap on it, and while the field has focus.
 
 ## Release Flow
 

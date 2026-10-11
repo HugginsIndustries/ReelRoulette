@@ -280,16 +280,25 @@ describe("Edit Tags", () => {
     expect(context.view().pending.upsertCategories.get("new-category")).toEqual({ id: "new-category", name: "Food", sortOrder: 3 });
   });
 
-  it("the Edit Tag dialog asks for a name, and keeps its fields after it closes", async () => {
+  it("the Edit Tag dialog holds Save while the name is empty, and keeps its fields after it closes", async () => {
     const context = setup();
     const { editor } = context;
     await openOn(context);
     editor.editTag("Bob");
     expect(context.view()).toMatchObject({ editing: true, edit: { oldName: "Bob", oldCategoryId: "people", name: "Bob", categoryId: "people" } });
+    expect(context.view()).toMatchObject({ editNameProblem: null, editNameFlagged: false });
     editor.typeEditName("  ");
+    expect(context.view()).toMatchObject({ editNameProblem: { message: "Enter a tag name.", empty: true }, editNameFlagged: true });
     editor.saveEdit();
-    expect(context.statuses).toEqual(["Tag name is required."]);
+    expect(editor.reveal.request.value).toEqual({ field: "editTagName", count: 1 });
+    expect(context.statuses).toEqual([]);
     expect(context.view().editing).toBe(true);
+    expect(context.view().pending.renameTags.size).toBe(0);
+
+    editor.cancelEdit();
+    editor.editTag("Bob");
+    expect(context.view().editNameFlagged).toBe(false);
+    editor.typeEditName("  ");
 
     editor.typeEditName("Robert");
     editor.saveEdit();

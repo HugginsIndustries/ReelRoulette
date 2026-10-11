@@ -1,5 +1,6 @@
 import { compareTagNames } from "../library/tagNameOrder";
 import { planTagEditorSave, type AutoTagSaveAssignment, type TagSaveStep } from "../library/tagSave";
+import type { FieldProblem } from "../validation/fieldValidation";
 
 export const UNCATEGORIZED_CATEGORY_ID = "uncategorized";
 
@@ -77,6 +78,11 @@ export interface TagCategoryRow {
   canMoveUp: boolean;
   canMoveDown: boolean;
   chips: TagChipRow[];
+}
+
+/** The Edit Tag dialog's name problem: an empty name, which holds Save. */
+export function editTagNameProblem(name: string): FieldProblem | null {
+  return name.trim() ? null : { message: "Enter a tag name.", empty: true };
 }
 
 export function normalizeTagKey(tagName: unknown): string {

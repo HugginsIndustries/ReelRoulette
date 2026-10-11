@@ -88,6 +88,8 @@ function checkDuration(value) {
 /**
  * A field using the validation pattern. `check(value)` returns null when the value is valid, or `{ message, empty }`.
  * An empty required field (`empty: true`) is flagged only once the user has typed in it, but still holds its action.
+ * `partners` are other controls checked with this one, such as the other dropdown of a pair: they are marked and
+ * described with it, and focusing one shows the tooltip too. The icon and tooltip stay with `input`.
  */
 const allFields = new Set();
 let tipCounter = 0;
@@ -99,6 +101,7 @@ class ValidatedField {
     this.check = check;
     this.pinned = !!opts.pinned;
     this.touched = !!opts.touched;
+    this.partners = opts.partners || [];
     this.hover = false;
     this.wrap = input.closest(".vfield");
     this.icon = this.wrap.querySelector(".vfield-icon");
@@ -114,8 +117,10 @@ class ValidatedField {
       this.touched = true;
       this.update();
     });
-    input.addEventListener("focus", () => this.place());
-    input.addEventListener("blur", () => this.place());
+    [input, ...this.partners].forEach((control) => {
+      control.addEventListener("focus", () => this.place());
+      control.addEventListener("blur", () => this.place());
+    });
     this.icon.addEventListener("pointerenter", (event) => {
       if (event.pointerType === "mouse") {
         this.hover = true;
@@ -169,14 +174,16 @@ class ValidatedField {
     const problem = this.problem;
     const flagged = this.flagged;
     this.wrap.classList.toggle("is-invalid", flagged);
-    if (flagged) {
-      this.tip.textContent = problem.message;
-      this.input.setAttribute("aria-invalid", "true");
-      this.input.setAttribute("aria-describedby", this.tip.id);
-    } else {
-      this.input.removeAttribute("aria-invalid");
-      this.input.removeAttribute("aria-describedby");
-    }
+    if (flagged) this.tip.textContent = problem.message;
+    [this.input, ...this.partners].forEach((control) => {
+      if (flagged) {
+        control.setAttribute("aria-invalid", "true");
+        control.setAttribute("aria-describedby", this.tip.id);
+      } else {
+        control.removeAttribute("aria-invalid");
+        control.removeAttribute("aria-describedby");
+      }
+    });
     this.place();
     this.listeners.forEach((listener) => listener());
   }
@@ -191,7 +198,7 @@ class ValidatedField {
   place() {
     const shown =
       this.flagged &&
-      (this.pinned || this.hover || document.activeElement === this.input) &&
+      (this.pinned || this.hover || [this.input, ...this.partners].includes(document.activeElement)) &&
       this.wrap.offsetParent !== null &&
       this.inScrollView();
     this.tip.classList.toggle("is-shown", shown);
@@ -217,6 +224,19 @@ class ValidatedField {
     const icon = this.icon.getBoundingClientRect();
     return icon.bottom > view.top && icon.top < view.bottom;
   }
+}
+
+/**
+ * The Filter tab's Favorites and Blacklisted filters, checked as a pair: Favorites only with Blacklisted only matches
+ * nothing, since no item is both. The icon sits after the Blacklisted dropdown, which a held action moves to. A
+ * dropdown's change updates it; call `update()` after a checkbox changes and the dropdowns' disabled state follows.
+ */
+const FLAG_PAIR_PROBLEM = "Nothing is both a favorite and blacklisted. Use excluded for one of them.";
+function flagPairField(favBox, favMode, blBox, blMode, options) {
+  const check = () => (favBox.checked && favMode.value === "only" && blBox.checked && blMode.value === "only" ? { message: FLAG_PAIR_PROBLEM } : null);
+  const field = new ValidatedField(blMode, check, { ...options, partners: [favMode] });
+  [favMode, blMode].forEach((select) => select.addEventListener("change", () => field.update()));
+  return field;
 }
 
 let placeQueued = false;

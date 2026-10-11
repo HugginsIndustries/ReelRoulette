@@ -297,7 +297,8 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
         "Edit Tag"
       <label for="tag-edit-name">
         "Tag Name"
-      <input autocomplete="off" id="tag-edit-name" type="text" value="Beach">
+      <span class="vfield">
+        <input autocomplete="off" id="tag-edit-name" type="text" value="Beach">
       <label for="tag-edit-category">
         "Category"
       <select id="tag-edit-category">
@@ -312,8 +313,9 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
       <div class="tag-edit-modal-actions">
         <button id="tag-edit-cancel-btn" type="button">
           "Cancel"
-        <button id="tag-edit-save-btn" type="button">
-          "Save"
+        <button class="held-action" id="tag-edit-save-btn" type="button">
+          <span class="btn-label">
+            "Save"
 "
 `;
 
@@ -324,7 +326,8 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
       "Edit Tag"
     <label for="tag-edit-name">
       "Tag Name"
-    <input autocomplete="off" id="tag-edit-name" type="text" value="Beach">
+    <span class="vfield">
+      <input autocomplete="off" id="tag-edit-name" type="text" value="Beach">
     <label for="tag-edit-category">
       "Category"
     <select id="tag-edit-category">
@@ -339,8 +342,9 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
     <div class="tag-edit-modal-actions">
       <button id="tag-edit-cancel-btn" type="button">
         "Cancel"
-      <button id="tag-edit-save-btn" type="button">
-        "Save"
+      <button class="held-action" id="tag-edit-save-btn" type="button">
+        <span class="btn-label">
+          "Save"
 "
 `;
 
@@ -589,14 +593,16 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
         "Edit Tag"
       <label for="tag-edit-name">
         "Tag Name"
-      <input autocomplete="off" id="tag-edit-name" type="text" value="">
+      <span class="vfield">
+        <input autocomplete="off" id="tag-edit-name" type="text" value="">
       <label for="tag-edit-category">
         "Category"
       <select id="tag-edit-category">
       <div class="tag-edit-modal-actions">
         <button id="tag-edit-cancel-btn" type="button">
           "Cancel"
-        <button id="tag-edit-save-btn" type="button">
-          "Save"
+        <button class="held-action" id="tag-edit-save-btn" type="button">
+          <span class="btn-label">
+            "Save"
 "
 `;

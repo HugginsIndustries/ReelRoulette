@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   UNCATEGORIZED_COLLAPSE_KEY,
   filterTagCategories,
+  DURATION_PROBLEM,
+  FILTER_ACTION_FIELDS,
+  FLAG_MODES_PROBLEM,
+  filterFieldProblems,
+  filterHeldReason,
   filterWithGeneralDraft,
-  generalDraftDurationError,
   generalDraftFromFilter,
   presetRowsFromApi,
   sourceLabel,
@@ -33,11 +37,11 @@ function draft(change: Partial<GeneralDraft> = {}): GeneralDraft {
 describe("generalDraftFromFilter", () => {
   it("shows durations as text, none as an empty field with its box checked, and every source checked when none is stored", () => {
     const shown = generalDraftFromFilter(filter({ minDurationSeconds: 90, maxDurationSeconds: 3700 }), SOURCES);
-    expect(shown).toMatchObject({ minText: "01:30", noMin: false, maxText: "01:01:40", noMax: false });
+    expect(shown).toMatchObject({ minText: "01:30", maxText: "01:01:40" });
     expect(shown.sourceChecked).toEqual([true, true, true]);
 
     const none = generalDraftFromFilter(filter(), SOURCES);
-    expect(none).toMatchObject({ minText: "", noMin: true, maxText: "", noMax: true });
+    expect(none).toMatchObject({ minText: "", maxText: "" });
   });
 
   it("shows each flag mode as its checkbox and choice, with the default choice for a filter that is off", () => {
@@ -74,7 +78,7 @@ describe("filterWithGeneralDraft", () => {
     const working = filter({ selectedTags: ["Beach"], globalMatchMode: false });
     const read = filterWithGeneralDraft(
       working,
-      draft({ favoritesOn: true, mediaTypeFilter: 2, audioFilter: 1, noMin: false, minText: "1:00:00" }),
+      draft({ favoritesOn: true, mediaTypeFilter: 2, audioFilter: 1, minText: "1:00:00" }),
       SOURCES
     );
     expect(read).toMatchObject({
@@ -123,10 +127,11 @@ describe("filterWithGeneralDraft", () => {
     expect(filterWithGeneralDraft(current, shown, sources)).toMatchObject({ favoritesMode: "excluded", blacklistedMode: "only" });
   });
 
-  it("stores no duration for a checked none box or text that is not valid", () => {
-    expect(filterWithGeneralDraft(filter(), draft({ noMin: true, minText: "1:00" }), SOURCES).minDurationSeconds).toBeNull();
-    expect(filterWithGeneralDraft(filter(), draft({ noMax: false, maxText: "abc" }), SOURCES).maxDurationSeconds).toBeNull();
-    expect(filterWithGeneralDraft(filter(), draft({ noMax: false, maxText: "" }), SOURCES).maxDurationSeconds).toBeNull();
+  it("stores no duration for an empty field or text that is not valid", () => {
+    expect(filterWithGeneralDraft(filter(), draft({ maxText: "abc" }), SOURCES).maxDurationSeconds).toBeNull();
+    expect(filterWithGeneralDraft(filter(), draft({ maxText: "12abc" }), SOURCES).maxDurationSeconds).toBeNull();
+    expect(filterWithGeneralDraft(filter({ maxDurationSeconds: 60 }), draft({ maxText: "" }), SOURCES).maxDurationSeconds).toBeNull();
+    expect(filterWithGeneralDraft(filter(), draft({ maxText: "1:00" }), SOURCES).maxDurationSeconds).toBe(60);
   });
 
   it("stores the checked sources, and none once all are checked", () => {
@@ -138,16 +143,54 @@ describe("filterWithGeneralDraft", () => {
   });
 });
 
-describe("generalDraftDurationError", () => {
-  it("names the first duration in use that is not valid", () => {
-    expect(generalDraftDurationError(draft())).toBeNull();
-    expect(generalDraftDurationError(draft({ noMin: true, minText: "abc", noMax: false, maxText: "1:75" }))).toBe(
-      "Maximum duration is invalid. Use MM:SS, HH:MM:SS, or seconds."
-    );
-    expect(generalDraftDurationError(draft({ noMin: false, minText: "abc", noMax: false, maxText: "1:75" }))).toBe(
-      "Minimum duration is invalid. Use MM:SS, HH:MM:SS, or seconds."
-    );
-    expect(generalDraftDurationError(draft({ noMin: false, minText: "" }))).toBeNull();
+describe("filterFieldProblems", () => {
+  const PRESETS = [{ name: "Favorites", filterState: filter() }];
+
+  it("flags a duration that is not valid, read strictly, and not an empty one", () => {
+    expect(filterFieldProblems(draft(), "Mine", PRESETS)).toEqual({ flagModes: null, minDuration: null, maxDuration: null, newPresetName: null });
+    for (const text of ["1:7x", "12abc", "1:75"]) {
+      expect(filterFieldProblems(draft({ minText: text }), "Mine", PRESETS).minDuration, text).toEqual({ message: DURATION_PROBLEM });
+      expect(filterFieldProblems(draft({ maxText: text }), "Mine", PRESETS).maxDuration, text).toEqual({ message: DURATION_PROBLEM });
+    }
+    expect(filterFieldProblems(draft({ minText: "" }), "Mine", PRESETS).minDuration).toBeNull();
+    expect(filterFieldProblems(draft({ minText: "  " }), "Mine", PRESETS).minDuration).toBeNull();
+    expect(filterFieldProblems(draft({ minText: "90:00" }), "Mine", PRESETS).minDuration).toBeNull();
+  });
+
+  it("flags an empty new preset name as required, and a saved preset's name ignoring case", () => {
+    expect(filterFieldProblems(draft(), "  ", PRESETS).newPresetName).toEqual({ message: "Enter a preset name.", empty: true });
+    expect(filterFieldProblems(draft(), " FAVORITES ", PRESETS).newPresetName).toEqual({ message: "Use a name no other preset has." });
+    expect(filterFieldProblems(draft(), "Favorites 2", PRESETS).newPresetName).toBeNull();
+  });
+
+  it.each(FLAG_MODE_PAIRS)("flags only Favorites only with Blacklisted only: Favorites %s with Blacklisted %s", (favorites, blacklisted) => {
+    const shown = generalDraftFromFilter(filter({ favoritesMode: favorites, blacklistedMode: blacklisted }), SOURCES);
+    const expected = favorites === "only" && blacklisted === "only" ? { message: FLAG_MODES_PROBLEM } : null;
+    expect(filterFieldProblems(shown, "Mine", PRESETS).flagModes).toEqual(expected);
+  });
+
+  it("does not flag Favorites only with a Blacklisted only choice whose box is off", () => {
+    expect(filterFieldProblems(draft({ favoritesOn: true, favoritesChoice: "only", blacklistedOn: false, blacklistedChoice: "only" }), "Mine", PRESETS).flagModes).toBeNull();
+  });
+});
+
+describe("filterHeldReason", () => {
+  it("says which field holds the action and what it expects", () => {
+    expect(filterHeldReason("apply", "minDuration", { message: DURATION_PROBLEM })).toBe("Correct the minimum duration to apply.");
+    expect(filterHeldReason("apply", "maxDuration", { message: DURATION_PROBLEM })).toBe("Correct the maximum duration to apply.");
+    expect(filterHeldReason("apply", "flagModes", { message: FLAG_MODES_PROBLEM })).toBe("Change Favorites or Blacklisted to apply.");
+    expect(filterHeldReason("updatePreset", "maxDuration", { message: DURATION_PROBLEM })).toBe("Correct the maximum duration first.");
+    expect(filterHeldReason("addPreset", "flagModes", { message: FLAG_MODES_PROBLEM })).toBe("Change Favorites or Blacklisted first.");
+    expect(filterHeldReason("addPreset", "newPresetName", { message: "Enter a preset name.", empty: true })).toBe("Enter a preset name first.");
+    expect(filterHeldReason("addPreset", "newPresetName", { message: "Use a name no other preset has." })).toBe("Use a name no other preset has.");
+  });
+
+  it("holds Apply and Update Preset on the General fields, and Add Preset on its name first", () => {
+    expect(FILTER_ACTION_FIELDS).toEqual({
+      apply: ["flagModes", "minDuration", "maxDuration"],
+      addPreset: ["newPresetName", "flagModes", "minDuration", "maxDuration"],
+      updatePreset: ["flagModes", "minDuration", "maxDuration"]
+    });
   });
 });
 

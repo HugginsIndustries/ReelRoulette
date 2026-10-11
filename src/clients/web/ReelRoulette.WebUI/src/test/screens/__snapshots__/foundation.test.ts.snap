@@ -144,15 +144,17 @@ exports[`page structure > keeps the starting markup 1`] = `
             "Edit Tag"
           <label for="tag-edit-name">
             "Tag Name"
-          <input autocomplete="off" id="tag-edit-name" type="text">
+          <span class="vfield">
+            <input autocomplete="off" id="tag-edit-name" type="text">
           <label for="tag-edit-category">
             "Category"
           <select id="tag-edit-category">
           <div class="tag-edit-modal-actions">
             <button id="tag-edit-cancel-btn" type="button">
               "Cancel"
-            <button id="tag-edit-save-btn" type="button">
-              "Save"
+            <button class="held-action" id="tag-edit-save-btn" type="button">
+              <span class="btn-label">
+                "Save"
     <div class="filter-dialog" id="filter-dialog" style="display: none">
       <div class="filter-dialog-header">
         <h2 id="filter-dialog-heading">
@@ -180,8 +182,9 @@ exports[`page structure > keeps the starting markup 1`] = `
           "Clear all filters"
         <button id="filter-cancel-btn" type="button">
           "Cancel"
-        <button id="filter-apply-btn" type="button">
-          "Apply"
+        <button class="held-action" id="filter-apply-btn" type="button">
+          <span class="btn-label">
+            "Apply"
     <div class="library-overlay" id="library-overlay" style="display: none">
       <div class="library-overlay-header">
         <h2>

@@ -17,7 +17,8 @@ import {
   presetHeading,
   resolvePresetAnchor,
   formatDurationForDisplay,
-  parseDurationInputToSeconds,
+  parseServerDuration,
+  parseTypedDuration,
   presetsToPostBody,
   serializeFilterStateForApi,
   MEDIA_TYPE_FILTER,
@@ -47,12 +48,32 @@ describe("filterStateModel", () => {
     expect(formatDurationForDisplay(3661)).toBe("01:01:01");
   });
 
-  it("parses MM:SS and HH:MM:SS", () => {
-    expect(parseDurationInputToSeconds("01:05")).toBe(65);
-    expect(parseDurationInputToSeconds("1:01:01")).toBe(3661);
-    expect(parseDurationInputToSeconds("90")).toBe(90);
-    expect(parseDurationInputToSeconds("")).toBe(null);
-    expect(parseDurationInputToSeconds("12:99")).toBe("invalid");
+  it("parses typed MM:SS, HH:MM:SS, and seconds", () => {
+    expect(parseTypedDuration("01:05")).toBe(65);
+    expect(parseTypedDuration("1:7")).toBe(67);
+    expect(parseTypedDuration("90:00")).toBe(5400);
+    expect(parseTypedDuration("1:01:01")).toBe(3661);
+    expect(parseTypedDuration("1:59:59")).toBe(7199);
+    expect(parseTypedDuration("90")).toBe(90);
+    expect(parseTypedDuration(" 12 ")).toBe(12);
+    expect(parseTypedDuration("12.5")).toBe(12.5);
+    expect(parseTypedDuration("")).toBe(null);
+    expect(parseTypedDuration("   ")).toBe(null);
+  });
+
+  it("refuses a typed duration that is not whole MM:SS, HH:MM:SS, or a number of seconds", () => {
+    for (const text of ["1:7x", "12abc", "1:75", "12:99", "0:60:00", "1:00:60", "1e3", ".5", "12.", "-5", "1:-5", "1:2:3:4", "00:01:30.5000000"]) {
+      expect(parseTypedDuration(text), text).toBe("invalid");
+    }
+  });
+
+  it("reads a server duration's leading numbers, so the desktop's fractional seconds read as whole seconds", () => {
+    expect(parseServerDuration("00:01:30.5000000")).toBe(90);
+    expect(parseServerDuration("00:01:30")).toBe(90);
+    expect(parseServerDuration("01:05")).toBe(65);
+    expect(parseServerDuration("90")).toBe(90);
+    expect(parseServerDuration("")).toBe(null);
+    expect(parseServerDuration("12:99")).toBe("invalid");
   });
 
   it("serializes min/max duration as HH:MM:SS for server TimeSpan parsing", () => {

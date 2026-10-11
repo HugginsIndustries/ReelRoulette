@@ -187,7 +187,7 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
   display: inline-flex;
   min-width: 0;
 }
-.vfield > .ctl {
+.vfield:not(.vfield-after) > .ctl {
   width: 100%;
   padding-right: 40px;
 }
@@ -202,6 +202,9 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
   cursor: help;
 }
 .vfield.is-invalid .vfield-icon { display: inline-flex; }
+/* A dropdown keeps its arrow on the right, so its icon sits just after it. */
+.vfield-after { align-items: center; gap: 6px; }
+.vfield-after > .vfield-icon { position: static; transform: none; }
 .vfield-tip {
   position: fixed;
   z-index: 3000;
@@ -255,6 +258,8 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 .filter-hint { font-size: 0.85rem; opacity: 0.75; margin: 0 0 8px; }
 .filter-stack { display: flex; flex-direction: column; gap: 4px; }
 .filter-stack label { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+/* Stacked text fields sit 10px apart, as the WebUI's filter rows do. */
+.duration-stack { gap: 10px; }
 /* The Favorites and Blacklisted filters: a checkbox and an only-or-excluded dropdown. */
 .mode-row { display: flex; align-items: center; gap: 10px; min-height: 40px; }
 .mode-row > label { display: flex; align-items: center; gap: 8px; min-width: 7.5rem; }
@@ -516,21 +521,44 @@ h1 { font-size: 1.4rem; margin: 0; }
 
   <section class="group">
     <h2>Duration (Filter tab, General)</h2>
-    <p class="group-note">Empty means no duration, so an empty field is never flagged. Anything other than whole MM:SS or HH:MM:SS (minutes and seconds under 60) or a number of seconds is flagged as it is typed: “1:7x”, “12abc”, and “1:75” all are. Today the WebUI reads “1:7x” as 1:07 and “12abc” as 12 seconds.</p>
+    <p class="group-note">An empty field means no limit, and its placeholder says so: “No minimum” or “No maximum”. It is never flagged. Anything other than whole MM:SS or HH:MM:SS (seconds under 60, and minutes under 60 in HH:MM:SS) or a number of seconds is flagged as it is typed: “1:7x”, “12abc”, and “1:75” all are.</p>
     <div class="specimens">
       <figure class="specimen">
-        <div class="filter-row"><span style="min-width:3rem">Min</span><span class="vfield duration-field"><input class="ctl" type="text" placeholder="HH:MM:SS or MM:SS" aria-label="Minimum duration" data-check="duration" value=""><span class="vfield-icon material-symbol-icon">error</span></span></div>
-        <figcaption><b>Empty</b>Valid: no minimum.</figcaption>
+        <div class="filter-row"><span style="min-width:3rem">Min</span><span class="vfield duration-field"><input class="ctl" type="text" placeholder="No minimum" aria-label="Minimum duration" data-check="duration" value=""><span class="vfield-icon material-symbol-icon">error</span></span></div>
+        <figcaption><b>Empty</b>Valid: no minimum, as its placeholder says.</figcaption>
         <p class="attrs mock-note"></p>
       </figure>
       <figure class="specimen">
-        <div class="filter-row"><span style="min-width:3rem">Min</span><span class="vfield duration-field"><input class="ctl" type="text" placeholder="HH:MM:SS or MM:SS" aria-label="Minimum duration" data-check="duration" data-pinned data-touched value="1:7x"><span class="vfield-icon material-symbol-icon">error</span></span></div>
+        <div class="filter-row"><span style="min-width:3rem">Min</span><span class="vfield duration-field"><input class="ctl" type="text" placeholder="No minimum" aria-label="Minimum duration" data-check="duration" data-pinned data-touched value="1:7x"><span class="vfield-icon material-symbol-icon">error</span></span></div>
         <figcaption><b>Typed “1:7x”</b>Flagged with the icon; tooltip held open here so it shows.</figcaption>
         <p class="attrs mock-note"></p>
       </figure>
       <figure class="specimen">
-        <div class="filter-row"><span style="min-width:3rem">Min</span><span class="vfield duration-field"><input class="ctl" type="text" placeholder="HH:MM:SS or MM:SS" aria-label="Minimum duration" data-check="duration" data-touched value="1:30"><span class="vfield-icon material-symbol-icon">error</span></span></div>
+        <div class="filter-row"><span style="min-width:3rem">Min</span><span class="vfield duration-field"><input class="ctl" type="text" placeholder="No minimum" aria-label="Minimum duration" data-check="duration" data-touched value="1:30"><span class="vfield-icon material-symbol-icon">error</span></span></div>
         <figcaption><b>Corrected to “1:30”</b>Icon, tooltip, and description gone.</figcaption>
+        <p class="attrs mock-note"></p>
+      </figure>
+    </div>
+  </section>
+
+  <section class="group">
+    <h2>Favorites and Blacklisted (Filter tab, General)</h2>
+    <p class="group-note">Checked as a pair. No item is both a favorite and blacklisted, so Favorites only with Blacklisted only matches nothing and is flagged as it is chosen; every other pairing is allowed. One icon sits just after the Blacklisted dropdown. Both dropdowns are marked invalid and described by its tooltip, and focusing either one shows it. Apply, Add Preset, and Update Preset can't proceed until either changes, and pressing one moves to the Blacklisted dropdown.</p>
+    <div class="specimens">
+      <figure class="specimen" data-pair>
+        <div class="filter-stack">
+          <div class="mode-row"><label><input type="checkbox" data-fav checked> Favorites</label><select class="ctl mode-select" aria-label="Favorites filter" data-fav-mode><option value="only" selected>only</option><option value="excluded">excluded</option></select></div>
+          <div class="mode-row"><label><input type="checkbox" data-bl checked> Blacklisted</label><span class="vfield vfield-after"><select class="ctl mode-select" aria-label="Blacklisted filter" data-bl-mode><option value="only">only</option><option value="excluded" selected>excluded</option></select><span class="vfield-icon material-symbol-icon">error</span></span></div>
+        </div>
+        <figcaption><b>Favorites only, Blacklisted excluded</b>Valid, like every pairing but one.</figcaption>
+        <p class="attrs mock-note"></p>
+      </figure>
+      <figure class="specimen" data-pair data-pinned>
+        <div class="filter-stack">
+          <div class="mode-row"><label><input type="checkbox" data-fav checked> Favorites</label><select class="ctl mode-select" aria-label="Favorites filter" data-fav-mode><option value="only" selected>only</option><option value="excluded">excluded</option></select></div>
+          <div class="mode-row"><label><input type="checkbox" data-bl checked> Blacklisted</label><span class="vfield vfield-after"><select class="ctl mode-select" aria-label="Blacklisted filter" data-bl-mode><option value="only" selected>only</option><option value="excluded">excluded</option></select><span class="vfield-icon material-symbol-icon">error</span></span></div>
+        </div>
+        <figcaption><b>Favorites only, Blacklisted only</b>Flagged; tooltip held open here so it shows.</figcaption>
         <p class="attrs mock-note"></p>
       </figure>
     </div>
@@ -641,7 +669,7 @@ h1 { font-size: 1.4rem; margin: 0; }
         <h3>Basic Filters</h3>
         <div class="filter-stack">
           <div class="mode-row"><label><input type="checkbox" data-mode-box> Favorites</label><select class="ctl mode-select" aria-label="Favorites filter" disabled><option value="only">only</option><option value="excluded">excluded</option></select></div>
-          <div class="mode-row"><label><input type="checkbox" data-mode-box checked> Blacklisted</label><select class="ctl mode-select" aria-label="Blacklisted filter"><option value="only">only</option><option value="excluded" selected>excluded</option></select></div>
+          <div class="mode-row"><label><input type="checkbox" data-mode-box checked> Blacklisted</label><span class="vfield vfield-after"><select class="ctl mode-select" aria-label="Blacklisted filter"><option value="only">only</option><option value="excluded" selected>excluded</option></select><span class="vfield-icon material-symbol-icon">error</span></span></div>
           <label><input type="checkbox"> Only never played</label>
           <label><input type="checkbox"> Only videos with known duration</label>
           <label><input type="checkbox"> Only videos with known loudness</label>
@@ -665,9 +693,9 @@ h1 { font-size: 1.4rem; margin: 0; }
       </div>
       <div class="filter-section">
         <h3>Duration Filter</h3>
-        <div class="filter-stack">
-          <div class="filter-row"><span style="min-width:3rem">Min</span><span class="vfield duration-field"><input class="ctl" type="text" placeholder="HH:MM:SS or MM:SS" aria-label="Minimum duration" value="2:75" data-min><span class="vfield-icon material-symbol-icon">error</span></span></div>
-          <div class="filter-row"><span style="min-width:3rem">Max</span><span class="vfield duration-field"><input class="ctl" type="text" placeholder="HH:MM:SS or MM:SS" aria-label="Maximum duration" value="" data-max><span class="vfield-icon material-symbol-icon">error</span></span></div>
+        <div class="filter-stack duration-stack">
+          <div class="filter-row"><span style="min-width:3rem">Min</span><span class="vfield duration-field"><input class="ctl" type="text" placeholder="No minimum" aria-label="Minimum duration" value="2:75" data-min><span class="vfield-icon material-symbol-icon">error</span></span></div>
+          <div class="filter-row"><span style="min-width:3rem">Max</span><span class="vfield duration-field"><input class="ctl" type="text" placeholder="No maximum" aria-label="Maximum duration" value="" data-max><span class="vfield-icon material-symbol-icon">error</span></span></div>
         </div>
       </div>
     </div>
@@ -772,6 +800,8 @@ function checkDuration(value) {
 /**
  * A field using the validation pattern. `check(value)` returns null when the value is valid, or `{ message, empty }`.
  * An empty required field (`empty: true`) is flagged only once the user has typed in it, but still holds its action.
+ * `partners` are other controls checked with this one, such as the other dropdown of a pair: they are marked and
+ * described with it, and focusing one shows the tooltip too. The icon and tooltip stay with `input`.
  */
 const allFields = new Set();
 let tipCounter = 0;
@@ -783,6 +813,7 @@ class ValidatedField {
     this.check = check;
     this.pinned = !!opts.pinned;
     this.touched = !!opts.touched;
+    this.partners = opts.partners || [];
     this.hover = false;
     this.wrap = input.closest(".vfield");
     this.icon = this.wrap.querySelector(".vfield-icon");
@@ -798,8 +829,10 @@ class ValidatedField {
       this.touched = true;
       this.update();
     });
-    input.addEventListener("focus", () => this.place());
-    input.addEventListener("blur", () => this.place());
+    [input, ...this.partners].forEach((control) => {
+      control.addEventListener("focus", () => this.place());
+      control.addEventListener("blur", () => this.place());
+    });
     this.icon.addEventListener("pointerenter", (event) => {
       if (event.pointerType === "mouse") {
         this.hover = true;
@@ -853,14 +886,16 @@ class ValidatedField {
     const problem = this.problem;
     const flagged = this.flagged;
     this.wrap.classList.toggle("is-invalid", flagged);
-    if (flagged) {
-      this.tip.textContent = problem.message;
-      this.input.setAttribute("aria-invalid", "true");
-      this.input.setAttribute("aria-describedby", this.tip.id);
-    } else {
-      this.input.removeAttribute("aria-invalid");
-      this.input.removeAttribute("aria-describedby");
-    }
+    if (flagged) this.tip.textContent = problem.message;
+    [this.input, ...this.partners].forEach((control) => {
+      if (flagged) {
+        control.setAttribute("aria-invalid", "true");
+        control.setAttribute("aria-describedby", this.tip.id);
+      } else {
+        control.removeAttribute("aria-invalid");
+        control.removeAttribute("aria-describedby");
+      }
+    });
     this.place();
     this.listeners.forEach((listener) => listener());
   }
@@ -875,7 +910,7 @@ class ValidatedField {
   place() {
     const shown =
       this.flagged &&
-      (this.pinned || this.hover || document.activeElement === this.input) &&
+      (this.pinned || this.hover || [this.input, ...this.partners].includes(document.activeElement)) &&
       this.wrap.offsetParent !== null &&
       this.inScrollView();
     this.tip.classList.toggle("is-shown", shown);
@@ -901,6 +936,19 @@ class ValidatedField {
     const icon = this.icon.getBoundingClientRect();
     return icon.bottom > view.top && icon.top < view.bottom;
   }
+}
+
+/**
+ * The Filter tab's Favorites and Blacklisted filters, checked as a pair: Favorites only with Blacklisted only matches
+ * nothing, since no item is both. The icon sits after the Blacklisted dropdown, which a held action moves to. A
+ * dropdown's change updates it; call `update()` after a checkbox changes and the dropdowns' disabled state follows.
+ */
+const FLAG_PAIR_PROBLEM = "Nothing is both a favorite and blacklisted. Use excluded for one of them.";
+function flagPairField(favBox, favMode, blBox, blMode, options) {
+  const check = () => (favBox.checked && favMode.value === "only" && blBox.checked && blMode.value === "only" ? { message: FLAG_PAIR_PROBLEM } : null);
+  const field = new ValidatedField(blMode, check, { ...options, partners: [favMode] });
+  [favMode, blMode].forEach((select) => select.addEventListener("change", () => field.update()));
+  return field;
 }
 
 let placeQueued = false;
@@ -1186,16 +1234,36 @@ const REASONS = {
   category: (field) => (field.problem.empty ? "Enter a category name first." : "Use a name no other category has.")
 };
 
-function showAttrs(field, out) {
-  const invalid = field.input.getAttribute("aria-invalid");
-  const describedBy = field.input.getAttribute("aria-describedby");
+function attrsOf(control) {
+  const invalid = control.getAttribute("aria-invalid");
+  const describedBy = control.getAttribute("aria-describedby");
   const description = describedBy ? document.getElementById(describedBy).textContent : "";
-  out.textContent =
-    `aria-invalid: ${invalid || "(not set)"}\n` +
-    `accessible description: ${description ? `“${description}”` : "(none)"}`;
+  return `aria-invalid: ${invalid || "(not set)"}\n` + `accessible description: ${description ? `“${description}”` : "(none)"}`;
 }
 
-document.querySelectorAll(".specimen").forEach((specimen) => {
+function showAttrs(field, out) {
+  out.textContent = attrsOf(field.input);
+}
+
+document.querySelectorAll(".specimen[data-pair]").forEach((specimen) => {
+  const [favBox, favMode, blBox, blMode] = ["data-fav", "data-fav-mode", "data-bl", "data-bl-mode"].map((attr) => specimen.querySelector(`[${attr}]`));
+  const field = flagPairField(favBox, favMode, blBox, blMode, { pinned: specimen.hasAttribute("data-pinned") });
+  const out = specimen.querySelector(".attrs");
+  const show = () => (out.textContent = `Favorites dropdown\n${attrsOf(favMode)}\n\nBlacklisted dropdown\n${attrsOf(blMode)}`);
+  field.onChange(show);
+  show();
+  [[favBox, favMode], [blBox, blMode]].forEach(([box, select]) => {
+    box.addEventListener("change", () => {
+      select.disabled = !box.checked;
+      field.update();
+    });
+    select.addEventListener("focus", () => {
+      field.pinned = false;
+    });
+  });
+});
+
+document.querySelectorAll(".specimen:not([data-pair])").forEach((specimen) => {
   const input = specimen.querySelector("input[data-check]");
   const kind = input.dataset.check;
   const field = new ValidatedField(input, CHECKS[kind], { pinned: input.hasAttribute("data-pinned"), touched: input.hasAttribute("data-touched") });
@@ -1224,10 +1292,15 @@ document.querySelectorAll("[data-mini]").forEach((mini) => {
   mini.querySelectorAll('input[type="radio"]').forEach((radio) => {
     radio.name = `${style}-${radio.closest(".filter-section").querySelector("h3").textContent}`;
   });
+  const [favBox, blBox] = mini.querySelectorAll("[data-mode-box]");
+  const modeSelect = (box) => box.closest(".mode-row").querySelector("select");
+  const flagModesField = flagPairField(favBox, modeSelect(favBox), blBox, modeSelect(blBox));
   // Each mode dropdown applies only while its checkbox is on.
-  mini.querySelectorAll("[data-mode-box]").forEach((box) => {
-    const select = box.closest(".mode-row").querySelector("select");
-    box.addEventListener("change", () => (select.disabled = !box.checked));
+  [favBox, blBox].forEach((box) => {
+    box.addEventListener("change", () => {
+      modeSelect(box).disabled = !box.checked;
+      flagModesField.update();
+    });
   });
   const minField = new ValidatedField(mini.querySelector("[data-min]"), checkDuration, { touched: true });
   const maxField = new ValidatedField(mini.querySelector("[data-max]"), checkDuration, { touched: true });
@@ -1243,15 +1316,15 @@ document.querySelectorAll("[data-mini]").forEach((mini) => {
   }
   mini.querySelectorAll(".filter-tab").forEach((tab) => tab.addEventListener("click", () => showSub(tab.dataset.sub)));
   function badge() {
-    const problem = minField.flagged || maxField.flagged;
+    const problem = flagModesField.flagged || minField.flagged || maxField.flagged;
     generalTab.classList.toggle("has-problem", problem);
     generalTab.title = problem ? "A field here is not valid" : "";
   }
-  [minField, maxField].forEach((field) => field.onChange(badge));
+  [flagModesField, minField, maxField].forEach((field) => field.onChange(badge));
   badge();
   const apply = mini.querySelector("[data-apply]");
-  holdAction(apply, () => [minField, maxField], {
-    reason: (field) => `Correct the ${field === minField ? "minimum" : "maximum"} duration to apply.`,
+  holdAction(apply, () => [flagModesField, minField, maxField], {
+    reason: (field) => (field === flagModesField ? "Change Favorites or Blacklisted to apply." : `Correct the ${field === minField ? "minimum" : "maximum"} duration to apply.`),
     beforeReveal: () => showSub("general")
   });
   apply.addEventListener("click", () => {

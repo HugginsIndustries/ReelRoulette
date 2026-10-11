@@ -281,8 +281,33 @@ export function formatDurationForApi(totalSeconds: number): string {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
-/** Desktop FilterDialog.ParseTimeSpan — returns seconds or null if empty/invalid */
-export function parseDurationInputToSeconds(text: string): number | null | "invalid" {
+/**
+ * A typed duration in seconds, null when empty, or "invalid": whole MM:SS or HH:MM:SS with seconds under 60, and
+ * minutes under 60 in HH:MM:SS, or a number of seconds. MM:SS minutes have no limit, so "90:00" is 90 minutes.
+ */
+export function parseTypedDuration(text: string): number | null | "invalid" {
+  const raw = String(text || "").trim();
+  if (!raw) {
+    return null;
+  }
+  let match = /^(\d+):(\d{1,2})$/.exec(raw);
+  if (match) {
+    const [minutes, seconds] = [Number(match[1]), Number(match[2])];
+    return seconds < 60 ? minutes * 60 + seconds : "invalid";
+  }
+  match = /^(\d+):(\d{1,2}):(\d{1,2})$/.exec(raw);
+  if (match) {
+    const [hours, minutes, seconds] = [Number(match[1]), Number(match[2]), Number(match[3])];
+    return minutes < 60 && seconds < 60 ? hours * 3600 + minutes * 60 + seconds : "invalid";
+  }
+  return /^\d+(\.\d+)?$/.test(raw) ? Number(raw) : "invalid";
+}
+
+/**
+ * A duration from a preset or filter the server sent, in seconds, null if empty, or "invalid". It reads each part's
+ * leading number, so the fractional seconds the desktop can write, such as "00:01:30.5000000", read as 90.
+ */
+export function parseServerDuration(text: string): number | null | "invalid" {
   const raw = String(text || "").trim();
   if (!raw) {
     return null;
@@ -375,7 +400,7 @@ function readDurationFromUnknown(value: unknown): number | null {
     return value;
   }
   if (typeof value === "string") {
-    const p = parseDurationInputToSeconds(value);
+    const p = parseServerDuration(value);
     if (p === "invalid") {
       return null;
     }

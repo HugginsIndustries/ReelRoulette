@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createFilterDialog } from "../filter/filterDialog";
+import { DURATION_PROBLEM, FLAG_MODES_PROBLEM } from "../filter/filterDialogModel";
 import { createDefaultFilterState } from "../filter/filterStateModel";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type ApiPreset } from "../state/appStore";
@@ -140,7 +141,6 @@ describe("General tab", () => {
     const { dialog, view } = setup();
     await dialog.open();
 
-    dialog.changeGeneral({ noMax: false });
     dialog.typeDuration("max", "2:00");
     expect(view().general.maxText).toBe("2:00");
     expect(view().working.maxDurationSeconds).toBeNull();
@@ -151,33 +151,104 @@ describe("General tab", () => {
     expect(view().pending).toBe(true);
   });
 
-  it("keeps an unchecked No minimum and text that is not valid as the user left them", async () => {
+  it("keeps text that is not valid as the user left it, and reads an emptied duration as no limit", async () => {
     const { dialog, view } = setup();
     await dialog.open();
+    expect(view().general).toMatchObject({ minText: "", maxText: "" });
 
-    dialog.changeGeneral({ noMin: false });
-    expect(view().general).toMatchObject({ noMin: false, minText: "" });
     dialog.changeGeneral({ minText: "abc" });
     expect(view().general.minText).toBe("abc");
     expect(view().working.minDurationSeconds).toBeNull();
 
-    dialog.changeGeneral({ noMin: true });
-    expect(view().general).toMatchObject({ noMin: true, minText: "" });
+    dialog.changeGeneral({ minText: "1:30" });
+    expect(view().working.minDurationSeconds).toBe(90);
+    dialog.changeGeneral({ minText: "" });
+    expect(view().working.minDurationSeconds).toBeNull();
+    expect(view().pending).toBe(false);
   });
 
-  it("refuses to apply a duration that is not valid and shows General", async () => {
-    const { dialog, view, statuses, library } = setup();
+  it("flags a duration that is not valid as it is typed, and not an empty one", async () => {
+    const { dialog, view } = setup();
     await dialog.open();
-    dialog.changeGeneral({ noMin: false, minText: "abc" });
+    expect(view().problems).toMatchObject({ minDuration: null, maxDuration: null });
+
+    dialog.typeDuration("min", "1:7x");
+    expect(view().problems.minDuration).toEqual({ message: DURATION_PROBLEM });
+    expect(view().flagged.minDuration).toBe(true);
+    dialog.typeDuration("min", "1:07");
+    expect(view().problems.minDuration).toBeNull();
+    expect(view().flagged.minDuration).toBe(false);
+
+    dialog.typeDuration("max", "12abc");
+    expect(view().flagged.maxDuration).toBe(true);
+    dialog.typeDuration("max", "");
+    expect(view().problems.maxDuration).toBeNull();
+    expect(view().flagged.maxDuration).toBe(false);
+  });
+
+  it("holds Apply on a duration that is not valid, with or without other changes, and moves to it without a status", async () => {
+    const { dialog, view, statuses, library, server, store } = setup();
+    await dialog.open();
+    dialog.typeDuration("min", "abc");
+    expect(view().pending).toBe(false);
+    expect(view().held.apply).toBe("minDuration");
     dialog.showTab("tags");
 
     await dialog.apply();
-
-    expect(statuses.at(-1)).toBe("Minimum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.");
     expect(dialog.tab.value).toBe("general");
+    expect(dialog.reveal.request.value).toEqual({ field: "minDuration", count: 1 });
     expect(dialog.isOpen.value).toBe(true);
     expect(view().general.minText).toBe("abc");
+
+    dialog.changeGeneral({ onlyNeverPlayed: true });
+    dialog.movePreset(0, 1);
+    expect(view().pending).toBe(true);
+    dialog.showTab("presets");
+    await dialog.apply();
+    expect(dialog.tab.value).toBe("general");
+    expect(dialog.reveal.request.value).toEqual({ field: "minDuration", count: 2 });
+    expect(server.requests.filter((request) => request.method === "POST")).toEqual([
+      expect.objectContaining({ path: "/api/tag-editor/model" })
+    ]);
     expect(library.commitQuery).not.toHaveBeenCalled();
+    expect(statuses).toEqual([]);
+
+    dialog.typeDuration("min", "1:30");
+    expect(view().held.apply).toBeNull();
+    await dialog.apply();
+    expect(store.appliedFilter.peek()).toMatchObject({ minDurationSeconds: 90, onlyNeverPlayed: true });
+    expect(library.commitQuery).toHaveBeenCalledTimes(1);
+  });
+
+  it("flags Favorites only with Blacklisted only, and no other pairing, and holds every action that uses it", async () => {
+    const { dialog, view, statuses, library } = setup([FAVORITES, RECENT]);
+    await dialog.open();
+    dialog.choosePreset("Recent");
+    dialog.typeNewPresetName("Mine");
+
+    dialog.changeGeneral({ favoritesOn: true, favoritesChoice: "only", blacklistedOn: true, blacklistedChoice: "excluded" });
+    expect(view().problems.flagModes).toBeNull();
+    dialog.changeGeneral({ blacklistedChoice: "only" });
+    expect(view().problems.flagModes).toEqual({ message: FLAG_MODES_PROBLEM });
+    expect(view().flagged.flagModes).toBe(true);
+    expect(view().held).toEqual({ apply: "flagModes", addPreset: "flagModes", updatePreset: "flagModes" });
+
+    dialog.showTab("presets");
+    dialog.addPreset();
+    expect(dialog.tab.value).toBe("general");
+    dialog.showTab("presets");
+    dialog.updatePreset();
+    expect(dialog.tab.value).toBe("general");
+    await dialog.apply();
+    expect(dialog.reveal.request.value).toEqual({ field: "flagModes", count: 3 });
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
+    expect(view().presets[1]!.filterState.favoritesMode).toBe("off");
+    expect(view().presetsChanged).toBe(false);
+    expect(library.commitQuery).not.toHaveBeenCalled();
+    expect(statuses).toEqual([]);
+
+    dialog.changeGeneral({ favoritesOn: false });
+    expect(view().held).toEqual({ apply: null, addPreset: null, updatePreset: null });
   });
 
   it("stores the checked sources", async () => {
@@ -231,8 +302,12 @@ describe("Presets tab", () => {
     expect(view().presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites"]);
 
     dialog.typeNewPresetName("recent");
+    expect(view().problems.newPresetName).toEqual({ message: "Use a name no other preset has." });
+    expect(view().flagged.newPresetName).toBe(true);
     dialog.addPreset();
-    expect(statuses.at(-1)).toBe("A preset with that name already exists.");
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites"]);
+    expect(dialog.reveal.request.value).toEqual({ field: "newPresetName", count: 1 });
+    expect(statuses).toEqual([]);
     dialog.typeNewPresetName("  Mine ");
     dialog.addPreset();
     expect(view().presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites", "Mine"]);
@@ -254,14 +329,70 @@ describe("Presets tab", () => {
     expect(view().presetsChanged).toBe(true);
   });
 
+  it("holds Add Preset while the new name is empty, and flags it only once the user has typed in it", async () => {
+    const { dialog, view, statuses } = setup([FAVORITES]);
+    await dialog.open();
+    expect(view().problems.newPresetName).toEqual({ message: "Enter a preset name.", empty: true });
+    expect(view().flagged.newPresetName).toBe(false);
+    expect(view().held.addPreset).toBe("newPresetName");
+
+    dialog.addPreset();
+    expect(dialog.tab.value).toBe("presets");
+    expect(dialog.reveal.request.value).toEqual({ field: "newPresetName", count: 1 });
+    expect(view().presets).toHaveLength(1);
+
+    dialog.typeNewPresetName("M");
+    dialog.typeNewPresetName("  ");
+    expect(view().flagged.newPresetName).toBe(true);
+    dialog.typeNewPresetName("Mine");
+    dialog.addPreset();
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Mine"]);
+    expect(view().newPresetName).toBe("");
+    expect(view().flagged.newPresetName).toBe(false);
+    expect(statuses).toEqual([]);
+
+    await dialog.open();
+    dialog.typeNewPresetName("");
+    expect(view().flagged.newPresetName).toBe(true);
+    await dialog.open();
+    expect(view().flagged.newPresetName).toBe(false);
+  });
+
+  it("holds Add Preset and Update Preset on a duration that is not valid", async () => {
+    const { dialog, view, statuses } = setup([FAVORITES, RECENT]);
+    await dialog.open();
+    dialog.choosePreset("Recent");
+    dialog.typeNewPresetName("Mine");
+    dialog.typeDuration("max", "1:75");
+    expect(view().held).toEqual({ apply: "maxDuration", addPreset: "maxDuration", updatePreset: "maxDuration" });
+
+    dialog.showTab("presets");
+    dialog.addPreset();
+    expect(dialog.tab.value).toBe("general");
+    expect(dialog.reveal.request.value).toEqual({ field: "maxDuration", count: 1 });
+    dialog.showTab("presets");
+    dialog.updatePreset();
+    expect(dialog.tab.value).toBe("general");
+    expect(dialog.reveal.request.value).toEqual({ field: "maxDuration", count: 2 });
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
+    expect(view().presetsChanged).toBe(false);
+    expect(statuses).toEqual([]);
+
+    dialog.typeDuration("max", "2:00");
+    dialog.updatePreset();
+    expect(view().presets[1]!.filterState.maxDurationSeconds).toBe(120);
+    dialog.addPreset();
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent", "Mine"]);
+  });
+
   it("leaves the General tab as the user left it when a preset is deleted", async () => {
     const { dialog, view } = setup([FAVORITES, RECENT]);
     await dialog.open();
-    dialog.changeGeneral({ noMin: false, minText: "abc" });
+    dialog.changeGeneral({ minText: "abc" });
 
     dialog.deletePreset(1);
 
-    expect(view().general).toMatchObject({ noMin: false, minText: "abc" });
+    expect(view().general).toMatchObject({ minText: "abc" });
   });
 
   it("updates the chosen preset with the working filter", async () => {
@@ -331,6 +462,33 @@ describe("applying", () => {
     expect(view().presetsChanged).toBe(true);
     expect(store.appliedFilter.value).toEqual(createDefaultFilterState());
     expect(library.commitQuery).not.toHaveBeenCalled();
+  });
+
+  it("Refresh keeps a preset list Apply hasn't saved, and Apply's star, and Apply then saves it", async () => {
+    const { dialog, view, server, store } = setup([FAVORITES, RECENT]);
+    await dialog.open();
+    dialog.movePreset(0, 1);
+    server.presets = [FAVORITES, RECENT, EVERYTHING];
+
+    await dialog.refresh();
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites"]);
+    expect(view().presetsChanged).toBe(true);
+    expect(view().pending).toBe(true);
+    expect(store.presets.peek().map((preset) => preset.name)).toEqual(["Favorites", "Recent", "Everything"]);
+
+    await dialog.apply();
+    const saves = server.requests.filter((request) => request.method === "POST" && request.path === "/api/presets");
+    expect(saves).toHaveLength(1);
+    expect(saves[0]!.body.map((preset: any) => preset.name)).toEqual(["Recent", "Favorites"]);
+  });
+
+  it("Refresh takes the server's preset list while there are no preset changes", async () => {
+    const { dialog, view, server } = setup([FAVORITES]);
+    await dialog.open();
+    server.presets = [FAVORITES, RECENT];
+    await dialog.refresh();
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
+    expect(view().presetsChanged).toBe(false);
   });
 
   it("goes back to the default filter and the saved presets on Clear all", async () => {

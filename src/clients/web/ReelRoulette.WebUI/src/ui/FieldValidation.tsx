@@ -1,0 +1,243 @@
+import type { ComponentChildren, JSX, RefObject } from "preact";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "preact/hooks";
+import type { FieldProblem, FieldReveal } from "../validation/fieldValidation";
+
+// The field validation pattern: a field that holds a value that is not valid shows a red icon, whose tooltip says what
+// the field expects, and the actions that use it are held until it is corrected. Field problems never use a dialog
+// or the status line.
+
+/** What a validated control takes: its invalid state and description while flagged, and focus for the tooltip. */
+export interface ValidatedControlProps {
+  "aria-invalid"?: "true";
+  "aria-describedby"?: string;
+  onFocus: () => void;
+  onBlur: () => void;
+}
+
+export interface FieldValidationOptions<F extends string = string, T extends HTMLElement = HTMLElement> {
+  problem: FieldProblem | null;
+  /** Whether the field shows its problem, from `isFlagged`. */
+  flagged: boolean;
+  /** Moves to the field, scrolling to and focusing its control, when a request names `field`. */
+  reveal?: { from: FieldReveal<F>; field: F };
+  /** The control's ref, when its component needs one of its own. */
+  controlRef?: RefObject<T | null>;
+}
+
+export interface FieldValidation<T extends HTMLElement> {
+  /** For the field's control, which a reveal or a tap on the icon focuses. */
+  control: ValidatedControlProps & { ref: RefObject<T | null> };
+  /** For another control checked with it, such as the other dropdown of a pair: marked and described with it. */
+  partner: ValidatedControlProps;
+  /** The red icon and its tooltip while the field is flagged, for the caller to place in the field's `vfield` wrapper. */
+  mark: JSX.Element | null;
+}
+
+const TIP_MARGIN = 8;
+const TIP_GAP = 10;
+
+/** Whether the icon shows: it has a size, and the closest scrolling container around it hasn't scrolled it out of view. */
+function iconInView(icon: HTMLElement, box: DOMRect): boolean {
+  if (box.width === 0 && box.height === 0) {
+    return false;
+  }
+  for (let parent = icon.parentElement; parent; parent = parent.parentElement) {
+    const overflow = getComputedStyle(parent).overflowY;
+    if (overflow === "auto" || overflow === "scroll") {
+      const view = parent.getBoundingClientRect();
+      return box.bottom > view.top && box.top < view.bottom;
+    }
+  }
+  return true;
+}
+
+/**
+ * Places a shown tooltip above its icon, or below it when there is no room, kept inside the window, with its arrow
+ * on the icon. It is fixed, so a scrolling dialog body doesn't clip it. It hides while the icon is out of view.
+ */
+function placeTip(icon: HTMLElement | null, tip: HTMLElement | null): void {
+  if (!icon || !tip) {
+    return;
+  }
+  const iconBox = icon.getBoundingClientRect();
+  if (!iconInView(icon, iconBox)) {
+    tip.dataset.place = "hidden";
+    return;
+  }
+  tip.dataset.place = "above";
+  const tipBox = tip.getBoundingClientRect();
+  const above = iconBox.top - tipBox.height - TIP_GAP >= TIP_MARGIN;
+  const top = above ? iconBox.top - tipBox.height - TIP_GAP : iconBox.bottom + TIP_GAP;
+  const left = Math.max(TIP_MARGIN, Math.min(iconBox.right + 6 - tipBox.width, window.innerWidth - tipBox.width - TIP_MARGIN));
+  tip.dataset.place = above ? "above" : "below";
+  tip.style.top = `${Math.round(top)}px`;
+  tip.style.left = `${Math.round(left)}px`;
+  const arrowRight = left + tipBox.width - (iconBox.left + iconBox.width / 2) - 5;
+  tip.style.setProperty("--arrow-right", `${Math.max(6, Math.round(arrowRight))}px`);
+}
+
+/**
+ * One field of the pattern. The tooltip shows while the pointer is on the icon, after a tap on the icon, which
+ * focuses the control, or while a control has focus.
+ */
+export function useFieldValidation<T extends HTMLElement, F extends string = string>(
+  options: FieldValidationOptions<F, T>
+): FieldValidation<T> {
+  const { problem, flagged, reveal } = options;
+  const tipId = useId();
+  const ownControl = useRef<T>(null);
+  const control = options.controlRef ?? ownControl;
+  const icon = useRef<HTMLSpanElement>(null);
+  const tip = useRef<HTMLSpanElement>(null);
+  const [focused, setFocused] = useState(false);
+  const [hover, setHover] = useState(false);
+  const shown = flagged && (focused || hover);
+
+  // A request made before the field rendered was for an earlier view of it.
+  const request = reveal ? reveal.from.request.value : null;
+  const handled = useRef(request?.count ?? 0);
+  useEffect(() => {
+    if (!request || request.count === handled.current) {
+      return;
+    }
+    handled.current = request.count;
+    if (request.field === reveal?.field) {
+      control.current?.scrollIntoView({ block: "center" });
+      control.current?.focus({ preventScroll: true });
+    }
+  }, [request]);
+
+  // The icon goes away under the pointer when the field is corrected, so no leave event comes.
+  useEffect(() => {
+    if (!flagged) {
+      setHover(false);
+    }
+  }, [flagged]);
+
+  useLayoutEffect(() => {
+    if (!shown) {
+      return;
+    }
+    const place = () => placeTip(icon.current, tip.current);
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [shown, problem?.message]);
+
+  const partner: ValidatedControlProps = {
+    ...(flagged ? { "aria-invalid": "true", "aria-describedby": tipId } : {}),
+    onFocus: () => setFocused(true),
+    onBlur: () => setFocused(false)
+  };
+  const mark =
+    flagged && problem ? (
+      <>
+        <span
+          ref={icon}
+          class="vfield-icon material-symbol-icon"
+          aria-hidden="true"
+          onPointerEnter={(event) => {
+            if (event.pointerType === "mouse") {
+              setHover(true);
+            }
+          }}
+          onPointerLeave={() => setHover(false)}
+          onPointerDown={(event) => {
+            if (event.pointerType !== "mouse") {
+              event.preventDefault();
+              control.current?.focus();
+            }
+          }}
+        >
+          error
+        </span>
+        <span ref={tip} id={tipId} role="tooltip" class={shown ? "vfield-tip is-shown" : "vfield-tip"}>
+          {problem.message}
+        </span>
+      </>
+    ) : null;
+  return { control: { ...partner, ref: control }, partner, mark };
+}
+
+/** A text field with the pattern's icon inside it on the right. */
+export function ValidatedField<F extends string = string>({
+  class: extraClass,
+  children,
+  ...options
+}: FieldValidationOptions<F, HTMLInputElement> & {
+  class?: string;
+  children: (control: FieldValidation<HTMLInputElement>["control"]) => ComponentChildren;
+}) {
+  const field = useFieldValidation<HTMLInputElement, F>(options);
+  return (
+    <span class={extraClass ? `vfield ${extraClass}` : "vfield"}>
+      {children(field.control)}
+      {field.mark}
+    </span>
+  );
+}
+
+export interface HeldButtonProps {
+  id: string;
+  class?: string;
+  /** Whether a field that is not valid holds the action. */
+  held: boolean;
+  /** Whether one of the fields the action uses is flagged, which shows the red icon while it is held. */
+  flagged: boolean;
+  /** Why it is held: its title and accessible description. */
+  reason: string | null;
+  onClick: () => void;
+  children: ComponentChildren;
+}
+
+/**
+ * An action that uses fields of the pattern. While one holds it, its label dims and it reads as unavailable, and
+ * its click handler moves to that field instead of acting. The red icon shows on its right once a field is flagged.
+ */
+export function HeldButton({ id, class: extraClass, held, flagged, reason, onClick, children }: HeldButtonProps) {
+  const describedId = useId();
+  const showsProblem = held && flagged;
+  const described = held && reason;
+  const classes = ["held-action", extraClass, showsProblem ? "shows-problem" : null].filter(Boolean).join(" ");
+  return (
+    <>
+      <button
+        id={id}
+        type="button"
+        class={classes}
+        aria-disabled={held ? "true" : undefined}
+        aria-describedby={described ? describedId : undefined}
+        title={described ? reason : undefined}
+        onClick={onClick}
+      >
+        <span class="btn-label">{children}</span>
+        {showsProblem ? (
+          <span class="btn-problem material-symbol-icon" aria-hidden="true">
+            error
+          </span>
+        ) : null}
+      </button>
+      {described ? (
+        <span id={describedId} class="visually-hidden">
+          {reason}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+/** The red icon after a section's name while a field in it is flagged, so the field can be found from another section. */
+export function SectionProblemMark() {
+  return (
+    <span class="section-problem material-symbol-icon" aria-hidden="true">
+      error
+    </span>
+  );
+}
+
+/** A section tab's title while a field in it is flagged. */
+export const SECTION_PROBLEM_TITLE = "A field here is not valid";

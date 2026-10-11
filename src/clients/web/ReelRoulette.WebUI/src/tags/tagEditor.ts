@@ -14,6 +14,7 @@ import type { Player } from "../playback/player";
 import type { AppApi } from "../state/appApi";
 import type { AppStore, StorageLike } from "../state/appStore";
 import type { ServerConnection } from "../state/serverConnection";
+import { createFieldReveal, isFlagged, type FieldProblem, type FieldReveal } from "../validation/fieldValidation";
 import {
   AUTO_TAG_SCANNING,
   autoTagApplyPending,
@@ -34,6 +35,7 @@ import {
   autoTagAppliedFromResponse,
   categoryOptions,
   createPendingTagEdits,
+  editTagNameProblem,
   hasPendingTagEdits,
   initialCategoryOrder,
   moveCategoryInOrder,
@@ -63,7 +65,12 @@ export interface TagEditDraft {
   oldCategoryId: string;
   name: string;
   categoryId: string;
+  /** The user has typed in the name since the dialog opened, so an empty one is flagged. */
+  nameTyped: boolean;
 }
+
+/** The Edit Tag dialog's field that can hold a value that is not valid. */
+export type TagEditField = "editTagName";
 
 interface AutoTagState {
   scanFull: boolean;
@@ -106,6 +113,9 @@ export interface TagEditorView extends TagEditorState {
   /** Save is enabled and marked while there is something to save. */
   savePending: boolean;
   results: AutoTagResults;
+  /** The Edit Tag name's problem, which holds its Save, or null. */
+  editNameProblem: FieldProblem | null;
+  editNameFlagged: boolean;
 }
 
 /**
@@ -118,6 +128,8 @@ export interface TagEditor {
   readonly tab: ReadonlySignal<TagEditorTab | null>;
   /** Null before the editor first opens. */
   readonly view: ReadonlySignal<TagEditorView | null>;
+  /** Asks the Edit Tag name to take focus, when its held Save moves to it. */
+  readonly reveal: FieldReveal<TagEditField>;
 
   /** Pauses playback, shows Edit Tags, and loads the tags of the item playing. */
   open(): void;
@@ -148,6 +160,7 @@ export interface TagEditor {
   editTag(tagName: string): void;
   typeEditName(text: string): void;
   chooseEditCategory(categoryId: string): void;
+  /** Held while the name is empty: it moves to the name instead. */
   saveEdit(): void;
   cancelEdit(): void;
 
@@ -199,6 +212,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
   const isOpen = signal(false);
   const tab = signal<TagEditorTab | null>(null);
   const view = signal<TagEditorView | null>(null);
+  const reveal = createFieldReveal<TagEditField>();
   let state: TagEditorState = {
     model: null,
     itemIds: [],
@@ -248,13 +262,16 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       next = { ...next, order: next.order.length > 0 ? display.order : next.order, newTagCategoryId };
     }
     state = next;
+    const editNameProblem = next.edit ? editTagNameProblem(next.edit.name) : null;
     view.value = {
       ...next,
       categories,
       categoryOptions: options,
       noModel: !next.model && manualPending(next),
       savePending: hasChanges(next),
-      results: autoTagResults(next.autoTag.rows, next.autoTag.viewAll, next.autoTag.hasRun)
+      results: autoTagResults(next.autoTag.rows, next.autoTag.viewAll, next.autoTag.hasRun),
+      editNameProblem,
+      editNameFlagged: isFlagged(editNameProblem, next.edit?.nameTyped ?? false)
     };
   }
 
@@ -481,6 +498,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     isOpen,
     tab,
     view,
+    reveal,
 
     open() {
       const current = store.current.peek();
@@ -678,7 +696,8 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
           name: tag.name,
           categoryId: current.categoryOptions.some((option) => option.id === categoryId)
             ? categoryId
-            : (current.categoryOptions[0]?.id ?? "")
+            : (current.categoryOptions[0]?.id ?? ""),
+          nameTyped: false
         },
         editing: true
       });
@@ -686,7 +705,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
 
     typeEditName(text) {
       if (state.edit && state.editing) {
-        update({ edit: { ...state.edit, name: text } });
+        update({ edit: { ...state.edit, name: text, nameTyped: true } });
       }
     },
 
@@ -701,11 +720,11 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       if (!edit || !state.editing) {
         return;
       }
-      const name = edit.name.trim();
-      if (!name) {
-        store.setStatus("Tag name is required.");
+      if (editTagNameProblem(edit.name)) {
+        reveal.reveal("editTagName");
         return;
       }
+      const name = edit.name.trim();
       const categoryId = edit.categoryId || UNCATEGORIZED_CATEGORY_ID;
       const nameChanged = normalizeTagKey(name) !== normalizeTagKey(edit.oldName);
       const categoryChanged = categoryId !== edit.oldCategoryId;

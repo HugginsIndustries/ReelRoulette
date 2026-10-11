@@ -133,71 +133,7 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 ## Active Milestones
 
-Last milestone completed: M12e
-
-### M12f1 - WebUI Field Validation Pattern
-
-- **Status**: ⏳ Planned
-- **Goal**: A field that holds a value that is not valid says so as it is typed, through one reusable pattern for the whole WebUI, and typed durations are parsed strictly.
-- **Depends on**: WebUI Preact Migration, WebUI Design Mockup, and Favorite and Blacklist Filter Modes, whose Favorites and Blacklisted controls the pattern checks as a pair.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Scope
-
-- The work lands inside today's overlays, the filter dialog and the tag editor.
-- One reusable field validation pattern for the whole WebUI, used anywhere a field can hold a value that is not valid.
-- In this milestone the filter dialog's minimum and maximum durations and new preset name, and the Edit Tag dialog's tag name, use it.
-- Field problems use this pattern, never a dialog or the status line.
-- A value that is not valid is flagged as it is typed, by a red validation icon inside the field on its right side, in the WebUI's existing Material Symbols icon style.
-- A tooltip says what the field expects, shown while the pointer is on the icon, after a tap on it, or while the field has focus. There is never a separate message line.
-- A required field that is still empty is flagged only once the user has typed in it, but the action that uses it can't proceed meanwhile.
-- The tooltips in this milestone: "Use MM:SS, HH:MM:SS, or seconds." for a duration; "Enter a preset name." or "Enter a tag name." for an empty name; and "Use a name no other preset has." for a taken preset name.
-- The field is marked invalid for screen readers (`aria-invalid`), and the tooltip's text is its accessible description.
-- Any action that would use a field while it is not valid, such as Apply, can't proceed until the field is corrected, whether or not anything else changed.
-- A held action's label dims and the red icon shows on its right, and pressing it does nothing but move to the first field that holds it, switching the filter dialog's section when needed.
-- A filter dialog section with a flagged field shows the red icon after its name, so the field can be found from another section.
-- Typed durations are parsed strictly: whole MM:SS or HH:MM:SS with minutes and seconds under 60, or a number of seconds.
-- Durations in presets and filters from the server, which can carry fractional seconds from the desktop, such as "00:01:30.5000000", are read as today.
-- The pattern replaces today's duration check at Apply: Apply no longer writes either invalid-duration message to the status line or to `last.log`.
-- The filter dialog's new preset name is flagged as it is typed, and Add Preset can't proceed while it is empty or taken. The pattern replaces both of Add Preset's status line messages.
-- The Edit Tag dialog's emptied tag name is flagged, and Save can't proceed while it is empty. The pattern replaces "Tag name is required.".
-- The filter dialog's Favorites and Blacklisted controls use the pattern as a pair: Favorites only with Blacklisted only is flagged as it is chosen, since the app doesn't allow an item to be both favorite and blacklisted, and Apply, Add Preset, and Update Preset can't proceed until either changes. Every other pairing stays allowed, including Favorites only with Blacklisted excluded. The server doesn't reject the pairing, and the desktop dialog refuses it too.
-- The mockup shows the pairing flagged, on its field validation page (`build/validation.src.html`) and in the Filter tab (`build/layout.src.html`). Where its icon sits and its tooltip's text are settled in that mockup update.
-- The filter dialog's Refresh keeps unsaved preset changes: while the preset list has changes Apply hasn't saved, Refresh reloads sources and tags but keeps the edited list and Apply's star, and Apply then saves it.
-
-#### Traps
-
-- `parseDurationInputToSeconds` in `src/filter/filterStateModel.ts` uses `parseInt` and `parseFloat`, so it reads "1:7x" as 1:07 and "12abc" as 12 seconds.
-- The same function reads durations in presets and filters from the server (`readDurationFromUnknown`), which can carry fractional seconds from the desktop, such as "00:01:30.5000000".
-- Apply checks the durations only when it runs (`generalDraftDurationError` in `src/filter/filterDialogModel.ts`, called from `apply` in `src/filter/filterDialog.ts`).
-- A duration that is not valid stops Apply, switches to General, and writes "Minimum duration is invalid. Use MM:SS, HH:MM:SS, or seconds." or "Maximum duration is invalid. Use MM:SS, HH:MM:SS, or seconds." to the status line through `store.setStatus`, which also relays it to `last.log`.
-- The open dialog covers the status line (`position: fixed; inset: 0`), so a status line message shows only after the dialog closes.
-- Leaving a field with a duration that is not valid returns Apply to its unmarked state, since the working filter counts it as no duration (measured).
-- Add Preset writes "Enter a preset name." for an empty name and "A preset with that name already exists." for a saved preset's name, ignoring case, to the status line (`addPreset` in `src/filter/filterDialog.ts`), where the open dialog covers them.
-- The Edit Tag dialog's Save writes "Tag name is required." to the status line for an empty name (`saveEdit` in `src/tags/tagEditor.ts`), where the tag editor covers it.
-- Refresh replaces the preset list with the server's but leaves Apply's star (`refresh` in `src/filter/filterDialog.ts` keeps `presetsChanged`), so a preset added, updated, renamed, moved, or deleted since the last Apply disappears while Apply still posts the server's own list. The filter dialog did the same before it moved to Preact.
-
-#### Acceptance
-
-- A duration that is not valid is flagged as it is typed by a red validation icon inside the field on its right side, with a tooltip saying what the field expects, and no separate message line shows. The tooltip shows while the pointer is on the icon, after a tap on it, or while the field has focus. Shown by WebUI tests of the field validation pattern on both durations as a value is typed and corrected.
-- A field flagged as not valid has `aria-invalid` set and the tooltip's text as its accessible description, and loses both once corrected, in WebUI tests of the pattern on both durations, the new preset name, and the Edit Tag name.
-- An empty required field the user hasn't typed in is not flagged, in WebUI tests of the pattern.
-- While a duration is not valid, Apply can't proceed, including when nothing else changed, and Apply never writes an invalid-duration message to the status line or `last.log`, in WebUI tests of the held action with and without other changes and of the status line and `last.log`.
-- A held action shows the red icon on the right of its label. Pressing a held Apply moves to the field that holds it, switching to General when needed, and applies nothing, in WebUI tests of the held action moving to the field.
-- A typed duration such as "1:7x", "12abc", or "1:75" is flagged, and a preset whose duration the server sends with fractional seconds, such as "00:01:30.5000000", loads as it does today, in WebUI tests of strict typed durations and of a server preset with fractional seconds.
-- A new preset name that is emptied after typing, or that matches a saved preset's name ignoring case, is flagged with the field validation pattern; Add Preset can't proceed while the name is empty or taken; and neither "Enter a preset name." nor "A preset with that name already exists." shows on the status line. Shown by WebUI tests of the pattern on the new preset name.
-- An Edit Tag dialog tag name that is emptied is flagged with the field validation pattern, its Save can't proceed while the name is empty, and "Tag name is required." no longer shows, in WebUI tests of the pattern on the Edit Tag name.
-- Favorites only with Blacklisted only is flagged with the field validation pattern, and Apply, Add Preset, and Update Preset can't proceed until either changes, while every other pairing, including Favorites only with Blacklisted excluded, is not flagged. Shown by WebUI tests of the pattern on the Favorites and Blacklisted controls.
-- After an unsaved preset change in the filter dialog, Refresh keeps the change and Apply's star, and Apply then saves it, in a WebUI test of Refresh after an unsaved preset change.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and one quick spot check.
-
-#### Not included
-
-- Turning the filter dialog and the tag editor into the Filter and Tags tabs, which is WebUI Responsive Layout and Panels.
-- Fields that later milestones add: each uses the pattern for its own fields that can hold a value that is not valid, starting with WebUI In-App Dialogs.
-- The dialog side of the WebUI's message rule, which is WebUI In-App Dialogs.
-- The status line side of the WebUI's message rule, which is WebUI Status Line Overhaul.
+Last milestone completed: M12f1
 
 ### M12f2 - WebUI In-App Dialogs
 

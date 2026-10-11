@@ -916,9 +916,17 @@ describe("Edit Tags", () => {
     expect(savePending()).toBe(false);
 
     await click(chipButton("Beach", "Edit tag"));
+    const statusBefore = statusLine();
     await typeInto(modalName(), "   ");
+    expect(modalName().getAttribute("aria-invalid")).toBe("true");
+    expect(document.getElementById(modalName().getAttribute("aria-describedby")!)?.textContent).toBe("Enter a tag name.");
+    expect(modalButton("Save").getAttribute("aria-disabled")).toBe("true");
+    expect(modalButton("Save").querySelector(".btn-problem")).not.toBeNull();
+    modalName().blur();
     await click(modalButton("Save"));
-    expect(statusLine()).toBe("Tag name is required.");
+    expect(document.activeElement).toBe(modalName());
+    expect(statusLine()).toBe(statusBefore);
+    expect(statusLine()).not.toBe("Tag name is required.");
     expect(modalOpen()).toBe(true);
 
     await typeInto(modalName(), " Shore ");

@@ -1,7 +1,13 @@
+import type { JSX, RefObject } from "preact";
 import type { FilterDialogTab, FilterDialogView } from "../filter/filterDialog";
 import {
+  FILTER_ACTION_FIELDS,
+  FILTER_FIELD_SECTION,
+  filterHeldReason,
   filterTagCategories,
   sourceLabel,
+  type FilterAction,
+  type FilterField,
   type FilterTagCategory,
   type FilterTagChip,
   type FlagFilterChoice,
@@ -9,6 +15,14 @@ import {
 } from "../filter/filterDialogModel";
 import { AUDIO_FILTER, MEDIA_TYPE_FILTER, TAG_MATCH_MODE } from "../filter/filterStateModel";
 import { useApp } from "./appContext";
+import {
+  HeldButton,
+  SECTION_PROBLEM_TITLE,
+  SectionProblemMark,
+  ValidatedField,
+  useFieldValidation,
+  type ValidatedControlProps
+} from "./FieldValidation";
 
 // The `data-*` attributes keep the markup as it was before the dialog moved to a component; nothing reads them.
 
@@ -57,6 +71,22 @@ const AUDIO_FILTERS = [
   { value: AUDIO_FILTER.WithoutAudioOnly, label: "Only videos without audio" }
 ] as const;
 
+/** Whether a field in the section is flagged, which marks its tab. */
+function sectionFlagged(view: FilterDialogView | null, section: FilterDialogTab): boolean {
+  const fields = Object.keys(FILTER_FIELD_SECTION) as FilterField[];
+  return !!view && fields.some((field) => FILTER_FIELD_SECTION[field] === section && view.flagged[field]);
+}
+
+/** A held action's state for its button. */
+function heldAction(view: FilterDialogView | null, action: FilterAction) {
+  const field = view?.held[action] ?? null;
+  return {
+    held: field !== null,
+    flagged: !!view && FILTER_ACTION_FIELDS[action].some((each) => view.flagged[each]),
+    reason: view && field ? filterHeldReason(action, field, view.problems[field]!) : null
+  };
+}
+
 /** Before the dialog first opens, the panels keep the page's starting markup, where only General has no style. */
 function panelStyle(shown: FilterDialogTab | null, panel: (typeof TABS)[number]) {
   if (shown === null) {
@@ -85,9 +115,15 @@ export function FilterDialog() {
         </div>
       </div>
       <div class="filter-dialog-tabstrip" role="tablist">
-        {TABS.map(({ tab, label }) => (
-          <button key={tab} type="button" class={tab === active ? "filter-tab is-active" : "filter-tab"} role="tab" data-filter-tab={tab} aria-selected={tab === active ? "true" : "false"} onClick={() => filterDialog.showTab(tab)}>{label}</button>
-        ))}
+        {TABS.map(({ tab, label }) => {
+          const problem = sectionFlagged(view, tab);
+          return (
+            <button key={tab} type="button" class={tab === active ? "filter-tab is-active" : "filter-tab"} role="tab" data-filter-tab={tab} aria-selected={tab === active ? "true" : "false"} title={problem ? SECTION_PROBLEM_TITLE : undefined} onClick={() => filterDialog.showTab(tab)}>
+              {label}
+              {problem ? <SectionProblemMark /> : null}
+            </button>
+          );
+        })}
       </div>
       <div class="filter-dialog-body themed-scrollbar">
         <div id="filter-panel-general" class="filter-panel" style={panelStyle(shown, general!)}>{view ? <GeneralPanel view={view} /> : null}</div>
@@ -97,7 +133,7 @@ export function FilterDialog() {
       <div class="filter-dialog-footer">
         <button id="filter-clear-all-btn" type="button" onClick={() => filterDialog.clearAll()}>Clear all filters</button>
         <button id="filter-cancel-btn" type="button" onClick={() => filterDialog.close()}>Cancel</button>
-        <button id="filter-apply-btn" type="button" class={view?.pending ? "has-pending" : undefined} onClick={() => void filterDialog.apply()}>{view?.pending ? "Apply*" : "Apply"}</button>
+        <HeldButton id="filter-apply-btn" class={view?.pending ? "has-pending" : undefined} {...heldAction(view, "apply")} onClick={() => void filterDialog.apply()}>{view?.pending ? "Apply*" : "Apply"}</HeldButton>
       </div>
     </div>
   );
@@ -111,9 +147,7 @@ function GeneralPanel({ view }: { view: FilterDialogView }) {
       <div class="filter-section">
         <h3>Basic Filters</h3>
         <div class="filter-stack">
-          {FLAG_FILTERS.map((flag) => (
-            <FlagFilterRow key={flag.id} flag={flag} draft={draft} />
-          ))}
+          <FlagFilterRows view={view} />
           {BASIC_FILTERS.map(({ id, field, label }) => (
             <label key={id}><input type="checkbox" id={id} checked={draft[field]} onChange={(event) => filterDialog.changeGeneral({ [field]: event.currentTarget.checked })} /> {label}</label>
           ))}
@@ -151,66 +185,116 @@ function GeneralPanel({ view }: { view: FilterDialogView }) {
       <div class="filter-section">
         <h3>Duration Filter</h3>
         <div class="filter-stack">
-          <DurationRow which="min" draft={draft} />
-          <DurationRow which="max" draft={draft} />
+          <DurationRow which="min" view={view} />
+          <DurationRow which="max" view={view} />
         </div>
       </div>
     </>
   );
 }
 
-/** A flag filter's checkbox and dropdown. The dropdown keeps its choice while the checkbox is off. */
-function FlagFilterRow({ flag, draft }: { flag: FlagFilter; draft: GeneralDraft }) {
+/**
+ * The Favorites and Blacklisted filters, checked as a pair: Favorites only with Blacklisted only matches nothing.
+ * Both dropdowns are marked and described while it is flagged, and its icon sits just after the Blacklisted one.
+ */
+function FlagFilterRows({ view }: { view: FilterDialogView }) {
+  const { filterDialog } = useApp();
+  const pair = useFieldValidation<HTMLSelectElement, FilterField>({
+    problem: view.problems.flagModes,
+    flagged: view.flagged.flagModes,
+    reveal: { from: filterDialog.reveal, field: "flagModes" }
+  });
+  const [favorites, blacklisted] = FLAG_FILTERS;
+  return (
+    <>
+      <FlagFilterRow flag={favorites!} draft={view.general} validation={pair.partner} />
+      <FlagFilterRow flag={blacklisted!} draft={view.general} validation={pair.control} mark={pair.mark} />
+    </>
+  );
+}
+
+/**
+ * A flag filter's checkbox and dropdown. The dropdown keeps its choice while the checkbox is off. The row given a
+ * `mark`, even a null one, keeps the pair's wrapper around its dropdown, so the icon can sit after it.
+ */
+function FlagFilterRow({
+  flag,
+  draft,
+  validation,
+  mark
+}: {
+  flag: FlagFilter;
+  draft: GeneralDraft;
+  validation: ValidatedControlProps & { ref?: RefObject<HTMLSelectElement | null> };
+  mark?: JSX.Element | null;
+}) {
   const { filterDialog } = useApp();
   const on = draft[flag.on];
+  const select = (
+    <select
+      {...validation}
+      class="mode-select"
+      id={`${flag.id}-mode`}
+      aria-label={`${flag.label} filter`}
+      value={draft[flag.choice]}
+      disabled={!on}
+      onChange={(event) => {
+        const value = event.currentTarget.value;
+        if (isFlagChoice(value)) {
+          filterDialog.changeGeneral({ [flag.choice]: value });
+        }
+      }}
+    >
+      {FLAG_CHOICES.map((choice) => (
+        <option key={choice} value={choice}>{choice}</option>
+      ))}
+    </select>
+  );
   return (
     <div class="mode-row">
       <label><input type="checkbox" id={flag.id} checked={on} onChange={(event) => filterDialog.changeGeneral({ [flag.on]: event.currentTarget.checked })} /> {flag.label}</label>
-      <select
-        class="mode-select"
-        id={`${flag.id}-mode`}
-        aria-label={`${flag.label} filter`}
-        value={draft[flag.choice]}
-        disabled={!on}
-        onChange={(event) => {
-          const value = event.currentTarget.value;
-          if (isFlagChoice(value)) {
-            filterDialog.changeGeneral({ [flag.choice]: value });
-          }
-        }}
-      >
-        {FLAG_CHOICES.map((choice) => (
-          <option key={choice} value={choice}>{choice}</option>
-        ))}
-      </select>
+      {mark === undefined ? (
+        select
+      ) : (
+        <span class="vfield vfield-after">
+          {select}
+          {mark}
+        </span>
+      )}
     </div>
   );
 }
 
 /**
- * A duration field and its No minimum or No maximum box. The field's text follows each keystroke, and the working
- * filter takes it when the field changes, so Apply's star appears when the user leaves the field.
+ * A duration field, where empty means no limit, as its placeholder says. The field's text follows each keystroke,
+ * which flags a duration that is not valid as it is typed, and the working filter takes it when the field changes,
+ * so Apply's star appears when the user leaves the field.
  */
-function DurationRow({ which, draft }: { which: "min" | "max"; draft: GeneralDraft }) {
+function DurationRow({ which, view }: { which: "min" | "max"; view: FilterDialogView }) {
   const { filterDialog } = useApp();
+  const draft = view.general;
   const min = which === "min";
+  const field = min ? "minDuration" : "maxDuration";
   const text = min ? draft.minText : draft.maxText;
-  const none = min ? draft.noMin : draft.noMax;
   return (
     <div class="filter-row">
       <span style="min-width:3rem">{min ? "Min" : "Max"}</span>
-      <input
-        type="text"
-        id={min ? "filter-min-dur-text" : "filter-max-dur-text"}
-        placeholder="HH:MM:SS or MM:SS"
-        value={text}
-        disabled={none}
-        onInput={(event) => filterDialog.typeDuration(which, event.currentTarget.value)}
-        onChange={(event) =>
-          filterDialog.changeGeneral(min ? { minText: event.currentTarget.value } : { maxText: event.currentTarget.value })
-        }
-      />
-      <label><input type="checkbox" id={min ? "filter-no-min-dur" : "filter-no-max-dur"} checked={none} onChange={(event) => filterDialog.changeGeneral(min ? { noMin: event.currentTarget.checked } : { noMax: event.currentTarget.checked })} /> {min ? "No minimum" : "No maximum"}</label>
+      <ValidatedField class="duration-field" problem={view.problems[field]} flagged={view.flagged[field]} reveal={{ from: filterDialog.reveal, field }}>
+        {(control) => (
+          <input
+            {...control}
+            type="text"
+            id={min ? "filter-min-dur-text" : "filter-max-dur-text"}
+            aria-label={min ? "Minimum duration" : "Maximum duration"}
+            placeholder={min ? "No minimum" : "No maximum"}
+            value={text}
+            onInput={(event) => filterDialog.typeDuration(which, event.currentTarget.value)}
+            onChange={(event) =>
+              filterDialog.changeGeneral(min ? { minText: event.currentTarget.value } : { maxText: event.currentTarget.value })
+            }
+          />
+        )}
+      </ValidatedField>
     </div>
   );
 }
@@ -300,14 +384,18 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
               <option key={name} value={name}>{name}</option>
             ))}
           </select>
-          <button type="button" id="filter-update-preset-btn" onClick={() => filterDialog.updatePreset()}>Update Preset</button>
+          <HeldButton id="filter-update-preset-btn" {...heldAction(view, "updatePreset")} onClick={() => filterDialog.updatePreset()}>Update Preset</HeldButton>
         </div>
       </div>
       <div class="filter-section">
         <h3>Create New Preset From Current Filter</h3>
         <div class="filter-row">
-          <input type="text" id="filter-new-preset-name" placeholder="Enter preset name" value={view.newPresetName} onInput={(event) => filterDialog.typeNewPresetName(event.currentTarget.value)} />
-          <button type="button" id="filter-add-preset-btn" onClick={() => filterDialog.addPreset()}>Add Preset</button>
+          <ValidatedField problem={view.problems.newPresetName} flagged={view.flagged.newPresetName} reveal={{ from: filterDialog.reveal, field: "newPresetName" }}>
+            {(control) => (
+              <input {...control} type="text" id="filter-new-preset-name" aria-label="New preset name" placeholder="Enter preset name" value={view.newPresetName} onInput={(event) => filterDialog.typeNewPresetName(event.currentTarget.value)} />
+            )}
+          </ValidatedField>
+          <HeldButton id="filter-add-preset-btn" {...heldAction(view, "addPreset")} onClick={() => filterDialog.addPreset()}>Add Preset</HeldButton>
         </div>
       </div>
       <div class="filter-section filter-section-manage">
