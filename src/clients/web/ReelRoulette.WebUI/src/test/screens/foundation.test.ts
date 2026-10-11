@@ -409,20 +409,29 @@ describe("pairing", () => {
     expect(page.streams()).toHaveLength(2);
   });
 
-  it("asks for a token and reports a failed pairing", async () => {
+  it("disables Pair while the token is empty, without flagging it, and reports a failed pairing in a notice", async () => {
     const server = new FakeServer();
     server.on("GET", "/api/version", () => status(401));
     server.on("POST", "/api/pair", () => status(403));
     mountPage({ server });
     await screen.findByText("Ready (API offline)");
+    const pairButton = screen.getByRole("button", { name: "Pair" }) as HTMLButtonElement;
+    const token = screen.getByLabelText("Pairing token");
 
-    fireEvent.click(screen.getByRole("button", { name: "Pair" }));
-    await screen.findByText("Pair token required.");
+    expect(pairButton.disabled).toBe(true);
+    fireEvent.input(token, { target: { value: "wrong" } });
+    expect(pairButton.disabled).toBe(false);
+    fireEvent.input(token, { target: { value: "   " } });
+    expect(pairButton.disabled).toBe(true);
+    expect(token.hasAttribute("aria-invalid")).toBe(false);
 
-    fireEvent.input(screen.getByLabelText("Pairing token"), { target: { value: "wrong" } });
-    fireEvent.click(screen.getByRole("button", { name: "Pair" }));
-    await screen.findByText("Pairing failed.");
-    expect((screen.getByRole("button", { name: "Pair" }).closest(".pair-section") as HTMLElement).style.display).toBe("flex");
+    fireEvent.input(token, { target: { value: "wrong" } });
+    fireEvent.click(pairButton);
+    const notice = await screen.findByText("Pairing failed.");
+    expect(notice.closest("dialog.app-dialog")).not.toBeNull();
+    expect(document.getElementById("status")!.textContent).toBe("Ready (API offline)");
+    await waitFor(() => expect(server.logLines()).toContain("status=Pairing failed. hasCurrent=false attempt=0"));
+    expect((pairButton.closest(".pair-section") as HTMLElement).style.display).toBe("flex");
   });
 
   it("pairs on startup with the token from the runtime config", async () => {
@@ -460,8 +469,12 @@ describe("server compatibility", () => {
     await screen.findByText("Server missing required capabilities: api.presets.match.");
     expect(page.stream().closed).toBe(true);
 
+    fireEvent.input(screen.getByLabelText("Pairing token"), { target: { value: "token-1" } });
     fireEvent.click(screen.getByRole("button", { name: "Pair", hidden: true }));
-    await screen.findByText("Pairing blocked by server compatibility check.");
+    const notice = await screen.findByText("Pairing blocked by server compatibility check.");
+    expect(notice.closest("dialog.app-dialog")).not.toBeNull();
+    expect(server.requests("POST", "/api/pair")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "OK", hidden: true }));
 
     await startRandomPick();
     await screen.findByText("Cannot play: server compatibility check failed.");

@@ -1,3 +1,4 @@
+import { effect } from "@preact/signals";
 import { useLayoutEffect } from "preact/hooks";
 import type { AppServices } from "../state/appServices";
 import { AppContext } from "./appContext";
@@ -11,6 +12,18 @@ export function App({ services }: { services: AppServices }) {
   useLayoutEffect(() => {
     services.connection.start();
     return () => services.connection.stop();
+  }, []);
+
+  // On a phone on its side the page shows only the player: the stylesheet hides the header and the status line by
+  // the body's class.
+  useLayoutEffect(() => {
+    const stop = effect(() => {
+      document.body.classList.toggle("short-screen", services.panel.shortScreen.value);
+    });
+    return () => {
+      stop();
+      document.body.classList.remove("short-screen");
+    };
   }, []);
 
   const relay = services.api.relayLog;

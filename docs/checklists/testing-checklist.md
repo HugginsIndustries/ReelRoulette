@@ -79,6 +79,9 @@ These need a person, real devices, or the Windows VM.
 - [ ] In the WebUI's Filter tab, on a desktop browser and a phone in both themes, a flagged duration's tooltip shows beside its red icon and inside the screen while the pointer is on the icon, after a tap on it, and while the field has focus.
 - [ ] Every in-app dialog matches the WebUI's theme and works in an installed web app on desktop and on mobile, including in fullscreen.
 - [ ] In the installed app on Android and iOS, dragging a tag category and a preset by its handle reorders them, and a drag that starts elsewhere on a row scrolls.
+- [ ] On a phone, a tablet, and a desktop browser, and as an installed app on Android and iOS, the panel opens beside the player or as an overlay by width, and a phone on its side fills the screen with the player.
+- [ ] As an installed app on an iPhone and an Android phone, the header (upright) and the panel and the player's controls (upright, on its side, and on Android in fullscreen) stay clear of the notch, the status bar, and the home indicator; with the phone on its side, stopping the server shows the reconnecting indicator on the player.
+- [ ] As an installed app on an iPad, launched in landscape and in portrait, the page and pseudo-fullscreen reach the bottom of the screen, and still do after turning it.
 
 ## Release Flow
 

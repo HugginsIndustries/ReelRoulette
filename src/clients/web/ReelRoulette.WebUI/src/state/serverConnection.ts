@@ -3,6 +3,7 @@ import {
   coerceRefreshSnapshot,
   newRefreshCompletionRunId
 } from "../events/refreshStatusProjection";
+import type { Dialogs } from "../dialogs/dialogs";
 import { createSseClient, type EventSourceLike, type SseClient } from "../events/sseClient";
 import type { AppApi } from "./appApi";
 import { PRESET_MENU_BLOCKED, PRESET_MENU_LOAD_FAILED, type AppStore } from "./appStore";
@@ -27,7 +28,10 @@ export interface ServerConnection {
   /** Closes the event stream and removes the reconnect listeners. */
   stop(): void;
   loadPresets(): Promise<void>;
-  /** Pairs with a token, then checks the version, reloads presets, and reconnects the event stream. */
+  /**
+   * Pairs with a token, then checks the version, reloads presets, and reconnects the event stream. A pairing that fails,
+   * or that the server's compatibility check blocks, shows in a notice.
+   */
   pair(token: string): Promise<void>;
   on<K extends keyof ServerConnectionEvents>(event: K, listener: ServerConnectionEvents[K]): void;
 }
@@ -37,6 +41,8 @@ export interface ServerConnectionOptions {
   pairToken?: string;
   store: AppStore;
   api: AppApi;
+  /** The in-app dialogs, for a pairing that fails or that the server's compatibility check blocks. */
+  dialogs: Pick<Dialogs, "notice">;
   /** Defaults to the global `fetch`, looked up on each request. */
   fetch?: typeof fetch;
   /** Defaults to the browser's `EventSource`. */
@@ -46,7 +52,7 @@ export interface ServerConnectionOptions {
 }
 
 export function createServerConnection(options: ServerConnectionOptions): ServerConnection {
-  const { store, api } = options;
+  const { store, api, dialogs } = options;
   const send: typeof fetch = options.fetch ?? ((input, init) => fetch(input, init));
   const pageWindow = options.window ?? (typeof window === "undefined" ? undefined : window);
   const listeners: { [K in keyof ServerConnectionEvents]: ServerConnectionEvents[K][] } = {
@@ -70,6 +76,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     store.compatibilityMessage.value = message;
     store.compatibilityBlocked.value = true;
     eventStream?.stop();
+    store.reconnecting.value = false;
     store.setStatus(message);
   }
 
@@ -115,9 +122,11 @@ export function createServerConnection(options: ServerConnectionOptions): Server
       identity: store.identity,
       createEventSource: options.createEventSource,
       onOpen() {
+        store.reconnecting.value = false;
         store.setStatus("SSE connected");
       },
       onError() {
+        store.reconnecting.value = true;
         store.setStatus("SSE reconnecting...");
       },
       handlers: {
@@ -163,13 +172,13 @@ export function createServerConnection(options: ServerConnectionOptions): Server
 
   async function pair(token: string): Promise<void> {
     if (store.compatibilityBlocked.peek()) {
-      store.setStatus("Pairing blocked by server compatibility check.");
+      void dialogs.notice("Pairing blocked by server compatibility check.");
       return;
     }
 
+    // Pair is disabled while the token is empty, so this sends nothing and says nothing.
     const trimmed = String(token || "").trim();
     if (!trimmed) {
-      store.setStatus("Pair token required.");
       return;
     }
     const response = await send(api.url("/api/pair"), {
@@ -179,7 +188,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
       body: JSON.stringify({ token: trimmed })
     });
     if (!response.ok) {
-      store.setStatus("Pairing failed.");
+      void dialogs.notice("Pairing failed.");
       return;
     }
     store.pairingRequired.value = false;
@@ -224,6 +233,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     stop() {
       removeReconnectListeners();
       eventStream?.stop();
+      store.reconnecting.value = false;
     },
     loadPresets,
     pair,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createPanelHost,
+  isShortScreen,
   panelModeFor,
   type PanelTab,
   type PanelTabHooks
@@ -106,6 +107,23 @@ describe("panel host", () => {
       expect(panelModeFor({ width: () => 900, height: () => 500, coarsePointer: () => true })).toBe("side");
       expect(panelModeFor({ width: () => 900, height: () => 400, coarsePointer: () => false })).toBe("side");
       expect(panelModeFor({ width: () => 1180, height: () => 820, coarsePointer: () => true })).toBe("side");
+    });
+
+    it("is a short screen on a touch screen below 500 px of viewport height, at any width, and not with a mouse", () => {
+      expect(isShortScreen({ height: () => 499, coarsePointer: () => true })).toBe(true);
+      expect(isShortScreen({ height: () => 500, coarsePointer: () => true })).toBe(false);
+      expect(isShortScreen({ height: () => 400, coarsePointer: () => false })).toBe(false);
+
+      const { panel, viewport } = setup({ width: 390, height: 844, coarse: true });
+      expect(panel.shortScreen.value).toBe(false);
+      viewport.set({ width: 844, height: 390 });
+      expect(panel.shortScreen.value).toBe(true);
+      viewport.set({ width: 667, height: 375 });
+      expect(panel.shortScreen.value).toBe(true);
+      viewport.set({ width: 1180, height: 820 });
+      expect(panel.shortScreen.value).toBe(false);
+      viewport.set({ width: 900, height: 400, coarse: false });
+      expect(panel.shortScreen.value).toBe(false);
     });
 
     it("moves an open panel between beside the player and the overlay as the window changes, keeping its tab", async () => {

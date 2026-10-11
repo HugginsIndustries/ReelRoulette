@@ -13,7 +13,10 @@ export const PANEL_DEFAULT_WIDTH = 420;
 export const PLAYER_MIN_WIDTH = 400;
 /** Below this viewport width the panel is the overlay. */
 export const OVERLAY_BELOW_WIDTH = 800;
-/** On a touch screen below this viewport height, as a phone on its side, the panel is the overlay. */
+/**
+ * On a touch screen below this viewport height, as a phone on its side, the panel is the overlay and the page shows
+ * only the player.
+ */
 export const OVERLAY_TOUCH_BELOW_HEIGHT = 500;
 /** The resize handle's width as the stylesheet sets it, for a mouse and for a touch screen, while it can't be measured. */
 const HANDLE_WIDTH = { fine: 12, coarse: 20 };
@@ -83,6 +86,8 @@ export interface PanelHost {
   readonly tab: ReadonlySignal<PanelTab>;
   readonly side: ReadonlySignal<PanelSide>;
   readonly mode: ReadonlySignal<PanelMode>;
+  /** A phone on its side, where the panel is the overlay and the page shows only the player. */
+  readonly shortScreen: ReadonlySignal<boolean>;
   /** The panel's width beside the player: the remembered width, within what the stage allows now. */
   readonly width: ReadonlySignal<number>;
   /** The widest the panel can be while leaving the player its minimum width. */
@@ -137,14 +142,19 @@ function windowViewport(): PanelViewport {
 }
 
 /**
- * Where the panel goes: the overlay below 800 px of viewport width, or on a touch screen below 500 px of viewport
- * height; otherwise beside the player. It goes by the viewport and the pointer, never the user agent.
+ * A touch screen below 500 px of viewport height, as a phone on its side. It goes by the viewport and the pointer,
+ * never the user agent.
+ */
+export function isShortScreen(viewport: Pick<PanelViewport, "height" | "coarsePointer">): boolean {
+  return viewport.coarsePointer() && viewport.height() < OVERLAY_TOUCH_BELOW_HEIGHT;
+}
+
+/**
+ * Where the panel goes: the overlay below 800 px of viewport width, or on a short screen; otherwise beside the player.
+ * It goes by the viewport and the pointer, never the user agent.
  */
 export function panelModeFor(viewport: Pick<PanelViewport, "width" | "height" | "coarsePointer">): PanelMode {
-  if (viewport.width() < OVERLAY_BELOW_WIDTH) {
-    return "overlay";
-  }
-  return viewport.coarsePointer() && viewport.height() < OVERLAY_TOUCH_BELOW_HEIGHT ? "overlay" : "side";
+  return viewport.width() < OVERLAY_BELOW_WIDTH || isShortScreen(viewport) ? "overlay" : "side";
 }
 
 export function createPanelHost(options: PanelHostOptions): PanelHost {
@@ -156,6 +166,7 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
   const side = signal(device.read(SIDE_KEY, "right", isPanelSide));
   const remembered = signal(Math.max(PANEL_MIN_WIDTH, device.read(WIDTH_KEY, PANEL_DEFAULT_WIDTH, isWidth)));
   const mode = signal(panelModeFor(viewport));
+  const shortScreen = signal(isShortScreen(viewport));
   const stageWidth = signal(viewport.width());
   const coarse = signal(viewport.coarsePointer());
   /** The handle's width while it shows, or 0 before it has been measured. */
@@ -183,6 +194,7 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
    */
   function measure(): void {
     mode.value = panelModeFor(viewport);
+    shortScreen.value = isShortScreen(viewport);
     coarse.value = viewport.coarsePointer();
     stageWidth.value = elements?.stage.clientWidth || viewport.width();
     if (elements?.handle.offsetWidth) {
@@ -266,6 +278,7 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
     tab,
     side,
     mode,
+    shortScreen,
     width,
     maxWidth,
 

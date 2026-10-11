@@ -92,6 +92,8 @@ export interface AppStore {
   /** Why the server failed the compatibility check, while it has. */
   readonly compatibilityMessage: Signal<string | null>;
   readonly pairingRequired: Signal<boolean>;
+  /** The event stream was lost and is reconnecting. */
+  readonly reconnecting: Signal<boolean>;
 
   /** `logText` replaces `message` in the server log when `message` shows a file, preset, or server error text. */
   setStatus(message: string, logText?: string): void;
@@ -170,6 +172,7 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     compatibilityBlocked: signal(false),
     compatibilityMessage: signal<string | null>(null),
     pairingRequired: signal(false),
+    reconnecting: signal(false),
 
     setStatus(message, logText = message) {
       store.status.value = message;

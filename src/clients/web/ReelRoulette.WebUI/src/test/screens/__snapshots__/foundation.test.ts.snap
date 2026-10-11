@@ -12,8 +12,9 @@ exports[`page structure > keeps the starting markup 1`] = `
         <span class="pair-section-label-hint">
           "Pairing token"
         <input id="pair-token" placeholder="Enter token" type="text">
-      <button id="pair-btn">
-        "Pair"
+      <button class="held-action" disabled="" id="pair-btn" type="button">
+        <span class="btn-label">
+          "Pair"
     <select aria-label="Choose preset" id="preset-select">
       <option value="">
         "None"
@@ -44,6 +45,10 @@ exports[`page structure > keeps the starting markup 1`] = `
         <img alt="Photo" id="photo" style="display: none">
         <div class="empty-state" id="empty-state">
           "Tap to play, or open the panel to choose a preset or filter."
+        <div class="conn-indicator" hidden="" id="conn-indicator" role="status">
+          <span aria-hidden="true" class="material-symbol-icon">
+            "sync"
+          "Reconnecting…"
         <div class="overlay-controls" id="overlay-controls">
           <button aria-controls="panel" aria-expanded="false" aria-label="Open panel" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" id="panel-btn" title="Open panel">
             <span class="material-symbol-icon">

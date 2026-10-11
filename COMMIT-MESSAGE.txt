@@ -19,6 +19,12 @@ Instructions:
 
 Commit Message:
 
-Chore: Keep showing the user results that also go to the advisor
+M12f4: Fill the screen with the player on a phone on its side in the WebUI
 
-- CLAUDE.md's section on other sessions in the repo now says a plan, report, summary, review result, or question goes to the user in full as usual, with an identical copy to the session named advisor in addition, never instead, and that the user is told when no advisor session exists to receive it.
+- On a touch screen under 500 px tall, a phone on its side, the WebUI hides its header, status line, and diagnostics line, and the player fills the screen without the browser's fullscreen mode. The header still shows while the server asks for pairing.
+- There the panel opens as the overlay, its tab row and the tabs' headings are lower, and the tabs' and the in-app dialogs' text buttons, fields, and selects are 38 px high, as in the mockup, to fit the short screen.
+- The page now draws edge to edge (`viewport-fit=cover`) and keeps clear of the screen's safe-area insets: the page's padding, the overlay panel, the stage in fullscreen and pseudo-fullscreen, and on a phone on its side the player's controls, so the installed app's header no longer sits under the status bar. In the installed app the page and pseudo-fullscreen take the large viewport's height (`100lvh`) in place of `100dvh`, which an iPad reports short by the status bar at launch, leaving a gap at the bottom.
+- On a phone on its side, while the event stream is lost, a "Reconnecting…" indicator shows on the player, except while the server asks for pairing, which refuses the stream until the device pairs.
+- A failed or blocked pairing shows in an in-app notice instead of on the status line, which a phone on its side hides, and Pair, the shared held button, is disabled while the token is empty, in place of "Pair token required.".
+- The milestone is complete and moves to `MILESTONES-COMPLETED.md`, and its release checks join the testing checklist. WebUI Settings Panel now also plans to have the installed app's status bar and `theme-color` follow the theme, and WebUI Status Line Overhaul lists the pairing messages as already moved and notes that a phone on its side hides the messages it will move to the notice.
+- `CHANGELOG.md`, `CONTEXT.md`, and `docs/domain-inventory.md` describe the phone layouts, and the mockup's fullscreen stage and its player controls on a phone on its side keep clear of the insets, with checks that the header hides there and shows while pairing, that the reconnecting indicator hides while pairing, and that the installed app takes the large viewport's height.

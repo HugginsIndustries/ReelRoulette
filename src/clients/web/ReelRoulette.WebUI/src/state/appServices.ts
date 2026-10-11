@@ -53,7 +53,8 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     sseUrl: config.sseUrl,
     pairToken: config.pairToken,
     store,
-    api
+    api,
+    dialogs
   });
   const panel = createPanelHost({ device: createDeviceStore(localStorage) });
   const player = createPlayer({ apiBaseUrl: config.apiBaseUrl, store, api, connection, dialogs });

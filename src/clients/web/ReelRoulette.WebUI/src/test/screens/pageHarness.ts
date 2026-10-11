@@ -310,6 +310,34 @@ export function stubCoarsePointer(): void {
   });
 }
 
+/**
+ * Gives the screen safe-area insets, in pixels, as a phone reports them, through the stylesheet's `--safe-area-*`
+ * variables, since happy-dom has no `env()`. A side left out is 0.
+ */
+export function stubSafeAreaInsets(insets: { top?: number; right?: number; bottom?: number; left?: number }): void {
+  const root = document.documentElement;
+  const sides = ["top", "right", "bottom", "left"] as const;
+  for (const side of sides) {
+    root.style.setProperty(`--safe-area-${side}`, `${insets[side] ?? 0}px`);
+  }
+  restores.push(() => {
+    for (const side of sides) {
+      root.style.removeProperty(`--safe-area-${side}`);
+    }
+  });
+}
+
+/**
+ * Reads `element`'s computed style afresh. happy-dom drops an element's computed style when the element itself or an
+ * ancestor it read on the way changes, but not when an ancestor above one whose style it had already computed does,
+ * as when the body's class changes, so a change on the element itself comes first (measured).
+ */
+export function currentStyle(element: Element): CSSStyleDeclaration {
+  element.setAttribute("data-restyle", "");
+  element.removeAttribute("data-restyle");
+  return getComputedStyle(element);
+}
+
 /** Applies the WebUI's stylesheet to the page, so a test can read the styles it gives. */
 export function useStylesheet(): void {
   const style = document.createElement("style");

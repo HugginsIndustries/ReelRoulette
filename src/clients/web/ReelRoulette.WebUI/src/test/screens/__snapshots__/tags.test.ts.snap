@@ -20,7 +20,7 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
         <section class="tag-editor-category">
           <div class="tag-editor-category-header">
             <div class="tag-editor-category-left">
-              <button aria-describedby="P0-1" aria-label="Reorder Places" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
+              <button aria-describedby="P0-2" aria-label="Reorder Places" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
                 <span class="material-symbol-icon">
                   "drag_indicator"
               <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Collapse category">
@@ -60,7 +60,7 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
         <section class="tag-editor-category">
           <div class="tag-editor-category-header">
             <div class="tag-editor-category-left">
-              <button aria-describedby="P0-1" aria-label="Reorder Mood" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
+              <button aria-describedby="P0-2" aria-label="Reorder Mood" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
                 <span class="material-symbol-icon">
                   "drag_indicator"
               <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Expand category">
@@ -88,7 +88,7 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
         <section class="tag-editor-category">
           <div class="tag-editor-category-header">
             <div class="tag-editor-category-left">
-              <button aria-describedby="P0-1" aria-label="Reorder People" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
+              <button aria-describedby="P0-2" aria-label="Reorder People" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
                 <span class="material-symbol-icon">
                   "drag_indicator"
               <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Collapse category">
@@ -150,7 +150,7 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
                 <span class="material-symbol-icon">
                   "edit_note"
-      <p class="visually-hidden" id="P0-1">
+      <p class="visually-hidden" id="P0-2">
         "Drag to reorder, or press the up and down arrow keys."
       <div aria-live="polite" class="visually-hidden">
     <div class="tag-editor-panel" id="tag-editor-panel-autotag" style="display: flex">
@@ -251,9 +251,9 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
 `;
 
 exports[`opening and closing > keeps its markup on each tab and in the Edit Tag dialog > edit tag dialog 1`] = `
-"<dialog aria-labelledby="P0-3" class="app-dialog" open="">
+"<dialog aria-labelledby="P0-4" class="app-dialog" open="">
   <div class="dialog-body">
-    <h3 id="P0-3">
+    <h3 id="P0-4">
       "Edit Tag"
     <label for="tag-edit-name">
       "Tag Name"
@@ -302,7 +302,7 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
         <section class="tag-editor-category">
           <div class="tag-editor-category-header">
             <div class="tag-editor-category-left">
-              <button aria-describedby="P0-1" aria-label="Reorder Places" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
+              <button aria-describedby="P0-2" aria-label="Reorder Places" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
                 <span class="material-symbol-icon">
                   "drag_indicator"
               <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Collapse category">
@@ -342,7 +342,7 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
         <section class="tag-editor-category">
           <div class="tag-editor-category-header">
             <div class="tag-editor-category-left">
-              <button aria-describedby="P0-1" aria-label="Reorder Mood" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
+              <button aria-describedby="P0-2" aria-label="Reorder Mood" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
                 <span class="material-symbol-icon">
                   "drag_indicator"
               <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Expand category">
@@ -370,7 +370,7 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
         <section class="tag-editor-category">
           <div class="tag-editor-category-header">
             <div class="tag-editor-category-left">
-              <button aria-describedby="P0-1" aria-label="Reorder People" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
+              <button aria-describedby="P0-2" aria-label="Reorder People" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
                 <span class="material-symbol-icon">
                   "drag_indicator"
               <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Collapse category">
@@ -432,7 +432,7 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
                 <span class="material-symbol-icon">
                   "edit_note"
-      <p class="visually-hidden" id="P0-1">
+      <p class="visually-hidden" id="P0-2">
         "Drag to reorder, or press the up and down arrow keys."
       <div aria-live="polite" class="visually-hidden">
     <div class="tag-editor-panel" id="tag-editor-panel-autotag" style="display: none">

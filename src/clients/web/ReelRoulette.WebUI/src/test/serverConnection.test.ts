@@ -74,11 +74,18 @@ function setup(routes: Record<string, () => Response> = {}, pairToken?: string) 
     statuses.push(message);
     setStatus(message, logText);
   };
+  const notices: string[] = [];
+  const dialogs = {
+    async notice(message: string) {
+      notices.push(message);
+    }
+  };
   const connection = createServerConnection({
     sseUrl: "http://localhost:51301/api/events",
     pairToken,
     store,
     api,
+    dialogs,
     fetch: fetchImpl,
     createEventSource: (url) => {
       const source = new FakeSource(url);
@@ -87,7 +94,7 @@ function setup(routes: Record<string, () => Response> = {}, pairToken?: string) 
     },
     window: pageWindow as unknown as Window
   });
-  return { store, connection, requests, sources, statuses, pageWindow };
+  return { store, connection, requests, sources, statuses, notices, pageWindow };
 }
 
 async function settle(): Promise<void> {
@@ -154,7 +161,7 @@ describe("createServerConnection", () => {
   });
 
   it("blocks an incompatible server: stops the stream, and preset loads and pairing say so", async () => {
-    const { store, connection, sources, statuses, requests } = setup({
+    const { store, connection, sources, statuses, notices, requests } = setup({
       "GET /api/version": () => json({ ...COMPATIBLE_VERSION, apiVersion: "7" })
     });
     connection.start();
@@ -166,9 +173,43 @@ describe("createServerConnection", () => {
 
     await connection.loadPresets();
     expect(store.presetMenu.value.entries).toEqual([{ label: "Server compatibility check failed", value: "" }]);
+    const statusCount = statuses.length;
     await connection.pair("token");
-    expect(statuses[statuses.length - 1]).toBe("Pairing blocked by server compatibility check.");
+    expect(notices).toEqual(["Pairing blocked by server compatibility check."]);
+    expect(statuses).toHaveLength(statusCount);
     expect(requests).not.toContain("POST /api/pair");
+  });
+
+  it("says the event stream is reconnecting from a lost connection until it opens again or stops", async () => {
+    const { store, connection, sources, pageWindow } = setup();
+    connection.start();
+    await settle();
+    expect(store.reconnecting.value).toBe(false);
+
+    sources[0]!.onerror?.(new Event("error"));
+    expect(store.reconnecting.value).toBe(true);
+    pageWindow.dispatchEvent(new Event("focus"));
+    expect(store.reconnecting.value).toBe(true);
+    sources[1]!.onopen?.(new Event("open"));
+    expect(store.reconnecting.value).toBe(false);
+
+    sources[1]!.onerror?.(new Event("error"));
+    expect(store.reconnecting.value).toBe(true);
+    connection.stop();
+    expect(store.reconnecting.value).toBe(false);
+  });
+
+  it("stops saying the event stream is reconnecting when the server fails the compatibility check", async () => {
+    const { store, connection, sources } = setup({
+      "GET /api/version": () => json({ ...COMPATIBLE_VERSION, apiVersion: "7" })
+    });
+    connection.start();
+    sources[0]!.onerror?.(new Event("error"));
+    expect(store.reconnecting.value).toBe(true);
+    await settle();
+
+    expect(store.compatibilityBlocked.value).toBe(true);
+    expect(store.reconnecting.value).toBe(false);
   });
 
   it("pairs with the config token on start, then checks the version, reloads presets, and reconnects", async () => {
@@ -187,15 +228,18 @@ describe("createServerConnection", () => {
     expect(sources).toHaveLength(2);
   });
 
-  it("asks for a token, and reports a failed pairing without reconnecting", async () => {
-    const { connection, requests, sources, statuses } = setup({ "POST /api/pair": () => json({}, 403) });
+  it("sends nothing for an empty token, and reports a failed pairing in a notice without reconnecting", async () => {
+    const { connection, requests, sources, statuses, notices } = setup({ "POST /api/pair": () => json({}, 403) });
     connection.start();
     await settle();
+    const statusCount = statuses.length;
 
     await connection.pair("   ");
-    expect(statuses[statuses.length - 1]).toBe("Pair token required.");
+    expect(requests).not.toContain("POST /api/pair");
+    expect(notices).toEqual([]);
     await connection.pair("wrong");
-    expect(statuses[statuses.length - 1]).toBe("Pairing failed.");
+    expect(notices).toEqual(["Pairing failed."]);
+    expect(statuses).toHaveLength(statusCount);
     expect(requests.filter((request) => request === "POST /api/pair")).toHaveLength(1);
     expect(sources).toHaveLength(1);
   });

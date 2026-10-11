@@ -112,6 +112,7 @@ export function Player() {
       ></video>
       <img id="photo" alt="Photo" style="display:none" ref={photo} onLoad={player.photoLoaded} onError={player.photoFailed} />
       <div id="empty-state" class="empty-state" ref={emptyState}>Tap to play, or open the panel to choose a preset or filter.</div>
+      <ReconnectingIndicator />
       <div id="overlay-controls" class="overlay-controls" onTouchStart={stopPropagation} onTouchMove={stopPropagation} onTouchEnd={stopPropagation} onClick={stopPropagation}>
         <PanelButton />
         <button id="favorite-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, player.favorite.value)} aria-label="Favorite" title="Favorite" onClick={press(player.toggleFavorite)}><span class="material-symbol-icon">favorite</span></button>
@@ -130,6 +131,21 @@ export function Player() {
           <span id="time-display">{player.timeText}</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Shows on the player on a phone on its side, where the status line that says so is hidden, while the connection is
+ * lost and reconnecting. While the server asks for pairing it refuses the connection, and the header's prompt shows
+ * instead.
+ */
+function ReconnectingIndicator() {
+  const { store, panel } = useApp();
+  const shown = store.reconnecting.value && !store.pairingRequired.value && panel.shortScreen.value;
+  return (
+    <div id="conn-indicator" class="conn-indicator" role="status" hidden={!shown}>
+      <span class="material-symbol-icon" aria-hidden="true">sync</span>Reconnecting…
     </div>
   );
 }

@@ -1376,6 +1376,9 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: a short touch screen gets the full-screen player layout and the overlay`, document.body.classList.contains("short-screen") && $("stage").classList.contains("is-overlay"));
   situation("reconnecting");
   check(`layout@${width}: there the player shows the reconnecting indicator`, !$("conn-indicator").hidden);
+  $("mock-pairing").click();
+  check(`layout@${width}: but not while the server asks for pairing, whose prompt shows instead`, $("conn-indicator").hidden);
+  $("mock-pairing").click();
   situation("connected");
   $("mock-short").click();
 
@@ -1389,6 +1392,25 @@ for (const width of [1280, 390]) {
     copy.remove();
     return shown;
   };
+  // The page's height follows the browser's toolbars in a tab and is the whole screen in an installed app. happy-dom
+  // drops `dvh` and `lvh` and its display mode is always `browser`, so the check reads the rules' text.
+  const installed = Array.from(document.styleSheets)
+    .flatMap((sheet) => Array.from(sheet.cssRules))
+    .filter((rule) => rule.media?.mediaText.includes("display-mode: standalone"))
+    .flatMap((rule) => Array.from(rule.cssRules));
+  const installedRule = (selector) => installed.find((rule) => rule.selectorText === selector);
+  check(`layout@${width}: the page's height is the dynamic viewport in a tab and the large one in an installed app, with pseudo-fullscreen`,
+    window.getComputedStyle(document.documentElement).getPropertyValue("--page-height") === "100dvh" &&
+      installedRule(":root")?.style.getPropertyValue("--page-height") === "100lvh" &&
+      installedRule(".stage.fullscreen-pseudo")?.style.height === "var(--page-height)");
+  // A phone on its side hides the header and the status line, and shows the header while the server asks for pairing.
+  const topBar = document.querySelector(".top-bar");
+  $("mock-short").click();
+  check(`layout@${width}: a phone on its side hides the header and the status line`, !displayed(topBar) && !displayed($("status")));
+  $("mock-pairing").click();
+  check(`layout@${width}: there the header shows while the server asks for pairing`, displayed(topBar) && !$("pair").hidden);
+  $("mock-pairing").click();
+  $("mock-short").click();
   $("mock-toggle").click();
   check(`layout@${width}: mockup notes show by default`, displayed($("play-chip")) && !document.documentElement.classList.contains("hide-mock"));
   change($("mock-hide-notes"), true);
