@@ -12,15 +12,14 @@ function tileItemId(target: EventTarget | null): string | null {
 }
 
 /**
- * The library overlay: header, search and sort toolbar, and the body with the grid or a message. The library
- * shows and hides the overlay by setting its `display`, so its `style` is rendered once and never changed here.
+ * The Library tab: header, search and sort toolbar, and the body with the grid or a message. The panel shows and
+ * hides the tab's page.
  */
 export function LibraryOverlay() {
   const { library } = useApp();
-  const overlay = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    library.attach({ overlay: overlay.current! });
+    library.attach();
     return () => library.detach();
   }, []);
 
@@ -28,13 +27,10 @@ export function LibraryOverlay() {
   const summary = library.summary.value;
   const body = library.body.value;
   return (
-    <div id="library-overlay" class="library-overlay" style="display:none" ref={overlay}>
+    <div id="library-overlay" class="library-overlay">
       <div class="library-overlay-header">
         <h2>Library</h2>
         <p id="library-overlay-summary" class="library-overlay-summary" aria-live="polite" hidden={summary === null}>{summary}</p>
-        <div class="library-overlay-actions">
-          <button id="library-overlay-close-btn" class="icon-glyph-base icon-glyph-button" type="button" title="Close" aria-label="Close" onClick={library.close}><span class="material-symbol-icon">close</span></button>
-        </div>
       </div>
       <div id="library-overlay-toolbar" class="library-overlay-toolbar" style={{ display: library.toolbarShown.value ? "flex" : "none" }}>
         <input id="library-search-input" class="library-overlay-search" type="search" placeholder="Search…" aria-label="Search library" autocomplete="off" value={controls.searchQuery} onInput={(event) => library.setSearch(event.currentTarget.value)} />

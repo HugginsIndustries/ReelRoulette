@@ -202,7 +202,7 @@ async function mountTags(
   await screen.findByText("Ready (API 1)");
   await settle();
   if (options.play !== false) {
-    await click(screen.getByText("Click here to play (choose a preset or open Filter…)"));
+    await click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
     await waitFor(() => expect((document.getElementById("video") as HTMLVideoElement).src).toContain("/api/media/item-video"));
   }
   return { page, server, tags };
@@ -247,16 +247,35 @@ function editor(): HTMLElement {
   return byId("tag-editor");
 }
 
-function isOpen(): boolean {
-  return editor().style.display === "flex";
+function panel(): HTMLElement {
+  return byId("panel");
 }
 
+/** Whether the panel is open on the Tags tab. */
+function isOpen(): boolean {
+  return !panel().hidden && !byId("panel-page-tags").hidden;
+}
+
+/** A tab of the panel's own tab row, apart from the tag editor's Edit Tags and Auto Tag tabs. */
+function panelTab(name: "Library" | "Filter" | "Tags"): HTMLButtonElement {
+  return within(panel().querySelector(".panel-tablist") as HTMLElement).getByRole("tab", { name, hidden: true }) as HTMLButtonElement;
+}
+
+/** Opens the panel with the panel button, unless it is open, and chooses the Tags tab. */
 async function openEditor(): Promise<void> {
-  await click(screen.getByRole("button", { name: "Edit Tags" }));
+  if (panel().hidden) {
+    await click(byId("panel-btn"));
+  }
+  await click(panelTab("Tags"));
   expect(isOpen()).toBe(true);
 }
 
-function headerButton(name: "Refresh" | "Close"): HTMLButtonElement {
+/** The panel's Close, which leaves the Tags tab as the tag editor's Close closed the editor. */
+function closeButton(): HTMLButtonElement {
+  return byId<HTMLButtonElement>("panel-close-btn");
+}
+
+function headerButton(name: "Refresh"): HTMLButtonElement {
   return within(editor().querySelector(".tag-editor-header") as HTMLElement).getByRole("button", { name }) as HTMLButtonElement;
 }
 
@@ -625,9 +644,9 @@ describe("opening and closing", () => {
     expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
     expect(savePending()).toBe(false);
 
-    await click(headerButton("Close"));
+    await click(closeButton());
     expect(isOpen()).toBe(false);
-    await click(screen.getByText("Click here to play (choose a preset or open Filter…)"));
+    await click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
     await openEditor();
     expect(tags.modelRequests()[1]).toEqual({ itemIds: ["item-video"] });
     expect(chipState("Beach").has).toBe("all");
@@ -636,13 +655,13 @@ describe("opening and closing", () => {
   it("closes without asking when nothing changed, and asks before dropping changes", async () => {
     const { tags } = await mountTags();
     await openEditor();
-    await click(headerButton("Close"));
+    await click(closeButton());
     expect(appDialogs()).toEqual([]);
     expect(isOpen()).toBe(false);
 
     await openEditor();
     await click(chipButton("Calm", "Add tag"));
-    await press(headerButton("Close"));
+    await press(closeButton());
     expect(confirmMessage()).toBe("Discard changes?");
     expect(document.activeElement).toBe(dialogButton(confirmation(), "Cancel"));
     expect(dialogButton(confirmation(), "Discard").classList.contains("btn-danger")).toBe(true);
@@ -651,9 +670,9 @@ describe("opening and closing", () => {
     expect(appDialogs()).toEqual([]);
     expect(isOpen()).toBe(true);
     expect(chipState("Calm").pending).toBe("add");
-    expect(document.activeElement).toBe(headerButton("Close"));
+    expect(document.activeElement).toBe(closeButton());
 
-    await press(headerButton("Close"));
+    await press(closeButton());
     await answer("Discard");
     expect(appDialogs()).toEqual([]);
     expect(isOpen()).toBe(false);
@@ -673,7 +692,7 @@ describe("opening and closing", () => {
     expect(byId("tag-editor-panel-autotag").style.display).toBe("flex");
     await click(autoTagBox("Scan full library"));
     await click(autoTagBox("View all matches"));
-    await click(headerButton("Close"));
+    await click(closeButton());
 
     await openEditor();
     expect(selectedTab()).toBe("Edit Tags");
@@ -796,9 +815,9 @@ describe("Edit Tags", () => {
     expect(chipButton("Beach", "Add tag").disabled).toBe(true);
     expect(chipButton("Beach", "Remove tag").disabled).toBe(true);
     expect(chipButton("Beach", "Edit tag").disabled).toBe(false);
-    await click(headerButton("Close"));
+    await click(closeButton());
 
-    await click(screen.getByText("Click here to play (choose a preset or open Filter…)"));
+    await click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
     await openEditor();
     expect(chipState("Beach").has).toBe("all");
     expect(chipState("Bob").has).toBe("all");
@@ -840,7 +859,7 @@ describe("Edit Tags", () => {
     expect(JSON.parse(sessionStorage.getItem("rr_tagEditorCollapsed") ?? "")).toEqual(["cat-places", "uncategorized"]);
     expect(savePending()).toBe(false);
 
-    await click(headerButton("Close"));
+    await click(closeButton());
     await openEditor();
     expect(categoryGrid("Places").style.display).toBe("none");
     expect(categoryGrid("Mood").style.display).toBe("");
@@ -1216,7 +1235,7 @@ describe("Edit Tags", () => {
     await openEditor();
     await choose(footerCategory(), "cat-people");
     await typeInto(newTagField(), "Sun");
-    await click(headerButton("Close"));
+    await click(closeButton());
     expect(appDialogs()).toEqual([]);
 
     await openEditor();
@@ -1637,7 +1656,7 @@ describe("Auto Tag", () => {
     expect(localStorage.getItem("rr_autoTagScanFullLibrary")).toBe("false");
   });
 
-  it("shows progress and turns off Scan Files, Close, Refresh, and Save while it scans", async () => {
+  it("shows progress and turns off Scan Files, the panel's Close, Refresh, and Save while it scans, and the Tags tab can't be left", async () => {
     const { tags } = await mountTags();
     await openEditor();
     await click(chipButton("Calm", "Add tag"));
@@ -1649,14 +1668,19 @@ describe("Auto Tag", () => {
     expect(progressShown()).toBe(true);
     expect(autoTagStatus()).toBe("Scanning…");
     expect(scanButton().disabled).toBe(true);
-    expect(headerButton("Close").disabled).toBe(true);
+    expect(closeButton().disabled).toBe(true);
     expect(headerButton("Refresh").disabled).toBe(true);
     expect(saveButton().disabled).toBe(true);
+    await click(panelTab("Library"));
+    fireEvent.keyDown(document, { key: "Escape" });
+    await settle();
+    expect(isOpen()).toBe(true);
+    expect(appDialogs()).toEqual([]);
 
     await tags.release();
     expect(progressShown()).toBe(false);
     expect(scanButton().disabled).toBe(false);
-    expect(headerButton("Close").disabled).toBe(false);
+    expect(closeButton().disabled).toBe(false);
     expect(headerButton("Refresh").disabled).toBe(false);
     expect(savePending()).toBe(true);
     expect(tags.scans()).toHaveLength(1);
@@ -1794,14 +1818,14 @@ describe("Auto Tag", () => {
     await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
   });
 
-  it("Close and Refresh ask before dropping selected files, and Refresh clears the results", async () => {
+  it("the panel's Close and Refresh ask before dropping selected files, and Refresh clears the results", async () => {
     const { tags } = await mountTags();
     await openEditor();
     await showTab("Auto Tag");
     await scan();
     await click(rowCheck("Sunset"));
 
-    await press(headerButton("Close"));
+    await press(closeButton());
     expect(confirmMessage()).toBe("Discard changes?");
     await answer("Cancel");
     expect(isOpen()).toBe(true);
@@ -1815,7 +1839,7 @@ describe("Auto Tag", () => {
     expect(results().textContent).toBe("");
     expect(tags.modelRequests()).toHaveLength(2);
 
-    await click(headerButton("Close"));
+    await click(closeButton());
     expect(appDialogs()).toEqual([]);
     expect(isOpen()).toBe(false);
     await openEditor();
@@ -1876,7 +1900,8 @@ describe("storage", () => {
     await save();
     await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
 
-    expect(storageKeys(localStorage)).toEqual(["rr_autoTagScanFullLibrary", "rr_clientId"]);
+    // The panel remembers on this device whether it is open and its tab, which the panel's own tests cover.
+    expect(storageKeys(localStorage).filter((key) => !key.startsWith("rr_device.panel."))).toEqual(["rr_autoTagScanFullLibrary", "rr_clientId"]);
     expect(storageKeys(sessionStorage)).toEqual(["rr_sessionId", "rr_tagEditorCollapsed"]);
   });
 });

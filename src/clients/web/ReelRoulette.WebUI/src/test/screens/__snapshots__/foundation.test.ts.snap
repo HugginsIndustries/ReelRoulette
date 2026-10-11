@@ -10,7 +10,7 @@ exports[`page structure > keeps the starting markup 1`] = `
     <div class="pair-section" id="pair-section" style="display: none">
       <label class="pair-section-label">
         <span class="pair-section-label-hint">
-          "Pairing token:"
+          "Pairing token"
         <input id="pair-token" placeholder="Enter token" type="text">
       <button id="pair-btn">
         "Pair"
@@ -37,23 +37,17 @@ exports[`page structure > keeps the starting markup 1`] = `
     <div class="now-playing" id="now-playing" style="display: none">
       <span id="now-playing-name">
       <span class="muted" id="now-playing-duration">
-  <div class="fullscreen-stage" id="fullscreen-stage">
-    <main>
+  <div class="fullscreen-stage" data-panel-mode="side" data-side="right" id="fullscreen-stage" style="--panel-width: 420px">
+    <main class="player-col">
       <div class="media-container controls-visible" id="media-container">
         <video disablepictureinpicture="" disableremoteplayback="" id="video" playsinline="" preload="auto" style="display: none" webkit-playsinline="">
         <img alt="Photo" id="photo" style="display: none">
         <div class="empty-state" id="empty-state">
-          "Click here to play (choose a preset or open Filter…)"
+          "Tap to play, or open the panel to choose a preset or filter."
         <div class="overlay-controls" id="overlay-controls">
-          <button aria-label="Library" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn" id="library-open-btn" title="Library">
+          <button aria-controls="panel" aria-expanded="false" aria-label="Open panel" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" id="panel-btn" title="Open panel">
             <span class="material-symbol-icon">
-              "browse"
-          <button aria-label="Select filters" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn" id="filter-edit-btn" title="Select filters…">
-            <span class="material-symbol-icon">
-              "filter_alt"
-          <button aria-label="Edit Tags" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn" id="tag-edit-btn" title="Edit Tags">
-            <span class="material-symbol-icon">
-              "tag"
+              "right_panel_open"
           <button aria-label="Favorite" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" id="favorite-btn" title="Favorite">
             <span class="material-symbol-icon">
               "favorite"
@@ -86,115 +80,126 @@ exports[`page structure > keeps the starting markup 1`] = `
             <input aria-label="Seek" id="seek-slider" max="100" min="0" type="range" value="0">
             <span id="time-display">
               "0:00 / 0:00"
-    <div class="tag-editor" id="tag-editor" style="display: none">
-      <div class="tag-editor-header">
-        <h2>
-          "Tag Editor"
-        <div class="tag-editor-actions">
-          <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="tag-editor-refresh-btn" title="Refresh">
+    <div aria-controls="panel" aria-label="Resize panel" aria-orientation="vertical" aria-valuemax="612" aria-valuemin="360" aria-valuenow="420" aria-valuetext="420 pixels" class="panel-handle" hidden="" id="panel-handle" role="separator" tabindex="0">
+      <span class="handle-grip">
+    <aside aria-label="Panel" class="panel" hidden="" id="panel">
+      <div class="panel-tabs">
+        <div aria-label="Panel tabs" class="panel-tablist" role="tablist">
+          <button aria-controls="panel-page-library" aria-label="Library" aria-selected="true" class="panel-tab" id="panel-tab-library" role="tab" title="Library" type="button">
             <span class="material-symbol-icon">
-              "refresh"
-          <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="tag-editor-close-btn" title="Close">
+              "browse"
+          <button aria-controls="panel-page-filter" aria-label="Filter" aria-selected="false" class="panel-tab" id="panel-tab-filter" role="tab" title="Filter" type="button">
             <span class="material-symbol-icon">
-              "close"
-      <div class="filter-dialog-tabstrip tag-editor-tabstrip" role="tablist">
-        <button aria-selected="true" class="filter-tab is-active" data-tag-editor-tab="edit" role="tab" type="button">
-          "Edit Tags"
-        <button aria-selected="false" class="filter-tab" data-tag-editor-tab="autotag" role="tab" type="button">
-          "Auto Tag"
-      <div class="tag-editor-panel-stack">
-        <div class="tag-editor-panel" id="tag-editor-panel-edit">
-          <div class="tag-editor-body themed-scrollbar" id="tag-editor-body">
-        <div class="tag-editor-panel" id="tag-editor-panel-autotag" style="display: none">
-          <div class="tag-editor-body tag-autotag-body themed-scrollbar">
-            <div class="tag-autotag-toolbar">
-              <label class="tag-autotag-check-label">
-                <input id="tag-autotag-scan-full" type="checkbox">
-                "Scan full library"
-              <label class="tag-autotag-check-label">
-                <input id="tag-autotag-view-all" type="checkbox">
-                "View all matches"
-            <p class="tag-autotag-hint">
-              "Use Scan Files to find matching tags. File name matching ignores extension."
-            <div class="tag-autotag-actions-row">
-              <button class="tag-autotag-row-btn" id="tag-autotag-select-all" type="button">
-                "Select all"
-              <button class="tag-autotag-row-btn" id="tag-autotag-deselect-all" type="button">
-                "Deselect all"
-              <button class="tag-autotag-scan-btn" id="tag-autotag-scan-btn" type="button">
-                "Scan Files"
-            <div aria-label="Scan in progress" class="tag-autotag-progress" id="tag-autotag-progress" role="progressbar" style="display: none">
-            <div aria-live="polite" class="tag-autotag-status" id="tag-autotag-status">
-            <div class="tag-autotag-results themed-scrollbar" id="tag-autotag-results">
-      <div class="tag-editor-footer">
-        <button aria-label="Add category" class="icon-glyph-base icon-glyph-button" id="tag-editor-add-category-btn" title="Add category">
+              "filter_alt"
+          <button aria-controls="panel-page-tags" aria-label="Tags" aria-selected="false" class="panel-tab" id="panel-tab-tags" role="tab" title="Tags" type="button">
+            <span class="material-symbol-icon">
+              "tag"
+        <span class="panel-tabs-spacer">
+        <button aria-label="Close panel" class="icon-glyph-base icon-glyph-button panel-close" id="panel-close-btn" title="Close" type="button">
           <span class="material-symbol-icon">
-            "add"
-        <select id="tag-editor-category-select">
-        <span class="vfield">
-          <input id="tag-editor-new-tag" placeholder="New tag name" type="text">
-        <button aria-label="Add tag" class="icon-glyph-base icon-glyph-button" disabled="" id="tag-editor-add-tag-btn" title="Add tag">
-          <span class="material-symbol-icon">
-            "add"
-        <button aria-label="Save" class="icon-glyph-base icon-glyph-button" id="tag-editor-apply-btn" title="Save">
-          <span class="material-symbol-icon">
-            "save"
-    <div class="filter-dialog" id="filter-dialog" style="display: none">
-      <div class="filter-dialog-header">
-        <h2 id="filter-dialog-heading">
-          "Preset: None"
-        <div class="filter-dialog-actions">
-          <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="filter-dialog-refresh-btn" title="Refresh" type="button">
-            <span class="material-symbol-icon">
-              "refresh"
-          <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="filter-dialog-close-btn" title="Close" type="button">
-            <span class="material-symbol-icon">
-              "close"
-      <div class="filter-dialog-tabstrip" role="tablist">
-        <button aria-selected="true" class="filter-tab is-active" data-filter-tab="general" role="tab" type="button">
-          "General"
-        <button aria-selected="false" class="filter-tab" data-filter-tab="tags" role="tab" type="button">
-          "Tags"
-        <button aria-selected="false" class="filter-tab" data-filter-tab="presets" role="tab" type="button">
-          "Presets"
-      <div class="filter-dialog-body themed-scrollbar">
-        <div class="filter-panel" id="filter-panel-general">
-        <div class="filter-panel" id="filter-panel-tags" style="display: none">
-        <div class="filter-panel" id="filter-panel-presets" style="display: none">
-      <div class="filter-dialog-footer">
-        <button id="filter-clear-all-btn" type="button">
-          "Clear all filters"
-        <button id="filter-cancel-btn" type="button">
-          "Cancel"
-        <button class="held-action" id="filter-apply-btn" type="button">
-          <span class="btn-label">
-            "Apply"
-    <div class="library-overlay" id="library-overlay" style="display: none">
-      <div class="library-overlay-header">
-        <h2>
-          "Library"
-        <p aria-live="polite" class="library-overlay-summary" hidden="" id="library-overlay-summary">
-        <div class="library-overlay-actions">
-          <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="library-overlay-close-btn" title="Close" type="button">
-            <span class="material-symbol-icon">
-              "close"
-      <div class="library-overlay-toolbar" id="library-overlay-toolbar" style="display: none">
-        <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
-        <div class="library-overlay-sort-cluster">
-          <select aria-label="Sort library" class="library-overlay-sort-select" id="library-sort-select">
-            <option value="Name">
-              "Name"
-            <option value="LastPlayed">
-              "Last played"
-            <option value="PlayCount">
-              "Play count"
-            <option value="Duration">
-              "Duration"
-            <option value="DateAdded">
-              "Date added"
-          <button aria-label="Toggle sort direction" class="library-overlay-sort-direction" id="library-sort-direction-btn" type="button">
-            "A–Z"
-      <div class="library-overlay-body" id="library-overlay-body">
+            "close"
+      <section aria-labelledby="panel-tab-library" class="panel-page" hidden="" id="panel-page-library" role="tabpanel">
+        <div class="library-overlay" id="library-overlay">
+          <div class="library-overlay-header">
+            <h2>
+              "Library"
+            <p aria-live="polite" class="library-overlay-summary" hidden="" id="library-overlay-summary">
+          <div class="library-overlay-toolbar" id="library-overlay-toolbar" style="display: none">
+            <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
+            <div class="library-overlay-sort-cluster">
+              <select aria-label="Sort library" class="library-overlay-sort-select" id="library-sort-select">
+                <option value="Name">
+                  "Name"
+                <option value="LastPlayed">
+                  "Last played"
+                <option value="PlayCount">
+                  "Play count"
+                <option value="Duration">
+                  "Duration"
+                <option value="DateAdded">
+                  "Date added"
+              <button aria-label="Toggle sort direction" class="library-overlay-sort-direction" id="library-sort-direction-btn" type="button">
+                "A–Z"
+          <div class="library-overlay-body" id="library-overlay-body">
+      <section aria-labelledby="panel-tab-filter" class="panel-page" hidden="" id="panel-page-filter" role="tabpanel">
+        <div class="filter-dialog" id="filter-dialog">
+          <div class="filter-dialog-header">
+            <h2 id="filter-dialog-heading">
+              "Preset: None"
+            <div class="filter-dialog-actions">
+              <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="filter-dialog-refresh-btn" title="Refresh" type="button">
+                <span class="material-symbol-icon">
+                  "refresh"
+          <div class="filter-dialog-tabstrip" role="tablist">
+            <button aria-selected="true" class="filter-tab is-active" data-filter-tab="general" role="tab" type="button">
+              "General"
+            <button aria-selected="false" class="filter-tab" data-filter-tab="tags" role="tab" type="button">
+              "Tags"
+            <button aria-selected="false" class="filter-tab" data-filter-tab="presets" role="tab" type="button">
+              "Presets"
+          <div class="filter-dialog-body themed-scrollbar">
+            <div class="filter-panel" id="filter-panel-general">
+            <div class="filter-panel" id="filter-panel-tags" style="display: none">
+            <div class="filter-panel" id="filter-panel-presets" style="display: none">
+          <div class="filter-dialog-footer">
+            <button id="filter-clear-all-btn" type="button">
+              "Clear all filters"
+            <button id="filter-cancel-btn" type="button">
+              "Cancel"
+            <button class="held-action" id="filter-apply-btn" type="button">
+              <span class="btn-label">
+                "Apply"
+      <section aria-labelledby="panel-tab-tags" class="panel-page" hidden="" id="panel-page-tags" role="tabpanel">
+        <div class="tag-editor" id="tag-editor">
+          <div class="tag-editor-header">
+            <h2>
+              "Tag Editor"
+            <div class="tag-editor-actions">
+              <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="tag-editor-refresh-btn" title="Refresh">
+                <span class="material-symbol-icon">
+                  "refresh"
+          <div class="filter-dialog-tabstrip tag-editor-tabstrip" role="tablist">
+            <button aria-selected="true" class="filter-tab is-active" data-tag-editor-tab="edit" role="tab" type="button">
+              "Edit Tags"
+            <button aria-selected="false" class="filter-tab" data-tag-editor-tab="autotag" role="tab" type="button">
+              "Auto Tag"
+          <div class="tag-editor-panel-stack">
+            <div class="tag-editor-panel" id="tag-editor-panel-edit">
+              <div class="tag-editor-body themed-scrollbar" id="tag-editor-body">
+            <div class="tag-editor-panel" id="tag-editor-panel-autotag" style="display: none">
+              <div class="tag-editor-body tag-autotag-body themed-scrollbar">
+                <div class="tag-autotag-toolbar">
+                  <label class="tag-autotag-check-label">
+                    <input id="tag-autotag-scan-full" type="checkbox">
+                    "Scan full library"
+                  <label class="tag-autotag-check-label">
+                    <input id="tag-autotag-view-all" type="checkbox">
+                    "View all matches"
+                <p class="tag-autotag-hint">
+                  "Use Scan Files to find matching tags. File name matching ignores extension."
+                <div class="tag-autotag-actions-row">
+                  <button class="tag-autotag-row-btn" id="tag-autotag-select-all" type="button">
+                    "Select all"
+                  <button class="tag-autotag-row-btn" id="tag-autotag-deselect-all" type="button">
+                    "Deselect all"
+                  <button class="tag-autotag-scan-btn" id="tag-autotag-scan-btn" type="button">
+                    "Scan Files"
+                <div aria-label="Scan in progress" class="tag-autotag-progress" id="tag-autotag-progress" role="progressbar" style="display: none">
+                <div aria-live="polite" class="tag-autotag-status" id="tag-autotag-status">
+                <div class="tag-autotag-results themed-scrollbar" id="tag-autotag-results">
+          <div class="tag-editor-footer">
+            <button aria-label="Add category" class="icon-glyph-base icon-glyph-button" id="tag-editor-add-category-btn" title="Add category">
+              <span class="material-symbol-icon">
+                "add"
+            <select id="tag-editor-category-select">
+            <span class="vfield">
+              <input id="tag-editor-new-tag" placeholder="New tag name" type="text">
+            <button aria-label="Add tag" class="icon-glyph-base icon-glyph-button" disabled="" id="tag-editor-add-tag-btn" title="Add tag">
+              <span class="material-symbol-icon">
+                "add"
+            <button aria-label="Save" class="icon-glyph-base icon-glyph-button" id="tag-editor-apply-btn" title="Save">
+              <span class="material-symbol-icon">
+                "save"
   <div class="status status-bottom" id="status">
     "Ready (API 1)"
   <div class="status diagnostics-mobile" id="mobile-diagnostics" style="display: none">

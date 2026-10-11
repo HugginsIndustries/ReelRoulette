@@ -1802,11 +1802,14 @@ function openPanel(tab, from) {
   $("mock-hint").hidden = true;
   showTab(tab);
 }
+// Focus goes back to what opened the panel, or the panel button, only when it was in the panel or on its handle.
 function closePanel() {
+  const focused = document.activeElement;
+  const hadFocus = $("panel").contains(focused) || $("handle").contains(focused);
   state.open = false;
   store.set("open", false);
   applyLayout();
-  if (opener) opener.focus({ preventScroll: true });
+  if (hadFocus) (opener || $("panel-btn")).focus({ preventScroll: true });
 }
 
 $("panel-btn").addEventListener("click", (event) => {

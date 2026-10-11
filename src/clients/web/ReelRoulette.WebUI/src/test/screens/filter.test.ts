@@ -6,6 +6,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   COMPATIBLE_VERSION,
+  DEFAULT_VIEWPORT,
   FakeServer,
   json,
   mountPage,
@@ -16,6 +17,7 @@ import {
   pressKey,
   resetPage,
   scrollOnFocus,
+  setViewport,
   settle,
   status,
   stubRowLayout,
@@ -154,17 +156,41 @@ function dialog(): HTMLElement {
   return document.getElementById("filter-dialog") as HTMLElement;
 }
 
-function isOpen(): boolean {
-  return dialog().style.display === "flex";
-}
-
 function byId<T extends HTMLElement = HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
 }
 
+function panel(): HTMLElement {
+  return byId("panel");
+}
+
+/** Whether the panel is open on the Filter tab. */
+function isOpen(): boolean {
+  return !panel().hidden && !byId("panel-page-filter").hidden;
+}
+
+/** A tab of the panel's own tab row, apart from the Filter tab's section tabs. */
+function panelTab(name: "Library" | "Filter" | "Tags"): HTMLButtonElement {
+  return within(panel().querySelector(".panel-tablist") as HTMLElement).getByRole("tab", { name, hidden: true }) as HTMLButtonElement;
+}
+
+/** Opens the panel with the panel button, unless it is open, and chooses the Filter tab. */
+async function chooseFilterTab(): Promise<void> {
+  if (panel().hidden) {
+    await click(byId("panel-btn"));
+  }
+  await click(panelTab("Filter"));
+}
+
 async function openDialog(): Promise<void> {
-  await click(screen.getByRole("button", { name: "Select filters" }));
+  await chooseFilterTab();
   await waitFor(() => expect(isOpen()).toBe(true));
+}
+
+/** Closes the panel with its Close. */
+async function closePanel(): Promise<void> {
+  await click(byId("panel-close-btn"));
+  expect(panel().hidden).toBe(true);
 }
 
 function dialogButton(name: string | RegExp): HTMLButtonElement {
@@ -444,12 +470,12 @@ async function nextPick(server: FakeServer): Promise<any> {
   return picks[picks.length - 1]!.body;
 }
 
-/** Applies the dialog and waits for the library to start over with the new filter. */
+/** Applies the Filter tab and waits for the library to start over with the new filter. Beside the player it stays open. */
 async function applyAndWait(server: FakeServer): Promise<any> {
   const before = libraryQueries(server).length;
   await apply();
   await waitFor(() => expect(libraryQueries(server).length).toBe(before + 1));
-  expect(isOpen()).toBe(false);
+  expect(isOpen()).toBe(true);
   expect(statusLine()).toBe("Filters applied.");
   return libraryQueries(server)[before].filterState;
 }
@@ -467,7 +493,7 @@ beforeEach(() => {
 });
 
 describe("opening and closing", () => {
-  it("opens on General from Select filters after loading sources, tags, and presets", async () => {
+  it("opens on General from the panel's Filter tab after loading sources, tags, and presets", async () => {
     const { server } = await mountFilter([FAVORITES_PRESET]);
     const presetLoads = server.requests("GET", "/api/presets").length;
     expect(isOpen()).toBe(false);
@@ -500,22 +526,48 @@ describe("opening and closing", () => {
     expect(byId("filter-panel-presets").style.display).toBe("none");
   });
 
-  it("Close and Cancel hide it without applying or saving presets, and it opens again from the applied filter and the saved presets", async () => {
+  it("the panel's Close, another tab, and Cancel drop its changes without applying or saving presets, and it shows the applied filter and the saved presets again", async () => {
     const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET, RECENT_PRESET]);
     const queries = libraryQueries(server).length;
+    const leave: Array<[string, () => Promise<void>]> = [
+      ["the panel's Close", closePanel],
+      ["another tab", () => click(panelTab("Library"))],
+      [
+        "Cancel beside the player",
+        async () => {
+          await click(dialogButton("Cancel"));
+          expect(isOpen()).toBe(true);
+          expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
+          expect(presetRows()).toEqual(presets.list.map((preset) => preset.name));
+          expect(applyButton().textContent).toBe("Apply");
+          await closePanel();
+        }
+      ],
+      [
+        "Cancel as the overlay",
+        async () => {
+          setViewport({ width: 600, height: 800 });
+          await settle();
+          await click(dialogButton("Cancel"));
+          expect(panel().hidden).toBe(true);
+          setViewport(DEFAULT_VIEWPORT);
+          await settle();
+        }
+      ]
+    ];
 
-    for (const button of ["Close", "Cancel"]) {
+    for (const [way, leaveTab] of leave) {
       await openDialog();
       await click(box("Favorites"));
-      expect(applyButton().textContent).toBe("Apply*");
+      expect(applyButton().textContent, way).toBe("Apply*");
       await showTab("Presets");
-      expect(presetRows()).toEqual(["Favorites", "Beach days", "Recent"]);
+      expect(presetRows(), way).toEqual(["Favorites", "Beach days", "Recent"]);
       await addPreset("Draft");
       await pressKey(presetHandle("Favorites"), "ArrowDown");
       await deletePreset("Recent");
       expect(presetRows()).toEqual(["Beach days", "Favorites", "Draft"]);
-      await click(dialogButton(button));
-      expect(isOpen()).toBe(false);
+      await leaveTab();
+      expect(isOpen(), way).toBe(false);
     }
 
     expect(presets.saves()).toHaveLength(0);
@@ -528,7 +580,7 @@ describe("opening and closing", () => {
     expect(presetRows()).toEqual(presets.list.map((preset) => preset.name));
   });
 
-  it("does not open while the server is incompatible", async () => {
+  it("shows but loads nothing while the server is incompatible", async () => {
     const server = new FakeServer();
     server.on("GET", "/api/version", () =>
       json({ ...COMPATIBLE_VERSION, capabilities: COMPATIBLE_VERSION.capabilities.filter((c) => c !== "api.presets.match") })
@@ -536,12 +588,14 @@ describe("opening and closing", () => {
     mountPage({ server });
     await screen.findByText("Server missing required capabilities: api.presets.match.");
 
-    await click(screen.getByRole("button", { name: "Select filters" }));
-    expect(isOpen()).toBe(false);
+    await chooseFilterTab();
+    expect(isOpen()).toBe(true);
     expect(server.requests("GET", "/api/sources")).toHaveLength(0);
+    expect(server.requests("POST", "/api/tag-editor/model")).toHaveLength(0);
+    expect(dialog().querySelector("input")).toBeNull();
   });
 
-  it("stays closed and says why when its sources or tags cannot load", async () => {
+  it("says why when its sources or tags cannot load, and loads them when it shows again or on Refresh", async () => {
     let tagModelStatus = 200;
     let sourcesStatus = 500;
     await mountFilter([], (server) => {
@@ -549,15 +603,27 @@ describe("opening and closing", () => {
       server.on("POST", "/api/tag-editor/model", () => (tagModelStatus === 200 ? json(TAG_MODEL) : status(tagModelStatus)));
     });
 
-    await click(screen.getByRole("button", { name: "Select filters" }));
-    expect(statusLine()).toBe("Filter dialog load failed: HTTP 500");
-    expect(isOpen()).toBe(false);
+    await chooseFilterTab();
+    expect(statusLine()).toBe("Filter load failed: HTTP 500");
+    expect(isOpen()).toBe(true);
+    expect(dialog().querySelector("input")).toBeNull();
 
     sourcesStatus = 200;
     tagModelStatus = 503;
-    await click(screen.getByRole("button", { name: "Select filters" }));
-    expect(statusLine()).toBe("Filter dialog load failed: tag-editor model 503");
-    expect(isOpen()).toBe(false);
+    await click(panelTab("Library"));
+    await chooseFilterTab();
+    expect(statusLine()).toBe("Filter load failed: tag-editor model 503");
+    expect(dialog().querySelector("input")).toBeNull();
+
+    await click(dialogButton("Refresh"));
+    expect(statusLine()).toBe("Filter refresh failed: tag-editor model 503");
+    expect(dialog().querySelector("input")).toBeNull();
+
+    tagModelStatus = 200;
+    await click(dialogButton("Refresh"));
+    expect(statusLine()).toBe("Filter data refreshed.");
+    expect(selectedTab()).toBe("General");
+    expect(box("Movies").checked).toBe(true);
   });
 
   it("keeps its markup on each tab", async () => {
@@ -1111,7 +1177,7 @@ describe("Tags tab", () => {
     ]);
     expect(applyButton().textContent).toBe("Apply");
 
-    await click(dialogButton("Close"));
+    await closePanel();
     await openDialog();
     await showTab("Tags");
     expect(categoryGrid("Places").style.display).toBe("none");
@@ -1584,6 +1650,8 @@ describe("Presets tab", () => {
   });
 
   it("keeps the dialog open and applies nothing when the presets cannot be saved", async () => {
+    // As the overlay, which a successful Apply closes.
+    setViewport({ width: 600, height: 800 });
     const { server, presets } = await mountFilter([FAVORITES_PRESET]);
     presets.saveFailure = 500;
     await openDialog();
@@ -1600,7 +1668,10 @@ describe("Presets tab", () => {
     expect((await nextPick(server)).filterState.onlyNeverPlayed).toBe(false);
 
     presets.saveFailure = null;
-    await applyAndWait(server);
+    await apply();
+    await waitFor(() => expect(libraryQueries(server)).toHaveLength(queries + 1));
+    expect(statusLine()).toBe("Filters applied.");
+    expect(panel().hidden).toBe(true);
     expect(presets.list.map((preset) => preset.name)).toEqual(["Favorites", "Unplayed"]);
   });
 });
@@ -1611,7 +1682,7 @@ describe("header, refresh, and clear all", () => {
     await waitFor(() => expect(headerSelectedLabel()).toBe("Everything"));
     await openDialog();
     expect(heading()).toBe("Preset: Everything");
-    await click(dialogButton("Close"));
+    await closePanel();
 
     await pickHeaderPreset("");
     expect(headerSelectedLabel()).toBe("None");
@@ -1620,10 +1691,11 @@ describe("header, refresh, and clear all", () => {
     await showTab("Presets");
     expect(presetSelectInDialog().value).toBe("");
     await apply();
-    expect(isOpen()).toBe(false);
+    expect(isOpen()).toBe(true);
     await waitFor(() => expect(statusLine()).toBe("Filters applied."));
     expect(headerSelectedLabel()).toBe("None");
 
+    await closePanel();
     await openDialog();
     expect(heading()).toBe("Preset: None");
     await showTab("Presets");
@@ -1759,7 +1831,8 @@ describe("names and storage", () => {
     await addPreset("Beach favorites");
     await applyAndWait(server);
 
-    expect(storageKeys(localStorage)).toEqual(["rr_clientId"]);
+    // The panel remembers on this device whether it is open and its tab, which the panel's own tests cover.
+    expect(storageKeys(localStorage).filter((key) => !key.startsWith("rr_device.panel."))).toEqual(["rr_clientId"]);
     expect(storageKeys(sessionStorage)).toEqual(["rr_filterDialogCollapsedCategories", "rr_sessionId"]);
   });
 });

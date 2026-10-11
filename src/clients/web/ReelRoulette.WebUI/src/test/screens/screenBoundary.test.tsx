@@ -1,10 +1,34 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ScreenBoundary } from "../../ui/ScreenBoundary";
 import { FakeServer, json, mountPage, resetPage, status } from "./pageHarness";
 
-const failing = vi.hoisted(() => ({ player: false, header: false, library: false, filter: false, tags: false }));
+const failing = vi.hoisted(() => ({ player: false, header: false, library: false, filter: false, tags: false, panel: false }));
+
+// The panel's tab row throws when it reads the tab, when a test asks it to, as a render bug in the panel would.
+vi.mock("../../panel/panelHost", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../panel/panelHost")>();
+  return {
+    ...actual,
+    createPanelHost(...args: Parameters<typeof actual.createPanelHost>) {
+      const host = actual.createPanelHost(...args);
+      if (!failing.panel) {
+        return host;
+      }
+      const tab = host.tab;
+      return {
+        ...host,
+        tab: {
+          get value(): never {
+            throw new RangeError("Cannot show C:\\media\\holiday clip.mp4");
+          },
+          peek: () => tab.peek()
+        } as unknown as typeof tab
+      };
+    }
+  };
+});
 
 // The player throws on its first render when a test asks it to, as a render bug in the player would.
 vi.mock("../../playback/mediaGestures", async (importOriginal) => {
@@ -99,6 +123,28 @@ function Broken(): never {
   throw new RangeError("broken");
 }
 
+const EMPTY_STATE_TEXT = "Tap to play, or open the panel to choose a preset or filter.";
+
+type PanelTabName = "Library" | "Filter" | "Tags";
+
+function panel(): HTMLElement {
+  return document.getElementById("panel") as HTMLElement;
+}
+
+/** Whether the panel is open on `tab`. */
+function isShowing(tab: PanelTabName): boolean {
+  return !panel().hidden && !(document.getElementById(`panel-page-${tab.toLowerCase()}`) as HTMLElement).hidden;
+}
+
+/** Opens the panel with the panel button if it is closed, then chooses `tab` in the panel's tab row. */
+function showPanelTab(tab: PanelTabName): void {
+  if (panel().hidden) {
+    fireEvent.click(screen.getByRole("button", { name: "Open panel" }));
+  }
+  const tabRow = panel().querySelector(".panel-tablist") as HTMLElement;
+  fireEvent.click(within(tabRow).getByRole("tab", { name: tab }));
+}
+
 beforeEach(() => {
   resetPage();
 });
@@ -110,6 +156,7 @@ afterEach(() => {
   failing.library = false;
   failing.filter = false;
   failing.tags = false;
+  failing.panel = false;
 });
 
 describe("ScreenBoundary", () => {
@@ -150,7 +197,7 @@ describe("ScreenBoundary", () => {
     await screen.findByText("Ready (API 1)");
     expect(screen.getByRole("combobox", { name: "Choose preset" })).toBeTruthy();
 
-    fireEvent.click(screen.getByText("Click here to play (choose a preset or open Filter…)"));
+    fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
 
     await waitFor(() => expect(server.logLines()).toContain("ui-error screen=header error=TypeError"));
     expect(server.logLines().some((line) => line.includes("holiday"))).toBe(false);
@@ -183,7 +230,39 @@ describe("ScreenBoundary", () => {
     await screen.findByText("SSE connected");
   });
 
-  it("keeps the player, header, status line, filter dialog, and connection working when the library overlay fails", async () => {
+  it("keeps the player, header, status line, and connection working when the panel fails to render", async () => {
+    failing.panel = true;
+    const server = new FakeServer();
+    server.on("POST", "/api/random", () =>
+      json({
+        id: "C:\\media\\holiday clip.mp4",
+        itemId: "item-video",
+        displayName: "holiday clip.mp4",
+        mediaType: "video",
+        durationSeconds: 65,
+        mediaUrl: "/api/media/item-video?token=t",
+        isFavorite: false,
+        isBlacklisted: false
+      })
+    );
+    const page = mountPage({ server });
+    await screen.findByText("Ready (API 1)");
+
+    await waitFor(() => expect(server.logLines()).toContain("ui-error screen=panel error=RangeError"));
+    expect(server.logLines().filter((line) => line.startsWith("ui-error"))).toEqual(["ui-error screen=panel error=RangeError"]);
+    expect(server.logLines().some((line) => line.includes("holiday"))).toBe(false);
+    expect(page.root.querySelector("#panel")).toBeNull();
+    expect(page.root.querySelector("#panel-handle")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open panel" }));
+    fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
+    await waitFor(() => expect((page.root.querySelector("video") as HTMLVideoElement).src).toContain("/api/media/item-video"));
+    expect(screen.getByRole("combobox", { name: "Choose preset" })).toBeTruthy();
+    page.stream().open();
+    await screen.findByText("SSE connected");
+  });
+
+  it("keeps the player, header, status line, panel, filter dialog, and connection working when the library overlay fails", async () => {
     failing.library = true;
     const server = new FakeServer();
     server.on("POST", "/api/library/query", () => status(500));
@@ -204,23 +283,28 @@ describe("ScreenBoundary", () => {
     const page = mountPage({ server });
     await screen.findByText("Library load failed: HTTP 500");
 
-    fireEvent.click(screen.getByRole("button", { name: "Library" }));
+    showPanelTab("Library");
     await waitFor(() => expect(server.logLines()).toContain("ui-error screen=library error=TypeError"));
     expect(server.logLines().filter((line) => line.startsWith("ui-error"))).toEqual(["ui-error screen=library error=TypeError"]);
     expect(server.logLines().some((line) => line.includes("holiday"))).toBe(false);
     expect(page.root.querySelector("#library-overlay")).toBeNull();
+    expect(isShowing("Library")).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "Library" }));
-    fireEvent.click(screen.getByText("Click here to play (choose a preset or open Filter…)"));
+    fireEvent.click(within(panel()).getByRole("button", { name: "Close panel" }));
+    await waitFor(() => expect(panel().hidden).toBe(true));
+    fireEvent.click(screen.getByRole("button", { name: "Open panel" }));
+    await waitFor(() => expect(isShowing("Library")).toBe(true));
+    fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
     await waitFor(() => expect((page.root.querySelector("video") as HTMLVideoElement).src).toContain("/api/media/item-video"));
     expect(screen.getByRole("combobox", { name: "Choose preset" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Select filters" }));
-    await waitFor(() => expect((page.root.querySelector("#filter-dialog") as HTMLElement).style.display).toBe("flex"));
+    showPanelTab("Filter");
+    await waitFor(() => expect(isShowing("Filter")).toBe(true));
+    expect(page.root.querySelector("#panel-page-filter #filter-dialog")).not.toBeNull();
     page.stream().open();
     await screen.findByText("SSE connected");
   });
 
-  it("keeps the player, header, status line, library overlay, tag editor, and connection working when the filter dialog fails", async () => {
+  it("keeps the player, header, status line, panel, library overlay, tag editor, and connection working when the filter dialog fails", async () => {
     failing.filter = true;
     const server = new FakeServer();
     server.on("POST", "/api/random", () =>
@@ -241,24 +325,27 @@ describe("ScreenBoundary", () => {
     await screen.findByText("Ready (API 1)");
     expect(page.root.querySelector("#fullscreen-stage #filter-dialog")).not.toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Select filters" }));
+    showPanelTab("Filter");
     await waitFor(() => expect(server.logLines()).toContain("ui-error screen=filter error=TypeError"));
     expect(server.logLines().filter((line) => line.startsWith("ui-error"))).toEqual(["ui-error screen=filter error=TypeError"]);
     expect(server.logLines().some((line) => line.includes("holiday"))).toBe(false);
     expect(page.root.querySelector("#filter-dialog")).toBeNull();
+    expect(isShowing("Filter")).toBe(true);
 
-    fireEvent.click(screen.getByText("Click here to play (choose a preset or open Filter…)"));
+    fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
     await waitFor(() => expect((page.root.querySelector("video") as HTMLVideoElement).src).toContain("/api/media/item-video"));
     expect(screen.getByRole("combobox", { name: "Choose preset" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Library" }));
-    await waitFor(() => expect((page.root.querySelector("#library-overlay") as HTMLElement).style.display).toBe("flex"));
-    fireEvent.click(screen.getByRole("button", { name: "Edit Tags" }));
-    await waitFor(() => expect((page.root.querySelector("#tag-editor") as HTMLElement).style.display).toBe("flex"));
+    showPanelTab("Library");
+    await waitFor(() => expect(isShowing("Library")).toBe(true));
+    await waitFor(() => expect(within(page.root.querySelector("#library-overlay") as HTMLElement).getByText("No media in library.")).toBeTruthy());
+    showPanelTab("Tags");
+    await waitFor(() => expect(isShowing("Tags")).toBe(true));
+    expect(page.root.querySelector("#panel-page-tags #tag-editor")).not.toBeNull();
     page.stream().open();
     await screen.findByText("SSE connected");
   });
 
-  it("keeps the player, header, status line, library overlay, filter dialog, and connection working when the tag editor fails", async () => {
+  it("keeps the player, header, status line, panel, library overlay, filter dialog, and connection working when the tag editor fails", async () => {
     failing.tags = true;
     const server = new FakeServer();
     server.on("POST", "/api/random", () =>
@@ -281,19 +368,22 @@ describe("ScreenBoundary", () => {
     await screen.findByText("Ready (API 1)");
     expect(page.root.querySelector("#fullscreen-stage #tag-editor")).not.toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit Tags" }));
+    showPanelTab("Tags");
     await waitFor(() => expect(server.logLines()).toContain("ui-error screen=tags error=TypeError"));
     expect(server.logLines().filter((line) => line.startsWith("ui-error"))).toEqual(["ui-error screen=tags error=TypeError"]);
     expect(server.logLines().some((line) => line.includes("holiday"))).toBe(false);
     expect(page.root.querySelector("#tag-editor")).toBeNull();
+    expect(isShowing("Tags")).toBe(true);
 
-    fireEvent.click(screen.getByText("Click here to play (choose a preset or open Filter…)"));
+    fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
     await waitFor(() => expect((page.root.querySelector("video") as HTMLVideoElement).src).toContain("/api/media/item-video"));
     expect(screen.getByRole("combobox", { name: "Choose preset" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Library" }));
-    await waitFor(() => expect((page.root.querySelector("#library-overlay") as HTMLElement).style.display).toBe("flex"));
-    fireEvent.click(screen.getByRole("button", { name: "Select filters" }));
-    await waitFor(() => expect((page.root.querySelector("#filter-dialog") as HTMLElement).style.display).toBe("flex"));
+    showPanelTab("Library");
+    await waitFor(() => expect(isShowing("Library")).toBe(true));
+    await waitFor(() => expect(within(page.root.querySelector("#library-overlay") as HTMLElement).getByText("No media in library.")).toBeTruthy());
+    showPanelTab("Filter");
+    await waitFor(() => expect(isShowing("Filter")).toBe(true));
+    expect(page.root.querySelector("#panel-page-filter #filter-dialog")).not.toBeNull();
     page.stream().open();
     await screen.findByText("SSE connected");
   });

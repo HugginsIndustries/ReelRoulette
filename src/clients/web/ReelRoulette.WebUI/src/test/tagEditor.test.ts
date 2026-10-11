@@ -123,12 +123,19 @@ function setup() {
   const sessionStorage = memoryStorage();
   const localStorage = memoryStorage();
   const confirm = vi.fn(async (_request: ConfirmRequest) => true);
+  /** The panel, which Save closes. */
+  const panel = {
+    close: vi.fn(async () => {
+      steps.push(`panel close open=${editor.isOpen.peek()}`);
+    })
+  };
   const editor = createTagEditor({
     store,
     api,
     connection,
     library: { session } as never,
     player,
+    panel,
     sessionStorage,
     localStorage,
     dialogs: { confirm },
@@ -136,7 +143,7 @@ function setup() {
   });
   const view = () => editor.view.value!;
   const titles = () => view().categories?.map((category) => category.name) ?? [];
-  return { editor, view, titles, store, server, statuses, steps, listeners, tiles, storedFilter, session, player, sessionStorage, localStorage, confirm };
+  return { editor, view, titles, store, server, statuses, steps, listeners, tiles, storedFilter, session, player, sessionStorage, localStorage, confirm, panel };
 }
 
 /** Lets fetch replies finish. */
@@ -180,9 +187,12 @@ describe("opening and closing", () => {
     expect(server.posts[0]!.body).toEqual({ itemIds: ["item-1"] });
     expect(context.titles()).toEqual(["Places", "People"]);
 
-    editor.close();
+    const closing = editor.close();
     expect(editor.isOpen.value).toBe(false);
     expect(steps.at(-1)).toBe("resume open=false");
+    expect(await closing).toBe(true);
+    expect(await editor.close()).toBe(true);
+    expect(context.player.resumeAfterTagEditor).toHaveBeenCalledTimes(1);
   });
 
   it("says why when the tags cannot load, and stays open", async () => {
@@ -200,6 +210,27 @@ describe("opening and closing", () => {
     context.editor.typeNewCategoryName("Food");
     context.editor.saveNewCategory();
     expect(context.view().noModel).toBe(true);
+  });
+
+  it("loads, saves, and scans nothing while the server fails the compatibility check", async () => {
+    const context = setup();
+    const { editor, server } = context;
+    context.store.compatibilityBlocked.value = true;
+    await openOn(context);
+    expect(editor.isOpen.value).toBe(true);
+    await editor.refresh();
+    await settle();
+
+    editor.addCategory();
+    editor.typeNewCategoryName("Food");
+    editor.saveNewCategory();
+    expect(context.view().savePending).toBe(true);
+    editor.save();
+    await editor.scan();
+    await settle();
+
+    expect(server.posts).toEqual([]);
+    expect(editor.isOpen.value).toBe(true);
   });
 
   it("starts over on each open from storage, and keeps the new tag fields and the Edit Tag dialog's", async () => {
@@ -251,7 +282,7 @@ describe("opening and closing", () => {
     editor.toggleTag("Bob", "add");
 
     confirm.mockResolvedValue(false);
-    await editor.close();
+    expect(await editor.close()).toBe(false);
     await editor.refresh();
     expect(confirm.mock.calls).toEqual([[DISCARD], [DISCARD]]);
     expect(editor.isOpen.value).toBe(true);
@@ -261,10 +292,11 @@ describe("opening and closing", () => {
     const scan = editor.scan();
     expect(context.view().autoTag).toMatchObject({ scanning: true, status: "Scanning…" });
     confirm.mockResolvedValue(true);
-    await editor.close();
+    expect(await editor.close()).toBe(false);
     await editor.refresh();
     editor.save();
     expect(editor.isOpen.value).toBe(true);
+    expect(context.panel.close).not.toHaveBeenCalled();
     expect(confirm).toHaveBeenCalledTimes(2);
     await scan;
     expect(context.view().autoTag.scanning).toBe(false);
@@ -278,9 +310,10 @@ describe("opening and closing", () => {
     expect(context.server.posts.at(-1)?.path).toBe("/api/tag-editor/model");
     expect(context.server.posts).toHaveLength(2);
     await settle();
-    void editor.close();
+    const closing = editor.close();
     expect(editor.isOpen.value).toBe(false);
     expect(confirm).not.toHaveBeenCalled();
+    expect(await closing).toBe(true);
   });
 
   it("Discard closes, or drops the changes and loads the tags again", async () => {
@@ -296,7 +329,7 @@ describe("opening and closing", () => {
     expect(context.view().savePending).toBe(false);
 
     editor.toggleTag("Bob", "add");
-    await editor.close();
+    expect(await editor.close()).toBe(true);
     expect(confirm).toHaveBeenCalledTimes(2);
     expect(editor.isOpen.value).toBe(false);
     expect(context.player.resumeAfterTagEditor).toHaveBeenCalledTimes(1);
@@ -312,8 +345,9 @@ describe("opening and closing", () => {
     const close = editor.close();
     editor.save();
     expect(editor.isOpen.value).toBe(false);
+    expect(context.panel.close).toHaveBeenCalledTimes(1);
     closing.answer(true);
-    await close;
+    expect(await close).toBe(true);
     expect(context.player.resumeAfterTagEditor).toHaveBeenCalledTimes(1);
     await settle();
 
@@ -567,7 +601,7 @@ describe("Edit Tags dialogs", () => {
 });
 
 describe("saving", () => {
-  it("updates the loaded tiles, closes, sends the steps in order, then says it applied", async () => {
+  it("updates the loaded tiles, closes, and closes the panel, sends the steps in order, then says it applied", async () => {
     const context = setup();
     const { editor, steps, server, statuses } = context;
     await openOn(context);
@@ -578,7 +612,8 @@ describe("saving", () => {
 
     editor.save();
     expect(editor.isOpen.value).toBe(false);
-    expect(steps.slice(0, 2)).toEqual(["writeTags ", "resume open=false"]);
+    expect(steps.slice(0, 3)).toEqual(["writeTags ", "resume open=false", "panel close open=false"]);
+    expect(context.panel.close).toHaveBeenCalledTimes(1);
     await settle();
     expect(server.posts.slice(1).map((post) => post.path)).toEqual(["/api/tag-editor/delete-tag", "/api/tag-editor/apply-item-tags"]);
     expect(server.posts[2]!.body).toEqual({ itemIds: ["item-1"], addTags: [], removeTags: ["Beach"] });
@@ -595,6 +630,7 @@ describe("saving", () => {
     context.editor.save();
     expect(context.statuses).toEqual(["No tag changes to save."]);
     expect(context.editor.isOpen.value).toBe(true);
+    expect(context.panel.close).not.toHaveBeenCalled();
   });
 
   it("puts the tiles back and names the step the server refused", async () => {

@@ -37,6 +37,10 @@
   --control-border: #555555;
   --control-fg: #ffffff;
   --focus-ring: rgba(239, 127, 34, 0.8);
+  /* The side panel and its icons. */
+  --surface: #111111;
+  --surface-border: #333333;
+  --icon: #ffffff;
 }
 
 html.theme-light {
@@ -59,6 +63,9 @@ html.theme-light {
   --control-border: #c5cad3;
   --control-fg: #1a1d21;
   --focus-ring: rgba(239, 127, 34, 0.95);
+  --surface: #f4f5f8;
+  --surface-border: #c5cad3;
+  --icon: #333333;
 }
 
 .themed-scrollbar {
@@ -363,12 +370,16 @@ body {
 #app > header.top-bar {
   flex-shrink: 0;
 }
+/* The stage: the player, the handle, and the panel side by side, the panel on the right or the left. */
 .fullscreen-stage {
   flex: 1;
   min-height: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   position: relative;
+}
+.fullscreen-stage[data-side="left"] {
+  flex-direction: row-reverse;
 }
 .fullscreen-stage:fullscreen,
 .fullscreen-stage:-webkit-full-screen {
@@ -600,9 +611,7 @@ body {
   z-index: 20;
   filter: drop-shadow(var(--control-drop-shadow));
 }
-#library-open-btn.overlay-corner-btn { right: 220px; }
-#filter-edit-btn.overlay-corner-btn { right: 168px; }
-#tag-edit-btn.overlay-corner-btn { right: 116px; }
+#panel-btn.overlay-corner-btn { right: 116px; }
 #favorite-btn.overlay-corner-btn { right: 64px; }
 #blacklist-btn.overlay-corner-btn { right: 12px; }
 .overlay-seek-row {
@@ -624,15 +633,13 @@ body {
   display: none;
 }
 .tag-editor {
-  position: fixed;
-  inset: 0;
-  background: rgba(16, 16, 16, 0.96);
-  color-scheme: dark;
-  z-index: 1000;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  padding: 16px;
-  gap: 12px;
+  padding: 12px;
+  gap: 10px;
 }
 .tag-editor-header {
   display: flex;
@@ -964,11 +971,6 @@ body {
   min-width: 0;
 }
 
-html.theme-light .tag-editor {
-  background: rgba(248, 249, 252, 0.98);
-  color: var(--page-fg);
-  color-scheme: light;
-}
 html.theme-light .tag-editor button:not(.icon-glyph-base) {
   background: var(--panel-bg);
   color: var(--page-fg);
@@ -1014,15 +1016,13 @@ html.theme-light .tag-editor .tag-chip .chip-btn.icon-glyph-base.is-selected {
 }
 
 .filter-dialog {
-  position: fixed;
-  inset: 0;
-  background: rgba(16, 16, 16, 0.96);
-  color-scheme: dark;
-  z-index: 1000;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  padding: 16px;
-  gap: 12px;
+  padding: 12px;
+  gap: 10px;
 }
 .filter-dialog-header {
   display: flex;
@@ -1260,11 +1260,6 @@ body.sorting * {
   user-select: none;
   -webkit-user-select: none;
 }
-html.theme-light .filter-dialog {
-  background: rgba(248, 249, 252, 0.98);
-  color: var(--page-fg);
-  color-scheme: light;
-}
 html.theme-light .filter-dialog-body {
   background: #f4f5f8;
   border-color: var(--panel-border);
@@ -1296,15 +1291,13 @@ html.theme-light .filter-dialog .tag-chip .chip-btn.icon-glyph-base.is-selected 
 }
 
 .library-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(16, 16, 16, 0.96);
-  color-scheme: dark;
-  z-index: 1000;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  padding: 16px;
-  gap: 12px;
+  padding: 12px;
+  gap: 10px;
 }
 .library-overlay-header {
   display: flex;
@@ -1328,11 +1321,6 @@ html.theme-light .filter-dialog .tag-chip .chip-btn.icon-glyph-base.is-selected 
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.library-overlay-actions {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 8px;
 }
 .library-overlay-body {
   flex: 1;
@@ -1478,11 +1466,6 @@ html.theme-light .library-grid-tile:focus-visible {
   background: transparent;
   color: #fff;
 }
-html.theme-light .library-overlay {
-  background: rgba(248, 249, 252, 0.98);
-  color: var(--page-fg);
-  color-scheme: light;
-}
 html.theme-light .library-overlay-body {
   background: #f4f5f8;
   border-color: var(--panel-border);
@@ -1567,7 +1550,8 @@ html.theme-light .library-overlay-result-row {
   border-bottom-color: rgba(0, 0, 0, 0.08);
 }
 
-@media (max-width: 600px) {
+/* The tabs' narrow layouts follow the panel's width, which beside the player is narrow at any window width. */
+@container panel (max-width: 600px) {
   .library-overlay-search {
     flex: 1 1 100%;
   }
@@ -1578,10 +1562,18 @@ html.theme-light .library-overlay-result-row {
     min-width: 0;
     flex: 1 1 auto;
   }
+  .tag-editor-footer {
+    gap: 6px;
+  }
+  .tag-editor-footer select {
+    flex-basis: 120px;
+    min-width: 96px;
+  }
 }
 
-main {
-  flex: 1;
+.player-col {
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 0;
   display: flex;
   overflow: hidden;
@@ -1624,17 +1616,145 @@ main {
     max-width: 100%;
   }
   .now-playing { margin-left: 0; }
-  .tag-editor-footer {
-    gap: 6px;
-  }
-  .tag-editor-footer select {
-    flex-basis: 120px;
-    min-width: 96px;
-  }
   .diagnostics-mobile {
     display: block;
     font-size: 0.75rem;
     color: var(--muted-fg);
     margin-top: 2px;
+  }
+}
+
+/* The side panel: beside the player at its width, or the full-screen overlay as the stage's panel mode says. */
+.panel {
+  flex: 0 0 var(--panel-width, 420px);
+  width: var(--panel-width, 420px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  color: var(--page-fg);
+  color-scheme: dark;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  container: panel / inline-size;
+}
+html.theme-light .panel {
+  color-scheme: light;
+}
+.panel[hidden],
+.panel-page[hidden],
+.panel-handle[hidden] {
+  display: none;
+}
+.fullscreen-stage[data-panel-mode="overlay"] .panel {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  width: auto;
+  border: 0;
+  border-radius: 0;
+}
+.fullscreen-stage[data-panel-mode="overlay"] .panel-handle {
+  display: none;
+}
+.panel-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 8px;
+  border-bottom: 1px solid var(--surface-border);
+  flex: 0 0 auto;
+}
+.panel-tablist {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.panel-tab {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--icon);
+  cursor: pointer;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.panel-tab:hover {
+  background: rgba(127, 127, 127, 0.16);
+}
+.panel-tab:focus-visible,
+.panel-close:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.panel-tab[aria-selected="true"] {
+  color: var(--huggins-orange);
+}
+.panel-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -5px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--huggins-orange);
+}
+.panel-tabs-spacer {
+  flex: 1;
+}
+.panel-close {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--icon);
+  cursor: pointer;
+}
+.panel-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* The handle between the player and the panel, which drags the panel's width. */
+.panel-handle {
+  flex: 0 0 12px;
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+}
+.handle-grip {
+  width: 4px;
+  height: 44px;
+  border-radius: 2px;
+  background: var(--panel-border);
+  transition: background 0.15s, height 0.15s;
+}
+.panel-handle:hover .handle-grip,
+.panel-handle:focus-visible .handle-grip,
+.panel-handle.is-dragging .handle-grip {
+  background: var(--huggins-orange);
+  height: 88px;
+}
+@media (pointer: coarse) {
+  .panel-handle {
+    flex-basis: 20px;
+  }
+  .handle-grip {
+    width: 6px;
+    height: 56px;
   }
 }

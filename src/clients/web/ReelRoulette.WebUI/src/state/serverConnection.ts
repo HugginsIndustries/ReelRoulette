@@ -67,6 +67,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
   }
 
   function blockForCompatibility(message: string): void {
+    store.compatibilityMessage.value = message;
     store.compatibilityBlocked.value = true;
     eventStream?.stop();
     store.setStatus(message);
@@ -97,6 +98,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
         return false;
       }
       store.compatibilityBlocked.value = false;
+      store.compatibilityMessage.value = null;
       store.pairingRequired.value = false;
       store.setStatus(`Ready (API ${version.apiVersion || "unknown"})`);
       emit("serverReady");

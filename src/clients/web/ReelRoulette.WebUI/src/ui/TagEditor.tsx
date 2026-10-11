@@ -30,9 +30,9 @@ function Icon({ name }: { name: string }) {
 }
 
 /**
- * The tag editor, with its Edit Tags and Auto Tag tabs, and its Edit Tag, Edit Category, and New Category dialogs. It
- * shows only while open, and its panels are empty until it first opens. The dialogs render after it rather than inside,
- * so the editor's own button styles don't reach them.
+ * The Tags tab's tag editor, with its Edit Tags and Auto Tag tabs, and its Edit Tag, Edit Category, and New Category
+ * dialogs. The panel shows and hides the tab, and the editor's panels are empty until it first opens. The dialogs
+ * render after it rather than inside, so the editor's own button styles don't reach them.
  */
 export function TagEditor() {
   const { tagEditor } = useApp();
@@ -58,12 +58,11 @@ export function TagEditor() {
   });
   return (
     <>
-      <div id="tag-editor" class="tag-editor" style={{ display: tagEditor.isOpen.value ? "flex" : "none" }}>
+      <div id="tag-editor" class="tag-editor">
         <div class="tag-editor-header">
           <h2>Tag Editor</h2>
           <div class="tag-editor-actions">
             <button id="tag-editor-refresh-btn" class={BUTTON} title="Refresh" aria-label="Refresh" disabled={scanning} onClick={() => void tagEditor.refresh()}><Icon name="refresh" /></button>
-            <button id="tag-editor-close-btn" class={BUTTON} title="Close" aria-label="Close" disabled={scanning} onClick={() => void tagEditor.close()}><Icon name="close" /></button>
           </div>
         </div>
         <div class="filter-dialog-tabstrip tag-editor-tabstrip" role="tablist">

@@ -137,12 +137,26 @@ Last milestone completed: M12f3
 
 ### M12f4 - WebUI Responsive Layout and Panels
 
-- **Status**: ⏳ Planned
+- **Status**: 🚧 In Progress
 - **Goal**: The WebUI layout adapts to the viewport: on tablets and desktops a side panel beside the player keeps the video in view while browsing, filtering, or tagging, and on phones the panel is a full-screen overlay.
 - **Depends on**: WebUI Preact Migration, WebUI Design Mockup, and New Logo and Icons, whose logo the header shows, and Favorite and Blacklist Filter Modes, whose filter controls the Filter tab carries, and WebUI In-App Dialogs, whose dialogs open inside the panel.
 - **Design**: `docs/mockups/reelroulette/`.
 
-#### Scope
+#### Decisions
+
+- Below 800 px of viewport width, or on a touch screen (coarse pointer) below 500 px of viewport height, the panel is a full-screen overlay with the same tabs; otherwise it sits beside the player.
+- The breakpoints use viewport size and pointer type, not the user agent.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Panel | ✅ Complete | The side panel beside the player or as a full-screen overlay, with the Library, Filter, and Tags tabs, one panel button, a resize handle, and its state remembered per device. |
+| Phone layouts | ⏳ Planned | A phone on its side fills the screen with the player, the installed app stays clear of the safe-area insets, and a reconnecting indicator shows while the status line is hidden. |
+
+#### Panel slice
+
+**Scope**
 
 - The main page is a header bar, the player with its overlay controls, and the footer status line, as today.
 - The header holds the logo, which New Logo and Icons puts there in place of the app name, and the current file name.
@@ -152,40 +166,47 @@ Last milestone completed: M12f3
 - The pairing token prompt keeps showing in the header, labeled "Pairing token", when the server asks for pairing.
 - Before anything plays, the player says "Tap to play, or open the panel to choose a preset or filter." in place of today's "Click here to play (choose a preset or open Filter…)", and a tap or Play starts a random pick, as today.
 - When the server fails the compatibility check, the panel still opens, the Library tab shows the compatibility message in place of the grid, and Play shows its notice.
+- Play's notice is the in-app notice "Cannot play: server compatibility check failed.", shown for Play, a tap on the player, and Next at the end of history, in place of today's status line message.
 - A panel host: at most one panel is open at a time.
-- Below 800 px of viewport width, or on a touch screen (coarse pointer) below 500 px of viewport height, the panel is a full-screen overlay with the same tabs; otherwise it sits beside the player.
-- The breakpoints use viewport size and pointer type, not the user agent.
 - Beside the player, the panel sits on the right by default or on the left as a per-device setting.
 - A drag handle between the panel and the player sets the panel's width, from 360 px to whatever leaves the player 400 px wide, starting at 420 px. The handle also takes the arrow keys while it has focus.
+- A remembered width wider than the window allows shows at the widest the window allows, and stays remembered for a wider window.
 - The panel has a single row of icon-only tabs: Library, Filter, Tags, Stats, and Settings, each with a tooltip and an accessible name.
+- Stats and Settings join the tab row with WebUI Stats Panel and WebUI Settings Panel, so this milestone's row holds Library, Filter, and Tags.
 - Library, Filter, and Tags keep the icons the player's buttons for them use today (`browse`, `filter_alt`, and `tag`).
 - This milestone builds the Library, Filter, and Tags tabs from the library overlay, filter dialog, and tag editor, moved in as they are.
+- One Close button at the end of the tab row closes the panel, in place of the library overlay's, filter dialog's, and tag editor's own Close.
 - The player's Library, Filter, and Tags buttons give way to one panel button, which opens the panel on its last tab, Library the first time, and closes the panel when it is open.
 - The panel button's icon shows the panel's side and whether it is open (`right_panel_open` and `right_panel_close`, or their left counterparts), and it is orange while the panel is open.
 - Favorite and Blacklist stay on the player.
 - Choosing a tile in the Library tab plays it in the player beside the panel. As the overlay, choosing a tile plays it and closes the overlay, as the library overlay does today.
 - Beside the player, the Filter tab's Apply and Cancel leave the panel open. As the overlay they close it, as the filter dialog does today.
+- The Filter tab's Cancel puts back the applied filter and the saved presets, as the mockup's does.
+- Leaving the Filter tab, for another tab or by closing the panel, drops its unsaved changes, as closing the filter dialog does today.
+- Leaving the Tags tab with unsaved changes asks "Discard changes?" first, as the tag editor's Close does today.
+- While Auto Tag scans, the Tags tab can't be left, and the panel's Close is disabled, as the tag editor's Close is today.
+- The Tags tab's Save closes the panel at every width, as the tag editor's Save closes the editor today.
 - The Tags tab keeps the tag editor's pause and resume, and the other tabs leave playback going.
+- Escape closes the top dialog, or else the panel, or else pseudo-fullscreen.
 - The WebUI remembers its per-device state across a page refresh, as the desktop remembers its own across restarts.
 - This milestone adds one per-device store and remembers in it whether the panel is open, its side, width, and last tab.
+- A panel remembered open opens on its last tab when the page loads, and that tab starts as if it had just been opened.
 - The panel and the dialogs stay inside the fullscreen stage, so they work in fullscreen as the overlays do today, including iOS pseudo-fullscreen.
-- Phone layouts work in an installed app (standalone display, safe-area insets).
-- A phone on its side, by the overlay's short-screen rule (a touch screen below 500 px of viewport height): the header and status line hide and the player fills the screen, as in fullscreen but without the browser's fullscreen mode.
-- On a phone on its side, the panel, as the overlay, and the dialogs still open, in layouts that fit a short screen.
-- A tablet in landscape, at 500 px or more, keeps the normal layout.
-- While the server asks for pairing, the header shows on a phone on its side anyway, so its prompt can be reached.
-- While the status line is hidden, on a phone on its side or with WebUI Settings Panel's Show the status line off, a small indicator on the player shows while the connection is lost and reconnecting.
 
-#### Traps
+**Traps**
 
 - The tag editor, filter, and library overlays are each `position: fixed; inset: 0` with `z-index: 1000`, so they cover the player while it keeps playing underneath (measured).
 - The tag editor pauses playback when it opens and resumes it when it closes (`pauseForTagEditor` and `resumeAfterTagEditor`).
-- The stylesheet has two `@media (max-width: 600px)` rules (measured).
 - Mobile browsers are detected by user agent (`getClientType` in `src/api/coreApi.ts`) (measured).
 - When the server fails the compatibility check, the library overlay doesn't open (`open` in `src/library/library.ts`), and play, pairing, and events stop.
+- Play while the compatibility check has failed shows its message on the status line (`pickRandom` in `src/playback/player.ts`).
 - Browser storage is kept per address, so on one device the WebUI opened at `localhost`, at the LAN address, and through an HTTPS proxy remembers three separate sets of state (inferred).
+- The filter dialog's Refresh does nothing before the dialog has loaded once (`refresh` in `src/filter/filterDialog.ts`).
+- The library grid reflows by itself when its width changes, through a `ResizeObserver` (`libraryGridController.ts`).
+- The bundled Material Symbols font has `right_panel_open`, `right_panel_close`, `left_panel_open`, and `left_panel_close` (measured).
+- happy-dom's `setViewport` changes the window size and fires `resize` and media query `change` events, and its `matchMedia` always reports a fine pointer, with no setting to change it (measured).
 
-#### Acceptance
+**Acceptance**
 
 - The main page shows the header bar with the logo and the current file name, the player with its overlay controls, and the footer status line, and the header has no settings icon.
 - At most one panel is open at a time, in component tests of the panel host.
@@ -197,15 +218,105 @@ Last milestone completed: M12f3
 - Beside the player, the Filter tab's Apply and Cancel leave the panel open; as the overlay, they close it. Shown by component tests of the Filter tab's Apply and Cancel beside the player and as the overlay.
 - After a page refresh, whether the panel is open, its side, width, and last tab are each as they were, in a component test of a page refresh keeping the panel's state.
 - Resizing the window across a breakpoint moves an open panel between side panel and overlay without losing its state, in panel host tests of the breakpoints.
-- The panel works in fullscreen.
-- On a touch screen below 500 px of viewport height, the header and status line hide and the player fills the screen without the browser's fullscreen mode, and the panel and dialogs open in layouts that fit; a tablet in landscape keeps the normal layout. Shown by component tests of the short-screen layout of a phone on its side.
-- As an installed app on a phone, the header, the panel, and the player's controls stay clear of the safe-area insets, in component tests of safe-area insets in a standalone display.
+- The panel works in fullscreen, in component tests of the panel in fullscreen and pseudo-fullscreen.
 - The layout does not depend on the user agent, in panel host tests of the breakpoints by width and by pointer and height.
 - Before anything plays, the player shows "Tap to play, or open the panel to choose a preset or filter.", and a tap or Play starts a random pick.
 - When the server fails the compatibility check, the panel opens, the Library tab shows the message in place of the grid, and Play shows its notice, in component tests of the compatibility-failure state.
-- On a phone on its side the header shows while the server asks for pairing, and while the status line is hidden a reconnecting indicator shows on the player when the connection is lost. Shown by component tests of the short-screen layout and of the reconnecting indicator.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check on a phone and a desktop browser.
+
+**Evidence**
+
+- The panel host is `src/panel/panelHost.ts`, the panel's tab row, pages, and resize handle are `src/ui/Panel.tsx`, and the per-device store is `src/state/deviceStore.ts`, one `localStorage` entry per setting as JSON under `rr_device.`, read with a fallback. The library overlay, filter dialog, and tag editor are the tabs' contents as they were, without their own Close; their element ids stay, for WebUI Library Tab and WebUI Tags and Filter Tabs to rework.
+- The host shows and hides the panel, the handle, and the tab pages by their `hidden` before a tab starts, so the library grid measures itself shown, as the overlay's `display` did. The stage takes the panel's side, mode, and width as attributes and a CSS variable without rendering again, and the tab row and the handle render apart from the pages, so dragging the handle doesn't render the player or the tabs.
+- A tab can refuse to be left: the Tags tab does while Auto Tag scans and when the user keeps their changes at "Discard changes?". Other requests are ignored until it answers.
+- The Filter service's open state now means the tab shows. Opening puts back the applied filter on General before it loads, so changes the tab was left with don't show while it loads again, and changes made while it loads are kept, the load then taking only the sources, tags, and presets, as Refresh does. Refresh before a first load loads the tab, which a panel remembered open on Filter needs when its first load fails. Nothing loads into the Filter tab while the server fails the compatibility check, Refresh included.
+- A panel remembered open shows its tab when the page loads and starts it once the server has passed or failed the compatibility check, so no tab loads from a server that hasn't been checked.
+- Nothing loads into the Tags tab while the server fails the compatibility check, and its Save and Scan Files send nothing, as for the Filter tab, so a Tags tab remembered open that starts on a failed check loads nothing.
+- The handle's width is measured while it shows, with the stylesheet's 12 and 20 px standing in until then. A click on the handle that doesn't drag leaves the remembered width, which can be wider than the window allows.
+- Beside the player, Next, Previous, and a swipe still change the item playing while the Tags tab shows, and the tab keeps the tags of the item playing when it showed, so its Save writes to that item. WebUI Tags and Filter Tabs makes the tab follow the playing item.
+- Closing the Tags tab resumes only the play it paused: a video the user played or paused while the tab showed stays as they left it, and nothing resumes once another item, or the same one again, has started, so an item played again while the tab showed isn't played and recorded once more. A photo the tab held still records its play again as it resumes. WebUI Auto-Pause and Photo Scrub Bar replaces this pause and resume, and resumes a photo without recording its play again.
+- The handle sits beside the panel, not in it, so closing the panel with focus on the handle gives focus to the panel button too.
+- Stats and Settings are not in the tab row yet; WebUI Stats Panel and WebUI Settings Panel add them.
+- The stylesheet takes the mockup's `--surface`, `--surface-border`, and `--icon` tokens and its panel, tab row, and handle rules. The overlays' full-screen positioning and backgrounds went, and their narrow layouts follow the panel's width through a container query, since beside the player the panel is narrow at any window width.
+- happy-dom's `setViewport` fires `resize` and media query `change` events, its `matchMedia` always reports a fine pointer, so the touch screen tests stub it, and it applies the stylesheet, so the tests read beside or overlay from the panel's computed position. It parses the container query without applying it (all measured).
+- The mockup already shows this layout. Its panel now gives focus back on closing only when focus was in the panel or on its handle, as the app does, where before it gave focus back to whatever opened the panel; its check closes the panel with focus outside it and with focus on its Close. Until later milestones, the app differs from it as they say: the header keeps the preset, randomization mode, and photo duration (WebUI Library Tab and WebUI Settings Panel); the tab row has three tabs (WebUI Stats Panel and WebUI Settings Panel); the Library tab keeps today's controls (WebUI Library Tab); the Tags tab keeps its Edit Tags and Auto Tag tabs and Save closes the panel, leaving the Tags tab asks first while leaving the Filter tab drops its changes, and no orange dot marks unsaved changes on the Filter and Tags tabs or the panel button (WebUI Tags and Filter Tabs); playback doesn't pause while the panel is the overlay, only while the Tags tab shows (WebUI Auto-Pause and Photo Scrub Bar); the arrow keys don't move between the panel's tabs (WebUI Keyboard Navigation and Focus); and the overlay has no safe-area padding, a touch screen below 500 px of height keeps the header and status line, and no reconnecting indicator shows on the player (the Phone layouts slice). `check.mjs` passes 749 checks.
+- New WebUI tests:
+  - the device store: settings kept and read back, a missing, unreadable, or wrong value read as its fallback, and storage the browser refuses;
+  - the panel host: the breakpoints at 799 and 800 px of width and at 499 and 500 px of height on a touch screen, a short window with a mouse, a tablet in landscape, an open panel crossing them keeping its tab with no tab started or left, the side, the width's start, limits, touch handle, the stage's width, and memory, opening on Library then the last tab, one page at a time, a tab refusing to be left, other requests ignored while it decides, closing only as the overlay, and memory of open and tab, with what can't be read falling back;
+  - the page: the header, the empty state and its tap, the one panel button with Favorite and Blacklist and no Library, Filter, or Tags button, its last tab, icons by side and state, and orange while open, the tabs' names, tooltips, and icons, one tab page at a time, Close giving focus back to the panel button, Escape, the breakpoints by width, by pointer and height, and not by user agent, crossing a breakpoint keeping the Filter tab's changes, dragging the handle and its keys on either side, a page refresh keeping the panel's state, choosing a tile beside the player and as the overlay, Apply and Cancel beside the player and as the overlay, Refresh after a failed load, the Tags tab asking before it is left and Save closing the panel, the panel in fullscreen and pseudo-fullscreen, and the compatibility failure;
+  - the panel's error boundary, which leaves the player, header, status line, and connection working;
+  - the Filter service's Cancel, starting over on General on open before it loads, keeping changes made while it loads, Refresh before a first load, and loading nothing while the server fails the compatibility check, the tag editor's close saying whether the tab can hide, and the Tags tab staying while Auto Tag scans;
+  - the panel host's handle measured while it shows, and a remembered tab started once, only while the panel is still open on it; the page's click on the handle that doesn't drag, a remembered tab starting after the version check, and a Filter tab remembered open loading nothing from an incompatible server, nor on its Refresh;
+  - the player's resume after the tag editor leaving a play or pause the user made and an item started since, the tag editor loading, saving, and scanning nothing while the server fails the compatibility check, and the page's Escape with focus on the handle, and a Library or Tags tab remembered open with a server that fails the check.
+- Existing tests now open and close the tabs through the panel. Tile plays that closed the overlay, and the filter save failure that kept it open, run at 600 px wide; the storage tests allow the panel's own keys.
+- The four markup snapshots changed for the panel and the panel button in place of the three buttons, the new empty state and pairing label, the tab contents without their Close and `display`, and the tag editor's generated ids, which moved by one now that it renders after the Filter tab, and nothing else.
+- Each guard was broken on purpose and its tests failed (measured, of 874):
+  - the overlay at exactly 800 px: 2;
+  - no short touch screen rule: 3;
+  - the user agent deciding: 1;
+  - no widest width: 1;
+  - open not remembered: 2;
+  - a remembered open tab not started: 2;
+  - closing beside the player too: 33;
+  - a tab unable to refuse being left: 5;
+  - no focus back to the panel button: 1;
+  - Cancel keeping the changes: 3;
+  - Refresh needing a loaded tab: 3;
+  - Save leaving the panel open: 7;
+  - no compatibility message in the Library tab: 3;
+  - Play's compatibility message on the status line: 2;
+  - the handle's keys ignoring the side: 2;
+  - the panel button ignoring the side: 1;
+  - no overlay style: 4;
+  - no panel error boundary: 1;
+  - Escape not closing the panel: 4.
+- The guards added after review failed the same way (measured, of 879):
+  - a Filter load with no compatibility check: 3;
+  - a remembered tab starting before the version check: 4;
+  - a Filter reload replacing changes made while it loads: 1;
+  - no start-over before a Filter reload: 1;
+  - the handle not measured: 1;
+  - a click on the handle remembering the width: 1.
+- The guards added after the second review failed the same way (measured, of 885):
+  - the tag editor's resume undoing the user's play or pause: 1;
+  - the tag editor's resume after another play started: 1;
+  - the tag model loading while the server fails the compatibility check: 2;
+  - the tag editor's Save sending while it fails: 1;
+  - the tag editor's scan sending while it fails: 1;
+  - focus on the handle ignored when the panel closes: 1;
+  - a remembered tab not started when the check fails: 1.
+- The guard added after the third review failed the same way (measured, of 885): a Filter reload replacing a duration being typed and a Favorites choice held while its box is off: 1.
+- `npm run verify` passed: 51 test files, 885 tests, the build, and the build output check.
+- `CHANGELOG.md`, `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, and `docs/domain-inventory.md` are updated, and the testing checklist's Release Specific checks name the panel's tabs.
+- The spot check passed on a phone and a desktop browser.
+
+#### Phone layouts slice
+
+**Scope**
+
+- Phone layouts work in an installed app (standalone display, safe-area insets).
+- A phone on its side, by the overlay's short-screen rule (a touch screen below 500 px of viewport height): the header and status line hide and the player fills the screen, as in fullscreen but without the browser's fullscreen mode.
+- On a phone on its side, the panel, as the overlay, and the dialogs still open, in layouts that fit a short screen.
+- A tablet in landscape, at 500 px or more, keeps the normal layout.
+- While the server asks for pairing, the header shows on a phone on its side anyway, so its prompt can be reached.
+- While the status line is hidden, on a phone on its side or with WebUI Settings Panel's Show the status line off, a small indicator on the player shows while the connection is lost and reconnecting.
+
+**Traps**
+
+- The stylesheet has one `@media (max-width: 600px)` rule, for the header and the diagnostics line; the panel's narrow layouts follow its own width through `@container panel (max-width: 600px)` (measured).
+- happy-dom leaves `env()` and `max()` out of computed styles, but substitutes `var()` and keeps `calc()` (measured).
+- `index.html`'s viewport meta has no `viewport-fit=cover`, so `env(safe-area-inset-*)` reads 0 (inferred).
+- With `apple-mobile-web-app-status-bar-style` set to `black-translucent`, an installed iOS app draws the page under the status bar, so the header can sit under it today (inferred).
+- Only the status line's "SSE reconnecting..." records a lost event stream (`createEventStream` in `src/state/serverConnection.ts`).
+
+**Acceptance**
+
+- On a touch screen below 500 px of viewport height, the header and status line hide and the player fills the screen without the browser's fullscreen mode, and the panel and dialogs open in layouts that fit; a tablet in landscape keeps the normal layout. Shown by component tests of the short-screen layout of a phone on its side.
+- As an installed app on a phone, the header, the panel, and the player's controls stay clear of the safe-area insets, in component tests of safe-area insets in a standalone display.
+- On a phone on its side the header shows while the server asks for pairing, and while the status line is hidden a reconnecting indicator shows on the player when the connection is lost. Shown by component tests of the short-screen layout and of the reconnecting indicator.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check on a phone.
 
 #### Release checks
 
@@ -219,8 +330,11 @@ Last milestone completed: M12f3
 - Choosing the panel's side in the Settings tab, which is WebUI Settings Panel.
 - Reworking the Library tab, which is WebUI Library Tab.
 - Reworking the Tags and Filter tabs, which is WebUI Tags and Filter Tabs.
+- The Tags tab's Save leaving the panel open, which is WebUI Tags and Filter Tabs.
+- The Tags tab following the playing item, which is WebUI Tags and Filter Tabs. Until then, beside the player, it keeps the item playing when it showed, and its Save writes to that item.
 - The Stats tab, which is WebUI Stats Panel.
 - The Settings tab, which is WebUI Settings Panel.
+- The arrow keys, Home, and End moving between the panel's tabs, which is WebUI Keyboard Navigation and Focus.
 - Replacing the tag editor's pause and resume, which is WebUI Auto-Pause and Photo Scrub Bar.
 - Per-device state that later milestones add, which each remembers in the same store: WebUI Library Tab, WebUI Tags and Filter Tabs, WebUI Settings Panel, the player milestones, and duplicate review in Admin Refresh, Backup, and Duplicate Review.
 - The playing item and its position, which is Resume Position and Session Continuity.
@@ -296,7 +410,8 @@ Last milestone completed: M12f3
 - With unsaved changes to its item's tags, the Tags tab stays on that item and shows a line naming it, "Editing tags for {file name}", until those changes are saved or discarded (Refresh discards them, asking first), and then follows the playing item.
 - Unsaved changes that are not to the item's tags, such as a category reorder or rename, don't hold the Tags tab on its item.
 - Unsaved changes survive closing the panel and switching tabs: the Filter tab's until Apply or Cancel, and the Tags tab's until Save, or Refresh, which discards them after asking.
-- The tag editor's Close confirmation, which WebUI In-App Dialogs moved to its dialog, goes away.
+- Leaving the Tags tab, for another tab or by closing the panel, no longer asks "Discard changes?".
+- The Tags tab's Save leaves the panel open, beside the player and as the overlay, as the mockup shows.
 - While the Filter or Tags tab holds unsaved changes, a small orange dot marks its tab icon, and the player's panel button while either does, so they aren't forgotten when the panel is closed, and their accessible names say so.
 - Tag categories, in the Tags tab and the Filter tab's Tags section, collapse and expand when their header is tapped or clicked, and their expand and collapse arrows go.
 - A category header's drag handle, its Edit button, and the Filter tab's Local match select keep their own actions.
@@ -307,7 +422,7 @@ Last milestone completed: M12f3
 - Auto Tag opens from the Tags tab as an overlay over the whole page, as its tab does today, instead of as a tab of the tag editor, so its file list keeps its width.
 - Auto Tag covers the player.
 - Auto Tag has its own Apply for its selected changes, which today the tag editor's Save applies.
-- Auto Tag's Close is disabled while a scan runs, as the tag editor's Refresh and Close are today.
+- Auto Tag's Close is disabled while a scan runs, as the tag editor's Refresh and the panel's Close are today.
 - Auto Tag's Apply sits at the right of its footer with Cancel to its left.
 - Auto Tag's Cancel clears the scan and closes Auto Tag, while the X at the top right closes it and keeps the last scan; both wait while a scan runs.
 - With View all matches, files that already have the tag show checked and disabled, so they can't be unchecked.
@@ -321,9 +436,9 @@ Last milestone completed: M12f3
 
 - Enter in the tag editor's New tag name does nothing: the field has no key handler and no form (`TagEditor.tsx`).
 - The tag editor's footer, with Add tag, also shows under the Auto Tag tab, where the new chip is hidden, so focus drops to the page after Add tag (`TagEditor.tsx`). Auto Tag opening as its own overlay over the whole page ends that case.
-- The tag editor takes the item playing when it opens (`open` in `src/tags/tagEditor.ts`), and its pause keeps that item on screen while it is open.
-- Closing the tag editor asks "Discard changes?" when it has changes (`close` in `src/tags/tagEditor.ts`).
-- Reopening the filter dialog rebuilds its draft from the applied filter and the server's presets, dropping unsaved filter and preset changes (`open` in `src/filter/filterDialog.ts`).
+- The Tags tab's tag editor takes the item playing when the tab shows (`open` in `src/tags/tagEditor.ts`) and keeps it. Beside the player, Next, Previous, and a swipe still change the item playing, so the tab can show and save an item that is no longer on screen.
+- Leaving the Tags tab, for another tab or by closing the panel, asks "Discard changes?" when it has changes (`close` in `src/tags/tagEditor.ts`).
+- Showing the Filter tab again rebuilds its draft from the applied filter and the server's presets, dropping unsaved filter and preset changes (`open` in `src/filter/filterDialog.ts`).
 - With View all matches, files that already have the tag show as ordinary checkboxes that start unchecked, and checking one sends the file again (`visibleAutoTagFiles` and `autoTagAssignments` in `src/tags/autoTagModel.ts`).
 - Auto Tag's results area is empty before a scan, and after one that finds nothing it repeats the status line's "Scan complete: no matching tags found." (`autoTagResults` in `src/tags/autoTagModel.ts`).
 - Auto Tag's header and each row are separate grids whose count columns size to their own content (`.tag-autotag-table-head` and `.tag-autotag-row-main` in `src/styles.css`), so the numbers drift from their headers.
@@ -337,6 +452,7 @@ Last milestone completed: M12f3
 - Tag categories start collapsed, new ones included, and each tab remembers which are expanded per device, after a page refresh too. A category expands when a tag is added to it or moved into it. A collapsed category's header shows how many of its tags the item has, in the Tags tab, or the filter uses, in the Filter tab, and the orange dot while it holds unsaved changes. Shown by component tests of categories starting collapsed and remembered per tab across a page refresh, expanding when a tag is added or moved into them, and a collapsed header's count and unsaved-changes dot.
 - Auto Tag opens from the Tags tab over the whole page, applies its selected changes with its own Apply, and its Close is disabled while a scan runs, in component tests of Auto Tag's Apply and its Close during a scan.
 - Auto Tag's Cancel, left of Apply, clears the scan and closes it, and the X closes it and keeps the last scan. With View all matches, files that already have the tag are checked and disabled. Its results area shows one placeholder before any scan and another when a scan finds nothing, and its two count columns line up under their headers. Shown by component tests of Auto Tag's Cancel, X, View all matches, and placeholders.
+- The Tags tab's Save leaves the panel open beside the player and as the overlay, in component tests of Save at each width.
 - The Filter tab's no-tags message names the Tags tab.
 - Enter in New tag name adds the tag, and does nothing while Add tag is disabled, in component tests of New tag name.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
@@ -366,6 +482,7 @@ Last milestone completed: M12f3
 - Closing resumes playback only if Auto-Pause paused it; playback the user paused stays paused.
 - Playing or pausing while the panel is open hands playback back to the user, so closing leaves it as it is.
 - Pausing a photo holds its autoplay timer, and the photo then resumes with the time it had left, not its full duration.
+- Resuming a photo neither loads it again nor records its play again, as closing the Tags tab on the same photo does today.
 - The mode is fixed at Responsive.
 - On a photo, the player's scrub bar stays in its place, so the controls keep their place between photos and videos.
 - While a photo's timer runs, with Autoplay on and Loop off, the bar fills as the timer runs, showing when the next item plays, with the time shown as elapsed and photo duration.
@@ -379,6 +496,7 @@ Last milestone completed: M12f3
 #### Traps
 
 - The tag editor's resume restarts a held photo: `resumeAfterTagEditor` in `src/playback/player.ts` calls `playCurrent`, which reloads the photo and starts its full duration.
+- `playCurrent` records a play unless the server already did, so the tag editor's resume records a held photo's play a second time, and the screen test of the Tags tab holding a photo's autoplay timer expects that second record (`src/test/screens/player.test.ts`).
 - `playCurrent` hides the seek row for a photo.
 - Play does nothing on a photo (`playOrPause` in `src/playback/player.ts` acts only on a video).
 - Nothing sets `accent-color` (`src/styles.css`).
@@ -390,7 +508,7 @@ Last milestone completed: M12f3
 - With Auto-Pause on Always, opening the panel pauses playback at every width; on Never, opening it never pauses. Shown by component tests of Auto-Pause in each mode at phone and desktop widths.
 - Under Always and Responsive, opening Auto Tag pauses playback, in component tests of Auto-Pause with Auto Tag.
 - Closing the panel or Auto Tag resumes playback only if Auto-Pause paused it, playback the user paused stays paused, and playing or pausing while the panel is open leaves playback as it is on close, in component tests of Auto-Pause with playback the user paused or resumed.
-- Auto-Pause holds a photo's autoplay timer while it pauses, and the photo then resumes with the time it had left, in a component test of a photo resuming with the time it had left.
+- Auto-Pause holds a photo's autoplay timer while it pauses, and the photo then resumes with the time it had left, without loading it again or recording its play again, in a component test of a photo resuming with the time it had left.
 - The tag editor has no pause of its own, and Auto-Pause is Responsive until the Settings tab can change it.
 - On a photo, the scrub bar shows in the place it has on a video. With Autoplay on and Loop off it fills as the photo's timer runs, Play/Pause pauses and resumes the timer with the time left kept, and dragging the bar moves the timer. With Autoplay off or Loop on, Play and the bar are disabled on a photo. Turning Autoplay on starts the photo's full time, and turning it off clears the timer. Shown by component tests of the scrub bar on a photo with Autoplay on and off.
 - The overlay's time display is light in both themes, and checkboxes, radio buttons, and sliders use the orange accent in both themes.
@@ -1675,10 +1793,10 @@ Last milestone completed: M12f3
     - The library window: "Library load failed: {error}", which the library also shows in its body, and "Library browse failed. Showing the tiles already loaded.".
     - Acknowledgments of the user's own actions that ask nothing more of them: "Added to favorites", "Removed from favorites", "Blacklisted", "Removed from blacklist", "Filters applied.", "Filter data refreshed.", "Updated preset "{name}" locally — Apply to save.", "Paired.", and "Tag editor changes applied". They are not the rule's confirmations, which are prompts that ask before an action.
   - A dialog, moves to the in-app notice:
-    - Playback: "Cannot play: server compatibility check failed.", "No response from the server. Try again.", "Random selection failed ({status}).", "Random selection failed: {error}", "No eligible media for current filters.", "Video file not found.", and "Photo file not found.".
+    - Playback: "No response from the server. Try again.", "Random selection failed ({status}).", "Random selection failed: {error}", "No eligible media for current filters.", "Video file not found.", and "Photo file not found.".
     - Library play: "Playback unavailable: no library item was selected.", "Media not found. The file may have moved or been deleted.", "This item is unavailable.", "This file type is not supported.", the server's error text, "Playback failed.", and "Playback failed: {error}".
     - Favorite and blacklist: "Favorite update failed ({status})." and "Blacklist update failed ({status}).".
-    - Filter: "Filter dialog load failed: {error}", "Filter refresh failed: {error}", "Saving presets failed ({status}).", "Saving presets failed: {error}", "Select a preset to update.", and "Preset not found.".
+    - Filter: "Filter load failed: {error}", "Filter refresh failed: {error}", "Saving presets failed ({status}).", "Saving presets failed: {error}", "Select a preset to update.", and "Preset not found.".
     - Pairing: "Pairing blocked by server compatibility check." and "Pairing failed.".
     - Tags: "Tag editor unavailable: {error}", "Tag refresh failed: {error}", "No tag changes to save.", and a failed tag save: "{step} failed ({status})" for Category update, Category delete, Tag create/update, Tag rename, Tag delete, Tag apply, and Auto-tag apply, "Tag update failed", "Tag apply failed", or the error's text.
   - Field validation, moves to the field validation pattern:

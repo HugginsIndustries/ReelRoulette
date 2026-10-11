@@ -85,7 +85,14 @@ function setup() {
       (listeners[event] ??= []).push(listener);
     }
   } as unknown as ServerConnection;
-  const player = createPlayer({ apiBaseUrl: "http://server/", store, api, connection, fetch: fetchImpl });
+  const notices: string[] = [];
+  const dialogs = {
+    notice(message: string) {
+      notices.push(message);
+      return Promise.resolve();
+    }
+  };
+  const player = createPlayer({ apiBaseUrl: "http://server/", store, api, connection, dialogs, fetch: fetchImpl });
   const elements = {
     video: fakeVideo(),
     photo: { src: "", style: { display: "none" } },
@@ -98,6 +105,7 @@ function setup() {
     store,
     player,
     elements,
+    notices,
     relayed,
     replies,
     requests: (path: string) => requests.filter((request) => request.path === path),
@@ -214,7 +222,8 @@ describe("createPlayer", () => {
 
     page.store.compatibilityBlocked.value = true;
     await page.player.pickRandom();
-    expect(page.store.status.value).toBe("Cannot play: server compatibility check failed.");
+    expect(page.notices).toEqual(["Cannot play: server compatibility check failed."]);
+    expect(page.store.status.value).toBe("No eligible media for current filters.");
     expect(page.requests("/api/random")).toHaveLength(1);
   });
 
@@ -318,6 +327,33 @@ describe("createPlayer", () => {
     page.player.pauseForTagEditor();
     page.player.resumeAfterTagEditor();
     expect(page.store.playAttemptId.value).toBe(3);
+  });
+
+  it("leaves a video as the user left it with Play/Pause while the tag editor was open", () => {
+    const page = setup();
+    page.play(VIDEO);
+    const { video } = page.elements;
+
+    page.player.pauseForTagEditor();
+    page.player.playOrPause();
+    page.player.playOrPause();
+    page.player.resumeAfterTagEditor();
+    expect(video.paused).toBe(true);
+  });
+
+  it("neither resumes nor plays again an item that started while the tag editor was open", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.player.toggleAutoplay();
+    page.play(PHOTO);
+    page.player.pauseForTagEditor();
+
+    page.play({ ...PHOTO, id: "/media/dune.jpg", itemId: "item-dune", displayName: "dune.jpg", mediaUrl: "/api/media/item-dune?token=t" });
+    page.player.resumeAfterTagEditor();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(page.store.playAttemptId.value).toBe(2);
+    expect(page.requests("/api/record-playback").map((request) => request.body.path)).toEqual(["item-photo", "item-dune"]);
   });
 
   it("Mute disables itself when pressed before anything plays, and mutes the first video", () => {

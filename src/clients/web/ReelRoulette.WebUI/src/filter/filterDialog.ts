@@ -1,6 +1,7 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { Library } from "../library/library";
+import type { PanelHost } from "../panel/panelHost";
 import { moveEntry } from "../reorder/reorder";
 import type { AppApi } from "../state/appApi";
 import type { AppStore, StorageLike } from "../state/appStore";
@@ -92,10 +93,11 @@ export interface FilterDialogView extends FilterDialogState {
 }
 
 /**
- * The filter dialog: a working copy of the applied filter and the saved presets, edited on the General, Tags, and
- * Presets tabs, which Apply makes the applied filter and saves.
+ * The Filter tab: a working copy of the applied filter and the saved presets, edited on the General, Tags, and
+ * Presets sections, which Apply makes the applied filter and saves. The panel shows and hides the tab.
  */
 export interface FilterDialog {
+  /** Whether the Filter tab shows. */
   readonly isOpen: ReadonlySignal<boolean>;
   /** The tab shown, or null before the dialog first opens. */
   readonly tab: ReadonlySignal<FilterDialogTab | null>;
@@ -105,24 +107,27 @@ export interface FilterDialog {
   readonly reveal: FieldReveal<FilterField>;
 
   /**
-   * Loads the sources, tags, and presets, then shows the dialog on General with the applied filter. Unless the
-   * server failed the compatibility check.
+   * The tab shows: starts over on General from the applied filter, then loads the sources, tags, and presets, keeping
+   * changes made while they load. Nothing loads while the server fails the compatibility check.
    */
   open(): Promise<void>;
-  /** Hides the dialog without applying anything. */
+  /** The tab hides without applying anything. It starts over from the applied filter when it next shows. */
   close(): void;
   showTab(tab: FilterDialogTab): void;
   /**
    * Loads the sources, tags, and presets again, keeping the working filter, and the preset list while it has
-   * changes Apply hasn't saved.
+   * changes Apply hasn't saved. Before they have loaded once, it loads them as showing the tab does, which it doesn't
+   * while the server fails the compatibility check.
    */
   refresh(): Promise<void>;
   /**
-   * Saves a changed preset list, applies the working filter, closes the dialog, and starts the library over.
-   * While a field it uses is not valid, it moves to that field instead. A save that fails keeps the dialog open and
-   * applies nothing.
+   * Saves a changed preset list, applies the working filter, closes the panel as the overlay, and starts the library
+   * over. While a field it uses is not valid, it moves to that field instead. A save that fails keeps the tab as it is
+   * and applies nothing.
    */
   apply(): Promise<void>;
+  /** Puts back the applied filter and the saved presets, and closes the panel as the overlay. */
+  cancel(): void;
   /** Goes back to the default filter and the saved presets. */
   clearAll(): void;
   /** Takes General tab fields the user changed. An empty duration means no limit. */
@@ -171,6 +176,8 @@ export interface FilterDialogOptions {
   api: AppApi;
   connection: Pick<ServerConnection, "loadPresets">;
   library: Pick<Library, "commitQuery">;
+  /** Apply and Cancel close the panel as the overlay; beside the player it stays open. */
+  panel: Pick<PanelHost, "closeIfOverlay">;
   /** Browser `sessionStorage`, for the collapsed tag categories. */
   storage: StorageLike;
   /** The in-app dialogs, for the confirmations. */
@@ -182,7 +189,7 @@ function errorText(error: unknown): string {
 }
 
 export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
-  const { store, api, connection, library, storage, dialogs } = options;
+  const { store, api, connection, library, panel, storage, dialogs } = options;
 
   const isOpen = signal(false);
   const tab = signal<FilterDialogTab | null>(null);
@@ -300,37 +307,91 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     };
   }
 
+  /**
+   * Takes loaded sources, tags, and presets, keeping the working filter, the General fields as they are, such as a
+   * duration still being typed, with only their sources checked again, and the preset list while Apply hasn't saved it.
+   */
+  function takeRemote(current: FilterDialogView, remote: Awaited<ReturnType<typeof loadRemote>>): void {
+    update({
+      sources: remote.sources,
+      tagModel: remote.tagModel,
+      presets: current.presetsChanged ? current.presets : remote.presets,
+      general: { ...current.general, sourceChecked: generalDraftFromFilter(current.working, remote.sources).sourceChecked }
+    });
+  }
+
+  /**
+   * Loads the sources, tags, and presets, then starts the working copy over from the applied filter, on General the
+   * first time. Changes made while it loaded are kept, and it only takes what loaded, as Refresh does. Says whether it
+   * loaded; a failure goes to the status line with `failure` before the reason. Nothing loads while the server fails
+   * the compatibility check.
+   */
+  async function start(failure: string): Promise<boolean> {
+    if (store.compatibilityBlocked.peek()) {
+      return false;
+    }
+    const before = view.peek();
+    let remote: Awaited<ReturnType<typeof loadRemote>>;
+    try {
+      remote = await loadRemote();
+    } catch (error) {
+      store.setStatus(`${failure}: ${errorText(error)}`);
+      return false;
+    }
+    const current = view.peek();
+    if (current && current !== before) {
+      takeRemote(current, remote);
+      return true;
+    }
+    const begin = workingFromHeader();
+    view.value = settled({
+      ...begin,
+      general: generalDraftFromFilter(begin.working, remote.sources),
+      sources: remote.sources,
+      tagModel: remote.tagModel,
+      presets: remote.presets,
+      presetsChanged: false,
+      collapsed: readCollapsed(),
+      newPresetName: "",
+      presetEdit: null
+    });
+    if (tab.peek() === null) {
+      tab.value = "general";
+    }
+    return true;
+  }
+
+  /** Puts back the applied filter and the saved presets, with the sources and tags already loaded. */
+  function restart(): void {
+    const current = view.peek();
+    if (!current) {
+      return;
+    }
+    const begin = workingFromHeader();
+    update({
+      ...begin,
+      general: generalDraftFromFilter(begin.working, current.sources),
+      presets: presetRowsFromApi(store.presets.peek()),
+      presetsChanged: false,
+      newPresetName: "",
+      presetEdit: null
+    });
+  }
+
   const dialog: FilterDialog = {
     isOpen,
     tab,
     view,
     reveal,
 
+    // It starts over on General at once, so the changes it was left with don't show while it loads again.
     async open() {
-      if (store.compatibilityBlocked.peek()) {
-        return;
-      }
-      let remote: Awaited<ReturnType<typeof loadRemote>>;
-      try {
-        remote = await loadRemote();
-      } catch (error) {
-        store.setStatus(`Filter dialog load failed: ${errorText(error)}`);
-        return;
-      }
-      const start = workingFromHeader();
-      view.value = settled({
-        ...start,
-        general: generalDraftFromFilter(start.working, remote.sources),
-        sources: remote.sources,
-        tagModel: remote.tagModel,
-        presets: remote.presets,
-        presetsChanged: false,
-        collapsed: readCollapsed(),
-        newPresetName: "",
-        presetEdit: null
-      });
-      tab.value = "general";
       isOpen.value = true;
+      if (view.peek()) {
+        restart();
+        tab.value = "general";
+      }
+      await start("Filter load failed");
     },
 
     close() {
@@ -343,16 +404,17 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     },
 
     async refresh() {
+      if (!view.peek()) {
+        if (await start("Filter refresh failed")) {
+          store.setStatus("Filter data refreshed.");
+        }
+        return;
+      }
       try {
         const remote = await loadRemote();
         const current = view.peek();
         if (current) {
-          update({
-            sources: remote.sources,
-            tagModel: remote.tagModel,
-            presets: current.presetsChanged ? current.presets : remote.presets,
-            general: generalDraftFromFilter(current.working, remote.sources)
-          });
+          takeRemote(current, remote);
         }
         store.setStatus("Filter data refreshed.");
       } catch (error) {
@@ -393,9 +455,14 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       store.appliedFilter.value = cloneFilterState(working);
       update({ working, original: cloneFilterState(working), presetName: store.activePresetName.peek() });
       await connection.loadPresets();
-      dialog.close();
+      void panel.closeIfOverlay();
       store.setStatus("Filters applied.");
       await library.commitQuery();
+    },
+
+    cancel() {
+      restart();
+      void panel.closeIfOverlay();
     },
 
     clearAll() {

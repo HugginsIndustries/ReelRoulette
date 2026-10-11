@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fireEvent } from "@testing-library/preact";
+import type { Window as HappyDomWindow } from "happy-dom";
 import { vi } from "vitest";
 import { renderApp } from "../../shell";
 import type { RuntimeConfig } from "../../types/runtimeConfig";
@@ -282,6 +283,33 @@ export function scrollOnFocus(scroller: HTMLElement): FocusCall[] {
   return calls;
 }
 
+/** happy-dom's window size, which each test starts from. */
+export const DEFAULT_VIEWPORT = { width: 1024, height: 768 };
+
+/**
+ * Resizes the window, which fires `resize` and media query `change` events, as a browser does, and decides the
+ * stylesheet's width and height rules.
+ */
+export function setViewport(viewport: { width: number; height: number }): void {
+  (window as unknown as HappyDomWindow).happyDOM.setViewport(viewport);
+}
+
+/**
+ * Makes `(pointer: coarse)` match, as on a touch screen; happy-dom's `matchMedia` always reports a fine pointer. The
+ * stylesheet's own pointer rules still see a fine pointer.
+ */
+export function stubCoarsePointer(): void {
+  const real = window.matchMedia.bind(window);
+  stubProperty(window, "matchMedia", {
+    value(query: string) {
+      if (!query.includes("pointer: coarse")) {
+        return real(query);
+      }
+      return { matches: true, media: query, addEventListener() {}, removeEventListener() {} } as unknown as MediaQueryList;
+    }
+  });
+}
+
 /** Applies the WebUI's stylesheet to the page, so a test can read the styles it gives. */
 export function useStylesheet(): void {
   const style = document.createElement("style");
@@ -344,8 +372,8 @@ export interface MountOptions {
 }
 
 /**
- * Clears what an earlier test left: storage, the page, the user agent, stubbed globals, and the stubbed
- * Fullscreen API and layout size. The app's own
+ * Clears what an earlier test left: storage, the page, the user agent, the window size, stubbed globals, and the
+ * stubbed Fullscreen API and layout size. The app's own
  * listeners on `document` and `window` outlive a test, so tests look only at the event streams that carry
  * their own page's client id, and storage is cleared so each page gets a new one.
  */
@@ -363,6 +391,9 @@ export function resetPage(userAgent = DESKTOP_USER_AGENT): void {
   document.body.innerHTML = "";
   createdSources = [];
   setUserAgent(userAgent);
+  if (window.innerWidth !== DEFAULT_VIEWPORT.width || window.innerHeight !== DEFAULT_VIEWPORT.height) {
+    setViewport(DEFAULT_VIEWPORT);
+  }
 }
 
 export function setUserAgent(userAgent: string): void {

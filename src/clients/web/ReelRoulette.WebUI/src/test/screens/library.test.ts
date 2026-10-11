@@ -9,6 +9,7 @@ import {
   mountPage,
   normalizedMarkup,
   resetPage,
+  setViewport,
   settle,
   status,
   stubLayoutSize,
@@ -164,16 +165,38 @@ function overlay(): HTMLElement {
   return document.getElementById("library-overlay") as HTMLElement;
 }
 
+function panel(): HTMLElement {
+  return document.getElementById("panel") as HTMLElement;
+}
+
+/** The library shows: the panel is open on its Library tab. */
 function isOpen(): boolean {
-  return overlay().style.display !== "none";
+  return !panel().hidden && !(document.getElementById("panel-page-library") as HTMLElement).hidden;
 }
 
+/** The panel's own tab, apart from the Filter and Tags tabs' section tabs. */
+function panelTab(name: "Library" | "Filter" | "Tags"): HTMLElement {
+  return within(panel().querySelector(".panel-tablist") as HTMLElement).getByRole("tab", { name, hidden: true });
+}
+
+/** Opens the panel with the panel button, then shows its Library tab if it opened on another. */
 async function openLibrary(): Promise<void> {
-  await click(screen.getByRole("button", { name: "Library" }));
+  if (panel().hidden) {
+    await click(screen.getByRole("button", { name: "Open panel" }));
+  }
+  if (!isOpen()) {
+    await click(panelTab("Library"));
+  }
 }
 
+/** Closes the panel with its own Close, at the end of its tab row; the panel button is named the same while open. */
 async function closeLibrary(): Promise<void> {
-  await click(within(overlay()).getByRole("button", { name: "Close", hidden: true }));
+  await click(within(panel()).getByRole("button", { name: "Close panel", hidden: true }));
+}
+
+/** A window below 800 px wide, where the panel is the overlay over the player. */
+function useOverlayWidth(): void {
+  setViewport({ width: 600, height: 800 });
 }
 
 function summary(): HTMLElement {
@@ -247,12 +270,13 @@ beforeEach(() => {
 });
 
 describe("overlay", () => {
-  it("opens from the Library button, and Close and Escape close it", async () => {
+  it("opens from the panel button on the Library tab, and the panel's Close and Escape close it", async () => {
     await mountLibrary(libraryItems(3));
     expect(isOpen()).toBe(false);
 
-    await openLibrary();
-    expect(overlay().style.display).toBe("flex");
+    await click(screen.getByRole("button", { name: "Open panel" }));
+    expect(isOpen()).toBe(true);
+    expect(tileNames()).toEqual(["clip 1.mp4", "clip 2.mp4", "clip 3.mp4"]);
     await closeLibrary();
     expect(isOpen()).toBe(false);
 
@@ -262,7 +286,7 @@ describe("overlay", () => {
     expect(isOpen()).toBe(false);
   });
 
-  it("does not open while the server is incompatible", async () => {
+  it("shows why in place of the library while the server is incompatible, and sends no query", async () => {
     stubLayoutSize();
     const server = new FakeServer();
     server.on("GET", "/api/version", () =>
@@ -272,7 +296,11 @@ describe("overlay", () => {
     await screen.findByText("Server missing required capabilities: api.presets.match.");
 
     await openLibrary();
-    expect(isOpen()).toBe(false);
+    expect(isOpen()).toBe(true);
+    expect(within(overlay()).getByRole("alert").textContent).toBe("Server missing required capabilities: api.presets.match.");
+    expect(toolbarShown()).toBe(false);
+    expect(summary().hidden).toBe(true);
+    expect(tileNames()).toEqual([]);
     expect(server.requests("POST", "/api/library/query")).toHaveLength(0);
   });
 
@@ -300,7 +328,7 @@ describe("overlay", () => {
 });
 
 describe("first page", () => {
-  it("loads once the server is ready, before the overlay opens, and opening shows it without querying again", async () => {
+  it("loads once the server is ready, before the tab opens, and opening shows it without querying again", async () => {
     const { library } = await mountLibrary(libraryItems(3));
     expect(library.queries()).toHaveLength(1);
     expect(library.queries()[0]).toMatchObject({
@@ -495,7 +523,7 @@ describe("fill on scroll", () => {
     expect(library.queries()).toHaveLength(3);
   });
 
-  it("does not fill while the overlay is hidden", async () => {
+  it("does not fill while the tab is hidden", async () => {
     const { library } = await mountLibrary(libraryItems(650));
     await settle();
     expect(library.queries()).toHaveLength(1);
@@ -545,7 +573,7 @@ describe("fill on scroll", () => {
     expect(library.queries()).toHaveLength(2);
   });
 
-  it("tiles reloaded while the overlay was hidden lay out as soon as it opens", async () => {
+  it("tiles reloaded while the tab was hidden lay out as soon as it opens", async () => {
     const { page, library } = await mountLibrary(libraryItems(3));
     await openLibrary();
     await closeLibrary();
@@ -611,7 +639,7 @@ describe("fill on scroll", () => {
 });
 
 describe("starting over", () => {
-  it("a header preset starts over while the overlay is hidden, and reopening shows the new totals", async () => {
+  it("a header preset starts over while the tab is hidden, and reopening shows the new totals", async () => {
     const { library } = await mountLibrary(libraryItems(3), (server) => {
       server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
     });
@@ -630,15 +658,15 @@ describe("starting over", () => {
     expect(tileNames()).toEqual(["clip 2.mp4"]);
   });
 
-  it("applying the filter dialog starts over from the first page with the new filter", async () => {
+  it("applying the Filter tab starts over from the first page with the new filter", async () => {
     const { library } = await mountLibrary(libraryItems(3), (server) => {
       server.on("GET", "/api/sources", () => json([]));
       server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
     });
     await openLibrary();
 
-    await click(screen.getByRole("button", { name: "Select filters", hidden: true }));
-    await waitFor(() => expect((document.getElementById("filter-dialog") as HTMLElement).style.display).toBe("flex"));
+    await click(panelTab("Filter"));
+    await waitFor(() => expect((document.getElementById("panel-page-filter") as HTMLElement).hidden).toBe(false));
     fireEvent.click(screen.getByLabelText("Favorites"));
     fireEvent.change(screen.getByLabelText("Favorites"));
     await click(screen.getByRole("button", { name: /^Apply/ }));
@@ -732,7 +760,8 @@ describe("live updates", () => {
 });
 
 describe("playing a tile", () => {
-  it("Enter or Space on a focused tile plays it, other keys do not, and the video element stays the same", async () => {
+  it("Enter or Space on a focused tile plays it and closes the overlay, other keys do not, and the video element stays the same", async () => {
+    useOverlayWidth();
     const { server } = await mountLibrary(libraryItems(3), (fake) => {
       fake.on("POST", "/api/play/item-1", () => json(playResponse(1)));
       fake.on("POST", "/api/play/item-2", () => json(playResponse(2)));
@@ -760,6 +789,7 @@ describe("playing a tile", () => {
   });
 
   it("a tile the server cannot play leaves the overlay open and says why", async () => {
+    useOverlayWidth();
     const replies: Response[] = [];
     const { server } = await mountLibrary(libraryItems(3), (fake) => {
       fake.on("POST", "/api/play/item-1", () => replies.shift()!);
@@ -801,6 +831,7 @@ describe("playing a tile", () => {
   });
 
   it("a second activation while a play is loading is ignored", async () => {
+    useOverlayWidth();
     let answer: () => void = () => {};
     const { server } = await mountLibrary(libraryItems(3), (fake) => {
       fake.on("POST", "/api/play/item-1", async () => {
@@ -826,7 +857,8 @@ describe("playing a tile", () => {
     expect(isOpen()).toBe(false);
   });
 
-  it("a play that cannot reach the server says so", async () => {
+  it("a play that cannot reach the server says so and leaves the overlay open", async () => {
+    useOverlayWidth();
     const { server } = await mountLibrary(libraryItems(3), (fake) => {
       fake.on("POST", "/api/play/item-1", () => {
         throw new TypeError("Failed to fetch");
@@ -859,7 +891,7 @@ describe("tiles", () => {
     expect(tile("item-3")?.querySelector(".library-grid-tile-badge")?.textContent).toBe("favoritethumb_down");
   });
 
-  it("add no browser storage keys while browsing and playing", async () => {
+  it("add no browser storage keys while browsing and playing, besides the panel's own", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await mountLibrary(libraryItems(3), (fake) => {
       fake.on("POST", "/api/play/item-1", () => json(playResponse(1)));
@@ -874,7 +906,7 @@ describe("tiles", () => {
     await openLibrary();
     await click(tile("item-1")!);
 
-    expect(storageKeys(localStorage)).toEqual(["rr_clientId"]);
+    expect(storageKeys(localStorage)).toEqual(["rr_clientId", "rr_device.panel.open", "rr_device.panel.tab"]);
     expect(storageKeys(sessionStorage)).toEqual(["rr_sessionId"]);
   });
 });

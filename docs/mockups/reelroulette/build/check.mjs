@@ -281,6 +281,14 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: the library loads its tiles`, tiles().length > 20 && $("lib-summary").textContent.startsWith("Showing"));
   press("1");
   check(`layout@${width}: the open tab's key closes the panel`, $("panel").hidden);
+  $("panel-btn").click();
+  $("panel-close").focus();
+  $("panel-close").click();
+  check(`layout@${width}: closing with focus in the panel gives focus to the panel button`, $("panel").hidden && document.activeElement === $("panel-btn"));
+  $("panel-btn").click();
+  $("panel-btn").blur();
+  press("Escape");
+  check(`layout@${width}: closing with focus outside the panel leaves focus where it was`, $("panel").hidden && document.activeElement !== $("panel-btn"));
 
   // A tap starts a random pick; Next picks at random at the end of the history, and both skip what can't play.
   queue.push(0);
@@ -927,6 +935,8 @@ for (const width of [1280, 390]) {
   input($("set-hide-after"), "1");
   check(`layout@${width}: and keeps 1`, window.localStorage.getItem("rr-mockup.hideAfter") === "1");
   closePanel();
+  // Closing with focus in the panel gives it to the panel button, and a control with focus keeps the controls up.
+  $("panel-btn").blur();
   window.mockup.choose(3);
   moveOverPlayer();
   check(`layout@${width}: moving the mouse over the player shows the controls`, controlsUp());

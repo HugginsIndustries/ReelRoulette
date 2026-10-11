@@ -8,6 +8,7 @@ import {
   json,
   mountPage,
   resetPage,
+  setViewport,
   settle,
   status,
   stubFullscreenApi,
@@ -51,7 +52,7 @@ const PHOTO_ITEM = {
 const VIDEO_URL = `${API_BASE_URL}/api/media/item-video?token=t`;
 const SECOND_VIDEO_URL = `${API_BASE_URL}/api/media/item-video-2?token=t`;
 const PHOTO_URL = `${API_BASE_URL}/api/media/item-photo?token=t`;
-const EMPTY_STATE_TEXT = "Click here to play (choose a preset or open Filter…)";
+const EMPTY_STATE_TEXT = "Tap to play, or open the panel to choose a preset or filter.";
 
 /** Answers random picks with these items in order, then keeps answering with the last one. */
 function answerRandom(server: FakeServer, ...items: unknown[]): void {
@@ -130,8 +131,37 @@ function overlay(id: "library-overlay" | "filter-dialog" | "tag-editor"): HTMLEl
   return document.getElementById(id) as HTMLElement;
 }
 
-function closeButton(id: "library-overlay" | "filter-dialog" | "tag-editor"): HTMLElement {
-  return within(overlay(id)).getByRole("button", { name: "Close" });
+type PanelTabName = "Library" | "Filter" | "Tags";
+
+const PANEL_PAGES: Record<PanelTabName, string> = {
+  Library: "panel-page-library",
+  Filter: "panel-page-filter",
+  Tags: "panel-page-tags"
+};
+
+function panel(): HTMLElement {
+  return document.getElementById("panel") as HTMLElement;
+}
+
+/** Whether the panel is open on `tab`. */
+function isShowing(tab: PanelTabName): boolean {
+  return !panel().hidden && !(document.getElementById(PANEL_PAGES[tab]) as HTMLElement).hidden;
+}
+
+/** Opens the panel with the panel button, then shows `tab` with its tab in the panel's tab row if it opened on another. */
+async function openPanel(tab: PanelTabName): Promise<void> {
+  if (panel().hidden) {
+    await click(button("Open panel"));
+  }
+  if (!isShowing(tab)) {
+    const tabRow = panel().querySelector(".panel-tablist") as HTMLElement;
+    await click(within(tabRow).getByRole("tab", { name: tab }));
+  }
+}
+
+/** Closes the panel with its own Close, at the end of its tab row. */
+async function closePanel(): Promise<void> {
+  await click(document.getElementById("panel-close-btn") as HTMLElement);
 }
 
 function button(name: string): HTMLButtonElement {
@@ -790,16 +820,17 @@ describe("fullscreen", () => {
     expect(fullscreen.requests).toHaveLength(0);
   });
 
-  it("Escape closes an open library overlay before it leaves the page-filling fullscreen", async () => {
+  it("Escape closes an open panel before it leaves the page-filling fullscreen", async () => {
     const page = mountPage({ server: serverPicking(VIDEO_ITEM) });
     await screen.findByText("Ready (API 1)");
     await click(button("Fullscreen"));
-    await click(button("Library"));
-    expect(overlay("library-overlay").style.display).toBe("flex");
+    await openPanel("Library");
+    expect(isShowing("Library")).toBe(true);
+    expect(isPseudoFullscreen()).toBe(true);
 
     fireEvent.keyDown(document, { key: "Escape" });
     await flush();
-    expect(overlay("library-overlay").style.display).toBe("none");
+    expect(panel().hidden).toBe(true);
     expect(isPseudoFullscreen()).toBe(true);
 
     fireEvent.keyDown(document, { key: "Escape" });
@@ -818,24 +849,24 @@ describe("fullscreen", () => {
 });
 
 describe("other screens", () => {
-  it("the tag editor pauses a playing video and resumes it on close, and a paused video stays paused", async () => {
+  it("the Tags tab pauses a playing video and resumes it on close, and a paused video stays paused", async () => {
     const server = serverPicking(VIDEO_ITEM);
     await mountAndPlay(server);
 
-    await click(button("Edit Tags"));
-    expect(overlay("tag-editor").style.display).toBe("flex");
+    await openPanel("Tags");
+    expect(isShowing("Tags")).toBe(true);
     expect(video().paused).toBe(true);
-    await click(closeButton("tag-editor"));
-    expect(overlay("tag-editor").style.display).toBe("none");
+    await closePanel();
+    expect(isShowing("Tags")).toBe(false);
     expect(video().paused).toBe(false);
 
     await click(button("Play/Pause"));
-    await click(button("Edit Tags"));
-    await click(closeButton("tag-editor"));
+    await openPanel("Tags");
+    await closePanel();
     expect(video().paused).toBe(true);
   });
 
-  it("the tag editor holds a photo's autoplay timer while open and starts it again on close", async () => {
+  it("the Tags tab holds a photo's autoplay timer while open and starts it again on close", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const server = serverPicking(PHOTO_ITEM, VIDEO_ITEM);
     await mount(server);
@@ -843,11 +874,11 @@ describe("other screens", () => {
     await click(emptyState());
 
     await vi.advanceTimersByTimeAsync(10_000);
-    await click(button("Edit Tags"));
+    await openPanel("Tags");
     await vi.advanceTimersByTimeAsync(30_000);
     expect(randomPicks(server)).toBe(1);
 
-    await click(closeButton("tag-editor"));
+    await closePanel();
     expect(playRecords(server)).toBe(2);
     await vi.advanceTimersByTimeAsync(14_999);
     expect(randomPicks(server)).toBe(1);
@@ -855,22 +886,23 @@ describe("other screens", () => {
     expect(randomPicks(server)).toBe(2);
   });
 
-  it("playback keeps going while the library overlay and the filter dialog are open", async () => {
+  it("playback keeps going while the Library and Filter tabs are open", async () => {
     const server = serverPicking(VIDEO_ITEM);
     await mountAndPlay(server);
 
-    await click(button("Library"));
-    expect(overlay("library-overlay").style.display).toBe("flex");
+    await openPanel("Library");
+    expect(isShowing("Library")).toBe(true);
     expect(video().paused).toBe(false);
-    await click(closeButton("library-overlay"));
+    await closePanel();
 
-    await click(button("Select filters"));
-    await waitFor(() => expect(overlay("filter-dialog").style.display).toBe("flex"));
+    await openPanel("Filter");
+    await waitFor(() => expect(isShowing("Filter")).toBe(true));
     expect(video().paused).toBe(false);
     expect(video().src).toBe(VIDEO_URL);
   });
 
   it("a library tile plays without a second play record, closes the overlay, and joins history", async () => {
+    setViewport({ width: 600, height: 800 });
     stubLayoutSize();
     const server = serverPicking(SECOND_VIDEO);
     server.on("POST", "/api/library/query", () =>
@@ -897,7 +929,7 @@ describe("other screens", () => {
     await screen.findByText("Ready (API 1)");
     await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(1));
 
-    await click(button("Library"));
+    await openPanel("Library");
     const tile = await waitFor(() => {
       const found = document.querySelector('.library-grid-tile[data-item-id="item-video"]');
       expect(found).not.toBeNull();
@@ -910,7 +942,7 @@ describe("other screens", () => {
       sessionId: page.sessionId()
     });
     expect(video().src).toBe(VIDEO_URL);
-    expect(overlay("library-overlay").style.display).toBe("none");
+    expect(panel().hidden).toBe(true);
     expect(playRecords(server)).toBe(0);
     await waitFor(() => expect(server.logLines()).toContain("playback=start attempt=1 hasCurrent=true mediaType=video"));
     const lines = server.logLines();
@@ -928,7 +960,7 @@ describe("other screens", () => {
 });
 
 describe("page structure", () => {
-  it("keeps the same video and photo elements while switching media and opening and closing each overlay", async () => {
+  it("keeps the same video and photo elements while switching media and opening and closing each panel tab", async () => {
     const server = serverPicking(VIDEO_ITEM, PHOTO_ITEM, SECOND_VIDEO);
     await mount(server);
     const videoNode = video();
@@ -940,13 +972,13 @@ describe("page structure", () => {
     await click(button("Next"));
     expect(video().style.display).toBe("block");
 
-    await click(button("Library"));
-    await click(closeButton("library-overlay"));
-    await click(button("Select filters"));
-    await waitFor(() => expect(overlay("filter-dialog").style.display).toBe("flex"));
-    await click(closeButton("filter-dialog"));
-    await click(button("Edit Tags"));
-    await click(closeButton("tag-editor"));
+    await openPanel("Library");
+    await closePanel();
+    await openPanel("Filter");
+    await waitFor(() => expect(isShowing("Filter")).toBe(true));
+    await closePanel();
+    await openPanel("Tags");
+    await closePanel();
 
     expect(video()).toBe(videoNode);
     expect(photo()).toBe(photoNode);
@@ -971,8 +1003,8 @@ describe("page structure", () => {
     await click(button("Fullscreen"));
     await click(button("Mute"));
     await click(button("Loop"));
-    await click(button("Library"));
-    await click(closeButton("library-overlay"));
+    await openPanel("Library");
+    await closePanel();
 
     records.push(...observer.takeRecords());
     observer.disconnect();

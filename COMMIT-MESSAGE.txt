@@ -19,11 +19,12 @@ Instructions:
 
 Commit Message:
 
-M12f3: Reorder tag categories and presets by drag handle in the WebUI
+M12f4: Open the WebUI's library, filter, and tags in a side panel
 
-- Tag categories and presets lose their up and down buttons for a drag handle at the start of each row. A drag starts only on the handle, once the pointer has moved a few pixels, so a drag elsewhere on a row still scrolls on a touch screen.
-- The dragged row follows the pointer within the list, also while the list scrolls, as the rows it passes slide out of its way. The list scrolls near its edges, and a dragged category hides its tags until it is dropped. The new order stays pending until Save or Apply.
-- The up and down arrow keys on a focused handle move its row one place. After any move focus is on the handle and screen readers hear the new position, and a drop leaves the list where it was scrolled to. Uncategorized's handle is dimmed and disabled, and it stays last.
-- Add Preset moves focus to the new preset's drag handle.
-- The mockup's drag starts after a few pixels, hides a dragged category's tags, and keeps the dragged row within the list, matching the app.
-- `CHANGELOG.md`, `CONTEXT.md`, and `docs/domain-inventory.md` describe drag reordering. The milestone is complete: its entry moves to `MILESTONES-COMPLETED.md`, and its release check joins the testing checklist's Release Specific section.
+- The WebUI's library overlay, filter dialog, and tag editor move, as they are, into one side panel's Library, Filter, and Tags tabs, a row of icon-only tabs with a Close. One panel button on the player replaces their three buttons, opens the panel on its last tab, and shows the panel's side and whether it is open.
+- From 800 px of viewport width, except on a touch screen under 500 px tall, the panel sits beside the player, and a handle sets its width from 360 px to whatever leaves the player 400 px. Below that it is a full-screen overlay. The breakpoints go by the viewport and pointer, not the user agent.
+- Beside the player, choosing a tile and the Filter tab's Apply and Cancel leave the panel open; as the overlay they close it. Cancel puts back the applied filter. The Tags tab's Save still closes the panel, and leaving the Tags tab with changes asks first, as its Close did. Closing the Tags tab resumes only the play it paused, leaving a play or pause the user made while it showed.
+- A per-device store remembers whether the panel is open, its tab, side, and width across a page refresh. A panel remembered open starts its tab once the server has passed or failed the compatibility check.
+- While the server fails the compatibility check, the panel opens with the server's message in the Library tab, the Filter and Tags tabs load nothing, and Play shows an in-app notice.
+- The milestone's entry splits into the Panel slice, done here, and the Phone layouts slice, and records that beside the player the Tags tab keeps the item that was playing when it showed until WebUI Tags and Filter Tabs, which now also plans to keep the panel open on Save. WebUI Auto-Pause and Photo Scrub Bar now also plans to resume a photo without recording its play again.
+- `CHANGELOG.md`, `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, and `docs/domain-inventory.md` describe the side panel, and the testing checklist's release checks name its tabs. The mockup's panel gives focus back on closing only when focus was in it or on its handle, as the app does.

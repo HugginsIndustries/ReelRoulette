@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`opening and closing > keeps its markup on each tab > general 1`] = `
-"<div class="filter-dialog" id="filter-dialog" style="display: flex">
+"<div class="filter-dialog" id="filter-dialog">
   <div class="filter-dialog-header">
     <h2 id="filter-dialog-heading">
       "Preset: Rich"
@@ -9,9 +9,6 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
       <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="filter-dialog-refresh-btn" title="Refresh" type="button">
         <span class="material-symbol-icon">
           "refresh"
-      <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="filter-dialog-close-btn" title="Close" type="button">
-        <span class="material-symbol-icon">
-          "close"
   <div class="filter-dialog-tabstrip" role="tablist">
     <button aria-selected="true" class="filter-tab is-active" data-filter-tab="general" role="tab" type="button">
       "General"
@@ -307,7 +304,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
 `;
 
 exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
-"<div class="filter-dialog" id="filter-dialog" style="display: flex">
+"<div class="filter-dialog" id="filter-dialog">
   <div class="filter-dialog-header">
     <h2 id="filter-dialog-heading">
       "Preset: Rich"
@@ -315,9 +312,6 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
       <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="filter-dialog-refresh-btn" title="Refresh" type="button">
         <span class="material-symbol-icon">
           "refresh"
-      <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="filter-dialog-close-btn" title="Close" type="button">
-        <span class="material-symbol-icon">
-          "close"
   <div class="filter-dialog-tabstrip" role="tablist">
     <button aria-selected="false" class="filter-tab" data-filter-tab="general" role="tab" type="button">
       "General"
@@ -613,7 +607,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
 `;
 
 exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
-"<div class="filter-dialog" id="filter-dialog" style="display: flex">
+"<div class="filter-dialog" id="filter-dialog">
   <div class="filter-dialog-header">
     <h2 id="filter-dialog-heading">
       "Preset: Rich"
@@ -621,9 +615,6 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
       <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="filter-dialog-refresh-btn" title="Refresh" type="button">
         <span class="material-symbol-icon">
           "refresh"
-      <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="filter-dialog-close-btn" title="Close" type="button">
-        <span class="material-symbol-icon">
-          "close"
   <div class="filter-dialog-tabstrip" role="tablist">
     <button aria-selected="false" class="filter-tab" data-filter-tab="general" role="tab" type="button">
       "General"

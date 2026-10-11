@@ -71,7 +71,7 @@ function statusLine(): string {
 }
 
 async function startRandomPick(): Promise<void> {
-  fireEvent.click(screen.getByText("Click here to play (choose a preset or open Filter…)"));
+  fireEvent.click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
   await settle();
 }
 
@@ -343,7 +343,7 @@ describe("photo duration", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Autoplay" }));
-    fireEvent.click(screen.getByText("Click here to play (choose a preset or open Filter…)"));
+    fireEvent.click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
     await vi.advanceTimersByTimeAsync(0);
     expect(server.requests("POST", "/api/random")).toHaveLength(1);
 
@@ -398,7 +398,7 @@ describe("pairing", () => {
 
     server.on("GET", "/api/version", () => json(COMPATIBLE_VERSION));
     server.on("GET", "/api/presets", () => json([FAVORITES_PRESET]));
-    fireEvent.input(screen.getByLabelText("Pairing token:"), { target: { value: " token-1 " } });
+    fireEvent.input(screen.getByLabelText("Pairing token"), { target: { value: " token-1 " } });
     fireEvent.click(pairButton);
 
     await screen.findByText("Ready (API 1)");
@@ -419,7 +419,7 @@ describe("pairing", () => {
     fireEvent.click(screen.getByRole("button", { name: "Pair" }));
     await screen.findByText("Pair token required.");
 
-    fireEvent.input(screen.getByLabelText("Pairing token:"), { target: { value: "wrong" } });
+    fireEvent.input(screen.getByLabelText("Pairing token"), { target: { value: "wrong" } });
     fireEvent.click(screen.getByRole("button", { name: "Pair" }));
     await screen.findByText("Pairing failed.");
     expect((screen.getByRole("button", { name: "Pair" }).closest(".pair-section") as HTMLElement).style.display).toBe("flex");
@@ -430,7 +430,7 @@ describe("pairing", () => {
     server.on("POST", "/api/pair", () => json({ paired: true }));
     mountPage({ server, config: { pairToken: "config-token" } });
 
-    expect((screen.getByLabelText("Pairing token:") as HTMLInputElement).value).toBe("config-token");
+    expect((screen.getByLabelText("Pairing token") as HTMLInputElement).value).toBe("config-token");
     await waitFor(() => expect(server.requests("POST", "/api/pair")).toHaveLength(1));
     expect(server.requests("POST", "/api/pair")[0]!.body).toEqual({ token: "config-token" });
   });

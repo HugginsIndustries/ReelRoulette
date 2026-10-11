@@ -1,7 +1,8 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
 import { requestPlayItem } from "../api/coreApi";
 import { playbackTraceLine } from "../logging/relayLogLines";
-import type { Player, ShownElement } from "../playback/player";
+import type { PanelHost } from "../panel/panelHost";
+import type { Player } from "../playback/player";
 import type { AppApi } from "../state/appApi";
 import type { AppStore } from "../state/appStore";
 import type { ServerConnection } from "../state/serverConnection";
@@ -30,7 +31,7 @@ import {
 } from "./libraryQuerySession";
 
 /**
- * What the overlay's body shows: nothing before it first shows a message or tiles, a message, or the grid,
+ * What the Library tab's body shows: nothing before it first shows a message or tiles, a message, or the grid,
  * which the grid controller renders into the body element it is given.
  */
 export type LibraryBody =
@@ -38,19 +39,14 @@ export type LibraryBody =
   | { kind: "message"; message: LibraryOverlayMessage }
   | { kind: "grid" };
 
-export interface LibraryElements {
-  /** The overlay, which the library shows and hides by setting its `display`. */
-  overlay: ShownElement;
-}
-
 export type CreateLibraryGrid = (
   host: HTMLElement,
   onCoverage: (coverage: LibraryGridCoverage) => void
 ) => LibraryGridController;
 
 /**
- * The library overlay's browse window, search and sort, and tile play. The first page loads once the server is
- * ready, and the window keeps its tiles and scroll position while the overlay is hidden.
+ * The Library tab's browse window, search and sort, and tile play. The first page loads once the server is ready, and
+ * the window keeps its tiles and scroll position while the tab is hidden. The panel shows and hides the tab.
  */
 export interface Library {
   /** The loaded window, which the tag editor reads and updates. */
@@ -64,14 +60,19 @@ export interface Library {
   readonly directionLabel: ReadonlySignal<string>;
   readonly body: ReadonlySignal<LibraryBody>;
 
-  attach(elements: LibraryElements): void;
-  /** Lets go of the overlay, which counts as closed from then on. */
+  /** The tab's view rendered, so the tab can open. */
+  attach(): void;
+  /** The tab's view went away, so the tab counts as closed from then on. */
   detach(): void;
   /** Creates the grid in `host`, the body element while the grid shows. Returns a function that destroys it. */
   attachGrid(host: HTMLElement): () => void;
   isOpen(): boolean;
-  /** Shows the overlay, unless the server failed the compatibility check. */
+  /**
+   * The tab shows, its page already shown. While the server fails the compatibility check, the body shows why, in
+   * place of the grid.
+   */
   open(): void;
+  /** The tab hides. */
   close(): void;
   /** Starts over from the first page with the applied filter and the current search and sort. */
   commitQuery(): Promise<void>;
@@ -80,7 +81,7 @@ export interface Library {
   /** Starts over sorted by `mode` in its default direction. */
   setSortMode(mode: string): void;
   toggleSortDirection(): void;
-  /** Plays a tile's item through the server, closes the overlay, and hands it to the player. */
+  /** Plays a tile's item through the server, closes the panel as the overlay, and hands the item to the player. */
   play(itemId: string): Promise<void>;
 }
 
@@ -90,6 +91,8 @@ export interface LibraryOptions {
   api: AppApi;
   connection: ServerConnection;
   player: Pick<Player, "playCurrent">;
+  /** Choosing a tile closes the panel as the overlay; beside the player it stays open. */
+  panel: Pick<PanelHost, "closeIfOverlay">;
   /** Defaults to the global `fetch`, looked up on each request. */
   fetch?: typeof fetch;
   /** Defaults to the grid controller. */
@@ -103,7 +106,7 @@ function errorText(error: unknown): string {
 }
 
 export function createLibrary(options: LibraryOptions): Library {
-  const { store, api, connection, player } = options;
+  const { store, api, connection, player, panel } = options;
   const apiBaseUrl = String(options.config.apiBaseUrl || "").replace(/\/+$/, "");
   const sseUrl = options.config.sseUrl;
   const send: typeof fetch = options.fetch ?? ((input, init) => fetch(input, init));
@@ -118,7 +121,7 @@ export function createLibrary(options: LibraryOptions): Library {
   const directionLabel = signal(getSortDirectionLabel(initialControls.sortMode, initialControls.sortDescending));
   const body = signal<LibraryBody>({ kind: "blank" });
 
-  let elements: LibraryElements | null = null;
+  let attached = false;
   let open = false;
   let grid: LibraryGridController | null = null;
   /** A new query's scroll to the top, kept for a grid that is about to be created. */
@@ -179,8 +182,9 @@ export function createLibrary(options: LibraryOptions): Library {
   }
 
   /**
-   * While hidden, only a grid already shown is updated, and its layout waits until the overlay shows. While
-   * shown, a window without a result shows its message in place of the grid.
+   * While hidden, only a grid already shown is updated, and its layout waits until the tab shows. While shown, a
+   * window without a result shows its message in place of the grid, and so does a server that failed the
+   * compatibility check.
    */
   function renderWindow(scroll: "top" | "keep"): void {
     const snap = session.snapshot();
@@ -191,6 +195,14 @@ export function createLibrary(options: LibraryOptions): Library {
       }
       showChrome(snap);
       showTiles(scroll);
+      return;
+    }
+
+    const blockedBy = store.compatibilityBlocked.peek() ? store.compatibilityMessage.peek() : null;
+    if (blockedBy !== null) {
+      toolbarShown.value = false;
+      summary.value = null;
+      body.value = { kind: "message", message: { text: blockedBy, error: true, live: false } };
       return;
     }
 
@@ -226,9 +238,6 @@ export function createLibrary(options: LibraryOptions): Library {
   }
 
   function close(): void {
-    if (elements) {
-      elements.overlay.style.display = "none";
-    }
     open = false;
     session.setOverlayVisible(false);
   }
@@ -283,7 +292,7 @@ export function createLibrary(options: LibraryOptions): Library {
       }
 
       store.pushHistory(data);
-      close();
+      void panel.closeIfOverlay();
       trace("info", "library-play-success");
       player.playCurrent({ recordPlayback: false });
     } catch (error) {
@@ -315,6 +324,12 @@ export function createLibrary(options: LibraryOptions): Library {
   connection.on("resyncRequired", () => {
     void session.resync();
   });
+  // The tab says why while the server fails the compatibility check, and shows the library again once it passes.
+  store.compatibilityBlocked.subscribe(() => {
+    if (open) {
+      renderWindow("keep");
+    }
+  });
 
   return {
     session,
@@ -324,8 +339,8 @@ export function createLibrary(options: LibraryOptions): Library {
     directionLabel,
     body,
 
-    attach(attached) {
-      elements = attached;
+    attach() {
+      attached = true;
     },
 
     detach() {
@@ -333,7 +348,7 @@ export function createLibrary(options: LibraryOptions): Library {
         open = false;
         session.setOverlayVisible(false);
       }
-      elements = null;
+      attached = false;
     },
 
     attachGrid(host) {
@@ -361,15 +376,18 @@ export function createLibrary(options: LibraryOptions): Library {
       return open;
     },
 
-    // Shows the overlay before the grid lays out, so a layout deferred while it was hidden measures it shown.
+    // The panel shows the tab before this runs, so a grid layout deferred while it was hidden measures it shown.
     open() {
-      if (store.compatibilityBlocked.peek() || !elements) {
+      if (!attached) {
         return;
       }
 
-      elements.overlay.style.display = "flex";
       open = true;
       session.setOverlayVisible(true);
+      if (store.compatibilityBlocked.peek()) {
+        renderWindow("keep");
+        return;
+      }
       const snap = session.snapshot();
       if (snap.phase !== "ready" || !grid) {
         renderWindow("keep");

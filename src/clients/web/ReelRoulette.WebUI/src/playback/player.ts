@@ -1,4 +1,5 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
+import type { Dialogs } from "../dialogs/dialogs";
 import { applyItemStateToCurrent } from "../library/currentItemState";
 import { playbackTraceLine } from "../logging/relayLogLines";
 import type { AppApi } from "../state/appApi";
@@ -86,7 +87,10 @@ export interface Player {
   seek(value: string): void;
   /** Pauses the video, or holds a photo's autoplay timer, while the tag editor is open. */
   pauseForTagEditor(): void;
-  /** Resumes what `pauseForTagEditor` paused. A video the user had paused stays paused. */
+  /**
+   * Resumes what `pauseForTagEditor` paused. A video the user had paused, or played or paused since, stays as it is,
+   * and nothing resumes once another item, or the same one again, has started.
+   */
   resumeAfterTagEditor(): void;
 
   // The video and photo elements' events.
@@ -105,6 +109,8 @@ export interface PlayerOptions {
   store: AppStore;
   api: AppApi;
   connection: ServerConnection;
+  /** The in-app dialogs, for a play the server's compatibility check stops. */
+  dialogs: Pick<Dialogs, "notice">;
   /** Defaults to the global `fetch`, looked up on each request. */
   fetch?: typeof fetch;
 }
@@ -133,7 +139,7 @@ function absolutizeMediaUrl(apiBaseUrl: string, mediaUrl: string): string {
 }
 
 export function createPlayer(options: PlayerOptions): Player {
-  const { store, api, connection } = options;
+  const { store, api, connection, dialogs } = options;
   const apiBaseUrl = String(options.apiBaseUrl || "").replace(/\/+$/, "");
   const send: typeof fetch = options.fetch ?? ((input, init) => fetch(input, init));
   const randomPicker = createRandomPicker((body, signal) =>
@@ -159,6 +165,8 @@ export function createPlayer(options: PlayerOptions): Player {
   let videoMuted = false;
   let tagEditorPausedVideo = false;
   let tagEditorHeldPhotoTimer = false;
+  /** The play attempt the tag editor paused; once another has started, there is nothing to resume. */
+  let tagEditorPausedAttempt = 0;
 
   function trace(level: string, message: string, context: Record<string, unknown> = {}): void {
     void api.relayLog(level, playbackTraceLine(message, store.current.peek(), store.playAttemptId.peek(), context));
@@ -277,7 +285,7 @@ export function createPlayer(options: PlayerOptions): Player {
 
   async function pickRandom(): Promise<void> {
     if (store.compatibilityBlocked.peek()) {
-      store.setStatus("Cannot play: server compatibility check failed.");
+      void dialogs.notice("Cannot play: server compatibility check failed.");
       return;
     }
 
@@ -419,6 +427,8 @@ export function createPlayer(options: PlayerOptions): Player {
         return;
       }
       if (elements && videoShown()) {
+        // The user's own play or pause stands once the tag editor closes.
+        tagEditorPausedVideo = false;
         if (elements.video.paused) {
           void elements.video.play().catch(() => {});
         } else {
@@ -463,6 +473,7 @@ export function createPlayer(options: PlayerOptions): Player {
     pauseForTagEditor() {
       tagEditorPausedVideo = false;
       tagEditorHeldPhotoTimer = false;
+      tagEditorPausedAttempt = store.playAttemptId.peek();
       if (store.current.peek()?.mediaType === "photo") {
         tagEditorHeldPhotoTimer = !!photoTimerId;
         clearPhotoTimer();
@@ -477,7 +488,8 @@ export function createPlayer(options: PlayerOptions): Player {
 
     resumeAfterTagEditor() {
       const current = store.current.peek();
-      if (!current) return;
+      // An item played since, or the same one played again, already plays as it should.
+      if (!current || store.playAttemptId.peek() !== tagEditorPausedAttempt) return;
       if (current.mediaType === "photo") {
         if (tagEditorHeldPhotoTimer && (store.autoplay.peek() || store.loop.peek())) {
           playCurrent();

@@ -35,7 +35,7 @@ function stopPropagation(event: Event): void {
  * once and never changed here, and the video element is never replaced or moved.
  */
 export function Player() {
-  const { store, player, fullscreen, library, filterDialog, tagEditor } = useApp();
+  const { store, player, fullscreen } = useApp();
   const container = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const photo = useRef<HTMLImageElement>(null);
@@ -111,11 +111,9 @@ export function Player() {
         onEnded={player.videoEnded}
       ></video>
       <img id="photo" alt="Photo" style="display:none" ref={photo} onLoad={player.photoLoaded} onError={player.photoFailed} />
-      <div id="empty-state" class="empty-state" ref={emptyState}>Click here to play (choose a preset or open Filter…)</div>
+      <div id="empty-state" class="empty-state" ref={emptyState}>Tap to play, or open the panel to choose a preset or filter.</div>
       <div id="overlay-controls" class="overlay-controls" onTouchStart={stopPropagation} onTouchMove={stopPropagation} onTouchEnd={stopPropagation} onClick={stopPropagation}>
-        <button id="library-open-btn" class={`${OVERLAY_BUTTON} overlay-corner-btn`} aria-label="Library" title="Library" onClick={press(library.open)}><span class="material-symbol-icon">browse</span></button>
-        <button id="filter-edit-btn" class={`${OVERLAY_BUTTON} overlay-corner-btn`} aria-label="Select filters" title="Select filters…" onClick={press(filterDialog.open)}><span class="material-symbol-icon">filter_alt</span></button>
-        <button id="tag-edit-btn" class={`${OVERLAY_BUTTON} overlay-corner-btn`} aria-label="Edit Tags" title="Edit Tags" onClick={press(tagEditor.open)}><span class="material-symbol-icon">tag</span></button>
+        <PanelButton />
         <button id="favorite-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, player.favorite.value)} aria-label="Favorite" title="Favorite" onClick={press(player.toggleFavorite)}><span class="material-symbol-icon">favorite</span></button>
         <button id="blacklist-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, player.blacklisted.value)} aria-label="Blacklist" title="Blacklist" onClick={press(player.toggleBlacklist)}><span class="material-symbol-icon">thumb_down</span></button>
         <div class="overlay-controls-row overlay-controls-transport">
@@ -133,5 +131,26 @@ export function Player() {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Opens the panel on its last tab, or closes it. Its icon shows the panel's side and whether it is open, and it is
+ * orange while the panel is open. It takes focus back when the panel closes with focus inside it.
+ */
+function PanelButton() {
+  const { panel } = useApp();
+  const button = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    panel.attachButton(button.current);
+    return () => panel.attachButton(null);
+  }, []);
+
+  const open = panel.isOpen.value;
+  const label = open ? "Close panel" : "Open panel";
+  return (
+    <button id="panel-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, open)} aria-label={label} title={label} aria-expanded={open ? "true" : "false"} aria-controls="panel" ref={button} onClick={press(panel.toggle)}>
+      <span class="material-symbol-icon">{`${panel.side.value}_panel_${open ? "close" : "open"}`}</span>
+    </button>
   );
 }

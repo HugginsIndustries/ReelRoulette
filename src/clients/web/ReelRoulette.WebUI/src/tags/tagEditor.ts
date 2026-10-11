@@ -11,6 +11,7 @@ import {
   type TagSaveStep,
   type TaggedItem
 } from "../library/tagSave";
+import type { PanelHost } from "../panel/panelHost";
 import type { Player } from "../playback/player";
 import type { AppApi } from "../state/appApi";
 import type { AppStore, StorageLike } from "../state/appStore";
@@ -139,30 +140,38 @@ export interface TagEditorView extends TagEditorState {
 }
 
 /**
- * The tag editor: the playing item's tags and the tag catalog on Edit Tags, file name matches on Auto Tag, and
- * Save, which sends all of their changes in the background after closing.
+ * The Tags tab's tag editor: the playing item's tags and the tag catalog on Edit Tags, file name matches on Auto Tag,
+ * and Save, which sends all of their changes in the background after closing the panel. The panel shows and hides
+ * the tab.
  */
 export interface TagEditor {
+  /** Whether the Tags tab shows. */
   readonly isOpen: ReadonlySignal<boolean>;
   /** The tab shown, or null before the editor first opens. */
   readonly tab: ReadonlySignal<TagEditorTab | null>;
   /** Null before the editor first opens. */
   readonly view: ReadonlySignal<TagEditorView | null>;
 
-  /** Pauses playback, shows Edit Tags, and loads the tags of the item playing. */
+  /**
+   * The tab shows: pauses playback, shows Edit Tags, and loads the tags of the item playing, which it doesn't while the
+   * server fails the compatibility check.
+   */
   open(): void;
   /**
-   * Asks first when there are changes, then hides the editor, closing its dialogs, and resumes playback. Not while a
-   * scan runs.
+   * The tab is about to hide: asks first when there are changes, then closes the editor's dialogs and resumes
+   * playback. Says whether the tab can hide, which it can't while a scan runs or when the user keeps the changes.
    */
-  close(): Promise<void>;
+  close(): Promise<boolean>;
   showTab(tab: TagEditorTab): void;
   /**
    * Asks first when there are changes, then drops them, closes the editor's dialogs, and loads the tags again. Not
    * while a scan runs.
    */
   refresh(): Promise<void>;
-  /** Closes the editor and sends the changes in the background. */
+  /**
+   * Closes the editor and the panel, and sends the changes in the background. Not while the server fails the
+   * compatibility check.
+   */
   save(): void;
 
   toggleCategory(categoryId: string): void;
@@ -220,6 +229,8 @@ export interface TagEditorOptions {
   connection: Pick<ServerConnection, "on">;
   library: Pick<Library, "session">;
   player: Pick<Player, "pauseForTagEditor" | "resumeAfterTagEditor">;
+  /** Save closes the panel, at every width, as it closed the tag editor. */
+  panel: Pick<PanelHost, "close">;
   /** Browser `sessionStorage`, for the collapsed categories. */
   sessionStorage: StorageLike;
   /** Browser `localStorage`, for Scan full library. */
@@ -388,7 +399,11 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     return current?.itemId ? [current.itemId] : [];
   }
 
+  /** Nothing loads while the server fails the compatibility check. */
   async function loadModel(): Promise<void> {
+    if (store.compatibilityBlocked.peek()) {
+      return;
+    }
     const response = await api.post("/api/tag-editor/model", { itemIds: currentItemIds() });
     if (!response.ok) {
       throw new Error(`tag-model:${response.status}`);
@@ -601,14 +616,24 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     },
 
     async close() {
+      if (!isOpen.peek()) {
+        return true;
+      }
       if (state.autoTag.scanning) {
-        return;
+        return false;
       }
       // With no changes it closes at once. The editor may have closed, or a scan started, while it asked.
-      if (hasChanges(state) && (!(await confirmDiscard()) || !isOpen.peek() || state.autoTag.scanning)) {
-        return;
+      if (hasChanges(state)) {
+        const discard = await confirmDiscard();
+        if (!isOpen.peek()) {
+          return true;
+        }
+        if (!discard || state.autoTag.scanning) {
+          return false;
+        }
       }
       closeEditor();
+      return true;
     },
 
     showTab(next) {
@@ -634,7 +659,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     },
 
     save() {
-      if (state.autoTag.scanning || !hasChanges(state)) {
+      if (state.autoTag.scanning || !hasChanges(state) || store.compatibilityBlocked.peek()) {
         return;
       }
       const steps = planTagEdits({
@@ -653,6 +678,8 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       const handle = saves.begin(loaded, steps, false, tagFilterCanChangeMembership());
       writeLoadedTagItems(loaded);
       closeEditor();
+      // The editor is closed, so the Tags tab lets the panel close without asking.
+      void options.panel.close();
       void saveInBackground(handle, steps);
     },
 
@@ -873,7 +900,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     },
 
     async scan() {
-      if (state.autoTag.scanning) {
+      if (state.autoTag.scanning || store.compatibilityBlocked.peek()) {
         return;
       }
       update({ autoTag: { ...state.autoTag, scanning: true, status: AUTO_TAG_SCANNING } });

@@ -20,7 +20,20 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
     presets: presets.slice(),
     sourcesStatus: 200,
     saveStatus: 200,
-    requests: [] as Array<{ method: string; path: string; body: any }>
+    /** While set, the sources request waits for it, so a test can act while the dialog loads. */
+    held: null as Promise<void> | null,
+    requests: [] as Array<{ method: string; path: string; body: any }>,
+    /** Holds the next loads until the returned function is called. */
+    hold(): () => void {
+      let release!: () => void;
+      server.held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return () => {
+        server.held = null;
+        release();
+      };
+    }
   };
   const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
@@ -28,6 +41,7 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
     const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
     server.requests.push({ method, path, body });
     if (path === "/api/sources") {
+      await server.held;
       return json([{ id: "source-1", displayName: "Movies" }, { id: "source-2", displayName: "Photos" }], server.sourcesStatus);
     }
     if (path === "/api/tag-editor/model") {
@@ -79,9 +93,15 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
     setItem: (key: string, value: string) => void session.set(key, value)
   };
   const confirm = vi.fn(async (_request: ConfirmRequest) => true);
-  const dialog = createFilterDialog({ store, api, connection, library, storage, dialogs: { confirm } });
+  /** The panel, which Apply and Cancel close as the overlay. */
+  const panel = {
+    closeIfOverlay: vi.fn(async () => {
+      steps.push("closeIfOverlay");
+    })
+  };
+  const dialog = createFilterDialog({ store, api, connection, library, panel, storage, dialogs: { confirm } });
   const view = () => dialog.view.value!;
-  return { dialog, view, store, server, statuses, steps, library, session, confirm };
+  return { dialog, view, store, server, statuses, steps, library, session, confirm, panel };
 }
 
 /** An action that is neither disabled nor held. */
@@ -116,18 +136,101 @@ describe("opening", () => {
     expect(view().pending).toBe(false);
   });
 
-  it("stays closed while the server is incompatible, and says why when its data cannot load", async () => {
+  it("shows but loads nothing while the server is incompatible, and says why when its data cannot load", async () => {
     const { dialog, store, server, statuses } = setup();
     store.compatibilityBlocked.value = true;
     await dialog.open();
     expect(server.requests).toHaveLength(0);
+    expect(dialog.isOpen.value).toBe(true);
+    expect(dialog.view.value).toBeNull();
+    await dialog.refresh();
+    expect(server.requests).toHaveLength(0);
+    expect(dialog.view.value).toBeNull();
+    dialog.close();
 
     store.compatibilityBlocked.value = false;
     server.sourcesStatus = 500;
     await dialog.open();
-    expect(statuses).toEqual(["Filter dialog load failed: HTTP 500"]);
-    expect(dialog.isOpen.value).toBe(false);
+    expect(statuses).toEqual(["Filter load failed: HTTP 500"]);
+    expect(dialog.isOpen.value).toBe(true);
     expect(dialog.view.value).toBeNull();
+    expect(dialog.tab.value).toBeNull();
+  });
+
+  it("Refresh before anything has loaded loads as showing the tab does, and says so", async () => {
+    const { dialog, view, server, statuses } = setup();
+    server.sourcesStatus = 500;
+    await dialog.open();
+    expect(dialog.view.value).toBeNull();
+
+    await dialog.refresh();
+    expect(statuses.at(-1)).toBe("Filter refresh failed: HTTP 500");
+    expect(dialog.view.value).toBeNull();
+
+    server.sourcesStatus = 200;
+    await dialog.refresh();
+    expect(statuses.at(-1)).toBe("Filter data refreshed.");
+    expect(dialog.tab.value).toBe("general");
+    expect(view().sources.map((source) => source.id)).toEqual(["source-1", "source-2"]);
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites"]);
+  });
+
+  it("starts over on General from the applied filter and the saved presets each time it shows, before it loads again", async () => {
+    const { dialog, view, server } = setup([FAVORITES, RECENT]);
+    await dialog.open();
+    dialog.changeGeneral({ onlyNeverPlayed: true });
+    dialog.movePreset(0, 1);
+    dialog.typeNewPresetName("Draft");
+    dialog.showTab("presets");
+    expect(view().pending).toBe(true);
+    dialog.close();
+    expect(dialog.isOpen.value).toBe(false);
+
+    const release = server.hold();
+    const opening = dialog.open();
+    const startedOver = () => {
+      expect(dialog.isOpen.value).toBe(true);
+      expect(dialog.tab.value).toBe("general");
+      expect(view().working.onlyNeverPlayed).toBe(false);
+      expect(view().general.onlyNeverPlayed).toBe(false);
+      expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
+      expect(view().presetsChanged).toBe(false);
+      expect(view().newPresetName).toBe("");
+      expect(view().pending).toBe(false);
+    };
+    startedOver();
+    release();
+    await opening;
+    startedOver();
+  });
+
+  it("keeps changes made while it loads again, and the section they were made in, and takes what loaded", async () => {
+    const { dialog, view, server } = setup([FAVORITES, RECENT]);
+    await dialog.open();
+    dialog.close();
+
+    const release = server.hold();
+    const opening = dialog.open();
+    dialog.showTab("presets");
+    dialog.changeGeneral({ onlyNeverPlayed: true });
+    dialog.changeGeneral({ favoritesChoice: "excluded" });
+    dialog.typeDuration("min", "1:30");
+    dialog.typeNewPresetName("Draft");
+    server.presets = [FAVORITES, RECENT, EVERYTHING];
+    release();
+    await opening;
+
+    expect(dialog.tab.value).toBe("presets");
+    expect(view().working.onlyNeverPlayed).toBe(true);
+    expect(view().general.onlyNeverPlayed).toBe(true);
+    expect(view().general.minText).toBe("1:30");
+    expect(view().working.minDurationSeconds).toBeNull();
+    expect(view().general.favoritesChoice).toBe("excluded");
+    expect(view().working.favoritesMode).toBe("off");
+    expect(view().general.sourceChecked).toEqual([true, true]);
+    expect(view().newPresetName).toBe("Draft");
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent", "Everything"]);
+    expect(view().pending).toBe(true);
   });
 
   it("opens on None while the header holds None, even when a saved preset has the default filter", async () => {
@@ -196,7 +299,7 @@ describe("General tab", () => {
   });
 
   it("holds Apply on a duration that is not valid, with or without other changes, and moves to it without a status", async () => {
-    const { dialog, view, statuses, library, server, store } = setup();
+    const { dialog, view, statuses, library, server, store, panel } = setup();
     await dialog.open();
     dialog.typeDuration("min", "abc");
     expect(view().pending).toBe(false);
@@ -207,6 +310,7 @@ describe("General tab", () => {
     expect(dialog.tab.value).toBe("general");
     expect(dialog.reveal.request.value).toEqual({ field: "minDuration", count: 1 });
     expect(dialog.isOpen.value).toBe(true);
+    expect(panel.closeIfOverlay).not.toHaveBeenCalled();
     expect(view().general.minText).toBe("abc");
 
     dialog.changeGeneral({ onlyNeverPlayed: true });
@@ -220,6 +324,7 @@ describe("General tab", () => {
       expect.objectContaining({ path: "/api/tag-editor/model" })
     ]);
     expect(library.commitQuery).not.toHaveBeenCalled();
+    expect(panel.closeIfOverlay).not.toHaveBeenCalled();
     expect(statuses).toEqual([]);
 
     dialog.typeDuration("min", "1:30");
@@ -561,8 +666,8 @@ describe("Edit Preset", () => {
 });
 
 describe("applying", () => {
-  it("saves changed presets, applies the filter, reloads presets, closes, and then starts the library over", async () => {
-    const { dialog, store, server, steps, statuses } = setup([FAVORITES]);
+  it("saves changed presets, applies the filter, reloads presets, closes the panel as the overlay, and then starts the library over", async () => {
+    const { dialog, store, server, steps, statuses, panel } = setup([FAVORITES]);
     await dialog.open();
     dialog.changeGeneral({ favoritesOn: true, onlyNeverPlayed: true });
     dialog.typeNewPresetName("Unplayed favorites");
@@ -574,11 +679,11 @@ describe("applying", () => {
     expect(server.requests.filter((request) => request.method === "POST" && request.path === "/api/presets")[0]!.body.map(
       (preset: any) => preset.name
     )).toEqual(["Favorites", "Unplayed favorites"]);
-    expect(steps).toEqual(["loadPresets", "commitQuery favoritesMode=only"]);
+    expect(steps).toEqual(["loadPresets", "closeIfOverlay", "commitQuery favoritesMode=only"]);
     expect(store.appliedFilter.value).toMatchObject({ favoritesMode: "only", onlyNeverPlayed: true });
     expect(store.activePresetName.value).toBe("Unplayed favorites");
     expect(store.presetMenu.value.selectedValue).toBe("saved-2");
-    expect(dialog.isOpen.value).toBe(false);
+    expect(panel.closeIfOverlay).toHaveBeenCalledTimes(1);
     expect(statuses.at(-1)).toBe("Filters applied.");
   });
 
@@ -597,7 +702,7 @@ describe("applying", () => {
   });
 
   it("keeps the dialog open and applies nothing when the presets cannot be saved", async () => {
-    const { dialog, view, store, server, statuses, library } = setup([FAVORITES]);
+    const { dialog, view, store, server, statuses, library, panel } = setup([FAVORITES]);
     server.saveStatus = 500;
     await dialog.open();
     dialog.changeGeneral({ onlyNeverPlayed: true });
@@ -608,6 +713,7 @@ describe("applying", () => {
 
     expect(statuses.at(-1)).toBe("Saving presets failed (500).");
     expect(dialog.isOpen.value).toBe(true);
+    expect(panel.closeIfOverlay).not.toHaveBeenCalled();
     expect(view().presetsChanged).toBe(true);
     expect(store.appliedFilter.value).toEqual(createDefaultFilterState());
     expect(library.commitQuery).not.toHaveBeenCalled();
@@ -638,6 +744,32 @@ describe("applying", () => {
     await dialog.refresh();
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
     expect(view().presetsChanged).toBe(false);
+  });
+
+  it("Cancel puts back the applied filter and the saved presets, applies and saves nothing, and closes the panel as the overlay", async () => {
+    const { dialog, view, store, server, library, panel } = setup([FAVORITES, RECENT]);
+    store.pickHeaderPreset("preset-favorites");
+    await dialog.open();
+    dialog.changeGeneral({ onlyNeverPlayed: true });
+    dialog.movePreset(0, 1);
+    dialog.typeNewPresetName("Draft");
+    dialog.editPreset(0);
+    expect(view().pending).toBe(true);
+
+    dialog.cancel();
+
+    expect(panel.closeIfOverlay).toHaveBeenCalledTimes(1);
+    expect(view().working).toMatchObject({ favoritesMode: "only", onlyNeverPlayed: false });
+    expect(view().general).toMatchObject({ favoritesOn: true, onlyNeverPlayed: false });
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
+    expect(view().presetsChanged).toBe(false);
+    expect(view().newPresetName).toBe("");
+    expect(view().presetEdit).toBeNull();
+    expect(view().heading).toBe("Preset: Favorites");
+    expect(view().pending).toBe(false);
+    expect(server.requests.filter((request) => request.method === "POST" && request.path === "/api/presets")).toHaveLength(0);
+    expect(store.appliedFilter.value).toMatchObject({ favoritesMode: "only", onlyNeverPlayed: false });
+    expect(library.commitQuery).not.toHaveBeenCalled();
   });
 
   it("goes back to the default filter and the saved presets on Clear all", async () => {

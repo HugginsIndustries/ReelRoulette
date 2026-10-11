@@ -1,18 +1,18 @@
+import { effect } from "@preact/signals";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { useApp } from "./appContext";
 import { DialogHost } from "./Dialog";
-import { FilterDialog } from "./FilterDialog";
-import { LibraryOverlay } from "./LibraryOverlay";
+import { Panel } from "./Panel";
 import { Player } from "./Player";
 import { ScreenBoundary } from "./ScreenBoundary";
-import { TagEditor } from "./TagEditor";
 
 /**
- * The part of the page that goes fullscreen: the player, the overlays, and the in-app dialogs, which stay inside it so
- * they show in fullscreen too.
+ * The part of the page that goes fullscreen: the player, the side panel with its tabs, and the in-app dialogs, which
+ * stay inside it so they show in fullscreen too. The panel's side, where it goes, and its width are set on the stage
+ * as they change, without rendering it again, so dragging the panel's handle doesn't render the player.
  */
 export function Stage() {
-  const { api, fullscreen, library } = useApp();
+  const { api, fullscreen, panel } = useApp();
   const stage = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -20,14 +20,25 @@ export function Stage() {
     return () => fullscreen.detach();
   }, []);
 
-  // Escape closes the library overlay when it is open, and otherwise leaves pseudo-fullscreen. While a dialog is open,
-  // Escape is the dialog's: it closes the top one.
+  useLayoutEffect(
+    () =>
+      effect(() => {
+        const element = stage.current!;
+        element.dataset.side = panel.side.value;
+        element.dataset.panelMode = panel.mode.value;
+        element.style.setProperty("--panel-width", `${panel.width.value}px`);
+      }),
+    []
+  );
+
+  // Escape closes the panel when it is open, and otherwise leaves pseudo-fullscreen. While a dialog is open, Escape is
+  // the dialog's: it closes the top one.
   useLayoutEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (stage.current?.querySelector("dialog[open]")) return;
-      if (library.isOpen()) {
-        library.close();
+      if (panel.isOpen.peek()) {
+        void panel.close();
         return;
       }
       fullscreen.exitPseudo();
@@ -38,19 +49,13 @@ export function Stage() {
 
   return (
     <div id="fullscreen-stage" class={fullscreen.pseudo.value ? "fullscreen-stage fullscreen-pseudo" : "fullscreen-stage"} ref={stage}>
-      <main>
+      <main class="player-col">
         <ScreenBoundary screen="player" relay={api.relayLog}>
           <Player />
         </ScreenBoundary>
       </main>
-      <ScreenBoundary screen="tags" relay={api.relayLog}>
-        <TagEditor />
-      </ScreenBoundary>
-      <ScreenBoundary screen="filter" relay={api.relayLog}>
-        <FilterDialog />
-      </ScreenBoundary>
-      <ScreenBoundary screen="library" relay={api.relayLog}>
-        <LibraryOverlay />
+      <ScreenBoundary screen="panel" relay={api.relayLog}>
+        <Panel />
       </ScreenBoundary>
       <ScreenBoundary screen="dialogs" relay={api.relayLog}>
         <DialogHost />

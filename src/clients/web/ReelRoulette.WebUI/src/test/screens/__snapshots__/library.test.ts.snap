@@ -1,15 +1,11 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`overlay > keeps its markup while loading, with tiles, and when a query fails > error 1`] = `
-"<div class="library-overlay" id="library-overlay" style="display: flex">
+"<div class="library-overlay" id="library-overlay">
   <div class="library-overlay-header">
     <h2>
       "Library"
     <p aria-live="polite" class="library-overlay-summary" hidden="" id="library-overlay-summary">
-    <div class="library-overlay-actions">
-      <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="library-overlay-close-btn" title="Close" type="button">
-        <span class="material-symbol-icon">
-          "close"
   <div class="library-overlay-toolbar" id="library-overlay-toolbar" style="display: none">
     <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
     <div class="library-overlay-sort-cluster">
@@ -33,15 +29,11 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
 `;
 
 exports[`overlay > keeps its markup while loading, with tiles, and when a query fails > loading 1`] = `
-"<div class="library-overlay" id="library-overlay" style="display: flex">
+"<div class="library-overlay" id="library-overlay">
   <div class="library-overlay-header">
     <h2>
       "Library"
     <p aria-live="polite" class="library-overlay-summary" hidden="" id="library-overlay-summary">
-    <div class="library-overlay-actions">
-      <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="library-overlay-close-btn" title="Close" type="button">
-        <span class="material-symbol-icon">
-          "close"
   <div class="library-overlay-toolbar" id="library-overlay-toolbar" style="display: none">
     <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
     <div class="library-overlay-sort-cluster">
@@ -65,16 +57,12 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
 `;
 
 exports[`overlay > keeps its markup while loading, with tiles, and when a query fails > tiles 1`] = `
-"<div class="library-overlay" id="library-overlay" style="display: flex">
+"<div class="library-overlay" id="library-overlay">
   <div class="library-overlay-header">
     <h2>
       "Library"
     <p aria-live="polite" class="library-overlay-summary" id="library-overlay-summary">
       "Showing 3 of 3 items"
-    <div class="library-overlay-actions">
-      <button aria-label="Close" class="icon-glyph-base icon-glyph-button" id="library-overlay-close-btn" title="Close" type="button">
-        <span class="material-symbol-icon">
-          "close"
   <div class="library-overlay-toolbar" id="library-overlay-toolbar" style="display: flex">
     <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
     <div class="library-overlay-sort-cluster">

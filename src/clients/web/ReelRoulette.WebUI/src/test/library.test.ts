@@ -31,12 +31,17 @@ function libraryItems(count: number, overrides: Record<string, unknown> = {}) {
   }));
 }
 
+/** The Library tab's page, which the panel shows and hides around the library's `open` and `close`. */
+interface FakePage {
+  hidden: boolean;
+}
+
 /** A stand-in for the grid controller that records what the library asks of it. */
-function fakeGrid(onCoverage: (coverage: LibraryGridCoverage) => void, overlay: { style: { display: string } }) {
+function fakeGrid(onCoverage: (coverage: LibraryGridCoverage) => void, page: FakePage) {
   const grid = {
     onCoverage,
     contents: [] as Array<{ ids: string[]; searchQuery: string; resetScroll: boolean | undefined }>,
-    /** The overlay's `display` each time the deferred layout was flushed. */
+    /** Whether the tab's page was shown or hidden each time the deferred layout was flushed. */
     flushes: [] as string[],
     destroyed: false,
     coverage: null as LibraryGridCoverage | null,
@@ -49,7 +54,7 @@ function fakeGrid(onCoverage: (coverage: LibraryGridCoverage) => void, overlay: 
     },
     measureCoverage: () => grid.coverage,
     flushDeferredLayout() {
-      grid.flushes.push(overlay.style.display);
+      grid.flushes.push(page.hidden ? "hidden" : "shown");
     },
     destroy() {
       grid.destroyed = true;
@@ -106,12 +111,13 @@ function setup() {
       (listeners[event] ??= []).push(listener);
     }
   } as unknown as ServerConnection;
-  const overlay = { style: { display: "none" } };
+  const page: FakePage = { hidden: true };
+  const panel = { closeIfOverlay: vi.fn(() => Promise.resolve()) };
   const playCalls: string[] = [];
   const player = {
     playCurrent: vi.fn((options?: { recordPlayback?: boolean }) => {
       playCalls.push(
-        `current=${store.current.peek()?.itemId} overlay=${overlay.style.display} recordPlayback=${options?.recordPlayback}`
+        `current=${store.current.peek()?.itemId} closeIfOverlay=${panel.closeIfOverlay.mock.calls.length} recordPlayback=${options?.recordPlayback}`
       );
     })
   };
@@ -123,20 +129,22 @@ function setup() {
     api,
     connection,
     player,
+    panel,
     fetch: fetchImpl,
     createGrid(_host, onCoverage) {
-      const grid = fakeGrid(onCoverage, overlay);
+      const grid = fakeGrid(onCoverage, page);
       grids.push(grid);
       return grid;
     },
     requestFrame: (callback) => frames.push(callback)
   });
-  service.attach({ overlay });
+  service.attach();
   return {
     library: service,
     fakeLibrary: library,
     store,
-    overlay,
+    page,
+    panel,
     player,
     playCalls,
     relayed,
@@ -146,12 +154,22 @@ function setup() {
     requests: (path: string) => requests.filter((request) => request.path === path),
     emit: (event: keyof ServerConnectionEvents, payload?: unknown) =>
       listeners[event]?.forEach((listener) => listener(payload)),
+    /** Shows the Library tab as the panel does: its page first, then the library's `open`. */
+    showTab() {
+      page.hidden = false;
+      service.open();
+    },
+    /** Hides the Library tab as the panel does: the library's `close`, then its page. */
+    hideTab() {
+      service.close();
+      page.hidden = true;
+    },
     runFrames() {
       for (const frame of frames.splice(0)) {
         frame();
       }
     },
-    /** Creates the grid when the body asks for it, as the overlay's grid element does when it mounts. */
+    /** Creates the grid when the body asks for it, as the Library tab's grid element does when it mounts. */
     mountGrid() {
       if (service.body.peek().kind !== "grid") {
         throw new Error("The body is not showing the grid.");
@@ -173,7 +191,7 @@ afterEach(() => {
 });
 
 describe("library window", () => {
-  it("loads the first page when the server is ready, and shows nothing until the overlay opens", async () => {
+  it("loads the first page when the server is ready, and shows nothing until the tab opens", async () => {
     const t = setup();
     t.emit("serverReady");
     await settle();
@@ -188,13 +206,12 @@ describe("library window", () => {
     expect(t.grids).toHaveLength(0);
   });
 
-  it("opening shows the overlay, the toolbar and totals, and the grid with the loaded tiles", async () => {
+  it("opening shows the toolbar and totals, and the grid with the loaded tiles", async () => {
     const t = setup();
     t.emit("serverReady");
     await settle();
 
-    t.library.open();
-    expect(t.overlay.style.display).toBe("flex");
+    t.showTab();
     expect(t.library.isOpen()).toBe(true);
     expect(t.library.body.peek()).toEqual({ kind: "grid" });
     expect(t.library.toolbarShown.peek()).toBe(true);
@@ -203,15 +220,14 @@ describe("library window", () => {
     expect(grid.contents).toEqual([{ ids: ["item-1", "item-2", "item-3"], searchQuery: "", resetScroll: false }]);
     expect(t.queries()).toHaveLength(1);
 
-    t.library.close();
-    expect(t.overlay.style.display).toBe("none");
+    t.hideTab();
     expect(t.library.isOpen()).toBe(false);
   });
 
   it("shows loading, error, and empty messages in place of the grid while open", async () => {
     const t = setup();
     t.fakeLibrary.failures.push(500);
-    t.library.open();
+    t.showTab();
     expect(t.library.body.peek()).toEqual({
       kind: "message",
       message: { text: "Loading library…", error: false, live: true }
@@ -236,9 +252,9 @@ describe("library window", () => {
     const t = setup();
     t.emit("serverReady");
     await settle();
-    t.library.open();
+    t.showTab();
     const grid = t.mountGrid();
-    t.library.close();
+    t.hideTab();
 
     t.fakeLibrary.failures.push(503);
     await t.library.commitQuery();
@@ -246,7 +262,7 @@ describe("library window", () => {
     expect(t.library.summary.peek()).toBe("Showing 3 of 3 items");
     expect(t.store.status.peek()).toBe("Library load failed: HTTP 503");
 
-    t.library.open();
+    t.showTab();
     expect(t.library.body.peek()).toMatchObject({ kind: "message", message: { text: "Loading library…" } });
     expect(t.library.summary.peek()).toBeNull();
     expect(t.library.toolbarShown.peek()).toBe(false);
@@ -254,13 +270,13 @@ describe("library window", () => {
     expect(grid.flushes).toEqual([]);
   });
 
-  it("updates a hidden grid's tiles, and flushes its deferred layout after the overlay shows", async () => {
+  it("updates a hidden grid's tiles, and flushes its deferred layout after the tab shows", async () => {
     const t = setup();
     t.emit("serverReady");
     await settle();
-    t.library.open();
+    t.showTab();
     const grid = t.mountGrid();
-    t.library.close();
+    t.hideTab();
 
     t.fakeLibrary.items = libraryItems(2);
     t.emit("refreshCompleted");
@@ -268,8 +284,8 @@ describe("library window", () => {
     expect(grid.contents.at(-1)).toEqual({ ids: ["item-1", "item-2"], searchQuery: "", resetScroll: false });
     expect(t.library.summary.peek()).toBe("Showing 2 of 2 items");
 
-    t.library.open();
-    expect(grid.flushes).toEqual(["flex"]);
+    t.showTab();
+    expect(grid.flushes).toEqual(["shown"]);
     expect(t.grids).toHaveLength(1);
   });
 
@@ -277,7 +293,7 @@ describe("library window", () => {
     const t = setup();
     t.emit("serverReady");
     await settle();
-    t.library.open();
+    t.showTab();
     await t.library.commitQuery();
 
     const grid = t.mountGrid();
@@ -288,7 +304,7 @@ describe("library window", () => {
     const t = setup();
     t.emit("serverReady");
     await settle();
-    t.library.open();
+    t.showTab();
     const grid = t.mountGrid();
     let release: () => void = () => {};
     t.fakeLibrary.held = new Promise<void>((resolve) => {
@@ -311,52 +327,52 @@ describe("library window", () => {
     const t = setup();
     t.emit("serverReady");
     await settle();
-    t.library.open();
+    t.showTab();
     const destroy = t.library.attachGrid({} as HTMLElement);
     destroy();
     expect(t.grids[0]!.destroyed).toBe(true);
 
-    t.library.close();
-    t.library.open();
+    t.hideTab();
+    t.showTab();
     expect(t.grids[0]!.flushes).toEqual([]);
   });
 });
 
 describe("fill", () => {
-  it("fills from the grid's coverage only while the overlay is open", async () => {
+  it("fills from the grid's coverage only while the tab is open", async () => {
     const t = setup();
     t.fakeLibrary.items = libraryItems(450);
     t.emit("serverReady");
     await settle();
-    t.library.open();
+    t.showTab();
     const grid = t.mountGrid();
-    t.library.close();
+    t.hideTab();
 
     grid.onCoverage(NEEDS_FILL);
     await settle();
     expect(t.queries()).toHaveLength(1);
 
-    t.library.open();
+    t.showTab();
     grid.onCoverage(NEEDS_FILL);
     await settle();
     expect(t.queries()).toHaveLength(2);
     expect(t.queries()[1]).toMatchObject({ offset: 200, limit: 200 });
   });
 
-  it("the frame after opening fills from the grid's coverage, unless the overlay closed first", async () => {
+  it("the frame after opening fills from the grid's coverage, unless the tab closed first", async () => {
     const t = setup();
     t.fakeLibrary.items = libraryItems(450);
     t.emit("serverReady");
     await settle();
-    t.library.open();
+    t.showTab();
     t.mountGrid().coverage = NEEDS_FILL;
 
-    t.library.close();
+    t.hideTab();
     t.runFrames();
     await settle();
     expect(t.queries()).toHaveLength(1);
 
-    t.library.open();
+    t.showTab();
     t.runFrames();
     await settle();
     expect(t.queries()).toHaveLength(2);
@@ -364,7 +380,7 @@ describe("fill", () => {
 
   it("opening loads the first page when there is none yet", async () => {
     const t = setup();
-    t.library.open();
+    t.showTab();
     await settle();
 
     expect(t.queries()).toHaveLength(1);
@@ -394,7 +410,7 @@ describe("search and sort", () => {
     const t = setup();
     t.emit("serverReady");
     await settle();
-    t.library.open();
+    t.showTab();
     expect(t.library.directionLabel.peek()).toBe("A–Z");
 
     t.library.setSortMode("PlayCount");
@@ -412,15 +428,15 @@ describe("search and sort", () => {
 });
 
 describe("play", () => {
-  it("joins history, closes the overlay, and then plays without recording the play again", async () => {
+  it("joins history, closes the panel as the overlay, and then plays without recording the play again", async () => {
     const t = setup();
     t.replies.set("/api/play/item-1", () => json(PLAYED));
-    t.library.open();
+    t.showTab();
 
     await t.library.play(" item-1 ");
 
     expect(t.requests("/api/play/item-1")[0]!.body).toEqual({ clientId: "client-1", sessionId: "session-1" });
-    expect(t.playCalls).toEqual(["current=item-1 overlay=none recordPlayback=false"]);
+    expect(t.playCalls).toEqual(["current=item-1 closeIfOverlay=1 recordPlayback=false"]);
     expect(t.store.history.peek()).toHaveLength(1);
     expect(t.relayed.filter((line) => line.startsWith("playback="))).toEqual([
       "playback=library-play-start attempt=0 hasCurrent=false",
@@ -449,9 +465,9 @@ describe("play", () => {
     expect(t.player.playCurrent).toHaveBeenCalledTimes(1);
   });
 
-  it("reports a refused, unauthorized, or unreachable play and leaves the overlay open", async () => {
+  it("reports a refused, unauthorized, or unreachable play and leaves the panel open", async () => {
     const t = setup();
-    t.library.open();
+    t.showTab();
 
     t.replies.set("/api/play/item-1", () => json({ error: "gone", code: "play_item_not_found" }, 404));
     await t.library.play("item-1");
@@ -477,19 +493,29 @@ describe("play", () => {
     await t.library.play("  ");
     expect(t.store.status.peek()).toBe("Playback unavailable: no library item was selected.");
 
-    expect(t.overlay.style.display).toBe("flex");
+    expect(t.panel.closeIfOverlay).not.toHaveBeenCalled();
+    expect(t.library.isOpen()).toBe(true);
     expect(t.player.playCurrent).not.toHaveBeenCalled();
   });
 
-  it("neither opens nor plays while the server is incompatible", async () => {
+  it("shows why in place of the library, and neither loads nor plays, while the server is incompatible", async () => {
     const t = setup();
+    t.store.compatibilityMessage.value = "Server API version 0 is not supported.";
     t.store.compatibilityBlocked.value = true;
 
-    t.library.open();
+    t.showTab();
     await t.library.play("item-1");
+    await settle();
 
-    expect(t.overlay.style.display).toBe("none");
-    expect(t.library.isOpen()).toBe(false);
+    expect(t.library.isOpen()).toBe(true);
+    expect(t.library.body.peek()).toEqual({
+      kind: "message",
+      message: { text: "Server API version 0 is not supported.", error: true, live: false }
+    });
+    expect(t.library.toolbarShown.peek()).toBe(false);
+    expect(t.library.summary.peek()).toBeNull();
+    expect(t.panel.closeIfOverlay).not.toHaveBeenCalled();
+    expect(t.player.playCurrent).not.toHaveBeenCalled();
     expect(t.store.status.peek()).toBe("Cannot play: server compatibility check failed.");
     expect(t.requests("/api/play/item-1")).toHaveLength(0);
     expect(t.queries()).toHaveLength(0);
@@ -524,7 +550,7 @@ describe("events", () => {
     expect(t.queries().at(-1)).toMatchObject({ offset: 0, limit: 3 });
   });
 
-  it("detaching the overlay while it is open counts as closed, and opening without it does nothing", async () => {
+  it("detaching the tab's view while it is open counts as closed, and opening without it does nothing", async () => {
     const t = setup();
     t.library.open();
     t.library.detach();

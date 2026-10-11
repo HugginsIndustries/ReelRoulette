@@ -97,9 +97,9 @@ function panelStyle(shown: FilterDialogTab | null, panel: (typeof TABS)[number])
 }
 
 /**
- * The filter dialog. It shows only while open, and keeps its panels while closed. The panels are empty until it
- * first opens. Edit Preset renders after it rather than inside it, so the dialog's own styles apply and not the filter
- * dialog's.
+ * The Filter tab, which the panel shows and hides. It keeps its sections while hidden, and they are empty until the
+ * tab first loads. Edit Preset renders after it rather than inside it, so the dialog's own styles apply and not the
+ * Filter tab's.
  */
 export function FilterDialog() {
   const { filterDialog } = useApp();
@@ -109,12 +109,11 @@ export function FilterDialog() {
   const [general, tags, presets] = TABS;
   return (
     <>
-      <div id="filter-dialog" class="filter-dialog" style={{ display: filterDialog.isOpen.value ? "flex" : "none" }}>
+      <div id="filter-dialog" class="filter-dialog">
         <div class="filter-dialog-header">
           <h2 id="filter-dialog-heading">{view ? view.heading : "Preset: None"}</h2>
           <div class="filter-dialog-actions">
             <button id="filter-dialog-refresh-btn" class="icon-glyph-base icon-glyph-button" type="button" title="Refresh" aria-label="Refresh" onClick={() => void filterDialog.refresh()}><span class="material-symbol-icon">refresh</span></button>
-            <button id="filter-dialog-close-btn" class="icon-glyph-base icon-glyph-button" type="button" title="Close" aria-label="Close" onClick={() => filterDialog.close()}><span class="material-symbol-icon">close</span></button>
           </div>
         </div>
         <div class="filter-dialog-tabstrip" role="tablist">
@@ -135,7 +134,7 @@ export function FilterDialog() {
         </div>
         <div class="filter-dialog-footer">
           <button id="filter-clear-all-btn" type="button" onClick={() => filterDialog.clearAll()}>Clear all filters</button>
-          <button id="filter-cancel-btn" type="button" onClick={() => filterDialog.close()}>Cancel</button>
+          <button id="filter-cancel-btn" type="button" onClick={() => filterDialog.cancel()}>Cancel</button>
           <HeldButton id="filter-apply-btn" class={view?.pending ? "has-pending" : undefined} {...heldAction(view, "apply")} onClick={() => void filterDialog.apply()}>{view?.pending ? "Apply*" : "Apply"}</HeldButton>
         </div>
       </div>

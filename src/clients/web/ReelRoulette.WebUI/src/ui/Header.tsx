@@ -29,7 +29,7 @@ function PairingPrompt() {
   const tokenInput = useRef<HTMLInputElement>(null);
   return (
     <div id="pair-section" class="pair-section" style={{ display: store.pairingRequired.value ? "flex" : "none" }}>
-      <label class="pair-section-label"><span class="pair-section-label-hint">Pairing token:</span> <input type="text" id="pair-token" placeholder="Enter token" defaultValue={config.pairToken} ref={tokenInput} /></label>
+      <label class="pair-section-label"><span class="pair-section-label-hint">Pairing token</span> <input type="text" id="pair-token" placeholder="Enter token" defaultValue={config.pairToken} ref={tokenInput} /></label>
       <button id="pair-btn" onClick={() => void connection.pair(tokenInput.current?.value ?? "")}>Pair</button>
     </div>
   );
