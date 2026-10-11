@@ -376,6 +376,7 @@ html.theme-light .lib-grid { background: #fff; }
 .tags-target b { color: var(--page-fg); font-weight: 600; }
 .tags-body .tag-category { background: var(--surface); }
 .tags-body .tag-category.is-dragging { border-radius: 6px; }
+.tags-body .tag-category.is-dragging .tag-grid { display: none; }
 .tags-footer { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
 .tags-footer-row { display: flex; align-items: center; gap: 8px; }
 .tags-footer-row .ctl { flex: 1 1 auto; }
@@ -2334,6 +2335,8 @@ document.addEventListener("keydown", (event) => {
 });
 
 // ---- Reordering by drag handle ----
+// How far the pointer moves on a handle before a drag starts, in pixels.
+const DRAG_START_DISTANCE = 5;
 function announce(text) {
   $("sort-live").textContent = text;
 }
@@ -2359,9 +2362,10 @@ function makeSortable({ list, rowSelector, keyOf, labelOf, commit }) {
     const box = row.getBoundingClientRect();
     return box.top + box.height / 2;
   };
-  const focusHandle = (key) => {
+  // An arrow key's move brings the handle into view when its row has left it; a drop leaves the list where it is.
+  const focusHandle = (key, preventScroll = false) => {
     const row = movable().find((r) => keyOf(r) === key);
-    if (row) row.querySelector(".drag-handle").focus({ preventScroll: false });
+    if (row) row.querySelector(".drag-handle").focus({ preventScroll });
   };
 
   list.addEventListener("keydown", (event) => {
@@ -2391,8 +2395,15 @@ function makeSortable({ list, rowSelector, keyOf, labelOf, commit }) {
     const grab = start.clientY - row.getBoundingClientRect().top;
     let y = start.clientY;
     let frame = 0;
-    row.classList.add("is-dragging");
-    document.body.classList.add("sorting");
+    let dragging = false;
+    // The drag starts once the pointer has moved a few pixels, so a tap on the handle changes nothing. A dragged
+    // category hides its tags until it is dropped, so only its header moves, however many tags it has.
+    const begin = () => {
+      dragging = true;
+      row.classList.add("is-dragging");
+      document.body.classList.add("sorting");
+      frame = requestAnimationFrame(follow);
+    };
 
     // The dragged row stays in place in the document while its neighbours move across it, so the pointer stays on it.
     const follow = () => {
@@ -2413,17 +2424,26 @@ function makeSortable({ list, rowSelector, keyOf, labelOf, commit }) {
         row.before(next);
         next = row.nextElementSibling;
       }
-      row.style.transform = `translateY(${y - grab - row.getBoundingClientRect().top}px)`;
+      // It shows no higher than the first row and no lower than the last, so it never makes the list longer and the
+      // list never scrolls on under it. Where it lands still goes by the pointer.
+      const rows = movable();
+      const highest = rows[0].getBoundingClientRect().top;
+      const lowest = rows[rows.length - 1].getBoundingClientRect().bottom - row.offsetHeight;
+      const shown = Math.min(Math.max(y - grab, highest), lowest);
+      row.style.transform = `translateY(${shown - row.getBoundingClientRect().top}px)`;
       frame = requestAnimationFrame(follow);
     };
     const move = (event) => {
       y = event.clientY;
+      if (!dragging && Math.hypot(event.clientX - start.clientX, event.clientY - start.clientY) > DRAG_START_DISTANCE) begin();
     };
     const end = () => {
       cancelAnimationFrame(frame);
       document.removeEventListener("pointermove", move);
       document.removeEventListener("pointerup", end);
       document.removeEventListener("pointercancel", end);
+      // The list keeps where it was scrolled to through the drop and the redraw.
+      const scrollTop = scroller ? scroller.scrollTop : 0;
       row.classList.remove("is-dragging");
       document.body.classList.remove("sorting");
       row.style.transform = "";
@@ -2433,12 +2453,12 @@ function makeSortable({ list, rowSelector, keyOf, labelOf, commit }) {
         commit(keys);
         announce(`${labelOf(key)} moved to position ${keys.indexOf(key) + 1} of ${keys.length}.`);
       }
-      focusHandle(key);
+      if (scroller) scroller.scrollTop = scrollTop;
+      focusHandle(key, true);
     };
     document.addEventListener("pointermove", move);
     document.addEventListener("pointerup", end);
     document.addEventListener("pointercancel", end);
-    frame = requestAnimationFrame(follow);
   });
 }
 

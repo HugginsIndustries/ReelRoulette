@@ -1,5 +1,6 @@
 import { compareTagNames } from "../library/tagNameOrder";
 import { planTagEditorSave, type AutoTagSaveAssignment, type TagSaveStep } from "../library/tagSave";
+import { moveEntry } from "../reorder/reorder";
 import { EMPTY_FIELD, type FieldProblem } from "../validation/fieldValidation";
 
 export const UNCATEGORIZED_CATEGORY_ID = "uncategorized";
@@ -75,8 +76,6 @@ export interface TagCategoryRow {
   name: string;
   uncategorized: boolean;
   collapsed: boolean;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
   chips: TagChipRow[];
 }
 
@@ -327,9 +326,8 @@ export function tagCategoryRows(
   collapsed: ReadonlySet<string>,
   selections: ReadonlyMap<string, TagSelection>
 ): TagCategoryRow[] {
-  const movableCount = display.categories.filter((category) => !isUncategorizedCategoryId(category.id)).length;
   const canChangeItems = display.items.length > 0;
-  return display.categories.map((category, index) => {
+  return display.categories.map((category) => {
     const isUncategorized = isUncategorizedCategoryId(category.id);
     const chips = display.tags
       .filter((tag) => (isUncategorizedCategoryId(tag.categoryId) ? UNCATEGORIZED_CATEGORY_ID : tag.categoryId) === category.id)
@@ -344,26 +342,26 @@ export function tagCategoryRows(
       name: category.name,
       uncategorized: isUncategorized,
       collapsed: collapsed.has(category.id),
-      canMoveUp: !isUncategorized && movableCount > 1 && index > 0,
-      canMoveDown: !isUncategorized && movableCount > 1 && index < movableCount - 1,
       chips
     };
   });
 }
 
-/** Swaps a category with its neighbor. Null when it cannot move that way; Uncategorized never moves. */
-export function moveCategoryInOrder(order: readonly string[], categoryId: string, direction: -1 | 1): string[] | null {
+/**
+ * Moves a category to `to`, counted among the categories that can move. Null when it is already there or cannot move
+ * there; Uncategorized never moves and stays last.
+ */
+export function moveCategoryInOrder(order: readonly string[], categoryId: string, to: number): string[] | null {
   if (!categoryId || isUncategorizedCategoryId(categoryId)) {
     return null;
   }
   const movable = order.filter((id) => !isUncategorizedCategoryId(id));
-  const index = movable.indexOf(categoryId);
-  const target = index + direction;
-  if (index < 0 || target < 0 || target >= movable.length) {
+  const from = movable.indexOf(categoryId);
+  if (from < 0 || to < 0 || to >= movable.length || to === from) {
     return null;
   }
-  [movable[index], movable[target]] = [movable[target]!, movable[index]!];
-  return order.some((id) => isUncategorizedCategoryId(id)) ? [...movable, UNCATEGORIZED_CATEGORY_ID] : movable;
+  const moved = moveEntry(movable, from, to);
+  return order.some((id) => isUncategorizedCategoryId(id)) ? [...moved, UNCATEGORIZED_CATEGORY_ID] : moved;
 }
 
 /** Adds a new category last, before Uncategorized. */

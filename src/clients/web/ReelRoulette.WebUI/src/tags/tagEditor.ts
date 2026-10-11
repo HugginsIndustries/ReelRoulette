@@ -166,7 +166,8 @@ export interface TagEditor {
   save(): void;
 
   toggleCategory(categoryId: string): void;
-  moveCategory(categoryId: string, direction: -1 | 1): void;
+  /** Moves a category to `to` among the categories that can move, until Save. */
+  moveCategory(categoryId: string, to: number): void;
   /** Opens the New Category dialog. */
   addCategory(): void;
   typeNewCategoryName(text: string): void;
@@ -666,8 +667,8 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       update({ collapsed });
     },
 
-    moveCategory(categoryId, direction) {
-      const order = moveCategoryInOrder(state.order, categoryId, direction);
+    moveCategory(categoryId, to) {
+      const order = moveCategoryInOrder(state.order, categoryId, to);
       if (order) {
         update({ order, orderChanged: true });
       }

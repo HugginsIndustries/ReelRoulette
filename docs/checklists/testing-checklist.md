@@ -78,6 +78,7 @@ These need a person, real devices, or the Windows VM.
 - [ ] In the WebUI and the desktop, Favorites excluded and Blacklisted only each limit browse and random play as named, and a preset saved in one client shows the same filter in the other.
 - [ ] In the WebUI's filter dialog, on a desktop browser and a phone in both themes, a flagged duration's tooltip shows beside its red icon and inside the screen while the pointer is on the icon, after a tap on it, and while the field has focus.
 - [ ] Every in-app dialog matches the WebUI's theme and works in an installed web app on desktop and on mobile, including in fullscreen.
+- [ ] In the installed app on Android and iOS, dragging a tag category and a preset by its handle reorders them, and a drag that starts elsewhere on a row scrolls.
 
 ## Release Flow
 

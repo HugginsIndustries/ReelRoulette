@@ -1202,6 +1202,64 @@ html.theme-light .tag-editor .tag-chip .chip-btn.icon-glyph-base.is-selected {
   min-width: 0;
   font-weight: 600;
 }
+/* Reordering: a row moves only by its handle, so a drag anywhere else on it still scrolls on a touch screen. */
+.tag-editor button.drag-handle,
+.filter-dialog button.drag-handle {
+  width: 32px;
+  min-width: 32px;
+  height: 44px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.drag-handle .material-symbol-icon {
+  font-size: 26px;
+  color: var(--muted-fg);
+}
+.drag-handle:hover:not(:disabled) .material-symbol-icon,
+.drag-handle:focus-visible .material-symbol-icon {
+  color: inherit;
+}
+.drag-handle.icon-glyph-button:hover:not(:disabled) {
+  opacity: 1;
+}
+.tag-editor button.drag-handle:disabled,
+.filter-dialog button.drag-handle:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.is-dragging .drag-handle .material-symbol-icon {
+  color: var(--huggins-orange);
+}
+.tag-editor-category.is-dragging,
+.filter-preset-row.is-dragging {
+  position: relative;
+  z-index: 5;
+}
+.tag-editor-category.is-dragging .tag-editor-category-header {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.filter-preset-row.is-dragging {
+  background: var(--surface-raised);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+/* A dragged category hides its tags until it is dropped, so only its header moves, however many tags it has. */
+.tag-editor-category.is-dragging .tag-editor-tag-grid {
+  display: none;
+}
+body.sorting,
+body.sorting * {
+  cursor: grabbing !important;
+  user-select: none;
+  -webkit-user-select: none;
+}
 html.theme-light .filter-dialog {
   background: rgba(248, 249, 252, 0.98);
   color: var(--page-fg);

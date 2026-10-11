@@ -24,6 +24,7 @@ import {
   useFieldValidation,
   type ValidatedControlProps
 } from "./FieldValidation";
+import { DragHandle, ReorderStatus, useReorder } from "./Reorder";
 
 // The `data-*` attributes keep the markup as it was before the dialog moved to a component; nothing reads them.
 
@@ -152,15 +153,10 @@ function presetEditButton(index: number): HTMLElement | null {
   return rows[Math.min(index, rows.length - 1)]?.querySelector<HTMLElement>('[title="Edit preset"]') ?? null;
 }
 
-/**
- * Where focus goes after Add Preset adds a preset: the new last row's up button, or its Edit while it is the only
- * preset and can't move up. A button, so no on-screen keyboard opens.
- */
+/** Where focus goes after Add Preset adds a preset: the new last row's drag handle. A button, so no on-screen keyboard opens. */
 function addedPresetFocus(): HTMLElement | null {
   const rows = document.querySelectorAll<HTMLElement>("#filter-dialog .filter-preset-row");
-  const row = rows[rows.length - 1];
-  const up = row?.querySelector<HTMLButtonElement>("[data-preset-up]");
-  return up && !up.disabled ? up : (row?.querySelector<HTMLElement>('[title="Edit preset"]') ?? null);
+  return rows[rows.length - 1]?.querySelector<HTMLElement>(".drag-handle") ?? null;
 }
 
 /** Edit Preset: renames a preset, or deletes it after asking. It shows while the dialog's preset edit is open. */
@@ -418,7 +414,7 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
   const { filterDialog } = useApp();
   const names = view.presets.map((preset) => preset.name);
   const chosen = view.presetName && names.includes(view.presetName) ? view.presetName : "";
-  const last = view.presets.length - 1;
+  const reorder = useReorder({ keys: names, nameOf: (name) => name, onMove: (from, to) => filterDialog.movePreset(from, to) });
   // Whether Add Preset added a preset, until its row renders and takes focus.
   const added = useRef(false);
   useLayoutEffect(() => {
@@ -457,10 +453,9 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
         <div class="filter-preset-list themed-scrollbar">
           {view.presets.length > 0 ? (
             view.presets.map((preset, index) => (
-              <div key={preset.name} class="filter-preset-row" data-preset-idx={String(index)}>
+              <div key={preset.name} ref={reorder.row(preset.name)} class={reorder.dragging === preset.name ? "filter-preset-row is-dragging" : "filter-preset-row"} data-preset-idx={String(index)}>
+                <DragHandle control={reorder.handle(preset.name)} />
                 <span class="filter-preset-name">{preset.name}</span>
-                <button type="button" class="icon-glyph-base icon-glyph-button" data-preset-up={String(index)} aria-label="Move up" title="Move up" disabled={index === 0} onClick={() => filterDialog.movePreset(index, -1)}><span class="material-symbol-icon">keyboard_arrow_up</span></button>
-                <button type="button" class="icon-glyph-base icon-glyph-button" data-preset-down={String(index)} aria-label="Move down" title="Move down" disabled={index === last} onClick={() => filterDialog.movePreset(index, 1)}><span class="material-symbol-icon">keyboard_arrow_down</span></button>
                 <button type="button" class="icon-glyph-base icon-glyph-button" data-preset-edit={String(index)} aria-label={`Edit preset ${preset.name}`} title="Edit preset" onClick={() => filterDialog.editPreset(index)}><span class="material-symbol-icon">edit_note</span></button>
               </div>
             ))
@@ -468,6 +463,7 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
             <span class="filter-hint">No presets</span>
           )}
         </div>
+        <ReorderStatus reorder={reorder} />
       </div>
     </>
   );

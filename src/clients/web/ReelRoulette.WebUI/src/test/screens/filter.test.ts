@@ -10,9 +10,17 @@ import {
   json,
   mountPage,
   normalizedMarkup,
+  pointerDown,
+  pointerMove,
+  pointerUp,
+  pressKey,
   resetPage,
+  scrollOnFocus,
   settle,
   status,
+  stubRowLayout,
+  stubScroller,
+  useStylesheet,
   type MountedPage
 } from "./pageHarness";
 
@@ -339,9 +347,17 @@ function presetRow(name: string): HTMLElement {
   return found;
 }
 
-function rowButton(name: string, label: "Move up" | "Move down" | "Edit preset"): HTMLButtonElement {
-  const accessibleName = label === "Edit preset" ? `Edit preset ${name}` : label;
-  return within(presetRow(name)).getByRole("button", { name: accessibleName }) as HTMLButtonElement;
+function rowButton(name: string, label: "Edit preset"): HTMLButtonElement {
+  return within(presetRow(name)).getByRole("button", { name: `${label} ${name}` }) as HTMLButtonElement;
+}
+
+function presetHandle(name: string): HTMLButtonElement {
+  return within(presetRow(name)).getByRole("button", { name: `Reorder ${name}` }) as HTMLButtonElement;
+}
+
+/** What screen readers last heard about a preset moving. */
+function presetAnnouncement(): string {
+  return byId("filter-panel-presets").querySelector("[aria-live]")?.textContent ?? "";
 }
 
 /** The in-app dialogs open, in document order: Edit Preset, inside the filter dialog, comes before a confirmation. */
@@ -495,7 +511,7 @@ describe("opening and closing", () => {
       await showTab("Presets");
       expect(presetRows()).toEqual(["Favorites", "Beach days", "Recent"]);
       await addPreset("Draft");
-      await click(rowButton("Favorites", "Move down"));
+      await pressKey(presetHandle("Favorites"), "ArrowDown");
       await deletePreset("Recent");
       expect(presetRows()).toEqual(["Beach days", "Favorites", "Draft"]);
       await click(dialogButton(button));
@@ -1265,43 +1281,40 @@ describe("Presets tab", () => {
     ["the pointer", press],
     ["the keyboard", pressWithKeyboard]
   ] as const) {
-    it(`Add Preset pressed with ${how} moves to the new preset's Move up`, async () => {
+    it(`Add Preset pressed with ${how} moves to the new preset's drag handle`, async () => {
       await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
       await openDialog();
       await showTab("Presets");
       fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Draft" } });
       await activate(dialogButton("Add Preset"));
       expect(presetRows()).toEqual(["Favorites", "Beach days", "Draft"]);
-      expect(document.activeElement).toBe(rowButton("Draft", "Move up"));
+      expect(document.activeElement).toBe(presetHandle("Draft"));
     });
 
-    it(`Add Preset pressed with ${how} moves to the new preset's Edit when it is the only preset`, async () => {
+    it(`Add Preset pressed with ${how} moves to the new preset's drag handle when it is the only preset`, async () => {
       await mountFilter();
       await openDialog();
       await showTab("Presets");
       fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Draft" } });
       await activate(dialogButton("Add Preset"));
-      expect(rowButton("Draft", "Move up").disabled).toBe(true);
-      expect(document.activeElement).toBe(rowButton("Draft", "Edit preset"));
+      expect(presetHandle("Draft").disabled).toBe(false);
+      expect(document.activeElement).toBe(presetHandle("Draft"));
     });
   }
 
-  it("Move up and Move down reorder the presets, with the ends turned off", async () => {
+  it("the arrow keys on a preset's handle move it, keeping focus there and saying where it went, until Apply saves them", async () => {
     const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET, RECENT_PRESET]);
     await openDialog();
     await showTab("Presets");
 
-    expect(rowButton("Favorites", "Move up").disabled).toBe(true);
-    expect(rowButton("Favorites", "Move down").disabled).toBe(false);
-    expect(rowButton("Recent", "Move down").disabled).toBe(true);
-
-    await click(rowButton("Favorites", "Move down"));
+    expect(await pressKey(presetHandle("Favorites"), "ArrowDown")).toBe(false);
     expect(presetRows()).toEqual(["Beach days", "Favorites", "Recent"]);
-    expect(rowButton("Beach days", "Move up").disabled).toBe(true);
-    expect(rowButton("Favorites", "Move up").disabled).toBe(false);
+    expect(document.activeElement).toBe(presetHandle("Favorites"));
+    expect(presetAnnouncement()).toBe("Favorites moved to position 2 of 3.");
     expect(applyButton().textContent).toBe("Apply*");
-    await click(rowButton("Recent", "Move up"));
+    expect(await pressKey(presetHandle("Recent"), "ArrowUp")).toBe(false);
     expect(presetRows()).toEqual(["Beach days", "Recent", "Favorites"]);
+    expect(presetAnnouncement()).toBe("Recent moved to position 2 of 3.");
     expect(Array.from(presetSelectInDialog().options).map((option) => option.textContent)).toEqual([
       "None",
       "Beach days",
@@ -1309,20 +1322,138 @@ describe("Presets tab", () => {
       "Favorites"
     ]);
 
+    expect(await pressKey(presetHandle("Beach days"), "ArrowUp")).toBe(false);
+    expect(await pressKey(presetHandle("Favorites"), "ArrowDown")).toBe(false);
+    expect(presetRows()).toEqual(["Beach days", "Recent", "Favorites"]);
+    expect(presets.saves()).toHaveLength(0);
+
     await applyAndWait(server);
     expect(presets.saves()[0].map((preset: any) => preset.name)).toEqual(["Beach days", "Recent", "Favorites"]);
   });
 
-  it("each preset row has Move up, Move down, and Edit preset, and nothing else", async () => {
+  it("each preset row has a drag handle, its name, and Edit preset, and nothing else", async () => {
     await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
     await showTab("Presets");
 
     for (const name of ["Favorites", "Beach days"]) {
-      const buttons = Array.from(presetRow(name).querySelectorAll("button"));
-      expect(buttons.map((button) => button.getAttribute("aria-label")), name).toEqual(["Move up", "Move down", `Edit preset ${name}`]);
-      expect(buttons.map((button) => button.title), name).toEqual(["Move up", "Move down", "Edit preset"]);
+      const row = presetRow(name);
+      expect(Array.from(row.children).map((child) => child.className), name).toEqual([
+        "drag-handle icon-glyph-base icon-glyph-button",
+        "filter-preset-name",
+        "icon-glyph-base icon-glyph-button"
+      ]);
+      const buttons = Array.from(row.querySelectorAll("button"));
+      expect(buttons.map((button) => button.getAttribute("aria-label")), name).toEqual([`Reorder ${name}`, `Edit preset ${name}`]);
+      expect(buttons.map((button) => button.title), name).toEqual(["Drag to reorder", "Edit preset"]);
     }
+    const help = byId(presetHandle("Favorites").getAttribute("aria-describedby") ?? "");
+    expect(help.textContent).toBe("Drag to reorder, or press the up and down arrow keys.");
+  });
+
+  describe("dragging a preset", () => {
+    async function mountLaidOut() {
+      const page = await mountFilter([FAVORITES_PRESET, BEACH_PRESET, RECENT_PRESET]);
+      await openDialog();
+      await showTab("Presets");
+      useStylesheet();
+      // Preset rows 40 px tall, one under another.
+      stubRowLayout("#filter-dialog .filter-preset-row", () => 40);
+      return page;
+    }
+
+    const transforms = () => Array.from(dialog().querySelectorAll<HTMLElement>(".filter-preset-row")).map((row) => row.style.transform);
+
+    it("follows the pointer past each preset its middle crosses, and moves there until Apply saves it", async () => {
+      const { server, presets } = await mountLaidOut();
+
+      pointerDown(presetHandle("Recent"), 90);
+      await pointerMove(80);
+      expect(presetRow("Recent").classList.contains("is-dragging")).toBe(true);
+      // Its middle, at 25, is past Beach days' at 60 but not Favorites' at 20.
+      await pointerMove(15);
+      expect(transforms()).toEqual(["", "translateY(40px)", "translateY(-75px)"]);
+      // Past Favorites' middle too, it stops at the top of the list, though the pointer goes on.
+      await pointerMove(5);
+      expect(transforms()).toEqual(["translateY(40px)", "translateY(40px)", "translateY(-80px)"]);
+      expect(presetRows()).toEqual(["Favorites", "Beach days", "Recent"]);
+      expect(applyButton().textContent).toBe("Apply");
+
+      await pointerUp();
+      expect(presetRows()).toEqual(["Recent", "Favorites", "Beach days"]);
+      expect(transforms()).toEqual(["", "", ""]);
+      expect(presetRow("Recent").classList.contains("is-dragging")).toBe(false);
+      expect(document.activeElement).toBe(presetHandle("Recent"));
+      expect(presetAnnouncement()).toBe("Recent moved to position 1 of 3.");
+      expect(applyButton().textContent).toBe("Apply*");
+      expect(presets.saves()).toHaveLength(0);
+
+      await applyAndWait(server);
+      expect(presets.saves()[0].map((preset: any) => preset.name)).toEqual(["Recent", "Favorites", "Beach days"]);
+    });
+
+    it("stays under the pointer while the list scrolls, and lands where the pointer is", async () => {
+      await mountLaidOut();
+      const list = dialog().querySelector<HTMLElement>(".filter-preset-list")!;
+      // A list reaching well past the presets, so the pointer stays away from its edges and it scrolls only when told to.
+      stubScroller(list, -200, 600, 1200);
+
+      pointerDown(presetHandle("Favorites"), 20);
+      await pointerMove(30);
+      expect(transforms()).toEqual(["translateY(10px)", "", ""]);
+      // Scrolled 50 px with the pointer still, its middle, at 80 in the list, is past Beach days' at 60.
+      list.scrollTop = 50;
+      fireEvent.scroll(list);
+      expect(transforms()).toEqual(["translateY(60px)", "translateY(-40px)", ""]);
+
+      await pointerUp();
+      expect(presetRows()).toEqual(["Beach days", "Favorites", "Recent"]);
+      expect(presetAnnouncement()).toBe("Favorites moved to position 2 of 3.");
+    });
+
+    it("keeps the list where it was scrolled after a drop, and focuses the dropped handle without scrolling", async () => {
+      await mountLaidOut();
+      const list = dialog().querySelector<HTMLElement>(".filter-preset-list")!;
+      // A list reaching well past the presets, so the pointer stays away from its edges and it scrolls only when told to.
+      stubScroller(list, -200, 600, 1200);
+      list.scrollTop = 30;
+      const focusCalls = scrollOnFocus(list);
+
+      pointerDown(presetHandle("Favorites"), 20);
+      await pointerMove(30);
+      // Its middle, at 100 in the list, is past Beach days' at 90.
+      await pointerMove(70);
+      expect(transforms()).toEqual(["translateY(50px)", "translateY(-40px)", ""]);
+      // As the transforms go and the presets move, the browser may scroll the list, before the page renders.
+      await pointerUp(() => {
+        list.scrollTop = 0;
+      });
+      expect(presetRows()).toEqual(["Beach days", "Favorites", "Recent"]);
+      expect(list.scrollTop).toBe(30);
+      expect(document.activeElement).toBe(presetHandle("Favorites"));
+      expect(focusCalls.map((call) => [call.element.getAttribute("aria-label"), call.preventScroll])).toEqual([["Reorder Favorites", true]]);
+    });
+
+    it("leaves the order for a tap on a handle, and starts only on the handle, so a drag on a preset's name scrolls", async () => {
+      await mountLaidOut();
+      expect(getComputedStyle(presetHandle("Favorites")).touchAction).toBe("none");
+      expect(getComputedStyle(presetRow("Favorites")).touchAction).not.toBe("none");
+
+      pointerDown(presetHandle("Favorites"), 10);
+      await pointerMove(14);
+      expect(presetRow("Favorites").classList.contains("is-dragging")).toBe(false);
+      await pointerUp();
+      expect(document.activeElement).toBe(presetHandle("Favorites"));
+
+      pointerDown(presetRow("Favorites").querySelector(".filter-preset-name")!, 10);
+      await pointerMove(100);
+      expect(presetRow("Favorites").classList.contains("is-dragging")).toBe(false);
+      await pointerUp();
+      expect(presetRows()).toEqual(["Favorites", "Beach days", "Recent"]);
+      expect(transforms()).toEqual(["", "", ""]);
+      expect(presetAnnouncement()).toBe("");
+      expect(applyButton().textContent).toBe("Apply");
+    });
   });
 
   it("Edit Preset's Delete asks first in a dialog above it, and deleting the chosen preset leaves the heading on None", async () => {
@@ -1556,7 +1687,7 @@ describe("header, refresh, and clear all", () => {
     const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
     await showTab("Presets");
-    await click(rowButton("Favorites", "Move down"));
+    await pressKey(presetHandle("Favorites"), "ArrowDown");
     expect(presetRows()).toEqual(["Beach days", "Favorites"]);
 
     presets.list = [...presets.list, RECENT_PRESET];
@@ -1654,7 +1785,7 @@ describe("controls kept in place", () => {
     await showTab("Presets");
     const list = dialog().querySelector(".filter-preset-list");
     fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Draft" } });
-    await click(rowButton("Favorites", "Move down"));
+    await pressKey(presetHandle("Favorites"), "ArrowDown");
     expect(presetRows()).toEqual(["Beach days", "Favorites", "Recent"]);
     expect(dialog().querySelector(".filter-preset-list")).toBe(list);
     expect(byId<HTMLInputElement>("filter-new-preset-name").value).toBe("Draft");

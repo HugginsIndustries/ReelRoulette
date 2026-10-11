@@ -1,6 +1,7 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { Library } from "../library/library";
+import { moveEntry } from "../reorder/reorder";
 import type { AppApi } from "../state/appApi";
 import type { AppStore, StorageLike } from "../state/appStore";
 import type { ServerConnection } from "../state/serverConnection";
@@ -145,7 +146,8 @@ export interface FilterDialog {
    * did. Disabled while the name is empty or taken, and held like Apply.
    */
   addPreset(): boolean;
-  movePreset(index: number, step: -1 | 1): void;
+  /** Moves the preset at `from` to `to`, until Apply saves the list. */
+  movePreset(from: number, to: number): void;
   /** Opens Edit Preset on a preset, with its name. */
   editPreset(index: number): void;
   /** Takes the name typed in Edit Preset. */
@@ -538,15 +540,13 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       return true;
     },
 
-    movePreset(index, step) {
+    movePreset(from, to) {
       const current = view.peek();
-      const target = index + step;
-      if (!current || !current.presets[index] || target < 0 || target >= current.presets.length) {
+      const count = current?.presets.length ?? 0;
+      if (!current || from === to || from < 0 || from >= count || to < 0 || to >= count) {
         return;
       }
-      const presets = current.presets.slice();
-      [presets[index], presets[target]] = [presets[target]!, presets[index]!];
-      update({ presets, presetsChanged: true });
+      update({ presets: moveEntry(current.presets, from, to), presetsChanged: true });
     },
 
     editPreset(index) {

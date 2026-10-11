@@ -1,7 +1,24 @@
 // @vitest-environment happy-dom
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it } from "vitest";
-import { FakeServer, json, mountPage, normalizedMarkup, resetPage, settle, status, type MountedPage } from "./pageHarness";
+import {
+  FakeServer,
+  json,
+  mountPage,
+  normalizedMarkup,
+  pointerDown,
+  pointerMove,
+  pointerUp,
+  pressKey,
+  resetPage,
+  scrollOnFocus,
+  settle,
+  status,
+  stubRowLayout,
+  stubScroller,
+  useStylesheet,
+  type MountedPage
+} from "./pageHarness";
 
 interface TagModel {
   categories: Array<{ id: string; name: string; sortOrder: number }>;
@@ -292,6 +309,16 @@ function chipNames(title: string): string[] {
 
 function categoryButton(title: string, label: string): HTMLButtonElement {
   return within(category(title)).getAllByTitle(label)[0] as HTMLButtonElement;
+}
+
+/** The category's drag handle, which is Uncategorized's dimmed one for Uncategorized. */
+function handle(title: string): HTMLButtonElement {
+  return category(title).querySelector(".drag-handle") as HTMLButtonElement;
+}
+
+/** What screen readers last heard about a category moving. */
+function reorderAnnouncement(): string {
+  return byId("tag-editor-panel-edit").querySelector("[aria-live]")?.textContent ?? "";
 }
 
 function categoryGrid(title: string): HTMLElement {
@@ -823,23 +850,45 @@ describe("Edit Tags", () => {
     expect(JSON.parse(sessionStorage.getItem("rr_tagEditorCollapsed") ?? "")).toEqual(["uncategorized"]);
   });
 
-  it("moves categories up and down, with the ends and Uncategorized turned off, and saves the new order", async () => {
+  it("each chip has add, remove, and edit, and each category a drag handle and Edit, except Uncategorized", async () => {
+    await mountTags();
+    await openEditor();
+    const titles = (element: HTMLElement) => Array.from(element.querySelectorAll("button")).map((button) => button.title);
+    expect(titles(chip("Beach"))).toEqual(["Add tag", "Remove tag", "Edit tag"]);
+    expect(within(chip("Beach")).queryByTitle("Delete tag")).toBeNull();
+    const header = (title: string) => category(title).querySelector(".tag-editor-category-header") as HTMLElement;
+    expect(titles(header("Places"))).toEqual(["Drag to reorder", "Collapse category", "Edit category"]);
+    const places = handle("Places");
+    expect(places.getAttribute("aria-label")).toBe("Reorder Places");
+    expect(places.textContent).toBe("drag_indicator");
+    expect(places.disabled).toBe(false);
+    expect(byId(places.getAttribute("aria-describedby") ?? "").textContent).toBe("Drag to reorder, or press the up and down arrow keys.");
+    expect(within(category("Places")).getByRole("button", { name: "Edit category Places" }).textContent).toBe("edit_note");
+    expect(titles(header("Uncategorized"))).toEqual(["Uncategorized stays last", "Collapse category"]);
+    expect(handle("Uncategorized").disabled).toBe(true);
+    expect(handle("Uncategorized").getAttribute("aria-label")).toBe("Uncategorized stays last");
+    expect(handle("Uncategorized").hasAttribute("aria-describedby")).toBe(false);
+    for (const title of ["Move category up", "Move category down", "Delete category", "Rename category"]) {
+      expect(within(editor()).queryByTitle(title), title).toBeNull();
+    }
+  });
+
+  it("moves a category with the arrow keys on its handle, keeping focus there and saying where it went, and saves the order", async () => {
     const { tags } = await mountTags();
     await openEditor();
 
-    expect(categoryButton("Places", "Move category up").disabled).toBe(true);
-    expect(categoryButton("Places", "Move category down").disabled).toBe(false);
-    expect(categoryButton("People", "Move category down").disabled).toBe(true);
-    for (const label of ["Move category up", "Move category down"]) {
-      expect(categoryButton("Uncategorized", label).disabled).toBe(true);
-    }
-
-    await click(categoryButton("People", "Move category up"));
+    expect(await pressKey(handle("People"), "ArrowUp")).toBe(false);
     expect(categoryTitles()).toEqual(["Places", "People", "Mood", "Uncategorized"]);
-    expect(categoryButton("People", "Move category down").disabled).toBe(false);
-    expect(categoryButton("Mood", "Move category down").disabled).toBe(true);
+    expect(document.activeElement).toBe(handle("People"));
+    expect(reorderAnnouncement()).toBe("People moved to position 2 of 3.");
     expect(optionLabels(footerCategory())).toEqual(["Places", "People", "Mood", "Uncategorized"]);
     expect(savePending()).toBe(true);
+
+    expect(await pressKey(handle("Places"), "ArrowUp")).toBe(false);
+    expect(await pressKey(handle("Mood"), "ArrowDown")).toBe(false);
+    expect(await pressKey(handle("Uncategorized"), "ArrowUp")).toBe(true);
+    expect(categoryTitles()).toEqual(["Places", "People", "Mood", "Uncategorized"]);
+    expect(reorderAnnouncement()).toBe("People moved to position 2 of 3.");
 
     await save();
     expect(tags.saves()).toEqual([
@@ -851,8 +900,8 @@ describe("Edit Tags", () => {
   it("says there is nothing to save when categories moved back, and stays open", async () => {
     const { tags } = await mountTags();
     await openEditor();
-    await click(categoryButton("Mood", "Move category down"));
-    await click(categoryButton("Mood", "Move category up"));
+    await pressKey(handle("Mood"), "ArrowDown");
+    await pressKey(handle("Mood"), "ArrowUp");
     expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
     expect(savePending()).toBe(true);
 
@@ -862,20 +911,122 @@ describe("Edit Tags", () => {
     expect(tags.saves()).toEqual([]);
   });
 
-  it("each chip has add, remove, and edit, and each category up, down, and Edit, except Uncategorized", async () => {
-    await mountTags();
-    await openEditor();
-    const titles = (element: HTMLElement) => Array.from(element.querySelectorAll("button")).map((button) => button.title);
-    expect(titles(chip("Beach"))).toEqual(["Add tag", "Remove tag", "Edit tag"]);
-    expect(within(chip("Beach")).queryByTitle("Delete tag")).toBeNull();
-    const controls = (title: string) => category(title).querySelector(".tag-editor-category-controls") as HTMLElement;
-    expect(titles(controls("Places"))).toEqual(["Move category up", "Move category down", "Edit category"]);
-    const edit = within(category("Places")).getByRole("button", { name: "Edit category Places" });
-    expect(edit.textContent).toBe("edit_note");
-    expect(edit.className).toBe(categoryButton("Places", "Move category up").className);
-    expect(titles(controls("Uncategorized"))).toEqual(["Move category up", "Move category down"]);
-    expect(within(editor()).queryByTitle("Delete category")).toBeNull();
-    expect(within(editor()).queryByTitle("Rename category")).toBeNull();
+  describe("dragging a category", () => {
+    async function mountLaidOut(): Promise<TagPage> {
+      const page = await mountTags();
+      await openEditor();
+      useStylesheet();
+      // Categories 100 px tall, or 40 px while one is dragged and hides its tags, 12 px apart.
+      stubRowLayout("#tag-editor-body .tag-editor-category", (row) => (row.classList.contains("is-dragging") ? 40 : 100), 12);
+      return page;
+    }
+
+    const transforms = () => Array.from(body().querySelectorAll<HTMLElement>(".tag-editor-category")).map((section) => section.style.transform);
+
+    it("hides its tags, follows the pointer past each category its middle crosses, and saves the new order", async () => {
+      const { tags } = await mountLaidOut();
+
+      pointerDown(handle("Places"), 20);
+      await pointerMove(30);
+      expect(category("Places").classList.contains("is-dragging")).toBe(true);
+      expect(getComputedStyle(categoryGrid("Places")).display).toBe("none");
+      expect(getComputedStyle(categoryGrid("Mood")).display).toBe("flex");
+      // Its middle, at 100, is short of Mood's, at 102: it follows the pointer and nothing makes way.
+      await pointerMove(100);
+      expect(transforms()).toEqual(["translateY(80px)", "", "", ""]);
+      // Past Mood's middle, Mood slides up into its place, by its 40 px and the 12 px gap.
+      await pointerMove(110);
+      expect(transforms()).toEqual(["translateY(90px)", "translateY(-52px)", "", ""]);
+      expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
+      expect(savePending()).toBe(false);
+
+      await pointerUp();
+      expect(categoryTitles()).toEqual(["Mood", "Places", "People", "Uncategorized"]);
+      expect(transforms()).toEqual(["", "", "", ""]);
+      expect(category("Places").classList.contains("is-dragging")).toBe(false);
+      expect(getComputedStyle(categoryGrid("Places")).display).toBe("flex");
+      expect(document.activeElement).toBe(handle("Places"));
+      expect(reorderAnnouncement()).toBe("Places moved to position 2 of 3.");
+      expect(savePending()).toBe(true);
+
+      await save();
+      expect(tags.saves()).toEqual([
+        { path: "/api/tag-editor/upsert-category", body: { id: "cat-mood", name: "Mood", sortOrder: 0 } },
+        { path: "/api/tag-editor/upsert-category", body: { id: "cat-places", name: "Places", sortOrder: 1 } }
+      ]);
+    });
+
+    it("stays above Uncategorized, and inside the list, however far down it is dragged", async () => {
+      await mountLaidOut();
+      pointerDown(handle("Places"), 20);
+      await pointerMove(30);
+      await pointerMove(2000);
+      // It stops with its bottom at People's, at 264, so the list grows no longer under it.
+      expect(transforms()).toEqual(["translateY(224px)", "translateY(-52px)", "translateY(-52px)", ""]);
+      await pointerUp();
+      expect(categoryTitles()).toEqual(["Mood", "People", "Places", "Uncategorized"]);
+      expect(reorderAnnouncement()).toBe("Places moved to position 3 of 3.");
+    });
+
+    it("keeps the list where it was scrolled after a drop, and focuses the dropped handle without scrolling", async () => {
+      await mountLaidOut();
+      // A list reaching well past the categories, so the pointer stays away from its edges and it scrolls only when told to.
+      stubScroller(body(), -200, 600, 1200);
+      body().scrollTop = 30;
+      const focusCalls = scrollOnFocus(body());
+
+      pointerDown(handle("Places"), 20);
+      await pointerMove(30);
+      // Its middle, at 160 in the list, is past Mood's at 132.
+      await pointerMove(130);
+      expect(transforms()).toEqual(["translateY(110px)", "translateY(-52px)", "", ""]);
+      // As the transforms go, the tags show again, and the categories move, the browser may scroll the list, before the
+      // page renders.
+      await pointerUp(() => {
+        body().scrollTop = 0;
+      });
+      expect(categoryTitles()).toEqual(["Mood", "Places", "People", "Uncategorized"]);
+      expect(body().scrollTop).toBe(30);
+      expect(document.activeElement).toBe(handle("Places"));
+      expect(focusCalls.map((call) => [call.element.getAttribute("aria-label"), call.preventScroll])).toEqual([["Reorder Places", true]]);
+    });
+
+    it("leaves the order for a tap on a handle, and for a drop where it started", async () => {
+      await mountLaidOut();
+      pointerDown(handle("Mood"), 130);
+      await pointerMove(134);
+      expect(category("Mood").classList.contains("is-dragging")).toBe(false);
+      await pointerUp();
+      expect(document.activeElement).toBe(handle("Mood"));
+
+      pointerDown(handle("Mood"), 130);
+      await pointerMove(160);
+      expect(category("Mood").classList.contains("is-dragging")).toBe(true);
+      await pointerMove(131);
+      await pointerUp();
+      expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
+      expect(transforms()).toEqual(["", "", "", ""]);
+      expect(reorderAnnouncement()).toBe("");
+      expect(savePending()).toBe(false);
+    });
+
+    it("starts only on the handle, so a drag anywhere else on a category scrolls", async () => {
+      await mountLaidOut();
+      expect(getComputedStyle(handle("Places")).touchAction).toBe("none");
+      for (const part of [category("Places"), category("Places").querySelector(".tag-editor-category-header")!, chip("Beach")]) {
+        expect(getComputedStyle(part).touchAction).not.toBe("none");
+      }
+
+      for (const start of [category("Places").querySelector(".tag-editor-category-title")!, chip("Beach")]) {
+        pointerDown(start, 20);
+        await pointerMove(200);
+        expect(category("Places").classList.contains("is-dragging")).toBe(false);
+        await pointerUp();
+      }
+      expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
+      expect(transforms()).toEqual(["", "", "", ""]);
+      expect(savePending()).toBe(false);
+    });
   });
 
   it("Edit Category opens on the name, flags a name another category has, and renames", async () => {

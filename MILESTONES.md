@@ -133,32 +133,7 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 ## Active Milestones
 
-Last milestone completed: M12f2
-
-### M12f3 - WebUI Drag Reordering
-
-- **Status**: ⏳ Planned
-- **Goal**: Tag categories and presets reorder by dragging a handle, or with the arrow keys on it, instead of up and down icons.
-- **Depends on**: WebUI In-App Dialogs, whose Edit button the drag handle sits beside.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Scope
-
-- Tag categories and presets reorder by drag and drop instead of up and down arrows, and the rows' up and down icons go.
-- Each row has a visible drag handle, the only place a drag starts, so dragging elsewhere on a row still scrolls on a touch screen.
-- The up and down arrow keys move a row while its handle has focus, and screen readers hear the new position.
-- Uncategorized stays last, as today, and shows its handle dimmed and disabled, so its name lines up with the other categories'.
-- A new order stays pending until Save or Apply, as a move does today.
-- After Add Preset adds a preset, focus moves to the new preset's drag handle, where today it moves to the up icon, or to the Edit button while the preset is the only one.
-
-#### Acceptance
-
-- Category and preset rows have no up or down icons, and each has a drag handle beside its Edit button.
-- Tag categories and presets reorder by dragging their handle, and with the up and down arrow keys on a focused handle. A drag that starts elsewhere on a row scrolls instead, screen readers hear the new position, and Uncategorized stays last with its handle disabled. Shown by WebUI tests of reordering with the arrow keys and of the drag logic deciding where a dragged row lands.
-- A new order stays pending until Save or Apply.
-- After Add Preset adds a preset, focus is on its drag handle, pressed with the pointer and with the keyboard, in WebUI tests of Add Preset.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and one quick spot check of dragging on a touch screen.
+Last milestone completed: M12f3
 
 ### M12f4 - WebUI Responsive Layout and Panels
 

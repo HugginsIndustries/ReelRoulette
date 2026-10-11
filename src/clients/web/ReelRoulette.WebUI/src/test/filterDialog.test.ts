@@ -307,6 +307,7 @@ describe("Presets tab", () => {
     expect(view().presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites"]);
     expect(view().newPresetName).toBe("Draft name");
     dialog.movePreset(0, -1);
+    dialog.movePreset(1, 2);
     dialog.movePreset(1, 1);
     expect(view().presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites"]);
 

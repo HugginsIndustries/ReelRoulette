@@ -275,29 +275,26 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
           "Manage Presets"
         <div class="filter-preset-list themed-scrollbar">
           <div class="filter-preset-row" data-preset-idx="0">
+            <button aria-describedby="P0-6" aria-label="Reorder Rich" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
+              <span class="material-symbol-icon">
+                "drag_indicator"
             <span class="filter-preset-name">
               "Rich"
-            <button aria-label="Move up" class="icon-glyph-base icon-glyph-button" data-preset-up="0" disabled="" title="Move up" type="button">
-              <span class="material-symbol-icon">
-                "keyboard_arrow_up"
-            <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="0" title="Move down" type="button">
-              <span class="material-symbol-icon">
-                "keyboard_arrow_down"
             <button aria-label="Edit preset Rich" class="icon-glyph-base icon-glyph-button" data-preset-edit="0" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
           <div class="filter-preset-row" data-preset-idx="1">
+            <button aria-describedby="P0-6" aria-label="Reorder Favorites" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
+              <span class="material-symbol-icon">
+                "drag_indicator"
             <span class="filter-preset-name">
               "Favorites"
-            <button aria-label="Move up" class="icon-glyph-base icon-glyph-button" data-preset-up="1" title="Move up" type="button">
-              <span class="material-symbol-icon">
-                "keyboard_arrow_up"
-            <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="1" disabled="" title="Move down" type="button">
-              <span class="material-symbol-icon">
-                "keyboard_arrow_down"
             <button aria-label="Edit preset Favorites" class="icon-glyph-base icon-glyph-button" data-preset-edit="1" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
+        <p class="visually-hidden" id="P0-6">
+          "Drag to reorder, or press the up and down arrow keys."
+        <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">
     <button id="filter-clear-all-btn" type="button">
       "Clear all filters"
@@ -584,29 +581,26 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
           "Manage Presets"
         <div class="filter-preset-list themed-scrollbar">
           <div class="filter-preset-row" data-preset-idx="0">
+            <button aria-describedby="P0-6" aria-label="Reorder Rich" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
+              <span class="material-symbol-icon">
+                "drag_indicator"
             <span class="filter-preset-name">
               "Rich"
-            <button aria-label="Move up" class="icon-glyph-base icon-glyph-button" data-preset-up="0" disabled="" title="Move up" type="button">
-              <span class="material-symbol-icon">
-                "keyboard_arrow_up"
-            <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="0" title="Move down" type="button">
-              <span class="material-symbol-icon">
-                "keyboard_arrow_down"
             <button aria-label="Edit preset Rich" class="icon-glyph-base icon-glyph-button" data-preset-edit="0" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
           <div class="filter-preset-row" data-preset-idx="1">
+            <button aria-describedby="P0-6" aria-label="Reorder Favorites" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
+              <span class="material-symbol-icon">
+                "drag_indicator"
             <span class="filter-preset-name">
               "Favorites"
-            <button aria-label="Move up" class="icon-glyph-base icon-glyph-button" data-preset-up="1" title="Move up" type="button">
-              <span class="material-symbol-icon">
-                "keyboard_arrow_up"
-            <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="1" disabled="" title="Move down" type="button">
-              <span class="material-symbol-icon">
-                "keyboard_arrow_down"
             <button aria-label="Edit preset Favorites" class="icon-glyph-base icon-glyph-button" data-preset-edit="1" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
+        <p class="visually-hidden" id="P0-6">
+          "Drag to reorder, or press the up and down arrow keys."
+        <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">
     <button id="filter-clear-all-btn" type="button">
       "Clear all filters"
@@ -893,29 +887,26 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
           "Manage Presets"
         <div class="filter-preset-list themed-scrollbar">
           <div class="filter-preset-row" data-preset-idx="0">
+            <button aria-describedby="P0-6" aria-label="Reorder Rich" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
+              <span class="material-symbol-icon">
+                "drag_indicator"
             <span class="filter-preset-name">
               "Rich"
-            <button aria-label="Move up" class="icon-glyph-base icon-glyph-button" data-preset-up="0" disabled="" title="Move up" type="button">
-              <span class="material-symbol-icon">
-                "keyboard_arrow_up"
-            <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="0" title="Move down" type="button">
-              <span class="material-symbol-icon">
-                "keyboard_arrow_down"
             <button aria-label="Edit preset Rich" class="icon-glyph-base icon-glyph-button" data-preset-edit="0" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
           <div class="filter-preset-row" data-preset-idx="1">
+            <button aria-describedby="P0-6" aria-label="Reorder Favorites" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
+              <span class="material-symbol-icon">
+                "drag_indicator"
             <span class="filter-preset-name">
               "Favorites"
-            <button aria-label="Move up" class="icon-glyph-base icon-glyph-button" data-preset-up="1" title="Move up" type="button">
-              <span class="material-symbol-icon">
-                "keyboard_arrow_up"
-            <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="1" disabled="" title="Move down" type="button">
-              <span class="material-symbol-icon">
-                "keyboard_arrow_down"
             <button aria-label="Edit preset Favorites" class="icon-glyph-base icon-glyph-button" data-preset-edit="1" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
+        <p class="visually-hidden" id="P0-6">
+          "Drag to reorder, or press the up and down arrow keys."
+        <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">
     <button id="filter-clear-all-btn" type="button">
       "Clear all filters"

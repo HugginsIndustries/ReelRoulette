@@ -5,6 +5,7 @@ import { normalizeTagKey, type TagCategory, type TagCategoryRow, type TagChipRow
 import { useApp } from "./appContext";
 import { NameDialog } from "./Dialog";
 import { ValidatedField } from "./FieldValidation";
+import { DragHandle, ReorderStatus, useReorder, type Reorder } from "./Reorder";
 
 // The `data-*` attributes keep the markup as it was before the editor moved to a component; nothing reads them.
 
@@ -39,6 +40,13 @@ export function TagEditor() {
   const shown = tagEditor.tab.value;
   const active = shown ?? "edit";
   const scanning = view?.autoTag.scanning ?? false;
+  // Every category but Uncategorized, which stays last, moves by its drag handle.
+  const movable = (view?.categories ?? []).filter((category) => !category.uncategorized);
+  const reorder = useReorder({
+    keys: movable.map((category) => category.id),
+    nameOf: (id) => movable.find((category) => category.id === id)?.name ?? "",
+    onMove: (from, to) => tagEditor.moveCategory(movable[from]!.id, to)
+  });
   // The tag Add tag created, until its chip renders and takes focus.
   const addedTag = useRef<string | null>(null);
   useLayoutEffect(() => {
@@ -66,8 +74,9 @@ export function TagEditor() {
         <div class="tag-editor-panel-stack">
           <div id="tag-editor-panel-edit" class="tag-editor-panel" style={panelStyle(shown, "edit")}>
             <div id="tag-editor-body" class="tag-editor-body themed-scrollbar">
-              {view?.categories ? view.categories.map((category) => <Category key={category.id} category={category} />) : view?.noModel ? "No tag model available." : null}
+              {view?.categories ? view.categories.map((category) => <Category key={category.id} category={category} reorder={reorder} />) : view?.noModel ? "No tag model available." : null}
             </div>
+            {view ? <ReorderStatus reorder={reorder} /> : null}
           </div>
           <div id="tag-editor-panel-autotag" class="tag-editor-panel" style={panelStyle(shown, "autotag")}>
             <AutoTagPanel view={view} />
@@ -104,19 +113,20 @@ function CategoryOptions({ options }: { options: readonly TagCategory[] }) {
   );
 }
 
-function Category({ category }: { category: TagCategoryRow }) {
+/** A category, which moves by its drag handle. Uncategorized's handle is dimmed, since it stays last. */
+function Category({ category, reorder }: { category: TagCategoryRow; reorder: Reorder }) {
   const { tagEditor } = useApp();
+  const fixed = category.uncategorized;
   return (
-    <section class="tag-editor-category">
+    <section class={reorder.dragging === category.id ? "tag-editor-category is-dragging" : "tag-editor-category"} ref={fixed ? undefined : reorder.row(category.id)}>
       <div class="tag-editor-category-header">
         <div class="tag-editor-category-left">
+          {fixed ? <DragHandle fixed="Uncategorized stays last" /> : <DragHandle control={reorder.handle(category.id)} />}
           <button class={`tag-editor-category-toggle ${BUTTON}`} title={category.collapsed ? "Expand category" : "Collapse category"} onClick={() => tagEditor.toggleCategory(category.id)}><Icon name={category.collapsed ? "keyboard_arrow_right" : "keyboard_arrow_down"} /></button>
           <div class="tag-editor-category-title">{category.name}</div>
         </div>
         <div class="tag-editor-category-controls">
-          <button class={`tag-editor-category-btn ${BUTTON}`} title="Move category up" disabled={!category.canMoveUp} onClick={() => tagEditor.moveCategory(category.id, -1)}><Icon name="arrow_drop_up" /></button>
-          <button class={`tag-editor-category-btn ${BUTTON}`} title="Move category down" disabled={!category.canMoveDown} onClick={() => tagEditor.moveCategory(category.id, 1)}><Icon name="arrow_drop_down" /></button>
-          {category.uncategorized ? null : (
+          {fixed ? null : (
             <button class={`tag-editor-category-btn ${BUTTON}`} title="Edit category" aria-label={`Edit category ${category.name}`} onClick={() => tagEditor.editCategory(category.id)}><Icon name="edit_note" /></button>
           )}
         </div>

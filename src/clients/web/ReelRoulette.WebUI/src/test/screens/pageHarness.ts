@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { fireEvent } from "@testing-library/preact";
 import { vi } from "vitest";
 import { renderApp } from "../../shell";
 import type { RuntimeConfig } from "../../types/runtimeConfig";
@@ -215,6 +219,111 @@ export function stubLayoutSize(width = 800, height = 600): void {
       return rendered(this) ? height : 0;
     }
   });
+}
+
+/**
+ * Lays out the rows that match `selector` one under another, as happy-dom does not: each `height(row)` pixels tall
+ * and `gap` pixels apart, in page order, from the top of the window. Other elements keep happy-dom's empty box.
+ */
+export function stubRowLayout(selector: string, height: (row: HTMLElement) => number, gap = 0): void {
+  const original = Element.prototype.getBoundingClientRect;
+  stubProperty(HTMLElement.prototype, "getBoundingClientRect", {
+    value(this: HTMLElement) {
+      if (!this.matches(selector)) {
+        return original.call(this);
+      }
+      let top = 0;
+      for (const row of Array.from(document.querySelectorAll<HTMLElement>(selector))) {
+        if (row === this) {
+          break;
+        }
+        top += height(row) + gap;
+      }
+      return new DOMRect(0, top, 300, height(this));
+    }
+  });
+}
+
+/**
+ * Makes `element` a list that scrolls, as happy-dom lays none out: `height` pixels tall from `top` in the window,
+ * holding `content` pixels. Its `overflow-y` is set on it, since happy-dom's computed style doesn't take it from the
+ * `overflow` shorthand. happy-dom sends no scroll event when its `scrollTop` is set, so a test sends one.
+ */
+export function stubScroller(element: HTMLElement, top: number, height: number, content: number): void {
+  element.style.overflowY = "auto";
+  restores.push(() => element.style.removeProperty("overflow-y"));
+  stubProperty(element, "clientHeight", { get: () => height });
+  stubProperty(element, "scrollHeight", { get: () => content });
+  stubProperty(element, "getBoundingClientRect", { value: () => new DOMRect(0, top, 300, height) });
+}
+
+/** A focus call the page made, and whether it asked not to scroll. */
+export interface FocusCall {
+  element: HTMLElement;
+  preventScroll: boolean;
+}
+
+/**
+ * Records each focus call from here on, and scrolls `scroller` to its top for one that doesn't ask not to scroll, as a
+ * browser may when it brings the focused element into view, which happy-dom doesn't do.
+ */
+export function scrollOnFocus(scroller: HTMLElement): FocusCall[] {
+  const calls: FocusCall[] = [];
+  const original = HTMLElement.prototype.focus;
+  stubProperty(HTMLElement.prototype, "focus", {
+    value(this: HTMLElement, options?: FocusOptions) {
+      calls.push({ element: this, preventScroll: options?.preventScroll === true });
+      if (!options?.preventScroll) {
+        scroller.scrollTop = 0;
+      }
+      original.call(this, options);
+    }
+  });
+  return calls;
+}
+
+/** Applies the WebUI's stylesheet to the page, so a test can read the styles it gives. */
+export function useStylesheet(): void {
+  const style = document.createElement("style");
+  style.textContent = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../styles.css"), "utf8");
+  document.head.append(style);
+  restores.push(() => style.remove());
+}
+
+let pointerY = 0;
+
+/** Presses a mouse's main button, or a finger, on `element` at height `y`. */
+export function pointerDown(element: Element, y: number): void {
+  pointerY = y;
+  fireEvent.pointerDown(element, { pointerId: 1, button: 0, clientX: 10, clientY: y });
+}
+
+/** Moves the pressed pointer to height `y`, and lets the page render. */
+export async function pointerMove(y: number): Promise<void> {
+  pointerY = y;
+  fireEvent.pointerMove(document, { pointerId: 1, clientX: 10, clientY: y });
+  await settle();
+}
+
+/**
+ * Lets go of the pointer where it is, and lets the page render. `beforeRender` stands in for what the browser does in
+ * between: it runs after the page's own handler, in the same event, since the page renders as the event ends.
+ */
+export async function pointerUp(beforeRender?: () => void): Promise<void> {
+  if (beforeRender) {
+    document.addEventListener("pointerup", beforeRender, { once: true });
+  }
+  fireEvent.pointerUp(document, { pointerId: 1, button: 0, clientX: 10, clientY: pointerY });
+  await settle();
+}
+
+/** Presses a key on `element`, focused first, and says whether the page left the key to the browser. */
+export async function pressKey(element: HTMLElement, key: string): Promise<boolean> {
+  element.focus();
+  const allowed = fireEvent.keyDown(element, { key });
+  fireEvent.keyUp(element, { key });
+  await settle();
+  return allowed;
 }
 
 export interface MountedPage {

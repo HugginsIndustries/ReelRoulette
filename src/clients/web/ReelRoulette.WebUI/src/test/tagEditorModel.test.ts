@@ -130,12 +130,16 @@ describe("category order and options", () => {
     expect(options.map((option) => option.id)).toEqual(["a", "b", "uncategorized"]);
   });
 
-  it("moves a category past its neighbor, keeping Uncategorized last, and refuses moves past the ends", () => {
-    expect(moveCategoryInOrder(ORDER, "people", -1)).toEqual(["places", "people", "mood", "uncategorized"]);
+  it("moves a category to a place among those that can move, keeping Uncategorized last, and refuses other moves", () => {
+    expect(moveCategoryInOrder(ORDER, "people", 1)).toEqual(["places", "people", "mood", "uncategorized"]);
+    expect(moveCategoryInOrder(ORDER, "people", 0)).toEqual(["people", "places", "mood", "uncategorized"]);
+    expect(moveCategoryInOrder(ORDER, "places", 2)).toEqual(["mood", "people", "places", "uncategorized"]);
     expect(moveCategoryInOrder(["places", "mood"], "places", 1)).toEqual(["mood", "places"]);
+    expect(moveCategoryInOrder(ORDER, "places", 0)).toBeNull();
     expect(moveCategoryInOrder(ORDER, "places", -1)).toBeNull();
-    expect(moveCategoryInOrder(ORDER, "people", 1)).toBeNull();
-    expect(moveCategoryInOrder(ORDER, "uncategorized", -1)).toBeNull();
+    expect(moveCategoryInOrder(ORDER, "people", 3)).toBeNull();
+    expect(moveCategoryInOrder(ORDER, "uncategorized", 0)).toBeNull();
+    expect(moveCategoryInOrder(ORDER, "food", 0)).toBeNull();
   });
 
   it("adds a category before Uncategorized, or last", () => {
@@ -148,11 +152,11 @@ describe("rows and chips", () => {
   it("gives each category its controls and its tags with what the items have and what is held", () => {
     const display = tagEditorDisplay(MODEL, createPendingTagEdits(), ORDER);
     const rows = tagCategoryRows(display, new Set(["mood"]), new Map([["calm", { action: "add" as const, name: "Calm" }]]));
-    expect(rows.map((row) => [row.name, row.canMoveUp, row.canMoveDown, row.collapsed, row.uncategorized])).toEqual([
-      ["Places", false, true, false, false],
-      ["Mood", true, true, true, false],
-      ["People", true, false, false, false],
-      ["Uncategorized", false, false, false, true]
+    expect(rows.map((row) => [row.name, row.collapsed, row.uncategorized])).toEqual([
+      ["Places", false, false],
+      ["Mood", true, false],
+      ["People", false, false],
+      ["Uncategorized", false, true]
     ]);
     expect(rows[0]!.chips).toEqual([
       { name: "alps", state: "state-none", pending: null, canChangeItems: true },

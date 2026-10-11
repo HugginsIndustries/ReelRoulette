@@ -6,6 +6,86 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12f3 - WebUI Drag Reordering
+
+- **Status**: ✅ Complete
+- **Goal**: Tag categories and presets reorder by dragging a handle, or with the arrow keys on it, instead of up and down icons.
+- **Depends on**: WebUI In-App Dialogs, whose Edit button ends the row the drag handle starts.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- Tag categories and presets reorder by drag and drop instead of up and down arrows, and the rows' up and down icons go.
+- Each row has a visible drag handle, the only place a drag starts, so dragging elsewhere on a row still scrolls on a touch screen.
+- The drag handle starts each row, before its name, and the Edit button ends it.
+- A drag starts once the pointer has moved a few pixels on the handle, so a tap on it changes nothing.
+- A dragged category hides its tags until it is dropped, so only its header moves, however many tags it has.
+- The up and down arrow keys move a row while its handle has focus, and screen readers hear the new position.
+- Uncategorized stays last, as today, and shows its handle dimmed and disabled, so its name lines up with the other categories'.
+- A new order stays pending until Save or Apply, as a move does today.
+- After Add Preset adds a preset, focus moves to the new preset's drag handle, where today it moves to the up icon, or to the Edit button while the preset is the only one.
+
+#### Acceptance
+
+- Category and preset rows have no up or down icons, and each has a drag handle at its start, before its name.
+- Tag categories and presets reorder by dragging their handle, and with the up and down arrow keys on a focused handle. A drag that starts elsewhere on a row scrolls instead, screen readers hear the new position, and Uncategorized stays last with its handle disabled. Shown by WebUI tests of reordering with the arrow keys and of the drag logic deciding where a dragged row lands.
+- A drag starts only once the pointer has moved a few pixels on the handle, and a dragged category's tags hide until it is dropped, in WebUI tests of a tap on the handle and of dragging a category.
+- A new order stays pending until Save or Apply.
+- After Add Preset adds a preset, focus is on its drag handle, pressed with the pointer and with the keyboard, in WebUI tests of Add Preset.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check of dragging on a touch screen.
+
+#### Evidence
+
+- The reordering rules are `src/reorder/reorder.ts`, and the handle, its help line, the announcement, and the drag are `src/ui/Reorder.tsx`, which the tag editor and the filter dialog both use. The services move a category or a preset to a place (`moveCategory(id, to)` and `movePreset(from, to)`), and category rows no longer say whether they can move up or down.
+- The rows stay where they are in the page during a drag: the dragged row and the rows it passes move by transforms, and the order is set when it is dropped. Preact draws the rows, and moving a focused button in the page drops its focus in happy-dom (measured). The mockup moves the rows themselves, and what the user sees is the same.
+- The dragged row shows no higher than the first row and no lower than the last, in the app and the mockup. Browsers count a moved row in how far its list scrolls, so below the last row it would lengthen the list, and scrolling near the edge would run on under it. Where it lands still goes by the pointer, so a row as tall as the first or last still lands past it. The app places the dragged row again whenever the list scrolls, such as by a wheel or a touchpad; the mockup already placed it every frame.
+- After a drop, the list keeps where it was scrolled to, and the handle takes focus without scrolling once the rows render in their new order, in the app and the mockup. The user found the list scrolling after a drop in a real browser, to the top on desktop and a little on a phone. happy-dom does no layout, so which cause it was isn't measured; the fix covers each one suspected: focusing the handle at its old place before the rows move, a focus that scrolls, and the browser scrolling the list as the rows move.
+- The rows are measured once the dragged row shows lifted, so a dragged category's tags are already hidden. Measured when the drag starts instead, the category drag test fails.
+- The tag editor renders the help line and the announcement only once it has its view, so the page's starting markup is unchanged.
+- happy-dom lays nothing out (every box is empty, measured), so the drag tests give the rows positions. It applies the WebUI's stylesheet (measured), so the tests read the dragged category's hidden tags and the handle's `touch-action: none` from it. The scroll test also gives the preset list its size and its `overflow-y`, which happy-dom's computed style doesn't take from the `overflow` shorthand (measured). The drop tests stand in for the browser: a focus without `preventScroll` scrolls the list to its top, and so does the drop itself, before the page renders.
+- The bundled Material Symbols font has `drag_indicator` (measured).
+- New and changed WebUI tests:
+  - the rules: where a dragged row lands, up, down, across several rows, among rows of different heights, and at the ends; where the dragged row shows, inside the list; how far the rows it passes slide; when a drag starts; the arrow keys; scrolling near the edges; and the announcement;
+  - the services: a category moves to a place among those that can move, Uncategorized staying last, and a preset to a place, refusing a move outside the list;
+  - in the tag editor and the filter dialog pages:
+    - each row's handle, name, and Edit, with no up or down icons, and Uncategorized's disabled handle;
+    - the arrow keys moving a row, with focus kept on its handle, the announcement, Save or Apply's star, and the saved order, and doing nothing at the ends;
+    - a drag that follows the pointer past each row its middle crosses, staying inside the list, with the rows it passes sliding out of its way, a dragged category's tags hidden until the drop, then the new order, focus, and the announcement;
+    - a dragged preset staying under the pointer while the list scrolls, and landing where the pointer is;
+    - a drop keeping the list where it was scrolled to, with one focus, on the dropped handle, without scrolling;
+    - a tap on a handle, a drop where the drag started, and a drag that starts on a row's name or tags, each leaving the order;
+    - Add Preset's focus on the new preset's drag handle, pressed with the pointer and with the keyboard, alone and among others.
+- The tags and filter markup snapshots changed for the handles, the removed up and down icons, the help line, and the announcement, and the Edit Tag dialog's heading id moved by one, and nothing else.
+- Each guard was broken on purpose and its tests failed (measured, of 817 unless noted):
+  - the dragged row's top in place of its center: 2;
+  - no move down past a row: 5;
+  - rows measured before the tags hide: 1;
+  - a drag starting without the pointer moving: 3;
+  - no focus back on the handle after a move: 2;
+  - no announcement: 5;
+  - Uncategorized's handle enabled: 2;
+  - no `touch-action: none` on the handle: 2;
+  - a dragged category's tags shown: 1;
+  - Add Preset's focus on Edit: 4;
+  - the arrow keys left to scroll: 2;
+  - a drop where it started counted as a move: 1;
+  - the rows it passes not sliding: 2;
+  - Uncategorized movable: 1;
+  - the dragged row shown past the list's ends: 2 (of 820);
+  - the dragged row not placed again as the list scrolls: 1 (of 820);
+  - the list's scroll position not kept after a drop: 2 (of 822);
+  - the dropped handle focused with scrolling: 2 (of 822);
+  - the handle focused at its old place before the rows move: 2 (of 822).
+- `npm run verify` passed: 48 test files, 822 tests, the build, and the build output check.
+- The mockup's drag starts once the pointer has moved more than 5 px, and a dragged category hides its tags until it is dropped. The user tried it on a phone and an iPad. It also keeps the dragged row within the list, and after a drop keeps where the list was scrolled to and focuses the handle without scrolling, as the app does. `check.mjs` passes 745 checks; it does no layout and can't drag, so no check was added.
+- `CHANGELOG.md`, `CONTEXT.md`, and `docs/domain-inventory.md` are updated.
+- The spot check passed: the user dragged tag categories and presets by their handles on a touch screen, and a drag elsewhere on a row scrolled. With the drop fix, the user dragged again on desktop and on a phone, and after each drop the list stayed where it was scrolled to and focus was on the dropped handle.
+
+#### Release checks
+
+- Manual: In the installed app on Android and iOS, dragging a tag category and a preset by its handle reorders them, and a drag that starts elsewhere on a row scrolls.
+
 ### M12f2 - WebUI In-App Dialogs
 
 - **Status**: ✅ Complete

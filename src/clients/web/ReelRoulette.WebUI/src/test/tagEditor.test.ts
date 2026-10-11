@@ -589,7 +589,7 @@ describe("saving", () => {
   it("says there is nothing to save when the changes cancel out, and stays open", async () => {
     const context = setup();
     await openOn(context);
-    context.editor.moveCategory("people", -1);
+    context.editor.moveCategory("people", 0);
     context.editor.moveCategory("people", 1);
     expect(context.view().savePending).toBe(true);
     context.editor.save();
