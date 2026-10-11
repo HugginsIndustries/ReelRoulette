@@ -1,18 +1,22 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
+import type { Dialogs } from "../dialogs/dialogs";
 import type { Library } from "../library/library";
 import type { AppApi } from "../state/appApi";
 import type { AppStore, StorageLike } from "../state/appStore";
 import type { ServerConnection } from "../state/serverConnection";
 import {
+  actionBlock,
   createFieldReveal,
-  firstHoldingField,
   isFlagged,
+  type ActionBlock,
   type FieldProblem,
   type FieldReveal
 } from "../validation/fieldValidation";
 import {
+  FILTER_ACTION_BESIDE,
   FILTER_ACTION_FIELDS,
   FILTER_FIELD_SECTION,
+  editPresetNameProblem,
   filterFieldProblems,
   filterWithGeneralDraft,
   generalDraftFromFilter,
@@ -24,6 +28,7 @@ import {
   type FilterSource,
   type FilterTagModel,
   type GeneralDraft,
+  type GeneralField,
   type TagChipAction
 } from "./filterDialogModel";
 import {
@@ -62,8 +67,8 @@ interface FilterDialogState {
   /** The tag categories collapsed on the Tags tab, kept for the browser session. */
   collapsed: ReadonlySet<string>;
   newPresetName: string;
-  /** The user has typed in the new preset name since it was last emptied for them, so an empty one is flagged. */
-  newPresetNameTyped: boolean;
+  /** Edit Preset: the preset it edits, by index, and the name typed in it, or null while it is closed. */
+  presetEdit: { index: number; name: string } | null;
 }
 
 /** What the dialog shows. Each change replaces it. */
@@ -75,8 +80,14 @@ export interface FilterDialogView extends FilterDialogState {
   problems: Record<FilterField, FieldProblem | null>;
   /** Whether each field shows its problem. */
   flagged: Record<FilterField, boolean>;
-  /** The first field that holds each action, or null while it can proceed. */
-  held: Record<FilterAction, FilterField | null>;
+  /**
+   * Whether each action is disabled, or the first General field that holds it. The new preset name sits beside Add
+   * Preset, so it disables it rather than holding it.
+   */
+  actions: Record<FilterAction, ActionBlock<GeneralField>>;
+  /** The problem of the name typed in Edit Preset, or null while it is valid or closed. Any problem disables Save. */
+  presetEditProblem: FieldProblem | null;
+  presetEditFlagged: boolean;
 }
 
 /**
@@ -129,13 +140,28 @@ export interface FilterDialog {
   /** Saves the working filter into the chosen preset, until Apply saves the list. Held like Apply. */
   updatePreset(): void;
   typeNewPresetName(text: string): void;
-  /** Adds the working filter as a preset with the typed name, until Apply saves the list. Held while the name is empty or taken, and like Apply. */
-  addPreset(): void;
+  /**
+   * Adds the working filter as the last preset, with the typed name, until Apply saves the list, and says whether it
+   * did. Disabled while the name is empty or taken, and held like Apply.
+   */
+  addPreset(): boolean;
   movePreset(index: number, step: -1 | 1): void;
-  /** Asks first. */
-  deletePreset(index: number): void;
-  /** Asks for the new name. */
-  renamePreset(index: number): void;
+  /** Opens Edit Preset on a preset, with its name. */
+  editPreset(index: number): void;
+  /** Takes the name typed in Edit Preset. */
+  typePresetName(text: string): void;
+  /**
+   * Renames the preset to the typed name, until Apply saves the list, and closes Edit Preset. Does nothing while the
+   * name is empty or another preset's. An unchanged name just closes it.
+   */
+  savePresetEdit(): void;
+  /** Closes Edit Preset without a change. */
+  cancelPresetEdit(): void;
+  /**
+   * Asks first, then deletes the preset Edit Preset is on, until Apply saves the list, and closes it. Cancel keeps it
+   * open with the typed name.
+   */
+  deleteEditedPreset(): Promise<void>;
 }
 
 export interface FilterDialogOptions {
@@ -145,10 +171,8 @@ export interface FilterDialogOptions {
   library: Pick<Library, "commitQuery">;
   /** Browser `sessionStorage`, for the collapsed tag categories. */
   storage: StorageLike;
-  /** Defaults to `window.confirm`, looked up on each use. */
-  confirm?: (message: string) => boolean;
-  /** Defaults to `window.prompt`, looked up on each use. */
-  prompt?: (message: string, value: string) => string | null;
+  /** The in-app dialogs, for the confirmations. */
+  dialogs: Pick<Dialogs, "confirm">;
 }
 
 function errorText(error: unknown): string {
@@ -156,9 +180,7 @@ function errorText(error: unknown): string {
 }
 
 export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
-  const { store, api, connection, library, storage } = options;
-  const confirm = options.confirm ?? ((message: string) => window.confirm(message));
-  const prompt = options.prompt ?? ((message: string, value: string) => window.prompt(message, value));
+  const { store, api, connection, library, storage, dialogs } = options;
 
   const isOpen = signal(false);
   const tab = signal<FilterDialogTab | null>(null);
@@ -173,6 +195,8 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     const holdNone = state.holdNone && filterStatesEqualForPresetMatch(state.working, createDefaultFilterState());
     const presetName = holdNone ? null : dialogPresetBase(state.working, state.presets, state.presetName);
     const problems = filterFieldProblems(state.general, state.newPresetName, state.presets);
+    const edit = state.presetEdit;
+    const presetEditProblem = edit ? editPresetNameProblem(edit.name, state.presets, edit.index) : null;
     return {
       ...state,
       holdNone,
@@ -181,31 +205,41 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       pending: filterDialogHasPendingChanges(state.working, state.original, state.presetsChanged),
       problems,
       flagged: {
-        flagModes: isFlagged(problems.flagModes, true),
-        minDuration: isFlagged(problems.minDuration, true),
-        maxDuration: isFlagged(problems.maxDuration, true),
-        newPresetName: isFlagged(problems.newPresetName, state.newPresetNameTyped)
+        flagModes: isFlagged(problems.flagModes),
+        minDuration: isFlagged(problems.minDuration),
+        maxDuration: isFlagged(problems.maxDuration),
+        newPresetName: isFlagged(problems.newPresetName)
       },
-      held: {
-        apply: firstHoldingField(FILTER_ACTION_FIELDS.apply, problems),
-        addPreset: firstHoldingField(FILTER_ACTION_FIELDS.addPreset, problems),
-        updatePreset: firstHoldingField(FILTER_ACTION_FIELDS.updatePreset, problems)
-      }
+      actions: {
+        apply: blockOf("apply", problems),
+        addPreset: blockOf("addPreset", problems),
+        updatePreset: blockOf("updatePreset", problems)
+      },
+      presetEditProblem,
+      presetEditFlagged: isFlagged(presetEditProblem)
     };
   }
 
+  function blockOf(action: FilterAction, problems: Record<FilterField, FieldProblem | null>): ActionBlock<GeneralField> {
+    const block = actionBlock(FILTER_ACTION_FIELDS[action], problems, FILTER_ACTION_BESIDE[action]);
+    // A field beside the action disables it, so only a General field can hold it.
+    return { disabled: block.disabled, heldBy: block.heldBy as GeneralField | null };
+  }
+
   /**
-   * Moves to the first field that holds the action, showing its section, and says whether there was one. Nothing
-   * goes to the status line: the field's icon and tooltip say what it expects.
+   * Says whether the action can't proceed. A disabled action does nothing; a held one moves to the first field that
+   * holds it, showing its section. Nothing goes to the status line: the field's icon and tooltip say what it expects.
    */
-  function heldBy(action: FilterAction): boolean {
-    const field = view.peek()?.held[action];
-    if (!field) {
+  function blocked(action: FilterAction): boolean {
+    const block = view.peek()?.actions[action];
+    if (!block) {
       return false;
     }
-    tab.value = FILTER_FIELD_SECTION[field];
-    reveal.reveal(field);
-    return true;
+    if (block.heldBy) {
+      tab.value = FILTER_FIELD_SECTION[block.heldBy];
+      reveal.reveal(block.heldBy);
+    }
+    return block.disabled || block.heldBy !== null;
   }
 
   function update(change: Partial<FilterDialogState>): void {
@@ -291,7 +325,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         presetsChanged: false,
         collapsed: readCollapsed(),
         newPresetName: "",
-        newPresetNameTyped: false
+        presetEdit: null
       });
       tab.value = "general";
       isOpen.value = true;
@@ -299,6 +333,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
 
     close() {
       isOpen.value = false;
+      update({ presetEdit: null });
     },
 
     showTab(next) {
@@ -325,7 +360,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
 
     async apply() {
       const before = view.peek();
-      if (!before || heldBy("apply")) {
+      if (!before || blocked("apply")) {
         return;
       }
       update({ working: readGeneral(before) });
@@ -462,7 +497,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
 
     updatePreset() {
       const current = view.peek();
-      if (!current || heldBy("updatePreset")) {
+      if (!current || blocked("updatePreset")) {
         return;
       }
       const name = current.presetName;
@@ -483,13 +518,13 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     },
 
     typeNewPresetName(text) {
-      update({ newPresetName: text, newPresetNameTyped: true });
+      update({ newPresetName: text });
     },
 
     addPreset() {
       const current = view.peek();
-      if (!current || heldBy("addPreset")) {
-        return;
+      if (!current || blocked("addPreset")) {
+        return false;
       }
       const name = current.newPresetName.trim();
       const working = readGeneral(current);
@@ -497,10 +532,10 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         working,
         presets: [...current.presets, { name, filterState: cloneFilterState(working) }],
         presetsChanged: true,
-        newPresetName: "",
-        newPresetNameTyped: false
+        newPresetName: ""
       });
       tab.value = "presets";
+      return true;
     },
 
     movePreset(index, step) {
@@ -514,38 +549,61 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       update({ presets, presetsChanged: true });
     },
 
-    deletePreset(index) {
+    editPreset(index) {
+      const row = view.peek()?.presets[index];
+      if (row) {
+        update({ presetEdit: { index, name: row.name } });
+      }
+    },
+
+    typePresetName(text) {
+      const edit = view.peek()?.presetEdit;
+      if (edit) {
+        update({ presetEdit: { ...edit, name: text } });
+      }
+    },
+
+    savePresetEdit() {
       const current = view.peek();
-      const removed = current?.presets[index];
-      if (!current || !removed || !confirm(`Delete preset "${removed.name}"?`)) {
+      const edit = current?.presetEdit;
+      const row = edit ? current.presets[edit.index] : undefined;
+      if (!current || !edit || !row || current.presetEditProblem) {
+        return;
+      }
+      const name = edit.name.trim();
+      if (name === row.name) {
+        update({ presetEdit: null });
+        return;
+      }
+      const presets = current.presets.slice();
+      presets[edit.index] = { ...row, name };
+      const chosen = current.presetName && namesEqualIgnoringCase(current.presetName, row.name);
+      update({ presets, presetsChanged: true, presetName: chosen ? name : current.presetName, presetEdit: null });
+    },
+
+    cancelPresetEdit() {
+      update({ presetEdit: null });
+    },
+
+    async deleteEditedPreset() {
+      const before = view.peek();
+      const edit = before?.presetEdit;
+      const removed = edit ? before.presets[edit.index] : undefined;
+      if (!edit || !removed) {
+        return;
+      }
+      const confirmed = await dialogs.confirm({ message: `Delete preset "${removed.name}"?`, confirmLabel: "Delete", danger: true });
+      const current = view.peek();
+      if (!confirmed || !current?.presetEdit) {
         return;
       }
       const chosen = current.presetName && namesEqualIgnoringCase(current.presetName, removed.name);
       update({
-        presets: current.presets.filter((_, rowIndex) => rowIndex !== index),
+        presets: current.presets.filter((_, rowIndex) => rowIndex !== edit.index),
         presetsChanged: true,
-        presetName: chosen ? null : current.presetName
+        presetName: chosen ? null : current.presetName,
+        presetEdit: null
       });
-    },
-
-    renamePreset(index) {
-      const current = view.peek();
-      const row = current?.presets[index];
-      if (!current || !row) {
-        return;
-      }
-      const name = String(prompt("Rename preset", row.name) ?? "").trim();
-      if (!name) {
-        return;
-      }
-      if (current.presets.some((other, otherIndex) => otherIndex !== index && namesEqualIgnoringCase(other.name, name))) {
-        store.setStatus("That name is already in use.");
-        return;
-      }
-      const presets = current.presets.slice();
-      presets[index] = { ...row, name };
-      const chosen = current.presetName && namesEqualIgnoringCase(current.presetName, row.name);
-      update({ presets, presetsChanged: true, presetName: chosen ? name : current.presetName });
     }
   };
 

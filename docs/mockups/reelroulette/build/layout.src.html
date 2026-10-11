@@ -379,6 +379,7 @@ html.theme-light .lib-grid { background: #fff; }
 .tags-footer { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
 .tags-footer-row { display: flex; align-items: center; gap: 8px; }
 .tags-footer-row .ctl { flex: 1 1 auto; }
+.tags-footer-row > .vfield { flex: 1 1 auto; }
 .placeholder-page { padding: 12px; }
 
 /* Auto Tag, over the whole page as today. */
@@ -953,7 +954,7 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
             <select class="ctl" id="tags-category-select" aria-label="Category for new tag"></select>
           </div>
           <div class="tags-footer-row">
-            <input class="ctl" type="text" id="tags-new-name" placeholder="New tag name" aria-label="New tag name" autocomplete="off">
+            <span class="vfield"><input class="ctl" type="text" id="tags-new-name" placeholder="New tag name" aria-label="New tag name" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
             <button class="icon-btn" type="button" id="tags-add-tag" aria-label="Add tag" title="Add tag"><span class="material-symbol-icon">add</span></button>
             <button class="icon-btn" type="button" id="tags-save" aria-label="Save" title="Save" disabled><span class="material-symbol-icon">save</span></button>
           </div>
@@ -2724,7 +2725,7 @@ $("lib-mode").addEventListener("change", (event) => store.set("libMode", event.t
 const filterBody = $("filter-body");
 function checkPresetName(value, own) {
   const name = value.trim();
-  if (!name) return { message: "Enter a preset name.", empty: true };
+  if (!name) return { empty: true };
   if (presets.some((preset) => preset !== own && preset.toLowerCase() === name.toLowerCase())) {
     return { message: "Use a name no other preset has." };
   }
@@ -2787,6 +2788,7 @@ function renderApply() {
   presetsTab.title = nameField.flagged ? "A field here is not valid" : "";
 }
 // Apply, Add Preset, and Update Preset all use the General section's pair and durations; Add Preset uses the name too.
+// Add Preset sits beside the name, so an empty or taken name disables it, and only the General fields hold it.
 function generalReason(field, ending) {
   if (field === flagModesField) return `Change Favorites or Blacklisted ${ending}.`;
   return `Correct the ${field === minField ? "minimum" : "maximum"} duration ${ending}.`;
@@ -2796,11 +2798,9 @@ holdAction($("filter-apply"), () => [flagModesField, minField, maxField], {
   beforeReveal: () => showSub("general")
 });
 holdAction($("filter-add-preset"), () => [nameField, flagModesField, minField, maxField], {
-  reason: (field) => {
-    if (field !== nameField) return generalReason(field, "first");
-    return field.problem.empty ? "Enter a preset name first." : "Use a name no other preset has.";
-  },
-  beforeReveal: (field) => field !== nameField && showSub("general")
+  beside: () => [nameField],
+  reason: (field) => generalReason(field, "first"),
+  beforeReveal: () => showSub("general")
 });
 holdAction($("filter-update-preset"), () => [flagModesField, minField, maxField], {
   reason: (field) => generalReason(field, "first"),
@@ -3016,7 +3016,6 @@ function openEditPreset(index) {
     label: "Preset Name",
     value: own,
     check: (value) => checkPresetName(value, own),
-    holdReason: (field) => (field.problem.empty ? "Enter a preset name first." : "Use a name no other preset has."),
     onSave: (name) => {
       presets[presets.indexOf(own)] = name;
       presetsChanged();
@@ -3028,10 +3027,12 @@ function openEditPreset(index) {
     }
   });
 }
+// Add Preset adds the preset last and moves to its drag handle: a button, so no on-screen keyboard opens.
 $("filter-add-preset").addEventListener("click", () => {
   presets.push(nameField.input.value.trim());
   nameField.reset("");
   presetsChanged();
+  $("filter-preset-list").lastElementChild?.querySelector(".drag-handle")?.focus();
 });
 
 function chipEl(name, buttons, stateClass) {
@@ -3262,6 +3263,7 @@ function renderTags() {
     host.append(section);
   });
   host.scrollTop = scrollTop;
+  newTagField.update();
   $("tags-save").disabled = !pending;
   unsaved.tags = pending;
   renderUnsaved();
@@ -3324,21 +3326,34 @@ $("tags-refresh").addEventListener("click", async () => {
   }
   followPlayingItem();
 });
-// Add Tag adds the tag to the chosen category and selects Add for the item being edited, until Save, as today.
+// New tag name: a name another tag has, ignoring case, is flagged, and Add tag, which sits beside it, is disabled
+// while the name is empty or taken. An existing tag goes on the item with its chip's Add.
+const newTagField = new ValidatedField($("tags-new-name"), (value) => {
+  const name = value.trim();
+  if (!name) return { empty: true };
+  return TAGS.some((category) => category.chips.some((chip) => chip.name.toLowerCase() === name.toLowerCase()))
+    ? { message: "Use a name no other tag has." }
+    : null;
+});
+holdAction($("tags-add-tag"), () => [newTagField], { beside: () => [newTagField] });
+// Add tag adds the tag to the chosen category, until Save, without putting it on the item being edited. Focus moves
+// to its chip's Add, so one more press puts it on the item, or to its Edit while no item is being edited: a button, so
+// no on-screen keyboard opens.
 function addTag() {
+  if (newTagField.holds) return;
   const name = $("tags-new-name").value.trim();
-  if (!name) return;
   const category = TAGS.find((c) => c.id === $("tags-category-select").value) || TAGS[TAGS.length - 1];
-  let chip = TAGS.flatMap((c) => c.chips).find((existing) => existing.name.toLowerCase() === name.toLowerCase());
-  if (!chip) {
-    chip = { key: `${category.id}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`, name };
-    category.chips.push(chip);
-  }
-  if (tagItems().length) chip.pending = "add";
+  const chip = { key: `${category.id}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`, name };
+  category.chips.push(chip);
   // The category the tag is in opens, so the change is visible.
-  setCategoryExpanded("tags", TAGS.find((c) => c.chips.includes(chip)).id, true);
-  $("tags-new-name").value = "";
+  setCategoryExpanded("tags", category.id, true);
+  newTagField.reset("");
   tagsChanged();
+  const added = [...$("tags-body").querySelectorAll(`.tag-category[data-key="${category.id}"] .tag-chip`)].find(
+    (element) => element.querySelector(".tag-chip-label").textContent === name
+  );
+  const add = added?.querySelector('[title="Add tag"]');
+  (add && !add.disabled ? add : added?.querySelector('[title="Edit tag"]'))?.focus();
 }
 $("tags-add-tag").addEventListener("click", addTag);
 $("tags-new-name").addEventListener("keydown", (event) => {
@@ -3349,22 +3364,20 @@ $("tags-new-name").addEventListener("keydown", (event) => {
 });
 function checkCategoryName(value, own) {
   const name = value.trim();
-  if (!name) return { message: "Enter a category name.", empty: true };
+  if (!name) return { empty: true };
   if (TAGS.some((category) => category !== own && category.name.toLowerCase() === name.toLowerCase())) {
     return { message: "Use a name no other category has." };
   }
   return null;
 }
-const categoryHoldReason = (field) => (field.problem.empty ? "Enter a category name first." : "Use a name no other category has.");
 
-// New Category: the remaining native prompt, which WebUI In-App Dialogs converts; shown here as it will look.
+// New Category checks its name as Edit Category does, so a new category can't take a name another one has.
 $("tags-add-category").addEventListener("click", () => {
   nameDialog({
     title: "New Category",
     label: "Category Name",
     value: "",
-    check: (value) => (value.trim() ? null : { message: "Enter a category name.", empty: true }),
-    holdReason: () => "Enter a category name first.",
+    check: (value) => checkCategoryName(value, null),
     onSave: (name) => {
       TAGS.splice(TAGS.length - 1, 0, { id: `c${Date.now()}`, name, chips: [] });
       tagsChanged();
@@ -3377,8 +3390,8 @@ function openEditTag(category, chip) {
     title: "Edit Tag",
     label: "Tag Name",
     value: chip.name,
-    check: (value) => (value.trim() ? null : { message: "Enter a tag name.", empty: true }),
-    holdReason: () => "Enter a tag name first.",
+    // Another tag's name is allowed: the server merges the two tags.
+    check: (value) => (value.trim() ? null : { empty: true }),
     extra: (form) => {
       const id = `edit-tag-category-${Date.now()}`;
       const label = document.createElement("label");
@@ -3421,7 +3434,6 @@ function openEditCategory(category) {
     label: "Category Name",
     value: category.name,
     check: (value) => checkCategoryName(value, category),
-    holdReason: categoryHoldReason,
     onSave: (name) => {
       category.name = name;
       tagsChanged();
@@ -3963,8 +3975,7 @@ function askControlToken() {
       value: "",
       inputType: "password",
       saveLabel: "Continue",
-      check: (value) => (value.trim() ? null : { message: "Enter the control token.", empty: true }),
-      holdReason: () => "Enter the control token first.",
+      check: (value) => (value.trim() ? null : { empty: true }),
       onSave: () => {
         accepted = true;
       },
@@ -4402,8 +4413,8 @@ $("volume").addEventListener("input", (event) => {
   store.set("volume", state.volume);
   syncStandInSound();
 });
-const pairField = new ValidatedField($("pair-token"), (value) => (value.trim() ? null : { message: "Enter the pairing token.", empty: true }));
-holdAction($("pair-btn"), () => [pairField], { reason: () => "Enter the pairing token first." });
+const pairField = new ValidatedField($("pair-token"), (value) => (value.trim() ? null : { empty: true }));
+holdAction($("pair-btn"), () => [pairField]);
 $("pair").addEventListener("submit", (event) => {
   event.preventDefault();
   if (pairField.holds) return;

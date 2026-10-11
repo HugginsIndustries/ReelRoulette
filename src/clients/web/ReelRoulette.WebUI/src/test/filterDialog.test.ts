@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ConfirmRequest } from "../dialogs/dialogs";
 import { createFilterDialog } from "../filter/filterDialog";
 import { DURATION_PROBLEM, FLAG_MODES_PROBLEM } from "../filter/filterDialogModel";
 import { createDefaultFilterState } from "../filter/filterStateModel";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type ApiPreset } from "../state/appStore";
+import { EMPTY_FIELD } from "../validation/fieldValidation";
 
 const FAVORITES: ApiPreset = { id: "preset-favorites", name: "Favorites", filterState: { favoritesOnly: true } };
 const EVERYTHING: ApiPreset = { id: "preset-everything", name: "Everything", filterState: {} };
@@ -76,11 +78,18 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
     getItem: (key: string) => session.get(key) ?? null,
     setItem: (key: string, value: string) => void session.set(key, value)
   };
-  const confirm = vi.fn((_message: string) => true);
-  const prompt = vi.fn((_message: string, _value: string): string | null => null);
-  const dialog = createFilterDialog({ store, api, connection, library, storage, confirm, prompt });
+  const confirm = vi.fn(async (_request: ConfirmRequest) => true);
+  const dialog = createFilterDialog({ store, api, connection, library, storage, dialogs: { confirm } });
   const view = () => dialog.view.value!;
-  return { dialog, view, store, server, statuses, steps, library, session, confirm, prompt };
+  return { dialog, view, store, server, statuses, steps, library, session, confirm };
+}
+
+/** An action that is neither disabled nor held. */
+const FREE = { disabled: false, heldBy: null };
+const DISABLED = { disabled: true, heldBy: null };
+
+function heldBy(field: string) {
+  return { disabled: false, heldBy: field };
 }
 
 describe("opening", () => {
@@ -191,7 +200,7 @@ describe("General tab", () => {
     await dialog.open();
     dialog.typeDuration("min", "abc");
     expect(view().pending).toBe(false);
-    expect(view().held.apply).toBe("minDuration");
+    expect(view().actions.apply).toEqual(heldBy("minDuration"));
     dialog.showTab("tags");
 
     await dialog.apply();
@@ -214,7 +223,7 @@ describe("General tab", () => {
     expect(statuses).toEqual([]);
 
     dialog.typeDuration("min", "1:30");
-    expect(view().held.apply).toBeNull();
+    expect(view().actions.apply).toEqual(FREE);
     await dialog.apply();
     expect(store.appliedFilter.peek()).toMatchObject({ minDurationSeconds: 90, onlyNeverPlayed: true });
     expect(library.commitQuery).toHaveBeenCalledTimes(1);
@@ -231,7 +240,7 @@ describe("General tab", () => {
     dialog.changeGeneral({ blacklistedChoice: "only" });
     expect(view().problems.flagModes).toEqual({ message: FLAG_MODES_PROBLEM });
     expect(view().flagged.flagModes).toBe(true);
-    expect(view().held).toEqual({ apply: "flagModes", addPreset: "flagModes", updatePreset: "flagModes" });
+    expect(view().actions).toEqual({ apply: heldBy("flagModes"), addPreset: heldBy("flagModes"), updatePreset: heldBy("flagModes") });
 
     dialog.showTab("presets");
     dialog.addPreset();
@@ -248,7 +257,7 @@ describe("General tab", () => {
     expect(statuses).toEqual([]);
 
     dialog.changeGeneral({ favoritesOn: false });
-    expect(view().held).toEqual({ apply: null, addPreset: null, updatePreset: null });
+    expect(view().actions).toEqual({ apply: FREE, addPreset: FREE, updatePreset: FREE });
   });
 
   it("stores the checked sources", async () => {
@@ -290,7 +299,7 @@ describe("Tags tab", () => {
 
 describe("Presets tab", () => {
   it("adds, moves, renames, and deletes presets in the working copy, and keeps a typed name meanwhile", async () => {
-    const { dialog, view, statuses, confirm, prompt } = setup([FAVORITES, RECENT]);
+    const { dialog, view, statuses, confirm } = setup([FAVORITES, RECENT]);
     await dialog.open();
 
     dialog.typeNewPresetName("Draft name");
@@ -301,61 +310,83 @@ describe("Presets tab", () => {
     dialog.movePreset(1, 1);
     expect(view().presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites"]);
 
-    dialog.typeNewPresetName("recent");
-    expect(view().problems.newPresetName).toEqual({ message: "Use a name no other preset has." });
-    expect(view().flagged.newPresetName).toBe(true);
-    dialog.addPreset();
-    expect(view().presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites"]);
-    expect(dialog.reveal.request.value).toEqual({ field: "newPresetName", count: 1 });
-    expect(statuses).toEqual([]);
     dialog.typeNewPresetName("  Mine ");
     dialog.addPreset();
     expect(view().presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites", "Mine"]);
     expect(view().newPresetName).toBe("");
     expect(dialog.tab.value).toBe("presets");
 
-    prompt.mockReturnValue("Ours");
-    dialog.renamePreset(2);
-    expect(prompt).toHaveBeenCalledWith("Rename preset", "Mine");
+    dialog.editPreset(2);
+    dialog.typePresetName("Ours");
+    dialog.savePresetEdit();
     expect(view().heading).toBe("Preset: Ours");
 
-    confirm.mockReturnValue(false);
-    dialog.deletePreset(2);
+    dialog.editPreset(2);
+    confirm.mockResolvedValueOnce(false);
+    await dialog.deleteEditedPreset();
     expect(view().presets).toHaveLength(3);
-    confirm.mockReturnValue(true);
-    dialog.deletePreset(2);
-    expect(confirm).toHaveBeenLastCalledWith('Delete preset "Ours"?');
+    await dialog.deleteEditedPreset();
+    expect(confirm).toHaveBeenLastCalledWith({ message: 'Delete preset "Ours"?', confirmLabel: "Delete", danger: true });
     expect(view().presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites"]);
     expect(view().presetsChanged).toBe(true);
+    expect(statuses).toEqual([]);
   });
 
-  it("holds Add Preset while the new name is empty, and flags it only once the user has typed in it", async () => {
+  it("disables Add Preset while the new name is empty, without a flag or a move, even while a General field has a problem", async () => {
     const { dialog, view, statuses } = setup([FAVORITES]);
     await dialog.open();
-    expect(view().problems.newPresetName).toEqual({ message: "Enter a preset name.", empty: true });
+    expect(view().problems.newPresetName).toBe(EMPTY_FIELD);
     expect(view().flagged.newPresetName).toBe(false);
-    expect(view().held.addPreset).toBe("newPresetName");
+    expect(view().actions.addPreset).toEqual(DISABLED);
 
-    dialog.addPreset();
+    dialog.showTab("presets");
+    expect(dialog.addPreset()).toBe(false);
     expect(dialog.tab.value).toBe("presets");
-    expect(dialog.reveal.request.value).toEqual({ field: "newPresetName", count: 1 });
+    expect(dialog.reveal.request.value).toBeNull();
     expect(view().presets).toHaveLength(1);
 
     dialog.typeNewPresetName("M");
     dialog.typeNewPresetName("  ");
-    expect(view().flagged.newPresetName).toBe(true);
+    expect(view().flagged.newPresetName).toBe(false);
+    expect(view().actions.addPreset).toEqual(DISABLED);
+
+    dialog.typeDuration("min", "abc");
+    expect(view().actions).toEqual({ apply: heldBy("minDuration"), addPreset: DISABLED, updatePreset: heldBy("minDuration") });
+    expect(dialog.addPreset()).toBe(false);
+    expect(dialog.tab.value).toBe("presets");
+    expect(dialog.reveal.request.value).toBeNull();
+    dialog.typeDuration("min", "");
+
     dialog.typeNewPresetName("Mine");
-    dialog.addPreset();
+    expect(view().actions.addPreset).toEqual(FREE);
+    expect(dialog.addPreset()).toBe(true);
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Mine"]);
     expect(view().newPresetName).toBe("");
     expect(view().flagged.newPresetName).toBe(false);
     expect(statuses).toEqual([]);
+  });
 
+  it("flags a new name another preset has, ignoring case, and disables Add Preset without a move, even while a General field has a problem", async () => {
+    const { dialog, view, statuses } = setup([FAVORITES, RECENT]);
     await dialog.open();
-    dialog.typeNewPresetName("");
+    dialog.showTab("presets");
+
+    dialog.typeNewPresetName("recent");
+    expect(view().problems.newPresetName).toEqual({ message: "Use a name no other preset has." });
     expect(view().flagged.newPresetName).toBe(true);
-    await dialog.open();
-    expect(view().flagged.newPresetName).toBe(false);
+    expect(view().actions.addPreset).toEqual(DISABLED);
+    dialog.addPreset();
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
+    expect(dialog.tab.value).toBe("presets");
+    expect(dialog.reveal.request.value).toBeNull();
+
+    dialog.typeDuration("max", "1:75");
+    expect(view().actions.addPreset).toEqual(DISABLED);
+    dialog.addPreset();
+    expect(dialog.tab.value).toBe("presets");
+    expect(dialog.reveal.request.value).toBeNull();
+    expect(view().presetsChanged).toBe(false);
+    expect(statuses).toEqual([]);
   });
 
   it("holds Add Preset and Update Preset on a duration that is not valid", async () => {
@@ -364,7 +395,7 @@ describe("Presets tab", () => {
     dialog.choosePreset("Recent");
     dialog.typeNewPresetName("Mine");
     dialog.typeDuration("max", "1:75");
-    expect(view().held).toEqual({ apply: "maxDuration", addPreset: "maxDuration", updatePreset: "maxDuration" });
+    expect(view().actions).toEqual({ apply: heldBy("maxDuration"), addPreset: heldBy("maxDuration"), updatePreset: heldBy("maxDuration") });
 
     dialog.showTab("presets");
     dialog.addPreset();
@@ -390,8 +421,10 @@ describe("Presets tab", () => {
     await dialog.open();
     dialog.changeGeneral({ minText: "abc" });
 
-    dialog.deletePreset(1);
+    dialog.editPreset(1);
+    await dialog.deleteEditedPreset();
 
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites"]);
     expect(view().general).toMatchObject({ minText: "abc" });
   });
 
@@ -408,6 +441,121 @@ describe("Presets tab", () => {
     expect(statuses.at(-1)).toBe('Updated preset "Recent" locally — Apply to save.');
     expect(view().presets[1]!.filterState).toMatchObject({ favoritesMode: "only", onlyNeverPlayed: true });
     expect(view().heading).toBe("Preset: Recent");
+  });
+});
+
+describe("Edit Preset", () => {
+  it("opens on a preset with its name, and Cancel, Close, or opening the dialog again closes it without a change", async () => {
+    const { dialog, view } = setup([FAVORITES, RECENT]);
+    await dialog.open();
+    expect(view().presetEdit).toBeNull();
+
+    dialog.editPreset(1);
+    expect(view().presetEdit).toEqual({ index: 1, name: "Recent" });
+    expect(view().presetEditProblem).toBeNull();
+    expect(view().presetEditFlagged).toBe(false);
+    dialog.typePresetName("Fresh");
+    expect(view().presetEdit).toEqual({ index: 1, name: "Fresh" });
+    dialog.cancelPresetEdit();
+    expect(view().presetEdit).toBeNull();
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
+    expect(view().presetsChanged).toBe(false);
+
+    dialog.editPreset(2);
+    expect(view().presetEdit).toBeNull();
+
+    dialog.editPreset(0);
+    dialog.close();
+    expect(view().presetEdit).toBeNull();
+    await dialog.open();
+    dialog.editPreset(0);
+    await dialog.open();
+    expect(view().presetEdit).toBeNull();
+  });
+
+  it("flags another preset's name, ignoring case, finds an empty name required without a flag, and saves neither", async () => {
+    const { dialog, view, statuses } = setup([FAVORITES, RECENT]);
+    await dialog.open();
+    dialog.editPreset(1);
+
+    dialog.typePresetName("favorites ");
+    expect(view().presetEditProblem).toEqual({ message: "Use a name no other preset has." });
+    expect(view().presetEditFlagged).toBe(true);
+    dialog.savePresetEdit();
+    expect(view().presetEdit).toEqual({ index: 1, name: "favorites " });
+
+    dialog.typePresetName("   ");
+    expect(view().presetEditProblem).toBe(EMPTY_FIELD);
+    expect(view().presetEditFlagged).toBe(false);
+    dialog.savePresetEdit();
+    expect(view().presetEdit).toEqual({ index: 1, name: "   " });
+
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
+    expect(view().presetsChanged).toBe(false);
+    expect(statuses).toEqual([]);
+
+    dialog.typePresetName("RECENT");
+    expect(view().presetEditProblem).toBeNull();
+    dialog.savePresetEdit();
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "RECENT"]);
+  });
+
+  it("just closes on Save with the name unchanged, without a change or a star", async () => {
+    const { dialog, view } = setup([FAVORITES, RECENT]);
+    await dialog.open();
+    dialog.editPreset(1);
+    dialog.typePresetName("  Recent ");
+
+    dialog.savePresetEdit();
+
+    expect(view().presetEdit).toBeNull();
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
+    expect(view().presetsChanged).toBe(false);
+    expect(view().pending).toBe(false);
+  });
+
+  it("renames to the trimmed name, the heading and chosen preset follow, and Apply saves the list", async () => {
+    const { dialog, view, server } = setup([FAVORITES, RECENT]);
+    await dialog.open();
+    dialog.choosePreset("Recent");
+    dialog.editPreset(1);
+    dialog.typePresetName("  Fresh ");
+
+    dialog.savePresetEdit();
+
+    expect(view().presetEdit).toBeNull();
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Fresh"]);
+    expect(view().presetName).toBe("Fresh");
+    expect(view().heading).toBe("Preset: Fresh");
+    expect(view().presetsChanged).toBe(true);
+    expect(view().pending).toBe(true);
+
+    await dialog.apply();
+    const saves = server.requests.filter((request) => request.method === "POST" && request.path === "/api/presets");
+    expect(saves.map((save) => save.body.map((preset: any) => preset.name))).toEqual([["Favorites", "Fresh"]]);
+  });
+
+  it("asks before Delete about the preset as it opened, stays open with the typed name on Cancel, and deletes it on confirm", async () => {
+    const { dialog, view, confirm } = setup([FAVORITES, RECENT]);
+    await dialog.open();
+    dialog.choosePreset("Recent");
+    dialog.editPreset(1);
+    dialog.typePresetName("Other");
+
+    confirm.mockResolvedValueOnce(false);
+    await dialog.deleteEditedPreset();
+    expect(confirm).toHaveBeenCalledWith({ message: 'Delete preset "Recent"?', confirmLabel: "Delete", danger: true });
+    expect(view().presetEdit).toEqual({ index: 1, name: "Other" });
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
+    expect(view().presetsChanged).toBe(false);
+
+    await dialog.deleteEditedPreset();
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(view().presetEdit).toBeNull();
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites"]);
+    expect(view().presetName).toBeNull();
+    expect(view().heading).toBe("Preset: None*");
+    expect(view().presetsChanged).toBe(true);
   });
 });
 

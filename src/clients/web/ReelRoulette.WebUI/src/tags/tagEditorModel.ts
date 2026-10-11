@@ -1,6 +1,6 @@
 import { compareTagNames } from "../library/tagNameOrder";
 import { planTagEditorSave, type AutoTagSaveAssignment, type TagSaveStep } from "../library/tagSave";
-import type { FieldProblem } from "../validation/fieldValidation";
+import { EMPTY_FIELD, type FieldProblem } from "../validation/fieldValidation";
 
 export const UNCATEGORIZED_CATEGORY_ID = "uncategorized";
 
@@ -80,9 +80,46 @@ export interface TagCategoryRow {
   chips: TagChipRow[];
 }
 
-/** The Edit Tag dialog's name problem: an empty name, which holds Save. */
+/**
+ * The Edit Tag dialog's name problem: an empty name, which disables Save. Another tag's name is allowed, since the
+ * server merges the two tags.
+ */
 export function editTagNameProblem(name: string): FieldProblem | null {
-  return name.trim() ? null : { message: "Enter a tag name.", empty: true };
+  return name.trim() ? null : EMPTY_FIELD;
+}
+
+/**
+ * The New Category and Edit Category dialogs' name problem: an empty name, or the name of another category the editor
+ * shows, ignoring case, either of which disables Save. Uncategorized's name is always taken, even while its row isn't
+ * showing, since a category with that name would fold into it. `ownId` is the category being edited, or null for a new
+ * one.
+ */
+export function categoryNameProblem(
+  name: string,
+  categories: readonly Pick<TagCategory, "id" | "name">[],
+  ownId: string | null
+): FieldProblem | null {
+  const key = name.trim().toLowerCase();
+  if (!key) {
+    return EMPTY_FIELD;
+  }
+  const taken =
+    isUncategorizedName(key) || categories.some((category) => category.id !== ownId && category.name.trim().toLowerCase() === key);
+  return taken
+    ? { message: "Use a name no other category has." }
+    : null;
+}
+
+/**
+ * The new tag name's problem: an empty name, or the name of a tag the editor shows in any category, ignoring case,
+ * either of which disables Add tag. A tag waiting to be deleted doesn't show, so its name is free.
+ */
+export function newTagNameProblem(name: string, tags: readonly Pick<CatalogTag, "name">[]): FieldProblem | null {
+  const key = normalizeTagKey(name);
+  if (!key) {
+    return EMPTY_FIELD;
+  }
+  return tags.some((tag) => normalizeTagKey(tag.name) === key) ? { message: "Use a name no other tag has." } : null;
 }
 
 export function normalizeTagKey(tagName: unknown): string {
@@ -94,8 +131,13 @@ export function isUncategorizedCategoryId(categoryId: unknown): boolean {
   return id === "" || id === UNCATEGORIZED_CATEGORY_ID;
 }
 
+/** Whether a category name is Uncategorized's, ignoring case and spaces. */
+function isUncategorizedName(name: unknown): boolean {
+  return String(name || "").trim().toLowerCase() === "uncategorized";
+}
+
 function isUncategorizedCategory(category: { id?: unknown; name?: unknown }): boolean {
-  return isUncategorizedCategoryId(category.id) || String(category.name || "").trim().toLowerCase() === "uncategorized";
+  return isUncategorizedCategoryId(category.id) || isUncategorizedName(category.name);
 }
 
 function uncategorized(): TagCategory {

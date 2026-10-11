@@ -86,8 +86,10 @@ function checkDuration(value) {
 }
 
 /**
- * A field using the validation pattern. `check(value)` returns null when the value is valid, or `{ message, empty }`.
- * An empty required field (`empty: true`) is flagged only once the user has typed in it, but still holds its action.
+ * A field using the validation pattern. `check(value)` returns null when the value is valid, `{ empty: true }` for
+ * an empty required field, or `{ message }` for any other problem. An empty required field is never flagged: the
+ * action that needs it is disabled instead. Any other problem is flagged as it is typed, and `holdAction` decides
+ * whether it disables or holds the action.
  * `partners` are other controls checked with this one, such as the other dropdown of a pair: they are marked and
  * described with it, and focusing one shows the tooltip too. The icon and tooltip stay with `input`.
  */
@@ -100,7 +102,6 @@ class ValidatedField {
     this.input = input;
     this.check = check;
     this.pinned = !!opts.pinned;
-    this.touched = !!opts.touched;
     this.partners = opts.partners || [];
     this.hover = false;
     this.wrap = input.closest(".vfield");
@@ -113,10 +114,7 @@ class ValidatedField {
     // Inside the field, so it shows in fullscreen and above a dialog; fixed, so scrolling bodies don't clip it.
     this.wrap.appendChild(this.tip);
 
-    input.addEventListener("input", () => {
-      this.touched = true;
-      this.update();
-    });
+    input.addEventListener("input", () => this.update());
     [input, ...this.partners].forEach((control) => {
       control.addEventListener("focus", () => this.place());
       control.addEventListener("blur", () => this.place());
@@ -146,14 +144,20 @@ class ValidatedField {
     return this.input.disabled ? null : this.check(this.input.value);
   }
 
+  /** An empty required field is never flagged. */
   get flagged() {
     const problem = this.problem;
-    return !!problem && !(problem.empty && !this.touched);
+    return !!problem && !problem.empty;
   }
 
-  /** True while the action that uses this field can't proceed. */
+  /** True while the action that uses this field can't proceed, for any problem. */
   get holds() {
     return !!this.problem;
+  }
+
+  /** True while the field is an empty required one, which disables the action that needs it. */
+  get disables() {
+    return !!this.problem?.empty;
   }
 
   onChange(listener) {
@@ -166,7 +170,6 @@ class ValidatedField {
 
   reset(value) {
     if (value !== undefined) this.input.value = value;
-    this.touched = false;
     this.update();
   }
 
@@ -252,37 +255,45 @@ window.addEventListener("scroll", placeAllTips, true);
 window.addEventListener("resize", placeAllTips);
 
 /**
- * Wires an action button to the fields it uses. While any of them holds the action, the button's label dims and it
- * reads as unavailable; when one of them is flagged, the red icon shows on its right too. Pressing it does nothing
- * but take the user to the first field that holds it.
+ * Wires an action button to the fields it uses.
+ * - An empty required field disables the action: it dims, and pressing it does nothing. So does any problem in a
+ *   field `beside()` returns: a field that sits right next to the action, such as a new name beside its Add button, or
+ *   a field of the dialog the action is in, since the dialog has the user's attention. The field's own icon and
+ *   tooltip say why. A field in `beside()` is also one of `fields()`. Disabling wins over holding.
+ * - Otherwise a flagged field elsewhere holds it: the button's label dims, it reads as unavailable, and the red icon
+ *   shows on its right. Pressing it does nothing but take the user to the first field that holds it.
  */
 function holdAction(button, fields, options) {
   const opts = options || {};
+  const ownTitle = button.getAttribute("title");
   const describe = document.createElement("span");
   describe.className = "vh";
   describe.id = (button.id || "action") + "-held";
   button.after(describe);
 
+  function disabled() {
+    return fields().some((field) => field.disables) || (opts.beside ? opts.beside().some((field) => field.holds) : false);
+  }
+
   function blocker() {
-    return fields().find((field) => field.holds) || null;
+    return disabled() ? null : fields().find((field) => field.holds) || null;
   }
 
   function refresh() {
+    button.disabled = disabled();
     const field = blocker();
     const held = !!field;
-    button.classList.toggle("shows-problem", held && fields().some((f) => f.flagged));
+    button.classList.toggle("shows-problem", held);
     if (held) {
       button.setAttribute("aria-disabled", "true");
-    } else {
-      button.removeAttribute("aria-disabled");
-    }
-    if (held) {
       describe.textContent = opts.reason ? opts.reason(field) : "Correct the field first.";
       button.setAttribute("aria-describedby", describe.id);
       button.title = describe.textContent;
     } else {
+      button.removeAttribute("aria-disabled");
       button.removeAttribute("aria-describedby");
-      button.removeAttribute("title");
+      if (ownTitle === null) button.removeAttribute("title");
+      else button.title = ownTitle;
     }
   }
 
@@ -384,11 +395,12 @@ function confirmDialog({ message, confirmLabel, danger }) {
 }
 
 /**
- * A dialog with one name field that uses the validation pattern, Save held while the name is not valid, and an
- * optional Delete that asks first in a dialog stacked above. `deleteLabel` renames Delete, in the dialog and in its
- * confirmation, for an action that deletes nothing, such as removing a source. `extra(body)` can add fields after the name.
+ * A dialog with one name field that uses the validation pattern, Save disabled while the name is empty or has another
+ * problem, such as a taken name, and an optional Delete that asks first in a dialog stacked above. `deleteLabel`
+ * renames Delete, in the dialog and in its confirmation, for an action that deletes nothing, such as removing a source.
+ * `extra(body)` can add fields after the name.
  */
-function nameDialog({ title, label, value, check, holdReason, onSave, deleteMessage, onDelete, deleteLabel, extra, saveLabel, inputType, onClose }) {
+function nameDialog({ title, label, value, check, onSave, deleteMessage, onDelete, deleteLabel, extra, saveLabel, inputType, onClose }) {
   const id = `dialog-field-${++dialogCounter}`;
   const form = document.createElement("form");
   form.className = "dialog-body";
@@ -439,7 +451,7 @@ function nameDialog({ title, label, value, check, holdReason, onSave, deleteMess
     }
   });
   field.reset(value || "");
-  holdAction(save, () => [field], { reason: holdReason });
+  holdAction(save, () => [field], { beside: () => [field] });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     if (field.holds) return;
@@ -454,7 +466,7 @@ function nameDialog({ title, label, value, check, holdReason, onSave, deleteMess
   return { close, form, field };
 }
 
-/** A notice: something the user must see, with one OK, as WebUI In-App Dialogs adds. */
+/** A notice: something the user must see, with one OK. */
 function noticeDialog({ title, message }) {
   return new Promise((resolve) => {
     const body = document.createElement("div");

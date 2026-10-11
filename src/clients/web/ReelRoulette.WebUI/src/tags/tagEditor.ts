@@ -1,4 +1,5 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
+import type { Dialogs } from "../dialogs/dialogs";
 import type { Library } from "../library/library";
 import { createAutoTagScanRequest, libraryQueryTagSaveEffect } from "../library/libraryQuerySession";
 import {
@@ -14,7 +15,7 @@ import type { Player } from "../playback/player";
 import type { AppApi } from "../state/appApi";
 import type { AppStore, StorageLike } from "../state/appStore";
 import type { ServerConnection } from "../state/serverConnection";
-import { createFieldReveal, isFlagged, type FieldProblem, type FieldReveal } from "../validation/fieldValidation";
+import { actionBlock, isFlagged, type FieldProblem } from "../validation/fieldValidation";
 import {
   AUTO_TAG_SCANNING,
   autoTagApplyPending,
@@ -33,18 +34,21 @@ import {
   UNCATEGORIZED_CATEGORY_ID,
   addCategoryToOrder,
   autoTagAppliedFromResponse,
+  categoryNameProblem,
   categoryOptions,
   createPendingTagEdits,
   editTagNameProblem,
   hasPendingTagEdits,
   initialCategoryOrder,
   moveCategoryInOrder,
+  newTagNameProblem,
   normalizeTagKey,
   planTagEdits,
   tagCategoryRows,
   tagEditorDisplay,
   tagSaveRequest,
   toggleTagSelection,
+  type CatalogTag,
   type PendingTagEdits,
   type TagAction,
   type TagCategory,
@@ -65,12 +69,13 @@ export interface TagEditDraft {
   oldCategoryId: string;
   name: string;
   categoryId: string;
-  /** The user has typed in the name since the dialog opened, so an empty one is flagged. */
-  nameTyped: boolean;
 }
 
-/** The Edit Tag dialog's field that can hold a value that is not valid. */
-export type TagEditField = "editTagName";
+/** The Edit Category dialog: the category and the name typed. */
+export interface CategoryEditDraft {
+  categoryId: string;
+  name: string;
+}
 
 interface AutoTagState {
   scanFull: boolean;
@@ -99,6 +104,10 @@ interface TagEditorState {
   /** The Edit Tag dialog's fields, kept after it closes, or null before it first opens. */
   edit: TagEditDraft | null;
   editing: boolean;
+  /** The Edit Category dialog, or null while it is closed. */
+  categoryEdit: CategoryEditDraft | null;
+  /** The New Category dialog's name, or null while it is closed. */
+  newCategory: { name: string } | null;
   autoTag: AutoTagState;
 }
 
@@ -113,9 +122,20 @@ export interface TagEditorView extends TagEditorState {
   /** Save is enabled and marked while there is something to save. */
   savePending: boolean;
   results: AutoTagResults;
-  /** The Edit Tag name's problem, which holds its Save, or null. */
+  /** The Edit Tag name's problem, which disables its Save, or null. */
   editNameProblem: FieldProblem | null;
   editNameFlagged: boolean;
+  /** The Edit Category name's problem, which disables its Save, or null. */
+  categoryEditProblem: FieldProblem | null;
+  categoryEditFlagged: boolean;
+  /** The New Category name's problem, which disables its Save, or null. */
+  newCategoryProblem: FieldProblem | null;
+  newCategoryFlagged: boolean;
+  /** The new tag name's problem, or null. */
+  newTagProblem: FieldProblem | null;
+  newTagFlagged: boolean;
+  /** Add tag is disabled: the new tag name sits beside it, so any problem in it disables it. */
+  addTagDisabled: boolean;
 }
 
 /**
@@ -128,41 +148,60 @@ export interface TagEditor {
   readonly tab: ReadonlySignal<TagEditorTab | null>;
   /** Null before the editor first opens. */
   readonly view: ReadonlySignal<TagEditorView | null>;
-  /** Asks the Edit Tag name to take focus, when its held Save moves to it. */
-  readonly reveal: FieldReveal<TagEditField>;
 
   /** Pauses playback, shows Edit Tags, and loads the tags of the item playing. */
   open(): void;
-  /** Asks first when there are changes, then hides the editor and resumes playback. Not while a scan runs. */
-  close(): void;
+  /**
+   * Asks first when there are changes, then hides the editor, closing its dialogs, and resumes playback. Not while a
+   * scan runs.
+   */
+  close(): Promise<void>;
   showTab(tab: TagEditorTab): void;
-  /** Asks first when there are changes, then drops them and loads the tags again. Not while a scan runs. */
-  refresh(): void;
+  /**
+   * Asks first when there are changes, then drops them, closes the editor's dialogs, and loads the tags again. Not
+   * while a scan runs.
+   */
+  refresh(): Promise<void>;
   /** Closes the editor and sends the changes in the background. */
   save(): void;
 
   toggleCategory(categoryId: string): void;
   moveCategory(categoryId: string, direction: -1 | 1): void;
-  /** Asks for the new name. */
-  renameCategory(categoryId: string): void;
-  /** Asks first. */
-  deleteCategory(categoryId: string): void;
-  /** Asks for the name. */
+  /** Opens the New Category dialog. */
   addCategory(): void;
+  typeNewCategoryName(text: string): void;
+  /** Adds the category last, before Uncategorized. Does nothing while the name is empty or taken. */
+  saveNewCategory(): void;
+  cancelNewCategory(): void;
+
+  /** Opens the Edit Category dialog. Not for Uncategorized. */
+  editCategory(categoryId: string): void;
+  typeCategoryName(text: string): void;
+  /** Renames the category, or just closes when the name is unchanged. Does nothing while the name is empty or taken. */
+  saveCategoryEdit(): void;
+  cancelCategoryEdit(): void;
+  /** Asks first, then deletes the category, its tags becoming Uncategorized, and closes the dialog. */
+  deleteEditedCategory(): Promise<void>;
+
   toggleTag(tagName: string, action: TagAction): void;
-  /** Asks first. */
-  deleteTag(tagName: string): void;
   typeNewTag(text: string): void;
   chooseNewTagCategory(categoryId: string): void;
-  addTag(): void;
+  /**
+   * Creates the tag in the chosen category, until Save, opening the category so its chip shows, and returns its name.
+   * It doesn't put the tag on the playing item; the chip's add does. Does nothing while the name is empty or another
+   * tag's, and returns null.
+   */
+  addTag(): string | null;
 
   /** Opens the Edit Tag dialog. */
   editTag(tagName: string): void;
   typeEditName(text: string): void;
   chooseEditCategory(categoryId: string): void;
-  /** Held while the name is empty: it moves to the name instead. */
+  /** Does nothing while the name is empty. */
   saveEdit(): void;
   cancelEdit(): void;
+  /** Asks first about the tag as it was when the dialog opened, then deletes it and closes the dialog. */
+  deleteEditedTag(): Promise<void>;
 
   setScanFullLibrary(checked: boolean): void;
   setViewAll(checked: boolean): void;
@@ -184,12 +223,8 @@ export interface TagEditorOptions {
   sessionStorage: StorageLike;
   /** Browser `localStorage`, for Scan full library. */
   localStorage: StorageLike;
-  /** Defaults to `window.confirm`, looked up on each use. */
-  confirm?: (message: string) => boolean;
-  /** Defaults to `window.prompt`, looked up on each use. */
-  prompt?: (message: string, value?: string) => string | null;
-  /** Defaults to `window.alert`, looked up on each use. */
-  alert?: (message: string) => void;
+  /** The in-app dialogs, for the confirmations. */
+  dialogs: Pick<Dialogs, "confirm">;
   /** Ids for new categories. */
   newId?: () => string;
 }
@@ -203,16 +238,12 @@ function emptyAutoTag(scanFull: boolean, viewAll: boolean): AutoTagState {
 }
 
 export function createTagEditor(options: TagEditorOptions): TagEditor {
-  const { store, api, connection, library } = options;
-  const confirm = options.confirm ?? ((message: string) => window.confirm(message));
-  const prompt = options.prompt ?? ((...args: [message: string, value?: string]) => window.prompt(...args));
-  const alert = options.alert ?? ((message: string) => window.alert(message));
+  const { store, api, connection, library, dialogs } = options;
   const newId = options.newId ?? (() => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`));
 
   const isOpen = signal(false);
   const tab = signal<TagEditorTab | null>(null);
   const view = signal<TagEditorView | null>(null);
-  const reveal = createFieldReveal<TagEditField>();
   let state: TagEditorState = {
     model: null,
     itemIds: [],
@@ -225,6 +256,8 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     newTagCategoryId: "",
     edit: null,
     editing: false,
+    categoryEdit: null,
+    newCategory: null,
     autoTag: emptyAutoTag(false, false)
   };
 
@@ -251,8 +284,10 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
   function settle(next: TagEditorState): void {
     let categories: TagCategoryRow[] | null = null;
     let options: TagCategory[] = [];
+    let tags: CatalogTag[] = [];
     if (next.model) {
       const display = tagEditorDisplay(next.model, next.pending, next.order);
+      tags = display.tags;
       categories = tagCategoryRows(display, next.collapsed, next.selections);
       options = categoryOptions(display.categories);
       const newTagCategoryId = options.some((option) => option.id === next.newTagCategoryId)
@@ -263,6 +298,11 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     }
     state = next;
     const editNameProblem = next.edit ? editTagNameProblem(next.edit.name) : null;
+    const categoryEditProblem = next.categoryEdit
+      ? categoryNameProblem(next.categoryEdit.name, categories ?? [], next.categoryEdit.categoryId)
+      : null;
+    const newCategoryProblem = next.newCategory ? categoryNameProblem(next.newCategory.name, categories ?? [], null) : null;
+    const newTagProblem = newTagNameProblem(next.newTagName, tags);
     view.value = {
       ...next,
       categories,
@@ -271,7 +311,14 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       savePending: hasChanges(next),
       results: autoTagResults(next.autoTag.rows, next.autoTag.viewAll, next.autoTag.hasRun),
       editNameProblem,
-      editNameFlagged: isFlagged(editNameProblem, next.edit?.nameTyped ?? false)
+      editNameFlagged: isFlagged(editNameProblem),
+      categoryEditProblem,
+      categoryEditFlagged: isFlagged(categoryEditProblem),
+      newCategoryProblem,
+      newCategoryFlagged: isFlagged(newCategoryProblem),
+      newTagProblem,
+      newTagFlagged: isFlagged(newTagProblem),
+      addTagDisabled: actionBlock(["newTag"], { newTag: newTagProblem }, ["newTag"]).disabled
     };
   }
 
@@ -287,6 +334,15 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
 
   function cleared(): Pick<TagEditorState, "selections" | "pending" | "orderChanged"> {
     return { selections: new Map(), pending: createPendingTagEdits(), orderChanged: false };
+  }
+
+  /** Closes the Edit Tag, Edit Category, and New Category dialogs. Edit Tag keeps its fields. */
+  function dialogsClosed(): Pick<TagEditorState, "editing" | "categoryEdit" | "newCategory"> {
+    return { editing: false, categoryEdit: null, newCategory: null };
+  }
+
+  function confirmDiscard(): Promise<boolean> {
+    return dialogs.confirm({ message: "Discard changes?", confirmLabel: "Discard", danger: true });
   }
 
   function readCollapsed(): Set<string> {
@@ -341,7 +397,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
   }
 
   function closeEditor(): void {
-    update({ editing: false, itemIds: [], ...cleared(), autoTag: emptyAutoTag(state.autoTag.scanFull, state.autoTag.viewAll) });
+    update({ ...dialogsClosed(), itemIds: [], ...cleared(), autoTag: emptyAutoTag(state.autoTag.scanFull, state.autoTag.viewAll) });
     isOpen.value = false;
     options.player.resumeAfterTagEditor();
   }
@@ -494,11 +550,37 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     return view.peek()?.categories?.find((category) => category.id === categoryId);
   }
 
+  /** Deletes a tag, with any change held for it, as part of `change`. */
+  function deleteTag(tagName: string, change: Partial<TagEditorState>): void {
+    const key = normalizeTagKey(tagName);
+    const upsertTags = new Map(state.pending.upsertTags);
+    upsertTags.delete(key);
+    const renameTags = new Map(state.pending.renameTags);
+    renameTags.delete(key);
+    const selections = new Map(state.selections);
+    selections.delete(key);
+    update({
+      ...change,
+      pending: { ...state.pending, deleteTags: new Map(state.pending.deleteTags).set(key, { name: tagName }), upsertTags, renameTags },
+      selections
+    });
+  }
+
+  /** Deletes a category, its tags becoming Uncategorized, as part of `change`. */
+  function deleteCategory(categoryId: string, change: Partial<TagEditorState>): void {
+    const upsertCategories = new Map(state.pending.upsertCategories);
+    upsertCategories.delete(categoryId);
+    update({
+      ...change,
+      pending: { ...state.pending, deleteCategoryIds: new Set(state.pending.deleteCategoryIds).add(categoryId), upsertCategories },
+      order: state.order.filter((id) => id !== categoryId)
+    });
+  }
+
   const editor: TagEditor = {
     isOpen,
     tab,
     view,
-    reveal,
 
     open() {
       const current = store.current.peek();
@@ -517,11 +599,12 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       });
     },
 
-    close() {
+    async close() {
       if (state.autoTag.scanning) {
         return;
       }
-      if (hasChanges(state) && !confirm("Discard changes?")) {
+      // With no changes it closes at once. The editor may have closed, or a scan started, while it asked.
+      if (hasChanges(state) && (!(await confirmDiscard()) || !isOpen.peek() || state.autoTag.scanning)) {
         return;
       }
       closeEditor();
@@ -531,14 +614,19 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       tab.value = next;
     },
 
-    refresh() {
+    async refresh() {
       if (state.autoTag.scanning) {
         return;
       }
-      if (hasChanges(state) && !confirm("Discard changes?")) {
+      if (hasChanges(state) && (!(await confirmDiscard()) || state.autoTag.scanning)) {
         return;
       }
-      update({ ...cleared(), order: [], autoTag: emptyAutoTag(state.autoTag.scanFull, state.autoTag.viewAll) });
+      update({
+        ...cleared(),
+        ...dialogsClosed(),
+        order: [],
+        autoTag: emptyAutoTag(state.autoTag.scanFull, state.autoTag.viewAll)
+      });
       loadModel().catch((error) => {
         store.setStatus(`Tag refresh failed: ${errorText(error)}`);
       });
@@ -585,72 +673,81 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       }
     },
 
-    renameCategory(categoryId) {
-      const category = findCategory(categoryId);
-      if (!category || category.uncategorized) {
-        return;
-      }
-      const name = String(prompt("Rename Category", category.name.trim()) || "").trim();
-      if (!name) {
-        return;
-      }
-      const taken = view
-        .peek()!
-        .categories!.some((other) => other.id !== categoryId && other.name.trim().toLowerCase() === name.toLowerCase());
-      if (taken) {
-        alert("Category already exists.");
-        return;
-      }
-      const sortOrder = Math.max(0, state.order.indexOf(categoryId));
-      const upsertCategories = new Map(state.pending.upsertCategories).set(categoryId, { id: categoryId, name, sortOrder });
-      update({ pending: { ...state.pending, upsertCategories } });
-    },
-
-    deleteCategory(categoryId) {
-      const category = findCategory(categoryId);
-      if (!category || category.uncategorized) {
-        return;
-      }
-      if (!confirm(`Delete category "${category.name || "Category"}"? Tags will become Uncategorized.`)) {
-        return;
-      }
-      const upsertCategories = new Map(state.pending.upsertCategories);
-      upsertCategories.delete(categoryId);
-      update({
-        pending: { ...state.pending, deleteCategoryIds: new Set(state.pending.deleteCategoryIds).add(categoryId), upsertCategories },
-        order: state.order.filter((id) => id !== categoryId)
-      });
-    },
-
     addCategory() {
-      const name = prompt("New category name");
-      if (!name || !name.trim()) {
+      update({ newCategory: { name: "" } });
+    },
+
+    typeNewCategoryName(text) {
+      if (state.newCategory) {
+        update({ newCategory: { name: text } });
+      }
+    },
+
+    saveNewCategory() {
+      if (!state.newCategory || view.peek()?.newCategoryProblem) {
         return;
       }
       const id = newId();
-      const upsertCategories = new Map(state.pending.upsertCategories).set(id, { id, name: name.trim(), sortOrder: state.order.length });
-      update({ pending: { ...state.pending, upsertCategories }, order: addCategoryToOrder(state.order, id) });
+      const name = state.newCategory.name.trim();
+      const upsertCategories = new Map(state.pending.upsertCategories).set(id, { id, name, sortOrder: state.order.length });
+      update({ pending: { ...state.pending, upsertCategories }, order: addCategoryToOrder(state.order, id), newCategory: null });
+    },
+
+    cancelNewCategory() {
+      update({ newCategory: null });
+    },
+
+    editCategory(categoryId) {
+      const category = findCategory(categoryId);
+      if (!category || category.uncategorized) {
+        return;
+      }
+      update({ categoryEdit: { categoryId, name: category.name.trim() } });
+    },
+
+    typeCategoryName(text) {
+      if (state.categoryEdit) {
+        update({ categoryEdit: { ...state.categoryEdit, name: text } });
+      }
+    },
+
+    saveCategoryEdit() {
+      const edit = state.categoryEdit;
+      if (!edit || view.peek()?.categoryEditProblem) {
+        return;
+      }
+      const category = findCategory(edit.categoryId);
+      const name = edit.name.trim();
+      if (!category || name === category.name.trim()) {
+        update({ categoryEdit: null });
+        return;
+      }
+      const sortOrder = Math.max(0, state.order.indexOf(edit.categoryId));
+      const upsertCategories = new Map(state.pending.upsertCategories).set(edit.categoryId, { id: edit.categoryId, name, sortOrder });
+      update({ pending: { ...state.pending, upsertCategories }, categoryEdit: null });
+    },
+
+    cancelCategoryEdit() {
+      update({ categoryEdit: null });
+    },
+
+    async deleteEditedCategory() {
+      const category = state.categoryEdit ? findCategory(state.categoryEdit.categoryId) : undefined;
+      if (!category || category.uncategorized) {
+        return;
+      }
+      const message = `Delete category "${category.name || "Category"}"? Tags will become Uncategorized.`;
+      if (!(await dialogs.confirm({ message, confirmLabel: "Delete", danger: true }))) {
+        return;
+      }
+      // The dialog may have closed while it asked.
+      if (state.categoryEdit?.categoryId === category.id) {
+        deleteCategory(category.id, { categoryEdit: null });
+      }
     },
 
     toggleTag(tagName, action) {
       update({ selections: toggleTagSelection(state.selections, tagName, action) });
-    },
-
-    deleteTag(tagName) {
-      if (!confirm(`Delete tag "${tagName}"?`)) {
-        return;
-      }
-      const key = normalizeTagKey(tagName);
-      const upsertTags = new Map(state.pending.upsertTags);
-      upsertTags.delete(key);
-      const renameTags = new Map(state.pending.renameTags);
-      renameTags.delete(key);
-      const selections = new Map(state.selections);
-      selections.delete(key);
-      update({
-        pending: { ...state.pending, deleteTags: new Map(state.pending.deleteTags).set(key, { name: tagName }), upsertTags, renameTags },
-        selections
-      });
     },
 
     typeNewTag(text) {
@@ -662,24 +759,22 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     },
 
     addTag() {
-      const name = state.newTagName.trim();
-      if (!name) {
-        return;
+      const current = view.peek();
+      if (!current || current.addTagDisabled) {
+        return null;
       }
+      const name = state.newTagName.trim();
       const key = normalizeTagKey(name);
+      const categoryId = state.newTagCategoryId || UNCATEGORIZED_CATEGORY_ID;
       const deleteTags = new Map(state.pending.deleteTags);
       deleteTags.delete(key);
-      const upsertTags = new Map(state.pending.upsertTags).set(key, {
-        name,
-        categoryId: state.newTagCategoryId || UNCATEGORIZED_CATEGORY_ID
-      });
-      const selections = new Map(state.selections);
-      if (currentItemIds().length > 0) {
-        selections.set(key, { action: "add", name });
-      } else {
-        selections.delete(key);
+      const upsertTags = new Map(state.pending.upsertTags).set(key, { name, categoryId });
+      const collapsed = new Set(state.collapsed);
+      if (collapsed.delete(categoryId)) {
+        saveCollapsed(collapsed);
       }
-      update({ pending: { ...state.pending, deleteTags, upsertTags }, selections, newTagName: "" });
+      update({ pending: { ...state.pending, deleteTags, upsertTags }, collapsed, newTagName: "" });
+      return name;
     },
 
     editTag(tagName) {
@@ -696,8 +791,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
           name: tag.name,
           categoryId: current.categoryOptions.some((option) => option.id === categoryId)
             ? categoryId
-            : (current.categoryOptions[0]?.id ?? ""),
-          nameTyped: false
+            : (current.categoryOptions[0]?.id ?? "")
         },
         editing: true
       });
@@ -705,7 +799,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
 
     typeEditName(text) {
       if (state.edit && state.editing) {
-        update({ edit: { ...state.edit, name: text, nameTyped: true } });
+        update({ edit: { ...state.edit, name: text } });
       }
     },
 
@@ -721,7 +815,6 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
         return;
       }
       if (editTagNameProblem(edit.name)) {
-        reveal.reveal("editTagName");
         return;
       }
       const name = edit.name.trim();
@@ -745,6 +838,20 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
 
     cancelEdit() {
       update({ editing: false });
+    },
+
+    async deleteEditedTag() {
+      const edit = state.edit;
+      if (!edit || !state.editing) {
+        return;
+      }
+      if (!(await dialogs.confirm({ message: `Delete tag "${edit.oldName}"?`, confirmLabel: "Delete", danger: true }))) {
+        return;
+      }
+      // The dialog may have closed while it asked.
+      if (state.editing) {
+        deleteTag(edit.oldName, { editing: false });
+      }
     },
 
     setScanFullLibrary(checked) {

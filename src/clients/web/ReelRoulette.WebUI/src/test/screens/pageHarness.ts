@@ -264,6 +264,12 @@ export function mountPage(options: MountOptions = {}): MountedPage {
   const server = options.server ?? new FakeServer();
   vi.stubGlobal("fetch", server.fetch);
   vi.stubGlobal("EventSource", FakeEventSource);
+  // The page asks and tells in its own dialog, so a browser dialog fails the test that opened it.
+  for (const name of ["alert", "confirm", "prompt"]) {
+    vi.stubGlobal(name, () => {
+      throw new Error(`The page opened the browser's ${name}.`);
+    });
+  }
 
   const root = document.createElement("div");
   root.id = "app";

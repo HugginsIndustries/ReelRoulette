@@ -3,8 +3,8 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "preact/hook
 import type { FieldProblem, FieldReveal } from "../validation/fieldValidation";
 
 // The field validation pattern: a field that holds a value that is not valid shows a red icon, whose tooltip says what
-// the field expects, and the actions that use it are held until it is corrected. Field problems never use a dialog
-// or the status line.
+// the field expects, and the actions that use it are disabled or held until it is corrected. An empty required field
+// is never flagged and only disables. Field problems never use a dialog or the status line.
 
 /** What a validated control takes: its invalid state and description while flagged, and focus for the tooltip. */
 export interface ValidatedControlProps {
@@ -184,46 +184,48 @@ export function ValidatedField<F extends string = string>({
 export interface HeldButtonProps {
   id: string;
   class?: string;
-  /** Whether a field that is not valid holds the action. */
-  held: boolean;
-  /** Whether one of the fields the action uses is flagged, which shows the red icon while it is held. */
-  flagged: boolean;
-  /** Why it is held: its title and accessible description. */
-  reason: string | null;
+  /**
+   * An empty required field, or any problem in a field right next to the action, disables it, from `actionBlock`.
+   * The field says why, so the button shows nothing more.
+   */
+  disabled: boolean;
+  /** Why a flagged field elsewhere holds the action, its title and accessible description, or null while none does. */
+  heldReason: string | null;
   onClick: () => void;
   children: ComponentChildren;
 }
 
 /**
- * An action that uses fields of the pattern. While one holds it, its label dims and it reads as unavailable, and
- * its click handler moves to that field instead of acting. The red icon shows on its right once a field is flagged.
+ * An action that uses fields of the pattern. While it is disabled, it dims and pressing it does nothing. While a
+ * field elsewhere holds it, its label dims, it reads as unavailable, the red icon shows on its right, and its click
+ * handler moves to that field instead of acting.
  */
-export function HeldButton({ id, class: extraClass, held, flagged, reason, onClick, children }: HeldButtonProps) {
+export function HeldButton({ id, class: extraClass, disabled, heldReason, onClick, children }: HeldButtonProps) {
   const describedId = useId();
-  const showsProblem = held && flagged;
-  const described = held && reason;
-  const classes = ["held-action", extraClass, showsProblem ? "shows-problem" : null].filter(Boolean).join(" ");
+  const held = !disabled && heldReason !== null;
+  const classes = ["held-action", extraClass, held ? "shows-problem" : null].filter(Boolean).join(" ");
   return (
     <>
       <button
         id={id}
         type="button"
         class={classes}
+        disabled={disabled}
         aria-disabled={held ? "true" : undefined}
-        aria-describedby={described ? describedId : undefined}
-        title={described ? reason : undefined}
+        aria-describedby={held ? describedId : undefined}
+        title={held ? heldReason : undefined}
         onClick={onClick}
       >
         <span class="btn-label">{children}</span>
-        {showsProblem ? (
+        {held ? (
           <span class="btn-problem material-symbol-icon" aria-hidden="true">
             error
           </span>
         ) : null}
       </button>
-      {described ? (
+      {held ? (
         <span id={describedId} class="visually-hidden">
-          {reason}
+          {heldReason}
         </span>
       ) : null}
     </>

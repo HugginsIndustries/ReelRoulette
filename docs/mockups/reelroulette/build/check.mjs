@@ -123,7 +123,24 @@ for (const name of ["index", "validation", "recovery", "desktop-notice", "layout
   const pinned = [...document.querySelectorAll("input[data-check]")];
   const states = pinned.map((input) => `${input.value || "''"}:${input.getAttribute("aria-invalid") || "-"}`);
   check(`validation: aria-invalid per specimen ${states.join(" ")}`,
-    states.join(" ") === "'':- 1:7x:true 1:30:- '':- '':true favorites:true Beach:- '':true '':true places:true");
+    states.join(" ") === "'':- 1:7x:true 1:30:- '':- favorites:true Beach days:- '':- beach:true Beach:- '':- '':- places:true");
+  // An empty name disables its action without a flag; a taken name disables an action beside it and holds a dialog's Save.
+  const actionState = (action) => (action.disabled ? "disabled" : action.getAttribute("aria-disabled") === "true" ? (action.classList.contains("shows-problem") ? "held" : "held-no-icon") : "available");
+  const actions = pinned.map((input) => input.closest(".specimen").querySelector("[data-action]")).filter(Boolean);
+  check(`validation: each action's state ${actions.map(actionState).join(" ")}`,
+    actions.map(actionState).join(" ") === "disabled disabled available disabled disabled available disabled disabled disabled");
+  const takenTag = pinned.find((input) => input.value === "beach");
+  check("validation: a taken tag name says what it expects",
+    document.getElementById(takenTag.getAttribute("aria-describedby") || "none")?.textContent === "Use a name no other tag has.");
+  const emptyPreset = pinned.find((input) => input.dataset.check === "preset" && !input.value);
+  const emptyPresetAction = emptyPreset.closest(".specimen").querySelector("[data-action]");
+  emptyPreset.value = "x";
+  emptyPreset.dispatchEvent(new window.Event("input"));
+  const typedState = actionState(emptyPresetAction);
+  emptyPreset.value = "";
+  emptyPreset.dispatchEvent(new window.Event("input"));
+  check(`validation: a typed preset name enables Add Preset, and emptying it disables it again without a flag (${typedState}, ${actionState(emptyPresetAction)})`,
+    typedState === "available" && actionState(emptyPresetAction) === "disabled" && !emptyPreset.hasAttribute("aria-invalid"));
   const typed = pinned[0];
   typed.value = "12:x";
   typed.dispatchEvent(new window.Event("input"));
@@ -390,8 +407,10 @@ for (const width of [1280, 390]) {
   const presetDialog = topDialog();
   const presetName = presetDialog?.querySelector("input");
   input(presetName, "favorites");
-  check(`layout@${width}: Edit Preset flags a taken name and holds Save`,
-    presetName.getAttribute("aria-invalid") === "true" && button(presetDialog, "Save").getAttribute("aria-disabled") === "true");
+  // A dialog has the user's attention, so a problem in its field disables Save, and the field's icon says why.
+  const disabledNoIcon = (el) => el.disabled && !el.classList.contains("shows-problem") && !el.hasAttribute("aria-disabled");
+  check(`layout@${width}: Edit Preset flags a taken name and disables Save without an icon`,
+    presetName.getAttribute("aria-invalid") === "true" && disabledNoIcon(button(presetDialog, "Save")));
   button(presetDialog, "Delete").click();
   check(`layout@${width}: Delete opens a confirmation stacked above the edit dialog`,
     openDialogs().length === 2 && topDialog().textContent.includes('Delete preset "Long videos"?') && topDialog().getAttribute("role") === "alertdialog");
@@ -463,8 +482,9 @@ for (const width of [1280, 390]) {
     pairTip?.textContent === "Nothing is both a favorite and blacklisted. Use excluded for one of them." && $("filter-bl-mode").closest(".vfield").contains(pairTip) &&
     document.querySelector('.filter-tab[data-sub="general"]').classList.contains("has-problem"));
   const heldWithIcon = (id) => $(id).getAttribute("aria-disabled") === "true" && $(id).classList.contains("shows-problem");
-  check(`layout@${width}: the pair holds Apply, Add Preset, and Update Preset`,
-    heldWithIcon("filter-apply") && heldWithIcon("filter-add-preset") && heldWithIcon("filter-update-preset") && $("filter-update-preset").title === "Change Favorites or Blacklisted first.");
+  const disabledNoIconId = (id) => disabledNoIcon($(id));
+  check(`layout@${width}: the pair holds Apply and Update Preset, and Add Preset stays disabled while its name is empty`,
+    heldWithIcon("filter-apply") && heldWithIcon("filter-update-preset") && disabledNoIconId("filter-add-preset") && $("filter-update-preset").title === "Change Favorites or Blacklisted first.");
   document.querySelector('[data-sub="presets"]').click();
   const statusBeforePair = status();
   $("filter-update-preset").click();
@@ -474,16 +494,25 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: turning Blacklisted off clears the pair and lets Apply proceed`,
     !$("filter-fav-mode").hasAttribute("aria-invalid") && !$("filter-bl-mode").hasAttribute("aria-invalid") && !$("filter-apply").hasAttribute("aria-disabled"));
   input($("filter-min"), "1:7x");
-  check(`layout@${width}: a duration that is not valid holds Add Preset and Update Preset too`,
-    heldWithIcon("filter-add-preset") && heldWithIcon("filter-update-preset") && $("filter-update-preset").title === "Correct the minimum duration first.");
+  check(`layout@${width}: a duration that is not valid holds Update Preset too, and Add Preset stays disabled while its name is empty`,
+    heldWithIcon("filter-update-preset") && disabledNoIconId("filter-add-preset") && $("filter-update-preset").title === "Correct the minimum duration first.");
   document.querySelector('[data-sub="presets"]').click();
   $("filter-new-preset").focus();
+  input($("filter-new-preset"), "FAVORITES");
+  const takenPresetTip = document.getElementById($("filter-new-preset").getAttribute("aria-describedby") || "none");
+  check(`layout@${width}: a taken preset name is flagged and disables Add Preset without an icon, even while a duration holds it ("${takenPresetTip?.textContent}")`,
+    $("filter-new-preset").getAttribute("aria-invalid") === "true" && takenPresetTip?.textContent === "Use a name no other preset has." &&
+    disabledNoIconId("filter-add-preset") && document.querySelector('.filter-tab[data-sub="presets"]').classList.contains("has-problem"));
   input($("filter-new-preset"), "Unique name");
+  check(`layout@${width}: with a new name, the duration holds Add Preset with its icon`, heldWithIcon("filter-add-preset") && !$("filter-add-preset").disabled);
   $("filter-add-preset").click();
   check(`layout@${width}: held Add Preset goes to the duration and adds nothing`,
     !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === $("filter-min") && $("filter-new-preset").value === "Unique name");
   input($("filter-min"), "");
-  input($("filter-new-preset"), "");
+  $("filter-add-preset").click();
+  const addedPreset = $("filter-preset-list").lastElementChild;
+  check(`layout@${width}: Add Preset adds the preset last and moves to its drag handle`,
+    addedPreset?.dataset.key === "Unique name" && document.activeElement === addedPreset.querySelector(".drag-handle") && $("filter-new-preset").value === "");
   await applyFilter(false, "only", true, "excluded");
 
   // An empty duration field means no limit: the rows have no boxes, and the placeholders say so.
@@ -612,8 +641,8 @@ for (const width of [1280, 390]) {
   const categoryDialog = topDialog();
   const categoryName = categoryDialog.querySelector("input");
   input(categoryName, "people");
-  check(`layout@${width}: a taken category name is flagged and Save held`,
-    categoryName.getAttribute("aria-invalid") === "true" && button(categoryDialog, "Save").getAttribute("aria-disabled") === "true");
+  check(`layout@${width}: a taken category name is flagged and disables Save without an icon`,
+    categoryName.getAttribute("aria-invalid") === "true" && disabledNoIcon(button(categoryDialog, "Save")));
   button(categoryDialog, "Delete").click();
   check(`layout@${width}: category Delete asks with today's wording`, topDialog().textContent.includes('Delete category "Places"? Tags will become Uncategorized.'));
   button(topDialog(), "Delete").click();
@@ -623,18 +652,50 @@ for (const width of [1280, 390]) {
   const tagDialog = topDialog();
   const name = tagDialog.querySelector("input");
   input(name, "");
-  check(`layout@${width}: emptied tag name flagged and Save held`,
-    name.getAttribute("aria-invalid") === "true" && button(tagDialog, "Save").getAttribute("aria-disabled") === "true");
+  check(`layout@${width}: an emptied tag name is not flagged and disables Save`,
+    !name.hasAttribute("aria-invalid") && button(tagDialog, "Save").disabled && !button(tagDialog, "Save").hasAttribute("aria-disabled"));
+  const otherTagName = [...document.querySelectorAll("#tags-body .tag-chip-label")].map((label) => label.textContent).find((text) => text !== "Alice");
+  input(name, otherTagName.toUpperCase());
+  check(`layout@${width}: Edit Tag can take another tag's name (${otherTagName}), since the server merges them`,
+    !name.hasAttribute("aria-invalid") && !button(tagDialog, "Save").disabled && !button(tagDialog, "Save").hasAttribute("aria-disabled"));
   button(tagDialog, "Delete").click();
   button(topDialog(), "Delete").click();
   await tick();
   check(`layout@${width}: Delete in Edit Tag removes the chip`, ![...document.querySelectorAll("#tags-body .tag-chip-label")].some((l) => l.textContent === "Alice"));
   $("tags-add-category").click();
   check(`layout@${width}: New Category opens as an in-app dialog`, topDialog()?.querySelector("h3")?.textContent === "New Category");
-  input(topDialog().querySelector("input"), "Pets");
+  const newCategoryDialog = topDialog();
+  const newCategoryName = newCategoryDialog.querySelector("input");
+  check(`layout@${width}: New Category's empty name disables Save without flagging it`,
+    !newCategoryName.hasAttribute("aria-invalid") && button(newCategoryDialog, "Save").disabled && !button(newCategoryDialog, "Save").hasAttribute("aria-disabled"));
+  input(newCategoryName, "PEOPLE");
+  const newCategoryTip = document.getElementById(newCategoryName.getAttribute("aria-describedby") || "none");
+  check(`layout@${width}: New Category flags a taken name, ignoring case, and disables Save without an icon ("${newCategoryTip?.textContent}")`,
+    newCategoryName.getAttribute("aria-invalid") === "true" && newCategoryTip?.textContent === "Use a name no other category has." &&
+    disabledNoIcon(button(newCategoryDialog, "Save")));
+  newCategoryDialog.querySelector('button[type="submit"]').click();
+  check(`layout@${width}: Save with a taken name adds nothing and keeps the dialog open`,
+    topDialog() === newCategoryDialog && window.mockup.tags.filter((category) => category.name.toLowerCase() === "people").length === 1);
+  input(newCategoryName, "Pets");
   topDialog().querySelector('button[type="submit"]').click();
   const pets = [...document.querySelectorAll("#tags-body .tag-category")].find((section) => section.querySelector(".tag-category-name").textContent === "Pets");
   check(`layout@${width}: a new category starts collapsed, with the dot until saved`, !!pets && collapsedNow(pets) && !pets.querySelector(".unsaved-dot").hidden);
+  const newTag = $("tags-new-name");
+  const chipCount = () => document.querySelectorAll("#tags-body .tag-chip").length;
+  check(`layout@${width}: an empty new tag name disables Add tag without a flag, and Add tag keeps its title`,
+    $("tags-add-tag").disabled && !newTag.hasAttribute("aria-invalid") && $("tags-add-tag").title === "Add tag");
+  const existingTag = document.querySelector("#tags-body .tag-chip-label").textContent;
+  const chipsBefore = chipCount();
+  input(newTag, existingTag.toUpperCase());
+  const newTagTip = document.getElementById(newTag.getAttribute("aria-describedby") || "none");
+  newTag.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  check(`layout@${width}: another tag's name (${existingTag}) is flagged and disables Add tag without an icon, and Enter adds nothing ("${newTagTip?.textContent}")`,
+    newTag.getAttribute("aria-invalid") === "true" && newTagTip?.textContent === "Use a name no other tag has." &&
+    $("tags-add-tag").disabled && !$("tags-add-tag").classList.contains("shows-problem") && chipCount() === chipsBefore);
+  input(newTag, "Zebra");
+  const zebraEnabled = !$("tags-add-tag").disabled && !newTag.hasAttribute("aria-invalid");
+  input(newTag, "");
+  check(`layout@${width}: a new tag name enables Add tag`, zebraEnabled && $("tags-add-tag").disabled);
   // The Tags tab follows the playing item unless it has unsaved changes to its item's tags.
   const playOther = () => {
     const other = items.find((item) => playable(item) && item.name !== np());
@@ -683,6 +744,12 @@ for (const width of [1280, 390]) {
   input($("tags-new-name"), "Serene");
   $("tags-add-tag").click();
   check(`layout@${width}: adding a tag opens its category`, !collapsedNow(tagSection("mood")) && JSON.parse(window.localStorage.getItem("rr-mockup.tagsExpanded")).includes("mood"));
+  const sereneAdd = () =>
+    [...tagSection("mood").querySelectorAll(".tag-chip")].find((chip) => chip.querySelector(".tag-chip-label").textContent === "Serene")?.querySelector('[title="Add tag"]');
+  check(`layout@${width}: Add tag doesn't put the new tag on the item, and moves to its chip's Add`,
+    !!sereneAdd() && !sereneAdd().disabled && !sereneAdd().classList.contains("is-selected") && document.activeElement === sereneAdd());
+  sereneAdd().click();
+  check(`layout@${width}: one more press puts the new tag on the item`, sereneAdd().classList.contains("is-selected"));
   tagSection("camera").querySelector('[title="Edit tag"]').click();
   topDialog().querySelector("select").value = "quality";
   topDialog().querySelector('button[type="submit"]').click();
@@ -1276,7 +1343,7 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: the pairing prompt shows in the header, labeled`, !$("pair").hidden && document.body.classList.contains("pairing") && $("pair").querySelector("label").textContent === "Pairing token" && $("pair-token").placeholder === "Enter token");
   input($("pair-token"), "x");
   input($("pair-token"), "");
-  check(`layout@${width}: an emptied pairing token is flagged and Pair held`, $("pair-token").getAttribute("aria-invalid") === "true" && $("pair-btn").getAttribute("aria-disabled") === "true");
+  check(`layout@${width}: an emptied pairing token is not flagged and disables Pair`, !$("pair-token").hasAttribute("aria-invalid") && $("pair-btn").disabled);
   input($("pair-token"), "wrong");
   $("pair").dispatchEvent(new window.Event("submit", { cancelable: true }));
   check(`layout@${width}: a wrong token says Pairing failed. and keeps the prompt`, notice() === "Pairing failed." && !$("pair").hidden);
@@ -1511,6 +1578,10 @@ for (const width of [1280, 390]) {
   const { document, errors, window } = await load("admin", width, "?instant");
   const $ = (id) => document.getElementById(id);
   const rows = () => [...$("backup-list").querySelectorAll(".list-row")].map((row) => row.firstChild.textContent);
+  const input = (el, value) => {
+    el.value = value;
+    el.dispatchEvent(new window.Event("input"));
+  };
   const save = (days) => {
     $("backup-days").value = days;
     $("backup-days").dispatchEvent(new window.Event("input"));
@@ -1533,6 +1604,13 @@ for (const width of [1280, 390]) {
   Object.defineProperty($("import-file"), "files", { configurable: true, value: [{ name: "library-2026-10-01.db" }] });
   $("import-file").dispatchEvent(new window.Event("change"));
   await tick();
+  const remap = topDialog().querySelector("#remap-0");
+  input(remap, "media/videos");
+  const importButton = button(topDialog(), "Import");
+  check(`backups@${width}: a remap path that is not valid is flagged and disables Import without an icon`,
+    remap.getAttribute("aria-invalid") === "true" && importButton.disabled && !importButton.classList.contains("shows-problem") && !importButton.hasAttribute("aria-disabled"));
+  input(remap, "/media/videos");
+  check(`backups@${width}: correcting it enables Import`, !remap.hasAttribute("aria-invalid") && !importButton.disabled);
   topDialog().querySelector("form").dispatchEvent(new window.Event("submit", { cancelable: true }));
   await tick();
   button(topDialog(), "Replace").click();
@@ -1568,9 +1646,24 @@ for (const width of [1280, 390]) {
   check(`admin@${width}: a port below 1024 is flagged and Save held`, $("web-port").getAttribute("aria-invalid") === "true" && $("web-save").getAttribute("aria-disabled") === "true");
   input($("refresh-interval"), "2");
   check(`admin@${width}: a refresh interval below 5 is flagged`, $("refresh-interval").getAttribute("aria-invalid") === "true");
+  const disabledNoIcon = (el) => el.disabled && !el.classList.contains("shows-problem") && !el.hasAttribute("aria-disabled");
+  check(`admin@${width}: an empty source path is not flagged and disables Add Source`, !$("source-path").hasAttribute("aria-invalid") && disabledNoIcon($("source-add-btn")));
   input($("source-path"), "/media/videos");
-  check(`admin@${width}: an existing source's folder is flagged`, $("source-path").getAttribute("aria-invalid") === "true");
+  check(`admin@${width}: an existing source's folder is flagged and disables Add Source without an icon`,
+    $("source-path").getAttribute("aria-invalid") === "true" && disabledNoIcon($("source-add-btn")));
+  input($("source-path"), "media/new");
+  check(`admin@${width}: so does a path that isn't a full path`, $("source-path").getAttribute("aria-invalid") === "true" && disabledNoIcon($("source-add-btn")));
+  input($("source-path"), "/media/new");
+  check(`admin@${width}: a new folder enables Add Source`, !$("source-path").hasAttribute("aria-invalid") && !$("source-add-btn").disabled);
+  input($("source-path"), "");
   document.querySelector('#source-list [title="Edit source"]').click();
+  const sourceName = topDialog().querySelector("input");
+  input(sourceName, "phone BACKUP");
+  check(`admin@${width}: Edit Source flags another source's name and disables Save without an icon`,
+    sourceName.getAttribute("aria-invalid") === "true" && disabledNoIcon(button(topDialog(), "Save")));
+  input(sourceName, "");
+  check(`admin@${width}: an emptied source name is not flagged and disables Save`, !sourceName.hasAttribute("aria-invalid") && disabledNoIcon(button(topDialog(), "Save")));
+  input(sourceName, "Videos");
   // Removing a source leaves its files on disk, so its button says Remove, not Delete.
   check(`admin@${width}: Edit Source holds the name and Remove, not Delete`,
     topDialog()?.querySelector("h3")?.textContent === "Edit Source" && !!button(topDialog(), "Remove") && !button(topDialog(), "Delete"));

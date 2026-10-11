@@ -133,72 +133,7 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 ## Active Milestones
 
-Last milestone completed: M12f1
-
-### M12f2 - WebUI In-App Dialogs
-
-- **Status**: ⏳ Planned
-- **Goal**: The WebUI asks for names and confirmations, and shows anything the user must notice or act on, in its own dialogs, styled like the rest of the WebUI, instead of the browser's `prompt`, `confirm`, and `alert`.
-- **Depends on**: WebUI Preact Migration, so the dialog is a Preact component the migrated screens use, and WebUI Field Validation Pattern, whose pattern its name fields use.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Scope
-
-- The dialog component and every conversion to it land together in this milestone.
-- The dialog component is themed and shown inside the fullscreen stage, so it works in fullscreen, including iOS pseudo-fullscreen.
-- It can stack one dialog above another. Escape or a click outside closes only the top dialog, and focus returns to where it was.
-- Enter in a dialog's field saves it.
-- A confirmation opens with Cancel focused, so Enter never confirms it by default, and its confirming button names the action, such as a red Delete.
-- Every dialog in the WebUI uses the component, never a browser dialog.
-- Tag editor: chips lose their delete icon, and category rows lose their rename and delete icons for one Edit button.
-- A chip's edit icon opens the Edit Tag dialog. A category's Edit button opens a new Edit Category dialog with the name, in place of today's rename prompt.
-- Edit Tag and Edit Category each have Delete, which asks first in a dialog stacked above, with today's wording: `Delete tag "{name}"?` and `Delete category "{name}"? Tags will become Uncategorized.`
-- Filter dialog's Manage Presets: preset rows lose their rename and delete icons for one Edit button.
-- A preset's Edit opens a new Edit Preset dialog with the name and Delete, which asks `Delete preset "{name}"?` in a dialog stacked above. It replaces today's rename prompt.
-- Category and preset rows keep their up and down icons.
-- The Edit Category and Edit Preset names use the field validation pattern. They are flagged when emptied, or when another category or preset has the name, ignoring case, and Save can't proceed meanwhile.
-- Their tooltips are "Enter a category name." or "Enter a preset name." for an empty name and "Use a name no other category has." or "Use a name no other preset has." for a taken one.
-- They replace the alert "Category already exists." and the status message "That name is already in use.".
-- The tag editor's two **Discard changes?** confirmations and its new category name move to the component, keeping their wording.
-- New category's name uses the field validation pattern: an empty name is flagged in the field as it is typed, and the dialog can't be confirmed with it.
-- A notice: a message the user must see, shown in the dialog component with one OK.
-- A notice is relayed to `last.log` as a status message is today, with the same text, which leaves out file and preset names.
-- The WebUI's message rule, dialog side: anything the user needs to notice or act on (an error from their own action, a failure that stops what they asked for, or a confirmation, meaning a prompt that asks before an action, such as Delete or Discard changes) shows in this in-app dialog, never in a browser-native dialog and never on the status line.
-- Field problems use the pattern from WebUI Field Validation Pattern instead, and the status line keeps only background information that shouldn't interrupt the user, such as connection state, refresh progress, and sync notices.
-- Work from this milestone on follows the rule.
-- Apart from the name checks, each dialog's wording and outcome stay as they are today; only how it is shown changes.
-
-#### Traps
-
-- Preset rename in the WebUI opens the browser's native prompt, which does not match the WebUI's styling and does not suit the WebUI when it runs as an installed web app (measured).
-- The WebUI uses native dialogs in nine places: preset delete and rename; tag editor category rename, duplicate-name alert, and category delete; tag delete; two **Discard changes?** confirmations; and new category name (measured).
-- The native dialogs are in `src/filter/filterDialog.ts` and `src/tags/tagEditor.ts`, which take `confirm`, `prompt`, and `alert` as options.
-- The two **Discard changes?** confirmations are the tag editor's Close and Refresh (`close` and `refresh` in `src/tags/tagEditor.ts`).
-- The alert "Category already exists." comes from `renameCategory` in `src/tags/tagEditor.ts`, and the status message "That name is already in use." from `renamePreset` in `src/filter/filterDialog.ts`.
-- Today an empty name in new category does nothing once confirmed.
-
-#### Acceptance
-
-- The WebUI calls no `prompt`, `confirm`, or `alert`, in a check that no native dialog calls remain.
-- Every dialog matches the WebUI's theme and shows and works in fullscreen, in WebUI tests of the dialog component showing in fullscreen.
-- A delete confirmation opens stacked above its edit dialog, with Cancel focused and a red Delete. Escape or a click outside closes only the top dialog, and focus returns to where it was. Enter in a dialog's field saves it. Shown by WebUI tests of the dialog component's stacking, Escape and a click outside, Enter, Cancel focus, and focus returning.
-- Chips have no delete icon, and category and preset rows have no rename or delete icons. Edit Tag, Edit Category, and Edit Preset each have Delete, which asks first with today's wording, in WebUI tests of the edit dialogs with Delete asking first and canceling.
-- An Edit Category or Edit Preset name that is emptied, or that another category or preset has ignoring case, is flagged with the field validation pattern, and its Save can't proceed. Neither "Category already exists." nor "That name is already in use." shows. Shown by WebUI tests of both names with the field validation pattern.
-- The tag editor's Close and Refresh confirmations and new category name use the dialog component, keep their wording, and confirming or canceling does what it does today, apart from the name check, in WebUI tests of confirm and cancel on each converted dialog.
-- In new category, an empty name is flagged with the field validation pattern as it is typed, and the dialog can't be confirmed until the name is corrected, in WebUI tests of the new category name.
-- A notice shows its message in the in-app dialog and is relayed to `last.log` with the text a status message with that wording is relayed with today, in a WebUI test of a notice and its `last.log` line.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and a spot check in an installed web app.
-
-#### Release checks
-
-- Manual: Every in-app dialog matches the WebUI's theme and works in an installed web app on desktop and on mobile, including in fullscreen.
-
-#### Not included
-
-- Replacing the category and preset rows' up and down icons with a drag handle beside the Edit button, which is WebUI Drag Reordering.
-- Removing the tag editor's Close confirmation once unsaved changes survive closing the panel, which is WebUI Tags and Filter Tabs.
-- Sorting today's status line messages by the message rule and moving those that belong in a dialog or a field, which is WebUI Status Line Overhaul.
+Last milestone completed: M12f2
 
 ### M12f3 - WebUI Drag Reordering
 
@@ -214,12 +149,14 @@ Last milestone completed: M12f1
 - The up and down arrow keys move a row while its handle has focus, and screen readers hear the new position.
 - Uncategorized stays last, as today, and shows its handle dimmed and disabled, so its name lines up with the other categories'.
 - A new order stays pending until Save or Apply, as a move does today.
+- After Add Preset adds a preset, focus moves to the new preset's drag handle, where today it moves to the up icon, or to the Edit button while the preset is the only one.
 
 #### Acceptance
 
 - Category and preset rows have no up or down icons, and each has a drag handle beside its Edit button.
 - Tag categories and presets reorder by dragging their handle, and with the up and down arrow keys on a focused handle. A drag that starts elsewhere on a row scrolls instead, screen readers hear the new position, and Uncategorized stays last with its handle disabled. Shown by WebUI tests of reordering with the arrow keys and of the drag logic deciding where a dragged row lands.
 - A new order stays pending until Save or Apply.
+- After Add Preset adds a preset, focus is on its drag handle, pressed with the pointer and with the keyboard, in WebUI tests of Add Preset.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check of dragging on a touch screen.
 
@@ -403,9 +340,12 @@ Last milestone completed: M12f1
 - Auto Tag's results area shows a placeholder before any scan, "Scan to find files whose names contain a tag's name.", and a different one when a scan finds nothing, "No file names contain any tag's name.".
 - Auto Tag's Total matched and To be changed counts each line up under their own header, with room between the two columns.
 - The Filter tab's message for a library with no tags reads "No tags yet. Add them in the Tags tab." in place of "No tags available. Use Edit tags to create tags.".
+- Enter in the Tags tab's New tag name adds the tag while Add tag is enabled, as the mockup shows, and does nothing while the name is empty or another tag's.
 
 #### Traps
 
+- Enter in the tag editor's New tag name does nothing: the field has no key handler and no form (`TagEditor.tsx`).
+- The tag editor's footer, with Add tag, also shows under the Auto Tag tab, where the new chip is hidden, so focus drops to the page after Add tag (`TagEditor.tsx`). Auto Tag opening as its own overlay over the whole page ends that case.
 - The tag editor takes the item playing when it opens (`open` in `src/tags/tagEditor.ts`), and its pause keeps that item on screen while it is open.
 - Closing the tag editor asks "Discard changes?" when it has changes (`close` in `src/tags/tagEditor.ts`).
 - Reopening the filter dialog rebuilds its draft from the applied filter and the server's presets, dropping unsaved filter and preset changes (`open` in `src/filter/filterDialog.ts`).
@@ -423,6 +363,7 @@ Last milestone completed: M12f1
 - Auto Tag opens from the Tags tab over the whole page, applies its selected changes with its own Apply, and its Close is disabled while a scan runs, in component tests of Auto Tag's Apply and its Close during a scan.
 - Auto Tag's Cancel, left of Apply, clears the scan and closes it, and the X closes it and keeps the last scan. With View all matches, files that already have the tag are checked and disabled. Its results area shows one placeholder before any scan and another when a scan finds nothing, and its two count columns line up under their headers. Shown by component tests of Auto Tag's Cancel, X, View all matches, and placeholders.
 - The Filter tab's no-tags message names the Tags tab.
+- Enter in New tag name adds the tag, and does nothing while Add tag is disabled, in component tests of New tag name.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check.
 
@@ -1061,9 +1002,10 @@ Last milestone completed: M12f1
 - The list has one Refresh for all sources, not one per source, since the refresh route takes no source id.
 - Each source row has an enable switch, the source's name, path, and statistics, and an Edit button (`edit_note`, "Edit source").
 - Edit opens an Edit Source dialog with the name, built as Edit Tag, Edit Category, and Edit Preset are.
-- The name uses the field validation pattern: "Enter a source name." when empty, and "Use a name no other source has." when another source has it, ignoring case.
+- The name uses the field validation pattern: a name another source has, ignoring case, is flagged with "Use a name no other source has.", and Save is disabled while the name is taken or empty, as WebUI In-App Dialogs sets out for the fields of a dialog. An empty name is not flagged.
 - Edit Source has **Remove**, not Delete, since the source's files stay on disk. It asks `Remove the source "{name}"? Its items leave the library; its files stay on disk.` in a dialog stacked above, with a red Remove.
-- The path field's tooltips read "Enter a folder path on the server." and "That folder is already a source.".
+- The path field uses the field validation pattern, and a path that is already a source is flagged with "That folder is already a source.". An empty path is not flagged.
+- Add Source sits beside the path field, so it is disabled while the path is empty or flagged, with no icon on the button, as WebUI In-App Dialogs sets out for an action whose fields sit right next to it.
 - The status line acknowledges each change: "Source renamed.", "Source added. Importing its files…", "{name} enabled." or "{name} disabled.", and "Source removed.", the last three followed by "ReelRoulette updates the library everywhere it's open.".
 
 **Traps**
@@ -1077,7 +1019,8 @@ Last milestone completed: M12f1
 **Acceptance**
 
 - From the admin section, sources can be added by server path, renamed, removed, enabled, disabled, and refreshed, with per-source statistics, and one Refresh covers the whole list, in admin section UI tests for Manage Sources.
-- A typed path that is not a folder on the server, or is already a source, is flagged with the field validation pattern as it is typed, and adding can't proceed until it is corrected, in admin section UI tests for Manage Sources.
+- A typed path that is not a folder on the server, or is already a source, is flagged with the field validation pattern as it is typed, and Add Source is disabled without an icon on it until the path is corrected, as it is while the path is empty, in admin section UI tests for Manage Sources.
+- An Edit Source name another source has, ignoring case, is flagged with the field validation pattern, and Save is disabled without an icon on it while the name is taken or empty, in admin section UI tests for Manage Sources.
 - Edit Source's button and its confirmation's button say Remove, not Delete, in admin section UI tests for Manage Sources.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
@@ -1195,6 +1138,7 @@ Last milestone completed: M12f1
 - While an import uploads, a progress bar shows in the library transfer section, with "Uploading {file}: {n}%".
 - The file uploads first; the server then reads its source folders for the remap dialog, or rejects a file that isn't a library with the notice "{file} isn't a ReelRoulette library. The library wasn't changed."
 - The remap dialog, titled "Import {file}", says "Its source folders were on another machine. Point each one at its folder on this server, or leave it to keep the path.", with one field per source folder labeled with its old path, using the field validation pattern, and Cancel and Import.
+- Import is disabled while a remap field is flagged, with no icon on it, as WebUI In-App Dialogs sets out for the fields of a dialog.
 - Import then asks "Replace the library with {file}? The current library is kept aside until the new one opens.", with Cancel focused and a red Replace, and the status line says "Imported {file}. Connected clients reload the library."
 
 **Traps**
@@ -1214,7 +1158,7 @@ Last milestone completed: M12f1
 - Connected clients resync after an import, in server tests for running-server import.
 - Before an import replaces the library, a catalog backup of the current one is taken, even with server backups off, in server tests for the backup taken before a replace.
 - An import while a refresh, backup, or scan runs does what the report decided, and never leaves a partial catalog, in server tests for an import during a refresh.
-- Each remap field checks for a folder on the server, and one left empty keeps the old path, in admin section UI tests for the remap fields.
+- Each remap field checks for a folder on the server, Import is disabled without an icon on it while one is flagged, and one left empty keeps the old path, in admin section UI tests for the remap fields.
 - A file larger than 30 MB uploads to the packaged server without a refusal for its size, in `./tools/scripts/verify-linux-packaged-server-smoke.sh` with its upload larger than 30 MB.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `./tools/scripts/verify-linux-packaged-server-smoke.sh`, `dotnet test ReelRoulette.sln`, and `npm run verify` pass.
@@ -1764,7 +1708,7 @@ Last milestone completed: M12f1
     - Tags: "Tag editor unavailable: {error}", "Tag refresh failed: {error}", "No tag changes to save.", and a failed tag save: "{step} failed ({status})" for Category update, Category delete, Tag create/update, Tag rename, Tag delete, Tag apply, and Auto-tag apply, "Tag update failed", "Tag apply failed", or the error's text.
   - Field validation, moves to the field validation pattern:
     - Moved by earlier milestones, which this milestone checks are gone from the status line: "Minimum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.", "Maximum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.", "Enter a preset name.", "A preset with that name already exists.", and "Tag name is required." in WebUI Field Validation Pattern, and "That name is already in use." in WebUI In-App Dialogs.
-    - Moved here: "Pair token required.", for the pairing prompt's token field. Pair can't proceed while the field is empty, and the field's tooltip reads "Enter the pairing token.".
+    - Moved here: "Pair token required.", for the pairing prompt's token field. Pair, beside the field, is disabled while it is empty, and an empty field is not flagged, as WebUI In-App Dialogs sets out.
   - Leaves the status line with nothing in its place: "Unauthorized. Pair first.". A random pick or library play that the server answers with 401 also shows the header's pairing prompt, which is the thing to act on, so the prompt is the only signal. It keeps its `last.log` line.
 - A message that moves to a dialog keeps its `last.log` line with the same text, as the notice in WebUI In-App Dialogs is relayed.
 - A field message is no longer relayed.
@@ -1797,7 +1741,7 @@ Last milestone completed: M12f1
 - The precedence rule and the per-event messages are documented, checked by reading them.
 - The status line shows only the messages sorted as background, including those other milestones added after the sorted list was read, checked against the sorted list for every status line write.
 - Each message sorted as a dialog shows in the in-app notice with the same wording, not on the status line, and its `last.log` line is unchanged, in tests that each screen's dialog messages show in the notice with their `last.log` lines and its background messages stay on the status line.
-- An empty pairing token is flagged with the field validation pattern once typed in and emptied, Pair can't proceed while it is empty, and "Pair token required." no longer shows, in tests of the pairing token field.
+- An empty pairing token is not flagged and disables Pair, and "Pair token required." no longer shows, in tests of the pairing token field.
 - None of the field messages moved by earlier milestones shows on the status line, checked against the sorted list for every status line write.
 - A random pick or library play answered with 401 shows the header's pairing prompt, shows "Unauthorized. Pair first." neither on the status line nor in a dialog, and relays its `last.log` line as before, in tests of a 401 on a random pick and a library play.
 - A failed Auto Tag scan shows its error instead of "Scan complete: no matching tags found.", in a test that replaces the one locking it today.

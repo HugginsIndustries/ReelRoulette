@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   COMPATIBLE_VERSION,
   FakeServer,
@@ -339,8 +339,58 @@ function presetRow(name: string): HTMLElement {
   return found;
 }
 
-function rowButton(name: string, label: "Move up" | "Move down" | "Rename" | "Delete"): HTMLButtonElement {
-  return within(presetRow(name)).getByRole("button", { name: label }) as HTMLButtonElement;
+function rowButton(name: string, label: "Move up" | "Move down" | "Edit preset"): HTMLButtonElement {
+  const accessibleName = label === "Edit preset" ? `Edit preset ${name}` : label;
+  return within(presetRow(name)).getByRole("button", { name: accessibleName }) as HTMLButtonElement;
+}
+
+/** The in-app dialogs open, in document order: Edit Preset, inside the filter dialog, comes before a confirmation. */
+function appDialogs(): HTMLDialogElement[] {
+  return Array.from(document.querySelectorAll<HTMLDialogElement>("dialog.app-dialog"));
+}
+
+function topDialog(): HTMLDialogElement {
+  return appDialogs().at(-1)!;
+}
+
+function buttonIn(container: HTMLElement, text: string): HTMLButtonElement {
+  const found = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.trim() === text);
+  if (!found) {
+    throw new Error(`No ${text} button in the dialog.`);
+  }
+  return found;
+}
+
+/** Presses a button the way a browser does: it takes focus, then it is clicked. */
+async function press(button: HTMLElement): Promise<void> {
+  button.focus();
+  fireEvent.click(button);
+  await settle();
+}
+
+/** Presses a focused button with Enter the way a browser does: the key goes down, then it is clicked with no pointer. */
+async function pressWithKeyboard(button: HTMLElement): Promise<void> {
+  button.focus();
+  fireEvent.keyDown(button, { key: "Enter" });
+  fireEvent.click(button, { detail: 0 });
+  fireEvent.keyUp(button, { key: "Enter" });
+  await settle();
+}
+
+/** Opens Edit Preset on a preset row and returns it. */
+async function editPreset(name: string): Promise<HTMLDialogElement> {
+  await press(rowButton(name, "Edit preset"));
+  const edit = topDialog();
+  expect(edit.querySelector("h3")?.textContent).toBe("Edit Preset");
+  return edit;
+}
+
+/** Deletes a preset through Edit Preset, confirming. */
+async function deletePreset(name: string): Promise<void> {
+  const edit = await editPreset(name);
+  await press(buttonIn(edit, "Delete"));
+  await press(buttonIn(topDialog(), "Delete"));
+  expect(appDialogs()).toEqual([]);
 }
 
 async function addPreset(name: string): Promise<void> {
@@ -435,7 +485,6 @@ describe("opening and closing", () => {
   });
 
   it("Close and Cancel hide it without applying or saving presets, and it opens again from the applied filter and the saved presets", async () => {
-    vi.stubGlobal("confirm", vi.fn(() => true));
     const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET, RECENT_PRESET]);
     const queries = libraryQueries(server).length;
 
@@ -447,7 +496,7 @@ describe("opening and closing", () => {
       expect(presetRows()).toEqual(["Favorites", "Beach days", "Recent"]);
       await addPreset("Draft");
       await click(rowButton("Favorites", "Move down"));
-      await click(rowButton("Recent", "Delete"));
+      await deletePreset("Recent");
       expect(presetRows()).toEqual(["Beach days", "Favorites", "Draft"]);
       await click(dialogButton(button));
       expect(isOpen()).toBe(false);
@@ -1117,31 +1166,54 @@ describe("Presets tab", () => {
     const statusBefore = statusLine();
     const name = byId<HTMLInputElement>("filter-new-preset-name");
     const addButton = () => dialogButton("Add Preset");
+    const disabledWithoutIcon = () => {
+      expect(addButton().disabled).toBe(true);
+      expect(heldState(addButton())).toEqual({ held: false, icon: false });
+      expect(addButton().classList.contains("shows-problem")).toBe(false);
+      expect(addButton().title).toBe("");
+    };
 
     expect(name.hasAttribute("aria-invalid")).toBe(false);
-    expect(heldState(addButton())).toEqual({ held: true, icon: false });
-    expect(addButton().title).toBe("Enter a preset name first.");
+    disabledWithoutIcon();
     await click(addButton());
-    expect(document.activeElement).toBe(name);
+    expect(document.activeElement).not.toBe(name);
     expect(presetRows()).toEqual(["Favorites", "Beach days"]);
     expect(tabMarked("Presets")).toBe(false);
 
     fireEvent.input(name, { target: { value: "x" } });
     fireEvent.input(name, { target: { value: "" } });
     await settle();
-    expect(name.getAttribute("aria-invalid")).toBe("true");
-    expect(tooltipOf(name)?.textContent).toBe("Enter a preset name.");
-    expect(heldState(addButton())).toEqual({ held: true, icon: true });
-    expect(tabMarked("Presets")).toBe(true);
+    expect(name.hasAttribute("aria-invalid")).toBe(false);
+    disabledWithoutIcon();
+    expect(tabMarked("Presets")).toBe(false);
 
     await addPreset("FAVORITES");
+    expect(name.getAttribute("aria-invalid")).toBe("true");
     expect(tooltipOf(name)?.textContent).toBe("Use a name no other preset has.");
-    expect(addButton().title).toBe("Use a name no other preset has.");
+    disabledWithoutIcon();
+    expect(tabMarked("Presets")).toBe(true);
     expect(presetRows()).toEqual(["Favorites", "Beach days"]);
     expect(name.value).toBe("FAVORITES");
+    expect(selectedTab()).toBe("Presets");
     expect(statusLine()).toBe(statusBefore);
 
-    await addPreset("  Unplayed  ");
+    const max = byId<HTMLInputElement>("filter-max-dur-text");
+    fireEvent.input(name, { target: { value: "  Unplayed  " } });
+    await showTab("General");
+    await type(max, "1:75");
+    await showTab("Presets");
+    expect(addButton().disabled).toBe(false);
+    expect(heldState(addButton())).toEqual({ held: true, icon: true });
+    expect(addButton().title).toBe("Correct the maximum duration first.");
+    expect(tabMarked("Presets")).toBe(false);
+    await click(addButton());
+    expect(selectedTab()).toBe("General");
+    expect(document.activeElement).toBe(max);
+    expect(presetRows()).toEqual(["Favorites", "Beach days"]);
+    await type(max, "");
+    await showTab("Presets");
+
+    await click(addButton());
     expect(name.hasAttribute("aria-invalid")).toBe(false);
     expect(presetRows()).toEqual(["Favorites", "Beach days", "Unplayed"]);
     expect(Array.from(presetSelectInDialog().options).map((option) => option.textContent)).toContain("Unplayed");
@@ -1189,6 +1261,31 @@ describe("Presets tab", () => {
     await waitFor(() => expect(headerSelectedLabel()).toBe("Favorites"));
   });
 
+  for (const [how, activate] of [
+    ["the pointer", press],
+    ["the keyboard", pressWithKeyboard]
+  ] as const) {
+    it(`Add Preset pressed with ${how} moves to the new preset's Move up`, async () => {
+      await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
+      await openDialog();
+      await showTab("Presets");
+      fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Draft" } });
+      await activate(dialogButton("Add Preset"));
+      expect(presetRows()).toEqual(["Favorites", "Beach days", "Draft"]);
+      expect(document.activeElement).toBe(rowButton("Draft", "Move up"));
+    });
+
+    it(`Add Preset pressed with ${how} moves to the new preset's Edit when it is the only preset`, async () => {
+      await mountFilter();
+      await openDialog();
+      await showTab("Presets");
+      fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Draft" } });
+      await activate(dialogButton("Add Preset"));
+      expect(rowButton("Draft", "Move up").disabled).toBe(true);
+      expect(document.activeElement).toBe(rowButton("Draft", "Edit preset"));
+    });
+  }
+
   it("Move up and Move down reorder the presets, with the ends turned off", async () => {
     const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET, RECENT_PRESET]);
     await openDialog();
@@ -1216,9 +1313,19 @@ describe("Presets tab", () => {
     expect(presets.saves()[0].map((preset: any) => preset.name)).toEqual(["Beach days", "Recent", "Favorites"]);
   });
 
-  it("Delete asks first, and deleting the chosen preset leaves the heading on None", async () => {
-    const confirmDelete = vi.fn(() => false);
-    vi.stubGlobal("confirm", confirmDelete);
+  it("each preset row has Move up, Move down, and Edit preset, and nothing else", async () => {
+    await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
+    await openDialog();
+    await showTab("Presets");
+
+    for (const name of ["Favorites", "Beach days"]) {
+      const buttons = Array.from(presetRow(name).querySelectorAll("button"));
+      expect(buttons.map((button) => button.getAttribute("aria-label")), name).toEqual(["Move up", "Move down", `Edit preset ${name}`]);
+      expect(buttons.map((button) => button.title), name).toEqual(["Move up", "Move down", "Edit preset"]);
+    }
+  });
+
+  it("Edit Preset's Delete asks first in a dialog above it, and deleting the chosen preset leaves the heading on None", async () => {
     const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
     await showTab("Presets");
@@ -1226,13 +1333,33 @@ describe("Presets tab", () => {
     await click(box("Favorites"));
     await click(box("Favorites"));
 
-    await click(rowButton("Beach days", "Delete"));
-    expect(confirmDelete).toHaveBeenCalledWith('Delete preset "Beach days"?');
+    const edit = await editPreset("Beach days");
+    const name = byId<HTMLInputElement>("filter-preset-edit-name");
+    expect(edit.contains(name)).toBe(true);
+    expect(name.value).toBe("Beach days");
+    expect(document.activeElement).toBe(name);
+    fireEvent.input(name, { target: { value: "Shore" } });
+    const remove = buttonIn(edit, "Delete");
+    expect(remove.classList.contains("btn-danger")).toBe(true);
+    await press(remove);
+
+    const confirm = topDialog();
+    expect(appDialogs()).toEqual([edit, confirm]);
+    expect(confirm.getAttribute("role")).toBe("alertdialog");
+    expect(document.getElementById(confirm.getAttribute("aria-labelledby")!)?.textContent).toBe('Delete preset "Beach days"?');
+    expect(document.activeElement).toBe(buttonIn(confirm, "Cancel"));
+    expect(buttonIn(confirm, "Delete").classList.contains("btn-danger")).toBe(true);
+
+    await press(buttonIn(confirm, "Cancel"));
+    expect(appDialogs()).toEqual([edit]);
+    expect(document.activeElement).toBe(remove);
+    expect(name.value).toBe("Shore");
     expect(presetRows()).toEqual(["Favorites", "Beach days"]);
     expect(heading()).toBe("Preset: Beach days");
 
-    confirmDelete.mockReturnValue(true);
-    await click(rowButton("Beach days", "Delete"));
+    await press(remove);
+    await press(buttonIn(topDialog(), "Delete"));
+    expect(appDialogs()).toEqual([]);
     expect(presetRows()).toEqual(["Favorites"]);
     expect(heading()).toBe("Preset: None*");
     expect(presetSelectInDialog().value).toBe("");
@@ -1244,34 +1371,85 @@ describe("Presets tab", () => {
     await waitFor(() => expect(headerSelectedLabel()).toBe("None*"));
   });
 
-  it("Rename asks for the new name and keeps the heading on the renamed preset", async () => {
-    const promptName = vi.fn((): string | null => "favorites ");
-    vi.stubGlobal("prompt", promptName);
+  it("Edit Preset flags a name another preset has, disables Save for it and an empty name, and renames, keeping the heading on the renamed preset", async () => {
     const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
     await showTab("Presets");
+
+    let edit = await editPreset("Beach days");
+    await press(byId("filter-preset-edit-save-btn"));
+    expect(appDialogs()).toEqual([]);
+    expect(label(applyButton())).toBe("Apply");
+    edit = await editPreset("Beach days");
+    fireEvent.input(byId("filter-preset-edit-name"), { target: { value: "Other" } });
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    await settle();
+    expect(appDialogs()).toEqual([]);
+    expect(presetRows()).toEqual(["Favorites", "Beach days"]);
+
     await chooseInDialog("Beach days");
+    const statusBefore = statusLine();
+    edit = await editPreset("Beach days");
+    const name = byId<HTMLInputElement>("filter-preset-edit-name");
+    const save = byId<HTMLButtonElement>("filter-preset-edit-save-btn");
+    expect(edit.contains(save)).toBe(true);
 
-    await click(rowButton("Beach days", "Rename"));
-    expect(promptName).toHaveBeenCalledWith("Rename preset", "Beach days");
-    expect(statusLine()).toBe("That name is already in use.");
+    fireEvent.input(name, { target: { value: "favorites " } });
+    await settle();
+    expect(name.getAttribute("aria-invalid")).toBe("true");
+    expect(tooltipOf(name)?.textContent).toBe("Use a name no other preset has.");
+    expect(save.disabled).toBe(true);
+    expect(save.hasAttribute("aria-disabled")).toBe(false);
+    expect(save.classList.contains("shows-problem")).toBe(false);
+    await press(save);
+    fireEvent.keyDown(name, { key: "Enter" });
+    await settle();
+    expect(appDialogs()).toEqual([edit]);
+    expect(presetRows()).toEqual(["Favorites", "Beach days"]);
+    expect(statusLine()).toBe(statusBefore);
+    expect(statusLine()).not.toBe("That name is already in use.");
+
+    fireEvent.input(name, { target: { value: "   " } });
+    await settle();
+    expect(name.hasAttribute("aria-invalid")).toBe(false);
+    expect(save.disabled).toBe(true);
+    await press(save);
+    expect(appDialogs()).toEqual([edit]);
     expect(presetRows()).toEqual(["Favorites", "Beach days"]);
 
-    promptName.mockReturnValue(null);
-    await click(rowButton("Beach days", "Rename"));
-    promptName.mockReturnValue("   ");
-    await click(rowButton("Beach days", "Rename"));
-    expect(presetRows()).toEqual(["Favorites", "Beach days"]);
-
-    promptName.mockReturnValue("  Sunny days ");
-    await click(rowButton("Beach days", "Rename"));
+    fireEvent.input(name, { target: { value: "  Sunny days " } });
+    await settle();
+    expect(save.disabled).toBe(false);
+    await press(save);
+    expect(appDialogs()).toEqual([]);
     expect(presetRows()).toEqual(["Favorites", "Sunny days"]);
     expect(heading()).toBe("Preset: Sunny days");
     expect(presetSelectInDialog().value).toBe("Sunny days");
+    expect(statusLine()).toBe(statusBefore);
 
     await applyAndWait(server);
     expect(presets.saves()[0].map((preset: any) => preset.name)).toEqual(["Favorites", "Sunny days"]);
     await waitFor(() => expect(headerSelectedLabel()).toBe("Sunny days"));
+  });
+
+  it("after Save renames a preset, focus goes to its row's Edit, and after Delete to the next row's, or the previous one's", async () => {
+    await mountFilter([FAVORITES_PRESET, BEACH_PRESET, RECENT_PRESET]);
+    await openDialog();
+    await showTab("Presets");
+
+    await editPreset("Beach days");
+    fireEvent.input(byId("filter-preset-edit-name"), { target: { value: " Sunny days " } });
+    await press(byId("filter-preset-edit-save-btn"));
+    expect(presetRows()).toEqual(["Favorites", "Sunny days", "Recent"]);
+    expect(document.activeElement).toBe(rowButton("Sunny days", "Edit preset"));
+
+    await deletePreset("Sunny days");
+    expect(document.activeElement).toBe(rowButton("Recent", "Edit preset"));
+    await deletePreset("Recent");
+    expect(document.activeElement).toBe(rowButton("Favorites", "Edit preset"));
+    await deletePreset("Favorites");
+    expect(presetRows()).toEqual([]);
+    expect(document.activeElement).toBe(document.body);
   });
 
   it("keeps the dialog open and applies nothing when the presets cannot be saved", async () => {

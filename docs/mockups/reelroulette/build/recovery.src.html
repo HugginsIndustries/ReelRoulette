@@ -97,8 +97,8 @@ $("mock-remote").addEventListener("change", () => {
   unlocked = false;
   applyGate();
 });
-const gateField = new ValidatedField($("gate-token"), (value) => (value.trim() ? null : { message: "Enter the control token.", empty: true }));
-holdAction($("gate-continue"), () => [gateField], { reason: () => "Enter the control token first." });
+const gateField = new ValidatedField($("gate-token"), (value) => (value.trim() ? null : { empty: true }));
+holdAction($("gate-continue"), () => [gateField]);
 $("gate").addEventListener("submit", (event) => {
   event.preventDefault();
   if (gateField.holds) return;

@@ -77,6 +77,7 @@ These need a person, real devices, or the Windows VM.
 - [ ] On the Windows VM, measure whether folder import and refresh see paths in a different casing from the stored ones: add a source typed in a casing that differs from the folder on disk, import it, rename a file by case only, and refresh. Record the result in the Ordinal Path Identity on Linux entry's Traps in `MILESTONES.md`.
 - [ ] In the WebUI and the desktop, Favorites excluded and Blacklisted only each limit browse and random play as named, and a preset saved in one client shows the same filter in the other.
 - [ ] In the WebUI's filter dialog, on a desktop browser and a phone in both themes, a flagged duration's tooltip shows beside its red icon and inside the screen while the pointer is on the icon, after a tap on it, and while the field has focus.
+- [ ] Every in-app dialog matches the WebUI's theme and works in an installed web app on desktop and on mobile, including in fullscreen.
 
 ## Release Flow
 

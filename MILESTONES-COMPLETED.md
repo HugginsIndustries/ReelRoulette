@@ -6,6 +6,155 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12f2 - WebUI In-App Dialogs
+
+- **Status**: ✅ Complete
+- **Goal**: The WebUI asks for names and confirmations, and shows anything the user must notice or act on, in its own dialogs, styled like the rest of the WebUI, instead of the browser's `prompt`, `confirm`, and `alert`.
+- **Depends on**: WebUI Preact Migration, so the dialog is a Preact component the migrated screens use, and WebUI Field Validation Pattern, whose pattern its name fields use.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- The dialog component and every conversion to it land together in this milestone.
+- The dialog component is themed and shown inside the fullscreen stage, so it works in fullscreen, including iOS pseudo-fullscreen.
+- It can stack one dialog above another. Escape or a click outside closes only the top dialog, and focus returns to where it was.
+- Enter in a dialog's field saves it.
+- A confirmation opens with Cancel focused, so Enter never confirms it by default, and its confirming button names the action, such as a red Delete.
+- Every dialog in the WebUI uses the component, never a browser dialog.
+- Tag editor: chips lose their delete icon, and category rows lose their rename and delete icons for one Edit button.
+- A chip's edit icon opens the Edit Tag dialog. A category's Edit button opens a new Edit Category dialog with the name, in place of today's rename prompt.
+- Edit Tag and Edit Category each have Delete, which asks first in a dialog stacked above, with today's wording: `Delete tag "{name}"?` and `Delete category "{name}"? Tags will become Uncategorized.`
+- Filter dialog's Manage Presets: preset rows lose their rename and delete icons for one Edit button.
+- A preset's Edit opens a new Edit Preset dialog with the name and Delete, which asks `Delete preset "{name}"?` in a dialog stacked above. It replaces today's rename prompt.
+- Category and preset rows keep their up and down icons.
+- The Edit Category and Edit Preset names use the field validation pattern. They are flagged when another category or preset has the name, ignoring case, and Save is disabled while the name is taken or empty.
+- Their tooltips are "Use a name no other category has." and "Use a name no other preset has.".
+- They replace the alert "Category already exists." and the status message "That name is already in use.".
+- The tag editor's two **Discard changes?** confirmations and its new category name move to the component, keeping their wording.
+- New category's name uses the field validation pattern as Edit Category's does: a name another category has, ignoring case, is flagged as it is typed with "Use a name no other category has.", and Save is disabled while the name is taken or empty, so creating and renaming a category follow one rule.
+- The field validation pattern changes for an empty required field: it is never flagged, and the action that needs it is disabled, dimmed, and pressing it does nothing.
+- That replaces WebUI Field Validation Pattern's rule that an emptied field is flagged once typed in, for every field that uses the pattern: the filter dialog's new preset name and the Edit Tag name, as well as this milestone's names.
+- An empty required field disables its action even while another field the action uses has a problem.
+- Disabled is the button's disabled state: it can't be focused, and screen readers hear it as unavailable.
+- An action whose fields all sit right next to it is disabled, with no icon on it, while any of them has a problem, and the field's red icon and tooltip say why.
+- Those fields are a field beside its button, such as the new preset name beside Add Preset and New tag name beside Add tag, or the fields of the dialog the action is in, such as New Category, Edit Category, and Edit Preset, since the dialog has the user's attention.
+- An action that uses a field elsewhere is held while that field has a problem: the red icon shows on the action, and pressing it moves to the field. Apply and Update Preset are, and so is Add Preset for a problem in a General field, such as a duration that is not valid, while its name is valid.
+- The filter dialog's Presets section keeps its icon while the new preset name is flagged.
+- The tag editor's New tag name uses the pattern: a name another tag has, ignoring case, is flagged with "Use a name no other tag has.", and Add tag is disabled while the name is empty or taken.
+- The Edit Tag name can still take another tag's name, since the server merges the two tags.
+- Add tag only creates the tag in the chosen category, no longer putting it on the playing item, and opens the category.
+- After Add tag, focus moves to the new chip's add icon, so one more press puts it on the item, or to its Edit button while no item is playing and add is disabled.
+- After Add Preset adds a preset, focus moves to the new preset's up icon, or to its Edit button while it is the only preset and can't move up.
+- Both move focus to a button for keyboard, mouse, and touch alike, since a button brings up no on-screen keyboard. The mockup does the same, with the new preset's drag handle in place of its up icon.
+- A notice: a message the user must see, shown in the dialog component with one OK.
+- A notice is relayed to `last.log` as a status message is today, with the same text, which leaves out file and preset names.
+- The WebUI's message rule, dialog side: anything the user needs to notice or act on (an error from their own action, a failure that stops what they asked for, or a confirmation, meaning a prompt that asks before an action, such as Delete or Discard changes) shows in this in-app dialog, never in a browser-native dialog and never on the status line.
+- Field problems use the pattern from WebUI Field Validation Pattern instead, and the status line keeps only background information that shouldn't interrupt the user, such as connection state, refresh progress, and sync notices.
+- Work from this milestone on follows the rule.
+- Apart from the name checks, each dialog's wording and outcome stay as they are today; only how it is shown changes.
+
+#### Traps
+
+- Preset rename in the WebUI opens the browser's native prompt, which does not match the WebUI's styling and does not suit the WebUI when it runs as an installed web app (measured).
+- The WebUI uses native dialogs in nine places: preset delete and rename; tag editor category rename, duplicate-name alert, and category delete; tag delete; two **Discard changes?** confirmations; and new category name (measured).
+- The native dialogs are in `src/filter/filterDialog.ts` and `src/tags/tagEditor.ts`, which take `confirm`, `prompt`, and `alert` as options.
+- The two **Discard changes?** confirmations are the tag editor's Close and Refresh (`close` and `refresh` in `src/tags/tagEditor.ts`).
+- The alert "Category already exists." comes from `renameCategory` in `src/tags/tagEditor.ts`, and the status message "That name is already in use." from `renamePreset` in `src/filter/filterDialog.ts`.
+- Today an empty name in new category does nothing once confirmed.
+- Today new category accepts a name another category has, and the server stores both, since it keys categories by id (`UpsertCategory` in `src/core/ReelRoulette.Core/Library/LibraryCatalogSession.cs`).
+- Today Add tag with another tag's name moves that tag to the chosen category and adds it to the playing item (`addTag` in `src/tags/tagEditor.ts`), while the server keeps the tag's stored capitalization (`UpsertTag`). Adding an existing tag to the item stays one click on its chip's add icon.
+- Renaming a tag onto another tag's name merges the two on the server (`RenameTag`).
+- The pattern's empty rule is `isFlagged` in `src/validation/fieldValidation.ts`, and `HeldButton` in `src/ui/FieldValidation.tsx` only marks an action `aria-disabled`.
+- The mockup's copy of the pattern is `ValidatedField` and `holdAction` in `build/common.js`, which the mockup's admin, recovery, pairing, and settings fields share, so the empty rule changes there too.
+
+#### Acceptance
+
+- The WebUI calls no `prompt`, `confirm`, or `alert`, in a check that no native dialog calls remain.
+- Every dialog matches the WebUI's theme and shows and works in fullscreen, in WebUI tests of the dialog component showing in fullscreen.
+- A delete confirmation opens stacked above its edit dialog, with Cancel focused and a red Delete. Escape or a click outside closes only the top dialog, and focus returns to where it was. Enter in a dialog's field saves it. Shown by WebUI tests of the dialog component's stacking, Escape and a click outside, Enter, Cancel focus, and focus returning.
+- Chips have no delete icon, and category and preset rows have no rename or delete icons. Edit Tag, Edit Category, and Edit Preset each have Delete, which asks first with today's wording, in WebUI tests of the edit dialogs with Delete asking first and canceling.
+- An Edit Category or Edit Preset name that another category or preset has, ignoring case, is flagged with the field validation pattern and disables its Save without an icon on it, and an emptied one is not flagged and disables Save. Neither "Category already exists." nor "That name is already in use." shows. Shown by WebUI tests of both names with the field validation pattern.
+- The tag editor's Close and Refresh confirmations and new category name use the dialog component, keep their wording, and confirming or canceling does what it does today, apart from the name check, in WebUI tests of confirm and cancel on each converted dialog.
+- In new category, a name another category has, ignoring case, is flagged with the field validation pattern as it is typed and disables Save without an icon on it, and an empty name disables Save without a flag, in WebUI tests of the new category name.
+- An empty required field is never flagged, and the action that needs it is disabled, including while another field it uses has a problem: the new preset name with Add Preset, the Edit Tag name with Save, and New tag name with Add tag, in WebUI tests of each.
+- A taken new preset name or New tag name is flagged and disables Add Preset or Add tag without an icon on the button, while a problem in another field holds Add Preset with its icon, in WebUI tests of both.
+- An Edit Tag name another tag has is not flagged, and Save renames the tag, in a WebUI test of the Edit Tag name.
+- A notice shows its message in the in-app dialog and is relayed to `last.log` with the text a status message with that wording is relayed with today, in a WebUI test of a notice and its `last.log` line.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check in an installed web app.
+
+#### Evidence
+
+- The dialog is `src/ui/Dialog.tsx` (the modal, the name dialog, the confirmation, the notice, and the host the stage shows them in) and `src/dialogs/dialogs.ts` (the page's confirmations and notices). The filter dialog and tag editor take the dialogs service in place of `confirm`, `prompt`, and `alert`.
+- The dialog is a native `<dialog>` opened with `showModal()`, so each one is in the browser's top layer above the last, above the overlays, and above fullscreen. happy-dom opens it but doesn't move focus, handle Escape, or support `:modal` (measured), so the component focuses, handles Escape, and returns focus itself. It also treats the browser's `cancel` and `close` events, as Android's back gesture sends, as a cancel.
+- A notice relays the same `last.log` line a status message with that text gets, through the store's `relayStatus`, which `setStatus` now calls. Nothing shows a notice yet; WebUI Status Line Overhaul moves the first messages to it.
+- The field validation pattern's rules are `isFlagged` (never for an empty field) and `actionBlock`, which decides whether an action is disabled or held and by which field. `HeldButton` sets the real `disabled` attribute when disabled.
+- The edit dialogs render after the filter dialog and the tag editor rather than inside them. Inside, those screens' button rules outranked the dialog's own, which turned the red Delete white in the filter dialog and dark in the light-theme tag editor.
+- Preset rows and tag chips are keyed by name, so a rename replaces the row whose Edit opened the dialog, and a delete removes it. When that happens, focus goes to the renamed row's Edit, or after a delete to the next row's, or the previous one's when the last was deleted (for tags within the same category, and for categories the next or previous category with Edit), and to the page when none is left. Focus returns after the render that closed the dialog, since Preact unmounts the dialog before it updates the rows beside it (measured).
+- Add tag returns the new tag's name and Add Preset says whether it added, and the tag editor and the filter dialog move focus once the new chip or row has rendered. Without that, and with Add tag still putting the tag on the item, the 11 new and changed tests of Add tag and Add Preset failed (measured).
+- Deviations from today's outcomes:
+  - Save with an unchanged name in Edit Category or Edit Preset closes the dialog without a pending change, as Edit Tag already did. Today's rename prompts left a pending change, which lit Save or starred Apply.
+  - Uncategorized has no Edit button, as the mockup shows, where today it had disabled rename and delete icons.
+  - Add tag no longer puts the new tag on the playing item; today it did, so a tag meant only for the catalog had to be taken off the item again.
+  - New Category and Edit Category take Uncategorized's name as taken, ignoring case, even while its row is hidden because no tag is uncategorized. Today New Category accepted it, and the new category then showed as Uncategorized, with no way to rename or delete it.
+- New and changed WebUI tests:
+  - the dialogs service: order, answers, and a notice's log text;
+  - the dialog component:
+    - a name dialog opening focused and selected;
+    - a confirmation stacked above it, with Cancel focused and a red Delete;
+    - Escape and a click outside closing only the top dialog, and a press inside not counting;
+    - focus returning each time, and to a fallback only when what had focus is gone;
+    - Enter saving, and a problem disabling Save and Enter;
+    - a notice;
+    - the browser's cancel and close;
+  - in the page:
+    - a dialog inside the stage in fullscreen and in pseudo-fullscreen, where Escape closes the dialog and stays in pseudo-fullscreen;
+    - a notice and its `last.log` line, with a log text in place of a preset name;
+  - the pattern's rules;
+  - in the filter dialog and tag editor services and pages, each converted dialog confirming and canceling with today's wording, Delete stacked above its edit dialog, each name rule, Add Preset and Add tag disabled or held, and Edit Tag taking another tag's name;
+  - in the pages, focus after a preset or tag rename and after deleting a preset, a tag, or a category in the middle, at the end, and alone;
+  - in the tag editor service and page, Add tag creating only the tag and opening its category, and in the pages, focus after Add tag on the new chip's add, or its Edit while nothing plays, and after Add Preset on the new preset's up icon, or its Edit when it is the only preset, each pressed with the pointer and with the keyboard.
+- The native dialog check parses the WebUI's source with the TypeScript compiler and is tested on samples. Before the conversion it found the nine native dialog calls and the five `window` fallbacks (measured). The screen tests' page throws on any native dialog.
+- The tags, filter, and whole-page markup snapshots changed for the removed icons, the Edit buttons, Add Preset and Add tag disabled, the new tag name's field wrapper, and the Edit Tag dialog, and nothing else.
+- Each guard was broken on purpose and its tests failed (measured, of 785, or 789 with the focus tests):
+  - a confirmation without Cancel focused: 7;
+  - no focus return: 12 of 789;
+  - focus returned during the render that closes the dialog: 12 of 789;
+  - no fallback in Edit Preset, Edit Tag, or Edit Category: 1 each;
+  - the fallback used while the opener is still there: 1;
+  - an empty field flagged: 18;
+  - Add Preset not beside its name: 3;
+  - a dialog's Save enabled on a taken name: 4;
+  - no taken category check: 5;
+  - no taken tag check: 4;
+  - a notice not relayed: 2;
+  - Edit Tag's Delete not asking: 6;
+  - a native confirm for Discard changes?: 9.
+- `npm run verify` passed: 47 test files, 799 tests, the build, and the build output check.
+- The mockup:
+  - New Category checks a taken name, as Edit Category does;
+  - the shared validation code never flags an empty field and disables its action, and disables an action for any problem in a field beside it or in its dialog;
+  - New tag name uses the pattern;
+  - the field validation page explains disabled or held;
+  - the admin page's Add Source, Edit Source, and import remap dialog follow the rule;
+  - two comments that described the dialogs as still to come are current;
+  - Add tag creates only the tag and moves to its chip's Add, and Add Preset moves to the new preset's drag handle.
+- The mockup's `check.mjs` passes 745 checks. Its new checks failed when New Category's taken check, the empty rule, the disabling, or the beside rule was taken out, and its Add tag and Add Preset checks failed against the mockup before Add tag stopped putting the tag on the item and both moved focus (measured).
+- Enter in the tag editor's New tag name adds nothing, today and still, where the mockup's Tags tab adds the tag. WebUI Tags and Filter Tabs, which builds that tab, now adds it.
+- `CHANGELOG.md`, `CONTEXT.md`, and `docs/domain-inventory.md` are updated. Admin Source and Item Management, Admin Library Catalog Transfer, and WebUI Status Line Overhaul follow the new field rule.
+- The spot check passed: in an installed web app, in fullscreen, the user checked a delete confirmation stacked above Edit Tag with Escape closing only the top dialog, Discard changes?, focus on a renamed chip's Edit, a taken preset name disabling Save, and focus moving to the next preset after a delete.
+
+#### Release checks
+
+- Manual: Every in-app dialog matches the WebUI's theme and works in an installed web app on desktop and on mobile, including in fullscreen.
+
+#### Not included
+
+- Replacing the category and preset rows' up and down icons with a drag handle beside the Edit button, which is WebUI Drag Reordering.
+- Removing the tag editor's Close confirmation once unsaved changes survive closing the panel, which is WebUI Tags and Filter Tabs.
+- Sorting today's status line messages by the message rule and moving those that belong in a dialog or a field, which is WebUI Status Line Overhaul.
+- Enter in New tag name adding the tag, which is WebUI Tags and Filter Tabs.
+
 ### M12f1 - WebUI Field Validation Pattern
 
 - **Status**: ✅ Complete

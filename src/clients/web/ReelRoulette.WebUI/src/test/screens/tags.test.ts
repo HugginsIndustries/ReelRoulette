@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { FakeServer, json, mountPage, normalizedMarkup, resetPage, settle, status, type MountedPage } from "./pageHarness";
 
 interface TagModel {
@@ -191,14 +191,24 @@ async function mountTags(
   return { page, server, tags };
 }
 
-const dialogs = {
-  confirm: vi.fn((_message: string): boolean => true),
-  prompt: vi.fn((_message: string, _value?: string): string | null => null),
-  alert: vi.fn((_message: string): void => {})
-};
-
 async function click(element: Element): Promise<void> {
   fireEvent.click(element);
+  await settle();
+}
+
+/** Presses a button the way a browser does: it takes focus, then it is clicked. */
+async function press(button: HTMLElement): Promise<void> {
+  button.focus();
+  fireEvent.click(button);
+  await settle();
+}
+
+/** Presses a focused button with Enter the way a browser does: the key goes down, then it is clicked with no pointer. */
+async function pressWithKeyboard(button: HTMLElement): Promise<void> {
+  button.focus();
+  fireEvent.keyDown(button, { key: "Enter" });
+  fireEvent.click(button, { detail: 0 });
+  fireEvent.keyUp(button, { key: "Enter" });
   await settle();
 }
 
@@ -298,7 +308,7 @@ function chip(name: string): HTMLElement {
   return found;
 }
 
-function chipButton(name: string, label: "Add tag" | "Remove tag" | "Edit tag" | "Delete tag"): HTMLButtonElement {
+function chipButton(name: string, label: "Add tag" | "Remove tag" | "Edit tag"): HTMLButtonElement {
   return within(chip(name)).getByTitle(label) as HTMLButtonElement;
 }
 
@@ -334,24 +344,111 @@ async function addTag(name: string, categoryId?: string): Promise<void> {
   await click(within(editor()).getByRole("button", { name: "Add tag" }));
 }
 
-function modal(): HTMLElement {
-  return byId("tag-edit-modal");
+function addTagButton(): HTMLButtonElement {
+  return byId<HTMLButtonElement>("tag-editor-add-tag-btn");
+}
+
+/** The in-app dialogs open. The tag editor's render before the confirmations, so the last one is on top. */
+function appDialogs(): HTMLDialogElement[] {
+  return Array.from(document.querySelectorAll<HTMLDialogElement>("dialog.app-dialog"));
+}
+
+type NameDialogTitle = "Edit Tag" | "Edit Category" | "New Category";
+
+function findNameDialog(title: NameDialogTitle): HTMLDialogElement | null {
+  return appDialogs().find((dialog) => dialog.querySelector("h3")?.textContent === title) ?? null;
+}
+
+function nameDialog(title: NameDialogTitle): HTMLDialogElement {
+  const found = findNameDialog(title);
+  if (!found) {
+    throw new Error(`The ${title} dialog is not open.`);
+  }
+  return found;
+}
+
+function nameField(title: NameDialogTitle): HTMLInputElement {
+  return within(nameDialog(title)).getByLabelText(title === "Edit Tag" ? "Tag Name" : "Category Name") as HTMLInputElement;
+}
+
+function dialogButton(dialog: HTMLElement, label: string): HTMLButtonElement {
+  return within(dialog).getByRole("button", { name: label }) as HTMLButtonElement;
+}
+
+/** The field shows its problem: marked invalid and described by the problem's tooltip. */
+function fieldProblem(field: HTMLInputElement): string | null {
+  if (field.getAttribute("aria-invalid") !== "true") {
+    return null;
+  }
+  return document.getElementById(field.getAttribute("aria-describedby")!)?.textContent ?? "";
+}
+
+/** Disabled without the icon a held action shows. */
+function disabledWithoutIcon(button: HTMLButtonElement): boolean {
+  return (
+    button.disabled &&
+    !button.hasAttribute("aria-disabled") &&
+    !button.classList.contains("shows-problem") &&
+    button.querySelector(".btn-problem") === null
+  );
+}
+
+async function pressEnter(field: HTMLInputElement): Promise<void> {
+  fireEvent.keyDown(field, { key: "Enter" });
+  await settle();
+}
+
+function modal(): HTMLDialogElement {
+  return nameDialog("Edit Tag");
 }
 
 function modalOpen(): boolean {
-  return modal().style.display === "flex";
+  return findNameDialog("Edit Tag") !== null;
 }
 
 function modalName(): HTMLInputElement {
-  return within(modal()).getByLabelText("Tag Name") as HTMLInputElement;
+  return nameField("Edit Tag");
 }
 
 function modalCategory(): HTMLSelectElement {
   return within(modal()).getByLabelText("Category") as HTMLSelectElement;
 }
 
-function modalButton(name: "Cancel" | "Save"): HTMLButtonElement {
-  return within(modal()).getByRole("button", { name }) as HTMLButtonElement;
+function modalButton(name: "Cancel" | "Save" | "Delete"): HTMLButtonElement {
+  return dialogButton(modal(), name);
+}
+
+/** The confirmation on top, which asks before an action. */
+function confirmation(): HTMLDialogElement {
+  const top = appDialogs().at(-1);
+  if (!top || top.getAttribute("role") !== "alertdialog") {
+    throw new Error("No confirmation is open.");
+  }
+  return top;
+}
+
+function confirmMessage(): string {
+  const dialog = confirmation();
+  return document.getElementById(dialog.getAttribute("aria-labelledby")!)?.textContent ?? "";
+}
+
+async function answer(label: "Cancel" | "Discard" | "Delete"): Promise<void> {
+  await press(dialogButton(confirmation(), label));
+}
+
+/** Opens Edit Tag on a tag, deletes it, and confirms. */
+async function deleteTag(name: string): Promise<void> {
+  await press(chipButton(name, "Edit tag"));
+  await press(modalButton("Delete"));
+  await answer("Delete");
+}
+
+async function editCategory(title: string): Promise<void> {
+  await press(within(category(title)).getByRole("button", { name: `Edit category ${title}` }));
+}
+
+async function newCategory(): Promise<void> {
+  await press(within(editor()).getByRole("button", { name: "Add category" }));
 }
 
 function statusLine(): string {
@@ -486,12 +583,6 @@ function storageKeys(storage: Storage): string[] {
 
 beforeEach(() => {
   resetPage();
-  dialogs.confirm.mockReset().mockReturnValue(true);
-  dialogs.prompt.mockReset().mockReturnValue(null);
-  dialogs.alert.mockReset();
-  vi.stubGlobal("confirm", dialogs.confirm);
-  vi.stubGlobal("prompt", dialogs.prompt);
-  vi.stubGlobal("alert", dialogs.alert);
 });
 
 describe("opening and closing", () => {
@@ -519,19 +610,25 @@ describe("opening and closing", () => {
     const { tags } = await mountTags();
     await openEditor();
     await click(headerButton("Close"));
-    expect(dialogs.confirm).not.toHaveBeenCalled();
+    expect(appDialogs()).toEqual([]);
     expect(isOpen()).toBe(false);
 
     await openEditor();
     await click(chipButton("Calm", "Add tag"));
-    dialogs.confirm.mockReturnValue(false);
-    await click(headerButton("Close"));
-    expect(dialogs.confirm).toHaveBeenCalledWith("Discard changes?");
+    await press(headerButton("Close"));
+    expect(confirmMessage()).toBe("Discard changes?");
+    expect(document.activeElement).toBe(dialogButton(confirmation(), "Cancel"));
+    expect(dialogButton(confirmation(), "Discard").classList.contains("btn-danger")).toBe(true);
+    expect(dialogButton(confirmation(), "Cancel").classList.contains("btn-danger")).toBe(false);
+    await answer("Cancel");
+    expect(appDialogs()).toEqual([]);
     expect(isOpen()).toBe(true);
     expect(chipState("Calm").pending).toBe("add");
+    expect(document.activeElement).toBe(headerButton("Close"));
 
-    dialogs.confirm.mockReturnValue(true);
-    await click(headerButton("Close"));
+    await press(headerButton("Close"));
+    await answer("Discard");
+    expect(appDialogs()).toEqual([]);
     expect(isOpen()).toBe(false);
     expect(tags.saves()).toEqual([]);
     await openEditor();
@@ -672,7 +769,6 @@ describe("Edit Tags", () => {
     expect(chipButton("Beach", "Add tag").disabled).toBe(true);
     expect(chipButton("Beach", "Remove tag").disabled).toBe(true);
     expect(chipButton("Beach", "Edit tag").disabled).toBe(false);
-    expect(chipButton("Beach", "Delete tag").disabled).toBe(false);
     await click(headerButton("Close"));
 
     await click(screen.getByText("Click here to play (choose a preset or open Filter…)"));
@@ -734,7 +830,7 @@ describe("Edit Tags", () => {
     expect(categoryButton("Places", "Move category up").disabled).toBe(true);
     expect(categoryButton("Places", "Move category down").disabled).toBe(false);
     expect(categoryButton("People", "Move category down").disabled).toBe(true);
-    for (const label of ["Move category up", "Move category down", "Rename category", "Delete category"]) {
+    for (const label of ["Move category up", "Move category down"]) {
       expect(categoryButton("Uncategorized", label).disabled).toBe(true);
     }
 
@@ -766,43 +862,102 @@ describe("Edit Tags", () => {
     expect(tags.saves()).toEqual([]);
   });
 
-  it("renames a category, refusing a name another category has", async () => {
+  it("each chip has add, remove, and edit, and each category up, down, and Edit, except Uncategorized", async () => {
+    await mountTags();
+    await openEditor();
+    const titles = (element: HTMLElement) => Array.from(element.querySelectorAll("button")).map((button) => button.title);
+    expect(titles(chip("Beach"))).toEqual(["Add tag", "Remove tag", "Edit tag"]);
+    expect(within(chip("Beach")).queryByTitle("Delete tag")).toBeNull();
+    const controls = (title: string) => category(title).querySelector(".tag-editor-category-controls") as HTMLElement;
+    expect(titles(controls("Places"))).toEqual(["Move category up", "Move category down", "Edit category"]);
+    const edit = within(category("Places")).getByRole("button", { name: "Edit category Places" });
+    expect(edit.textContent).toBe("edit_note");
+    expect(edit.className).toBe(categoryButton("Places", "Move category up").className);
+    expect(titles(controls("Uncategorized"))).toEqual(["Move category up", "Move category down"]);
+    expect(within(editor()).queryByTitle("Delete category")).toBeNull();
+    expect(within(editor()).queryByTitle("Rename category")).toBeNull();
+  });
+
+  it("Edit Category opens on the name, flags a name another category has, and renames", async () => {
     const { tags } = await mountTags();
     await openEditor();
+    const statusBefore = statusLine();
 
-    for (const answer of [null, "   "]) {
-      dialogs.prompt.mockReturnValue(answer);
-      await click(categoryButton("Places", "Rename category"));
-    }
-    expect(dialogs.prompt).toHaveBeenCalledWith("Rename Category", "Places");
-    expect(savePending()).toBe(false);
+    await editCategory("Places");
+    const field = nameField("Edit Category");
+    const dialogSave = dialogButton(nameDialog("Edit Category"), "Save");
+    expect(field.value).toBe("Places");
+    expect(document.activeElement).toBe(field);
+    expect(dialogSave.disabled).toBe(false);
 
-    dialogs.prompt.mockReturnValue("mood");
-    await click(categoryButton("Places", "Rename category"));
-    expect(dialogs.alert).toHaveBeenCalledWith("Category already exists.");
-    expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
+    await typeInto(field, " MOOD ");
+    expect(fieldProblem(field)).toBe("Use a name no other category has.");
+    expect(disabledWithoutIcon(dialogSave)).toBe(true);
+    await pressEnter(field);
+    expect(appDialogs()).toEqual([nameDialog("Edit Category")]);
+    expect(statusLine()).toBe(statusBefore);
 
-    dialogs.prompt.mockReturnValue("  Scenery ");
-    await click(categoryButton("Places", "Rename category"));
+    await typeInto(field, "  ");
+    expect(fieldProblem(field)).toBeNull();
+    expect(disabledWithoutIcon(dialogSave)).toBe(true);
+
+    await typeInto(field, "  Scenery ");
+    expect(fieldProblem(field)).toBeNull();
+    expect(dialogSave.disabled).toBe(false);
+    await pressEnter(field);
+    expect(appDialogs()).toEqual([]);
     expect(categoryTitles()).toEqual(["Scenery", "Mood", "People", "Uncategorized"]);
     expect(optionLabels(footerCategory())[0]).toBe("Scenery");
+
+    await editCategory("Mood");
+    await typeInto(nameField("Edit Category"), "Feelings");
+    await press(dialogButton(nameDialog("Edit Category"), "Save"));
+    expect(appDialogs()).toEqual([]);
+    expect(categoryTitles()).toEqual(["Scenery", "Feelings", "People", "Uncategorized"]);
+    expect(statusLine()).toBe(statusBefore);
+
     await save();
     expect(tags.saves()).toEqual([
-      { path: "/api/tag-editor/upsert-category", body: { id: "cat-places", name: "Scenery", sortOrder: 0 } }
+      { path: "/api/tag-editor/upsert-category", body: { id: "cat-places", name: "Scenery", sortOrder: 0 } },
+      { path: "/api/tag-editor/upsert-category", body: { id: "cat-mood", name: "Feelings", sortOrder: 1 } }
     ]);
   });
 
-  it("deletes a category after asking, and its tags become Uncategorized", async () => {
+  it("Edit Category's Cancel, or Save with the name unchanged, changes nothing", async () => {
+    await mountTags();
+    await openEditor();
+    await editCategory("People");
+    await typeInto(nameField("Edit Category"), "Folks");
+    await press(dialogButton(nameDialog("Edit Category"), "Cancel"));
+    expect(appDialogs()).toEqual([]);
+    expect(document.activeElement).toBe(within(category("People")).getByRole("button", { name: "Edit category People" }));
+
+    await editCategory("People");
+    await press(dialogButton(nameDialog("Edit Category"), "Save"));
+    expect(appDialogs()).toEqual([]);
+    expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
+    expect(savePending()).toBe(false);
+  });
+
+  it("Delete in Edit Category asks first, and its tags become Uncategorized", async () => {
     const { tags } = await mountTags();
     await openEditor();
 
-    dialogs.confirm.mockReturnValue(false);
-    await click(categoryButton("People", "Delete category"));
-    expect(dialogs.confirm).toHaveBeenCalledWith('Delete category "People"? Tags will become Uncategorized.');
+    await editCategory("People");
+    const remove = dialogButton(nameDialog("Edit Category"), "Delete");
+    expect(remove.classList.contains("btn-danger")).toBe(true);
+    await press(remove);
+    expect(confirmMessage()).toBe('Delete category "People"? Tags will become Uncategorized.');
+    expect(appDialogs()).toEqual([nameDialog("Edit Category"), confirmation()]);
+    expect(dialogButton(confirmation(), "Delete").classList.contains("btn-danger")).toBe(true);
+    await answer("Cancel");
+    expect(appDialogs()).toEqual([nameDialog("Edit Category")]);
+    expect(document.activeElement).toBe(remove);
     expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
 
-    dialogs.confirm.mockReturnValue(true);
-    await click(categoryButton("People", "Delete category"));
+    await press(remove);
+    await answer("Delete");
+    expect(appDialogs()).toEqual([]);
     expect(categoryTitles()).toEqual(["Places", "Mood", "Uncategorized"]);
     expect(chipNames("Uncategorized")).toEqual(["Alice", "Bob", "Loose"]);
     expect(optionLabels(footerCategory())).toEqual(["Places", "Mood", "Uncategorized"]);
@@ -812,19 +967,34 @@ describe("Edit Tags", () => {
     ]);
   });
 
-  it("adds a category before Uncategorized", async () => {
+  it("New Category disables Save while the name is empty or another category's, and adds before Uncategorized", async () => {
     const { tags } = await mountTags();
     await openEditor();
 
-    for (const answer of [null, "  "]) {
-      dialogs.prompt.mockReturnValue(answer);
-      await click(within(editor()).getByRole("button", { name: "Add category" }));
-    }
-    expect(dialogs.prompt).toHaveBeenCalledWith("New category name");
+    await newCategory();
+    const field = nameField("New Category");
+    const dialogSave = dialogButton(nameDialog("New Category"), "Save");
+    expect(within(nameDialog("New Category")).queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(field.value).toBe("");
+    expect(document.activeElement).toBe(field);
+    expect(fieldProblem(field)).toBeNull();
+    expect(disabledWithoutIcon(dialogSave)).toBe(true);
+
+    await typeInto(field, "people");
+    expect(fieldProblem(field)).toBe("Use a name no other category has.");
+    expect(disabledWithoutIcon(dialogSave)).toBe(true);
+    await pressEnter(field);
+    expect(findNameDialog("New Category")).not.toBeNull();
+
+    await press(dialogButton(nameDialog("New Category"), "Cancel"));
+    expect(appDialogs()).toEqual([]);
     expect(savePending()).toBe(false);
 
-    dialogs.prompt.mockReturnValue(" Food ");
-    await click(within(editor()).getByRole("button", { name: "Add category" }));
+    await newCategory();
+    expect(nameField("New Category").value).toBe("");
+    await typeInto(nameField("New Category"), " Food ");
+    await press(dialogButton(nameDialog("New Category"), "Save"));
+    expect(appDialogs()).toEqual([]);
     expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Food", "Uncategorized"]);
     expect(chipNames("Food")).toEqual([]);
     expect(optionLabels(footerCategory())).toEqual(["Places", "Mood", "People", "Food", "Uncategorized"]);
@@ -835,26 +1005,49 @@ describe("Edit Tags", () => {
     expect(tags.saves()[0]!.body.id).not.toBe("");
   });
 
-  it("adds a tag to the chosen category and to the playing item, and clears the name", async () => {
+  it("adds a tag to the chosen category, not to the playing item, and clears the name", async () => {
     const { tags } = await mountTags();
     await openEditor();
     expect(footerCategory().value).toBe("cat-places");
-
-    await click(within(editor()).getByRole("button", { name: "Add tag" }));
-    expect(savePending()).toBe(false);
+    expect(disabledWithoutIcon(addTagButton())).toBe(true);
 
     await addTag("  Sunset ", "cat-mood");
     expect(chipNames("Mood")).toEqual(["Calm", "Sunset"]);
-    expect(chipState("Sunset")).toEqual({ has: "none", pending: "add" });
+    expect(chipState("Sunset")).toEqual({ has: "none", pending: null });
     expect(newTagField().value).toBe("");
     expect(footerCategory().value).toBe("cat-mood");
 
     await save();
-    expect(tags.saves()).toEqual([
-      { path: "/api/tag-editor/upsert-tag", body: { name: "Sunset", categoryId: "cat-mood" } },
-      { path: "/api/tag-editor/apply-item-tags", body: { itemIds: ["item-video"], addTags: ["Sunset"], removeTags: [] } }
-    ]);
+    expect(tags.saves()).toEqual([{ path: "/api/tag-editor/upsert-tag", body: { name: "Sunset", categoryId: "cat-mood" } }]);
   });
+
+  for (const [how, activate] of [
+    ["the pointer", press],
+    ["the keyboard", pressWithKeyboard]
+  ] as const) {
+    it(`Add tag pressed with ${how} moves to the new chip's add, opening its category, and one more press puts it on the item`, async () => {
+      await mountTags();
+      await openEditor();
+      await click(categoryButton("Mood", "Collapse category"));
+      await choose(footerCategory(), "cat-mood");
+      await typeInto(newTagField(), "Sunset");
+      await activate(addTagButton());
+      expect(categoryGrid("Mood").style.display).toBe("");
+      expect(document.activeElement).toBe(chipButton("Sunset", "Add tag"));
+
+      await activate(chipButton("Sunset", "Add tag"));
+      expect(chipState("Sunset")).toEqual({ has: "none", pending: "add" });
+    });
+
+    it(`Add tag pressed with ${how} moves to the new chip's Edit while nothing plays`, async () => {
+      await mountTags({ play: false });
+      await openEditor();
+      await typeInto(newTagField(), "Sunset");
+      await activate(addTagButton());
+      expect(chipButton("Sunset", "Add tag").disabled).toBe(true);
+      expect(document.activeElement).toBe(chipButton("Sunset", "Edit tag"));
+    });
+  }
 
   it("adds a tag only to the catalog when nothing plays", async () => {
     const { tags } = await mountTags({ play: false });
@@ -873,11 +1066,37 @@ describe("Edit Tags", () => {
     await choose(footerCategory(), "cat-people");
     await typeInto(newTagField(), "Sun");
     await click(headerButton("Close"));
-    expect(dialogs.confirm).not.toHaveBeenCalled();
+    expect(appDialogs()).toEqual([]);
 
     await openEditor();
     expect(newTagField().value).toBe("Sun");
     expect(footerCategory().value).toBe("cat-people");
+  });
+
+  it("the new tag name flags another tag's name, and Add tag is disabled while the name is empty or taken", async () => {
+    await mountTags();
+    await openEditor();
+    const field = newTagField();
+    expect(field.closest(".vfield")?.parentElement?.classList.contains("tag-editor-footer")).toBe(true);
+    expect(fieldProblem(field)).toBeNull();
+    expect(disabledWithoutIcon(addTagButton())).toBe(true);
+    expect(addTagButton().title).toBe("Add tag");
+    expect(addTagButton().getAttribute("aria-label")).toBe("Add tag");
+
+    await typeInto(field, "  ");
+    expect(fieldProblem(field)).toBeNull();
+    expect(disabledWithoutIcon(addTagButton())).toBe(true);
+
+    await typeInto(field, " CALM ");
+    expect(fieldProblem(field)).toBe("Use a name no other tag has.");
+    expect(disabledWithoutIcon(addTagButton())).toBe(true);
+    await click(addTagButton());
+    expect(field.value).toBe(" CALM ");
+    expect(savePending()).toBe(false);
+
+    await typeInto(field, "Sunset");
+    expect(fieldProblem(field)).toBeNull();
+    expect(addTagButton().disabled).toBe(false);
   });
 
   it("the Edit Tag dialog opens on the tag's name and category, and Cancel or a click outside closes it", async () => {
@@ -885,21 +1104,24 @@ describe("Edit Tags", () => {
     await openEditor();
     expect(modalOpen()).toBe(false);
 
-    await click(chipButton("Beach", "Edit tag"));
+    const edit = chipButton("Beach", "Edit tag");
+    await press(edit);
     expect(modalOpen()).toBe(true);
+    expect(editor().contains(modal())).toBe(false);
     expect(modalName().value).toBe("Beach");
     expect(document.activeElement).toBe(modalName());
     expect(modalCategory().value).toBe("cat-places");
     expect(optionLabels(modalCategory())).toEqual(["Places", "Mood", "People", "Uncategorized"]);
 
     await typeInto(modalName(), "Shore");
-    await click(modalButton("Cancel"));
+    await press(modalButton("Cancel"));
     expect(modalOpen()).toBe(false);
+    expect(document.activeElement).toBe(edit);
     expect(chipNames("Places")).toEqual(["alps", "Beach"]);
 
-    await click(chipButton("Loose", "Edit tag"));
+    await press(chipButton("Loose", "Edit tag"));
     expect(modalCategory().value).toBe("uncategorized");
-    await click(modal().querySelector(".tag-edit-modal-card") as HTMLElement);
+    await click(modal().querySelector(".dialog-body") as HTMLElement);
     expect(modalOpen()).toBe(true);
     await click(modal());
     expect(modalOpen()).toBe(false);
@@ -918,13 +1140,9 @@ describe("Edit Tags", () => {
     await click(chipButton("Beach", "Edit tag"));
     const statusBefore = statusLine();
     await typeInto(modalName(), "   ");
-    expect(modalName().getAttribute("aria-invalid")).toBe("true");
-    expect(document.getElementById(modalName().getAttribute("aria-describedby")!)?.textContent).toBe("Enter a tag name.");
-    expect(modalButton("Save").getAttribute("aria-disabled")).toBe("true");
-    expect(modalButton("Save").querySelector(".btn-problem")).not.toBeNull();
-    modalName().blur();
-    await click(modalButton("Save"));
-    expect(document.activeElement).toBe(modalName());
+    expect(fieldProblem(modalName())).toBeNull();
+    expect(disabledWithoutIcon(modalButton("Save"))).toBe(true);
+    await pressEnter(modalName());
     expect(statusLine()).toBe(statusBefore);
     expect(statusLine()).not.toBe("Tag name is required.");
     expect(modalOpen()).toBe(true);
@@ -948,18 +1166,94 @@ describe("Edit Tags", () => {
     ]);
   });
 
-  it("deletes a tag after asking, with any change held for it", async () => {
+  it("after Save renames a tag, focus goes to its chip's Edit, and after Delete to the next chip's in its category, or the previous one's", async () => {
+    await mountTags();
+    await openEditor();
+
+    await press(chipButton("Beach", "Edit tag"));
+    await typeInto(modalName(), " Shore ");
+    await press(modalButton("Save"));
+    expect(document.activeElement).toBe(chipButton("Shore", "Edit tag"));
+
+    await press(chipButton("Calm", "Edit tag"));
+    await choose(modalCategory(), "cat-people");
+    await press(modalButton("Save"));
+    expect(chipNames("People")).toEqual(["Alice", "Bob", "Calm"]);
+    expect(document.activeElement).toBe(chipButton("Calm", "Edit tag"));
+
+    await deleteTag("Alice");
+    expect(document.activeElement).toBe(chipButton("Bob", "Edit tag"));
+    await deleteTag("Calm");
+    expect(document.activeElement).toBe(chipButton("Bob", "Edit tag"));
+    await deleteTag("Bob");
+    expect(chipNames("People")).toEqual([]);
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("after Delete removes a category, focus goes to the next category's Edit, or the previous one's", async () => {
+    await mountTags();
+    await openEditor();
+    const categoryEdit = (title: string) => within(category(title)).getByRole("button", { name: `Edit category ${title}` });
+
+    await editCategory("Mood");
+    await press(dialogButton(nameDialog("Edit Category"), "Delete"));
+    await answer("Delete");
+    expect(categoryTitles()).toEqual(["Places", "People", "Uncategorized"]);
+    expect(document.activeElement).toBe(categoryEdit("People"));
+
+    await editCategory("People");
+    await press(dialogButton(nameDialog("Edit Category"), "Delete"));
+    await answer("Delete");
+    expect(categoryTitles()).toEqual(["Places", "Uncategorized"]);
+    expect(document.activeElement).toBe(categoryEdit("Places"));
+
+    await editCategory("Places");
+    await press(dialogButton(nameDialog("Edit Category"), "Delete"));
+    await answer("Delete");
+    expect(categoryTitles()).toEqual(["Uncategorized"]);
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("the Edit Tag dialog takes another tag's name without flagging it, and Save sends the rename", async () => {
+    const { tags } = await mountTags();
+    await openEditor();
+    await click(chipButton("Alice", "Edit tag"));
+    await typeInto(modalName(), "BOB");
+    expect(fieldProblem(modalName())).toBeNull();
+    expect(modalButton("Save").disabled).toBe(false);
+    await pressEnter(modalName());
+    expect(modalOpen()).toBe(false);
+
+    await save();
+    expect(tags.saves()).toEqual([
+      { path: "/api/tag-editor/rename-tag", body: { oldName: "Alice", newName: "BOB", newCategoryId: null } }
+    ]);
+  });
+
+  it("Delete in Edit Tag asks above it, Cancel goes back to it, and confirming deletes the tag with any change held for it", async () => {
     const { tags } = await mountTags();
     await openEditor();
     await click(chipButton("Bob", "Remove tag"));
 
-    dialogs.confirm.mockReturnValue(false);
-    await click(chipButton("Bob", "Delete tag"));
-    expect(dialogs.confirm).toHaveBeenCalledWith('Delete tag "Bob"?');
+    await press(chipButton("Bob", "Edit tag"));
+    await typeInto(modalName(), "Robert");
+    const remove = modalButton("Delete");
+    expect(remove.classList.contains("btn-danger")).toBe(true);
+    await press(remove);
+    expect(appDialogs()).toEqual([modal(), confirmation()]);
+    expect(confirmMessage()).toBe('Delete tag "Bob"?');
+    expect(document.activeElement).toBe(dialogButton(confirmation(), "Cancel"));
+    expect(dialogButton(confirmation(), "Delete").classList.contains("btn-danger")).toBe(true);
+
+    await answer("Cancel");
+    expect(appDialogs()).toEqual([modal()]);
+    expect(document.activeElement).toBe(remove);
+    expect(modalName().value).toBe("Robert");
     expect(chipNames("People")).toEqual(["Alice", "Bob"]);
 
-    dialogs.confirm.mockReturnValue(true);
-    await click(chipButton("Bob", "Delete tag"));
+    await press(remove);
+    await answer("Delete");
+    expect(appDialogs()).toEqual([]);
     expect(chipNames("People")).toEqual(["Alice"]);
     await save();
     expect(tags.saves()).toEqual([{ path: "/api/tag-editor/delete-tag", body: { name: "Bob" } }]);
@@ -969,19 +1263,23 @@ describe("Edit Tags", () => {
     const { tags } = await mountTags();
     await openEditor();
     await click(headerButton("Refresh"));
-    expect(dialogs.confirm).not.toHaveBeenCalled();
+    expect(appDialogs()).toEqual([]);
     expect(tags.modelRequests()).toHaveLength(2);
 
     await click(chipButton("Calm", "Add tag"));
-    dialogs.confirm.mockReturnValue(false);
-    await click(headerButton("Refresh"));
-    expect(dialogs.confirm).toHaveBeenCalledWith("Discard changes?");
+    await press(headerButton("Refresh"));
+    expect(confirmMessage()).toBe("Discard changes?");
+    expect(document.activeElement).toBe(dialogButton(confirmation(), "Cancel"));
+    expect(dialogButton(confirmation(), "Discard").classList.contains("btn-danger")).toBe(true);
+    await answer("Cancel");
+    expect(appDialogs()).toEqual([]);
     expect(tags.modelRequests()).toHaveLength(2);
     expect(chipState("Calm").pending).toBe("add");
 
     tags.model.tags.push({ name: "Snow", categoryId: "cat-places" });
-    dialogs.confirm.mockReturnValue(true);
-    await click(headerButton("Refresh"));
+    await press(headerButton("Refresh"));
+    await answer("Discard");
+    expect(appDialogs()).toEqual([]);
     expect(tags.modelRequests()).toHaveLength(3);
     expect(chipNames("Places")).toEqual(["alps", "Beach", "Snow"]);
     expect(chipState("Calm").pending).toBe(null);
@@ -993,14 +1291,18 @@ describe("saving", () => {
   it("sends each kind of change in order, Auto Tag last, and closes before the server answers", async () => {
     const { tags } = await mountTags();
     await openEditor();
-    dialogs.prompt.mockReturnValue("Scenery");
-    await click(categoryButton("Places", "Rename category"));
-    await click(categoryButton("Mood", "Delete category"));
+    await editCategory("Places");
+    await typeInto(nameField("Edit Category"), "Scenery");
+    await press(dialogButton(nameDialog("Edit Category"), "Save"));
+    await editCategory("Mood");
+    await press(dialogButton(nameDialog("Edit Category"), "Delete"));
+    await answer("Delete");
     await addTag("Sunset", "cat-people");
+    await click(chipButton("Sunset", "Add tag"));
     await click(chipButton("Beach", "Edit tag"));
     await typeInto(modalName(), "Shore");
     await click(modalButton("Save"));
-    await click(chipButton("Bob", "Delete tag"));
+    await deleteTag("Bob");
     await click(chipButton("Alice", "Add tag"));
     await showTab("Auto Tag");
     await scan();
@@ -1031,7 +1333,7 @@ describe("saving", () => {
     await click(chipButton("Beach", "Edit tag"));
     await typeInto(modalName(), "Shore");
     await click(modalButton("Save"));
-    await click(chipButton("Calm", "Delete tag"));
+    await deleteTag("Calm");
     await click(chipButton("Alice", "Add tag"));
 
     await save();
@@ -1047,7 +1349,7 @@ describe("saving", () => {
     const { tags } = await mountTags({ setup: (_server, fake) => fake.failures.set("/api/tag-editor/delete-tag", 0) });
     const deleteAndSave = async (name: string) => {
       await openEditor();
-      await click(chipButton(name, "Delete tag"));
+      await deleteTag(name);
       await save();
       await settle();
     };
@@ -1126,7 +1428,7 @@ describe("saving", () => {
     await pickHeaderPreset("preset-beach");
     const before = libraryQueries(server).length;
     await openEditor();
-    await click(chipButton("Beach", "Delete tag"));
+    await deleteTag("Beach");
 
     await save();
     await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
@@ -1348,21 +1650,22 @@ describe("Auto Tag", () => {
     await scan();
     await click(rowCheck("Sunset"));
 
-    dialogs.confirm.mockReturnValue(false);
-    await click(headerButton("Close"));
-    expect(dialogs.confirm).toHaveBeenCalledWith("Discard changes?");
+    await press(headerButton("Close"));
+    expect(confirmMessage()).toBe("Discard changes?");
+    await answer("Cancel");
     expect(isOpen()).toBe(true);
+    expect(rowCheck("Sunset").checked).toBe(true);
 
-    dialogs.confirm.mockReturnValue(true);
-    await click(headerButton("Refresh"));
-    expect(dialogs.confirm).toHaveBeenCalledTimes(2);
+    await press(headerButton("Refresh"));
+    expect(confirmMessage()).toBe("Discard changes?");
+    await answer("Discard");
     expect(selectedTab()).toBe("Auto Tag");
     expect(autoTagStatus()).toBe("");
     expect(results().textContent).toBe("");
     expect(tags.modelRequests()).toHaveLength(2);
 
     await click(headerButton("Close"));
-    expect(dialogs.confirm).toHaveBeenCalledTimes(2);
+    expect(appDialogs()).toEqual([]);
     expect(isOpen()).toBe(false);
     await openEditor();
     await showTab("Auto Tag");

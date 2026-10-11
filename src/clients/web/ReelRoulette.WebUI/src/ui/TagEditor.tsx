@@ -1,9 +1,10 @@
-import { useEffect, useRef } from "preact/hooks";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { TagEditorTab, TagEditorView } from "../tags/tagEditor";
 import type { AutoTagResults, AutoTagRowView } from "../tags/autoTagModel";
-import type { TagCategory, TagCategoryRow, TagChipRow } from "../tags/tagEditorModel";
+import { normalizeTagKey, type TagCategory, type TagCategoryRow, type TagChipRow } from "../tags/tagEditorModel";
 import { useApp } from "./appContext";
-import { HeldButton, ValidatedField } from "./FieldValidation";
+import { NameDialog } from "./Dialog";
+import { ValidatedField } from "./FieldValidation";
 
 // The `data-*` attributes keep the markup as it was before the editor moved to a component; nothing reads them.
 
@@ -28,8 +29,9 @@ function Icon({ name }: { name: string }) {
 }
 
 /**
- * The tag editor, with its Edit Tags and Auto Tag tabs and the Edit Tag dialog. It shows only while open, and its
- * panels are empty until it first opens.
+ * The tag editor, with its Edit Tags and Auto Tag tabs, and its Edit Tag, Edit Category, and New Category dialogs. It
+ * shows only while open, and its panels are empty until it first opens. The dialogs render after it rather than inside,
+ * so the editor's own button styles don't reach them.
  */
 export function TagEditor() {
   const { tagEditor } = useApp();
@@ -37,41 +39,58 @@ export function TagEditor() {
   const shown = tagEditor.tab.value;
   const active = shown ?? "edit";
   const scanning = view?.autoTag.scanning ?? false;
+  // The tag Add tag created, until its chip renders and takes focus.
+  const addedTag = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const name = addedTag.current;
+    if (name !== null) {
+      addedTag.current = null;
+      addedChipFocus(name)?.focus();
+    }
+  });
   return (
-    <div id="tag-editor" class="tag-editor" style={{ display: tagEditor.isOpen.value ? "flex" : "none" }}>
-      <div class="tag-editor-header">
-        <h2>Tag Editor</h2>
-        <div class="tag-editor-actions">
-          <button id="tag-editor-refresh-btn" class={BUTTON} title="Refresh" aria-label="Refresh" disabled={scanning} onClick={() => tagEditor.refresh()}><Icon name="refresh" /></button>
-          <button id="tag-editor-close-btn" class={BUTTON} title="Close" aria-label="Close" disabled={scanning} onClick={() => tagEditor.close()}><Icon name="close" /></button>
-        </div>
-      </div>
-      <div class="filter-dialog-tabstrip tag-editor-tabstrip" role="tablist">
-        {TABS.map(({ tab, label }) => (
-          <button key={tab} type="button" class={tab === active ? "filter-tab is-active" : "filter-tab"} role="tab" data-tag-editor-tab={tab} aria-selected={tab === active ? "true" : "false"} onClick={() => tagEditor.showTab(tab)}>{label}</button>
-        ))}
-      </div>
-      <div class="tag-editor-panel-stack">
-        <div id="tag-editor-panel-edit" class="tag-editor-panel" style={panelStyle(shown, "edit")}>
-          <div id="tag-editor-body" class="tag-editor-body themed-scrollbar">
-            {view?.categories ? view.categories.map((category) => <Category key={category.id} category={category} />) : view?.noModel ? "No tag model available." : null}
+    <>
+      <div id="tag-editor" class="tag-editor" style={{ display: tagEditor.isOpen.value ? "flex" : "none" }}>
+        <div class="tag-editor-header">
+          <h2>Tag Editor</h2>
+          <div class="tag-editor-actions">
+            <button id="tag-editor-refresh-btn" class={BUTTON} title="Refresh" aria-label="Refresh" disabled={scanning} onClick={() => void tagEditor.refresh()}><Icon name="refresh" /></button>
+            <button id="tag-editor-close-btn" class={BUTTON} title="Close" aria-label="Close" disabled={scanning} onClick={() => void tagEditor.close()}><Icon name="close" /></button>
           </div>
         </div>
-        <div id="tag-editor-panel-autotag" class="tag-editor-panel" style={panelStyle(shown, "autotag")}>
-          <AutoTagPanel view={view} />
+        <div class="filter-dialog-tabstrip tag-editor-tabstrip" role="tablist">
+          {TABS.map(({ tab, label }) => (
+            <button key={tab} type="button" class={tab === active ? "filter-tab is-active" : "filter-tab"} role="tab" data-tag-editor-tab={tab} aria-selected={tab === active ? "true" : "false"} onClick={() => tagEditor.showTab(tab)}>{label}</button>
+          ))}
+        </div>
+        <div class="tag-editor-panel-stack">
+          <div id="tag-editor-panel-edit" class="tag-editor-panel" style={panelStyle(shown, "edit")}>
+            <div id="tag-editor-body" class="tag-editor-body themed-scrollbar">
+              {view?.categories ? view.categories.map((category) => <Category key={category.id} category={category} />) : view?.noModel ? "No tag model available." : null}
+            </div>
+          </div>
+          <div id="tag-editor-panel-autotag" class="tag-editor-panel" style={panelStyle(shown, "autotag")}>
+            <AutoTagPanel view={view} />
+          </div>
+        </div>
+        <div class="tag-editor-footer">
+          <button id="tag-editor-add-category-btn" class={BUTTON} title="Add category" aria-label="Add category" onClick={() => tagEditor.addCategory()}><Icon name="add" /></button>
+          <select id="tag-editor-category-select" value={view?.newTagCategoryId} onChange={(event) => tagEditor.chooseNewTagCategory(event.currentTarget.value)}>
+            <CategoryOptions options={view?.categoryOptions ?? []} />
+          </select>
+          <ValidatedField problem={view?.newTagProblem ?? null} flagged={view?.newTagFlagged ?? false}>
+            {(control) => (
+              <input {...control} id="tag-editor-new-tag" type="text" placeholder="New tag name" value={view?.newTagName ?? ""} onInput={(event) => tagEditor.typeNewTag(event.currentTarget.value)} />
+            )}
+          </ValidatedField>
+          <button id="tag-editor-add-tag-btn" class={BUTTON} title="Add tag" aria-label="Add tag" disabled={!view || view.addTagDisabled} onClick={() => (addedTag.current = tagEditor.addTag())}><Icon name="add" /></button>
+          <button id="tag-editor-apply-btn" class={view?.savePending ? `${BUTTON} has-pending` : BUTTON} title="Save" aria-label="Save" disabled={view ? !view.savePending || scanning : undefined} onClick={() => tagEditor.save()}><Icon name="save" /></button>
         </div>
       </div>
-      <div class="tag-editor-footer">
-        <button id="tag-editor-add-category-btn" class={BUTTON} title="Add category" aria-label="Add category" onClick={() => tagEditor.addCategory()}><Icon name="add" /></button>
-        <select id="tag-editor-category-select" value={view?.newTagCategoryId} onChange={(event) => tagEditor.chooseNewTagCategory(event.currentTarget.value)}>
-          <CategoryOptions options={view?.categoryOptions ?? []} />
-        </select>
-        <input id="tag-editor-new-tag" type="text" placeholder="New tag name" value={view?.newTagName ?? ""} onInput={(event) => tagEditor.typeNewTag(event.currentTarget.value)} />
-        <button id="tag-editor-add-tag-btn" class={BUTTON} title="Add tag" aria-label="Add tag" onClick={() => tagEditor.addTag()}><Icon name="add" /></button>
-        <button id="tag-editor-apply-btn" class={view?.savePending ? `${BUTTON} has-pending` : BUTTON} title="Save" aria-label="Save" disabled={view ? !view.savePending || scanning : undefined} onClick={() => tagEditor.save()}><Icon name="save" /></button>
-      </div>
-      <EditTagDialog view={view} />
-    </div>
+      {view?.editing && view.edit ? <EditTagDialog view={view} /> : null}
+      {view?.categoryEdit ? <EditCategoryDialog view={view} /> : null}
+      {view?.newCategory ? <NewCategoryDialog view={view} /> : null}
+    </>
   );
 }
 
@@ -97,8 +116,9 @@ function Category({ category }: { category: TagCategoryRow }) {
         <div class="tag-editor-category-controls">
           <button class={`tag-editor-category-btn ${BUTTON}`} title="Move category up" disabled={!category.canMoveUp} onClick={() => tagEditor.moveCategory(category.id, -1)}><Icon name="arrow_drop_up" /></button>
           <button class={`tag-editor-category-btn ${BUTTON}`} title="Move category down" disabled={!category.canMoveDown} onClick={() => tagEditor.moveCategory(category.id, 1)}><Icon name="arrow_drop_down" /></button>
-          <button class={`tag-editor-category-btn ${BUTTON}`} title="Rename category" disabled={category.uncategorized} onClick={() => tagEditor.renameCategory(category.id)}><Icon name="edit_note" /></button>
-          <button class={`tag-editor-category-btn ${BUTTON}`} title="Delete category" disabled={category.uncategorized} onClick={() => tagEditor.deleteCategory(category.id)}><Icon name="delete" /></button>
+          {category.uncategorized ? null : (
+            <button class={`tag-editor-category-btn ${BUTTON}`} title="Edit category" aria-label={`Edit category ${category.name}`} onClick={() => tagEditor.editCategory(category.id)}><Icon name="edit_note" /></button>
+          )}
         </div>
       </div>
       <div class="tag-editor-tag-grid" style={category.collapsed ? { display: "none" } : undefined}>
@@ -118,7 +138,6 @@ function Chip({ chip }: { chip: TagChipRow }) {
       <button class={`chip-btn ${TOGGLE}${chip.pending === "add" ? " is-selected" : ""}`} title="Add tag" disabled={!chip.canChangeItems} onClick={() => tagEditor.toggleTag(chip.name, "add")}><Icon name="add" /></button>
       <button class={`chip-btn ${TOGGLE}${chip.pending === "remove" ? " is-selected" : ""}`} title="Remove tag" disabled={!chip.canChangeItems} onClick={() => tagEditor.toggleTag(chip.name, "remove")}><Icon name="remove" /></button>
       <button class={`chip-btn ${BUTTON}`} title="Edit tag" onClick={() => tagEditor.editTag(chip.name)}><Icon name="edit_note" /></button>
-      <button class={`chip-btn ${BUTTON}`} title="Delete tag" onClick={() => tagEditor.deleteTag(chip.name)}><Icon name="delete" /></button>
     </div>
   );
 }
@@ -186,53 +205,130 @@ function ResultRow({ entry }: { entry: AutoTagRowView }) {
   );
 }
 
+/** The chip of the tag with this name, ignoring case and spaces, as tag names are compared. */
+function findChip(name: string): Element | undefined {
+  const key = normalizeTagKey(name);
+  return Array.from(document.querySelectorAll("#tag-editor-body .tag-chip")).find(
+    (candidate) => normalizeTagKey(candidate.querySelector(".tag-chip-label")?.textContent) === key
+  );
+}
+
+/** The Edit tag button of the chip with this name. */
+function chipEditButton(name: string): HTMLElement | null {
+  return findChip(name)?.querySelector<HTMLElement>('[title="Edit tag"]') ?? null;
+}
+
 /**
- * The Edit Tag dialog. Its fields keep their last values while it is closed, as the page did before it moved to a
- * component. Opening it focuses and selects the name.
+ * Where focus goes after Add tag creates a tag: its chip's add, so one more press puts it on the playing item, or its
+ * Edit while nothing plays and add is disabled. A button, so no on-screen keyboard opens.
  */
-function EditTagDialog({ view }: { view: TagEditorView | null }) {
-  const { tagEditor } = useApp();
-  const name = useRef<HTMLInputElement>(null);
-  const editing = view?.editing ?? false;
-  useEffect(() => {
-    if (!editing) {
-      return;
+function addedChipFocus(name: string): HTMLElement | null {
+  const add = findChip(name)?.querySelector<HTMLButtonElement>('[title="Add tag"]');
+  return add && !add.disabled ? add : chipEditButton(name);
+}
+
+/** Where a chip was: its category, and its place among that category's chips. */
+interface ChipPlace {
+  categoryId: string;
+  index: number;
+}
+
+function chipPlace(view: TagEditorView, name: string): ChipPlace | null {
+  for (const category of view.categories ?? []) {
+    const index = category.chips.findIndex((chip) => chip.name === name);
+    if (index >= 0) {
+      return { categoryId: category.id, index };
     }
-    const timer = setTimeout(() => {
-      name.current?.focus();
-      name.current?.select();
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [editing]);
-  const edit = view?.edit;
+  }
+  return null;
+}
+
+/**
+ * Where focus goes when Edit Tag closes after its chip was replaced or removed: after a rename, the renamed chip's Edit,
+ * in whichever category it is now; after a delete, the next chip's in the same category, or the previous one's when
+ * the last was deleted.
+ */
+function editTagFallback(view: TagEditorView | null, oldName: string, typedName: string, place: ChipPlace | null): HTMLElement | null {
+  if (!view?.pending.deleteTags.has(normalizeTagKey(oldName))) {
+    return chipEditButton(typedName.trim());
+  }
+  const chips = view.categories?.find((category) => category.id === place?.categoryId)?.chips ?? [];
+  const next = chips[Math.min(place?.index ?? 0, chips.length - 1)];
+  return next ? chipEditButton(next.name) : null;
+}
+
+function EditTagDialog({ view }: { view: TagEditorView }) {
+  const { tagEditor } = useApp();
+  const edit = view.edit!;
+  const [place] = useState(() => chipPlace(view, edit.oldName));
   return (
-    <div
-      id="tag-edit-modal"
-      class="tag-edit-modal"
-      style={{ display: editing ? "flex" : "none" }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          tagEditor.cancelEdit();
-        }
-      }}
+    <NameDialog
+      title="Edit Tag"
+      label="Tag Name"
+      fieldId="tag-edit-name"
+      saveId="tag-edit-save-btn"
+      value={edit.name}
+      problem={view.editNameProblem}
+      flagged={view.editNameFlagged}
+      onInput={(text) => tagEditor.typeEditName(text)}
+      onSave={() => tagEditor.saveEdit()}
+      onCancel={() => tagEditor.cancelEdit()}
+      onDelete={() => void tagEditor.deleteEditedTag()}
+      fallbackFocus={() => editTagFallback(tagEditor.view.peek(), edit.oldName, edit.name, place)}
     >
-      <div class="tag-edit-modal-card">
-        <h3>Edit Tag</h3>
-        <label for="tag-edit-name">Tag Name</label>
-        <ValidatedField problem={view?.editNameProblem ?? null} flagged={view?.editNameFlagged ?? false} reveal={{ from: tagEditor.reveal, field: "editTagName" }} controlRef={name}>
-          {(control) => (
-            <input {...control} id="tag-edit-name" type="text" autocomplete="off" value={edit?.name ?? ""} onInput={(event) => tagEditor.typeEditName(event.currentTarget.value)} />
-          )}
-        </ValidatedField>
-        <label for="tag-edit-category">Category</label>
-        <select id="tag-edit-category" value={edit?.categoryId} onChange={(event) => tagEditor.chooseEditCategory(event.currentTarget.value)}>
-          {edit ? <CategoryOptions options={view?.categoryOptions ?? []} /> : null}
-        </select>
-        <div class="tag-edit-modal-actions">
-          <button id="tag-edit-cancel-btn" type="button" onClick={() => tagEditor.cancelEdit()}>Cancel</button>
-          <HeldButton id="tag-edit-save-btn" held={!!view?.editNameProblem} flagged={view?.editNameFlagged ?? false} reason={view?.editNameProblem ? "Enter a tag name first." : null} onClick={() => tagEditor.saveEdit()}>Save</HeldButton>
-        </div>
-      </div>
-    </div>
+      <label for="tag-edit-category">Category</label>
+      <select id="tag-edit-category" value={edit.categoryId} onChange={(event) => tagEditor.chooseEditCategory(event.currentTarget.value)}>
+        <CategoryOptions options={view.categoryOptions} />
+      </select>
+    </NameDialog>
+  );
+}
+
+/**
+ * The Edit button of the category at `index`, or of the one before it: after a delete, the next category's, or the
+ * previous one's when the deleted one was the last with an Edit button.
+ */
+function categoryEditButton(index: number): HTMLElement | null {
+  const categories = document.querySelectorAll("#tag-editor-body .tag-editor-category");
+  const at = (position: number) => categories[position]?.querySelector<HTMLElement>('[title="Edit category"]') ?? null;
+  return at(index) ?? at(index - 1);
+}
+
+function EditCategoryDialog({ view }: { view: TagEditorView }) {
+  const { tagEditor } = useApp();
+  const [index] = useState(() => view.categories?.findIndex((category) => category.id === view.categoryEdit?.categoryId) ?? 0);
+  return (
+    <NameDialog
+      title="Edit Category"
+      label="Category Name"
+      fieldId="tag-category-edit-name"
+      saveId="tag-category-edit-save-btn"
+      value={view.categoryEdit!.name}
+      problem={view.categoryEditProblem}
+      flagged={view.categoryEditFlagged}
+      onInput={(text) => tagEditor.typeCategoryName(text)}
+      onSave={() => tagEditor.saveCategoryEdit()}
+      onCancel={() => tagEditor.cancelCategoryEdit()}
+      onDelete={() => void tagEditor.deleteEditedCategory()}
+      fallbackFocus={() => categoryEditButton(index)}
+    />
+  );
+}
+
+function NewCategoryDialog({ view }: { view: TagEditorView }) {
+  const { tagEditor } = useApp();
+  return (
+    <NameDialog
+      title="New Category"
+      label="Category Name"
+      fieldId="tag-new-category-name"
+      saveId="tag-new-category-save-btn"
+      value={view.newCategory!.name}
+      problem={view.newCategoryProblem}
+      flagged={view.newCategoryFlagged}
+      onInput={(text) => tagEditor.typeNewCategoryName(text)}
+      onSave={() => tagEditor.saveNewCategory()}
+      onCancel={() => tagEditor.cancelNewCategory()}
+    />
   );
 }

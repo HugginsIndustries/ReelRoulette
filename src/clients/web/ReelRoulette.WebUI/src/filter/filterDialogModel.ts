@@ -1,5 +1,5 @@
 import { compareTagNames } from "../library/tagNameOrder";
-import type { FieldProblem } from "../validation/fieldValidation";
+import { EMPTY_FIELD, type FieldProblem } from "../validation/fieldValidation";
 import {
   TAG_MATCH_MODE,
   cloneFilterState,
@@ -165,12 +165,22 @@ export type FilterField = "flagModes" | "minDuration" | "maxDuration" | "newPres
 /** The filter dialog's actions that use those fields. */
 export type FilterAction = "apply" | "addPreset" | "updatePreset";
 
-/** The fields each action uses, in the order a held action moves to them. Add Preset's name sits beside it, so it is first. */
+/** The fields each action uses, in the order a held action moves to them. */
 export const FILTER_ACTION_FIELDS: Readonly<Record<FilterAction, readonly FilterField[]>> = {
   apply: ["flagModes", "minDuration", "maxDuration"],
   addPreset: ["newPresetName", "flagModes", "minDuration", "maxDuration"],
   updatePreset: ["flagModes", "minDuration", "maxDuration"]
 };
+
+/** The fields right next to each action, any problem in which disables it: Add Preset's name sits beside it. */
+export const FILTER_ACTION_BESIDE: Readonly<Record<FilterAction, readonly FilterField[]>> = {
+  apply: [],
+  addPreset: ["newPresetName"],
+  updatePreset: []
+};
+
+/** The fields in the General section, which can hold an action from another section. */
+export type GeneralField = Exclude<FilterField, "newPresetName">;
 
 /** The dialog section each field is in. */
 export const FILTER_FIELD_SECTION: Readonly<Record<FilterField, "general" | "presets">> = {
@@ -181,6 +191,9 @@ export const FILTER_FIELD_SECTION: Readonly<Record<FilterField, "general" | "pre
 };
 
 export const DURATION_PROBLEM = "Use MM:SS, HH:MM:SS, or seconds.";
+
+/** A preset name another preset has, ignoring case. */
+export const PRESET_NAME_PROBLEM = "Use a name no other preset has.";
 
 /** Favorites only with Blacklisted only matches nothing, since the app never lets an item be both. */
 export const FLAG_MODES_PROBLEM = "Nothing is both a favorite and blacklisted. Use excluded for one of them.";
@@ -203,18 +216,31 @@ export function filterFieldProblems(
     minDuration: durationProblem(draft.minText),
     maxDuration: durationProblem(draft.maxText),
     newPresetName: !name
-      ? { message: "Enter a preset name.", empty: true }
+      ? EMPTY_FIELD
       : presets.some((row) => namesEqualIgnoringCase(row.name, name))
-        ? { message: "Use a name no other preset has." }
+        ? { message: PRESET_NAME_PROBLEM }
         : null
   };
 }
 
-/** Why a field holds an action, which the action's title and accessible description say. */
-export function filterHeldReason(action: FilterAction, field: FilterField, problem: FieldProblem): string {
-  if (field === "newPresetName") {
-    return problem.empty ? "Enter a preset name first." : "Use a name no other preset has.";
+/**
+ * The problem of the name typed in Edit Preset for the preset at `index`, or null while it is valid: empty, or another
+ * preset's name, ignoring case. The preset's own name is valid, in any case.
+ */
+export function editPresetNameProblem(text: string, presets: readonly PresetRow[], index: number): FieldProblem | null {
+  const name = text.trim();
+  if (!name) {
+    return EMPTY_FIELD;
   }
+  const taken = presets.some((row, rowIndex) => rowIndex !== index && namesEqualIgnoringCase(row.name, name));
+  return taken ? { message: PRESET_NAME_PROBLEM } : null;
+}
+
+/**
+ * Why a General field holds an action, which the action's title and accessible description say. The new preset name
+ * never holds Add Preset: it sits beside it, so it disables it.
+ */
+export function filterHeldReason(action: FilterAction, field: GeneralField): string {
   const ending = action === "apply" ? "to apply" : "first";
   if (field === "flagModes") {
     return `Change Favorites or Blacklisted ${ending}.`;

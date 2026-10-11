@@ -447,8 +447,8 @@ function applyGate() {
     applyGate();
   });
 });
-const gateField = new ValidatedField($("gate-token"), (value) => (value.trim() ? null : { message: "Enter the control token.", empty: true }));
-holdAction($("gate-continue"), () => [gateField], { reason: () => "Enter the control token first." });
+const gateField = new ValidatedField($("gate-token"), (value) => (value.trim() ? null : { empty: true }));
+holdAction($("gate-continue"), () => [gateField]);
 $("gate-form").addEventListener("submit", (event) => {
   event.preventDefault();
   if (gateField.holds) return;
@@ -481,7 +481,7 @@ function form(formId, saveId, fields, done, confirm) {
 form("web-form", "web-save", [
   ["web-port", rangeCheck(1024, 65535, "")],
   ["web-host", (value) => (/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/i.test(value.trim()) ? null : { message: "Use letters, digits, and hyphens, without spaces." })],
-  ["web-token", (value) => (value.trim() || !document.querySelector('input[name="web-auth"][value="token"]').checked ? null : { message: "Enter a shared token.", empty: true })]
+  ["web-token", (value) => (value.trim() || !document.querySelector('input[name="web-auth"][value="token"]').checked ? null : { empty: true })]
 ], "Web access settings saved. Port and remote connection changes apply at the server's next start.");
 // The control token can be changed. Changing it asks first, since it signs other machines out, as the Operator page
 // warns today.
@@ -621,7 +621,8 @@ function importLibrary(fileName) {
   const validated = fields.map((input) => new ValidatedField(input, (value) => (value.trim().startsWith("/") ? null : { message: "Use a full path on the server, starting with /." })));
   const { close } = openDialog({ content: body, labelledBy: "import-title", onClose: () => validated.forEach((field) => field.dispose()) });
   validated.forEach((field) => field.update());
-  holdAction(go, () => validated, { reason: () => "Correct the path first." });
+  // The dialog has the user's attention, so a path that is not valid disables Import, and the field's icon says why.
+  holdAction(go, () => validated, { beside: () => validated });
   cancel.addEventListener("click", () => close(false));
   body.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -714,10 +715,9 @@ function renderSources() {
       value: source.name,
       check: (value) => {
         const name = value.trim();
-        if (!name) return { message: "Enter a source name.", empty: true };
+        if (!name) return { empty: true };
         return SOURCES.some((other) => other !== source && other.name.toLowerCase() === name.toLowerCase()) ? { message: "Use a name no other source has." } : null;
       },
-      holdReason: () => "Correct the name first.",
       onSave: (name) => {
         source.name = name;
         renderSources();
@@ -738,12 +738,13 @@ function renderSources() {
 }
 const sourceField = new ValidatedField($("source-path"), (value) => {
   const path = value.trim();
-  if (!path) return { message: "Enter a folder path on the server.", empty: true };
+  if (!path) return { empty: true };
   if (!path.startsWith("/")) return { message: "Use a full path on the server, starting with /." };
   if (SOURCES.some((source) => source.path === path.replace(/\/$/, ""))) return { message: "That folder is already a source." };
   return null;
 });
-holdAction($("source-add-btn"), () => [sourceField], { reason: () => "Enter a folder path first." });
+// Add Source sits beside the path, so any problem in it disables Add Source, and the field's icon says why.
+holdAction($("source-add-btn"), () => [sourceField], { beside: () => [sourceField] });
 renderSources();
 $("sources-refresh").addEventListener("click", () => $("refresh-now").click());
 $("source-add").addEventListener("submit", (event) => {

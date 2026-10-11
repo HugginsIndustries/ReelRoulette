@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { useApp } from "./appContext";
+import { DialogHost } from "./Dialog";
 import { FilterDialog } from "./FilterDialog";
 import { LibraryOverlay } from "./LibraryOverlay";
 import { Player } from "./Player";
@@ -7,8 +8,8 @@ import { ScreenBoundary } from "./ScreenBoundary";
 import { TagEditor } from "./TagEditor";
 
 /**
- * The part of the page that goes fullscreen: the player and the overlays, which stay inside it so they show in
- * fullscreen too.
+ * The part of the page that goes fullscreen: the player, the overlays, and the in-app dialogs, which stay inside it so
+ * they show in fullscreen too.
  */
 export function Stage() {
   const { api, fullscreen, library } = useApp();
@@ -19,10 +20,12 @@ export function Stage() {
     return () => fullscreen.detach();
   }, []);
 
-  // Escape closes the library overlay when it is open, and otherwise leaves pseudo-fullscreen.
+  // Escape closes the library overlay when it is open, and otherwise leaves pseudo-fullscreen. While a dialog is open,
+  // Escape is the dialog's: it closes the top one.
   useLayoutEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (stage.current?.querySelector("dialog[open]")) return;
       if (library.isOpen()) {
         library.close();
         return;
@@ -48,6 +51,9 @@ export function Stage() {
       </ScreenBoundary>
       <ScreenBoundary screen="library" relay={api.relayLog}>
         <LibraryOverlay />
+      </ScreenBoundary>
+      <ScreenBoundary screen="dialogs" relay={api.relayLog}>
+        <DialogHost />
       </ScreenBoundary>
     </div>
   );

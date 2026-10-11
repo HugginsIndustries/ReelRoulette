@@ -19,13 +19,13 @@ Instructions:
 
 Commit Message:
 
-M12f1: Flag fields that are not valid as they are typed in the WebUI
+M12f2: Ask and tell in the WebUI's own dialogs
 
-- One field validation pattern for the WebUI: a red icon inside a field that holds a value that is not valid, whose tooltip says what the field expects and is the field's accessible description, and held actions whose label dims and which move to the field when pressed. Field problems no longer go to the status line or `last.log`.
-- The filter dialog's durations, new preset name, and Favorites and Blacklisted pair use it. Favorites only with Blacklisted only is flagged on both dropdowns and, like a duration that is not valid, holds Apply, Add Preset, and Update Preset. A section with a flagged field shows the icon after its name.
-- The Edit Tag dialog's emptied name is flagged and holds Save.
-- Typed durations are parsed strictly (whole MM:SS or HH:MM:SS, or seconds), while durations from the server are still read leniently, so the desktop's fractional seconds load as before. The No minimum and No maximum boxes are gone: an empty duration field means no limit, and its placeholder says so. The desktop keeps its boxes.
-- The filter dialog's Refresh keeps a preset list Apply hasn't saved, with Apply's star, and Apply then saves it.
-- The mockup shows the Favorites and Blacklisted pair flagged, the preset actions held, and the duration fields without their boxes, and its check covers them.
-- `CHANGELOG.md`, `CONTEXT.md`, and `docs/domain-inventory.md` describe the pattern.
-- The milestone is complete: its entry moves to `MILESTONES-COMPLETED.md`, and its release check joins the testing checklist's Release Specific section.
+- One in-app dialog for the WebUI: themed, in the browser's top layer inside the fullscreen stage, so it works in fullscreen and iOS pseudo-fullscreen. Dialogs stack, Escape or a click outside closes only the top one, focus returns to where it was, and Enter in a name field saves. Confirmations open with Cancel focused and name their action; notices have one OK and relay their text to `last.log` as a status message does.
+- The WebUI no longer calls the browser's `alert`, `confirm`, or `prompt`; a test parses its source to keep it that way, and screen tests fail on any native dialog.
+- The tag editor's Discard changes? confirmations move to the dialog. Chips and categories have one Edit button: Edit Tag gains Delete, a new Edit Category has the name and Delete, and New Category is a dialog. Delete asks first in a dialog stacked above.
+- Preset rows have one Edit button, whose Edit Preset dialog renames or deletes, asking first. After a rename or delete, focus goes to the renamed row's Edit button, or the next or previous row's.
+- The field validation pattern: an empty required field is never flagged and disables its action, and a field beside its action, or in its dialog, disables it for any problem. Only a field elsewhere holds an action. New and renamed categories and presets can't take a taken name, Uncategorized's included, and New tag name flags another tag's name.
+- Add tag only creates the tag, opening its category, and no longer puts it on the playing item. Focus moves to the new chip's add icon, or its Edit while nothing plays, and after Add Preset to the new preset's up icon, or its Edit when it is the only one.
+- The mockup's shared validation code, field validation page, Tags tab, and admin page follow the rule, and its Add tag and Add Preset match the app, with the new preset's drag handle taking focus; its checks cover them. Planned admin and status line entries follow the rule, and WebUI Drag Reordering gives Add Preset's focus to the drag handle.
+- `CHANGELOG.md`, `CONTEXT.md`, and `docs/domain-inventory.md` describe the dialog, the rule, and Add tag. The milestone is complete: its entry moves to `MILESTONES-COMPLETED.md`, and its release check joins the testing checklist's Release Specific section.

@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { EMPTY_FIELD } from "../validation/fieldValidation";
 import {
   addCategoryToOrder,
   autoTagAppliedFromResponse,
+  categoryNameProblem,
   categoryOptions,
   chipState,
   createPendingTagEdits,
   hasPendingTagEdits,
   initialCategoryOrder,
   moveCategoryInOrder,
+  newTagNameProblem,
   planTagEdits,
   tagCategoryRows,
   tagEditorDisplay,
@@ -181,6 +184,53 @@ describe("rows and chips", () => {
     expect(toggleTagSelection(selections, "CALM", "remove").size).toBe(0);
     expect(hasPendingTagEdits(createPendingTagEdits())).toBe(false);
     expect(hasPendingTagEdits(pending({ deleteTags: new Map([["bob", { name: "Bob" }]]) }))).toBe(true);
+  });
+});
+
+describe("name problems", () => {
+  const CATEGORIES = [
+    { id: "places", name: "Places" },
+    { id: "people", name: " People " },
+    { id: "uncategorized", name: "Uncategorized" }
+  ];
+
+  it("a category name is empty, or taken when another category has it, ignoring case and spaces", () => {
+    expect(categoryNameProblem("", CATEGORIES, null)).toBe(EMPTY_FIELD);
+    expect(categoryNameProblem("   ", CATEGORIES, "places")).toBe(EMPTY_FIELD);
+    expect(categoryNameProblem(" people", CATEGORIES, null)).toEqual({ message: "Use a name no other category has." });
+    expect(categoryNameProblem("PLACES", CATEGORIES, "people")).toEqual({ message: "Use a name no other category has." });
+    expect(categoryNameProblem("uncategorized", CATEGORIES, "places")).toEqual({ message: "Use a name no other category has." });
+    expect(categoryNameProblem(" Food ", CATEGORIES, null)).toBeNull();
+  });
+
+  it("Uncategorized is always taken, in any case, even while its row isn't showing", () => {
+    const shown = CATEGORIES.filter((category) => category.id !== "uncategorized");
+    expect(categoryNameProblem(" UNCATEGORIZED ", shown, null)).toEqual({ message: "Use a name no other category has." });
+    expect(categoryNameProblem("uncategorized", shown, "places")).toEqual({ message: "Use a name no other category has." });
+  });
+
+  it("a category may keep its own name, in any case", () => {
+    expect(categoryNameProblem("places", CATEGORIES, "places")).toBeNull();
+    expect(categoryNameProblem("People", CATEGORIES, "people")).toBeNull();
+  });
+
+  it("a new tag name is empty, or taken when a tag shown in any category has it, ignoring case and spaces", () => {
+    const tags = tagEditorDisplay(MODEL, createPendingTagEdits(), ORDER).tags;
+    expect(newTagNameProblem("", tags)).toBe(EMPTY_FIELD);
+    expect(newTagNameProblem("  ", tags)).toBe(EMPTY_FIELD);
+    expect(newTagNameProblem(" ALPS ", tags)).toEqual({ message: "Use a name no other tag has." });
+    expect(newTagNameProblem("loose", tags)).toEqual({ message: "Use a name no other tag has." });
+    expect(newTagNameProblem("Sunset", tags)).toBeNull();
+  });
+
+  it("a new tag may take the name of a tag waiting to be deleted, and not a renamed tag's new name", () => {
+    const edits = pending({
+      deleteTags: new Map([["bob", { name: "Bob" }]]),
+      renameTags: new Map([["calm", { oldName: "Calm", newName: "Shore", newCategoryId: null }]])
+    });
+    const tags = tagEditorDisplay(MODEL, edits, ORDER).tags;
+    expect(newTagNameProblem("bob", tags)).toBeNull();
+    expect(newTagNameProblem("shore", tags)).toEqual({ message: "Use a name no other tag has." });
   });
 });
 

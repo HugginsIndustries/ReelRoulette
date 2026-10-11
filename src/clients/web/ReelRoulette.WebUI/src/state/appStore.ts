@@ -93,6 +93,8 @@ export interface AppStore {
 
   /** `logText` replaces `message` in the server log when `message` shows a file, preset, or server error text. */
   setStatus(message: string, logText?: string): void;
+  /** Relays a status message's text to the server log without showing it, as `setStatus` relays it. */
+  relayStatus(logText: string): void;
   /** Rebuilds the header preset dropdown from the presets and the applied filter. */
   syncHeaderPresets(): void;
   /** Shows one message in the header preset dropdown in place of the presets. */
@@ -168,6 +170,10 @@ export function createAppStore(options: AppStoreOptions): AppStore {
 
     setStatus(message, logText = message) {
       store.status.value = message;
+      store.relayStatus(logText);
+    },
+
+    relayStatus(logText) {
       const at = now();
       const line = String(logText || "");
       if (line !== lastRelayedStatus || at - lastRelayedStatusAtMs > STATUS_RELAY_REPEAT_MS) {

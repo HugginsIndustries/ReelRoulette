@@ -131,30 +131,14 @@ exports[`page structure > keeps the starting markup 1`] = `
           <span class="material-symbol-icon">
             "add"
         <select id="tag-editor-category-select">
-        <input id="tag-editor-new-tag" placeholder="New tag name" type="text">
-        <button aria-label="Add tag" class="icon-glyph-base icon-glyph-button" id="tag-editor-add-tag-btn" title="Add tag">
+        <span class="vfield">
+          <input id="tag-editor-new-tag" placeholder="New tag name" type="text">
+        <button aria-label="Add tag" class="icon-glyph-base icon-glyph-button" disabled="" id="tag-editor-add-tag-btn" title="Add tag">
           <span class="material-symbol-icon">
             "add"
         <button aria-label="Save" class="icon-glyph-base icon-glyph-button" id="tag-editor-apply-btn" title="Save">
           <span class="material-symbol-icon">
             "save"
-      <div class="tag-edit-modal" id="tag-edit-modal" style="display: none">
-        <div class="tag-edit-modal-card">
-          <h3>
-            "Edit Tag"
-          <label for="tag-edit-name">
-            "Tag Name"
-          <span class="vfield">
-            <input autocomplete="off" id="tag-edit-name" type="text">
-          <label for="tag-edit-category">
-            "Category"
-          <select id="tag-edit-category">
-          <div class="tag-edit-modal-actions">
-            <button id="tag-edit-cancel-btn" type="button">
-              "Cancel"
-            <button class="held-action" id="tag-edit-save-btn" type="button">
-              <span class="btn-label">
-                "Save"
     <div class="filter-dialog" id="filter-dialog" style="display: none">
       <div class="filter-dialog-header">
         <h2 id="filter-dialog-heading">

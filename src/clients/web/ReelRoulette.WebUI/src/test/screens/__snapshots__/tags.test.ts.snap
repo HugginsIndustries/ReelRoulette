@@ -35,12 +35,9 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Move category down">
                 <span class="material-symbol-icon">
                   "arrow_drop_down"
-              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Rename category">
+              <button aria-label="Edit category Places" class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Edit category">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Delete category">
-                <span class="material-symbol-icon">
-                  "delete"
           <div class="tag-editor-tag-grid">
             <div class="tag-chip state-none">
               <span class="tag-chip-label">
@@ -54,9 +51,6 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
-                <span class="material-symbol-icon">
-                  "delete"
             <div class="tag-chip state-all">
               <span class="tag-chip-label">
                 "Beach"
@@ -69,9 +63,6 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
-                <span class="material-symbol-icon">
-                  "delete"
         <section class="tag-editor-category">
           <div class="tag-editor-category-header">
             <div class="tag-editor-category-left">
@@ -87,12 +78,9 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Move category down">
                 <span class="material-symbol-icon">
                   "arrow_drop_down"
-              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Rename category">
+              <button aria-label="Edit category Mood" class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Edit category">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Delete category">
-                <span class="material-symbol-icon">
-                  "delete"
           <div class="tag-editor-tag-grid" style="display: none">
             <div class="tag-chip state-none">
               <span class="tag-chip-label">
@@ -106,9 +94,6 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
-                <span class="material-symbol-icon">
-                  "delete"
         <section class="tag-editor-category">
           <div class="tag-editor-category-header">
             <div class="tag-editor-category-left">
@@ -124,12 +109,9 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Move category down">
                 <span class="material-symbol-icon">
                   "arrow_drop_down"
-              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Rename category">
+              <button aria-label="Edit category People" class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Edit category">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Delete category">
-                <span class="material-symbol-icon">
-                  "delete"
           <div class="tag-editor-tag-grid">
             <div class="tag-chip state-none">
               <span class="tag-chip-label">
@@ -143,9 +125,6 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
-                <span class="material-symbol-icon">
-                  "delete"
             <div class="tag-chip state-all">
               <span class="tag-chip-label">
                 "Bob"
@@ -158,9 +137,6 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
-                <span class="material-symbol-icon">
-                  "delete"
         <section class="tag-editor-category">
           <div class="tag-editor-category-header">
             <div class="tag-editor-category-left">
@@ -176,12 +152,6 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Move category down">
                 <span class="material-symbol-icon">
                   "arrow_drop_down"
-              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Rename category">
-                <span class="material-symbol-icon">
-                  "edit_note"
-              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Delete category">
-                <span class="material-symbol-icon">
-                  "delete"
           <div class="tag-editor-tag-grid">
             <div class="tag-chip state-none">
               <span class="tag-chip-label">
@@ -195,9 +165,6 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
-                <span class="material-symbol-icon">
-                  "delete"
     <div class="tag-editor-panel" id="tag-editor-panel-autotag" style="display: flex">
       <div class="tag-editor-body tag-autotag-body themed-scrollbar">
         <div class="tag-autotag-toolbar">
@@ -284,45 +251,21 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
         "People"
       <option selected="false" value="uncategorized">
         "Uncategorized"
-    <input id="tag-editor-new-tag" placeholder="New tag name" type="text" value="">
-    <button aria-label="Add tag" class="icon-glyph-base icon-glyph-button" id="tag-editor-add-tag-btn" title="Add tag">
+    <span class="vfield">
+      <input id="tag-editor-new-tag" placeholder="New tag name" type="text" value="">
+    <button aria-label="Add tag" class="icon-glyph-base icon-glyph-button" disabled="" id="tag-editor-add-tag-btn" title="Add tag">
       <span class="material-symbol-icon">
         "add"
     <button aria-label="Save" class="icon-glyph-base icon-glyph-button has-pending" id="tag-editor-apply-btn" title="Save">
       <span class="material-symbol-icon">
         "save"
-  <div class="tag-edit-modal" id="tag-edit-modal" style="display: none">
-    <div class="tag-edit-modal-card">
-      <h3>
-        "Edit Tag"
-      <label for="tag-edit-name">
-        "Tag Name"
-      <span class="vfield">
-        <input autocomplete="off" id="tag-edit-name" type="text" value="Beach">
-      <label for="tag-edit-category">
-        "Category"
-      <select id="tag-edit-category">
-        <option selected="true" value="cat-places">
-          "Places"
-        <option selected="false" value="cat-mood">
-          "Mood"
-        <option selected="false" value="cat-people">
-          "People"
-        <option selected="false" value="uncategorized">
-          "Uncategorized"
-      <div class="tag-edit-modal-actions">
-        <button id="tag-edit-cancel-btn" type="button">
-          "Cancel"
-        <button class="held-action" id="tag-edit-save-btn" type="button">
-          <span class="btn-label">
-            "Save"
 "
 `;
 
 exports[`opening and closing > keeps its markup on each tab and in the Edit Tag dialog > edit tag dialog 1`] = `
-"<div class="tag-edit-modal" id="tag-edit-modal" style="display: flex">
-  <div class="tag-edit-modal-card">
-    <h3>
+"<dialog aria-labelledby="P0-2" class="app-dialog" open="">
+  <div class="dialog-body">
+    <h3 id="P0-2">
       "Edit Tag"
     <label for="tag-edit-name">
       "Tag Name"
@@ -339,8 +282,11 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
         "People"
       <option selected="false" value="uncategorized">
         "Uncategorized"
-    <div class="tag-edit-modal-actions">
-      <button id="tag-edit-cancel-btn" type="button">
+    <div class="dialog-actions">
+      <button class="btn-danger" type="button">
+        "Delete"
+      <span class="dialog-spacer">
+      <button type="button">
         "Cancel"
       <button class="held-action" id="tag-edit-save-btn" type="button">
         <span class="btn-label">
@@ -383,12 +329,9 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Move category down">
                 <span class="material-symbol-icon">
                   "arrow_drop_down"
-              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Rename category">
+              <button aria-label="Edit category Places" class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Edit category">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Delete category">
-                <span class="material-symbol-icon">
-                  "delete"
           <div class="tag-editor-tag-grid">
             <div class="tag-chip state-none">
               <span class="tag-chip-label">
@@ -402,9 +345,6 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
-                <span class="material-symbol-icon">
-                  "delete"
             <div class="tag-chip state-all">
               <span class="tag-chip-label">
                 "Beach"
@@ -417,9 +357,6 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
-                <span class="material-symbol-icon">
-                  "delete"
         <section class="tag-editor-category">
           <div class="tag-editor-category-header">
             <div class="tag-editor-category-left">
@@ -435,12 +372,9 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Move category down">
                 <span class="material-symbol-icon">
                   "arrow_drop_down"
-              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Rename category">
+              <button aria-label="Edit category Mood" class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Edit category">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Delete category">
-                <span class="material-symbol-icon">
-                  "delete"
           <div class="tag-editor-tag-grid" style="display: none">
             <div class="tag-chip state-none">
               <span class="tag-chip-label">
@@ -454,9 +388,6 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
-                <span class="material-symbol-icon">
-                  "delete"
         <section class="tag-editor-category">
           <div class="tag-editor-category-header">
             <div class="tag-editor-category-left">
@@ -472,12 +403,9 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Move category down">
                 <span class="material-symbol-icon">
                   "arrow_drop_down"
-              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Rename category">
+              <button aria-label="Edit category People" class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Edit category">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Delete category">
-                <span class="material-symbol-icon">
-                  "delete"
           <div class="tag-editor-tag-grid">
             <div class="tag-chip state-none">
               <span class="tag-chip-label">
@@ -491,9 +419,6 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
-                <span class="material-symbol-icon">
-                  "delete"
             <div class="tag-chip state-all">
               <span class="tag-chip-label">
                 "Bob"
@@ -506,9 +431,6 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
-                <span class="material-symbol-icon">
-                  "delete"
         <section class="tag-editor-category">
           <div class="tag-editor-category-header">
             <div class="tag-editor-category-left">
@@ -524,12 +446,6 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Move category down">
                 <span class="material-symbol-icon">
                   "arrow_drop_down"
-              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Rename category">
-                <span class="material-symbol-icon">
-                  "edit_note"
-              <button class="tag-editor-category-btn icon-glyph-base icon-glyph-button" disabled="" title="Delete category">
-                <span class="material-symbol-icon">
-                  "delete"
           <div class="tag-editor-tag-grid">
             <div class="tag-chip state-none">
               <span class="tag-chip-label">
@@ -543,9 +459,6 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
               <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
                 <span class="material-symbol-icon">
                   "edit_note"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Delete tag">
-                <span class="material-symbol-icon">
-                  "delete"
     <div class="tag-editor-panel" id="tag-editor-panel-autotag" style="display: none">
       <div class="tag-editor-body tag-autotag-body themed-scrollbar">
         <div class="tag-autotag-toolbar">
@@ -580,29 +493,13 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
         "People"
       <option selected="false" value="uncategorized">
         "Uncategorized"
-    <input id="tag-editor-new-tag" placeholder="New tag name" type="text" value="">
-    <button aria-label="Add tag" class="icon-glyph-base icon-glyph-button" id="tag-editor-add-tag-btn" title="Add tag">
+    <span class="vfield">
+      <input id="tag-editor-new-tag" placeholder="New tag name" type="text" value="">
+    <button aria-label="Add tag" class="icon-glyph-base icon-glyph-button" disabled="" id="tag-editor-add-tag-btn" title="Add tag">
       <span class="material-symbol-icon">
         "add"
     <button aria-label="Save" class="icon-glyph-base icon-glyph-button has-pending" id="tag-editor-apply-btn" title="Save">
       <span class="material-symbol-icon">
         "save"
-  <div class="tag-edit-modal" id="tag-edit-modal" style="display: none">
-    <div class="tag-edit-modal-card">
-      <h3>
-        "Edit Tag"
-      <label for="tag-edit-name">
-        "Tag Name"
-      <span class="vfield">
-        <input autocomplete="off" id="tag-edit-name" type="text" value="">
-      <label for="tag-edit-category">
-        "Category"
-      <select id="tag-edit-category">
-      <div class="tag-edit-modal-actions">
-        <button id="tag-edit-cancel-btn" type="button">
-          "Cancel"
-        <button class="held-action" id="tag-edit-save-btn" type="button">
-          <span class="btn-label">
-            "Save"
 "
 `;

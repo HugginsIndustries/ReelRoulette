@@ -798,6 +798,7 @@ html.theme-light .lib-grid { background: #fff; }
 .tags-footer { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
 .tags-footer-row { display: flex; align-items: center; gap: 8px; }
 .tags-footer-row .ctl { flex: 1 1 auto; }
+.tags-footer-row > .vfield { flex: 1 1 auto; }
 .placeholder-page { padding: 12px; }
 
 /* Auto Tag, over the whole page as today. */
@@ -1372,7 +1373,7 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
             <select class="ctl" id="tags-category-select" aria-label="Category for new tag"></select>
           </div>
           <div class="tags-footer-row">
-            <input class="ctl" type="text" id="tags-new-name" placeholder="New tag name" aria-label="New tag name" autocomplete="off">
+            <span class="vfield"><input class="ctl" type="text" id="tags-new-name" placeholder="New tag name" aria-label="New tag name" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
             <button class="icon-btn" type="button" id="tags-add-tag" aria-label="Add tag" title="Add tag"><span class="material-symbol-icon">add</span></button>
             <button class="icon-btn" type="button" id="tags-save" aria-label="Save" title="Save" disabled><span class="material-symbol-icon">save</span></button>
           </div>
@@ -1719,8 +1720,10 @@ function checkDuration(value) {
 }
 
 /**
- * A field using the validation pattern. `check(value)` returns null when the value is valid, or `{ message, empty }`.
- * An empty required field (`empty: true`) is flagged only once the user has typed in it, but still holds its action.
+ * A field using the validation pattern. `check(value)` returns null when the value is valid, `{ empty: true }` for
+ * an empty required field, or `{ message }` for any other problem. An empty required field is never flagged: the
+ * action that needs it is disabled instead. Any other problem is flagged as it is typed, and `holdAction` decides
+ * whether it disables or holds the action.
  * `partners` are other controls checked with this one, such as the other dropdown of a pair: they are marked and
  * described with it, and focusing one shows the tooltip too. The icon and tooltip stay with `input`.
  */
@@ -1733,7 +1736,6 @@ class ValidatedField {
     this.input = input;
     this.check = check;
     this.pinned = !!opts.pinned;
-    this.touched = !!opts.touched;
     this.partners = opts.partners || [];
     this.hover = false;
     this.wrap = input.closest(".vfield");
@@ -1746,10 +1748,7 @@ class ValidatedField {
     // Inside the field, so it shows in fullscreen and above a dialog; fixed, so scrolling bodies don't clip it.
     this.wrap.appendChild(this.tip);
 
-    input.addEventListener("input", () => {
-      this.touched = true;
-      this.update();
-    });
+    input.addEventListener("input", () => this.update());
     [input, ...this.partners].forEach((control) => {
       control.addEventListener("focus", () => this.place());
       control.addEventListener("blur", () => this.place());
@@ -1779,14 +1778,20 @@ class ValidatedField {
     return this.input.disabled ? null : this.check(this.input.value);
   }
 
+  /** An empty required field is never flagged. */
   get flagged() {
     const problem = this.problem;
-    return !!problem && !(problem.empty && !this.touched);
+    return !!problem && !problem.empty;
   }
 
-  /** True while the action that uses this field can't proceed. */
+  /** True while the action that uses this field can't proceed, for any problem. */
   get holds() {
     return !!this.problem;
+  }
+
+  /** True while the field is an empty required one, which disables the action that needs it. */
+  get disables() {
+    return !!this.problem?.empty;
   }
 
   onChange(listener) {
@@ -1799,7 +1804,6 @@ class ValidatedField {
 
   reset(value) {
     if (value !== undefined) this.input.value = value;
-    this.touched = false;
     this.update();
   }
 
@@ -1885,37 +1889,45 @@ window.addEventListener("scroll", placeAllTips, true);
 window.addEventListener("resize", placeAllTips);
 
 /**
- * Wires an action button to the fields it uses. While any of them holds the action, the button's label dims and it
- * reads as unavailable; when one of them is flagged, the red icon shows on its right too. Pressing it does nothing
- * but take the user to the first field that holds it.
+ * Wires an action button to the fields it uses.
+ * - An empty required field disables the action: it dims, and pressing it does nothing. So does any problem in a
+ *   field `beside()` returns: a field that sits right next to the action, such as a new name beside its Add button, or
+ *   a field of the dialog the action is in, since the dialog has the user's attention. The field's own icon and
+ *   tooltip say why. A field in `beside()` is also one of `fields()`. Disabling wins over holding.
+ * - Otherwise a flagged field elsewhere holds it: the button's label dims, it reads as unavailable, and the red icon
+ *   shows on its right. Pressing it does nothing but take the user to the first field that holds it.
  */
 function holdAction(button, fields, options) {
   const opts = options || {};
+  const ownTitle = button.getAttribute("title");
   const describe = document.createElement("span");
   describe.className = "vh";
   describe.id = (button.id || "action") + "-held";
   button.after(describe);
 
+  function disabled() {
+    return fields().some((field) => field.disables) || (opts.beside ? opts.beside().some((field) => field.holds) : false);
+  }
+
   function blocker() {
-    return fields().find((field) => field.holds) || null;
+    return disabled() ? null : fields().find((field) => field.holds) || null;
   }
 
   function refresh() {
+    button.disabled = disabled();
     const field = blocker();
     const held = !!field;
-    button.classList.toggle("shows-problem", held && fields().some((f) => f.flagged));
+    button.classList.toggle("shows-problem", held);
     if (held) {
       button.setAttribute("aria-disabled", "true");
-    } else {
-      button.removeAttribute("aria-disabled");
-    }
-    if (held) {
       describe.textContent = opts.reason ? opts.reason(field) : "Correct the field first.";
       button.setAttribute("aria-describedby", describe.id);
       button.title = describe.textContent;
     } else {
+      button.removeAttribute("aria-disabled");
       button.removeAttribute("aria-describedby");
-      button.removeAttribute("title");
+      if (ownTitle === null) button.removeAttribute("title");
+      else button.title = ownTitle;
     }
   }
 
@@ -2017,11 +2029,12 @@ function confirmDialog({ message, confirmLabel, danger }) {
 }
 
 /**
- * A dialog with one name field that uses the validation pattern, Save held while the name is not valid, and an
- * optional Delete that asks first in a dialog stacked above. `deleteLabel` renames Delete, in the dialog and in its
- * confirmation, for an action that deletes nothing, such as removing a source. `extra(body)` can add fields after the name.
+ * A dialog with one name field that uses the validation pattern, Save disabled while the name is empty or has another
+ * problem, such as a taken name, and an optional Delete that asks first in a dialog stacked above. `deleteLabel`
+ * renames Delete, in the dialog and in its confirmation, for an action that deletes nothing, such as removing a source.
+ * `extra(body)` can add fields after the name.
  */
-function nameDialog({ title, label, value, check, holdReason, onSave, deleteMessage, onDelete, deleteLabel, extra, saveLabel, inputType, onClose }) {
+function nameDialog({ title, label, value, check, onSave, deleteMessage, onDelete, deleteLabel, extra, saveLabel, inputType, onClose }) {
   const id = `dialog-field-${++dialogCounter}`;
   const form = document.createElement("form");
   form.className = "dialog-body";
@@ -2072,7 +2085,7 @@ function nameDialog({ title, label, value, check, holdReason, onSave, deleteMess
     }
   });
   field.reset(value || "");
-  holdAction(save, () => [field], { reason: holdReason });
+  holdAction(save, () => [field], { beside: () => [field] });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     if (field.holds) return;
@@ -2087,7 +2100,7 @@ function nameDialog({ title, label, value, check, holdReason, onSave, deleteMess
   return { close, form, field };
 }
 
-/** A notice: something the user must see, with one OK, as WebUI In-App Dialogs adds. */
+/** A notice: something the user must see, with one OK. */
 function noticeDialog({ title, message }) {
   return new Promise((resolve) => {
     const body = document.createElement("div");
@@ -3639,7 +3652,7 @@ $("lib-mode").addEventListener("change", (event) => store.set("libMode", event.t
 const filterBody = $("filter-body");
 function checkPresetName(value, own) {
   const name = value.trim();
-  if (!name) return { message: "Enter a preset name.", empty: true };
+  if (!name) return { empty: true };
   if (presets.some((preset) => preset !== own && preset.toLowerCase() === name.toLowerCase())) {
     return { message: "Use a name no other preset has." };
   }
@@ -3702,6 +3715,7 @@ function renderApply() {
   presetsTab.title = nameField.flagged ? "A field here is not valid" : "";
 }
 // Apply, Add Preset, and Update Preset all use the General section's pair and durations; Add Preset uses the name too.
+// Add Preset sits beside the name, so an empty or taken name disables it, and only the General fields hold it.
 function generalReason(field, ending) {
   if (field === flagModesField) return `Change Favorites or Blacklisted ${ending}.`;
   return `Correct the ${field === minField ? "minimum" : "maximum"} duration ${ending}.`;
@@ -3711,11 +3725,9 @@ holdAction($("filter-apply"), () => [flagModesField, minField, maxField], {
   beforeReveal: () => showSub("general")
 });
 holdAction($("filter-add-preset"), () => [nameField, flagModesField, minField, maxField], {
-  reason: (field) => {
-    if (field !== nameField) return generalReason(field, "first");
-    return field.problem.empty ? "Enter a preset name first." : "Use a name no other preset has.";
-  },
-  beforeReveal: (field) => field !== nameField && showSub("general")
+  beside: () => [nameField],
+  reason: (field) => generalReason(field, "first"),
+  beforeReveal: () => showSub("general")
 });
 holdAction($("filter-update-preset"), () => [flagModesField, minField, maxField], {
   reason: (field) => generalReason(field, "first"),
@@ -3931,7 +3943,6 @@ function openEditPreset(index) {
     label: "Preset Name",
     value: own,
     check: (value) => checkPresetName(value, own),
-    holdReason: (field) => (field.problem.empty ? "Enter a preset name first." : "Use a name no other preset has."),
     onSave: (name) => {
       presets[presets.indexOf(own)] = name;
       presetsChanged();
@@ -3943,10 +3954,12 @@ function openEditPreset(index) {
     }
   });
 }
+// Add Preset adds the preset last and moves to its drag handle: a button, so no on-screen keyboard opens.
 $("filter-add-preset").addEventListener("click", () => {
   presets.push(nameField.input.value.trim());
   nameField.reset("");
   presetsChanged();
+  $("filter-preset-list").lastElementChild?.querySelector(".drag-handle")?.focus();
 });
 
 function chipEl(name, buttons, stateClass) {
@@ -4177,6 +4190,7 @@ function renderTags() {
     host.append(section);
   });
   host.scrollTop = scrollTop;
+  newTagField.update();
   $("tags-save").disabled = !pending;
   unsaved.tags = pending;
   renderUnsaved();
@@ -4239,21 +4253,34 @@ $("tags-refresh").addEventListener("click", async () => {
   }
   followPlayingItem();
 });
-// Add Tag adds the tag to the chosen category and selects Add for the item being edited, until Save, as today.
+// New tag name: a name another tag has, ignoring case, is flagged, and Add tag, which sits beside it, is disabled
+// while the name is empty or taken. An existing tag goes on the item with its chip's Add.
+const newTagField = new ValidatedField($("tags-new-name"), (value) => {
+  const name = value.trim();
+  if (!name) return { empty: true };
+  return TAGS.some((category) => category.chips.some((chip) => chip.name.toLowerCase() === name.toLowerCase()))
+    ? { message: "Use a name no other tag has." }
+    : null;
+});
+holdAction($("tags-add-tag"), () => [newTagField], { beside: () => [newTagField] });
+// Add tag adds the tag to the chosen category, until Save, without putting it on the item being edited. Focus moves
+// to its chip's Add, so one more press puts it on the item, or to its Edit while no item is being edited: a button, so
+// no on-screen keyboard opens.
 function addTag() {
+  if (newTagField.holds) return;
   const name = $("tags-new-name").value.trim();
-  if (!name) return;
   const category = TAGS.find((c) => c.id === $("tags-category-select").value) || TAGS[TAGS.length - 1];
-  let chip = TAGS.flatMap((c) => c.chips).find((existing) => existing.name.toLowerCase() === name.toLowerCase());
-  if (!chip) {
-    chip = { key: `${category.id}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`, name };
-    category.chips.push(chip);
-  }
-  if (tagItems().length) chip.pending = "add";
+  const chip = { key: `${category.id}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`, name };
+  category.chips.push(chip);
   // The category the tag is in opens, so the change is visible.
-  setCategoryExpanded("tags", TAGS.find((c) => c.chips.includes(chip)).id, true);
-  $("tags-new-name").value = "";
+  setCategoryExpanded("tags", category.id, true);
+  newTagField.reset("");
   tagsChanged();
+  const added = [...$("tags-body").querySelectorAll(`.tag-category[data-key="${category.id}"] .tag-chip`)].find(
+    (element) => element.querySelector(".tag-chip-label").textContent === name
+  );
+  const add = added?.querySelector('[title="Add tag"]');
+  (add && !add.disabled ? add : added?.querySelector('[title="Edit tag"]'))?.focus();
 }
 $("tags-add-tag").addEventListener("click", addTag);
 $("tags-new-name").addEventListener("keydown", (event) => {
@@ -4264,22 +4291,20 @@ $("tags-new-name").addEventListener("keydown", (event) => {
 });
 function checkCategoryName(value, own) {
   const name = value.trim();
-  if (!name) return { message: "Enter a category name.", empty: true };
+  if (!name) return { empty: true };
   if (TAGS.some((category) => category !== own && category.name.toLowerCase() === name.toLowerCase())) {
     return { message: "Use a name no other category has." };
   }
   return null;
 }
-const categoryHoldReason = (field) => (field.problem.empty ? "Enter a category name first." : "Use a name no other category has.");
 
-// New Category: the remaining native prompt, which WebUI In-App Dialogs converts; shown here as it will look.
+// New Category checks its name as Edit Category does, so a new category can't take a name another one has.
 $("tags-add-category").addEventListener("click", () => {
   nameDialog({
     title: "New Category",
     label: "Category Name",
     value: "",
-    check: (value) => (value.trim() ? null : { message: "Enter a category name.", empty: true }),
-    holdReason: () => "Enter a category name first.",
+    check: (value) => checkCategoryName(value, null),
     onSave: (name) => {
       TAGS.splice(TAGS.length - 1, 0, { id: `c${Date.now()}`, name, chips: [] });
       tagsChanged();
@@ -4292,8 +4317,8 @@ function openEditTag(category, chip) {
     title: "Edit Tag",
     label: "Tag Name",
     value: chip.name,
-    check: (value) => (value.trim() ? null : { message: "Enter a tag name.", empty: true }),
-    holdReason: () => "Enter a tag name first.",
+    // Another tag's name is allowed: the server merges the two tags.
+    check: (value) => (value.trim() ? null : { empty: true }),
     extra: (form) => {
       const id = `edit-tag-category-${Date.now()}`;
       const label = document.createElement("label");
@@ -4336,7 +4361,6 @@ function openEditCategory(category) {
     label: "Category Name",
     value: category.name,
     check: (value) => checkCategoryName(value, category),
-    holdReason: categoryHoldReason,
     onSave: (name) => {
       category.name = name;
       tagsChanged();
@@ -4878,8 +4902,7 @@ function askControlToken() {
       value: "",
       inputType: "password",
       saveLabel: "Continue",
-      check: (value) => (value.trim() ? null : { message: "Enter the control token.", empty: true }),
-      holdReason: () => "Enter the control token first.",
+      check: (value) => (value.trim() ? null : { empty: true }),
       onSave: () => {
         accepted = true;
       },
@@ -5317,8 +5340,8 @@ $("volume").addEventListener("input", (event) => {
   store.set("volume", state.volume);
   syncStandInSound();
 });
-const pairField = new ValidatedField($("pair-token"), (value) => (value.trim() ? null : { message: "Enter the pairing token.", empty: true }));
-holdAction($("pair-btn"), () => [pairField], { reason: () => "Enter the pairing token first." });
+const pairField = new ValidatedField($("pair-token"), (value) => (value.trim() ? null : { empty: true }));
+holdAction($("pair-btn"), () => [pairField]);
 $("pair").addEventListener("submit", (event) => {
   event.preventDefault();
   if (pairField.holds) return;

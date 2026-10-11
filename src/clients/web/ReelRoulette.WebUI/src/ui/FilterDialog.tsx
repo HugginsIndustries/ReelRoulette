@@ -1,7 +1,7 @@
 import type { JSX, RefObject } from "preact";
+import { useLayoutEffect, useRef } from "preact/hooks";
 import type { FilterDialogTab, FilterDialogView } from "../filter/filterDialog";
 import {
-  FILTER_ACTION_FIELDS,
   FILTER_FIELD_SECTION,
   filterHeldReason,
   filterTagCategories,
@@ -15,6 +15,7 @@ import {
 } from "../filter/filterDialogModel";
 import { AUDIO_FILTER, MEDIA_TYPE_FILTER, TAG_MATCH_MODE } from "../filter/filterStateModel";
 import { useApp } from "./appContext";
+import { NameDialog } from "./Dialog";
 import {
   HeldButton,
   SECTION_PROBLEM_TITLE,
@@ -77,13 +78,12 @@ function sectionFlagged(view: FilterDialogView | null, section: FilterDialogTab)
   return !!view && fields.some((field) => FILTER_FIELD_SECTION[field] === section && view.flagged[field]);
 }
 
-/** A held action's state for its button. */
+/** An action's state for its button: disabled, or held by a field elsewhere. */
 function heldAction(view: FilterDialogView | null, action: FilterAction) {
-  const field = view?.held[action] ?? null;
+  const block = view?.actions[action];
   return {
-    held: field !== null,
-    flagged: !!view && FILTER_ACTION_FIELDS[action].some((each) => view.flagged[each]),
-    reason: view && field ? filterHeldReason(action, field, view.problems[field]!) : null
+    disabled: block?.disabled ?? false,
+    heldReason: block?.heldBy ? filterHeldReason(action, block.heldBy) : null
   };
 }
 
@@ -97,7 +97,8 @@ function panelStyle(shown: FilterDialogTab | null, panel: (typeof TABS)[number])
 
 /**
  * The filter dialog. It shows only while open, and keeps its panels while closed. The panels are empty until it
- * first opens.
+ * first opens. Edit Preset renders after it rather than inside it, so the dialog's own styles apply and not the filter
+ * dialog's.
  */
 export function FilterDialog() {
   const { filterDialog } = useApp();
@@ -106,36 +107,81 @@ export function FilterDialog() {
   const active = shown ?? "general";
   const [general, tags, presets] = TABS;
   return (
-    <div id="filter-dialog" class="filter-dialog" style={{ display: filterDialog.isOpen.value ? "flex" : "none" }}>
-      <div class="filter-dialog-header">
-        <h2 id="filter-dialog-heading">{view ? view.heading : "Preset: None"}</h2>
-        <div class="filter-dialog-actions">
-          <button id="filter-dialog-refresh-btn" class="icon-glyph-base icon-glyph-button" type="button" title="Refresh" aria-label="Refresh" onClick={() => void filterDialog.refresh()}><span class="material-symbol-icon">refresh</span></button>
-          <button id="filter-dialog-close-btn" class="icon-glyph-base icon-glyph-button" type="button" title="Close" aria-label="Close" onClick={() => filterDialog.close()}><span class="material-symbol-icon">close</span></button>
+    <>
+      <div id="filter-dialog" class="filter-dialog" style={{ display: filterDialog.isOpen.value ? "flex" : "none" }}>
+        <div class="filter-dialog-header">
+          <h2 id="filter-dialog-heading">{view ? view.heading : "Preset: None"}</h2>
+          <div class="filter-dialog-actions">
+            <button id="filter-dialog-refresh-btn" class="icon-glyph-base icon-glyph-button" type="button" title="Refresh" aria-label="Refresh" onClick={() => void filterDialog.refresh()}><span class="material-symbol-icon">refresh</span></button>
+            <button id="filter-dialog-close-btn" class="icon-glyph-base icon-glyph-button" type="button" title="Close" aria-label="Close" onClick={() => filterDialog.close()}><span class="material-symbol-icon">close</span></button>
+          </div>
+        </div>
+        <div class="filter-dialog-tabstrip" role="tablist">
+          {TABS.map(({ tab, label }) => {
+            const problem = sectionFlagged(view, tab);
+            return (
+              <button key={tab} type="button" class={tab === active ? "filter-tab is-active" : "filter-tab"} role="tab" data-filter-tab={tab} aria-selected={tab === active ? "true" : "false"} title={problem ? SECTION_PROBLEM_TITLE : undefined} onClick={() => filterDialog.showTab(tab)}>
+                {label}
+                {problem ? <SectionProblemMark /> : null}
+              </button>
+            );
+          })}
+        </div>
+        <div class="filter-dialog-body themed-scrollbar">
+          <div id="filter-panel-general" class="filter-panel" style={panelStyle(shown, general!)}>{view ? <GeneralPanel view={view} /> : null}</div>
+          <div id="filter-panel-tags" class="filter-panel" style={panelStyle(shown, tags!)}>{view ? <TagsPanel view={view} /> : null}</div>
+          <div id="filter-panel-presets" class="filter-panel" style={panelStyle(shown, presets!)}>{view ? <PresetsPanel view={view} /> : null}</div>
+        </div>
+        <div class="filter-dialog-footer">
+          <button id="filter-clear-all-btn" type="button" onClick={() => filterDialog.clearAll()}>Clear all filters</button>
+          <button id="filter-cancel-btn" type="button" onClick={() => filterDialog.close()}>Cancel</button>
+          <HeldButton id="filter-apply-btn" class={view?.pending ? "has-pending" : undefined} {...heldAction(view, "apply")} onClick={() => void filterDialog.apply()}>{view?.pending ? "Apply*" : "Apply"}</HeldButton>
         </div>
       </div>
-      <div class="filter-dialog-tabstrip" role="tablist">
-        {TABS.map(({ tab, label }) => {
-          const problem = sectionFlagged(view, tab);
-          return (
-            <button key={tab} type="button" class={tab === active ? "filter-tab is-active" : "filter-tab"} role="tab" data-filter-tab={tab} aria-selected={tab === active ? "true" : "false"} title={problem ? SECTION_PROBLEM_TITLE : undefined} onClick={() => filterDialog.showTab(tab)}>
-              {label}
-              {problem ? <SectionProblemMark /> : null}
-            </button>
-          );
-        })}
-      </div>
-      <div class="filter-dialog-body themed-scrollbar">
-        <div id="filter-panel-general" class="filter-panel" style={panelStyle(shown, general!)}>{view ? <GeneralPanel view={view} /> : null}</div>
-        <div id="filter-panel-tags" class="filter-panel" style={panelStyle(shown, tags!)}>{view ? <TagsPanel view={view} /> : null}</div>
-        <div id="filter-panel-presets" class="filter-panel" style={panelStyle(shown, presets!)}>{view ? <PresetsPanel view={view} /> : null}</div>
-      </div>
-      <div class="filter-dialog-footer">
-        <button id="filter-clear-all-btn" type="button" onClick={() => filterDialog.clearAll()}>Clear all filters</button>
-        <button id="filter-cancel-btn" type="button" onClick={() => filterDialog.close()}>Cancel</button>
-        <HeldButton id="filter-apply-btn" class={view?.pending ? "has-pending" : undefined} {...heldAction(view, "apply")} onClick={() => void filterDialog.apply()}>{view?.pending ? "Apply*" : "Apply"}</HeldButton>
-      </div>
-    </div>
+      {view?.presetEdit ? <EditPresetDialog view={view} /> : null}
+    </>
+  );
+}
+
+/**
+ * The Edit button of the preset row at `index`, or of the last row when there are fewer: after a rename, which keeps
+ * the preset's place, the renamed row; after a delete, the next row, or the previous one when the last was deleted.
+ */
+function presetEditButton(index: number): HTMLElement | null {
+  const rows = document.querySelectorAll<HTMLElement>("#filter-dialog .filter-preset-row");
+  return rows[Math.min(index, rows.length - 1)]?.querySelector<HTMLElement>('[title="Edit preset"]') ?? null;
+}
+
+/**
+ * Where focus goes after Add Preset adds a preset: the new last row's up button, or its Edit while it is the only
+ * preset and can't move up. A button, so no on-screen keyboard opens.
+ */
+function addedPresetFocus(): HTMLElement | null {
+  const rows = document.querySelectorAll<HTMLElement>("#filter-dialog .filter-preset-row");
+  const row = rows[rows.length - 1];
+  const up = row?.querySelector<HTMLButtonElement>("[data-preset-up]");
+  return up && !up.disabled ? up : (row?.querySelector<HTMLElement>('[title="Edit preset"]') ?? null);
+}
+
+/** Edit Preset: renames a preset, or deletes it after asking. It shows while the dialog's preset edit is open. */
+function EditPresetDialog({ view }: { view: FilterDialogView }) {
+  const { filterDialog } = useApp();
+  const index = view.presetEdit?.index ?? 0;
+  return (
+    <NameDialog
+      title="Edit Preset"
+      label="Preset Name"
+      fieldId="filter-preset-edit-name"
+      saveId="filter-preset-edit-save-btn"
+      value={view.presetEdit?.name ?? ""}
+      problem={view.presetEditProblem}
+      flagged={view.presetEditFlagged}
+      onInput={(text) => filterDialog.typePresetName(text)}
+      onSave={() => filterDialog.savePresetEdit()}
+      onCancel={() => filterDialog.cancelPresetEdit()}
+      onDelete={() => void filterDialog.deleteEditedPreset()}
+      fallbackFocus={() => presetEditButton(index)}
+    />
   );
 }
 
@@ -373,6 +419,14 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
   const names = view.presets.map((preset) => preset.name);
   const chosen = view.presetName && names.includes(view.presetName) ? view.presetName : "";
   const last = view.presets.length - 1;
+  // Whether Add Preset added a preset, until its row renders and takes focus.
+  const added = useRef(false);
+  useLayoutEffect(() => {
+    if (added.current) {
+      added.current = false;
+      addedPresetFocus()?.focus();
+    }
+  });
   return (
     <>
       <div class="filter-section">
@@ -395,7 +449,7 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
               <input {...control} type="text" id="filter-new-preset-name" aria-label="New preset name" placeholder="Enter preset name" value={view.newPresetName} onInput={(event) => filterDialog.typeNewPresetName(event.currentTarget.value)} />
             )}
           </ValidatedField>
-          <HeldButton id="filter-add-preset-btn" {...heldAction(view, "addPreset")} onClick={() => filterDialog.addPreset()}>Add Preset</HeldButton>
+          <HeldButton id="filter-add-preset-btn" {...heldAction(view, "addPreset")} onClick={() => (added.current = filterDialog.addPreset())}>Add Preset</HeldButton>
         </div>
       </div>
       <div class="filter-section filter-section-manage">
@@ -407,8 +461,7 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
                 <span class="filter-preset-name">{preset.name}</span>
                 <button type="button" class="icon-glyph-base icon-glyph-button" data-preset-up={String(index)} aria-label="Move up" title="Move up" disabled={index === 0} onClick={() => filterDialog.movePreset(index, -1)}><span class="material-symbol-icon">keyboard_arrow_up</span></button>
                 <button type="button" class="icon-glyph-base icon-glyph-button" data-preset-down={String(index)} aria-label="Move down" title="Move down" disabled={index === last} onClick={() => filterDialog.movePreset(index, 1)}><span class="material-symbol-icon">keyboard_arrow_down</span></button>
-                <button type="button" class="icon-glyph-base icon-glyph-button" data-preset-rename={String(index)} aria-label="Rename" title="Rename" onClick={() => filterDialog.renamePreset(index)}><span class="material-symbol-icon">edit_note</span></button>
-                <button type="button" class="icon-glyph-base icon-glyph-button" data-preset-del={String(index)} aria-label="Delete" title="Delete" onClick={() => filterDialog.deletePreset(index)}><span class="material-symbol-icon">delete</span></button>
+                <button type="button" class="icon-glyph-base icon-glyph-button" data-preset-edit={String(index)} aria-label={`Edit preset ${preset.name}`} title="Edit preset" onClick={() => filterDialog.editPreset(index)}><span class="material-symbol-icon">edit_note</span></button>
               </div>
             ))
           ) : (

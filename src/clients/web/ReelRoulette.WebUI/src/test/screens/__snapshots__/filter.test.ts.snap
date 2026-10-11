@@ -267,11 +267,9 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
         <div class="filter-row">
           <span class="vfield">
             <input aria-label="New preset name" id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
-          <button aria-describedby="P0-8" aria-disabled="true" class="held-action" id="filter-add-preset-btn" title="Enter a preset name first." type="button">
+          <button class="held-action" disabled="" id="filter-add-preset-btn" type="button">
             <span class="btn-label">
               "Add Preset"
-          <span class="visually-hidden" id="P0-8">
-            "Enter a preset name first."
       <div class="filter-section filter-section-manage">
         <h3>
           "Manage Presets"
@@ -285,12 +283,9 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
             <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="0" title="Move down" type="button">
               <span class="material-symbol-icon">
                 "keyboard_arrow_down"
-            <button aria-label="Rename" class="icon-glyph-base icon-glyph-button" data-preset-rename="0" title="Rename" type="button">
+            <button aria-label="Edit preset Rich" class="icon-glyph-base icon-glyph-button" data-preset-edit="0" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
-            <button aria-label="Delete" class="icon-glyph-base icon-glyph-button" data-preset-del="0" title="Delete" type="button">
-              <span class="material-symbol-icon">
-                "delete"
           <div class="filter-preset-row" data-preset-idx="1">
             <span class="filter-preset-name">
               "Favorites"
@@ -300,12 +295,9 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
             <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="1" disabled="" title="Move down" type="button">
               <span class="material-symbol-icon">
                 "keyboard_arrow_down"
-            <button aria-label="Rename" class="icon-glyph-base icon-glyph-button" data-preset-rename="1" title="Rename" type="button">
+            <button aria-label="Edit preset Favorites" class="icon-glyph-base icon-glyph-button" data-preset-edit="1" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
-            <button aria-label="Delete" class="icon-glyph-base icon-glyph-button" data-preset-del="1" title="Delete" type="button">
-              <span class="material-symbol-icon">
-                "delete"
   <div class="filter-dialog-footer">
     <button id="filter-clear-all-btn" type="button">
       "Clear all filters"
@@ -584,11 +576,9 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
         <div class="filter-row">
           <span class="vfield">
             <input aria-label="New preset name" id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
-          <button aria-describedby="P0-8" aria-disabled="true" class="held-action" id="filter-add-preset-btn" title="Enter a preset name first." type="button">
+          <button class="held-action" disabled="" id="filter-add-preset-btn" type="button">
             <span class="btn-label">
               "Add Preset"
-          <span class="visually-hidden" id="P0-8">
-            "Enter a preset name first."
       <div class="filter-section filter-section-manage">
         <h3>
           "Manage Presets"
@@ -602,12 +592,9 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
             <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="0" title="Move down" type="button">
               <span class="material-symbol-icon">
                 "keyboard_arrow_down"
-            <button aria-label="Rename" class="icon-glyph-base icon-glyph-button" data-preset-rename="0" title="Rename" type="button">
+            <button aria-label="Edit preset Rich" class="icon-glyph-base icon-glyph-button" data-preset-edit="0" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
-            <button aria-label="Delete" class="icon-glyph-base icon-glyph-button" data-preset-del="0" title="Delete" type="button">
-              <span class="material-symbol-icon">
-                "delete"
           <div class="filter-preset-row" data-preset-idx="1">
             <span class="filter-preset-name">
               "Favorites"
@@ -617,12 +604,9 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
             <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="1" disabled="" title="Move down" type="button">
               <span class="material-symbol-icon">
                 "keyboard_arrow_down"
-            <button aria-label="Rename" class="icon-glyph-base icon-glyph-button" data-preset-rename="1" title="Rename" type="button">
+            <button aria-label="Edit preset Favorites" class="icon-glyph-base icon-glyph-button" data-preset-edit="1" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
-            <button aria-label="Delete" class="icon-glyph-base icon-glyph-button" data-preset-del="1" title="Delete" type="button">
-              <span class="material-symbol-icon">
-                "delete"
   <div class="filter-dialog-footer">
     <button id="filter-clear-all-btn" type="button">
       "Clear all filters"
@@ -901,11 +885,9 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
         <div class="filter-row">
           <span class="vfield">
             <input aria-label="New preset name" id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
-          <button aria-describedby="P0-8" aria-disabled="true" class="held-action" id="filter-add-preset-btn" title="Enter a preset name first." type="button">
+          <button class="held-action" disabled="" id="filter-add-preset-btn" type="button">
             <span class="btn-label">
               "Add Preset"
-          <span class="visually-hidden" id="P0-8">
-            "Enter a preset name first."
       <div class="filter-section filter-section-manage">
         <h3>
           "Manage Presets"
@@ -919,12 +901,9 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
             <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="0" title="Move down" type="button">
               <span class="material-symbol-icon">
                 "keyboard_arrow_down"
-            <button aria-label="Rename" class="icon-glyph-base icon-glyph-button" data-preset-rename="0" title="Rename" type="button">
+            <button aria-label="Edit preset Rich" class="icon-glyph-base icon-glyph-button" data-preset-edit="0" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
-            <button aria-label="Delete" class="icon-glyph-base icon-glyph-button" data-preset-del="0" title="Delete" type="button">
-              <span class="material-symbol-icon">
-                "delete"
           <div class="filter-preset-row" data-preset-idx="1">
             <span class="filter-preset-name">
               "Favorites"
@@ -934,12 +913,9 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
             <button aria-label="Move down" class="icon-glyph-base icon-glyph-button" data-preset-down="1" disabled="" title="Move down" type="button">
               <span class="material-symbol-icon">
                 "keyboard_arrow_down"
-            <button aria-label="Rename" class="icon-glyph-base icon-glyph-button" data-preset-rename="1" title="Rename" type="button">
+            <button aria-label="Edit preset Favorites" class="icon-glyph-base icon-glyph-button" data-preset-edit="1" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
-            <button aria-label="Delete" class="icon-glyph-base icon-glyph-button" data-preset-del="1" title="Delete" type="button">
-              <span class="material-symbol-icon">
-                "delete"
   <div class="filter-dialog-footer">
     <button id="filter-clear-all-btn" type="button">
       "Clear all filters"

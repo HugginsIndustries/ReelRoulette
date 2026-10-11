@@ -1,4 +1,5 @@
 import { getClientId, getClientType, getDeviceName, getSessionId } from "../api/coreApi";
+import { createDialogs, type Dialogs } from "../dialogs/dialogs";
 import { createFilterDialog, type FilterDialog } from "../filter/filterDialog";
 import { createLibrary, type Library } from "../library/library";
 import { createPlayer, type Player } from "../playback/player";
@@ -10,13 +11,14 @@ import { createAppStore, type AppStore } from "./appStore";
 import { createServerConnection, type ServerConnection } from "./serverConnection";
 
 /**
- * One page's runtime config, shared state, server requests, server connection, player, fullscreen, library, filter
- * dialog, and tag editor.
+ * One page's runtime config, shared state, server requests, in-app dialogs, server connection, player, fullscreen,
+ * library, filter dialog, and tag editor.
  */
 export interface AppServices {
   config: RuntimeConfig;
   store: AppStore;
   api: AppApi;
+  dialogs: Dialogs;
   connection: ServerConnection;
   player: Player;
   fullscreen: StageFullscreen;
@@ -43,6 +45,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
       void api.relayLog(level, message);
     }
   });
+  const dialogs = createDialogs({ relayStatus: (logText) => store.relayStatus(logText) });
   const connection = createServerConnection({
     sseUrl: config.sseUrl,
     pairToken: config.pairToken,
@@ -52,7 +55,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
   const player = createPlayer({ apiBaseUrl: config.apiBaseUrl, store, api, connection });
   // After the player, so the player handles an item-state event before the library does.
   const library = createLibrary({ config, store, api, connection, player });
-  const filterDialog = createFilterDialog({ store, api, connection, library, storage: sessionStorage });
-  const tagEditor = createTagEditor({ store, api, connection, library, player, sessionStorage, localStorage });
-  return { config, store, api, connection, player, fullscreen: createStageFullscreen(), library, filterDialog, tagEditor };
+  const filterDialog = createFilterDialog({ store, api, connection, library, storage: sessionStorage, dialogs });
+  const tagEditor = createTagEditor({ store, api, connection, library, player, sessionStorage, localStorage, dialogs });
+  return { config, store, api, dialogs, connection, player, fullscreen: createStageFullscreen(), library, filterDialog, tagEditor };
 }
