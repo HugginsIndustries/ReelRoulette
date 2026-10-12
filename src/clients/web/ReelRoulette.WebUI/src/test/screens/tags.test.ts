@@ -1513,7 +1513,7 @@ describe("saving", () => {
     expect(tags.modelRequests()).toHaveLength(1);
   });
 
-  // Kept as it was before the tag editor moved to Preact, and recorded in WebUI Status Line Overhaul: a save that
+  // Kept as it was before the tag editor moved to Preact, and recorded in WebUI Notifications: a save that
   // cannot reach the server shows the message of the last refused save on this page.
   it("a save that cannot reach the server says it failed, with the last refused save's message once there is one", async () => {
     const { tags } = await mountTags({ setup: (_server, fake) => fake.failures.set("/api/tag-editor/delete-tag", 0) });
@@ -1857,7 +1857,7 @@ describe("Auto Tag", () => {
     expect(results().querySelector(".tag-autotag-hint")?.textContent).toBe("Scan complete: no matching tags found.");
   });
 
-  // Kept as it was before the tag editor moved to Preact, and recorded in WebUI Status Line Overhaul: the status
+  // Kept as it was before the tag editor moved to Preact, and recorded in WebUI Notifications: the status
   // keeps "Scanning…" when every match already has its tag.
   it("shows no rows when every match already has its tag, and leaves the status on Scanning…", async () => {
     await mountTags({ setup: (_server, tags) => (tags.scan = { rows: [SCAN.rows[2]] }) });
@@ -1873,7 +1873,7 @@ describe("Auto Tag", () => {
     expect(autoTagStatus()).toBe("Scan complete: 1 matching tags, 1 matches, 0/0 selected changes.");
   });
 
-  // Kept as it was before the tag editor moved to Preact, and recorded in WebUI Status Line Overhaul: a failed scan
+  // Kept as it was before the tag editor moved to Preact, and recorded in WebUI Notifications: a failed scan
   // reads as a scan that found nothing.
   it("a failed scan shows that no tags matched", async () => {
     await mountTags({ setup: (_server, tags) => (tags.scanStatus = 500) });

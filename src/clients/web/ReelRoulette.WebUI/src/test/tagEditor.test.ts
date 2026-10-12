@@ -645,7 +645,7 @@ describe("saving", () => {
     expect(context.tiles[0]!.tags).toEqual(["Beach"]);
   });
 
-  // Kept as it was before the tag editor moved to Preact, and recorded in WebUI Status Line Overhaul.
+  // Kept as it was before the tag editor moved to Preact, and recorded in WebUI Notifications.
   it("reports a save that cannot reach the server with the last refused step's message", async () => {
     const context = setup();
     const save = async (name: string) => {
@@ -757,7 +757,7 @@ describe("Auto Tag", () => {
     expect(server.posts.at(-1)).toEqual({ path: "/api/autotag/apply", body: { assignments: [{ tagName: "Sunset", itemPaths: ["C:\\sunset.mp4"] }] } });
   });
 
-  // Both kept as they were before the tag editor moved to Preact, and recorded in WebUI Status Line Overhaul.
+  // Both kept as they were before the tag editor moved to Preact, and recorded in WebUI Notifications.
   it("reads a failed scan as one with no matches, and keeps Scanning… when no row shows", async () => {
     const context = setup();
     context.server.scanStatus = 500;

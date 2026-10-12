@@ -274,7 +274,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
   };
 
   const saves = createTagSaveSession();
-  /** The message of the last refused save step on this page (recorded in WebUI Status Line Overhaul). */
+  /** The message of the last refused save step on this page (recorded in WebUI Notifications). */
   let lastSaveError = "";
 
   function manualPending(current: TagEditorState): boolean {
@@ -912,7 +912,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
         }
         rows = autoTagRowsFromScan(await response.json());
       } catch {
-        // A failed scan reads as one that found nothing (recorded in WebUI Status Line Overhaul).
+        // A failed scan reads as one that found nothing (recorded in WebUI Notifications).
         rows = [];
       }
       updateRows(rows, { hasRun: true });

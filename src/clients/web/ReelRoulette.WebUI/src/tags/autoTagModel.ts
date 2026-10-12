@@ -121,7 +121,7 @@ export function autoTagSummary(rows: readonly AutoTagRow[], viewAll: boolean): s
 
 /**
  * The status after the results change. It is left as it was while no row shows, so a scan whose matches all have
- * their tag keeps "Scanning…" (recorded in WebUI Status Line Overhaul).
+ * their tag keeps "Scanning…" (recorded in WebUI Notifications).
  */
 export function autoTagStatusAfterChange(rows: readonly AutoTagRow[], viewAll: boolean, hasRun: boolean, previous: string): string {
   if (!hasRun) {

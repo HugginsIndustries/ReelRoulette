@@ -23,7 +23,7 @@ body { height: var(--page-height); overflow: hidden; display: flex; flex-directi
 }
 
 /* Header: the logo and the file name, the pairing prompt while the server asks for it, and at the right the admin icon.
-   It has no settings icon, since the panel's tab row reaches Settings. */
+   It has no settings icon, since the panel's tab row reaches Settings, and no bell, which is on the player. */
 .top-bar {
   display: flex;
   flex-wrap: wrap;
@@ -83,7 +83,9 @@ body { height: var(--page-height); overflow: hidden; display: flex; flex-directi
 }
 .stage:fullscreen .media-container { --player-radius: 0px; }
 .stage.fullscreen-pseudo .media-container { --player-radius: 0px; }
-.player-col { flex: 1 1 0; min-width: 0; display: flex; }
+/* The player column holds the popups beside the player, which clips what it holds. It sets no z-index or containment,
+   since either makes a stacking context that would keep the popups under the overlay panel. */
+.player-col { flex: 1 1 0; min-width: 0; display: flex; position: relative; }
 
 /* The player is clipped by a rounded clip-path as well as overflow: WebKit doesn't clip a layer of its own, such as the
    blurred ambient canvas, to its parent's rounded corners, so on iOS they turned square once ambient mode drew. */
@@ -194,7 +196,13 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
 .overlay-btn:disabled { opacity: var(--icon-disabled-opacity); cursor: default; }
 .overlay-btn.active { color: var(--huggins-orange); }
 .overlay-corner-btn { position: absolute; top: 12px; z-index: 20; filter: drop-shadow(var(--control-drop-shadow)); }
+/* The bell sits at the top left, so it can be reached in fullscreen and on a phone on its side, and it hides with the
+   other controls. The panel button sits on the panel's side: at the top right, or just right of the bell while the
+   panel is on the left. */
+#notify-btn { left: 12px; }
+#notify-btn .notify-badge { box-shadow: 0 0 0 2px #000; }
 #panel-btn { right: 116px; }
+.stage[data-side="left"] #panel-btn { right: auto; left: 64px; }
 #favorite-btn { right: 64px; }
 #blacklist-btn { right: 12px; }
 .overlay-seek-row { display: flex; align-items: center; gap: 12px; pointer-events: auto; }
@@ -584,6 +592,8 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
 .setting-fields .setting-sub { margin-left: 26px; }
 .setting-fields .btn { justify-self: start; margin-top: 6px; }
 .setting-fields:disabled, .choice-row label:has(input:disabled) { opacity: 0.55; }
+.setting-fields:disabled .choice-row label:has(input:disabled) { opacity: 1; }
+#set-popup-position { justify-self: start; min-width: 12rem; }
 .choice-row { display: flex; flex-wrap: wrap; gap: 0 16px; }
 .choice-row label, .choice-stack label { display: flex; align-items: center; gap: 8px; min-height: 36px; }
 .choice-stack { display: flex; flex-direction: column; }
@@ -618,10 +628,10 @@ kbd {
 }
 .lib-controls.is-collapsed, .lib-filters.is-collapsed { display: none !important; }
 
-/* A phone on its side (a touch screen under 500 px tall): the header and status line hide and the player fills the
-   screen, like fullscreen without the browser's fullscreen mode. The panel and dialogs still open, compacted. */
+/* A phone on its side (a touch screen under 500 px tall): the header hides and the player fills the screen, like
+   fullscreen without the browser's fullscreen mode. The panel and dialogs still open, compacted. */
 body.short-screen #app { padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); }
-body.short-screen .top-bar, body.short-screen .status { display: none; }
+body.short-screen .top-bar { display: none; }
 body.short-screen .media-container { --player-radius: 0px; }
 body.short-screen .panel-tabs { padding: 2px 6px; }
 body.short-screen .panel-tab, body.short-screen #panel-close { width: 40px; height: 40px; min-width: 40px; }
@@ -642,28 +652,50 @@ body.short-screen .stage:not(.fullscreen-pseudo):not(:fullscreen) .overlay-contr
   padding-bottom: max(12px, env(safe-area-inset-bottom));
 }
 body.short-screen .stage:not(.fullscreen-pseudo):not(:fullscreen) .overlay-corner-btn { top: max(12px, env(safe-area-inset-top)); }
-body.short-screen .stage:not(.fullscreen-pseudo):not(:fullscreen) .conn-indicator { top: max(14px, env(safe-area-inset-top)); }
+body.short-screen .stage:not(.fullscreen-pseudo):not(:fullscreen) .player-indicator { top: max(14px, env(safe-area-inset-top)); }
+body.short-screen .stage:not(.covers-player):not(.fullscreen-pseudo):not(:fullscreen) .media-container.controls-visible ~ .toasts[data-pos^="bottom"] {
+  bottom: calc(112px + env(safe-area-inset-bottom));
+}
 
-/* Before anything plays, and the reconnecting indicator shown while the status line is hidden. */
+/* Before anything plays. */
 .empty-state { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--muted-fg); }
-.conn-indicator {
+/* The player's indicator: one lasting state at a time, such as Reconnecting…, at the top center. On a narrow player it
+   sits below the corner buttons. A library refresh's progress shows only while the player's controls do. At the top,
+   centered, it stays clear of the corner buttons on both sides, which take the last 160 px at the right, and a long
+   state ends in an ellipsis instead. */
+.player-indicator {
   position: absolute;
   top: 14px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 25;
+  max-width: calc(100% - 336px);
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 4px 12px 4px 10px;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.72);
   color: #fff;
   font-size: 0.85rem;
+  line-height: 1.3;
+  text-align: center;
   pointer-events: none;
+  transition: opacity 0.2s;
 }
-.conn-indicator .material-symbol-icon { font-size: 18px; animation: spin 1.2s linear infinite; }
+.player-indicator .material-symbol-icon { font-size: 18px; flex: 0 0 auto; }
+.player-indicator-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.player-indicator .material-symbol-icon.spins { animation: spin 1.2s linear infinite; }
+.player-indicator.is-warning .material-symbol-icon { color: var(--huggins-orange); }
+.media-container:not(.controls-visible) .player-indicator.follows-controls { opacity: 0; }
+@container (max-width: 600px) { .player-indicator { top: 64px; max-width: calc(100% - 24px); } }
 @keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .player-indicator .material-symbol-icon.spins { animation-duration: 3s; } }
+/* Popups at the bottom move up above the player's controls while those show, and down again when they hide, except
+   while the overlay panel covers the player. On a player under 600 px wide, popups at the top start below the
+   indicator. */
+.stage:not(.covers-player) .media-container.controls-visible ~ .toasts[data-pos^="bottom"] { bottom: 112px; }
+.player-col.is-narrow .toasts[data-pos^="top"] { top: 104px; }
 .pair-label { white-space: nowrap; }
 body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
 
@@ -672,13 +704,10 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
 /* Today's startup error page, when the runtime configuration doesn't load. */
 .startup-error { position: fixed; inset: 0; z-index: 6000; background: var(--page-bg); color: var(--page-fg); overflow: auto; padding: 24px; }
 
-/* The status line. */
-.status { font-size: 0.9rem; color: var(--muted-fg); margin-top: 10px; min-height: 1.2em; flex-shrink: 0; }
-
 /* Mockup controls. */
 .mock-chip {
   position: absolute;
-  top: 12px;
+  top: 64px;
   left: 12px;
   z-index: 30;
   padding: 4px 8px;
@@ -686,16 +715,16 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
   align-items: center;
   gap: 4px;
   pointer-events: none;
-  max-width: calc(100% - 190px);
+  max-width: calc(50% - 18px);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .mock-chip .material-symbol-icon { font-size: 18px; }
-.mock-hint { position: absolute; top: 64px; right: 12px; z-index: 30; padding: 6px 10px; max-width: 230px; pointer-events: none; }
-@container (max-width: 340px) {
-  .mock-chip { top: 64px; max-width: calc(100% - 24px); }
-  .mock-hint { top: 108px; }
+.mock-hint { position: absolute; top: 64px; right: 12px; z-index: 30; padding: 6px 10px; max-width: min(230px, calc(50% - 18px)); pointer-events: none; }
+/* Below the indicator, which a narrow player shows under the corner buttons. */
+@container (max-width: 600px) {
+  .mock-chip, .mock-hint { top: 108px; }
 }
 .mock-toggle {
   position: fixed;
@@ -769,10 +798,11 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
         <div id="ambient" class="ambient" aria-hidden="true" hidden><canvas width="32" height="18"></canvas></div>
         <div id="video" class="fake-video"><div class="subject"></div></div>
         <div id="empty-state" class="empty-state" hidden>Tap to play, or open the panel to choose a preset or filter.</div>
-        <div id="conn-indicator" class="conn-indicator" role="status" hidden><span class="material-symbol-icon">sync</span>Reconnecting…</div>
+        <div id="player-indicator" class="player-indicator" role="status" hidden></div>
         <div id="play-chip" class="mock-chip mock-note"></div>
         <div id="mock-hint" class="mock-hint mock-note">The panel button opens the panel on its last tab.</div>
         <div class="overlay-controls" id="overlay-controls">
+          <button id="notify-btn" class="overlay-btn overlay-corner-btn notify-btn" type="button" aria-label="Notifications" title="Notifications"><span class="material-symbol-icon">notifications</span><span class="notify-badge" hidden></span></button>
           <button id="panel-btn" class="overlay-btn overlay-corner-btn" aria-expanded="false" aria-controls="panel"><span class="material-symbol-icon">right_panel_open</span><span class="unsaved-dot" hidden></span></button>
           <button id="favorite-btn" class="overlay-btn overlay-corner-btn" aria-label="Favorite" title="Favorite"><span class="material-symbol-icon">favorite</span></button>
           <button id="blacklist-btn" class="overlay-btn overlay-corner-btn" aria-label="Blacklist" title="Blacklist"><span class="material-symbol-icon">thumb_down</span></button>
@@ -792,6 +822,7 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
           </div>
         </div>
       </div>
+      <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
     </main>
 
     <div id="handle" class="panel-handle" role="separator" aria-orientation="vertical" aria-label="Resize panel" tabindex="0" hidden>
@@ -1114,9 +1145,42 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
               <div class="choice-row"><label><input type="checkbox" id="set-tile-names"> Show file names on tiles</label></div>
               <p class="setting-hint">Hovering a tile shows its name either way.</p>
             </div>
+          </div>
+          <div class="settings-section" id="set-notify-section">
+            <h3>Notifications</h3>
             <div class="setting">
-              <div class="choice-row"><label><input type="checkbox" id="set-status"> Show the status line</label></div>
-              <p class="setting-hint">Connection, refresh, and sync messages below the player.</p>
+              <div class="choice-row"><label><input type="checkbox" id="set-popups"> Show popups</label></div>
+              <p class="setting-hint">Short messages over the player. The bell on the player lists them either way.</p>
+              <details class="setting-more" id="set-popups-more">
+                <summary><span class="material-symbol-icon setting-more-chevron">chevron_right</span>Popup settings</summary>
+                <fieldset class="setting-fields" id="set-popup-fields">
+                  <span class="setting-label" id="set-popup-kinds-label">Show popups for</span>
+                  <div class="choice-stack" role="group" aria-labelledby="set-popup-kinds-label">
+                    <label><input type="checkbox" name="set-popup-kind" value="actions"><span>Your actions<small>Such as Added to favorites, Filters applied, and Path copied.</small></span></label>
+                    <label><input type="checkbox" name="set-popup-kind" value="devices"><span>Other devices<small>Favorites and blacklist changes made on another device.</small></span></label>
+                    <label><input type="checkbox" name="set-popup-kind" value="refresh"><span>Library refresh<small>When a refresh finishes or fails.</small></span></label>
+                    <label><input type="checkbox" name="set-popup-kind" value="skips"><span>Skipped files<small>When playback skips a missing file or one this browser can't play.</small></span></label>
+                    <label><input type="checkbox" name="set-popup-kind" value="connection"><span>Connection<small>When the connection to the server comes back, or the library can't load more.</small></span></label>
+                  </div>
+                  <label class="setting-label" for="set-popup-position">Position</label>
+                  <select class="ctl" id="set-popup-position">
+                    <option value="bottom-center">Bottom center</option>
+                    <option value="bottom-left">Bottom left</option>
+                    <option value="bottom-right">Bottom right</option>
+                    <option value="top-center">Top center</option>
+                    <option value="top-left">Top left</option>
+                    <option value="top-right">Top right</option>
+                  </select>
+                  <div class="choice-row"><label><input type="checkbox" id="set-popup-fullscreen"> Show in fullscreen</label></div>
+                  <span class="setting-label" id="set-popup-time-label">Show for</span>
+                  <div class="choice-row" role="radiogroup" aria-labelledby="set-popup-time-label">
+                    <label><input type="radio" name="set-popup-time" value="3"> 3 seconds</label>
+                    <label><input type="radio" name="set-popup-time" value="5"> 5 seconds</label>
+                    <label><input type="radio" name="set-popup-time" value="10"> 10 seconds</label>
+                  </div>
+                  <p class="setting-hint">Pointing at a popup keeps it. A warning stays until you close it.</p>
+                </fieldset>
+              </details>
             </div>
           </div>
           <div class="settings-section">
@@ -1225,11 +1289,33 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
         <label><input type="checkbox" id="mock-short"> A phone on its side (a touch screen under 500 px tall)</label>
         <p class="mock-small mock-keep">The theme, panel side, and Auto-Pause are in the Settings tab.</p>
       </fieldset>
+      <fieldset id="mock-lasting">
+        <legend>Lasting states, on the player</legend>
+        <label><input type="checkbox" value="reconnecting"> Reconnecting: the server is stopped</label>
+        <label><input type="checkbox" value="incompatible"> The server fails the compatibility check</label>
+        <label><input type="checkbox" value="nolibrary"> The server runs without a library</label>
+        <label><input type="checkbox" value="loading"> Loading, held until unchecked</label>
+        <label><input type="checkbox" value="refresh"> A library refresh: it finishes by itself, or now when unchecked</label>
+        <p class="mock-small mock-keep">The first three are the Server choices above. The indicator shows one at a time, the first checked in this order; the list under the bell shows them all. Loading shows after half a second, so a quick load shows nothing. The refresh shows only while the player's controls do.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Test notifications</legend>
+        <div class="mock-sheet-actions" id="mock-tests">
+          <button type="button" data-test="actions">Your action</button>
+          <button type="button" data-test="devices">Another device</button>
+          <button type="button" data-test="refresh">Refresh finished</button>
+          <button type="button" data-test="refresh-failed">Refresh failed</button>
+          <button type="button" data-test="skips">Skipped file</button>
+          <button type="button" data-test="connection">Reconnected</button>
+          <button type="button" data-test="notice">An error, in the dialog</button>
+          <button type="button" data-test="burst">Four at once</button>
+        </div>
+        <p class="mock-small mock-keep">Each follows the Settings tab's Notifications section; one whose kind is off goes only to the list, and the bell counts it.</p>
+      </fieldset>
       <fieldset>
         <legend>Events</legend>
         <div class="mock-sheet-actions">
           <button type="button" id="mock-sync">A favorite from another device</button>
-          <button type="button" id="mock-refresh">A library refresh</button>
           <button type="button" id="mock-startup">The runtime config fails</button>
         </div>
       </fieldset>
@@ -1239,8 +1325,6 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
       </div>
     </div>
   </div>
-
-  <div id="status" class="status">Ready</div>
 </div>
 
 <script>
@@ -1281,7 +1365,6 @@ const state = {
   iosVolume: store.get("iosVolume", false),
   sound: store.get("sound", true),
   mockShort: store.get("mockShort", false),
-  showStatus: store.get("showStatus", true),
   libCollapsed: store.get("libCollapsed", false),
   tileNames: store.get("tileNames", false),
   hideControls: store.get("hideControls", "timeout"),
@@ -1367,7 +1450,8 @@ function loudnessGain(item) {
   const db = loudnessAdjustment(item);
   return db == null ? 1 : Math.pow(10, db / 20);
 }
-const NO_LIBRARY_MESSAGE = "Running without a library. The catalog was saved by a newer version of ReelRoulette and was left unchanged.";
+const NO_LIBRARY_REASON = "The catalog was saved by a newer version of ReelRoulette and was left unchanged.";
+const NO_LIBRARY_MESSAGE = `Running without a library. ${NO_LIBRARY_REASON}`;
 
 // Many tags across many categories, to see long lists and try reordering them.
 const UNCATEGORIZED = "uncategorized";
@@ -1426,6 +1510,55 @@ let historyIndex = -1;
 let pickInFlight = false;
 // For build/check.mjs: picks it queues come first, and "?instant" in the address skips the mockup's waits.
 const mockHooks = { queue: [], instant: new URLSearchParams(location.search).has("instant") };
+
+// ---- Notifications, in place of the status line ----
+// Lasting states show on the player's indicator, one at a time, in common.js's precedence order; the list under the
+// bell shows them all.
+const LASTING = {
+  reconnecting: { icon: "sync", spin: true, title: "Reconnecting…", detail: "The connection to the server was lost. ReelRoulette keeps trying." },
+  incompatible: { icon: "sync_problem", warning: true, title: "Server not compatible", detail: "Unsupported server API version: 2." },
+  nolibrary: { icon: "warning", warning: true, title: "Running without a library", detail: NO_LIBRARY_REASON },
+  loading: { icon: "progress_activity", spin: true, title: "Loading…" }
+};
+const notes = initNotifications({
+  button: $("notify-btn"),
+  host: $("toasts"),
+  indicator: $("player-indicator"),
+  listHost: stage,
+  // While the server asks for pairing, nothing works until the device pairs, and the header's prompt says so.
+  indicatorHidden: () => state.pairing,
+  inFullscreen: () => isFullscreen(),
+  onSettings: () => {
+    openPanel("settings");
+    $("set-popups-more").open = true;
+    $("set-notify-section").scrollIntoView?.({ block: "start" });
+    $("set-popups").focus({ preventScroll: true });
+  },
+  // The player's controls stay while the list is open, so their countdown starts again when it closes, however it closes.
+  onClose: () => controlsActivity(),
+  instant: mockHooks.instant
+});
+const acknowledge = (text, key, detail = "") => notes.notify({ kind: "actions", text, detail, key });
+// Loading shows only after half a second, so a quick load shows nothing. A random pick, the media, and the Mockup
+// tab's hold each keep it on. The half second counts once, from the first hold until every hold ends, so a pick and
+// its media load are one loading period.
+const LOADING_GRACE = 500;
+const loadingHolds = new Set();
+let loadingTimer = 0;
+function setLoading(reason, on) {
+  if (on) loadingHolds.add(reason);
+  else loadingHolds.delete(reason);
+  if (!loadingHolds.size) {
+    clearTimeout(loadingTimer);
+    loadingTimer = 0;
+    return void notes.setLasting("loading", null);
+  }
+  if (loadingTimer || notes.lasting().some((info) => info.id === "loading")) return;
+  loadingTimer = setTimeout(() => {
+    loadingTimer = 0;
+    if (loadingHolds.size) notes.setLasting("loading", LASTING.loading);
+  }, mockHooks.instant ? 0 : LOADING_GRACE);
+}
 
 // "Advance after" in the Settings tab: today's photo duration, renamed, and the Timer mode's interval.
 const photoSeconds = () => state.advanceAfter;
@@ -1516,17 +1649,18 @@ function setPlaying(playing, by) {
 }
 
 function skipNotice(item) {
-  $("status").textContent = item.missing ? "Skipped a missing file." : "Skipped a file this browser can't play.";
+  notes.notify({ kind: "skips", text: item.missing ? "Skipped a missing file." : "Skipped a file this browser can't play.", detail: item.name, key: "skip" });
 }
 
-// Starts an item. The status line says "Loading..." and then "Playing", as today, unless it is reporting a skip.
-function start(item, { quiet = false } = {}) {
+// Starts an item. While its media loads, the player's indicator says Loading… after the grace time.
+let mediaLoads = 0;
+function start(item) {
   playback.item = item;
   playback.time = 0;
   playback.timer = 0;
   playback.failed = isPlayable(item) ? null : "format";
   if (playback.failed) {
-    // A file chosen from the library that this browser can't play: its notice, not the status line.
+    // A file chosen from the library that this browser can't play: its notice, not a popup.
     playback.playing = false;
     playback.autoPaused = false;
     playback.pausedBy = "error";
@@ -1538,12 +1672,9 @@ function start(item, { quiet = false } = {}) {
   item.plays += 1;
   setPlaying(true, "user");
   followPlayingItem();
-  if (!quiet) {
-    $("status").textContent = "Loading...";
-    setTimeout(() => {
-      if (playback.item === item && $("status").textContent === "Loading...") $("status").textContent = "Playing";
-    }, mockHooks.instant ? 0 : 300);
-  }
+  const load = ++mediaLoads;
+  setLoading("media", true);
+  setTimeout(() => load === mediaLoads && setLoading("media", false), mockHooks.instant ? 0 : 300);
 }
 function pushHistory(item) {
   history.splice(historyIndex + 1);
@@ -1556,22 +1687,29 @@ function pickRandom(tries = 0) {
   if (state.situation === "incompatible") return void noticeDialog({ message: "Cannot play: server compatibility check failed." });
   if (pickInFlight) return;
   pickInFlight = true;
-  if (!tries) $("status").textContent = "Loading...";
+  setLoading("pick", true);
   const finish = () => {
     pickInFlight = false;
-    if (state.situation === "reconnecting") return void noticeDialog({ message: "Random selection failed: Failed to fetch" });
-    if (state.situation === "noanswer") return void noticeDialog({ message: "No response from the server. Try again." });
-    if (state.situation === "nolibrary") return void noticeDialog({ message: "Random selection failed (503)." });
+    const fail = (message) => {
+      setLoading("pick", false);
+      noticeDialog({ message });
+    };
+    if (state.situation === "reconnecting") return void fail("Random selection failed: Failed to fetch");
+    if (state.situation === "noanswer") return void fail("No response from the server. Try again.");
+    if (state.situation === "nolibrary") return void fail("Random selection failed (503).");
     const pool = state.situation === "empty" ? [] : ITEMS.filter((item) => !item.removed && passesApplied(item));
-    if (!pool.length) return void noticeDialog({ message: "No eligible media for current filters." });
+    if (!pool.length) return void fail("No eligible media for current filters.");
     const queued = mockHooks.queue.shift();
     const item = queued !== undefined ? ITEMS[queued] : pool[Math.floor(Math.random() * pool.length)];
+    // The next pick keeps this one's hold, and the media's hold starts before the pick's ends, so the loading period
+    // runs on unbroken.
     if (cannotPlay(item) && tries < 20) {
       skipNotice(item);
       return pickRandom(tries + 1);
     }
     pushHistory(item);
-    start(item, { quiet: tries > 0 });
+    start(item);
+    setLoading("pick", false);
   };
   // The WebUI gives up on a pick after 10 seconds; the mockup waits 4.
   const delay = mockHooks.instant ? 0 : state.situation === "noanswer" ? 4000 : 350;
@@ -1580,7 +1718,7 @@ function pickRandom(tries = 0) {
 }
 
 // Next steps forward through history and picks at random at its end; Previous steps back and does nothing at the
-// start, as today. Both skip a file that is missing or that this browser can't play, saying so on the status line.
+// start, as today. Both skip a file that is missing or that this browser can't play, saying so in a popup.
 function goNext(tries = 0) {
   if (historyIndex < history.length - 1) {
     historyIndex += 1;
@@ -1589,7 +1727,7 @@ function goNext(tries = 0) {
       skipNotice(item);
       return goNext(tries + 1);
     }
-    return start(item, { quiet: tries > 0 });
+    return start(item);
   }
   pickRandom(tries);
 }
@@ -1603,7 +1741,7 @@ function goPrevious() {
   if (index < 0) return;
   historyIndex = index;
   if (skipped) skipNotice(skipped);
-  start(history[index], { quiet: !!skipped });
+  start(history[index]);
 }
 // A tile chosen from the library: a missing file says so and nothing else changes, as a library play does today.
 function chooseItem(item) {
@@ -1791,19 +1929,22 @@ function renderPanelButton() {
 function applyLayout() {
   state.mode = computeMode();
   document.body.classList.toggle("short-screen", isShortScreen());
-  $("status").hidden = !state.showStatus;
   stage.dataset.side = state.side;
   stage.classList.toggle("is-overlay", state.mode === "overlay");
+  stage.classList.toggle("covers-player", state.mode === "overlay" && state.open);
   panel.hidden = !state.open;
   handle.hidden = !state.open || state.mode === "overlay";
   const width = effectiveWidth();
   stage.style.setProperty("--panel-w", `${width}px`);
+  // Measured once the panel's new state is in place, so it is the player's width after the change.
+  const playerCol = media.parentElement;
+  playerCol.classList.toggle("is-narrow", playerCol.clientWidth > 0 && playerCol.clientWidth < 600);
   handle.setAttribute("aria-valuemin", String(PANEL_MIN));
   handle.setAttribute("aria-valuemax", String(maxWidth()));
   handle.setAttribute("aria-valuenow", String(width));
   handle.setAttribute("aria-valuetext", `${width} pixels`);
   renderPanelButton();
-  renderConnection();
+  notes.renderIndicator();
   syncAutoPause();
   renderReadout();
   placeAllTips();
@@ -1827,6 +1968,7 @@ function showTab(tab) {
 let opener = null;
 function openPanel(tab, from) {
   opener = from || null;
+  notes.closeList(false);
   state.open = true;
   store.set("open", true);
   $("mock-hint").hidden = true;
@@ -1954,8 +2096,9 @@ media.addEventListener("click", () => {
 
 // ---- When the player's controls hide ----
 // Timeout, the default: they hide after a time with no activity, and moving the mouse, tapping, or a key shows them
-// and restarts the countdown. They stay while the pointer or keyboard focus is on them, while the scrub bar or volume
-// is dragged, and, with Keep visible while paused, while nothing plays. On click/tap: a click or tap on the player
+// and restarts the countdown. They stay while a mouse or pen pointer is over them, while keyboard focus is on one, while
+// the scrub bar or volume is dragged, and, with Keep visible while paused, while nothing plays. A touch doesn't count as
+// over them, and focus that a tap or click leaves on a control doesn't hold them: after a tap on Play they still hide. On click/tap: a click or tap on the player
 // shows or hides them, as today. Never: they stay.
 const overlayControls = $("overlay-controls");
 const CONTROL_PARTS = ".overlay-btn, .overlay-seek-row";
@@ -1963,8 +2106,14 @@ let hideTimer = 0;
 let pointerOnControls = false;
 let draggingControl = false;
 const setControlsShown = (shown) => media.classList.toggle("controls-visible", shown);
+// Keyboard focus is focus that :focus-visible matches in the WebUI. The mockup tracks the last input itself, since
+// happy-dom matches :focus-visible for any focus.
+let keyboardFocus = false;
+document.addEventListener("keydown", () => (keyboardFocus = true), true);
+document.addEventListener("pointerdown", () => (keyboardFocus = false), true);
 function controlsHeld() {
-  return pointerOnControls || draggingControl || overlayControls.contains(document.activeElement) || (state.keepWhilePaused && !playback.playing);
+  const focusHolds = keyboardFocus && overlayControls.contains(document.activeElement);
+  return pointerOnControls || draggingControl || focusHolds || (state.keepWhilePaused && !playback.playing) || notes.listShown();
 }
 function restartHideCountdown() {
   clearTimeout(hideTimer);
@@ -1991,6 +2140,7 @@ function applyControlsMode() {
 }
 media.addEventListener("pointermove", controlsActivity);
 overlayControls.addEventListener("pointerover", (event) => {
+  if (event.pointerType !== "mouse" && event.pointerType !== "pen") return;
   if (event.target.closest(CONTROL_PARTS)) pointerOnControls = true;
 });
 overlayControls.addEventListener("pointerout", (event) => {
@@ -2305,7 +2455,7 @@ function toggleFlag(flag) {
   item[flag] = !item[flag];
   if (item[flag]) item[flag === "favorite" ? "blacklisted" : "favorite"] = false;
   const messages = flag === "favorite" ? ["Added to favorites", "Removed from favorites"] : ["Blacklisted", "Removed from blacklist"];
-  $("status").textContent = item[flag] ? messages[0] : messages[1];
+  acknowledge(item[flag] ? messages[0] : messages[1], "flag", item.name);
   renderPlayback();
   layoutGrid(true);
 }
@@ -2322,6 +2472,7 @@ function isIosTouchWebKit() {
 }
 function syncFullscreenIcon() {
   setIcon($("fullscreen-btn").querySelector(".material-symbol-icon"), isFullscreen() ? "fullscreen_exit" : "fullscreen");
+  if (isFullscreen() && !notes.getSettings().fullscreen) notes.dismissAll();
   applyLayout();
 }
 function setPseudo(on) {
@@ -2935,7 +3086,7 @@ $("filter-apply").addEventListener("click", () => {
   readApplied();
   renderLibPresets();
   reloadGrid();
-  $("status").textContent = "Filters applied.";
+  acknowledge("Filters applied.", "filter");
   if (state.mode === "overlay") closePanel();
 });
 $("filter-cancel").addEventListener("click", () => {
@@ -3000,13 +3151,13 @@ $("filter-clear").addEventListener("click", () => {
 $("filter-refresh").addEventListener("click", () => {
   if (state.situation === "reconnecting") return void noticeDialog({ message: "Filter refresh failed: Failed to fetch" });
   renderFilterTags();
-  $("status").textContent = "Filter data refreshed.";
+  acknowledge("Filter data refreshed.", "filter");
 });
 // Update Preset saves the tab's filter into the chosen preset until Apply saves the list, as today.
 $("filter-update-preset").addEventListener("click", () => {
   const chosen = $("filter-preset-select").value;
   if (!chosen) return void noticeDialog({ message: "Select a preset to update." });
-  $("status").textContent = `Updated preset "${chosen}" locally — Apply to save.`;
+  acknowledge(`Updated preset "${chosen}" locally — Apply to save.`, "filter");
   filterPending = true;
   renderApply();
 });
@@ -3368,7 +3519,7 @@ $("tags-save").addEventListener("click", () => {
   renderFilterTags();
   renderStats();
   // Saving for the selection acknowledges itself as the other bulk actions do.
-  $("status").textContent = several ? `Updated tags on ${items.length === 1 ? "1 item" : `${items.length} items`}.` : "Tag editor changes applied";
+  acknowledge(several ? `Updated tags on ${items.length === 1 ? "1 item" : `${items.length} items`}.` : "Tag editor changes applied", "tags");
 });
 // Refresh discards unsaved changes, asking first, and the tab then follows the playing item.
 $("tags-refresh").addEventListener("click", async () => {
@@ -3657,7 +3808,7 @@ $("autotag-apply").addEventListener("click", () => {
   autoTag.rows = autoTagScan();
   renderAutoTag();
   followPlayingItem();
-  $("status").textContent = "Tag editor changes applied";
+  acknowledge("Tag editor changes applied", "tags");
 });
 
 // ---- Header ----
@@ -3699,28 +3850,16 @@ $("mock-reset").addEventListener("click", () => {
   showTab("library");
 });
 
-// The server's situation, with today's messages for each. The status line shows "Ready (API 1)" once connected,
-// "SSE reconnecting..." while the event stream is down, and "SSE connected" when it comes back.
-const SITUATION_STATUS = {
-  connected: "Ready (API 1)",
-  reconnecting: "SSE reconnecting...",
-  noanswer: "Ready (API 1)",
-  nolibrary: NO_LIBRARY_MESSAGE,
-  incompatible: "Unsupported server API version: 2.",
-  empty: "Ready (API 1)"
-};
-function renderConnection() {
-  // While the status line is hidden, a small indicator on the player shows the lost connection, except while the
-  // server asks for pairing, which refuses the connection and whose prompt shows instead.
-  const statusHidden = !state.showStatus || isShortScreen();
-  $("conn-indicator").hidden = !(state.situation === "reconnecting" && statusHidden && !state.pairing);
-}
+// The server's situation. Being connected needs no message. Reconnecting, a failed compatibility check, and running
+// without a library are lasting states on the player, and the connection coming back is a popup.
+const SERVER_STATES = ["reconnecting", "incompatible", "nolibrary"];
 function applySituation(situation) {
   const was = state.situation;
   state.situation = situation;
   document.querySelectorAll('input[name="mock-situation"]').forEach((radio) => (radio.checked = radio.value === situation));
-  $("status").textContent = was === "reconnecting" && situation !== "reconnecting" ? "SSE connected" : SITUATION_STATUS[situation];
-  renderConnection();
+  SERVER_STATES.forEach((id) => notes.setLasting(id, situation === id ? LASTING[id] : null));
+  if (was === "reconnecting" && situation !== "reconnecting") notes.notify({ kind: "connection", text: "Reconnected.", key: "connection" });
+  renderMockLasting();
   renderLibPresets();
   renderPresets();
   renderFilterTags();
@@ -3738,24 +3877,78 @@ $("mock-sync").addEventListener("click", () => {
   if (!item) return;
   item.favorite = !item.favorite;
   if (item.favorite) item.blacklisted = false;
-  $("status").textContent = `Synced: ${item.favorite ? "Added to favorites" : "Removed from favorites"}: ${item.name}`;
+  notes.notify({ kind: "devices", text: `${item.favorite ? "Added to" : "Removed from"} favorites on another device`, detail: item.name, key: `sync:${item.id}` });
   renderPlayback();
   layoutGrid(true);
 });
-$("mock-refresh").addEventListener("click", () => {
-  const steps = [
-    "Core refresh: Refreshing sources (10%)",
-    "Core refresh: Fingerprinting files (35%)",
-    "Core refresh: Scanning durations (60%)",
-    "Core refresh: Scanning loudness (80%)",
-    "Core refresh: Generating thumbnails (95%)",
-    "Core refresh complete | Source: no changes | Fingerprint: ready 72 | Duration: files 48, all cached | Loudness: files 48, all cached | Thumbnails: reused 72"
-  ];
-  steps.forEach((text, i) => setTimeout(() => {
-    $("status").textContent = text;
-    // The library window reloads once the refresh finishes.
-    if (i === steps.length - 1) reloadGrid();
-  }, mockHooks.instant ? 0 : i * 900));
+
+// A library refresh: its stage and progress on the player's indicator while the controls show, and its result in a
+// popup. The summary is today's, without "Core refresh complete".
+const REFRESH_STAGES = [["Refreshing sources", 10], ["Fingerprinting files", 35], ["Scanning durations", 60], ["Scanning loudness", 80], ["Generating thumbnails", 95]];
+const REFRESH_SUMMARY = "Source: no changes · Fingerprint: ready 72 · Duration: files 48, all cached · Loudness: files 48, all cached · Thumbnails: reused 72";
+let refreshTimer = 0;
+let refreshStep = -1;
+function startRefresh() {
+  clearTimeout(refreshTimer);
+  refreshStep = -1;
+  const advance = () => {
+    refreshStep += 1;
+    if (refreshStep >= REFRESH_STAGES.length) return void finishRefresh();
+    const [stage, percent] = REFRESH_STAGES[refreshStep];
+    notes.setLasting("refresh", { icon: "autorenew", spin: true, title: `Library refresh: ${stage}`, progress: `(${percent}%)`, followsControls: true });
+    renderMockLasting();
+    // "?instant" holds it at its first stage until it is unchecked, so the check can see each state.
+    if (!mockHooks.instant) refreshTimer = setTimeout(advance, 2500);
+  };
+  advance();
+}
+function finishRefresh() {
+  clearTimeout(refreshTimer);
+  refreshStep = -1;
+  notes.setLasting("refresh", null);
+  notes.notify({ kind: "refresh", text: "Library refresh finished", detail: REFRESH_SUMMARY, key: "refresh" });
+  renderMockLasting();
+  // The library window reloads once the refresh finishes.
+  reloadGrid();
+}
+
+// The Mockup tab's lasting states: the server's follow the Server choice, and loading and a refresh run on their own.
+function renderMockLasting() {
+  const active = new Set(notes.lasting().map((info) => info.id));
+  $("mock-lasting").querySelectorAll("input").forEach((box) => {
+    box.checked = box.value === "loading" ? loadingHolds.has("mock") : active.has(box.value);
+  });
+}
+$("mock-lasting").addEventListener("change", (event) => {
+  const box = event.target;
+  if (SERVER_STATES.includes(box.value)) applySituation(box.checked ? box.value : "connected");
+  else if (box.value === "loading") setLoading("mock", box.checked);
+  else if (box.value === "refresh") {
+    if (box.checked) startRefresh();
+    else finishRefresh();
+  }
+});
+
+// Test notifications, one of each kind, as the WebUI sends them.
+const sampleName = () => (playback.item || ITEMS[0]).name;
+const TESTS = {
+  actions: () => acknowledge("Added to favorites", "flag", sampleName()),
+  devices: () => notes.notify({ kind: "devices", text: "Blacklisted on another device", detail: sampleName() }),
+  refresh: () => notes.notify({ kind: "refresh", text: "Library refresh finished", detail: REFRESH_SUMMARY, key: "refresh" }),
+  "refresh-failed": () => notes.notify({ kind: "refresh", level: "warning", text: "Library refresh failed", detail: "Source \"Videos\" is unavailable: /media/videos was not found.", key: "refresh" }),
+  skips: () => notes.notify({ kind: "skips", text: "Skipped a file this browser can't play.", detail: sampleName(), key: "skip" }),
+  connection: () => notes.notify({ kind: "connection", text: "Reconnected.", key: "connection" }),
+  notice: () => noticeDialog({ message: "Saving presets failed (500)." }),
+  burst: () => {
+    acknowledge("Filters applied.", "filter");
+    notes.notify({ kind: "devices", text: "Added to favorites on another device", detail: ITEMS[1].name });
+    notes.notify({ kind: "skips", text: "Skipped a missing file.", detail: ITEMS[13].name, key: "skip" });
+    acknowledge("Path copied.", "path", ITEMS[2].name);
+  }
+};
+$("mock-tests").addEventListener("click", (event) => {
+  const test = event.target.closest("button")?.dataset.test;
+  if (test) TESTS[test]();
 });
 $("mock-startup").addEventListener("click", () => {
   toggleSheet(false);
@@ -3868,7 +4061,8 @@ $("lib-filters").addEventListener("click", () => showTab("filter"));
 let placeholderUntil = 0;
 function reloadGrid() {
   if (state.situation === "reconnecting") {
-    $("status").textContent = "Library browse failed. Showing the tiles already loaded.";
+    // A failure, so not the Connection kind's check.
+    notes.notify({ kind: "connection", icon: "sync_problem", text: "Library browse failed. Showing the tiles already loaded.", key: "browse" });
     return;
   }
   placeholderUntil = Date.now() + (mockHooks.instant ? 0 : 450);
@@ -3999,7 +4193,7 @@ async function runBulk(kind) {
   closeBulkMenu();
   const items = [...selected].map((id) => ITEMS[id]);
   const noun = countOf(items.length);
-  const status = (text) => ($("status").textContent = text);
+  const status = (text) => acknowledge(text, "bulk");
   if (kind === "fav-add") { items.forEach((item) => Object.assign(item, { favorite: true, blacklisted: false })); status(`Added ${noun} to favorites.`); }
   if (kind === "fav-remove") { items.forEach((item) => (item.favorite = false)); status(`Removed ${noun} from favorites.`); }
   if (kind === "bl-add") { items.forEach((item) => Object.assign(item, { blacklisted: true, favorite: false })); status(`Blacklisted ${noun}.`); }
@@ -4077,7 +4271,7 @@ async function removeFromLibrary(items) {
   selecting = false;
   lastSelected = null;
   renderBulk();
-  $("status").textContent = answer.deleteFiles ? `Removed ${noun} from the library and deleted their files.` : `Removed ${noun} from the library.`;
+  acknowledge(answer.deleteFiles ? `Removed ${noun} from the library and deleted their files.` : `Removed ${noun} from the library.`, "bulk");
 }
 
 // ---- Stats tab ----
@@ -4103,10 +4297,10 @@ function fileStats(item) {
   action.prepend(iconSpan(state.serverMachine ? "folder_open" : "content_copy"));
   action.addEventListener("click", () => {
     if (state.serverMachine) {
-      $("status").textContent = "Opened in the file manager.";
+      acknowledge("Opened in the file manager.", "path", item.name);
     } else {
       navigator.clipboard?.writeText(item.path).catch(() => {});
-      $("status").textContent = "Path copied.";
+      acknowledge("Path copied.", "path", item.name);
     }
   });
   path.append(code, action);
@@ -4349,11 +4543,35 @@ function initSettings() {
     store.set("tileNames", state.tileNames);
     layoutGrid(true);
   });
-  $("set-status").checked = state.showStatus;
-  $("set-status").addEventListener("change", () => {
-    state.showStatus = $("set-status").checked;
-    store.set("showStatus", state.showStatus);
-    applyLayout();
+  // Notifications: whether popups show, for which kinds, where, and for how long. Changing where or how long shows a
+  // sample popup.
+  const renderNotifySettings = () => {
+    const current = notes.getSettings();
+    $("set-popups").checked = current.popups;
+    $("set-popup-fields").disabled = !current.popups;
+    document.querySelectorAll('input[name="set-popup-kind"]').forEach((box) => (box.checked = !!current.kinds[box.value]));
+    $("set-popup-position").value = current.position;
+    $("set-popup-fullscreen").checked = current.fullscreen;
+    document.querySelectorAll('input[name="set-popup-time"]').forEach((radio) => (radio.checked = Number(radio.value) === current.seconds));
+  };
+  renderNotifySettings();
+  $("set-popups").addEventListener("change", () => {
+    notes.updateSettings({ popups: $("set-popups").checked });
+    renderNotifySettings();
+  });
+  document.querySelectorAll('input[name="set-popup-kind"]').forEach((box) => {
+    box.addEventListener("change", () => notes.updateSettings({ kinds: { [box.value]: box.checked } }));
+  });
+  $("set-popup-position").addEventListener("change", () => {
+    notes.updateSettings({ position: $("set-popup-position").value });
+    notes.preview();
+  });
+  $("set-popup-fullscreen").addEventListener("change", () => notes.updateSettings({ fullscreen: $("set-popup-fullscreen").checked }));
+  document.querySelectorAll('input[name="set-popup-time"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      notes.updateSettings({ seconds: Number(radio.value) });
+      notes.preview();
+    });
   });
   // Today's client type and device name, which the WebUI reads from the user agent.
   const mobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
@@ -4408,7 +4626,7 @@ const TAB_KEYS = { 1: "library", 2: "filter", 3: "tags", 4: "stats", 5: "setting
 const isTextField = (el) =>
   el && (el.isContentEditable || el.tagName === "TEXTAREA" || el.tagName === "SELECT" ||
     (el.tagName === "INPUT" && !["checkbox", "radio", "button", "submit"].includes(el.type)));
-// The volume keys move the slider without a status line message.
+// The volume keys move the slider without a popup.
 function setVolume(value) {
   state.volume = Math.max(0, Math.min(100, value));
   store.set("volume", state.volume);
@@ -4480,7 +4698,7 @@ $("pair").addEventListener("submit", (event) => {
   pairField.reset("");
   applyMockOptions();
   applyLayout();
-  $("status").textContent = "Paired.";
+  acknowledge("Paired.", "pair");
 });
 
 // ---- Mockup options ----
@@ -4531,7 +4749,9 @@ window.mockup = {
   choose: (id) => chooseItem(ITEMS[id]),
   history: () => ({ ids: history.map((item) => item.id), index: historyIndex }),
   ambientSamples: () => ambientSamples,
-  situation: applySituation
+  situation: applySituation,
+  notifications: notes,
+  hooks: mockHooks
 };
 
 // ---- Start ----

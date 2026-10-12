@@ -490,6 +490,8 @@ function noticeDialog({ title, message }) {
     const { close } = openDialog({ content: body, labelledBy: text.id, role: "alertdialog", onClose: () => resolve() });
     ok.addEventListener("click", () => close(true));
     ok.focus();
+    // The notifications list keeps every notice too, so one closed too quickly can be read again.
+    if (activeNotifications) activeNotifications.record({ text: message, detail: title || "" });
   });
 }
 
@@ -505,4 +507,409 @@ function initHideMock() {
     });
   }
   apply();
+}
+
+/**
+ * Notifications, which replace the status line:
+ * - Lasting states, such as Reconnecting…, show as one indicator on the player: the first active one in
+ *   `NOTIFY_LASTING_ORDER`. The list shows every active one, with its full text, under Now, on the main page and in
+ *   the admin view alike.
+ * - One-off messages pop up briefly, as the Settings tab's Notifications section allows, by kind.
+ * - The bell, on the player or at the end of the admin view's bar, opens the list of recent messages: every one-off message,
+ *   whether it popped up or not, and every notice the in-app dialog showed. Its badge counts the messages that didn't pop up since the list was last
+ *   open. The list keeps the last 50 for the page's life; a page refresh clears it.
+ * Errors and anything that needs an answer stay in the in-app dialog, and field problems stay in their fields.
+ */
+const NOTIFY_KINDS = {
+  actions: "check_circle",
+  devices: "devices",
+  refresh: "autorenew",
+  skips: "fast_forward",
+  connection: "cloud_done",
+  error: "error"
+};
+const NOTIFY_DEFAULTS = {
+  popups: true,
+  kinds: { actions: true, devices: true, refresh: true, skips: true, connection: true },
+  position: "bottom-center",
+  fullscreen: true,
+  seconds: 5
+};
+// The lasting states' precedence order: the indicator shows the first active one.
+const NOTIFY_LASTING_ORDER = ["reconnecting", "incompatible", "nolibrary", "loading", "refresh"];
+const NOTIFY_KEEP = 50;
+const POPUPS_AT_ONCE = 3;
+let activeNotifications = null;
+
+function notifySettings() {
+  const saved = store.get("notify", {}) || {};
+  return { ...NOTIFY_DEFAULTS, ...saved, kinds: { ...NOTIFY_DEFAULTS.kinds, ...(saved.kinds || {}) } };
+}
+
+function notifyAgo(time) {
+  const seconds = Math.round((Date.now() - time) / 1000);
+  if (seconds < 60) return "Just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  return new Date(time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+// `listHost` holds the list: on the main page the stage, so the list shows in fullscreen. `inFullscreen` tells whether the
+// player is in fullscreen, where popups show only while Show in fullscreen is on. `onClose` runs whenever the list
+// closes, so the player's controls, which stay while it is open, can start their countdown again.
+function initNotifications({ button, host, indicator, listHost = document.body, indicatorHidden = () => false, inFullscreen = () => false, onSettings, onClose, instant = false }) {
+  let settings = notifySettings();
+  const entries = [];
+  const lasting = new Map();
+  let unread = 0;
+  let listOpen = false;
+  let timeTimer = 0;
+  const badge = button.querySelector(".notify-badge");
+
+  const list = document.createElement("section");
+  list.className = "notify-list";
+  list.id = "notify-list";
+  list.hidden = true;
+  list.setAttribute("role", "dialog");
+  list.setAttribute("aria-labelledby", "notify-title");
+  list.innerHTML =
+    '<div class="notify-head"><h2 id="notify-title" tabindex="-1">Notifications</h2>' +
+    '<button class="btn" type="button" data-act="clear">Clear</button>' +
+    '<button class="icon-btn" type="button" data-act="close" aria-label="Close" title="Close"><span class="material-symbol-icon">close</span></button></div>' +
+    '<div class="notify-scroll themed-scrollbar">' +
+    '<div data-part="now" hidden><h3 class="notify-group-title">Now</h3><ul class="notify-entries"></ul></div>' +
+    '<div data-part="recent"><h3 class="notify-group-title">Recent</h3><ul class="notify-entries"></ul><p class="notify-empty">No notifications yet.</p></div>' +
+    "</div>" +
+    '<div class="notify-foot"><button class="btn" type="button" data-act="settings"><span class="material-symbol-icon">settings</span>Notification settings</button></div>';
+  hydrateIcons(list);
+  listHost.append(list);
+  button.setAttribute("aria-controls", list.id);
+  button.setAttribute("aria-expanded", "false");
+  const part = (name) => list.querySelector(`[data-part="${name}"]`);
+  const act = (name) => list.querySelector(`[data-act="${name}"]`);
+  if (!onSettings) act("settings").parentElement.hidden = true;
+
+  function entryRow({ icon, text, detail, time, kind, level, highlight }) {
+    const row = document.createElement("li");
+    row.className = "notify-entry";
+    row.classList.toggle("is-error", kind === "error");
+    row.classList.toggle("is-warning", level === "warning");
+    row.classList.toggle("is-unread", !!highlight);
+    const label = document.createElement("span");
+    label.className = "notify-text";
+    label.textContent = text;
+    const when = document.createElement("span");
+    when.className = "notify-time";
+    when.textContent = time ? notifyAgo(time) : "";
+    row.append(iconSpan(icon), label, when);
+    if (detail) {
+      const more = document.createElement("span");
+      more.className = "notify-detail";
+      more.textContent = detail;
+      row.append(more);
+    }
+    return row;
+  }
+
+  function activeLasting() {
+    return NOTIFY_LASTING_ORDER.filter((id) => lasting.has(id)).map((id) => ({ id, ...lasting.get(id) }));
+  }
+
+  function renderList() {
+    const now = activeLasting();
+    part("now").hidden = now.length === 0;
+    part("now").querySelector("ul").replaceChildren(...now.map((info) =>
+      entryRow({ icon: info.icon, text: info.progress ? `${info.title} ${info.progress}` : info.title, detail: info.detail, level: info.warning ? "warning" : "" })));
+    const recent = part("recent");
+    recent.querySelector("ul").replaceChildren(...entries.map(entryRow));
+    recent.querySelector(".notify-group-title").hidden = entries.length === 0;
+    recent.querySelector(".notify-empty").hidden = entries.length > 0 || now.length > 0;
+    act("clear").disabled = entries.length === 0;
+  }
+
+  function renderBadge() {
+    badge.hidden = unread === 0;
+    badge.textContent = unread > 9 ? "9+" : String(unread);
+    const label = unread ? `Notifications, ${unread} unread` : "Notifications";
+    button.setAttribute("aria-label", label);
+    button.title = label;
+  }
+
+  // Under the bell, lined up with its left edge when the bell is in the left half of the screen and its right edge otherwise.
+  function placeList() {
+    const anchor = button.getBoundingClientRect();
+    const width = list.offsetWidth || Math.min(380, window.innerWidth - 16);
+    const left = anchor.left < window.innerWidth / 2 ? anchor.left : anchor.right - width;
+    list.style.left = `${Math.max(8, Math.min(left, window.innerWidth - width - 8))}px`;
+    list.style.top = `${Math.round(anchor.bottom + 6)}px`;
+    list.style.maxHeight = `${Math.max(220, Math.round(window.innerHeight - anchor.bottom - 18))}px`;
+  }
+
+  function openList() {
+    listOpen = true;
+    list.hidden = false;
+    button.setAttribute("aria-expanded", "true");
+    entries.forEach((entry) => {
+      entry.highlight = entry.unread;
+      entry.unread = false;
+    });
+    unread = 0;
+    renderBadge();
+    renderList();
+    placeList();
+    list.querySelector("#notify-title").focus({ preventScroll: true });
+    clearInterval(timeTimer);
+    timeTimer = setInterval(renderList, 30000);
+  }
+
+  function closeList(returnFocus = true) {
+    if (!listOpen) return;
+    listOpen = false;
+    list.hidden = true;
+    button.setAttribute("aria-expanded", "false");
+    entries.forEach((entry) => (entry.highlight = false));
+    clearInterval(timeTimer);
+    if (returnFocus) button.focus({ preventScroll: true });
+    onClose?.();
+  }
+
+  button.addEventListener("click", () => (listOpen ? closeList() : openList()));
+  act("close").addEventListener("click", () => closeList());
+  act("clear").addEventListener("click", () => {
+    entries.length = 0;
+    renderList();
+    list.querySelector("#notify-title").focus({ preventScroll: true });
+  });
+  act("settings").addEventListener("click", () => {
+    closeList(false);
+    onSettings?.();
+  });
+  // A press outside closes the list, and Escape closes it before anything else it would close.
+  document.addEventListener("pointerdown", (event) => {
+    if (listOpen && !list.contains(event.target) && !button.contains(event.target)) closeList(false);
+  }, true);
+  document.addEventListener("keydown", (event) => {
+    if (!listOpen || event.key !== "Escape" || document.querySelector("dialog[open]")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeList();
+  }, true);
+  window.addEventListener("resize", () => listOpen && placeList());
+
+  // ---- Popups ----
+  const shownToasts = () => [...host.children].filter((toast) => !toast.classList.contains("is-leaving"));
+  function dismiss(toast, now = false) {
+    if (toast.classList.contains("is-leaving")) return;
+    clearTimeout(toast.timer);
+    toast.classList.add("is-leaving");
+    setTimeout(() => toast.remove(), instant || now ? 0 : 160);
+  }
+  function resume(toast) {
+    if (!toast.remaining || toast.hover || toast.focused) return;
+    toast.started = Date.now();
+    toast.running = true;
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => dismiss(toast), toast.remaining);
+  }
+  // Takes off only the time since the countdown last ran, so a second pause, such as keyboard focus while the mouse
+  // points at it, takes nothing more off.
+  function pause(toast) {
+    if (!toast.remaining || !toast.running) return;
+    toast.running = false;
+    clearTimeout(toast.timer);
+    toast.remaining = Math.max(800, toast.remaining - (Date.now() - toast.started));
+  }
+  function newToast(key) {
+    const toast = document.createElement("div");
+    toast.className = "toast";
+    if (key) toast.dataset.key = key;
+    toast.addEventListener("pointerenter", (event) => {
+      if (event.pointerType !== "mouse" && event.pointerType !== "pen") return;
+      toast.hover = true;
+      pause(toast);
+    });
+    toast.addEventListener("pointerleave", () => {
+      if (!toast.hover) return;
+      toast.hover = false;
+      resume(toast);
+    });
+    toast.addEventListener("focusin", () => {
+      toast.focused = true;
+      pause(toast);
+    });
+    toast.addEventListener("focusout", () => {
+      toast.focused = false;
+      resume(toast);
+    });
+    // A swipe to either side on a touch screen dismisses it.
+    toast.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "mouse" || event.target.closest("button")) return;
+      const startX = event.clientX;
+      let dx = 0;
+      const move = (e) => {
+        dx = e.clientX - startX;
+        toast.style.transition = "none";
+        toast.style.transform = `translateX(${dx}px)`;
+        toast.style.opacity = String(Math.max(0.2, 1 - Math.abs(dx) / 220));
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", up);
+        toast.style.transition = "";
+        if (Math.abs(dx) > 64) return void dismiss(toast, true);
+        toast.style.transform = "";
+        toast.style.opacity = "";
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", up);
+    });
+    return toast;
+  }
+  function showToast({ icon, text, detail, level }, key) {
+    // A popup with the same key, such as a second favorite change, replaces the one showing and starts its time over.
+    let toast = key ? shownToasts().find((shown) => shown.dataset.key === key) : null;
+    if (!toast) {
+      toast = newToast(key);
+      toast.classList.toggle("is-warning", level === "warning");
+      host.append(toast);
+      // The cap never closes a warning: it closes the oldest popups that aren't one.
+      const shown = shownToasts();
+      shown.filter((old) => !old.classList.contains("is-warning"))
+        .slice(0, Math.max(0, shown.length - POPUPS_AT_ONCE))
+        .forEach((old) => dismiss(old, true));
+    }
+    toast.classList.toggle("is-warning", level === "warning");
+    const words = document.createElement("div");
+    words.className = "toast-text";
+    const title = document.createElement("div");
+    title.textContent = text;
+    words.append(title);
+    if (detail) {
+      const more = document.createElement("div");
+      more.className = "toast-detail";
+      more.textContent = detail;
+      words.append(more);
+    }
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "icon-btn";
+    close.setAttribute("aria-label", "Dismiss");
+    close.title = "Dismiss";
+    close.append(iconSpan("close"));
+    close.addEventListener("click", () => dismiss(toast));
+    toast.replaceChildren(iconSpan(icon), words, close);
+    // A warning stays until it is closed.
+    clearTimeout(toast.timer);
+    toast.running = false;
+    toast.remaining = level === "warning" ? 0 : settings.seconds * 1000;
+    resume(toast);
+    return toast;
+  }
+
+  function add(entry) {
+    entries.unshift(entry);
+    if (entries.length > NOTIFY_KEEP) entries.length = NOTIFY_KEEP;
+    renderBadge();
+    if (listOpen) renderList();
+  }
+
+  /** A one-off message: it pops up if its kind is on, and the list keeps it either way. */
+  // While three warnings show, there is no room for a new popup, unless it replaces one with the same key.
+  function hasRoom(key) {
+    const shown = shownToasts();
+    return shown.some((toast) => toast.dataset.key === key) || shown.filter((toast) => toast.classList.contains("is-warning")).length < POPUPS_AT_ONCE;
+  }
+
+  // `icon` replaces the kind's where the kind's would mislead, such as a failure of a kind whose icon reads as success.
+  function notify({ kind, text, detail = "", key = "", level = "", icon = "" }) {
+    const entry = { kind, text, detail, level, icon: icon || (level === "warning" ? "warning" : NOTIFY_KINDS[kind]), time: Date.now(), unread: false };
+    const toastKey = key || kind + ":" + text;
+    const pops = settings.popups && !!settings.kinds[kind] && !listOpen && (settings.fullscreen || !inFullscreen()) && hasRoom(toastKey);
+    if (!pops && !listOpen) {
+      entry.unread = true;
+      unread += 1;
+    }
+    add(entry);
+    if (pops) showToast(entry, toastKey);
+    // While the list is open nothing pops up, so a popup showing with this key would now be out of date: it closes,
+    // and the list shows the new message.
+    else if (listOpen) shownToasts().filter((toast) => toast.dataset.key === toastKey).forEach((toast) => dismiss(toast));
+    return entry;
+  }
+
+  /** A message the user has already seen elsewhere, such as a notice, kept in the list only. */
+  function record({ kind = "error", text, detail = "" }) {
+    add({ kind, text, detail, level: "", icon: NOTIFY_KINDS[kind], time: Date.now(), unread: false });
+  }
+
+  function setLasting(id, info) {
+    if (info) lasting.set(id, info);
+    else lasting.delete(id);
+    renderIndicator();
+    if (listOpen) renderList();
+  }
+
+  function renderIndicator() {
+    if (!indicator) return;
+    const top = indicatorHidden() ? null : activeLasting()[0];
+    indicator.hidden = !top;
+    if (!top) return;
+    indicator.dataset.state = top.id;
+    indicator.classList.toggle("follows-controls", !!top.followsControls);
+    indicator.classList.toggle("is-warning", !!top.warning);
+    const icon = iconSpan(top.icon, top.spin ? "spins" : "");
+    // Its own box, so a long state ends in an ellipsis before the corner buttons.
+    const label = document.createElement("span");
+    label.className = "player-indicator-text";
+    label.textContent = top.title;
+    const parts = [icon, label];
+    // The percentage changes often, so it is left out of what a screen reader announces.
+    if (top.progress) {
+      const progress = document.createElement("span");
+      progress.setAttribute("aria-hidden", "true");
+      progress.textContent = top.progress;
+      parts.push(" ", progress);
+    }
+    indicator.replaceChildren(...parts);
+  }
+
+  function applySettings() {
+    host.dataset.pos = settings.position;
+  }
+  applySettings();
+  renderBadge();
+
+  activeNotifications = {
+    notify,
+    record,
+    setLasting,
+    renderIndicator,
+    lasting: () => activeLasting(),
+    /** Closes every popup, such as on entering fullscreen while Show in fullscreen is off. */
+    dismissAll: () => shownToasts().forEach((toast) => dismiss(toast, true)),
+    entries: () => entries.slice(),
+    unread: () => unread,
+    toasts: shownToasts,
+    listShown: () => listOpen,
+    openList,
+    closeList,
+    getSettings: () => JSON.parse(JSON.stringify(settings)),
+    updateSettings(change) {
+      settings = { ...settings, ...change, kinds: { ...settings.kinds, ...(change.kinds || {}) } };
+      store.set("notify", settings);
+      applySettings();
+    },
+    resetSettings() {
+      store.remove("notify");
+      settings = notifySettings();
+      applySettings();
+    },
+    /** Shows where popups appear and for how long, without adding to the list. */
+    preview() {
+      return showToast({ icon: "notifications", text: "Popups show here.", detail: `For ${settings.seconds} seconds, unless you point at one or close it.` }, "preview");
+    }
+  };
+  return activeNotifications;
 }

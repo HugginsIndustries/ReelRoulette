@@ -23,7 +23,7 @@ body { height: 100dvh; overflow: hidden; display: flex; flex-direction: column; 
 .top-bar .muted { color: var(--muted-fg); font-size: 0.95rem; }
 a.icon-btn { text-decoration: none; }
 
-/* The admin view: a full page between the header and the status line, covering the player. */
+/* The admin view: a full page below the header, covering the player. */
 .admin { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--surface-border); border-radius: 8px; overflow: hidden; }
 .admin-bar { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid var(--surface-border); flex: 0 0 auto; }
 .admin-bar h2 { margin: 0; font-size: 1.15rem; }
@@ -131,15 +131,19 @@ a.icon-btn { text-decoration: none; }
 .log-more { padding: 8px; text-align: center; font-size: 0.82rem; color: var(--muted-fg); }
 .log-raw { margin: 0; padding: 6px 8px 8px 24px; white-space: pre-wrap; word-break: break-all; border-bottom: 1px solid var(--surface-border); background: var(--surface-raised); }
 
-.status { font-size: 0.9rem; color: var(--muted-fg); margin-top: 10px; min-height: 1.2em; flex-shrink: 0; }
+/* The popups, as on the main page. They sit over the admin view, which has no player, and its bell is at the end of
+   the admin bar, which stays on a phone on its side, where the app's header hides. */
+.toasts { position: fixed; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); }
+.toasts[data-pos^="bottom"] { bottom: max(16px, env(safe-area-inset-bottom)); }
+.toasts[data-pos^="top"] { top: 72px; }
 .mock-bar { padding: 6px 10px; margin: 0 0 10px; display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; flex: 0 0 auto; }
 .mock-bar label { display: flex; gap: 6px; align-items: center; }
 .mock-bar button { font: inherit; }
 .client-counts { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; }
 
-/* A phone on its side: the app's header and status line hide, as on the main page; the admin bar stays. */
+/* A phone on its side: the app's header hides, as on the main page; the admin bar stays. */
 body.short-screen #app { padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); }
-body.short-screen .top-bar, body.short-screen .status { display: none; }
+body.short-screen .top-bar { display: none; }
 body.short-screen .admin { border-radius: 0; }
 body.short-screen .admin-nav { padding: 4px 8px; }
 </style>
@@ -176,6 +180,7 @@ body.short-screen .admin-nav { padding: 4px 8px; }
     <div class="admin-bar">
       <a class="icon-btn" href="layout.html" aria-label="Back to the player" title="Back to the player"><span class="material-symbol-icon">arrow_back</span></a>
       <h2 class="grow">Admin</h2>
+      <button class="icon-btn notify-btn" type="button" id="notify-btn" aria-label="Notifications" title="Notifications"><span class="material-symbol-icon">notifications</span><span class="notify-badge" hidden></span></button>
     </div>
     <nav class="admin-nav" aria-label="Admin sections">
       <a href="#server">Server</a><a href="#web">Web access</a><a href="#control">Control</a><a href="#library">Library</a>
@@ -405,7 +410,7 @@ body.short-screen .admin-nav { padding: 4px 8px; }
     </div>
   </div>
 
-  <div id="status" class="status">Ready</div>
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
 </div>
 
 <script>
@@ -414,7 +419,13 @@ body.short-screen .admin-nav { padding: 4px 8px; }
 hydrateIcons();
 initHideMock();
 const $ = (id) => document.getElementById(id);
-const status = (text) => ($("status").textContent = text);
+// The admin view's acknowledgments pop up as the main page's do, and its refresh shows its progress in its own card.
+// Its list is the main page's, so Now shows every active lasting state; this page's bar sets only running without a library
+// and its own refresh.
+const notes = initNotifications({ button: $("notify-btn"), host: $("toasts") });
+const status = (text) => notes.notify({ kind: "actions", text });
+// For build/check.mjs only.
+window.mockup = { notifications: notes };
 const state = {
   remote: store.get("adminRemote", false),
   noLibrary: store.get("adminNoLibrary", false),
@@ -435,6 +446,7 @@ function applyGate() {
   const coarse = window.matchMedia("(pointer: coarse)").matches;
   document.body.classList.toggle("short-screen", state.mockShort || (coarse && window.innerHeight < 500));
   $("refresh-now").disabled = state.noLibrary;
+  notes.setLasting("nolibrary", state.noLibrary ? { icon: "warning", warning: true, title: "Running without a library", detail: "The catalog was saved by a newer version of ReelRoulette and was left unchanged." } : null);
   $("dup-scan").disabled = state.noLibrary;
   placeAllTips();
 }
@@ -535,21 +547,26 @@ $("update-apply").addEventListener("click", async () => {
   }
 });
 
-// ---- Refresh; the status line shows its progress and result ----
+// ---- Refresh: its card shows the stage and progress, and its result pops up ----
 $("refresh-now").addEventListener("click", () => {
   const bar = $("refresh-progress");
   bar.hidden = false;
+  $("refresh-now").disabled = true;
   let percent = 0;
-  const stages = ["Scanning sources", "Durations", "Loudness", "Thumbnails"];
+  const stages = ["Refreshing sources", "Scanning durations", "Scanning loudness", "Generating thumbnails"];
   const timer = setInterval(() => {
     percent += 10;
     bar.firstElementChild.style.width = `${percent}%`;
-    status(`Core refresh: ${stages[Math.min(3, Math.floor(percent / 25))]} (${percent}%)`);
+    const stage = stages[Math.min(3, Math.floor(percent / 25))];
+    $("refresh-state").textContent = `Refreshing: ${stage} (${percent}%)`;
+    notes.setLasting("refresh", { icon: "autorenew", title: `Library refresh: ${stage}`, progress: `(${percent}%)` });
     if (percent >= 100) {
       clearInterval(timer);
       bar.hidden = true;
+      $("refresh-now").disabled = state.noLibrary;
       $("refresh-state").textContent = "Last refresh just now: 2 added, 0 removed, 0 renamed.";
-      status("Core refresh complete | 2 added, 0 removed, 0 renamed");
+      notes.setLasting("refresh", null);
+      notes.notify({ kind: "refresh", text: "Library refresh finished", detail: "Source: 2 added", key: "refresh" });
     }
   }, 300);
 });
@@ -561,7 +578,7 @@ $("clear-all-stats").addEventListener("click", async () => {
 
 // ---- Library transfer: import keeps the desktop's source folder remap ----
 // A plain download in every browser, with no save picker. A browser doesn't say when a download finishes, so the
-// status line says it has started.
+// popup says it has started.
 $("export").addEventListener("click", () => status("Downloading library-2026-10-08.db."));
 $("import-file").addEventListener("change", () => {
   if ($("import-file").files.length) uploadLibrary($("import-file").files[0].name, true);

@@ -232,7 +232,13 @@ for (const width of [1280, 390]) {
   const queue = window.mockup.queue;
   const np = () => $("np-name").textContent;
   const chip = () => $("play-chip").textContent;
-  const status = () => $("status").textContent;
+  // Notifications: what the list under the bell keeps, what popped up, and the player's indicator.
+  const messages = window.mockup.notifications;
+  const toastTexts = () => messages.toasts().map((toast) => toast.querySelector(".toast-text > div").textContent);
+  const newest = () => messages.entries()[0]?.text || "";
+  const said = (text) => newest() === text && toastTexts().includes(text);
+  const test = (name) => document.querySelector(`#mock-tests [data-test="${name}"]`).click();
+  const indicatorText = () => ($("player-indicator").hidden ? "" : [...$("player-indicator").childNodes].filter((node) => !node.classList?.contains("material-symbol-icon")).map((node) => node.textContent).join(""));
   const situation = (value) => document.querySelector(`input[name="mock-situation"][value="${value}"]`).click();
   const tiles = () => [...$("lib-grid").querySelectorAll(".lib-tile")];
   const gridText = () => $("lib-grid").textContent;
@@ -249,9 +255,27 @@ for (const width of [1280, 390]) {
   // Nothing plays until a tap or Play.
   check(`layout@${width}: nothing plays at first, and the player shows the start hint`,
     !$("empty-state").hidden && $("empty-state").textContent === "Tap to play, or open the panel to choose a preset or filter." && $("panel").hidden && $("np-name").parentElement.hidden && chip().includes("Nothing playing"));
-  check(`layout@${width}: the status line says Ready (API 1) (${status()})`, status() === "Ready (API 1)");
+  check(`layout@${width}: there is no status line, and while connected nothing shows on the player and nothing pops up`,
+    !$("status") && !document.querySelector(".status") && $("player-indicator").hidden && messages.toasts().length === 0 && messages.entries().length === 0);
+  // Popups sit beside the player, which clips what it holds, and above the overlay panel, so nothing between them may
+  // make a stacking context: no z-index, containment, or container on the player column or the stage.
+  const rulesFor = (selector) => Array.from(document.styleSheets).flatMap((sheet) => Array.from(sheet.cssRules)).filter((rule) => rule.selectorText === selector);
+  const stacks = (selector) => rulesFor(selector).some((rule) => ["z-index", "contain", "container", "container-type", "container-name", "isolation"].some((name) => rule.style.getPropertyValue(name)));
+  const zOf = (selector) => Number(rulesFor(selector).map((rule) => rule.style.getPropertyValue("z-index")).find(Boolean));
+  check(`layout@${width}: popups sit in the player column, above the overlay panel, with no stacking context between (${zOf(".toasts")} > ${zOf(".stage.is-overlay .panel")})`,
+    $("toasts").parentElement === $("media").parentElement && !stacks(".player-col") && !stacks(".stage") && zOf(".toasts") > zOf(".stage.is-overlay .panel"));
+  const ruleStyle = (selector, name) => rulesFor(selector).map((rule) => rule.style.getPropertyValue(name)).find(Boolean) || "";
+  check(`layout@${width}: the bell is on the player, at the top left with its controls, with no badge, and the header has none`,
+    $("notify-btn").parentElement === $("overlay-controls") && $("notify-btn").classList.contains("overlay-corner-btn") && ruleStyle("#notify-btn", "left") === "12px" &&
+    !document.querySelector(".top-bar .notify-btn") && $("notify-btn").getAttribute("aria-label") === "Notifications" && $("notify-btn").querySelector(".notify-badge").hidden);
+  $("notify-btn").click();
+  check(`layout@${width}: pressing it opens the list in the stage, so it shows in fullscreen, and starts no random pick`,
+    !$("notify-list").hidden && $("notify-list").parentElement === $("stage") && !$("notify-list").querySelector(".notify-empty").hidden &&
+    window.mockup.history().ids.length === 0 && !$("empty-state").hidden);
+  $("notify-btn").click();
+  check(`layout@${width}: and pressing it again closes it`, $("notify-list").hidden);
   const corner = [...document.querySelectorAll(".overlay-corner-btn")].map((b) => b.id).join(",");
-  check(`layout@${width}: the player's corner buttons are ${corner}`, corner === "panel-btn,favorite-btn,blacklist-btn");
+  check(`layout@${width}: the player's corner buttons are ${corner}`, corner === "notify-btn,panel-btn,favorite-btn,blacklist-btn");
   check(`layout@${width}: the header has no settings icon`, !$("header-settings") && !!$("header-admin"));
   // The header shows the lockup for the theme, or the icon alone on a phone, in place of the "ReelRoulette" text.
   // happy-dom keeps an element's computed style after a class changes on <html>, so each is measured on a fresh copy.
@@ -294,14 +318,15 @@ for (const width of [1280, 390]) {
   queue.push(0);
   $("media").click();
   await tick();
-  check(`layout@${width}: a tap starts a random pick (${np()}, ${status()})`, np() === items[0].name && chip().includes("Playing") && $("empty-state").hidden && status() === "Playing");
+  check(`layout@${width}: a tap starts a random pick, and Loading… is gone once it plays (${np()}, ${indicatorText()})`,
+    np() === items[0].name && chip().includes("Playing") && $("empty-state").hidden && $("player-indicator").hidden && messages.entries().length === 0);
   queue.push(2);
   $("next-btn").click();
   check(`layout@${width}: Next at the end of the history picks at random (a photo, scrub bar disabled)`, np() === items[2].name && $("seek").disabled);
   queue.push(4, 3);
   $("next-btn").click();
-  check(`layout@${width}: a random pick skips a file this browser can't play, saying so (${status()})`,
-    np() === items[3].name && status() === "Skipped a file this browser can't play." && openDialogs().length === 0);
+  check(`layout@${width}: a random pick skips a file this browser can't play, saying so in a popup that names it (${newest()})`,
+    np() === items[3].name && said("Skipped a file this browser can't play.") && messages.entries()[0].detail === items[4].name && openDialogs().length === 0);
   $("prev-btn").click();
   check(`layout@${width}: Previous steps back through the history`, np() === items[2].name);
   $("prev-btn").click();
@@ -315,7 +340,8 @@ for (const width of [1280, 390]) {
   dismissNotices();
   queue.push(missing.id, 0);
   press("r");
-  check(`layout@${width}: R picks at random and skips a missing file, saying so (${status()})`, status() === "Skipped a missing file." && np() === items[0].name);
+  check(`layout@${width}: R picks at random and skips a missing file, saying so (${newest()})`, said("Skipped a missing file.") && np() === items[0].name);
+  check(`layout@${width}: and the second skip's popup replaces the first (${toastTexts()})`, toastTexts().filter((text) => text.startsWith("Skipped")).length === 1);
   window.mockup.choose(4);
   check(`layout@${width}: an .avi chosen from the library shows the format notice`, notice().includes("format (.avi) isn't supported in this browser") && chip().includes("Can't play"));
   dismissNotices();
@@ -337,18 +363,28 @@ for (const width of [1280, 390]) {
 
   // The server's situations.
   situation("reconnecting");
-  check(`layout@${width}: reconnecting shows on the status line (${status()})`, status() === "SSE reconnecting..." && $("conn-indicator").hidden);
+  check(`layout@${width}: reconnecting shows on the player's indicator at every width (${indicatorText()})`,
+    indicatorText() === "Reconnecting…" && $("player-indicator").dataset.state === "reconnecting" && !!$("player-indicator").querySelector(".spins"));
+  // At the top, centered, it stays clear of the corner buttons on either side, the last 160 px at the right, and cuts
+  // its text short with an ellipsis instead.
+  check(`layout@${width}: at the top, the indicator stops short of the corner buttons, ending its text with an ellipsis (${ruleStyle(".player-indicator", "max-width")})`,
+    ruleStyle(".player-indicator", "max-width") === "calc(100% - 336px)" && ruleStyle(".player-indicator-text", "text-overflow") === "ellipsis" &&
+    $("player-indicator").querySelector(".player-indicator-text")?.textContent === "Reconnecting…");
   press("r");
   check(`layout@${width}: a random pick then fails with a notice (${notice()})`, notice() === "Random selection failed: Failed to fetch");
   dismissNotices();
   $("favorite-btn").click();
   check(`layout@${width}: and so does Favorite (${notice()})`, notice() === "Favorite update failed (503)." && !$("favorite-btn").classList.contains("active"));
   dismissNotices();
-  $("set-status").click();
-  check(`layout@${width}: with the status line hidden, the player shows the reconnecting indicator`, $("status").hidden && !$("conn-indicator").hidden);
-  $("set-status").click();
+  $("notify-btn").click();
+  const nowText = () => $("notify-list").querySelector('[data-part="now"]').textContent;
+  check(`layout@${width}: the bell's list shows it under Now with its full text, and keeps the notices (${nowText().slice(0, 40)})`,
+    !$("notify-list").hidden && $("notify-btn").getAttribute("aria-expanded") === "true" && nowText().includes("The connection to the server was lost.") &&
+    $("notify-list").textContent.includes("Favorite update failed (503).") && messages.entries()[0].kind === "error");
+  press("Escape");
+  check(`layout@${width}: Escape closes the list and gives focus back to the bell`, $("notify-list").hidden && document.activeElement === $("notify-btn"));
   situation("connected");
-  check(`layout@${width}: reconnecting says SSE connected (${status()})`, status() === "SSE connected" && $("conn-indicator").hidden);
+  check(`layout@${width}: when the connection comes back, the indicator goes and Reconnected. pops up (${newest()})`, said("Reconnected.") && $("player-indicator").hidden);
   situation("noanswer");
   press("r");
   check(`layout@${width}: a server that doesn't answer gives up with a notice (${notice()})`, notice() === "No response from the server. Try again.");
@@ -357,12 +393,13 @@ for (const width of [1280, 390]) {
   openTab("library");
   check(`layout@${width}: without a library the grid shows the server's message (${gridText().slice(0, 40)})`,
     gridText().startsWith("Running without a library.") && !!$("lib-grid").querySelector(".lib-empty.is-error") && $("lib-preset").disabled && $("lib-preset").textContent === "Error loading presets");
+  check(`layout@${width}: and the player's indicator says so (${indicatorText()})`, indicatorText() === "Running without a library" && $("player-indicator").classList.contains("is-warning"));
   press("r");
   check(`layout@${width}: and random picks fail with a notice (${notice()})`, notice() === "Random selection failed (503).");
   dismissNotices();
   situation("incompatible");
   check(`layout@${width}: a failed compatibility check opens the panel and shows its message in the Library tab (${gridText()})`,
-    !$("panel").hidden && gridText() === "Unsupported server API version: 2." && status() === "Unsupported server API version: 2.");
+    !$("panel").hidden && gridText() === "Unsupported server API version: 2." && indicatorText() === "Server not compatible");
   press("r");
   check(`layout@${width}: and Play shows its notice (${notice()})`, notice() === "Cannot play: server compatibility check failed.");
   dismissNotices();
@@ -398,10 +435,10 @@ for (const width of [1280, 390]) {
     min.getAttribute("aria-invalid") === "true" && apply.getAttribute("aria-disabled") === "true" && applyKids === "btn-label,btn-problem");
   check(`layout@${width}: the tooltip sits inside the field`, min.closest(".vfield").contains(document.getElementById(min.getAttribute("aria-describedby"))));
   document.querySelector('[data-sub="presets"]').click();
-  const statusBeforeApply = status();
+  const messagesBeforeApply = messages.entries().length;
   apply.click();
-  check(`layout@${width}: held Apply goes to the field, keeps the panel open, and writes no status`,
-    !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === min && !$("panel").hidden && status() === statusBeforeApply);
+  check(`layout@${width}: held Apply goes to the field, keeps the panel open, and sends no message`,
+    !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === min && !$("panel").hidden && messages.entries().length === messagesBeforeApply);
   input(min, "1:30");
   document.querySelector('[data-sub="presets"]').click();
   const presetNames = () => [...document.querySelectorAll(".filter-preset-row")].map((r) => r.dataset.key).join(",");
@@ -436,7 +473,7 @@ for (const width of [1280, 390]) {
   apply.click();
   check(`layout@${width}: Apply clears the dots`, !dot("tab-btn-filter") && !dot("panel-btn"));
   check(`layout@${width}: valid Apply applies${overlay ? " and closes the overlay" : " and stays open"}`,
-    status() === "Filters applied." && $("panel").hidden === overlay);
+    said("Filters applied.") && $("panel").hidden === overlay);
   check(`layout@${width}: closing resumes playback`, overlay ? chip().includes("Playing") : true);
   if ($("panel").hidden) $("panel-btn").click();
   check(`layout@${width}: reopening comes back on the last tab (Filter)`, !$("tab-filter").hidden);
@@ -494,10 +531,10 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: the pair holds Apply and Update Preset, and Add Preset stays disabled while its name is empty`,
     heldWithIcon("filter-apply") && heldWithIcon("filter-update-preset") && disabledNoIconId("filter-add-preset") && $("filter-update-preset").title === "Change Favorites or Blacklisted first.");
   document.querySelector('[data-sub="presets"]').click();
-  const statusBeforePair = status();
+  const messagesBeforePair = messages.entries().length;
   $("filter-update-preset").click();
-  check(`layout@${width}: held Update Preset goes to the Blacklisted dropdown and writes no status`,
-    !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === $("filter-bl-mode") && status() === statusBeforePair);
+  check(`layout@${width}: held Update Preset goes to the Blacklisted dropdown and sends no message`,
+    !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === $("filter-bl-mode") && messages.entries().length === messagesBeforePair);
   change($("filter-bl"), false);
   check(`layout@${width}: turning Blacklisted off clears the pair and lets Apply proceed`,
     !$("filter-fav-mode").hasAttribute("aria-invalid") && !$("filter-bl-mode").hasAttribute("aria-invalid") && !$("filter-apply").hasAttribute("aria-disabled"));
@@ -571,7 +608,9 @@ for (const width of [1280, 390]) {
   openTab("library");
   const tileCount = tiles().length;
   input($("lib-search"), "beach");
-  check(`layout@${width}: a browse while reconnecting keeps the loaded tiles (${status()})`, status() === "Library browse failed. Showing the tiles already loaded." && tiles().length === tileCount);
+  check(`layout@${width}: a browse while reconnecting keeps the loaded tiles (${newest()})`, said("Library browse failed. Showing the tiles already loaded.") && tiles().length === tileCount);
+  const browseIcon = messages.toasts().find((toast) => toast.textContent.includes("Library browse failed"))?.querySelector(".material-symbol-icon").dataset.icon;
+  check(`layout@${width}: its popup shows a problem icon, not the Connection kind's check (${browseIcon})`, browseIcon === "sync_problem");
   input($("lib-search"), "");
   openTab("filter");
   $("filter-apply").click();
@@ -727,8 +766,8 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: reopening and switching tabs keeps them (Tags dot, Save lit, line shown)`,
     dot("tab-btn-tags") && !$("tags-save").disabled && !line.hidden);
   $("tags-save").click();
-  check(`layout@${width}: after Save it follows the playing item, and the dots go (${status()})`,
-    line.hidden && !dot("tab-btn-tags") && !dot("panel-btn") && status() === "Tag editor changes applied");
+  check(`layout@${width}: after Save it follows the playing item, and the dots go (${newest()})`,
+    line.hidden && !dot("tab-btn-tags") && !dot("panel-btn") && said("Tag editor changes applied"));
   playOther();
   check(`layout@${width}: with no unsaved changes it follows`, line.hidden);
   document.querySelector('#tags-body .tag-chip [title="Remove tag"]').click();
@@ -822,7 +861,7 @@ for (const width of [1280, 390]) {
   change($("autotag-all"), false);
   $("autotag-apply").click();
   check(`layout@${width}: its own Apply applies the checked changes (${$("autotag-status").textContent})`,
-    status() === "Tag editor changes applied" && $("autotag-apply").disabled && $("autotag-status").textContent.endsWith("0/0 selected changes."));
+    said("Tag editor changes applied") && $("autotag-apply").disabled && $("autotag-status").textContent.endsWith("0/0 selected changes."));
   $("autotag-close").click();
   check(`layout@${width}: and the X closes it`, $("autotag").hidden);
   $("open-autotag").click();
@@ -902,7 +941,7 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: the shortcut reference lists the bindings, ? among them`, $("shortcut-list").querySelectorAll("dt").length === 17 &&
     [...$("shortcut-list").querySelectorAll("dt")].some((dt) => dt.textContent === "?"));
   const sectionNames = [...$("settings-body").querySelectorAll(".settings-section h3")].map((h) => h.textContent).join(", ");
-  check(`layout@${width}: Settings is in sections: ${sectionNames}`, sectionNames === "Playback, Audio, Player controls, Appearance, Panel, Keyboard shortcuts, Diagnostics");
+  check(`layout@${width}: Settings is in sections: ${sectionNames}`, sectionNames === "Playback, Audio, Player controls, Appearance, Notifications, Panel, Keyboard shortcuts, Diagnostics");
   const sectionOf = (id) => $(id).closest(".settings-section").querySelector("h3").textContent;
   check(`layout@${width}: each setting sits in its section`,
     sectionOf("set-advance") === "Playback" && sectionOf("set-ambient") === "Appearance" && document.querySelector('input[name="set-seek"]').closest(".settings-section").querySelector("h3").textContent === "Playback" &&
@@ -919,9 +958,62 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: the Theme setting switches to Light`, document.documentElement.classList.contains("theme-light"));
   document.querySelector('input[name="set-theme"][value="dark"]').click();
   check(`layout@${width}: and to Dark`, document.documentElement.classList.contains("theme-dark"));
-  $("set-status").click();
-  check(`layout@${width}: the status line can be hidden`, $("status").hidden);
-  $("set-status").click();
+  // Notifications, in place of Show the status line: popups on for every kind, at the bottom center, for 5 seconds.
+  const kindBox = (kind) => document.querySelector(`input[name="set-popup-kind"][value="${kind}"]`);
+  const secondsChoice = (value) => document.querySelector(`input[name="set-popup-time"][value="${value}"]`);
+  check(`layout@${width}: Settings has no status line option, and Notifications follows Appearance`,
+    !$("set-status") && sectionOf("set-popups") === "Notifications" && $("set-notify-section").previousElementSibling.querySelector("h3").textContent === "Appearance");
+  check(`layout@${width}: popups start on for every kind, at the bottom center, in fullscreen too, for 5 seconds`,
+    $("set-popups").checked && !$("set-popup-fields").disabled && ["actions", "devices", "refresh", "skips", "connection"].every((kind) => kindBox(kind).checked) &&
+    $("set-popup-position").value === "bottom-center" && $("set-popup-fullscreen").checked && secondsChoice("5").checked && $("toasts").dataset.pos === "bottom-center");
+  check(`layout@${width}: their settings are a collapsible group under Show popups, closed at first, like Ambient mode's`,
+    $("set-popups-more").tagName === "DETAILS" && !$("set-popups-more").open && $("set-popups-more").contains($("set-popup-fields")) &&
+    $("set-popups-more").querySelector("summary").textContent.endsWith("Popup settings") && !!$("set-popups-more").querySelector("summary .setting-more-chevron"));
+  const entriesBeforePreview = messages.entries().length;
+  change($("set-popup-position"), "top-right");
+  check(`layout@${width}: a new position moves the popups and shows a sample there, which the list doesn't keep`,
+    $("toasts").dataset.pos === "top-right" && toastTexts().includes("Popups show here.") && messages.entries().length === entriesBeforePreview);
+  secondsChoice("3").click();
+  check(`layout@${width}: so does a new time (${messages.toasts().at(-1)?.querySelector(".toast-detail")?.textContent})`,
+    messages.getSettings().seconds === 3 && toastTexts().filter((text) => text === "Popups show here.").length === 1 && messages.toasts().some((toast) => toast.textContent.includes("For 3 seconds")));
+  kindBox("actions").click();
+  $("set-popups").blur();
+  const toastsBeforeOff = messages.toasts().length;
+  document.querySelector('#mock-tests [data-test="actions"]').click();
+  check(`layout@${width}: with Your actions off, an action's message goes only to the list, and the bell counts it`,
+    newest() === "Added to favorites" && messages.toasts().length === toastsBeforeOff && $("notify-btn").querySelector(".notify-badge").textContent === "1" &&
+    !$("notify-btn").querySelector(".notify-badge").hidden && $("notify-btn").getAttribute("aria-label") === "Notifications, 1 unread");
+  $("notify-btn").click();
+  check(`layout@${width}: opening the list marks it, clears the count, and shows its time`,
+    $("notify-btn").querySelector(".notify-badge").hidden && $("notify-list").querySelector(".notify-entry.is-unread")?.textContent.includes("Added to favorites") &&
+    $("notify-list").querySelector(".notify-entry .notify-time").textContent === "Just now");
+  $("notify-btn").click();
+  kindBox("actions").click();
+  change($("set-popups"), false);
+  check(`layout@${width}: turning popups off disables their settings`, $("set-popup-fields").disabled && !messages.getSettings().popups);
+  change($("set-popups"), true);
+  change($("set-popup-position"), "bottom-center");
+  secondsChoice("5").click();
+  // Show in fullscreen off: entering fullscreen closes the popups showing, and while there messages go to the list only.
+  test("actions");
+  change($("set-popup-fullscreen"), false);
+  $("fullscreen-btn").click();
+  await tick();
+  const inFullscreen = () => !!document.fullscreenElement || $("stage").classList.contains("fullscreen-pseudo");
+  check(`layout@${width}: with Show in fullscreen off, entering fullscreen closes the popups showing`, inFullscreen() && messages.toasts().length === 0);
+  test("devices");
+  check(`layout@${width}: and a message there goes only to the list, which the bell counts`,
+    newest() === "Blacklisted on another device" && messages.toasts().length === 0 && $("notify-btn").querySelector(".notify-badge").textContent === "1");
+  $("fullscreen-btn").click();
+  await tick();
+  test("actions");
+  check(`layout@${width}: out of fullscreen they pop up again`, !inFullscreen() && toastTexts().includes("Added to favorites"));
+  change($("set-popup-fullscreen"), true);
+  $("notify-btn").click();
+  $("notify-btn").click();
+  // Closing the list gives focus back to the bell, and a control with keyboard focus keeps the controls up.
+  $("notify-btn").blur();
+  check(`layout@${width}: and they come back as they were`, !$("set-popup-fields").disabled && kindBox("actions").checked && $("toasts").dataset.pos === "bottom-center");
 
   // Hide player controls: Timeout by default, with its two settings under it; On click/tap; Never.
   const hideChoice = (value) => document.querySelector(`input[name="set-hide-controls"][value="${value}"]`);
@@ -935,7 +1027,7 @@ for (const width of [1280, 390]) {
   input($("set-hide-after"), "1");
   check(`layout@${width}: and keeps 1`, window.localStorage.getItem("rr-mockup.hideAfter") === "1");
   closePanel();
-  // Closing with focus in the panel gives it to the panel button, and a control with focus keeps the controls up.
+  // Closing with focus in the panel gives it to the panel button, and a control with keyboard focus keeps the controls up.
   $("panel-btn").blur();
   window.mockup.choose(3);
   moveOverPlayer();
@@ -957,10 +1049,22 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: each movement restarts the countdown`, controlsUp());
   await sleep(600);
   check(`layout@${width}: and they hide once it runs out`, !controlsUp());
+  // The bell is one of the controls, so they stay while its list is open, and the countdown starts over when it closes,
+  // even by a tap, which moves no pointer over the player.
   moveOverPlayer();
-  $("play-btn").dispatchEvent(new window.PointerEvent("pointerover", { bubbles: true }));
+  $("notify-btn").click();
   await sleep(1300);
-  check(`layout@${width}: they stay while the pointer is over them`, controlsUp());
+  check(`layout@${width}: they stay, with the bell, while its list is open`, controlsUp() && !$("notify-list").hidden && !$("overlay-controls").contains(document.activeElement));
+  const listClose = $("notify-list").querySelector('[data-act="close"]');
+  listClose.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+  listClose.click();
+  await sleep(1300);
+  check(`layout@${width}: and hide again once a tap on Close closes it`, !controlsUp() && $("notify-list").hidden);
+  $("notify-btn").blur();
+  moveOverPlayer();
+  $("play-btn").dispatchEvent(new window.PointerEvent("pointerover", { bubbles: true, pointerType: "mouse" }));
+  await sleep(1300);
+  check(`layout@${width}: they stay while the mouse pointer is over them`, controlsUp());
   $("play-btn").dispatchEvent(new window.PointerEvent("pointerout", { bubbles: true, relatedTarget: $("media") }));
   await sleep(1300);
   check(`layout@${width}: and hide after it leaves`, !controlsUp());
@@ -971,6 +1075,32 @@ for (const width of [1280, 390]) {
   document.dispatchEvent(new window.PointerEvent("pointerup", { bubbles: true }));
   await sleep(1300);
   check(`layout@${width}: and hide after the drag ends`, !controlsUp());
+  // Only a mouse or pen counts as over them, and only keyboard focus on one holds them, as :focus-visible does: a tap
+  // on Play leaves focus there, and the controls still hide.
+  moveOverPlayer();
+  $("play-btn").dispatchEvent(new window.PointerEvent("pointerover", { bubbles: true, pointerType: "touch" }));
+  await sleep(1300);
+  check(`layout@${width}: a touch on them doesn't count as a pointer over them`, !controlsUp());
+  const tap = (el) => {
+    el.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+    el.focus();
+    el.dispatchEvent(new window.PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }));
+    el.click();
+  };
+  moveOverPlayer();
+  tap($("play-btn"));
+  tap($("play-btn"));
+  await sleep(1300);
+  check(`layout@${width}: after a tap on Play, which leaves focus on it, they still hide once the time runs out (${chip()})`,
+    document.activeElement === $("play-btn") && chip().includes("Playing") && !controlsUp());
+  $("play-btn").blur();
+  press("Tab");
+  $("play-btn").focus();
+  await sleep(1300);
+  check(`layout@${width}: keyboard focus on a control keeps them up`, controlsUp());
+  $("play-btn").blur();
+  await sleep(1300);
+  check(`layout@${width}: and they hide once it leaves`, !controlsUp());
   moveOverPlayer();
   $("play-btn").click();
   await sleep(1300);
@@ -1134,6 +1264,15 @@ for (const width of [1280, 390]) {
     accented.every((el) => window.getComputedStyle(el).accentColor === accent));
   const sides = [...document.querySelectorAll('input[name="set-side"]')].map((radio) => radio.parentElement.textContent.trim()).join(", ");
   check(`layout@${width}: the panel side options read ${sides}`, sides === "Left, Right");
+  // The panel button sits on the panel's side: at the top right, or just right of the bell while the panel is on the left.
+  const panelIcon = () => $("panel-btn").querySelector(".material-symbol-icon").dataset.icon;
+  document.querySelector('input[name="set-side"][value="left"]').click();
+  check(`layout@${width}: with the panel on the left, its button moves to the top left, just right of the bell, with the left icons (${panelIcon()})`,
+    $("stage").dataset.side === "left" && panelIcon().startsWith("left_panel_") && ruleStyle('.stage[data-side="left"] #panel-btn', "left") === "64px" &&
+    ruleStyle('.stage[data-side="left"] #panel-btn', "right") === "auto");
+  document.querySelector('input[name="set-side"][value="right"]').click();
+  check(`layout@${width}: and back at the top right with the right icons on the right (${panelIcon()})`,
+    $("stage").dataset.side === "right" && panelIcon().startsWith("right_panel_") && ruleStyle("#panel-btn", "right") === "116px");
 
   // Keyboard shortcuts, ignored while typing.
   closePanel();
@@ -1149,10 +1288,10 @@ for (const width of [1280, 390]) {
   press("2");
   check(`layout@${width}: 2 again closes the panel`, $("panel").hidden);
   const volumeBefore = Number($("volume").value);
-  const statusBeforeVolume = status();
+  const messagesBeforeVolume = messages.entries().length;
   press("[");
-  check(`layout@${width}: [ lowers the volume by the step (${volumeBefore} to ${$("volume").value}), with no status message`,
-    Number($("volume").value) === volumeBefore - 5 && status() === statusBeforeVolume);
+  check(`layout@${width}: [ lowers the volume by the step (${volumeBefore} to ${$("volume").value}), with no message`,
+    Number($("volume").value) === volumeBefore - 5 && messages.entries().length === messagesBeforeVolume);
   // Frame stepping on comma and period, only while a video is paused.
   window.mockup.choose(3);
   $("play-btn").click();
@@ -1223,8 +1362,8 @@ for (const width of [1280, 390]) {
   chipFor(none).querySelector('[title="Add tag"]').click();
   chipFor(one).querySelector('[title="Remove tag"]').click();
   $("tags-save").click();
-  check(`layout@${width}: Save applies the changes to every selected item (${status()})`,
-    pair.every((id) => items[id].tags.has(none.key) && !items[id].tags.has(one.key)) && status() === "Updated tags on 2 items." &&
+  check(`layout@${width}: Save applies the changes to every selected item (${newest()})`,
+    pair.every((id) => items[id].tags.has(none.key) && !items[id].tags.has(one.key)) && said("Updated tags on 2 items.") &&
     tagLine.textContent === "Editing tags for 2 items" && chipFor(none).classList.contains("state-all") && !/state-/.test(chipFor(one).className));
   // The tab follows the selection while selection lasts.
   openTab("library");
@@ -1248,7 +1387,7 @@ for (const width of [1280, 390]) {
   change(topDialog().querySelector('input[type="checkbox"]'), false);
   button(topDialog(), "Remove").click();
   await tick();
-  check(`layout@${width}: the items leave the grid (${status()})`, !tiles().some((t) => t.getAttribute("aria-label") === removedName) && status() === "Removed 2 items from the library.");
+  check(`layout@${width}: the items leave the grid (${newest()})`, !tiles().some((t) => t.getAttribute("aria-label") === removedName) && said("Removed 2 items from the library."));
   $("bulk-exit").click();
   check(`layout@${width}: when selection ends without unsaved changes, the Tags tab follows the playing item again`, tagLine.hidden);
   // Selection ending with unsaved changes keeps its items in the Tags tab until the changes are saved or discarded.
@@ -1360,7 +1499,7 @@ for (const width of [1280, 390]) {
   dismissNotices();
   input($("pair-token"), "abc123");
   $("pair").dispatchEvent(new window.Event("submit", { cancelable: true }));
-  check(`layout@${width}: Pair hides the prompt`, $("pair").hidden && status() === "Paired." && !document.body.classList.contains("pairing"));
+  check(`layout@${width}: Pair hides the prompt`, $("pair").hidden && said("Paired.") && !document.body.classList.contains("pairing"));
   $("mock-ios-volume").click();
   check(`layout@${width}: with the gain stage running, a read-only volume, as on iOS, keeps its slider`, !$("volume-wrap").hidden && standIn.gains.length === 1);
   // Library controls collapse, and the preset and randomization dropdowns share a row.
@@ -1370,14 +1509,13 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: the controls and the Filters line collapse, stay collapsed on this device, and say so (${$("lib-collapse").title})`,
     $("lib-controls").classList.contains("is-collapsed") && $("lib-filters").classList.contains("is-collapsed") && window.localStorage.getItem("rr-mockup.libCollapsed") === "true" && $("lib-collapse").title === "Show controls & filters");
   $("lib-collapse").click();
-  // A phone on its side: the header and status line hide, the panel opens as the overlay, and the reconnecting
-  // indicator stands in for the status line.
+  // A phone on its side: the header hides, the panel opens as the overlay, and the player's indicator still shows.
   $("mock-short").click();
   check(`layout@${width}: a short touch screen gets the full-screen player layout and the overlay`, document.body.classList.contains("short-screen") && $("stage").classList.contains("is-overlay"));
   situation("reconnecting");
-  check(`layout@${width}: there the player shows the reconnecting indicator`, !$("conn-indicator").hidden);
+  check(`layout@${width}: there the player shows the reconnecting indicator`, indicatorText() === "Reconnecting…");
   $("mock-pairing").click();
-  check(`layout@${width}: but not while the server asks for pairing, whose prompt shows instead`, $("conn-indicator").hidden);
+  check(`layout@${width}: but not while the server asks for pairing, whose prompt shows instead`, $("player-indicator").hidden);
   $("mock-pairing").click();
   situation("connected");
   $("mock-short").click();
@@ -1403,10 +1541,10 @@ for (const width of [1280, 390]) {
     window.getComputedStyle(document.documentElement).getPropertyValue("--page-height") === "100dvh" &&
       installedRule(":root")?.style.getPropertyValue("--page-height") === "100lvh" &&
       installedRule(".stage.fullscreen-pseudo")?.style.height === "var(--page-height)");
-  // A phone on its side hides the header and the status line, and shows the header while the server asks for pairing.
+  // A phone on its side hides the header, and shows it while the server asks for pairing.
   const topBar = document.querySelector(".top-bar");
   $("mock-short").click();
-  check(`layout@${width}: a phone on its side hides the header and the status line`, !displayed(topBar) && !displayed($("status")));
+  check(`layout@${width}: a phone on its side hides the header`, !displayed(topBar));
   $("mock-pairing").click();
   check(`layout@${width}: there the header shows while the server asks for pairing`, displayed(topBar) && !$("pair").hidden);
   $("mock-pairing").click();
@@ -1425,10 +1563,113 @@ for (const width of [1280, 390]) {
 
   // Events from the server, and the runtime config failing.
   $("mock-sync").click();
-  check(`layout@${width}: a favorite from another device shows a sync notice (${status().slice(0, 40)})`, /^Synced: (Added to|Removed from) favorites: /.test(status()));
-  $("mock-refresh").click();
+  check(`layout@${width}: a favorite from another device pops up, naming the file (${newest()})`,
+    /^(Added to|Removed from) favorites on another device$/.test(newest()) && toastTexts().includes(newest()) && !!messages.entries()[0].detail && messages.entries()[0].kind === "devices");
+
+  // Lasting states: the Mockup tab starts and ends each, and the indicator shows the first in its order.
+  const lastingBox = (id) => $("mock-lasting").querySelector(`input[value="${id}"]`);
+  const toggleLasting = (id, on) => change(lastingBox(id), on);
+  toggleLasting("refresh", true);
+  check(`layout@${width}: a library refresh shows its stage and progress, only while the controls show (${indicatorText()})`,
+    indicatorText() === "Library refresh: Refreshing sources (10%)" && $("player-indicator").classList.contains("follows-controls") && lastingBox("refresh").checked);
+  toggleLasting("loading", true);
   await tick();
-  check(`layout@${width}: a library refresh ends with its summary`, status().startsWith("Core refresh complete | Source: "));
+  check(`layout@${width}: Loading… comes before a refresh (${indicatorText()})`, indicatorText() === "Loading…" && lastingBox("loading").checked);
+  toggleLasting("reconnecting", true);
+  check(`layout@${width}: and Reconnecting… before both, which the Server choice follows (${indicatorText()})`,
+    indicatorText() === "Reconnecting…" && document.querySelector('input[name="mock-situation"][value="reconnecting"]').checked);
+  $("notify-btn").click();
+  const nowRows = () => [...$("notify-list").querySelectorAll('[data-part="now"] .notify-entry')].map((row) => row.querySelector(".notify-text").textContent);
+  check(`layout@${width}: the list shows all three under Now, in order (${nowRows()})`,
+    nowRows().length === 3 && nowRows()[0] === "Reconnecting…" && nowRows()[1] === "Loading…" && nowRows()[2].startsWith("Library refresh:"));
+  $("notify-btn").click();
+  toggleLasting("reconnecting", false);
+  toggleLasting("loading", false);
+  check(`layout@${width}: ending them leaves the refresh (${indicatorText()})`, indicatorText().startsWith("Library refresh:") && !lastingBox("loading").checked && !lastingBox("reconnecting").checked);
+  toggleLasting("refresh", false);
+  check(`layout@${width}: unchecking a library refresh finishes it, with its result in a popup (${newest()})`,
+    said("Library refresh finished") && messages.entries()[0].detail.startsWith("Source: no changes · Fingerprint:") && $("player-indicator").hidden && !lastingBox("refresh").checked);
+  toggleLasting("incompatible", true);
+  check(`layout@${width}: a failed compatibility check is a lasting state too (${indicatorText()})`, indicatorText() === "Server not compatible");
+  toggleLasting("incompatible", false);
+  check(`layout@${width}: and unchecking it reconnects as normal`, $("player-indicator").hidden && document.querySelector('input[name="mock-situation"][value="connected"]').checked);
+
+  // Loading… counts its half second once, from the first hold until every hold ends, so a pick and its media load are
+  // one loading period: a 350 ms pick and a 300 ms load show it from half a second in until the media loads.
+  window.mockup.hooks.instant = false;
+  queue.push(0);
+  press("r");
+  await sleep(575);
+  const loadingMidway = indicatorText();
+  await sleep(300);
+  window.mockup.hooks.instant = true;
+  check(`layout@${width}: Loading… shows half a second into a pick and its media load (${loadingMidway}), and goes once the media loads`,
+    loadingMidway === "Loading…" && $("player-indicator").hidden && np() === items[0].name);
+
+  // Test notifications: a warning stays, a notice goes to the list, at most three show, and Dismiss closes one.
+  test("refresh-failed");
+  const warning = messages.toasts().find((toast) => toast.classList.contains("is-warning"));
+  check(`layout@${width}: a failed refresh is a warning that stays until it's closed (${newest()})`,
+    said("Library refresh failed") && !!warning && warning.remaining === 0 && !toastTexts().includes("Library refresh finished"));
+  test("notice");
+  check(`layout@${width}: an error shows in the dialog, not a popup, and the list keeps it (${notice()})`,
+    notice() === "Saving presets failed (500)." && newest() === "Saving presets failed (500)." && !toastTexts().includes("Saving presets failed (500)."));
+  dismissNotices();
+  test("burst");
+  check(`layout@${width}: four at once show three, newest last, and the cap closes the oldest that isn't a warning (${toastTexts()})`,
+    messages.toasts().length === 3 && toastTexts()[0] === "Library refresh failed" && toastTexts().at(-1) === "Path copied.");
+  // While three warnings show, a new popup goes to the list only, and the bell counts it.
+  ["Second", "Third"].forEach((which) => messages.notify({ kind: "refresh", level: "warning", text: `${which} warning`, key: `warning-${which}` }));
+  const unreadBeforeWarnings = messages.unread();
+  test("actions");
+  check(`layout@${width}: while three warnings show, a new popup goes to the list only, and the bell counts it (${toastTexts()})`,
+    messages.toasts().length === 3 && messages.toasts().every((toast) => toast.classList.contains("is-warning")) && newest() === "Added to favorites" &&
+    !toastTexts().includes("Added to favorites") && messages.unread() === unreadBeforeWarnings + 1);
+  const shownBefore = messages.toasts().length;
+  messages.toasts()[0].querySelector('[aria-label="Dismiss"]').click();
+  await tick();
+  check(`layout@${width}: Dismiss closes a popup`, messages.toasts().length < shownBefore);
+  messages.dismissAll();
+  // Pointing at a popup pauses its time, and a second pause, such as keyboard focus on its Dismiss while the mouse is
+  // over it, takes nothing more off. A pen points as a mouse does.
+  test("actions");
+  const paused = messages.toasts().at(-1);
+  paused.dispatchEvent(new window.PointerEvent("pointerenter", { pointerType: "mouse" }));
+  await sleep(400);
+  paused.querySelector('[aria-label="Dismiss"]').focus();
+  check(`layout@${width}: pointing at a popup and then focusing it keeps its time (${paused.remaining} of 5000 ms)`, paused.remaining > 4900);
+  paused.querySelector('[aria-label="Dismiss"]').blur();
+  paused.dispatchEvent(new window.PointerEvent("pointerleave", { pointerType: "mouse" }));
+  messages.dismissAll();
+  test("actions");
+  const penned = messages.toasts().at(-1);
+  penned.dispatchEvent(new window.PointerEvent("pointerenter", { pointerType: "pen" }));
+  check(`layout@${width}: a pen pointing at a popup pauses it too`, penned.hover === true);
+  messages.dismissAll();
+  // While the list is open nothing pops up, and a popup showing with a new message's key closes, since it would now be
+  // out of date: the list shows the new message.
+  test("refresh-failed");
+  $("notify-btn").click();
+  test("refresh");
+  check(`layout@${width}: while the list is open, a new message closes the popup with its key (${toastTexts()})`,
+    !toastTexts().includes("Library refresh failed") && !toastTexts().includes("Library refresh finished") && newest() === "Library refresh finished");
+  $("notify-btn").click();
+  $("notify-btn").blur();
+  messages.dismissAll();
+  $("notify-btn").click();
+  $("notify-list").querySelector('[data-act="settings"]').click();
+  check(`layout@${width}: the list's Notification settings opens the Settings tab at Show popups, with its settings expanded`,
+    $("notify-list").hidden && !$("tab-settings").hidden && document.activeElement === $("set-popups") && $("set-popups-more").open);
+  $("set-popups-more").open = false;
+  closePanel();
+  $("notify-btn").click();
+  $("notify-list").querySelector('[data-act="clear"]').click();
+  check(`layout@${width}: Clear empties the list`, messages.entries().length === 0 && !$("notify-list").querySelector(".notify-empty").hidden && $("notify-list").querySelector('[data-act="clear"]').disabled);
+  press("p");
+  check(`layout@${width}: opening the panel closes the list${width < 800 ? ", and the overlay panel stops popups making room for the controls" : ""}`,
+    $("notify-list").hidden && !$("panel").hidden && $("stage").classList.contains("covers-player") === width < 800);
+  closePanel();
+  check(`layout@${width}: closing it lets them make room again`, !$("stage").classList.contains("covers-player"));
   $("mock-startup").click();
   check(`layout@${width}: a runtime config failure shows today's error page`, !$("startup-error").hidden && $("startup-error").textContent.includes("Runtime Configuration Error"));
   $("startup-error-back").click();
@@ -1609,6 +1850,12 @@ for (const width of [1280, 390]) {
   // backups only while it is on.
   const { document, errors, window } = await load("admin", width, "?instant");
   const $ = (id) => document.getElementById(id);
+  const adminMessages = window.mockup.notifications;
+  const adminNewest = () => adminMessages.entries()[0]?.text || "";
+  const adminSaid = (text) => adminNewest() === text && adminMessages.toasts().some((toast) => toast.textContent.includes(text));
+  check(`admin@${width}: there is no status line, and the bell is at the end of the admin bar, which stays on a phone on its side, not in the header`,
+    !$("status") && !document.querySelector(".status") && $("notify-btn")?.parentElement === document.querySelector("#admin .admin-bar") &&
+    $("notify-btn") === document.querySelector("#admin .admin-bar").lastElementChild && !document.querySelector(".top-bar .notify-btn") && !!$("toasts"));
   const rows = () => [...$("backup-list").querySelectorAll(".list-row")].map((row) => row.firstChild.textContent);
   const input = (el, value) => {
     el.value = value;
@@ -1661,6 +1908,9 @@ for (const width of [1280, 390]) {
 for (const width of [1280, 390]) {
   const { document, errors, window } = await load("admin", width, "?instant");
   const $ = (id) => document.getElementById(id);
+  const adminMessages = window.mockup.notifications;
+  const adminNewest = () => adminMessages.entries()[0]?.text || "";
+  const adminSaid = (text) => adminNewest() === text && adminMessages.toasts().some((toast) => toast.textContent.includes(text));
   const input = (el, value) => {
     el.value = value;
     el.dispatchEvent(new window.Event("input"));
@@ -1720,37 +1970,37 @@ for (const width of [1280, 390]) {
     !!topDialog() && !topDialog().closest("[hidden]"));
   button(topDialog(), "Delete").click();
   await new Promise((resolve) => setTimeout(resolve, 0));
-  check(`admin@${width}: and review closes, saying what it deleted (${$("dup-state").textContent} / ${$("status").textContent})`,
-    $("review").hidden && !$("admin").hidden && $("dup-state").textContent === "Deleted 1 file." && $("status").textContent === "Deleted 1 duplicate file.");
+  check(`admin@${width}: and review closes, saying what it deleted (${$("dup-state").textContent} / ${adminNewest()})`,
+    $("review").hidden && !$("admin").hidden && $("dup-state").textContent === "Deleted 1 file." && adminSaid("Deleted 1 duplicate file."));
   const sourceBox = document.querySelector("#source-list input.switch");
   sourceBox.click();
   sourceBox.dispatchEvent(new window.Event("change"));
-  check(`admin@${width}: a source change says every open copy of ReelRoulette follows it (${$("status").textContent})`,
-    $("status").textContent === "Videos disabled. ReelRoulette updates the library everywhere it's open.");
+  check(`admin@${width}: a source change says every open copy of ReelRoulette follows it (${adminNewest()})`,
+    adminSaid("Videos disabled. ReelRoulette updates the library everywhere it's open."));
   sourceBox.click();
   sourceBox.dispatchEvent(new window.Event("change"));
   check(`admin@${width}: one Refresh Sources button for the whole list`, !!$("sources-refresh") && !document.querySelector('#source-list [aria-label^="Refresh"]'));
   check(`admin@${width}: Export Library is a plain download, with no ellipsis`, $("export").textContent.trim().endsWith("Export Library"));
   // The control token: Save without a change saves at once; a changed token asks first, since it signs other machines out.
-  $("status").textContent = "";
+  let adminCount = adminMessages.entries().length;
   $("control-save").click();
   await new Promise((resolve) => setTimeout(resolve, 0));
-  check(`admin@${width}: saving Control with the token unchanged asks nothing (${$("status").textContent})`, !topDialog() && $("status").textContent === "Control settings saved.");
-  $("status").textContent = "";
+  check(`admin@${width}: saving Control with the token unchanged asks nothing (${adminNewest()})`, !topDialog() && adminSaid("Control settings saved."));
+  adminCount = adminMessages.entries().length;
   input($("control-token"), "new-token-1234");
   $("control-save").click();
   await new Promise((resolve) => setTimeout(resolve, 0));
   check(`admin@${width}: a changed token asks first, warning other machines will be signed out (${topDialog()?.textContent.slice(0, 60)})`,
     topDialog()?.textContent.includes("Other machines will be signed out") && button(topDialog(), "Change Token")?.classList.contains("btn-danger") &&
-    document.activeElement?.textContent.trim() === "Cancel" && $("status").textContent === "" && $("control-token").closest(".field").textContent.includes("Changing it signs them out."));
+    document.activeElement?.textContent.trim() === "Cancel" && adminMessages.entries().length === adminCount && $("control-token").closest(".field").textContent.includes("Changing it signs them out."));
   button(topDialog(), "Cancel").click();
   await new Promise((resolve) => setTimeout(resolve, 0));
-  check(`admin@${width}: Cancel saves nothing`, !topDialog() && $("status").textContent === "");
+  check(`admin@${width}: Cancel saves nothing`, !topDialog() && adminMessages.entries().length === adminCount);
   $("control-save").click();
   await new Promise((resolve) => setTimeout(resolve, 0));
   button(topDialog(), "Change Token").click();
   await new Promise((resolve) => setTimeout(resolve, 0));
-  check(`admin@${width}: Change Token saves it`, !topDialog() && $("status").textContent === "Control settings saved.");
+  check(`admin@${width}: Change Token saves it`, !topDialog() && adminSaid("Control settings saved.") && adminMessages.entries().length === adminCount + 1);
   $("control-save").click();
   await new Promise((resolve) => setTimeout(resolve, 0));
   check(`admin@${width}: and saving again without a change asks nothing`, !topDialog());

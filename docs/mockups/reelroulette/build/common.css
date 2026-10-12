@@ -416,3 +416,104 @@ html.hide-mock .mock-small:not(.mock-keep) { display: none !important; }
   text-transform: uppercase;
   color: var(--mock);
 }
+
+/* Notifications: the bell, its list of recent messages, and the popups. */
+.notify-btn { position: relative; }
+.notify-btn[aria-expanded="true"] { color: var(--huggins-orange); }
+.notify-badge {
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--huggins-orange);
+  color: #1a1a1a;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--page-bg);
+  pointer-events: none;
+}
+.notify-list {
+  position: fixed;
+  z-index: 1500;
+  width: min(380px, calc(100vw - 16px));
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-raised);
+  color: var(--page-fg);
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.notify-head { display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 14px; border-bottom: 1px solid var(--surface-border); flex: 0 0 auto; }
+.notify-head h2 { margin: 0; font-size: 1.05rem; flex: 1 1 auto; }
+.notify-head .btn, .notify-foot .btn { min-height: 36px; padding: 4px 10px; font-size: 0.9rem; }
+.notify-head .btn .material-symbol-icon, .notify-foot .btn .material-symbol-icon { font-size: 20px; }
+.notify-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.notify-group-title { margin: 0; padding: 8px 14px 2px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-fg); }
+.notify-entries { list-style: none; margin: 0; padding: 0; }
+.notify-entry { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 2px 10px; padding: 8px 14px; border-bottom: 1px solid var(--surface-border); font-size: 0.92rem; }
+.notify-entry:last-child { border-bottom: 0; }
+.notify-entry > .material-symbol-icon { font-size: 22px; color: var(--huggins-orange); grid-row: span 2; align-self: start; }
+.notify-entry.is-error > .material-symbol-icon, .notify-entry.is-warning > .material-symbol-icon { color: var(--error); }
+.notify-entry.is-unread { background: color-mix(in srgb, var(--huggins-orange) 10%, transparent); }
+.notify-text { min-width: 0; overflow-wrap: anywhere; }
+.notify-time { font-size: 0.78rem; color: var(--muted-fg); white-space: nowrap; align-self: start; padding-top: 2px; }
+.notify-detail { grid-column: 2 / 4; font-size: 0.84rem; color: var(--muted-fg); overflow-wrap: anywhere; }
+.notify-empty { margin: 0; padding: 18px 14px; color: var(--muted-fg); font-size: 0.92rem; }
+.notify-foot { display: flex; justify-content: flex-end; padding: 6px 8px; border-top: 1px solid var(--surface-border); flex: 0 0 auto; }
+
+/* Popups stack from their edge, newest nearest it, at most three. They take no focus, and only their own boxes take
+   the pointer, so the player and panel stay usable around them. */
+.toasts {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  transition: bottom 0.2s ease;
+}
+.toasts[data-pos^="bottom"] { bottom: 12px; }
+.toasts[data-pos^="top"] { top: 64px; flex-direction: column-reverse; }
+.toasts[data-pos$="left"] { align-items: flex-start; }
+.toasts[data-pos$="right"] { align-items: flex-end; }
+.toast {
+  pointer-events: auto;
+  width: min(400px, 100%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 4px 4px 12px;
+  background: var(--surface-raised);
+  color: var(--page-fg);
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  font-size: 0.92rem;
+  touch-action: pan-y;
+  animation: toast-in 0.16s ease-out;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.toasts[data-pos^="top"] .toast { animation-name: toast-in-top; }
+.toast > .material-symbol-icon { font-size: 22px; color: var(--huggins-orange); flex: 0 0 auto; }
+.toast.is-warning { border-color: var(--error); }
+.toast.is-warning > .material-symbol-icon { color: var(--error); }
+.toast-text { flex: 1 1 auto; min-width: 0; padding: 6px 0; }
+.toast-detail { font-size: 0.84rem; color: var(--muted-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast .icon-btn { width: 36px; min-width: 36px; height: 36px; flex: 0 0 auto; }
+.toast .icon-btn .material-symbol-icon { font-size: 20px; }
+.toast.is-leaving { opacity: 0; transform: scale(0.96); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(10px); } }
+@keyframes toast-in-top { from { opacity: 0; transform: translateY(-10px); } }
+@media (prefers-reduced-motion: reduce) {
+  .toast, .toasts { animation: none; transition: none; }
+}

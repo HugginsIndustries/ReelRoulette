@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI becomes the only client on every device. Until the desktop removal release, the desktop client gets no significant changes or new features: bug fixes (crashes, data loss, broken playback, security) and small changes that keep it working with the server, or that match a small server-side change, are allowed. Until then server contract changes only add fields, so the last desktop build keeps working. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. The desktop still ships as a fallback, and its last build tells users it is retired. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12g, M12h1, M12h2, M12h3, M12i, M12j, M12k, M12l, M12m, M12n1, M12n2, M12n3, M12n4, M12n5, M12o, M12p, M12q, M12r, M12s1, M12s2, M12t, M12u, M12v.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. The desktop still ships as a fallback, and its last build tells users it is retired. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h1, M12h2, M12h3, M12i, M12j, M12k, M12l, M12m, M12n1, M12n2, M12n3, M12n4, M12n5, M12o, M12q, M12r, M12s1, M12s2, M12t, M12u, M12v.
 - **v0.16.0 — Desktop removal**: Remove the desktop client, its packaging, and its tests, then move preset writes to per-preset routes. P48, P25.
 - **v0.16.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.17.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access. P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28j, P28k, P28l.
@@ -319,21 +319,181 @@ Last milestone completed: M12f4
 - Pausing for the admin view, which is WebUI Admin Section.
 - The Auto-Pause setting, which is WebUI Settings Panel.
 
+### M12f8 - WebUI Notifications
+
+- **Status**: ⏳ Planned
+- **Goal**: The WebUI's status line gives way to notifications: lasting states show on the player's indicator, one-off messages pop up briefly, and a bell lists recent messages, while what the user must notice or act on stays in the in-app dialog or the field it is about.
+- **Depends on**: WebUI Field Validation Pattern, whose pattern the field messages move to, and WebUI In-App Dialogs, whose notice the dialog messages move to, and Catalog Open and Backup Safety, whose library states and messages the list's Now shows.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- The main page has no status line.
+- The mobile diagnostics line stays below the player, where the status line was, until WebUI Settings Panel moves it to the Settings tab.
+- The WebUI's message rule:
+  - A lasting state shows on the player's indicator.
+  - A one-off message pops up briefly, and the list behind the bell keeps it.
+  - Anything the user must notice or act on shows in the in-app notice, as WebUI In-App Dialogs sets out, and the list keeps it too.
+  - A field problem shows in its field, with the pattern from WebUI Field Validation Pattern, and the list doesn't keep it.
+  - An error already shown in place, such as in the header's preset list or the library's body, stays there and doesn't pop up.
+- The player's indicator, today's "Reconnecting…" indicator extended to every width:
+  - It shows one lasting state at a time, the first active one in this order, which is the precedence rule, so it never alternates: Reconnecting…, Server not compatible, Running without a library, Loading…, and a library refresh.
+  - Reconnecting… shows while the event stream is lost or the server can't be reached, which today's "SSE reconnecting..." and "Ready (API offline)" report. The WebUI checks `/api/version` again each time the event stream opens or fails, and Reconnecting… ends only once the stream is open and that check succeeds.
+  - Server not compatible shows while the server fails the compatibility check. Its full message ("Unsupported server API version: {version}.", "Server requires client API version {version} or newer.", or "Server missing required capabilities: {list}.") shows in the list's Now and the Library tab, and Play's notice stays.
+  - Running without a library shows while `/api/version` reports a library state other than ready. The server's message for its library state (newer, damaged, missing, or unreadable) shows in the list's Now and the Library tab. While it shows, the event stream failing doesn't show Reconnecting…, since the server refuses the stream until it has a library. It ends when the stream opens and the version check reports the library ready.
+  - Loading… shows while a random pick waits or the media loads, only after half a second, so a quick load shows nothing. The half second counts once, from the first wait until every wait ends, so a pick and its media load are one loading period.
+  - A library refresh shows "Library refresh: {stage} ({percent}%)", and only while the player's controls show, since a refresh can run for hours.
+  - It sits at the player's top center, and below the corner buttons on a player under 600 px wide.
+  - At the top, it stays clear of the corner buttons on both sides, and a state too long for that ends in an ellipsis.
+  - It hides while the server asks for pairing, whose prompt is the thing to act on.
+  - It is a polite live region, and the percentage is hidden from screen readers, so each step of a refresh isn't announced.
+- `/api/version` adds `libraryState` and `libraryMessage`, as `/control/status` reports them, a contract change that only adds, so the WebUI learns the library state from a route the server answers without a library.
+- The favorite and blacklist requests send the device's `clientId`, as random picks and plays already do, and `itemStateChanged` carries it back as `clientId`, the client that made the change, both contract changes that only add. The WebUI shows no Other devices popup for an event with its own `clientId`, so its own change pops up only as Your actions. An event without one, such as one from the desktop, counts as another device's.
+- Popups:
+  - A popup is a themed card with an icon for its kind, the message, an optional second line such as the file name, and Dismiss.
+  - A message that the kind's icon would misread has its own: "Library browse failed. Showing the tiles already loaded." shows a sync problem icon, not the Connection kind's cloud with a check.
+  - At most three show at once, newest nearest their edge.
+  - The cap never closes a warning: a new popup closes the oldest that isn't one, and while three warnings show, a new popup goes to the list only, which the bell counts.
+  - A popup with the same key, such as a second favorite change or a second skip, replaces the one showing and starts its time over.
+  - Pointing at one with a mouse or pen, or keyboard focus on it, pauses its time, which runs again only once neither does.
+  - A swipe to either side on a touch screen closes it.
+  - A warning, such as a failed refresh, stays until it is closed.
+  - At the bottom, popups rise above the player's controls while those show, unless the overlay panel covers the player.
+  - On a player under 600 px wide, popups at the top start below the indicator.
+  - They show over the overlay panel and in fullscreen, take no focus, and only their own boxes take the pointer.
+  - While the list is open, new messages go to it and don't pop up.
+  - While the list is open, a popup showing with a new message's key closes, since it would be out of date, and the list shows the new message.
+- The bell and the list:
+  - The bell sits at the player's top left, with its other controls, so it can be reached in fullscreen and on a phone on its side. It shows and hides with them.
+  - The player's controls stay shown while the list is open.
+  - The bell opens the list under it, lined up with its left edge, or with its right edge when the bell is in the right half of the screen, as the admin bar's is. The list sits inside the fullscreen stage, so it shows in fullscreen and iOS pseudo-fullscreen.
+  - The list's Now shows each active lasting state with its full text.
+  - Its Recent shows, newest first, every one-off message, whether it popped up or not, and every in-app notice, each with its time ("Just now", "{n} min ago", then the time of day).
+  - It keeps the last 50 messages for the page's life, and a page refresh clears it.
+  - The bell's badge counts the messages that didn't pop up since the list was last open, and the list marks them.
+  - The list has Clear.
+  - It closes on its Close, on the bell, on a press outside it, when the panel opens, or on Escape, which closes it before anything else. After Close, the bell, or Escape, focus returns to the bell; after a press outside or the panel opening, it stays where that put it.
+- The popup settings, kept per device, which WebUI Settings Panel's Notifications section sets. Until then they keep their defaults:
+  - Show popups, on by default.
+  - The kinds that pop up: Your actions, Other devices, Library refresh, Skipped files, and Connection, each on by default.
+  - Position: Bottom center, the default, Bottom left, Bottom right, Top center, Top left, or Top right.
+  - Show in fullscreen, on by default. Off, entering fullscreen closes the popups showing, and in fullscreen messages go only to the list, which the bell counts.
+  - Show for: 3, 5, the default, or 10 seconds.
+- Every status line message, from `src/state/serverConnection.ts`, `src/state/serverCompatibility.ts`, `src/events/refreshStatusProjection.ts`, `src/playback/player.ts`, `src/library/library.ts`, `src/library/libraryPlayModel.ts`, `src/library/libraryQuerySession.ts`, `src/filter/filterDialog.ts`, and `src/tags/tagEditor.ts`, sorted by the rule:
+  - No message, since the normal state needs none: "Ready", "Ready (API {version})", "Playing", and "Core refresh idle.".
+  - The indicator: "Ready (API offline)" and "SSE reconnecting..." as Reconnecting…, the version and capability mismatches as Server not compatible, the server's library message as Running without a library, "Loading..." as Loading…, and "Core refresh: {stage} ({percent}%)" as "Library refresh: {stage} ({percent}%)".
+  - Popups, by kind:
+    - Connection: "SSE connected" becomes "Reconnected.", shown only after Reconnecting… showed; and "Library browse failed. Showing the tiles already loaded.".
+    - Library refresh: the "Core refresh complete | …" summary becomes "Library refresh finished", with the summary's segments after it, joined by " · ", on its second line; and "Core refresh failed: {error}" becomes the warning "Library refresh failed", with the error on its second line.
+    - Other devices: "Synced: Added to favorites: {file}", "Synced: Removed from favorites: {file}", and "Synced: Blacklisted: {file}" become "Added to favorites on another device", "Removed from favorites on another device", and "Blacklisted on another device", with the file name on the second line. An item leaving the blacklist, which today also reads "Synced: Removed from favorites: {file}", becomes "Removed from blacklist on another device", told apart by the event's `previousIsBlacklisted`.
+    - Your actions, the acknowledgments of the user's own actions, with today's wording: "Added to favorites", "Removed from favorites", "Blacklisted", and "Removed from blacklist", with the file name on the second line, "Filters applied.", "Filter data refreshed.", "Updated preset "{name}" locally — Apply to save.", "Paired.", and "Tag editor changes applied". They are not the rule's confirmations, which are prompts that ask before an action.
+  - In place, with no popup: "Error loading presets: {error}", which the header's preset list shows as "Error loading presets", and "Library load failed: {error}", which the library shows in its body.
+  - A dialog, moves to the in-app notice, and the list keeps it:
+    - Playback: "No response from the server. Try again.", "Random selection failed ({status}).", "Random selection failed: {error}", "No eligible media for current filters.", "Video file not found.", and "Photo file not found.".
+    - Library play: "Cannot play: server compatibility check failed.", which Play already shows in the notice, "Playback unavailable: no library item was selected.", "Media not found. The file may have moved or been deleted.", "This item is unavailable.", "This file type is not supported.", the server's error text, "Playback failed.", and "Playback failed: {error}".
+    - Favorite and blacklist: "Favorite update failed ({status})." and "Blacklist update failed ({status}).".
+    - Filter: "Filter load failed: {error}", "Filter refresh failed: {error}", "Saving presets failed ({status}).", "Saving presets failed: {error}", "Select a preset to update.", and "Preset not found.".
+    - Tags: "Tag editor unavailable: {error}", "Tag refresh failed: {error}", "No tag changes to save.", and a failed tag save: "{step} failed ({status})" for Category update, Category delete, Tag create/update, Tag rename, Tag delete, Tag apply, and Auto-tag apply, "Tag apply failed", "Tag apply failed: {error}", or the error's text.
+    - Moved by earlier milestones, which this milestone checks show nowhere else: "Pairing failed." and "Pairing blocked by server compatibility check." in WebUI Responsive Layout and Panels.
+  - Field validation, stays in the field pattern:
+    - Moved by earlier milestones, which this milestone checks show nowhere else: "Minimum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.", "Maximum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.", "Enter a preset name.", "A preset with that name already exists.", and "Tag name is required." in WebUI Field Validation Pattern, "That name is already in use." in WebUI In-App Dialogs, and "Pair token required." in WebUI Responsive Layout and Panels, where Pair is disabled while the token is empty.
+  - Nothing: "Unauthorized. Pair first.". A random pick or library play that the server answers with 401 also shows the header's pairing prompt, which is the thing to act on, so the prompt is the only signal. It keeps its `last.log` line.
+- Messages that other milestones add follow the rule from the start, and this milestone checks those already shipped against it. The skips Browser-Playable Filter adds are Skipped files popups, with the file name on the second line.
+- A message that moves to a dialog keeps its `last.log` line with the same text, as the notice in WebUI In-App Dialogs is relayed, and a popup or lasting state relays its text as a status line message is relayed today.
+- A field message is no longer relayed.
+- A failed Auto Tag scan shows its error.
+- The Auto Tag panel's status leaves "Scanning…" when the scan finishes.
+- A tag save shows its own error.
+- The JSON responses that `getJson` in `src/state/appApi.ts`, the random pick in `src/playback/randomPick.ts`, `requestPlayItem` in `src/api/coreApi.ts`, the filter's tag model in `loadRemote` in `src/filter/filterDialog.ts`, and the tag editor's model and the Auto Tag scan in `loadModel` and `scan` in `src/tags/tagEditor.ts` read go through one helper that checks the content type and reports a clear error.
+- When it completes, the Release Specific check in `docs/checklists/testing-checklist.md` that pauses the server expects the indicator's Loading… and the in-app notice's "No response from the server. Try again." in place of the status line's messages.
+
+#### Traps
+
+- With the server stopped, the WebUI shows "library load failed: HTTP 503" only briefly before "SSE reconnecting..." (measured before promotion).
+- The desktop alternates between "core runtime unavailable" and "core runtime is required to browse the library" with the server stopped (measured before promotion).
+- The v0.14.1 release notes still list the WebUI status line flipping between messages as a known issue.
+- `getJson` in `src/state/appApi.ts` throws `HTTP {status}` and drops the response body, so the server's library message in a 503 never reaches the status line.
+- Without a library, the server refuses the event stream with 503, as it does every route but version, capabilities, pair, the web runtime, backup, and refresh settings, and client logs (`LibraryRouteGate.cs`), so today the WebUI reads it as a lost connection and shows "SSE reconnecting...". Only `/control/status` reports `libraryState` and `libraryMessage`, and it needs the control token from another machine.
+- The WebUI checks `/api/version` only at start and after pairing (`loadVersion` in `src/state/serverConnection.ts`), and the event stream reopening doesn't check it again, so a server that couldn't be reached at page load and comes back never fires `serverReady`.
+- On a phone on its side the stylesheet hides the status line (`body.short-screen .status` in `src/styles.css`), so until they move to the notice, the messages sorted as a dialog, such as "No eligible media for current filters." after Play, show nothing there.
+- The playing video's `playing` event sets the status to "Playing". On a connection where the video keeps buffering, that hides "Loading..." while a random pick waits and "No response from the server. Try again." after one times out.
+- `pickRandom` in `player.ts` and `play` in `library.ts` set the pairing prompt just before "Unauthorized. Pair first.". The 401 case in `mapPlayItemErrorToStatus` is never reached, since `play` handles 401 first.
+- Tests lock today's three wrong Auto Tag and tag save messages below as they are, marked as recorded in this milestone.
+- A failed Auto Tag scan shows "Scan complete: no matching tags found." in the panel's status and results, as a scan that found nothing does: `scan` in `src/tags/tagEditor.ts` treats a failure as no rows.
+- Before the WebUI Preact Migration, `app.js` set "Auto-tag scan failed. Core runtime is unavailable or still recovering." and overwrote it at once.
+- A scan where every match already has its tag shows "No rows to show." and leaves the panel's status on "Scanning…": `autoTagStatusAfterChange` in `src/tags/autoTagModel.ts` keeps the status while no row shows.
+- A tag save that cannot reach the server shows the message of the last step the server refused on the page, or "Tag apply failed" when none was: `lastSaveError` in `src/tags/tagEditor.ts` lasts for the page.
+- `getJson`, the random pick's `request` in `src/playback/randomPick.ts`, `requestPlayItem` in `src/api/coreApi.ts`, `loadRemote` in `src/filter/filterDialog.ts`, and `loadModel` and `scan` in `src/tags/tagEditor.ts` call `response.json()` without checking the content type, so an HTML error page from a proxy surfaces as a `SyntaxError`. Pairing reads no JSON, and refresh status arrives only over the event stream.
+- `itemStateChanged` in `src/playback/player.ts` reads any event that leaves an item neither favorite nor blacklisted as "Synced: Removed from favorites: {file}", an item leaving the blacklist too.
+- The server sends `itemStateChanged` to every device, the one that made the change too, and the payload names no client (`PublishExternal` in `ServerStateService.cs`), so today a device's own favorite shows "Added to favorites" and then "Synced: Added to favorites: {file}". The favorite and blacklist requests send no `clientId`, and the server publishes the event before it answers the request, so the event can arrive before the response.
+- The status line component also holds the mobile diagnostics line (`MobileDiagnostics` in `src/ui/StatusLine.tsx`), which WebUI Settings Panel moves to the Settings tab.
+- A z-index, containment, or `container` on the element that holds the popups beside the player makes a stacking context that keeps them under the overlay panel; the mockup's first version did this (measured).
+- The player clips what it holds (`overflow: hidden` on `.media-container` in `src/styles.css`), so the popups sit beside it, not inside it.
+- The WebUI's player controls stop a click from reaching the player (`onClick` on `#overlay-controls` in `src/ui/Player.tsx`), so a bell among them, pressed with nothing playing, starts no random pick.
+- In the mockup, a press on the bell with nothing playing starts no random pick (measured).
+
+#### Acceptance
+
+- With the server stopped, unavailable, or mismatched, or running without a library, while loading, and during a refresh, the indicator shows the first lasting state in the precedence order and does not alternate, in WebUI tests of the precedence rule for each lasting state alone and together.
+- With the server running without a library or failing the compatibility check, the list's Now and the Library tab show the server's message, in WebUI tests of the per-event messages.
+- `/api/version` reports `libraryState` and `libraryMessage`, with and without a library, in server tests of the version route, and OpenAPI and the generated contracts list them.
+- Without a library, the refused event stream shows Running without a library, not Reconnecting…, and the state ends when the library opens, in WebUI tests of the stream failing and opening with each library state.
+- A server that couldn't be reached at page load and comes back ends Reconnecting… once the version check succeeds, and the page then loads, in WebUI tests of the version check on the stream opening.
+- An item leaving the blacklist on another device pops up "Removed from blacklist on another device", in WebUI tests of the item state event's messages.
+- A device's own favorite or blacklist change pops up only as Your actions, while one from another client, or an event without a `clientId`, pops up as Other devices, in WebUI tests of the item state event's `clientId`; the event carries the request's `clientId`, in server tests of the favorite and blacklist routes, and OpenAPI and the generated contracts list both fields.
+- Loading… shows only after half a second, counted once across a pick and its media load, a refresh's progress only while the controls show, and the indicator nothing while the server asks for pairing, in WebUI tests of the indicator.
+- The indicator sits at the player's top center, clear of the corner buttons with a long state ending in an ellipsis, and below them on a player under 600 px wide, where popups at the top start below it, in WebUI tests of the indicator's and popups' placement.
+- The indicator is a polite live region with its percentage hidden from screen readers, and popups take no focus, with only their own boxes taking the pointer, in WebUI tests.
+- A refresh's progress and its result read the same during and after each refresh, in WebUI tests of the refresh progress and result messages.
+- The precedence rule and the per-event messages are documented, checked by reading them.
+- The main page has no status line, and the mobile diagnostics line stays below the player, in WebUI tests.
+- Each one-off message pops up as its kind, with its kind's icon or its own, and as the settings allow, and the list keeps it whether it popped up or not, checked against the sorted list for every message the WebUI sends, including those other milestones added.
+- At most three popups show, the cap closes the oldest that isn't a warning, and while three warnings show a new popup goes to the list only, one with the same key replaces the one showing, a warning stays until closed, pointing at one with a mouse or pen, focusing it, or both pauses its time without taking more off, Dismiss and a swipe close it, popups at the bottom rise above the controls unless the overlay panel covers the player, and none pops up while the list is open, where one showing with a new message's key closes, in WebUI tests of popups.
+- The bell's badge counts the messages that didn't pop up, the list shows Now and Recent, Clear empties it, the list closes on Close, the bell, Escape, a press outside, or the panel opening, with focus back on the bell after Close, the bell, or Escape, and the controls stay shown while it is open, in WebUI tests of the bell and the list.
+- Recent shows each message's time as "Just now", "{n} min ago", then the time of day, and the list keeps the last 50 messages until a page refresh clears it, in WebUI tests of the list.
+- The list sits inside the fullscreen stage and the popups above the overlay panel, with no stacking context between them, in WebUI tests.
+- Popups follow each popup setting, kept per device, and start on for every kind, at the bottom center, in fullscreen too, for 5 seconds, in WebUI tests of each setting's effect and its default.
+- With Show in fullscreen off, entering fullscreen closes the popups showing, and in fullscreen messages go only to the list, which the bell counts, in WebUI tests.
+- Each message sorted as a dialog shows in the in-app notice with the same wording, not as a popup, the list keeps it, and its `last.log` line is unchanged, in tests that each screen's dialog messages show in the notice with their `last.log` lines.
+- A popup or lasting state relays its text to `last.log` as a status line message is relayed today, and a field message is no longer relayed, in WebUI tests of the relay.
+- None of the dialog and field messages moved by earlier milestones pops up or shows on the indicator, checked against the sorted list for every message the WebUI sends.
+- A random pick or library play answered with 401 shows the header's pairing prompt, shows "Unauthorized. Pair first." nowhere, and relays its `last.log` line as before, in tests of a 401 on a random pick and a library play.
+- A failed Auto Tag scan shows its error instead of "Scan complete: no matching tags found.", in a test that replaces the one locking it today.
+- A scan where every match already has its tag clears "Scanning…", in a test that replaces the one locking it today.
+- A tag save that fails on a network error shows that error, not one from an earlier save, in a test that replaces the one locking it today.
+- A response that isn't JSON, such as a proxy's HTML error page, shows a clear error, not a `SyntaxError`, in tests of such a response for `getJson`, the random pick, a library play, the filter's tag model, the tag editor's model, and an Auto Tag scan.
+- The testing checklist's paused-server check expects the indicator's Loading… and the in-app notice, checked by reading it.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass, and one quick spot check with the server stopped.
+
+#### Release checks
+
+- Manual: With the server stopped, unavailable, or mismatched, and during a refresh, the player's indicator settles on one state.
+- Manual: On a phone and an iPad, popups, the bell, and its list show and work in the browser, in fullscreen, and on a phone on its side.
+
+#### Not included
+
+- A desktop counterpart and a shared fixture for the precedence rule, since the desktop is frozen. The desktop's status messages stay as they are.
+- Keeping the list across a page refresh.
+- The Notifications section in the Settings tab, its sample popup, and the list's Notification settings link, which is WebUI Settings Panel.
+- The admin view's bell and popups, which is WebUI Admin Section.
+
 ### M12g - WebUI Settings Panel
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI side panel has a Settings tab for per-device preferences and diagnostics.
-- **Depends on**: WebUI Responsive Layout and Panels, WebUI Field Validation Pattern, and WebUI Library Tab, whose tiles Show file names on tiles changes, and WebUI Auto-Pause and Photo Scrub Bar, whose Auto-Pause mode it sets.
+- **Depends on**: WebUI Responsive Layout and Panels, WebUI Field Validation Pattern, and WebUI Library Tab, whose tiles Show file names on tiles changes, and WebUI Auto-Pause and Photo Scrub Bar, whose Auto-Pause mode it sets, and WebUI Notifications, whose popup settings its Notifications section sets.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
 
 - The Settings tab joins the side panel's tab row.
 - The header has no settings icon, since the tab row reaches the Settings tab. WebUI Responsive Layout and Panels already leaves it out.
-- Move the diagnostics information to the Settings tab, and remove the diagnostics panel from below the main page's status line.
+- Move the diagnostics information to the Settings tab, and remove the mobile diagnostics line from below the player, where WebUI Notifications leaves it.
 - Client settings live in the Settings tab, all kept per device.
 - Advance after is today's photo duration, renamed, and it leaves the header. It keeps today's 1–300 seconds.
 - The panel's side setting chooses the side the panel opens on, with options reading Left, then Right, matching the sides.
+- The player's panel button sits on the panel's side: at the player's top right, as today, or, with the panel on the left, at its top left just right of the bell that WebUI Notifications adds, with the `left_panel_open` and `left_panel_close` icons.
 - Auto-Pause offers Never, Always, or Responsive, the default. WebUI Auto-Pause and Photo Scrub Bar describes the modes and keeps Auto-Pause at Responsive until this setting exists.
 - Randomization mode is not a Settings tab entry; it is in the Library tab.
 - Every client setting survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
@@ -344,18 +504,24 @@ Last milestone completed: M12f4
   - Playback: Autoplay mode, Advance after (today's photo duration, renamed), and Seek step.
   - Audio: Volume step and Enhanced audio, on by default and described as "Processes audio in the app, so in-app volume works on iPhone and iPad."
   - Player controls: Hide player controls, with Hide after and Keep visible while paused under its Timeout choice.
-  - Appearance: Theme, Ambient mode with its expandable settings, Show file names on tiles, and Show the status line.
+  - Appearance: Theme, Ambient mode with its expandable settings, and Show file names on tiles.
+  - Notifications: Show popups and its collapsible Popup settings.
   - Panel: Side and Auto-Pause.
   - Keyboard shortcuts: the shortcut reference, collapsed by default with a chevron, as Ambient mode settings is. `?` opens Settings with it expanded.
   - Diagnostics: the client id, the session id, the client type, the device name, the server's version with its API version, such as "0.15.0 (API 1)", and the app's own version, labeled "ReelRoulette", not "WebUI".
 - Below the sections, one line: "Settings apply at once and are kept on this device."
-- This milestone fills Playback with Advance after, Appearance with Theme, Show file names on tiles, and Show the status line, Panel, and Diagnostics. The other settings arrive with the milestones that build them, each in its section here.
+- This milestone fills Playback with Advance after, Appearance with Theme and Show file names on tiles, Notifications, Panel, and Diagnostics. The other settings arrive with the milestones that build them, each in its section here.
 - The WebUI build reads the app's version from the repository's `.version` file, which `set-release-version.ps1` already sets for each release.
 - Hints say only what a label doesn't: no mockup notes, no "as on the desktop" asides, and no key badges in setting labels, since the shortcut reference lists the keys.
 - Theme is System (the default, following the system as the WebUI does today), Dark, or Light, kept per device.
 - The installed app's status bar style and the `theme-color` meta follow the theme in use, so the status bar's text reads against the page in the light theme too.
 - Show file names on tiles is off by default, kept per device. Hovering a tile with a mouse shows its name as a tooltip either way.
-- Show the status line is on by default, kept per device. With the status line hidden, WebUI Responsive Layout and Panels' reconnecting indicator shows on the player while the connection is lost.
+- The Notifications section sets WebUI Notifications' popup settings, which keep their defaults until then:
+  - Show popups, with the hint "Short messages over the player. The bell on the player lists them either way."
+  - Under it, a collapsible Popup settings group, closed at first, with a chevron as Ambient mode settings has, and disabled while Show popups is off.
+  - The group holds, in this order: Show popups for, the five kinds, each with its hint as in the mockup; Position; Show in fullscreen; and Show for, with the hint "Pointing at a popup keeps it. A warning stays until you close it."
+  - Changing the position or the time shows a sample popup there, which the bell's list doesn't keep.
+- The bell's list gains a Notification settings link, which opens the Settings tab at Show popups with Popup settings expanded.
 - Loop, autoplay, and mute are only the player's buttons, with no entry in the Settings tab, and each button's state survives a page refresh.
 - Settings fields that can hold a value that is not valid use the field validation pattern, and such a value is not kept. Advance after is one.
 
@@ -378,15 +544,18 @@ Last milestone completed: M12f4
 - An Advance after value outside 1–300 seconds is flagged with the field validation pattern as it is typed and is not kept, and the value in use stays as it was, in WebUI tests of Advance after with the field validation pattern.
 - Auto-Pause offers Never, Always, and Responsive, starts at Responsive, and the panel pauses as the chosen mode says, in WebUI tests.
 - Each setting applies as it changes, with no Save, in WebUI tests.
-- Theme offers System, Dark, and Light and starts at System, and turning off Show the status line hides it, in WebUI tests.
+- Theme offers System, Dark, and Light and starts at System, in WebUI tests.
 - The `theme-color` meta and the status bar style follow the theme in use, in WebUI tests of the theme.
 - Show file names on tiles starts off, and turning it on shows each tile's name on the tile, in WebUI tests.
 - The Settings tab has no loop or autoplay entry, in WebUI tests.
 - The Settings tab is in the panel's tab row, and the header has no settings icon, in WebUI tests.
-- The Settings tab shows Playback, Appearance, Panel, and Diagnostics, in that order, with room for the sections later milestones add in the places the mockup gives them, and no setting label carries a key badge, in WebUI tests.
+- With the panel on the left, the panel button sits at the player's top left, just right of the bell, with the left icons, and with the panel on the right at its top right with the right icons, in WebUI tests of the panel's side.
+- The Notifications section sets each popup setting from its default, disables Popup settings while Show popups is off, and shows a sample popup when the position or time changes, in WebUI tests of the section.
+- The bell's list's Notification settings link opens the Settings tab at Show popups with Popup settings expanded, in WebUI tests.
+- The Settings tab shows Playback, Appearance, Notifications, Panel, and Diagnostics, in that order, with room for the sections later milestones add in the places the mockup gives them, and no setting label carries a key badge, in WebUI tests.
 - The Settings tab shows the diagnostics information on desktop and mobile browsers, and the main page no longer shows the diagnostics panel, in WebUI tests.
 - Diagnostics shows the client and session ids, the client type, the device name, the server's version with its API version, and the app's version from `.version`, labeled "ReelRoulette", in WebUI tests and a build check that the app's version matches `.version`.
-- After a page refresh, Advance after, the panel's side, Auto-Pause, the theme, whether file names show on tiles, whether the status line shows, and the autoplay, loop, and mute buttons' state are each as they were, in WebUI tests of a page refresh keeping each setting this milestone adds.
+- After a page refresh, Advance after, the panel's side, Auto-Pause, the theme, whether file names show on tiles, the popup settings, and the autoplay, loop, and mute buttons' state are each as they were, in WebUI tests of a page refresh keeping each setting this milestone adds.
 - Preferences are stored per device and do not change other devices, in WebUI tests for preference storage.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check on a phone.
@@ -411,7 +580,7 @@ Last milestone completed: M12f4
 
 - **Status**: ⏳ Planned
 - **Goal**: Everything the Operator page does, apart from its logs, moves into a full-page admin section of the WebUI.
-- **Depends on**: WebUI Responsive Layout and Panels, whose header holds the admin icon, and WebUI Auto-Pause and Photo Scrub Bar, whose Auto-Pause the admin view follows, and WebUI In-App Dialogs, whose confirmation the control token change uses, and WebUI Field Validation Pattern, whose pattern its settings fields use, and Catalog Open and Backup Safety, whose library state and message the admin section shows.
+- **Depends on**: WebUI Responsive Layout and Panels, whose header holds the admin icon, and WebUI Auto-Pause and Photo Scrub Bar, whose Auto-Pause the admin view follows, and WebUI In-App Dialogs, whose confirmation the control token change uses, and WebUI Field Validation Pattern, whose pattern its settings fields use, and Catalog Open and Backup Safety, whose library state and message the admin section shows, and WebUI Notifications, whose bell and popups the admin view uses.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Slices
@@ -442,7 +611,7 @@ Last milestone completed: M12f4
 
 - Admin is a full-page view opened from the header's admin icon, not a panel tab. The icon is always visible.
 - The view keeps the Operator page's responsive layout, restyled to match the rest of the WebUI.
-- Its layout: a bar with a back arrow ("Back to the player") and the title Admin; a row of jump links to its sections; and cards, each titled with its icon, in this order: Server (`dns`), Web access (`lan`), Control (`key`), Library refresh (`sync`), Library transfer (`swap_vert`), Backups (`storage`), Sources (`folder`), Duplicates (`content_paste`), Testing suite (`bug_report`), Connected clients (`group`), Log Viewer (`article`), and API events (`description`).
+- Its layout: a bar with a back arrow ("Back to the player"), the title Admin, and at its right end the notifications bell; a row of jump links to its sections; and cards, each titled with its icon, in this order: Server (`dns`), Web access (`lan`), Control (`key`), Library refresh (`sync`), Library transfer (`swap_vert`), Backups (`storage`), Sources (`folder`), Duplicates (`content_paste`), Testing suite (`bug_report`), Connected clients (`group`), Log Viewer (`article`), and API events (`description`).
 - Sources, Duplicates, the Log Viewer, and API events take the full width, and on a wide screen the others take half.
 - The cards for refresh, transfer, backups, sources, duplicates, and the Log Viewer arrive with the milestones that build them, in their places.
 - The admin view covers the player, so opening it pauses playback under the Always and Responsive Auto-Pause modes, and leaving it resumes playback only if Auto-Pause paused it, as WebUI Auto-Pause and Photo Scrub Bar describes.
@@ -463,7 +632,8 @@ Last milestone completed: M12f4
 - The values each field accepts are read from the server's checks when this slice starts.
 - Connected clients show each client's id and, where its user agent names one, its operating system, then its type, address, and the time it connected, with counts of API sessions, control sessions, and event streams.
 - Connected clients leave out the session id, which the Operator page shows today.
-- On a phone on its side, where the app's header hides, the admin view keeps its own bar, with the back arrow and its title.
+- On a phone on its side, where the app's header hides, the admin view keeps its own bar, with the back arrow, its title, and the bell.
+- The admin view has no status line. Its acknowledgments, such as "Control settings saved.", pop up as Your actions popups, and its bell opens the same list as the player's, whose Now shows the lasting states, since the admin view has no player, as WebUI Notifications sets out.
 - Gating: opening admin from another machine asks for the control token first, through `POST /control/pair`, and shows nothing until it is accepted. On the server machine, which the merged localhost helper decides, it opens directly.
 
 **Traps**
@@ -484,6 +654,7 @@ Last milestone completed: M12f4
 - The admin section offers every action and setting the Operator page offers today, apart from its Server Logs and Enable Web UI, and calls the same routes, in admin section UI tests of loading status and settings, saving settings, and the testing panel.
 - Connected clients show each client's id with its operating system where the user agent names one, its type, address, and connection time, and the three counts, without the session id, in admin section UI tests.
 - In the admin section, one Download click and one confirmation start the update download, in admin section UI tests.
+- The admin view has no status line, its bar ends with the bell, which opens the list, and its acknowledgments pop up, in admin section UI tests of its notifications.
 - The control token shows hidden with Show and Copy, saving a changed token asks first and warns that other machines will be signed out, and saving it unchanged asks nothing, in admin section UI tests of the control token's Show, Copy, and change confirmation.
 - An admin settings field with a value the server would not accept, such as the port, is flagged with the field validation pattern as it is typed, and its Save can't proceed until it is corrected, in admin section UI tests of settings fields with the field validation pattern.
 - From another machine, opening admin asks for the control token first, and nothing in the admin section is shown until a valid token is entered; on the server machine it opens without one, in admin section UI tests of control-token gating.
@@ -755,9 +926,10 @@ Last milestone completed: M12f4
 **Scope**
 
 - Refresh Now with the refresh status.
+- While a refresh runs, the Refresh card shows its stage and progress, and its result pops up as WebUI Notifications' Library refresh popup, a warning when it fails.
 - The refresh settings the desktop Settings dialog shows: auto-refresh and its interval (5–1440 minutes), forced loudness and duration rescans on the next refresh, and fingerprint scan parallelism (1–16).
 - Clear playback stats for the whole library, which the desktop offers from its Playback menu through `POST /api/playback/clear-stats`. It is an admin action, in the admin view's library section: a red Clear All Playback Stats… button under Playback stats in the Library refresh card.
-- Clear All Playback Stats… asks "Clear the playback stats of every item in the library? Plays and last played go back to none." with a red Clear, and the status line then says "Cleared the library's playback stats.".
+- Clear All Playback Stats… asks "Clear the playback stats of every item in the library? Plays and last played go back to none." with a red Clear, and a Your actions popup then says "Cleared the library's playback stats.".
 
 **Traps**
 
@@ -768,7 +940,7 @@ Last milestone completed: M12f4
 
 **Acceptance**
 
-- Refresh Now starts a refresh, and the status line shows its progress and result, in admin section UI tests.
+- Refresh Now starts a refresh, its card shows the refresh's stage and progress, and its result pops up, in admin section UI tests.
 - Refresh settings load and save, and saving one field leaves the others as they were on the server, in admin section UI tests.
 - Each refresh field accepts the range the server enforces, in admin section UI tests.
 - A refresh value outside its range is flagged with the field validation pattern as it is typed, and Save can't proceed until it is corrected, in admin section UI tests of each refresh field.
@@ -822,7 +994,7 @@ Last milestone completed: M12f4
 - The kept file's card is outlined green, and the others red with a dimmed thumbnail.
 - A footer sums up "{n} files to delete from {n} groups; Keep All groups are left as they are." or "Keep All everywhere: nothing will be deleted.", with Cancel and a red Delete {n} Files, disabled while nothing would be deleted.
 - The confirmation says "This permanently deletes the duplicate files you didn't keep from disk.", then "Groups to process: {n}" and "Files to delete: {n}", with a red Delete {n} Files.
-- Afterwards the card says "Deleted {n} files." and the status line "Deleted {n} duplicate files.".
+- Afterwards the card says "Deleted {n} files." and a Your actions popup "Deleted {n} duplicate files.".
 - A count of one is singular, such as "Delete 1 File".
 
 **Traps**
@@ -899,7 +1071,7 @@ Last milestone completed: M12f4
 - Edit Source has **Remove**, not Delete, since the source's files stay on disk. It asks `Remove the source "{name}"? Its items leave the library; its files stay on disk.` in a dialog stacked above, with a red Remove.
 - The path field uses the field validation pattern, and a path that is already a source is flagged with "That folder is already a source.". An empty path is not flagged.
 - Add Source sits beside the path field, so it is disabled while the path is empty or flagged, with no icon on the button, as WebUI In-App Dialogs sets out for an action whose fields sit right next to it.
-- The status line acknowledges each change: "Source renamed.", "Source added. Importing its files…", "{name} enabled." or "{name} disabled.", and "Source removed.", the last three followed by "ReelRoulette updates the library everywhere it's open.".
+- A Your actions popup acknowledges each change: "Source renamed.", "Source added. Importing its files…", "{name} enabled." or "{name} disabled.", and "Source removed.", the last three followed by "ReelRoulette updates the library everywhere it's open.".
 
 **Traps**
 
@@ -998,7 +1170,7 @@ Last milestone completed: M12f4
 
 - The export route suggests `library-{date}.db` as the download's name (its `Content-Disposition` file name) in place of `library.db`, dated by the server's local date, such as `library-2026-10-08.db`. Only the suggested name changes.
 - **Export Library** in the admin section uses the same route, `GET /api/library/catalog-checkpoint`. Export is a plain download in every browser, with no save picker, so it has no ellipsis.
-- The status line says "Downloading {file}." as the download starts.
+- A Your actions popup says "Downloading {file}." as the download starts.
 - The library transfer card's hint reads "Export saves the whole library: items, tags, presets, and stats. Import replaces it while the server runs; the current library is kept aside until the new one opens."
 
 **Traps**
@@ -1032,7 +1204,7 @@ Last milestone completed: M12f4
 - The file uploads first; the server then reads its source folders for the remap dialog, or rejects a file that isn't a library with the notice "{file} isn't a ReelRoulette library. The library wasn't changed."
 - The remap dialog, titled "Import {file}", says "Its source folders were on another machine. Point each one at its folder on this server, or leave it to keep the path.", with one field per source folder labeled with its old path, using the field validation pattern, and Cancel and Import.
 - Import is disabled while a remap field is flagged, with no icon on it, as WebUI In-App Dialogs sets out for the fields of a dialog.
-- Import then asks "Replace the library with {file}? The current library is kept aside until the new one opens.", with Cancel focused and a red Replace, and the status line says "Imported {file}. Connected clients reload the library."
+- Import then asks "Replace the library with {file}? The current library is kept aside until the new one opens.", with Cancel focused and a red Replace, and a Your actions popup says "Imported {file}. Connected clients reload the library."
 
 **Traps**
 
@@ -1063,7 +1235,7 @@ Last milestone completed: M12f4
 - A new route lists the server's backups, a contract change that only adds.
 - The Backups card lists the server's backups under Restore, newest first, each named by when it was made, such as "Today 06:00", "Yesterday 18:00", or "3 days ago (daily)", with a Restore… button.
 - A backup kept only by daily retention is labeled "(daily)".
-- Restore asks "Restore the backup from {when}? The current library is kept aside until the backup opens.", with Cancel focused and a red Restore, and the status line then says "Restored the backup from {when}.".
+- Restore asks "Restore the backup from {when}? The current library is kept aside until the backup opens.", with Cancel focused and a red Restore, and a Your actions popup then says "Restored the backup from {when}.".
 
 **Traps**
 
@@ -1219,7 +1391,7 @@ Last milestone completed: M12f4
 
 - A volume slider at the end of the seek row. With Enhanced audio on, it sets the gain stage, on every device, which is also how iOS, where Safari makes a media element's volume read-only, gets one.
 - The Settings tab offers the desktop's volume steps: 1, 2, or 5 percent, used by the scroll wheel, a two-finger drag, and the [ and ] keys that WebUI Keyboard Shortcuts binds.
-- Changing the volume, by the slider or otherwise, writes nothing to the status line.
+- Changing the volume, by the slider or otherwise, sends no notification.
 - The scroll wheel over the player changes the volume by the volume step, one step per notch.
   - A trackpad's small deltas add up into notches, so a light swipe doesn't jump the volume.
   - The mockup counts a line- or page-unit event, or one of at least 50 px, as a whole notch, and otherwise a notch per 100 px.
@@ -1251,7 +1423,7 @@ Last milestone completed: M12f4
 
 - The volume slider sits at the end of the seek row and sets the volume, and the Settings tab offers the desktop's volume steps, in WebUI tests.
 - The scroll wheel over the player changes the volume by the volume step, one step per notch with a trackpad's small deltas added up, without scrolling the page; on a touch screen a two-finger drag does too, without zooming. Each shows the controls, and none changes anything on a photo. Shown by wheel tests for notches and added-up trackpad deltas, and two-finger drag tests.
-- Changing the volume writes nothing to the status line, in WebUI tests.
+- Changing the volume sends no notification, in WebUI tests.
 - With Enhanced audio on, every device plays through the gain stage, which starts on the first tap. On iOS the volume slider shows once it runs, and the slider, scroll wheel, and two-finger drag set the gain. Shown by a test that the gain stage starts on the first tap and the slider then shows.
 - The gain glides to each new level and fades in on play and out on pause, so nothing crackles or pops, in tests that the gain only glides and that play and pause fade it in and out.
 - With Enhanced audio off, audio plays directly, and on iOS the volume controls hide. If the gain stage can't start, the notice's **Turn off Enhanced audio** turns it off for the device. Shown by tests for Enhanced audio on and off and for the notice when the gain stage can't start.
@@ -1394,12 +1566,12 @@ Last milestone completed: M12f4
   - Its settings have plain labels, each showing its value: Update rate (1 per second by default, from 0.25 to 4), Fade time (2 s, from 0.25 to 4 s), Blur (64 px, from 10 to 80 px), Strength in the dark theme (50%), Strength in the light theme (75%), and Saturation (100%, from 0 to 200%).
   - A Reset to defaults button.
 - Hide player controls, a Settings tab entry in its Player controls section, kept per device:
-  - Timeout, the default: the controls hide after a set time with no activity. Moving the mouse or tapping shows them and restarts the countdown. They stay visible while the pointer is over them and while the scrub bar or volume is being dragged.
+  - Timeout, the default: the controls hide after a set time with no activity. Moving the mouse or tapping shows them and restarts the countdown. They stay visible while a mouse or pen pointer is over them, while the scrub bar or volume is being dragged, and while the bell's list, which WebUI Notifications adds, is open, and their countdown starts again when it closes. A touch doesn't count as a pointer over them.
   - While Timeout is chosen, two settings show under it: Hide after, 1 to 30 seconds and 3 by default, using the field validation pattern; and Keep visible while paused, on by default.
   - On click/tap: clicking or tapping the player shows or hides them, as today.
   - Never: the controls stay visible.
   - In every mode, hidden controls can't be pressed, so the first tap or click on them only shows them.
-  - With Timeout, a key press counts as activity and shows them, and keyboard focus on a control keeps them shown.
+  - With Timeout, a key press counts as activity and shows them, and keyboard focus on a control, focus that `:focus-visible` matches, keeps them shown. Focus that a tap or click leaves on a control doesn't, so after a tap on Play they still hide.
 - The player is also clipped by a rounded `clip-path: inset(0 round 8px)`, square in fullscreen and on a phone on its side, as in the mockup, so its corners stay rounded on iOS with ambient mode on.
 - Ambient mode and its settings, and Hide player controls and its two settings, survive a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
 
@@ -1414,13 +1586,15 @@ Last milestone completed: M12f4
 - There is no timeout, and hidden controls can still be pressed, since only their container ignores the pointer (`.overlay-controls` in `src/styles.css`).
 - In Safari and Firefox on iOS, the player's rounded corners turned square once ambient mode drew, and stayed rounded with it off or on other devices (measured).
 - WebKit doesn't clip a layer of its own, such as the blurred ambient canvas, to its parent's rounded corners (inferred).
+- A tap on Play left focus on it, and the mockup's first version, which kept the controls shown for any focus on a control, then kept them up until the next tap elsewhere (measured).
+- happy-dom, which the WebUI's screen tests use, matches `:focus-visible` for any focus, including focus a tap leaves, so a test can't tell keyboard focus from a tap's by it; the mockup tracks the last input itself (measured).
 
 #### Acceptance
 
 - The fullscreen button shows the exit icon while the stage is in fullscreen or pseudo-fullscreen, in a test of the fullscreen button's icon.
 - With ambient mode on, a blurred, dimmed copy of the frame's colors fills the black space around a playing video and crossfades as the picture changes, and a photo gets one from the photo. Sampling stops while the video is paused or the tab is hidden. Off, the space is plain black in both themes. The light theme uses full color at its own strength, and a sample that arrives mid-fade never lets the black background show through. Shown by ambient mode tests for sampling at the update rate while a video plays, holding while it is paused or the tab is hidden, and a photo drawn once.
 - The Ambient mode settings section offers each setting with its default and range, shows each value, applies changes as they're made, and Reset to defaults restores the defaults, in ambient mode tests of each of its settings.
-- With Hide player controls on Timeout, the controls hide after the Hide after time with no activity, moving the mouse or tapping shows them and restarts the countdown, and they stay while the pointer is over them, while the scrub bar or volume is dragged, and, with Keep visible while paused, while paused. On click/tap toggles them on a click or tap, and Never keeps them visible. Hide after accepts 1 to 30 seconds. Hidden controls can't be pressed. Shown by controls tests for each Hide player controls mode, the countdown, and each thing that keeps the controls shown.
+- With Hide player controls on Timeout, the controls hide after the Hide after time with no activity, moving the mouse or tapping shows them and restarts the countdown, and they stay while a mouse or pen pointer is over them, while keyboard focus is on a control, while the scrub bar or volume is dragged, while the bell's list is open, and, with Keep visible while paused, while paused. A touch over them and focus a tap leaves on Play don't keep them shown. On click/tap toggles them on a click or tap, and Never keeps them visible. Hide after accepts 1 to 30 seconds. Hidden controls can't be pressed. Shown by controls tests for each Hide player controls mode, the countdown, and each thing that keeps the controls shown.
 - The player is clipped by the rounded `clip-path`, square in fullscreen and on a phone on its side, in a WebUI test.
 - After a page refresh, ambient mode and its settings, and Hide player controls and its two settings, are each as they were, in tests for a page refresh keeping each setting this milestone adds.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
@@ -1455,7 +1629,7 @@ Last milestone completed: M12f4
   - It uses the browser's frame timings (`requestVideoFrameCallback`) where the browser provides them, and, where it doesn't, an assumed frame rate that this milestone decides.
   - It replaces the desktop's Frame seek step (Shift and the arrow keys), which LibVLC drives.
 - Shortcuts do nothing while focus is in a text field.
-- Esc closes the first of these that is open: Auto Tag (not while a scan runs), the panel, and then pseudo-fullscreen. An open dialog takes Esc itself.
+- Esc closes the first of these that is open: the bell's list, Auto Tag (not while a scan runs), the panel, and then pseudo-fullscreen. An open dialog takes Esc itself.
 - A shortcut reference in the Settings tab's Keyboard shortcuts section, collapsed by default with a chevron. `?`, pressed anywhere outside a text field, opens Settings with it expanded, and the reference lists `?` too.
 - The seek step survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
 
@@ -1469,7 +1643,7 @@ Last milestone completed: M12f4
 
 - Each bound shortcut does what the desktop's does, in keyboard tests per binding under `happy-dom`.
 - 1 to 5 open the panel on Library, Filter, Tags, Stats, and Settings, T and S on Tags and Settings, and the open tab's key closes the panel; P shows or hides the panel. Shown by keyboard tests per binding.
-- Esc closes Auto Tag, the panel, and pseudo-fullscreen, in that order, and leaves Auto Tag open while a scan runs, in tests of the Esc order.
+- Esc closes the bell's list, Auto Tag, the panel, and pseudo-fullscreen, in that order, and leaves Auto Tag open while a scan runs, in tests of the Esc order.
 - Shortcuts are ignored while a text field has focus, in keyboard tests per binding.
 - [ and ] change the volume by the volume step, and do nothing on a photo, in keyboard tests per binding.
 - J and L seek by the seek step, and the Settings tab offers the desktop's seek step choices, in keyboard tests per binding.
@@ -1494,7 +1668,7 @@ Last milestone completed: M12f4
 
 - **Status**: ⏳ Planned
 - **Goal**: A WebUI on the server machine opens the system file manager at the playing file, and elsewhere copies its path.
-- **Depends on**: Reverse Proxy and HTTPS Access, WebUI Preact Migration, and WebUI Stats Panel.
+- **Depends on**: Reverse Proxy and HTTPS Access, WebUI Preact Migration, and WebUI Stats Panel, and WebUI Notifications, whose Your actions popup acknowledges it.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -1550,7 +1724,7 @@ Last milestone completed: M12f4
 
 - A Show in File Manager action for the current file where the server offers it, and Copy Path everywhere else.
 - They sit beside the file's path in the Stats tab, Show in File Manager with the `folder_open` icon and Copy Path with `content_copy`.
-- The status line then says "Opened in the file manager." or "Path copied."
+- A Your actions popup then says "Opened in the file manager." or "Path copied.", with the file name on its second line.
 - Copy Path from another device at the LAN address falls back to copying from a hidden text field with `document.execCommand('copy')`.
 
 **Traps**
@@ -1569,93 +1743,11 @@ Last milestone completed: M12f4
 
 - Manual: On the server machine at `http://localhost`, Show in File Manager opens the file manager at the playing file on Linux and Windows; from another device, Copy Path copies it, at the LAN address and through an HTTPS proxy.
 
-### M12p - WebUI Status Line Overhaul
-
-- **Status**: ⏳ Planned
-- **Goal**: The WebUI status line shows only background information, one stable message per situation, and what the user must notice or act on moves to an in-app dialog or the field it is about.
-- **Depends on**: WebUI Field Validation Pattern, whose pattern the field messages move to, and WebUI In-App Dialogs, whose notice the dialog messages move to, and Catalog Open and Backup Safety, whose 503 message the status line shows.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Scope
-
-- Defines one precedence rule for which message wins when several apply, so the status line never alternates.
-- The precedence rule also settles the buffering case in Traps, where "Playing" hides "Loading..." while a random pick waits and "No response from the server. Try again." after one times out.
-- Defines the message for each event once: server stopped, API unavailable, the server running without a library (showing the server's message for each library state: newer, damaged, missing, or unreadable), version or capability mismatch, and refresh progress and results.
-- The precedence rule and the per-event messages cover the background messages only.
-- The WebUI's message rule, status line side: the status line is only for background information that shouldn't interrupt the user, such as connection state, refresh progress, and sync notices.
-- Anything the user needs to notice or act on shows in the in-app dialog, as WebUI In-App Dialogs sets out, and field problems use the pattern from WebUI Field Validation Pattern.
-- Every status line message, from `src/state/serverConnection.ts`, `src/state/serverCompatibility.ts`, `src/events/refreshStatusProjection.ts`, `src/playback/player.ts`, `src/library/library.ts`, `src/library/libraryPlayModel.ts`, `src/library/libraryQuerySession.ts`, `src/filter/filterDialog.ts`, and `src/tags/tagEditor.ts`, sorted by the rule:
-  - Background, stays on the status line:
-    - Connection: "Ready", "Ready (API {version})", "Ready (API offline)", "SSE connected", "SSE reconnecting...", "Error loading presets: {error}", and a version or capability mismatch: "Unsupported server API version: {version}.", "Server requires client API version {version} or newer.", and "Server missing required capabilities: {list}.".
-    - Refresh: "Core refresh: {stage} ({percent}%)", the "Core refresh complete | …" summary, "Core refresh failed: {error}", and "Core refresh idle.".
-    - Sync notices: "Synced: Added to favorites: {file}", "Synced: Removed from favorites: {file}", and "Synced: Blacklisted: {file}".
-    - Playback progress: "Loading..." and "Playing".
-    - The library window: "Library load failed: {error}", which the library also shows in its body, and "Library browse failed. Showing the tiles already loaded.".
-    - Acknowledgments of the user's own actions that ask nothing more of them: "Added to favorites", "Removed from favorites", "Blacklisted", "Removed from blacklist", "Filters applied.", "Filter data refreshed.", "Updated preset "{name}" locally — Apply to save.", "Paired.", and "Tag editor changes applied". They are not the rule's confirmations, which are prompts that ask before an action.
-  - A dialog, moves to the in-app notice:
-    - Playback: "No response from the server. Try again.", "Random selection failed ({status}).", "Random selection failed: {error}", "No eligible media for current filters.", "Video file not found.", and "Photo file not found.".
-    - Library play: "Playback unavailable: no library item was selected.", "Media not found. The file may have moved or been deleted.", "This item is unavailable.", "This file type is not supported.", the server's error text, "Playback failed.", and "Playback failed: {error}".
-    - Favorite and blacklist: "Favorite update failed ({status})." and "Blacklist update failed ({status}).".
-    - Filter: "Filter load failed: {error}", "Filter refresh failed: {error}", "Saving presets failed ({status}).", "Saving presets failed: {error}", "Select a preset to update.", and "Preset not found.".
-    - Tags: "Tag editor unavailable: {error}", "Tag refresh failed: {error}", "No tag changes to save.", and a failed tag save: "{step} failed ({status})" for Category update, Category delete, Tag create/update, Tag rename, Tag delete, Tag apply, and Auto-tag apply, "Tag update failed", "Tag apply failed", or the error's text.
-    - Moved by earlier milestones, which this milestone checks are gone from the status line: "Pairing failed." and "Pairing blocked by server compatibility check." in WebUI Responsive Layout and Panels.
-  - Field validation, moves to the field validation pattern:
-    - Moved by earlier milestones, which this milestone checks are gone from the status line: "Minimum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.", "Maximum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.", "Enter a preset name.", "A preset with that name already exists.", and "Tag name is required." in WebUI Field Validation Pattern, "That name is already in use." in WebUI In-App Dialogs, and "Pair token required." in WebUI Responsive Layout and Panels, where Pair is disabled while the token is empty.
-  - Leaves the status line with nothing in its place: "Unauthorized. Pair first.". A random pick or library play that the server answers with 401 also shows the header's pairing prompt, which is the thing to act on, so the prompt is the only signal. It keeps its `last.log` line.
-- A message that moves to a dialog keeps its `last.log` line with the same text, as the notice in WebUI In-App Dialogs is relayed.
-- A field message is no longer relayed.
-- Status line messages that other milestones add after the sorted list was read follow the rule from the start, and this milestone checks those already shipped against it.
-- A failed Auto Tag scan shows its error.
-- The Auto Tag panel's status leaves "Scanning…" when the scan finishes.
-- A tag save shows its own error.
-- Pair, refresh status, version, and random responses are read through one helper that checks the content type and reports a clear error.
-
-#### Traps
-
-- With the server stopped, the WebUI shows "library load failed: HTTP 503" only briefly before "SSE reconnecting..." (measured before promotion).
-- The desktop alternates between "core runtime unavailable" and "core runtime is required to browse the library" with the server stopped (measured before promotion).
-- The v0.14.1 release notes still list the WebUI status line flipping between messages as a known issue.
-- The WebUI's `fetchJson` throws `HTTP {status}` and drops the response body, so the server's library message in a 503 never reaches the status line.
-- On a phone on its side the stylesheet hides the status line (`body.short-screen .status` in `src/styles.css`), so until they move to the notice, the messages sorted as a dialog, such as "No eligible media for current filters." after Play, show nothing there.
-- The playing video's `playing` event sets the status to "Playing". On a connection where the video keeps buffering, that hides "Loading..." while a random pick waits and "No response from the server. Try again." after one times out.
-- `pickRandom` in `player.ts` and `play` in `library.ts` set the pairing prompt just before "Unauthorized. Pair first.". The 401 case in `mapPlayItemErrorToStatus` is never reached, since `play` handles 401 first.
-- Tests lock today's three wrong Auto Tag and tag save messages below as they are, marked as recorded in this milestone.
-- A failed Auto Tag scan shows "Scan complete: no matching tags found." in the panel's status and results, as a scan that found nothing does: `scan` in `src/tags/tagEditor.ts` treats a failure as no rows.
-- Before the WebUI Preact Migration, `app.js` set "Auto-tag scan failed. Core runtime is unavailable or still recovering." and overwrote it at once.
-- A scan where every match already has its tag shows "No rows to show." and leaves the panel's status on "Scanning…": `autoTagStatusAfterChange` in `src/tags/autoTagModel.ts` keeps the status while no row shows.
-- A tag save that cannot reach the server shows the message of the last step the server refused on the page, or "Tag apply failed" when none was: `lastSaveError` in `src/tags/tagEditor.ts` lasts for the page.
-- `src/api/coreApi.ts` calls `response.json()` for pair, refresh status, version, and random responses without checking the content type or catching parse errors, so an HTML error page from a proxy surfaces as a `SyntaxError`.
-
-#### Acceptance
-
-- With the server stopped, unavailable, or mismatched, the status line settles on one message and does not alternate, in WebUI tests of the precedence rule covering the server stopped, the API unavailable, and a version or capability mismatch.
-- With the server running without a library, the status line shows the server's message, in WebUI tests of the per-event messages.
-- Refresh status reads the same during and after each refresh, in WebUI tests of the refresh progress and result messages.
-- The precedence rule and the per-event messages are documented, checked by reading them.
-- The status line shows only the messages sorted as background, including those other milestones added after the sorted list was read, checked against the sorted list for every status line write.
-- Each message sorted as a dialog shows in the in-app notice with the same wording, not on the status line, and its `last.log` line is unchanged, in tests that each screen's dialog messages show in the notice with their `last.log` lines and its background messages stay on the status line.
-- None of the dialog and field messages moved by earlier milestones shows on the status line, checked against the sorted list for every status line write.
-- A random pick or library play answered with 401 shows the header's pairing prompt, shows "Unauthorized. Pair first." neither on the status line nor in a dialog, and relays its `last.log` line as before, in tests of a 401 on a random pick and a library play.
-- A failed Auto Tag scan shows its error instead of "Scan complete: no matching tags found.", in a test that replaces the one locking it today.
-- A scan where every match already has its tag clears "Scanning…", in a test that replaces the one locking it today.
-- A tag save that fails on a network error shows that error, not one from an earlier save, in a test that replaces the one locking it today.
-- A pair, refresh status, version, or random response that isn't JSON, such as a proxy's HTML error page, shows a clear error, not a `SyntaxError`, in tests of a response that isn't JSON for each of the four reads.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and one quick spot check with the server stopped.
-
-#### Release checks
-
-- Manual: With the server stopped, unavailable, or mismatched, and during a refresh, the WebUI settles on one status message.
-
-#### Not included
-
-- The desktop's half of the overhaul and its shared fixture, since the desktop is frozen. The desktop's status messages stay as they are.
-
 ### M12q - Testing Suite Overhaul
 
 - **Status**: ⏳ Planned
 - **Goal**: The testing suite produces clear results that match the WebUI's connection and status handling.
-- **Depends on**: WebUI Status Line Overhaul, Server Shutdown Fixes, and WebUI Admin Section.
+- **Depends on**: WebUI Notifications, Server Shutdown Fixes, and WebUI Admin Section.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Slices
@@ -1676,6 +1768,7 @@ Last milestone completed: M12f4
 
 - The suite predates the current client connection and status handling and no longer produces clear results.
 - With the API unavailable, the WebUI shows "library load failed: HTTP 503" only briefly before settling on "SSE reconnecting..." (measured before promotion).
+- WebUI Notifications replaces "SSE reconnecting..." with the indicator's Reconnecting…, and the library keeps its load failure in its body.
 - SSE disconnect behaves inconsistently and may need redesigning (measured before promotion).
 - The Operator testing suite has five scenario flags: API version mismatch, capability mismatch, API unavailable, missing media, and SSE disconnect.
 
@@ -1689,7 +1782,7 @@ Last milestone completed: M12f4
 
 - Redesign the scenarios against current WebUI behavior, define the expected WebUI message for each, and verify the WebUI's behavior as part of the suite.
 - The suite runs from the admin section.
-- Each scenario shows its expected message under it, labeled "Expected message:". The mockup leaves the messages to this milestone, which takes them from WebUI Status Line Overhaul's per-event messages.
+- Each scenario shows its expected message under it, labeled "Expected message:": the lasting state the player's indicator shows, or the popup the WebUI sends. The mockup leaves the messages to this milestone, which takes them from WebUI Notifications' per-event messages.
 - If the redesign changes the scenarios the testing routes under `/control` take, that is a contract change that doesn't only add, and OpenAPI and the admin section change together.
 
 **Traps**
@@ -1718,7 +1811,7 @@ Last milestone completed: M12f4
 
 - **Status**: ⏳ Planned
 - **Goal**: Browse and random play can be limited to files a browser can play, and a file the browser cannot play says so instead of "not found".
-- **Depends on**: WebUI Preact Migration, Favorite and Blacklist Filter Modes, whose FilterState schema it adds its field to, and WebUI Status Line Overhaul, whose precedence rule the new message follows.
+- **Depends on**: WebUI Preact Migration, Favorite and Blacklist Filter Modes, whose FilterState schema it adds its field to, and WebUI Notifications, whose Skipped files popups announce the skips.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -1792,11 +1885,11 @@ Last milestone completed: M12f4
 - Say that the format is not supported in this browser when that is the cause, and "not found" only when the file is missing.
 - The format message reads "This video's format (.{ext}) isn't supported in this browser.".
 - The WebUI asks the server whether the file exists, with a one-byte range request to the item's media URL: a `404` means it is missing, and otherwise this browser can't play its format. Comparing the container against the profile instead would call an mkv that Safari can't play missing, since the profile counts mkv as playable.
-- When autoplay, Next, Previous, or a random pick reaches a file this browser can't play, or one that is missing, the player skips on to the next item in the same direction and says so on the status line, as background information under WebUI Status Line Overhaul's rule, instead of stopping on the message.
+- When autoplay, Next, Previous, or a random pick reaches a file this browser can't play, or one that is missing, the player skips on to the next item in the same direction and says so in a Skipped files popup, with the file name on its second line, as WebUI Notifications sets out, instead of stopping on the message.
 - The mockup words the skip messages "Skipped a file this browser can't play." and "Skipped a missing file."
 - A file the user chose from the library still shows its message.
 - After ten skips in a row, the player stops on the last file's message, so a filter that matches only files this browser can't play doesn't pick without end.
-- WebUI Status Line Overhaul moves "Video file not found." and "Photo file not found." to the notice; after this milestone only a file chosen from the library shows it.
+- WebUI Notifications moves "Video file not found." and "Photo file not found." to the notice; after this milestone only a file chosen from the library shows it.
 
 **Traps**
 
@@ -1808,7 +1901,7 @@ Last milestone completed: M12f4
 **Acceptance**
 
 - A file the browser cannot play shows a format-not-supported message, and a missing file shows not found, decided by the server's answer for the file, not by its container, in WebUI tests of both error messages with the server answering found and not found.
-- Autoplay, Next, Previous, and random picks skip a file this browser can't play or one that is missing, and say so on the status line, and a file chosen from the library shows its message instead, in WebUI tests.
+- Autoplay, Next, Previous, and random picks skip a file this browser can't play or one that is missing, and say so in a Skipped files popup, and a file chosen from the library shows its message instead, in WebUI tests.
 - After ten skips in a row, the player stops on the last file's message, in WebUI tests of the stop after ten skips.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
@@ -1935,7 +2028,7 @@ Last milestone completed: M12f4
 #### Decisions
 
 - Select all selects every item that matches the search and filters, loaded or not, and each bulk action applies to all of them.
-- Each bulk action acknowledges itself on the status line: "Added {n} items to favorites.", "Removed {n} items from favorites.", "Blacklisted {n} items.", "Removed {n} items from the blacklist.", "Updated tags on {n} items.", "Cleared playback stats for {n} items.", and "Removed {n} items from the library.", or "Removed {n} items from the library and deleted their files.", with "1 item" for one.
+- Each bulk action acknowledges itself in a Your actions popup: "Added {n} items to favorites.", "Removed {n} items from favorites.", "Blacklisted {n} items.", "Removed {n} items from the blacklist.", "Updated tags on {n} items.", "Cleared playback stats for {n} items.", and "Removed {n} items from the library.", or "Removed {n} items from the library and deleted their files.", with "1 item" for one.
 
 #### Slices
 
@@ -1955,6 +2048,8 @@ Last milestone completed: M12f4
 - One bulk route takes many ids and sets or clears favorite or blacklist on all of them in one request, publishing one event for all of them in place of one request and one `itemStateChanged` per item.
 - Clear playback stats takes ids beside its paths, so a selection of items that aren't loaded can be cleared.
 - The WebUI applies the patch-or-reload rule to each id in the bulk event and reloads its window at most once.
+- The bulk request sends the device's `clientId`, and the bulk event carries it back as `clientId`, as WebUI Notifications does for one item's favorite or blacklist.
+- Other devices show one Other devices popup for the batch: "Added {n} items to favorites on another device", "Removed {n} items from favorites on another device", "Blacklisted {n} items on another device", or "Removed {n} items from the blacklist on another device", with "1 item" for one. The device whose `clientId` the event carries shows only its Your actions popup.
 - The desktop reloads its loaded window on the bulk event, a small change matching the server's, which the freeze allows.
 - For a selection of every matching item, the Tags tab's chip states and collapsed counts need each tag's count across the selection, which the WebUI can't work out for items it hasn't loaded. The slice measures the existing tag-editor model, which takes item ids, on the 49,055-item catalog against a counts-only addition, and uses the cheaper one.
 - OpenAPI and generated WebUI types.
@@ -1971,6 +2066,7 @@ Last milestone completed: M12f4
 
 - The ids-only query returns every matching id, in server tests for the ids-only query.
 - Bulk favorite and blacklist send one request and publish one event, the WebUI reloads its window at most once for it, and the desktop reloads its loaded window on it, in server tests for the bulk route and its one event and a desktop test that the bulk event reloads the loaded window, and WebUI tests that the bulk event reloads the window at most once.
+- The bulk event carries the request's `clientId`, in server tests for the bulk route, and other devices show one Other devices popup for the batch while the device that made the change shows only its Your actions popup, in WebUI tests of the bulk event's popups.
 - Clear playback stats clears items given by id, in server tests for clearing stats by ids.
 - The measurement of the tag-editor model against a counts-only addition on the 49,055-item catalog is recorded, and the cheaper read is used.
 - The ids-only query, the bulk route, and clear-stats ids are in OpenAPI, and `npm run verify:contracts` passes, in contract tests.
@@ -2083,7 +2179,7 @@ Last milestone completed: M12f4
 
 - **Status**: ⏳ Planned
 - **Goal**: Every part of the WebUI works from the keyboard alone, and keyboard focus is always visible, in the brand orange.
-- **Depends on**: WebUI In-App Dialogs, WebUI Drag Reordering, WebUI Responsive Layout and Panels, WebUI Library Tab, WebUI Tags and Filter Tabs, WebUI Auto-Pause and Photo Scrub Bar, WebUI Settings Panel, WebUI Admin Section, Log Viewer Redesign, Recovery Page and Operator Retirement, Admin Refresh, Backup, and Duplicate Review, Admin Source and Item Management, Admin Library Catalog Transfer, WebUI Stats Panel, WebUI Volume and Enhanced Audio, WebUI Player Controls and Ambient Mode, WebUI Keyboard Shortcuts, Testing Suite Overhaul, WebUI Grid Row Reuse, and WebUI Multi-Select and Bulk Actions.
+- **Depends on**: WebUI In-App Dialogs, WebUI Drag Reordering, WebUI Responsive Layout and Panels, WebUI Library Tab, WebUI Tags and Filter Tabs, WebUI Auto-Pause and Photo Scrub Bar, WebUI Notifications, WebUI Settings Panel, WebUI Admin Section, Log Viewer Redesign, Recovery Page and Operator Retirement, Admin Refresh, Backup, and Duplicate Review, Admin Source and Item Management, Admin Library Catalog Transfer, WebUI Stats Panel, WebUI Volume and Enhanced Audio, WebUI Player Controls and Ambient Mode, WebUI Keyboard Shortcuts, Testing Suite Overhaul, WebUI Grid Row Reuse, and WebUI Multi-Select and Bulk Actions.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
@@ -2100,7 +2196,7 @@ Last milestone completed: M12f4
 - Tab from a tile reaches its check icon, which shows as hovering shows it, and Space or Enter toggles it, starting selection as a click does, with focus staying on it. Tab again leaves the grid.
 - Enter or Space on a tile still chooses it.
 - Selection updates the tiles in place, as WebUI Grid Row Reuse patches a tile, so focus is never lost to a redraw.
-- Every other screen works from the keyboard, each control in a sensible Tab order and with an accessible name: the player's controls and seek bar; the panel button and tab row, where the arrow keys, Home, and End move between tabs; the Library controls; the Filter tab and its sections; the Tags tab, its chips, category headers, and drag handles, and Auto Tag; the Stats tab; the Settings tab, including the Ambient mode settings section and its sliders and the Keyboard shortcuts section; the in-app dialogs; the admin view, its sections, the Log Viewer, duplicate review, and the control-token gate; and the recovery page.
+- Every other screen works from the keyboard, each control in a sensible Tab order and with an accessible name: the player's controls and seek bar; the notifications bell, its list with Clear, Close, and Notification settings, and the popups' Dismiss; the panel button and tab row, where the arrow keys, Home, and End move between tabs; the Library controls; the Filter tab and its sections; the Tags tab, its chips, category headers, and drag handles, and Auto Tag; the Stats tab; the Settings tab, including the Ambient mode settings section and its sliders and the Keyboard shortcuts section; the in-app dialogs; the admin view, its sections, the Log Viewer, duplicate review, and the control-token gate; and the recovery page.
 - What covers the page keeps Tab inside it while open and returns focus where it was on close: the panel as a full-screen overlay and Auto Tag, as the in-app dialogs already do.
 - The keyboard shortcuts stay as WebUI Keyboard Shortcuts binds them.
 - Where the arrow keys have a local job, in the grid, the tab row, sliders, and on a focused drag handle, they keep it instead of playing the previous or next item.
@@ -2702,7 +2798,7 @@ Last milestone completed: M12f4
 ### P27e - WebUI Instrumentation
 
 - **Status**: ⏳ Planned
-- **Goal**: The WebUI logs its key flows as structured entries instead of relaying status-line text.
+- **Goal**: The WebUI logs its key flows as structured entries instead of relaying notification text.
 - **Depends on**: Structured Log API and Privacy Rules, and WebUI Login Gate.
 
 #### Scope
@@ -2714,12 +2810,13 @@ Last milestone completed: M12f4
   - `SseLifecycle`.
   - `RandomPickAndPlay`.
   - `MutateItemState`: favorite, blacklist, and tag-edit apply.
-- Remove the status-line relay and the `legacy` path in the WebUI.
+- Remove the notification relay and the `legacy` path in the WebUI.
 - A guard test fails if string-only logging or message parsing comes back.
 
 #### Traps
 
 - The WebUI logs mainly by relaying each status-line message as free text.
+- WebUI Notifications keeps that relay for its popups, lasting states, and notices.
 
 #### Acceptance
 
@@ -3252,7 +3349,7 @@ Last milestone completed: M12f4
 - The desktop's findings (unbounded event payload, ambiguous API results, an undisposed cancellation source, timers after close, plain HTTP to another machine, and undetected black video on Fedora), since the desktop is frozen to bug fixes.
 - The startup error markup finding, which is WebUI Preact Migration.
 - Overlapping resyncs, which is Admin Source and Item Management, since it already changes that code.
-- Unchecked JSON, which is WebUI Status Line Overhaul, since it already changes that code.
+- Unchecked JSON, which is WebUI Notifications, since it already changes that code.
 - Favorite and blacklist after Next, which is WebUI Multi-Select and Bulk Actions, since it already changes that code.
 - The weak build check, which is New Logo and Icons, since it already changes that code.
 
