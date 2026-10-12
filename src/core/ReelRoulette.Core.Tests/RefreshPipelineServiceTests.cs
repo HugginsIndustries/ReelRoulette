@@ -171,6 +171,79 @@ public sealed class RefreshPipelineServiceTests
 
         var sourceStage = final.Stages.Single(s => s.Stage == "sourceRefresh");
         Assert.Contains("1 removed", sourceStage.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(ReadSourceRefreshLogLines(scope.RootPath));
+    }
+
+    [Fact]
+    public async Task SourceRefresh_KeepsItemsOfARootThatListsNoMediaFiles()
+    {
+        using var scope = new DataFolderScope();
+        var emptyDir = Path.Combine(scope.RootPath, "unmounted");
+        var sourceDir = Path.Combine(scope.RootPath, "source-a");
+        Directory.CreateDirectory(emptyDir);
+        Directory.CreateDirectory(sourceDir);
+
+        var existingPath = Path.Combine(sourceDir, "existing.mp4");
+        await File.WriteAllTextAsync(existingPath, "existing");
+        var lastPlayed = new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        SeedItem KeptItem(string id, string fileName) => new(id, Path.Combine(emptyDir, fileName))
+        {
+            SourceId = "src-empty",
+            RelativePath = fileName,
+            FileName = fileName,
+            IsFavorite = true,
+            PlayCount = 3,
+            LastPlayedUtc = lastPlayed,
+            Tags = ["Keep"]
+        };
+
+        CatalogSeed.Write(
+            scope.RootPath,
+            sources: [new SeedSource("src-empty", emptyDir), new SeedSource("src-a", sourceDir)],
+            items:
+            [
+                KeptItem("item-kept-1", "one.mp4"),
+                KeptItem("item-kept-2", "two.mp4"),
+                new SeedItem("item-existing", existingPath)
+                {
+                    SourceId = "src-a",
+                    RelativePath = "existing.mp4",
+                    FileName = "existing.mp4"
+                },
+                new SeedItem("item-missing", Path.Combine(sourceDir, "missing.mp4"))
+                {
+                    SourceId = "src-a",
+                    RelativePath = "missing.mp4",
+                    FileName = "missing.mp4"
+                }
+            ],
+            tags: [new SeedTag("Keep")]);
+
+        var state = new ServerStateService();
+        var service = CreateService(state, scope.RootPath);
+        Assert.True(service.TryStartManual().Accepted);
+        var final = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(30));
+
+        var itemList = LoadCatalog(scope.RootPath).Items;
+        Assert.Equal(
+            ["item-existing", "item-kept-1", "item-kept-2"],
+            itemList.Select(item => item.Id).Order(StringComparer.Ordinal));
+        foreach (var kept in itemList.Where(item => item.SourceId == "src-empty"))
+        {
+            Assert.True(kept.IsFavorite);
+            Assert.Equal(3, kept.PlayCount);
+            Assert.Equal(lastPlayed, kept.LastPlayedUtc);
+            Assert.Contains("Keep", kept.Tags);
+        }
+
+        var sourceStage = final.Stages.Single(s => s.Stage == "sourceRefresh");
+        Assert.Contains("1 removed", sourceStage.Message, StringComparison.OrdinalIgnoreCase);
+
+        var warning = Assert.Single(ReadSourceRefreshLogLines(scope.RootPath));
+        Assert.Contains("[server] [warn]", warning);
+        Assert.Contains($"root={emptyDir} ", warning);
+        Assert.Contains("2 items", warning);
     }
 
     [Fact]
@@ -1274,6 +1347,14 @@ public sealed class RefreshPipelineServiceTests
         }
 
         throw new TimeoutException(timeoutMessage);
+    }
+
+    private static string[] ReadSourceRefreshLogLines(string appDataDirectory)
+    {
+        var logPath = Path.Combine(appDataDirectory, "last.log");
+        return File.Exists(logPath)
+            ? File.ReadAllLines(logPath).Where(line => line.Contains("Source refresh", StringComparison.Ordinal)).ToArray()
+            : [];
     }
 
     private static LibraryCatalogSnapshot LoadCatalog(string directory)

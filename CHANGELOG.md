@@ -37,6 +37,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 - **Desktop preset picks keep the WebUI's presets:** Picking a preset in the desktop's library panel no longer saves the desktop's copy of the preset list, which removed presets the WebUI had added since the desktop last loaded them. The desktop's filter dialog saves the list only when Apply changed it.
 - **Filter dialog Refresh keeps unsaved presets:** Refresh in the WebUI's filter dialog no longer drops presets added, changed, moved, renamed, or deleted since the last Apply. Apply then saves them.
 - **One random pick at a time:** Pressing Next again in the WebUI while a random pick is loading no longer sends more picks that each play briefly and count as a play. A pick the server doesn't answer within 10 seconds is cancelled with "No response from the server. Try again.", and the next press starts a fresh one.
+- **Refresh keeps files from an unmounted drive or share:** When a source's folder is there but holds no media files, as when its drive or network share isn't mounted, a refresh no longer removes every file of that source from the library along with its tags, favorites, and play stats. It keeps them and writes a warning to the server log naming the folder.
 
 ### Security
 

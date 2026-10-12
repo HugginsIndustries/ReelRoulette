@@ -32,6 +32,7 @@ public sealed class RefreshPipelineService : BackgroundService
 
     private readonly ServerStateService _state;
     private readonly ILogger<RefreshPipelineService> _logger;
+    private readonly ServerLogService _serverLog;
     private readonly FileFingerprintService _fingerprintService = new();
     private readonly object _runLock = new();
     private readonly LibraryCatalogHost _catalog;
@@ -64,6 +65,7 @@ public sealed class RefreshPipelineService : BackgroundService
     {
         _state = state;
         _logger = logger;
+        _serverLog = new ServerLogService(appDataPathOverride ?? ServerDataPaths.DataDirectory(), logger);
         _coreSettings = coreSettings;
         _catalog = catalog;
 
@@ -429,9 +431,21 @@ public sealed class RefreshPipelineService : BackgroundService
                 .Where(path => !string.IsNullOrWhiteSpace(path))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            var missingItems = existingForSource
-                .Where(item => !discovered.Contains(item.FullPath))
-                .ToList();
+            // A root that lists no media files while the library still holds items from it is far more likely a drive
+            // or share that isn't mounted than a source whose every file was deleted, so nothing is removed from it.
+            var rootListsNoMedia = discovered.Count == 0 && existingForSource.Count > 0;
+            if (rootListsNoMedia)
+            {
+                _serverLog.Append(
+                    "warn",
+                    $"Source refresh root={rootPath} lists no media files but the library has {existingForSource.Count} items from it; none were removed. Check that its drive or share is mounted.");
+            }
+
+            var missingItems = rootListsNoMedia
+                ? []
+                : existingForSource
+                    .Where(item => !discovered.Contains(item.FullPath))
+                    .ToList();
             var newPaths = discovered
                 .Where(path => !existingPaths.Contains(path))
                 .ToList();
