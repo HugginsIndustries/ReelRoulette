@@ -2606,7 +2606,25 @@ Last milestone completed: M12f6
 - Defines what happens to a single oversized entry and to concurrent appends.
 - Startup no longer empties `last.log`: the previous run's entries stay, and rotation and retention bound its size.
 - At startup the server writes a `lifecycle` entry with the version, process id, and listen URL, so the kept log shows where each run starts.
-- Human-readable rendering is a view over the fields (admin section, console), not what is stored.
+- Human-readable rendering in the admin section is a view over the fields, not what is stored.
+- Server `ILogger` output:
+  - The writer takes entries from loggers outside the app, such as ASP.NET Core's, only at `warn` and above, whatever levels the console uses.
+  - An `ILogger` entry that gives no `comp` or `op` gets them from its logger category and event, since the schema requires both. Decides the mapping.
+  - Entries from loggers outside the app get `comp` `framework`.
+  - An exception logged through `ILogger` is normalized into `data.error` like `ex` on ingestion, without its raw message or stack trace.
+  - The `ILogger` calls that pass a path, listed in Traps, leave it out.
+  - An event that a call site logs through `ILogger` and also appends by hand is written once, at one level:
+    - A catalog backup failure and a checkpoint failure are written as `error`.
+    - A tray that fails to start writes one `error` entry, not an error and then a warning.
+- Console:
+  - The console keeps its own logging provider, separate from the writer, and chooses what it shows by logger category.
+  - It shows `Microsoft.Hosting.Lifetime`'s entries, the server's lifecycle entries, warnings, and errors, with their formatted text.
+  - The server's lifecycle entries are the startup entry, the shutdown entry, a restart request, and an update being applied. They log under a logger category of their own, apart from the other entries of the classes that write them.
+  - Other `info` entries, such as per-request ones, update checks, and tray actions, go to `last.log` only.
+- Failures:
+  - The writer reports its own write failures on standard error, never through `ILogger`.
+  - A startup failure after the writer exists, such as a listen port already in use, is written to `last.log` before the process exits.
+- The replacement server that a self-restart starts doesn't write into the console of the run it replaced; its entries go to `last.log`.
 - Contract change for `POST /api/logs/client` in OpenAPI and the generated WebUI types.
 
 #### Traps
@@ -2619,6 +2637,30 @@ Last milestone completed: M12f6
 - Startup empties `last.log` (`ResetServerLastLog` in `ServerApp/Program.cs`).
 - Because startup empties it, a restart erases what led up to it: a restart at 03:55 removed the previous run's lines, including a Wi-Fi drop and share reconnects at 03:36–03:42 (measured).
 - The server writes no startup line to `last.log`; "Opened library catalog" goes to the console only, so a restart shows only as the log starting over.
+- ServerApp's `appsettings.json` sets `Microsoft.AspNetCore` to `Warning` and `Microsoft.Hosting.Lifetime` to `Information` under `Logging:LogLevel`, which applies to every provider unless a provider sets its own levels.
+- Without that setting, ASP.NET Core logs 3 to 6 entries per request at Information, and they were 143 of a run's 150 console entries (measured).
+- `Microsoft.Hosting.Lifetime`'s startup entries include the content root path (measured).
+- These `ILogger` calls pass a path:
+  - "Opened library catalog" in `ServerHostComposition.cs`.
+  - The source read and source enable failures in `ServerStateService.cs`.
+  - The item count and eligible query failures in `LibraryPlaybackService.cs`.
+  - The backup failure in `LibraryCatalogBackup.cs`.
+  - The tray icon warnings in `AvaloniaTrayHostUi.cs`.
+  - The autostart enable entry, with its `Exec` path, in `LinuxXdgStartupLaunchService.cs`.
+  - The Linux menu registration skip, at Debug, with the install directory, in `LinuxAppImageRegistrationService.cs`.
+- An `ILogger` call that passes an exception prints its full stack trace on the console.
+- Exception messages can carry paths.
+- The startup and shutdown entries log through `app.Logger` in `ServerApp/Program.cs`.
+- `RestartCoordinator` in `ServerApp/Program.cs` logs a restart request under the same logger category as a stop request and the replacement server's launch.
+- `UpdateService` logs an update being applied under the same logger category as its update checks.
+- These events are logged through `ILogger` and also appended by hand, so routing `ILogger` to the writer would write each twice: running without a library, a catalog migration, a catalog backup failure, a checkpoint failure, the tray ending, a tray UI error, and the tray's failure and rejection warnings.
+- A catalog backup failure (`LibraryCatalogBackup.cs`) and a checkpoint failure (`LibraryOperationsService.cs`) log `Warning` through `ILogger` and `error` by hand.
+- A tray that fails to start logs an error, then a warning that the tray ended, then appends that warning by hand (`AvaloniaTrayHostUi.cs`).
+- `ServerLogService` reports its own append failures through `ILogger`, which would loop back into the writer once the writer takes `ILogger` output.
+- The shared `ServerLogService` registered in `ServerHostComposition.cs` has no logger, so a failed append of a pairing, proxy, tray, or playback line is dropped without a report.
+- The `net10.0-windows` build is a `WinExe` with no console, so output that reaches only the console is lost there (inferred).
+- A comment in `ServerApp/Program.cs` notes that a replacement server after a self-restart can exit with "address already in use" on Linux.
+- `TryLaunchReplacementProcess` in `ServerApp/Program.cs` starts the replacement server without redirecting its output, so it writes into the terminal of the run it replaced and keeps writing there after a `dotnet run` session's prompt returns (inferred).
 
 #### Acceptance
 
@@ -2632,12 +2674,27 @@ Last milestone completed: M12f6
 - Rotation, retention, oversized entries, and concurrent appends behave as documented, in rotation and retention edge-case tests.
 - Startup keeps the entries an earlier run wrote, in a startup test with an existing `last.log`.
 - Startup writes an entry with the version, process id, and listen URL, shown by a captured entry.
+- An API request writes no framework entry to `last.log`, and neither does a normal startup, in writer tests that run each through the host.
+- An `ILogger` entry without `comp` or `op` is written with both, and an entry from a logger outside the app with `comp` `framework`, in mapping tests.
+- An exception logged through `ILogger` is written as `data.error` without its raw message or stack trace, in exception normalization tests.
+- The listed `ILogger` calls write no path, in a startup test that captures the catalog-open entry and a guard test over the other listed messages.
+- Each event logged both ways is written once at its one level, in tests for a catalog backup failure, a checkpoint failure, and a tray that fails to start.
+- With default settings, the console shows `Microsoft.Hosting.Lifetime`'s entries, the startup entry with the listen URL, the shutdown entry, a restart request, an update being applied, warnings, and errors, and no `info` entry from a request, an update check, or a tray action, in console provider tests.
+- A failed write is reported on standard error and logs nothing through `ILogger`, in a writer test with an unwritable log file.
+- A server whose listen port is taken writes an error entry to `last.log` before it exits, in a startup test with the port in use.
+- A self-restart starts its replacement without the console of the run it replaced, in a test of the replacement's process start settings.
 - `docs/api.md` and `docs/architecture.md` describe the schema, the ingestion contract, and the rotation rules, checked by reading them.
+- `docs/dev-setup.md` describes what the console shows and what goes only to `last.log`, checked by reading it.
 - `dotnet test ReelRoulette.sln` and `npm run verify:contracts` pass.
+
+#### Release checks
+
+- Manual: On the Windows VM, an installed server started while another process holds its port leaves an error entry in `last.log`.
 
 #### Not included
 
 - Moving the admin section's log view off its current route, which is Admin Log Viewer.
+- Hiding ASP.NET Core's per-request lines on the console; ServerApp's `appsettings.json` already sets them to `Warning`.
 
 ### P27b - Structured Log API and Privacy Rules
 
@@ -2661,7 +2718,7 @@ Last milestone completed: M12f6
 - `LogContext = { clientOpId?, traceId?, spanId?, clientId?, sessionId?, ver?, build?, clientTs? }`.
 - `ingestReqId`, `srcIp`, and `userAgent` are never client-supplied.
 - Baseline `comp` names:
-  - Server: `api`, `auth`, `sse`, `playback`, `refresh.pipeline`, `storage`.
+  - Server: `api`, `auth`, `sse`, `playback`, `refresh.pipeline`, `storage`, and `framework` for entries from loggers outside the app.
   - WebUI: `web.app`, `web.player`, `web.library`, `web.api`, `web.sse`.
 - Privacy by construction, enforced by the API rather than by rewriting entries afterwards:
   - `msg` and `data` never carry file names or paths, tag or category names, preset or source names, search text, tokens, cookies, PINs or other secrets, or raw media identifiers that reveal content.
@@ -2669,7 +2726,14 @@ Last milestone completed: M12f6
   - Prefer fixed templates with counts, booleans, and durations, for example `"Saved preferences."` with `data: { wroteBackup: true }`, or `"API request failed."` with `data: { endpoint: "SetFavorite" }` and no URL.
   - `ex` on `LogError` and `LogFatal` becomes `data.error` with `type`, `code`, `messageSafe`, and an optional fingerprint; raw stack traces, local paths, and payload fragments are not emitted.
   - `data` is checked for size and shape before serialization.
+  - Entries from loggers outside the app, whose text this API doesn't build, are written with their message template as `msg`, its placeholders unfilled, and their exception as `data.error`.
 - Until WebUI Instrumentation removes it, the WebUI status relay keeps working by emitting through the new API as `comp` `legacy`, `op` `unmigrated`, level `info`. This is the only inferred path.
+
+#### Traps
+
+- ASP.NET Core's request entries carry the full URL, including the media token in `/api/media/{token}` (measured).
+- The static file middleware's entries carry the served file's path on disk (measured).
+- The pairing middleware accepts the token as a `?token=` query, so a request URL in an entry can carry it (inferred).
 
 #### Acceptance
 
@@ -2678,6 +2742,7 @@ Last milestone completed: M12f6
 - `ex` is always written as privacy-safe `data.error`, never as a top-level field, in `ex` normalization tests.
 - Oversized or arbitrary `data` is rejected before it is written, in API tests.
 - Paths, names, and secrets in the shapes the privacy rules list are refused, in negative tests.
+- An entry from a logger outside the app is written with its unfilled message template and none of the values it logged, in a test that logs a framework warning with a path and a URL.
 - The legacy path is the only one that emits `comp` `legacy`, in API tests, and the docs describe it as temporary, checked by reading them.
 - The docs describe the `comp` baseline and the privacy rules, checked by reading them.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
@@ -2714,8 +2779,11 @@ Last milestone completed: M12f6
 - Kestrel answers `408` only when a request's headers don't finish within 30 s (`RequestHeadersTimeout`) or its body arrives slower than 240 bytes a second after a 5 s grace (`MinRequestBodyDataRate`), in ASP.NET Core 10.0.12's source.
 - A body timeout makes a minimal API answer `408` without running its handler, so the request writes no line of its own, in ASP.NET Core 10.0.12's source.
 - Kestrel logs both timeouts at Debug, below the writer's default minimum of `info`, in ASP.NET Core 10.0.12's source.
+- ServerApp's `appsettings.json` sets `Microsoft.AspNetCore`, which includes Kestrel's categories, to `Warning`, and the writer takes entries from loggers outside the app only at `warn` and above, so Kestrel's Debug timeout entries reach neither the console nor `last.log`.
 - Raising or turning off those timeouts would turn a `408` into a request that hangs (inferred).
 - The refresh warning for a source whose folder lists no media files names the folder in `last.log`.
+- Source import writes the source's root path to `last.log`.
+- A written catalog backup writes the backup's path to `last.log`.
 
 #### Acceptance
 
@@ -2724,6 +2792,7 @@ Last milestone completed: M12f6
 - Server entries contain no file names, paths, tag names, or secrets, shown by a scan of a captured `last.log` for paths, names, and secrets.
 - A refresh run's entries give each stage's duration and each source's walk time, and a source walk or a single file check over the threshold logs a warning, in refresh tests with a slow source and a slow file check.
 - A request whose headers or body stop arriving logs a warning, shown by a captured entry for each.
+- Per-request entries, such as library queries and random picks, are written to `last.log` and not shown on the console, in console provider tests.
 
 #### Not included
 
