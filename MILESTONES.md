@@ -281,6 +281,11 @@ Last milestone completed: M12f6
 - A failed Auto Tag scan shows its error.
 - Auto Tag's status leaves "Scanning…" when the scan finishes.
 - A tag save shows its own error.
+- A library load answered with `408` or `504`, a timeout from the server or a proxy, shows its own message in the library's body in place of "Library load failed: HTTP {status}".
+- The refresh status and its `refreshStatusChanged` event list the sources a run kept because their folder listed no media files while the library held items from them, each with its source id and item count, a contract change that only adds. The kept sources travel in a field rather than in a stage message's text, which the desktop parses.
+- The field carries source ids rather than folders, since the event goes to every client, and the WebUI looks up each folder in the source list from `GET /api/sources`, which Source Access Policy limits to the sources each session may see.
+- When a refresh keeps a source's items that way, the in-app notice says so with the folder, once per folder for the page's life, and the list keeps it.
+- The timeout message's and the kept-source notice's wording is approved in the mockup, which doesn't show either yet.
 - The JSON responses that `getJson` in `src/state/appApi.ts`, the random pick in `src/playback/randomPick.ts`, `requestPlayItem` in `src/api/coreApi.ts`, the filter's tag model in `loadRemote` in `src/filter/filterDialog.ts`, and the tag editor's model and the Auto Tag scan in `loadModel` and `scan` in `src/tags/tagEditor.ts` read go through one helper that checks the content type and reports a clear error.
 - When it completes, the Release Specific check in `docs/checklists/testing-checklist.md` that pauses the server expects the indicator's Loading… and the in-app notice's "No response from the server. Try again." in place of the status line's messages.
 
@@ -308,6 +313,11 @@ Last milestone completed: M12f6
 - The player clips what it holds (`overflow: hidden` on `.media-container` in `src/styles.css`), so the popups sit beside it, not inside it.
 - The WebUI's player controls stop a click from reaching the player (`onClick` on `#overlay-controls` in `src/ui/Player.tsx`), so a bell among them, pressed with nothing playing, starts no random pick.
 - In the mockup, a press on the bell with nothing playing starts no random pick (measured).
+- Kestrel answers `408` when a request's headers or body don't arrive within its timeouts, and `getJson` turns it into "HTTP 408", so a server stalled on its storage showed "Library load failed: HTTP 408" (measured).
+- A refresh that keeps a source's items because its folder lists no media files writes only a `last.log` warning; no client hears of it.
+- The desktop parses the refresh stage messages for its status line (`BuildSourceRefreshSummary` in `MainWindow.axaml.cs`).
+- Auto-refresh runs every 15 minutes by default, so a notice on every run would show four times an hour.
+- The WebUI loads the source list into `store.sources` only for the Filter tab (`loadRemote` in `src/filter/filterDialog.ts`) and the Filters line (`loadSourcesForSummary` in `src/library/library.ts`), so it may not be loaded when a refresh keeps a source.
 
 #### Acceptance
 
@@ -340,6 +350,9 @@ Last milestone completed: M12f6
 - A tag save that fails on a network error shows that error, not one from an earlier save, in a test that replaces the one locking it today.
 - A response that isn't JSON, such as a proxy's HTML error page, shows a clear error, not a `SyntaxError`, in tests of such a response for `getJson`, the random pick, a library play, the filter's tag model, the tag editor's model, and an Auto Tag scan.
 - The testing checklist's paused-server check expects the indicator's Loading… and the in-app notice, checked by reading it.
+- A library load answered with `408` or `504` shows the timeout message in the library's body, in WebUI tests of the library load's failures.
+- The refresh status and `refreshStatusChanged` list each source a run kept because its folder listed no media files, by its source id with its item count and no folder, in server tests of a run with such a source, and OpenAPI and the generated contracts list the field.
+- A kept source shows the in-app notice with its folder from the source list once per folder for the page's life, and the list keeps it, in WebUI tests of the kept-source notice with the source list loaded and not yet loaded.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass, and one quick spot check with the server stopped.
 
@@ -354,6 +367,7 @@ Last milestone completed: M12f6
 - Keeping the list across a page refresh.
 - The Notifications section in the Settings tab, its sample popup, and the list's Notification settings link, which is WebUI Settings Panel.
 - The admin view's bell and popups, which is WebUI Admin Section.
+- A message for a video the server couldn't read, which is Browser-Playable Filter.
 
 ### M12g - WebUI Settings Panel
 
@@ -1688,7 +1702,7 @@ Last milestone completed: M12f6
 ### M12r - Browser-Playable Filter
 
 - **Status**: ⏳ Planned
-- **Goal**: Browse and random play can be limited to files a browser can play, and a file the browser cannot play says so instead of "not found".
+- **Goal**: Browse and random play can be limited to files a browser can play, and a file the browser cannot play, or one the server can't read, says so instead of "not found".
 - **Depends on**: WebUI Preact Migration, Favorite and Blacklist Filter Modes, whose FilterState schema it adds its field to, and WebUI Notifications, whose Skipped files popups announce the skips.
 - **Design**: `docs/mockups/reelroulette/`.
 
@@ -1704,9 +1718,9 @@ Last milestone completed: M12f6
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Contract | ⏳ Planned | A nullable browser-playable field in the FilterState schema, applied by the server in the list query, its counts, and random selection, and kept when a posted preset leaves it out. |
+| Contract | ⏳ Planned | A nullable browser-playable field in the FilterState schema, applied by the server in the list query, its counts, and random selection, and kept when a posted preset leaves it out, and a `503` with its own play error code from the media and play routes for a file the server can't read. |
 | WebUI | ⏳ Planned | The "Only files this browser can play" option in the Filter tab, saved in presets and compared in preset matching. |
-| Error message | ⏳ Planned | A format-not-supported message for a file the browser can't play, "not found" only for a missing file, and skipping such files during autoplay, Next, Previous, and random picks. |
+| Error message | ⏳ Planned | A format-not-supported message for a file the browser can't play, "not found" only for a missing file, a couldn't-load message for any other answer, such as the server's `503` for a file it can't read, and skipping missing and unplayable files during autoplay, Next, Previous, and random picks. |
 
 #### Contract slice
 
@@ -1716,6 +1730,9 @@ Last milestone completed: M12f6
 - OpenAPI and generated WebUI types; it only adds a field.
 - The server keeps a preset's stored value when a posted preset leaves the field out, matching it to the stored preset by name.
 - The profile is documented in `docs/api.md`.
+- `GET /api/media/{idOrToken}` and `POST /api/play/{itemId}` answer `503` when the file can't be read, such as on a stalled drive or share, and `404` only when it is missing.
+- The play route's `503` carries the code `play_media_unreadable`.
+- OpenAPI and the generated WebUI types document the new `503` reason on both routes and the new code; the change only adds.
 
 **Traps**
 
@@ -1729,12 +1746,18 @@ Last milestone completed: M12f6
 - The desktop posted its cached list not only on a preset save but on every header preset pick and every filter dialog Apply, with the cache refreshed only on connect, reconnect, resync, and filter dialog open. Favorite and Blacklist Filter Modes limits the post to an Apply that changed presets, so by this milestone a desktop preset save is what drops the option.
 - `FilterPresetSnapshot` is `name` and `filterState`, so a posted preset carries no id.
 - A preset the desktop renames in the same save loses the option, until Per-Preset Preset Writes (inferred).
+- `ServeMedia` in `ServerHostComposition.cs` and `TryPlayItem` in `LibraryPlaybackService.cs` check `File.Exists`, which returns false on any I/O error, so a file on a stalled drive or share answers `404`.
+- `File.Exists` and `FileInfo.Exists` can't tell a missing file from an unreadable one, so the server needs the exception from opening the file or reading its metadata (inferred).
+- Both routes already answer `503` with `LibraryUnavailable` when the server has no library.
+- A stalled share can hold a check for seconds before it fails: a library play took 8.6 s during a stall against 0.16 s normally (measured), so the `503` comes only once the read fails.
 
 **Acceptance**
 
 - With the option on, the list query, its counts, and random selection exclude videos outside the profile, and with it off, results are unchanged, in server tests for the option in the list query, counts, and random selection.
 - A preset the desktop saves without the field keeps its stored option, in server tests that a preset posted without the field keeps it.
 - OpenAPI and the generated WebUI types carry the nullable field, in contract tests.
+- The media and play routes answer `503` for a file whose read fails with an I/O error and `404` for a missing one, and the play route's `503` carries `play_media_unreadable`, in server tests of both routes with a missing and an unreadable file.
+- OpenAPI and the generated WebUI types carry the new `503` reason and code, in contract tests.
 - The profile is documented in `docs/api.md`, checked by reading it.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
@@ -1762,12 +1785,16 @@ Last milestone completed: M12f6
 
 - Say that the format is not supported in this browser when that is the cause, and "not found" only when the file is missing.
 - The format message reads "This video's format (.{ext}) isn't supported in this browser.".
-- The WebUI asks the server whether the file exists, with a one-byte range request to the item's media URL: a `404` means it is missing, and otherwise this browser can't play its format. Comparing the container against the profile instead would call an mkv that Safari can't play missing, since the profile counts mkv as playable.
+- The WebUI asks the server about the file with a one-byte range request to the item's media URL: a successful answer (`200` or `206`) means this browser can't play its format, and a `404` means it is missing. Comparing the container against the profile instead would call an mkv that Safari can't play missing, since the profile counts mkv as playable.
+- Any other answer, or none, such as a `503` when the server can't read the file, shows a couldn't-load message.
+- On the couldn't-load message the player stops instead of skipping, since the cause probably affects the next file too.
+- A library play answered with `503` and `play_media_unreadable` shows the couldn't-load message, mapped in `mapPlayItemErrorToStatus` in `src/library/libraryPlayModel.ts`, so the server's error text doesn't need to match it.
 - When autoplay, Next, Previous, or a random pick reaches a file this browser can't play, or one that is missing, the player skips on to the next item in the same direction and says so in a Skipped files popup, with the file name on its second line, as WebUI Notifications sets out, instead of stopping on the message.
 - The mockup words the skip messages "Skipped a file this browser can't play." and "Skipped a missing file."
 - A file the user chose from the library still shows its message.
 - After ten skips in a row, the player stops on the last file's message, so a filter that matches only files this browser can't play doesn't pick without end.
 - WebUI Notifications moves "Video file not found." and "Photo file not found." to the notice; after this milestone only a file chosen from the library shows it.
+- The couldn't-load message's wording is approved in the mockup, which doesn't show it yet.
 
 **Traps**
 
@@ -1775,18 +1802,23 @@ Last milestone completed: M12f6
 - Both messages come from the media element's error handlers, `videoFailed` and `photoFailed` in `src/playback/player.ts`.
 - A browser reports a missing file (a `404` from `/api/media`) and an unsupported format with the same `MEDIA_ERR_SRC_NOT_SUPPORTED` code, so the error code alone cannot tell them apart (inferred).
 - The one-byte range request needs no contract change (inferred).
+- When the drive or share holding the media stalled, the WebUI said "Video file not found." for a file that was still there (measured).
+- The WebUI's library play shows the server's error text for a status it doesn't map (`mapPlayItemErrorToStatus` in `src/library/libraryPlayModel.ts`), and `503` is one.
 
 **Acceptance**
 
-- A file the browser cannot play shows a format-not-supported message, and a missing file shows not found, decided by the server's answer for the file, not by its container, in WebUI tests of both error messages with the server answering found and not found.
+- A file the browser cannot play shows a format-not-supported message, a missing file shows not found, and any other answer or none shows the couldn't-load message, decided by the server's answer for the file, not by its container, in WebUI tests of each message with the server answering found, not found, `503`, and not at all.
 - Autoplay, Next, Previous, and random picks skip a file this browser can't play or one that is missing, and say so in a Skipped files popup, and a file chosen from the library shows its message instead, in WebUI tests.
 - After ten skips in a row, the player stops on the last file's message, in WebUI tests of the stop after ten skips.
+- The player stops on the couldn't-load message instead of skipping, in WebUI tests of autoplay and Next reaching a file the server can't read.
+- A library play answered with `503` and `play_media_unreadable` shows the couldn't-load message, in WebUI tests of the library play's error messages.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
 #### Release checks
 
 - Manual: With the browser-playable filter on, browse and random play show no avi or wmv files; with it off, playing one says its format is not supported in this browser, and a deleted file says not found.
+- Manual: With a source on a network share that is disconnected while a video from it plays, the player says it couldn't load the file, not that it is missing.
 
 #### Not included
 
@@ -2572,7 +2604,8 @@ Last milestone completed: M12f6
   - JSON serialization also escapes the control characters other than line breaks.
 - Rotation: rotate at 25 MB, keep the current file plus 10 uncompressed archives, and enforce retention at startup before writing.
 - Defines what happens to a single oversized entry and to concurrent appends.
-- Decides whether startup still empties `last.log` once rotation exists.
+- Startup no longer empties `last.log`: the previous run's entries stay, and rotation and retention bound its size.
+- At startup the server writes a `lifecycle` entry with the version, process id, and listen URL, so the kept log shows where each run starts.
 - Human-readable rendering is a view over the fields (admin section, console), not what is stored.
 - Contract change for `POST /api/logs/client` in OpenAPI and the generated WebUI types.
 
@@ -2583,7 +2616,9 @@ Last milestone completed: M12f6
 - `ServerLogService` turns line breaks into a literal `\n` but writes other control characters as sent.
 - The server's `ILogger` output goes only to the console.
 - Client logs arrive through `POST /api/logs/client` as source, level, and message.
-- Startup empties `last.log`.
+- Startup empties `last.log` (`ResetServerLastLog` in `ServerApp/Program.cs`).
+- Because startup empties it, a restart erases what led up to it: a restart at 03:55 removed the previous run's lines, including a Wi-Fi drop and share reconnects at 03:36–03:42 (measured).
+- The server writes no startup line to `last.log`; "Opened library catalog" goes to the console only, so a restart shows only as the log starting over.
 
 #### Acceptance
 
@@ -2595,6 +2630,8 @@ Last milestone completed: M12f6
 - Invalid client payloads get a `400` with every error listed and are not written, in rejection tests for each invalid case.
 - A client message with line breaks or control characters cannot produce a second log line, in server tests.
 - Rotation, retention, oversized entries, and concurrent appends behave as documented, in rotation and retention edge-case tests.
+- Startup keeps the entries an earlier run wrote, in a startup test with an existing `last.log`.
+- Startup writes an entry with the version, process id, and listen URL, shown by a captured entry.
 - `docs/api.md` and `docs/architecture.md` describe the schema, the ingestion contract, and the rotation rules, checked by reading them.
 - `dotnet test ReelRoulette.sln` and `npm run verify:contracts` pass.
 
@@ -2658,19 +2695,35 @@ Last milestone completed: M12f6
 #### Scope
 
 - Structured logs for:
+  - Shutdown.
   - API handlers, and login and session outcomes.
   - Event stream connect and disconnect.
-  - Refresh pipeline stages and outcomes.
+  - Refresh pipeline stages and outcomes: each run's start and end, each stage's duration, and each source's walk time.
   - Catalog open, import, backup, and replace.
   - Settings changes and their errors.
+- A warning when a source's walk or a single file check takes longer than a threshold. Decides the threshold.
+- Kestrel's request headers and request body timeouts, as warnings.
+- Sources are identified by id, since the privacy rules allow no paths or source names, including in the refresh warning for a folder that lists no media files.
 - Favor state changes, decisions, degradations, and failures over repetitive noise.
 - Move the remaining hand-built server log lines to `ILogger` with structured fields.
+
+#### Traps
+
+- Refresh writes only its warning for a source whose folder lists no media files to `last.log`; its progress and failures reach the log only as WebUI status lines relayed by connected clients, once per client, and not at all when none is connected (measured).
+- On a 49,100-item library, a refresh run takes 3.5–6.5 min, the largest source's walk 8.5–15 s, and the file checks 3.4–4.6 min (measured).
+- Kestrel answers `408` only when a request's headers don't finish within 30 s (`RequestHeadersTimeout`) or its body arrives slower than 240 bytes a second after a 5 s grace (`MinRequestBodyDataRate`), in ASP.NET Core 10.0.12's source.
+- A body timeout makes a minimal API answer `408` without running its handler, so the request writes no line of its own, in ASP.NET Core 10.0.12's source.
+- Kestrel logs both timeouts at Debug, below the writer's default minimum of `info`, in ASP.NET Core 10.0.12's source.
+- Raising or turning off those timeouts would turn a `408` into a request that hangs (inferred).
+- The refresh warning for a source whose folder lists no media files names the folder in `last.log`.
 
 #### Acceptance
 
 - Each listed area emits structured entries with `comp`, `op`, and fitting levels, shown by a captured entry per listed area.
 - Request-scoped entries carry trace fields when trace context is active, and every entry carries `ingestReqId`; `clientOpId` appears only when a client sent one, shown by correlation checks.
 - Server entries contain no file names, paths, tag names, or secrets, shown by a scan of a captured `last.log` for paths, names, and secrets.
+- A refresh run's entries give each stage's duration and each source's walk time, and a source walk or a single file check over the threshold logs a warning, in refresh tests with a slow source and a slow file check.
+- A request whose headers or body stop arriving logs a warning, shown by a captured entry for each.
 
 #### Not included
 
@@ -2691,6 +2744,7 @@ Last milestone completed: M12f6
   - `SseLifecycle`.
   - `RandomPickAndPlay`.
   - `MutateItemState`: favorite, blacklist, and tag-edit apply.
+- Video error entries carry the media element's error code, and video and photo error entries carry the server's answer when the WebUI asked.
 - Remove the notification relay and the `legacy` path in the WebUI.
 - A guard test fails if string-only logging or message parsing comes back.
 
@@ -2698,6 +2752,7 @@ Last milestone completed: M12f6
 
 - The WebUI logs mainly by relaying each status-line message as free text.
 - WebUI Notifications keeps that relay for its popups, lasting states, and notices.
+- `videoFailed` in `src/playback/player.ts` relays `playback=video-onerror` with no error code or status, so a missing file, a format the browser can't play, and a server that can't read the file log the same line.
 
 #### Acceptance
 
@@ -2705,6 +2760,7 @@ Last milestone completed: M12f6
 - `MutateItemState` covers favorite, blacklist, and tag-edit apply, shown by one captured entry per `MutateItemState` case.
 - No WebUI string-only logging or `legacy` entry remains, in the guard test.
 - WebUI entries contain no file names, paths, tag names, search text, or PINs, shown by the captured entries.
+- A video error's entry carries its error code, and the server's answer when there was one, shown by a captured entry for a missing file and for one the server can't read.
 - `npm run verify` passes.
 
 ### P27f - Admin Log Viewer
@@ -3055,6 +3111,7 @@ Last milestone completed: M12f6
 - Grants are stored in the account store against account ids and catalog source ids.
 - A grant for a source id that is not in the catalog (for example after a catalog import) is ignored and shown as stale in the admin section.
 - Denied sources are enforced through the source access policy on every path it covers, including `GET /api/media/{idOrToken}`, `GET /api/thumbnail/{itemId}`, and `POST /api/play/{itemId}`.
+- WebUI Notifications' kept-source notice leaves out sources the session's source list doesn't include.
 - Admins and localhost connections see every source.
 
 #### Acceptance
@@ -3062,6 +3119,7 @@ Last milestone completed: M12f6
 - Admins can grant or deny each user each source in the admin section, in admin section UI tests for permission editing.
 - Denied sources and their items are invisible to that user on every policy path, in policy tests for every path with a denied source.
 - A denied item cannot be streamed, played, or have its thumbnail read, even by a client that knows its id, in direct-id bypass tests.
+- The kept-source notice leaves out a kept source missing from the session's source list, in a WebUI test of the notice.
 - Permission changes reach active sessions through events or requery, in server tests.
 - Grants survive account and source renames, and a catalog import leaves grants for missing sources inert, in server tests, including a catalog-import test for stale grants.
 
@@ -3134,7 +3192,7 @@ Last milestone completed: M12f6
 ### P35 - Server Robustness Findings
 
 - **Status**: ⏳ Planned
-- **Goal**: Close the server and Core robustness findings that no other milestone owns, so bad input and crashes cannot lose settings or grow memory without bound.
+- **Goal**: Close the server and Core robustness findings that no other milestone owns, so bad input and crashes cannot lose settings or grow memory without bound, and a stalled drive or share cannot stall a refresh.
 
 #### Scope
 
@@ -3157,6 +3215,9 @@ Last milestone completed: M12f6
   - Dead write-back: `DynamicCorsOriginRegistry` keeps the rebuilt list only in the registry.
 - Events:
   - Revision reuse after a restart: give each server start an instance id that clients send back with the last event ID, or start revisions from a value that cannot repeat, and send `resyncRequired` on a mismatch. This is a contract change.
+- Storage:
+  - Stalled source: the refresh stops working on a source whose storage stops responding, keeps that source's items as they are, and logs a warning, instead of crawling on. Decides the threshold and whether the rest of the run continues.
+  - Two stats per file: the fingerprint stage's check loop stats each file once, or reuses the size and write time the walk already read.
 - The audio filter's handling of unscanned videos: decides whether a NULL `has_audio` counts as **With audio**, **Without audio**, or neither, then aligns `docs/api.md`, both clients' labels, and tests.
 
 #### Traps
@@ -3181,6 +3242,12 @@ Last milestone completed: M12f6
   - Dead write-back: `DynamicCorsOriginRegistry.RebuildAllowedOrigins` writes the rebuilt list back into the shared `ServerRuntimeOptions.CorsAllowedOrigins`, which nothing reads after the registry's constructor.
 - Events:
   - Revision reuse after a restart: `ServerStateService` starts its revision counter at zero on every start. A client that reconnects after the restarted server has published past that client's last event ID, but no further than its replay history, gets a partial replay from the new server and no `resyncRequired`.
+- Storage:
+  - Stalled source: the source walk (`EnumerateMediaFiles`, which calls `Directory.EnumerateFiles` with `AllDirectories`) and the fingerprint stage's check loop have no timeout and run synchronously on one thread pool thread.
+  - With the media on a soft CIFS mount whose server answered slowly, the largest source's walk took 17 min 48 s against 8.5–15 s normally, the check loop advanced one file every 50–65 s, and the run took 48.5 min against 3.5–6.5 min (measured).
+  - `Directory.EnumerateFiles` with `AllDirectories` throws on an I/O error rather than returning a partial list.
+  - A source whose folder lists no media files while the library holds items from it already keeps them, with a `last.log` warning.
+  - Two stats per file: the check loop calls `File.Exists` and then `new FileInfo` for every item, about 98,000 stats on a 49,100-item library, which take 3.4–4.6 min, about 2.1–2.8 ms a stat (measured).
 - The audio filter's handling of unscanned videos: `LibraryCatalogListQuery` matches **With audio** on `has_audio = 1` and **Without audio** on `has_audio = 0`, so a video whose audio has not been scanned (`has_audio` NULL) is hidden by both.
 
 #### Acceptance
@@ -3188,6 +3255,8 @@ Last milestone completed: M12f6
 - A catalog item id that would resolve outside the thumbnail folder is refused, in its finding's test.
 - No server process launch goes through a shell, in its finding's test.
 - Randomization state stays within its cap under many client and session ids, in its finding's test.
+- A refresh stops working on a source whose storage stops responding, keeps that source's items, and logs a warning, in its finding's tests with a source whose walk stalls and one whose file checks stall.
+- The check loop stats each file once, in its finding's test.
 - Each finding above is fixed or explicitly declined with a reason in this entry.
 - Each fixed finding has a test.
 - `dotnet test ReelRoulette.sln` passes.
@@ -3196,6 +3265,8 @@ Last milestone completed: M12f6
 
 - The server's own settings findings (partial posts, the non-atomic write, and the silent load failure), which is Server Settings Robustness, since the admin section saves server settings from any device.
 - Closing the two desktop settings findings by deleting `JsonFileStorageService` if it is still unused, which is Desktop Client Removal.
+- Logging slow sources and refresh durations, which is Server Instrumentation.
+- Telling a file the server can't read from a missing one in the media and play routes, which is Browser-Playable Filter.
 
 ---
 

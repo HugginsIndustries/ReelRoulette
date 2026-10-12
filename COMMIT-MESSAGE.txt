@@ -19,8 +19,10 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Keep a source's items when its folder lists no media files during refresh
+Docs: Plan the logging, stalled-storage, and notification follow-ups from the playback stall report
 
-- A refresh no longer removes every item of a source whose folder exists but lists no media files while the library still holds items from it, as with a mount point whose drive or share isn't mounted, so their tags, favorites, and play stats survive; it removes nothing from that source and writes a last.log warning naming the folder.
-- Sources that still list media files remove gone files as before, which the existing removal test now also checks writes no warning, and a new test covers an empty folder beside a source with a genuine removal.
-- CONTEXT.md, the API doc, and the changelog describe the guard.
+- Structured Log Schema, Writer, and Ingestion settles that startup keeps the previous run's last.log, with rotation bounding its size, and writes a startup entry with version, process id, and listen URL so the kept log shows where each run starts.
+- Server Instrumentation adds refresh run, stage, and source walk durations, warnings for a slow source walk or file check, and Kestrel's request timeouts as warnings, with sources identified by id; WebUI Instrumentation adds the media error code to video error entries and the server's answer to video and photo ones.
+- Browser-Playable Filter's Contract slice adds a 503 with its own play error code from the media and play routes for a file the server can't read, and its Error message slice adds a couldn't-load message that stops the player instead of skipping, so only a successful answer reads as an unplayable format.
+- WebUI Notifications adds a timeout message for a library load answered with 408 or 504, and an in-app notice when a refresh keeps the items of a source whose folder lists no media files, through a refresh status field of source ids that only adds, with the WebUI looking up each folder in the source list, and Per-User Source Permissions has that notice leave out sources the session's list doesn't include.
+- Server Robustness Findings adds stopping a refresh on a source whose storage stops responding and checking each file once, with the stall's measured timings as traps.
