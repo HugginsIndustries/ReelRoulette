@@ -39,6 +39,7 @@ exports[`page structure > keeps the starting markup 1`] = `
           <button aria-controls="panel" aria-expanded="false" aria-label="Open panel" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" id="panel-btn" title="Open panel">
             <span class="material-symbol-icon">
               "right_panel_open"
+            <span class="unsaved-dot" hidden="">
           <button aria-label="Favorite" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" id="favorite-btn" title="Favorite">
             <span class="material-symbol-icon">
               "favorite"
@@ -82,9 +83,11 @@ exports[`page structure > keeps the starting markup 1`] = `
           <button aria-controls="panel-page-filter" aria-label="Filter" aria-selected="false" class="panel-tab" id="panel-tab-filter" role="tab" title="Filter" type="button">
             <span class="material-symbol-icon">
               "filter_alt"
+            <span class="unsaved-dot" hidden="">
           <button aria-controls="panel-page-tags" aria-label="Tags" aria-selected="false" class="panel-tab" id="panel-tab-tags" role="tab" title="Tags" type="button">
             <span class="material-symbol-icon">
               "tag"
+            <span class="unsaved-dot" hidden="">
         <span class="panel-tabs-spacer">
         <button aria-label="Close panel" class="icon-glyph-base icon-glyph-button panel-close" id="panel-close-btn" title="Close" type="button">
           <span class="material-symbol-icon">
@@ -138,11 +141,10 @@ exports[`page structure > keeps the starting markup 1`] = `
           <div class="filter-dialog-header">
             <h2 id="filter-dialog-heading">
               "Preset: None"
-            <div class="filter-dialog-actions">
-              <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="filter-dialog-refresh-btn" title="Refresh" type="button">
-                <span class="material-symbol-icon">
-                  "refresh"
-          <div class="filter-dialog-tabstrip" role="tablist">
+            <button aria-label="Refresh" class="icon-btn" id="filter-dialog-refresh-btn" title="Refresh" type="button">
+              <span class="material-symbol-icon">
+                "refresh"
+          <div aria-label="Filter sections" class="filter-dialog-tabstrip" role="tablist">
             <button aria-selected="true" class="filter-tab is-active" data-filter-tab="general" role="tab" type="button">
               "General"
             <button aria-selected="false" class="filter-tab" data-filter-tab="tags" role="tab" type="button">
@@ -154,11 +156,11 @@ exports[`page structure > keeps the starting markup 1`] = `
             <div class="filter-panel" id="filter-panel-tags" style="display: none">
             <div class="filter-panel" id="filter-panel-presets" style="display: none">
           <div class="filter-dialog-footer">
-            <button id="filter-clear-all-btn" type="button">
+            <button class="btn" id="filter-clear-all-btn" type="button">
               "Clear all filters"
-            <button id="filter-cancel-btn" type="button">
+            <button class="btn" id="filter-cancel-btn" type="button">
               "Cancel"
-            <button class="held-action" id="filter-apply-btn" type="button">
+            <button class="held-action btn" id="filter-apply-btn" type="button">
               <span class="btn-label">
                 "Apply"
       <section aria-labelledby="panel-tab-tags" class="panel-page" hidden="" id="panel-page-tags" role="tabpanel">
@@ -166,52 +168,29 @@ exports[`page structure > keeps the starting markup 1`] = `
           <div class="tag-editor-header">
             <h2>
               "Tag Editor"
-            <div class="tag-editor-actions">
-              <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="tag-editor-refresh-btn" title="Refresh">
-                <span class="material-symbol-icon">
-                  "refresh"
-          <div class="filter-dialog-tabstrip tag-editor-tabstrip" role="tablist">
-            <button aria-selected="true" class="filter-tab is-active" data-tag-editor-tab="edit" role="tab" type="button">
-              "Edit Tags"
-            <button aria-selected="false" class="filter-tab" data-tag-editor-tab="autotag" role="tab" type="button">
-              "Auto Tag"
-          <div class="tag-editor-panel-stack">
-            <div class="tag-editor-panel" id="tag-editor-panel-edit">
-              <div class="tag-editor-body themed-scrollbar" id="tag-editor-body">
-            <div class="tag-editor-panel" id="tag-editor-panel-autotag" style="display: none">
-              <div class="tag-editor-body tag-autotag-body themed-scrollbar">
-                <div class="tag-autotag-toolbar">
-                  <label class="tag-autotag-check-label">
-                    <input id="tag-autotag-scan-full" type="checkbox">
-                    "Scan full library"
-                  <label class="tag-autotag-check-label">
-                    <input id="tag-autotag-view-all" type="checkbox">
-                    "View all matches"
-                <p class="tag-autotag-hint">
-                  "Use Scan Files to find matching tags. File name matching ignores extension."
-                <div class="tag-autotag-actions-row">
-                  <button class="tag-autotag-row-btn" id="tag-autotag-select-all" type="button">
-                    "Select all"
-                  <button class="tag-autotag-row-btn" id="tag-autotag-deselect-all" type="button">
-                    "Deselect all"
-                  <button class="tag-autotag-scan-btn" id="tag-autotag-scan-btn" type="button">
-                    "Scan Files"
-                <div aria-label="Scan in progress" class="tag-autotag-progress" id="tag-autotag-progress" role="progressbar" style="display: none">
-                <div aria-live="polite" class="tag-autotag-status" id="tag-autotag-status">
-                <div class="tag-autotag-results themed-scrollbar" id="tag-autotag-results">
+            <button aria-label="Auto Tag" class="icon-btn" id="tag-editor-autotag-btn" title="Auto Tag" type="button">
+              <span class="material-symbol-icon">
+                "auto_awesome"
+            <button aria-label="Refresh" class="icon-btn" id="tag-editor-refresh-btn" title="Refresh" type="button">
+              <span class="material-symbol-icon">
+                "refresh"
+          <p aria-live="polite" class="tags-target" hidden="" id="tag-editor-target">
+          <div class="tag-editor-body themed-scrollbar" id="tag-editor-body">
           <div class="tag-editor-footer">
-            <button aria-label="Add category" class="icon-glyph-base icon-glyph-button" id="tag-editor-add-category-btn" title="Add category">
-              <span class="material-symbol-icon">
-                "add"
-            <select id="tag-editor-category-select">
-            <span class="vfield">
-              <input id="tag-editor-new-tag" placeholder="New tag name" type="text">
-            <button aria-label="Add tag" class="icon-glyph-base icon-glyph-button" disabled="" id="tag-editor-add-tag-btn" title="Add tag">
-              <span class="material-symbol-icon">
-                "add"
-            <button aria-label="Save" class="icon-glyph-base icon-glyph-button" id="tag-editor-apply-btn" title="Save">
-              <span class="material-symbol-icon">
-                "save"
+            <div class="tag-editor-footer-row">
+              <button aria-label="Add category" class="icon-btn" id="tag-editor-add-category-btn" title="Add category" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <select aria-label="Category for new tag" class="ctl" id="tag-editor-category-select">
+            <div class="tag-editor-footer-row">
+              <span class="vfield">
+                <input aria-label="New tag name" autocomplete="off" class="ctl" id="tag-editor-new-tag" placeholder="New tag name" type="text">
+              <button aria-label="Add tag" class="icon-btn" disabled="" id="tag-editor-add-tag-btn" title="Add tag" type="button">
+                <span class="material-symbol-icon">
+                  "add"
+              <button aria-label="Save" class="icon-btn" id="tag-editor-apply-btn" title="Save" type="button">
+                <span class="material-symbol-icon">
+                  "save"
   <div class="status status-bottom" id="status">
     "Ready (API 1)"
   <div class="status diagnostics-mobile" id="mobile-diagnostics" style="display: none">

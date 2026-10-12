@@ -28,6 +28,7 @@ import {
   type ValidatedControlProps
 } from "./FieldValidation";
 import { DragHandle, ReorderStatus, useReorder } from "./Reorder";
+import { TagCategory as Category, tagsInUse } from "./TagCategory";
 
 // The `data-*` attributes keep the markup as it was before the dialog moved to a component; nothing reads them.
 
@@ -95,11 +96,9 @@ export function FilterDialog() {
       <div id="filter-dialog" class="filter-dialog">
         <div class="filter-dialog-header">
           <h2 id="filter-dialog-heading">{view ? view.heading : "Preset: None"}</h2>
-          <div class="filter-dialog-actions">
-            <button id="filter-dialog-refresh-btn" class="icon-glyph-base icon-glyph-button" type="button" title="Refresh" aria-label="Refresh" onClick={() => void filterDialog.refresh()}><span class="material-symbol-icon">refresh</span></button>
-          </div>
+          <button id="filter-dialog-refresh-btn" class="icon-btn" type="button" title="Refresh" aria-label="Refresh" onClick={() => void filterDialog.refresh()}><span class="material-symbol-icon">refresh</span></button>
         </div>
-        <div class="filter-dialog-tabstrip" role="tablist">
+        <div class="filter-dialog-tabstrip" role="tablist" aria-label="Filter sections">
           {TABS.map(({ tab, label }) => {
             const problem = sectionFlagged(view, tab);
             return (
@@ -116,9 +115,9 @@ export function FilterDialog() {
           <div id="filter-panel-presets" class="filter-panel" style={panelStyle(shown, presets!)}>{view ? <PresetsPanel view={view} /> : null}</div>
         </div>
         <div class="filter-dialog-footer">
-          <button id="filter-clear-all-btn" type="button" onClick={() => filterDialog.clearAll()}>Clear all filters</button>
-          <button id="filter-cancel-btn" type="button" onClick={() => filterDialog.cancel()}>Cancel</button>
-          <HeldButton id="filter-apply-btn" class={view?.pending ? "has-pending" : undefined} {...heldAction(view, "apply")} onClick={() => void filterDialog.apply()}>{view?.pending ? "Apply*" : "Apply"}</HeldButton>
+          <button id="filter-clear-all-btn" class="btn" type="button" onClick={() => filterDialog.clearAll()}>Clear all filters</button>
+          <button id="filter-cancel-btn" class="btn" type="button" onClick={() => filterDialog.cancel()}>Cancel</button>
+          <HeldButton id="filter-apply-btn" class={view?.pending ? "btn has-pending" : "btn"} {...heldAction(view, "apply")} onClick={() => void filterDialog.apply()}>{view?.pending ? "Apply*" : "Apply"}</HeldButton>
         </div>
       </div>
       {view?.presetEdit ? <EditPresetDialog view={view} /> : null}
@@ -208,7 +207,7 @@ function GeneralPanel({ view }: { view: FilterDialogView }) {
       </div>
       <div class="filter-section">
         <h3>Duration Filter</h3>
-        <div class="filter-stack">
+        <div class="filter-stack duration-stack">
           <DurationRow which="min" view={view} />
           <DurationRow which="max" view={view} />
         </div>
@@ -257,7 +256,7 @@ function FlagFilterRow({
   const select = (
     <select
       {...validation}
-      class="mode-select"
+      class="ctl mode-select"
       id={`${flag.id}-mode`}
       aria-label={`${flag.label} filter`}
       value={draft[flag.choice]}
@@ -309,6 +308,8 @@ function DurationRow({ which, view }: { which: "min" | "max"; view: FilterDialog
             {...control}
             type="text"
             id={min ? "filter-min-dur-text" : "filter-max-dur-text"}
+            class="ctl"
+            autocomplete="off"
             aria-label={min ? "Minimum duration" : "Maximum duration"}
             placeholder={min ? "No minimum" : "No maximum"}
             value={text}
@@ -325,9 +326,9 @@ function DurationRow({ which, view }: { which: "min" | "max"; view: FilterDialog
 
 function TagsPanel({ view }: { view: FilterDialogView }) {
   const { filterDialog } = useApp();
-  const categories = filterTagCategories(view.tagModel, view.working, view.collapsed);
+  const categories = filterTagCategories(view.tagModel, view.working, view.expanded, view.applied);
   if (categories.length === 0) {
-    return <p class="filter-hint">No tags available. Use Edit tags to create tags.</p>;
+    return <p class="filter-hint">No tags yet. Add them in the Tags tab.</p>;
   }
   const globalAnd = view.working.globalMatchMode !== false;
   return (
@@ -335,8 +336,8 @@ function TagsPanel({ view }: { view: FilterDialogView }) {
       <div class="filter-section">
         <h3>Category Combination</h3>
         <p class="filter-hint">AND = all categories must match. OR = any category can match.</p>
-        <label>Combine categories using:
-          <select id="filter-global-match" value={globalAnd ? "and" : "or"} onChange={(event) => filterDialog.setGlobalMatch(event.currentTarget.value === "and")}>
+        <label class="filter-row">Combine categories using:
+          <select id="filter-global-match" class="ctl" value={globalAnd ? "and" : "or"} onChange={(event) => filterDialog.setGlobalMatch(event.currentTarget.value === "and")}>
             <option value="and">AND</option>
             <option value="or">OR</option>
           </select>
@@ -352,42 +353,44 @@ function TagsPanel({ view }: { view: FilterDialogView }) {
   );
 }
 
+/** A tag category, which its header toggles, with its Local match mode, which keeps its own action. */
 function TagCategory({ category }: { category: FilterTagCategory }) {
   const { filterDialog } = useApp();
   const categoryId = category.id ?? "";
   return (
-    <div class="tag-editor-category" data-filter-category={category.id ?? undefined}>
-      <div class="tag-editor-category-header">
-        <div class="tag-editor-category-left">
-          <button type="button" class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" data-filter-category-toggle={category.collapseKey} title={category.collapsed ? "Expand category" : "Collapse category"} onClick={() => filterDialog.toggleCategory(category.collapseKey)}><span class="material-symbol-icon">{category.collapsed ? "keyboard_arrow_right" : "keyboard_arrow_down"}</span></button>
-          <span class="tag-editor-category-title">{category.name}</span>
-        </div>
-        <div class="tag-editor-category-controls">
-          <label class="filter-hint" style="margin:0">Local:
-            <select class="filter-local-mode" data-cat-id={categoryId} value={String(category.localMode)} onChange={(event) => filterDialog.setLocalMatch(categoryId, Number.parseInt(event.currentTarget.value, 10) === TAG_MATCH_MODE.Or ? TAG_MATCH_MODE.Or : TAG_MATCH_MODE.And)}>
-              <option value={String(TAG_MATCH_MODE.And)}>ALL (AND)</option>
-              <option value={String(TAG_MATCH_MODE.Or)}>ANY (OR)</option>
-            </select>
-          </label>
-        </div>
-      </div>
-      <div class="tag-editor-tag-grid" style={category.collapsed ? { display: "none" } : undefined}>
-        {category.chips.map((chip) => (
-          <TagChip key={chip.name} chip={chip} categoryId={category.id} />
-        ))}
-      </div>
-    </div>
+    <Category
+      name={category.name}
+      gridId={`filter-tag-grid-${category.collapseKey}`}
+      collapsed={category.collapsed}
+      inUse={category.inUse}
+      inUseTitle={tagsInUse(category.inUse, "in the filter")}
+      unsaved={category.unsaved}
+      onToggle={() => filterDialog.toggleCategory(category.collapseKey)}
+      controls={
+        <label class="filter-local">Local:
+          <select class="ctl filter-local-mode" data-cat-id={categoryId} value={String(category.localMode)} onChange={(event) => filterDialog.setLocalMatch(categoryId, Number.parseInt(event.currentTarget.value, 10) === TAG_MATCH_MODE.Or ? TAG_MATCH_MODE.Or : TAG_MATCH_MODE.And)}>
+            <option value={String(TAG_MATCH_MODE.And)}>ALL (AND)</option>
+            <option value={String(TAG_MATCH_MODE.Or)}>ANY (OR)</option>
+          </select>
+        </label>
+      }
+    >
+      {category.chips.map((chip) => (
+        <TagChip key={chip.name} chip={chip} />
+      ))}
+    </Category>
   );
 }
 
-function TagChip({ chip, categoryId }: { chip: FilterTagChip; categoryId: string | null }) {
+/** A tag: green when the filter includes it, violet otherwise, with its include and exclude. */
+function TagChip({ chip }: { chip: FilterTagChip }) {
   const { filterDialog } = useApp();
   const state = chip.included ? " state-all" : chip.excluded ? " state-none" : "";
   return (
-    <div class={`tag-chip${state}`} data-filter-cat={categoryId ?? undefined}>
+    <div class={`tag-chip${state}`}>
       <span class="tag-chip-label">{chip.name}</span>
-      <button type="button" class={`chip-btn icon-glyph-base icon-glyph-toggle${chip.included ? " is-selected" : ""}`} data-filter-chip="inc" data-tag={chip.name} title="Include" onClick={() => filterDialog.toggleTag(chip.name, "include")}><span class="material-symbol-icon">add</span></button>
-      <button type="button" class={`chip-btn icon-glyph-base icon-glyph-toggle${chip.excluded ? " is-selected" : ""}`} data-filter-chip="exc" data-tag={chip.name} title="Exclude" onClick={() => filterDialog.toggleTag(chip.name, "exclude")}><span class="material-symbol-icon">remove</span></button>
+      <button type="button" class={chip.included ? "icon-btn is-selected" : "icon-btn"} title="Include" aria-label={`Include ${chip.name}`} onClick={() => filterDialog.toggleTag(chip.name, "include")}><span class="material-symbol-icon">add</span></button>
+      <button type="button" class={chip.excluded ? "icon-btn is-selected" : "icon-btn"} title="Exclude" aria-label={`Exclude ${chip.name}`} onClick={() => filterDialog.toggleTag(chip.name, "exclude")}><span class="material-symbol-icon">remove</span></button>
     </div>
   );
 }
@@ -410,24 +413,24 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
       <div class="filter-section">
         <h3>Choose Preset</h3>
         <div class="filter-row">
-          <select id="filter-dialog-preset-select" value={chosen} onChange={(event) => filterDialog.choosePreset(event.currentTarget.value)}>
+          <select id="filter-dialog-preset-select" class="ctl grow" aria-label="Choose preset" value={chosen} onChange={(event) => filterDialog.choosePreset(event.currentTarget.value)}>
             <option value="">None</option>
             {names.map((name) => (
               <option key={name} value={name}>{name}</option>
             ))}
           </select>
-          <HeldButton id="filter-update-preset-btn" {...heldAction(view, "updatePreset")} onClick={() => filterDialog.updatePreset()}>Update Preset</HeldButton>
+          <HeldButton id="filter-update-preset-btn" class="btn" {...heldAction(view, "updatePreset")} onClick={() => filterDialog.updatePreset()}>Update Preset</HeldButton>
         </div>
       </div>
       <div class="filter-section">
         <h3>Create New Preset From Current Filter</h3>
         <div class="filter-row">
-          <ValidatedField problem={view.problems.newPresetName} flagged={view.flagged.newPresetName} reveal={{ from: filterDialog.reveal, field: "newPresetName" }}>
+          <ValidatedField class="new-preset-field" problem={view.problems.newPresetName} flagged={view.flagged.newPresetName} reveal={{ from: filterDialog.reveal, field: "newPresetName" }}>
             {(control) => (
-              <input {...control} type="text" id="filter-new-preset-name" aria-label="New preset name" placeholder="Enter preset name" value={view.newPresetName} onInput={(event) => filterDialog.typeNewPresetName(event.currentTarget.value)} />
+              <input {...control} type="text" id="filter-new-preset-name" class="ctl" aria-label="New preset name" placeholder="Enter preset name" autocomplete="off" value={view.newPresetName} onInput={(event) => filterDialog.typeNewPresetName(event.currentTarget.value)} />
             )}
           </ValidatedField>
-          <HeldButton id="filter-add-preset-btn" {...heldAction(view, "addPreset")} onClick={() => (added.current = filterDialog.addPreset())}>Add Preset</HeldButton>
+          <HeldButton id="filter-add-preset-btn" class="btn" {...heldAction(view, "addPreset")} onClick={() => (added.current = filterDialog.addPreset())}>Add Preset</HeldButton>
         </div>
       </div>
       <div class="filter-section filter-section-manage">
@@ -438,7 +441,7 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
               <div key={preset.name} ref={reorder.row(preset.name)} class={reorder.dragging === preset.name ? "filter-preset-row is-dragging" : "filter-preset-row"} data-preset-idx={String(index)}>
                 <DragHandle control={reorder.handle(preset.name)} />
                 <span class="filter-preset-name">{preset.name}</span>
-                <button type="button" class="icon-glyph-base icon-glyph-button" data-preset-edit={String(index)} aria-label={`Edit preset ${preset.name}`} title="Edit preset" onClick={() => filterDialog.editPreset(index)}><span class="material-symbol-icon">edit_note</span></button>
+                <button type="button" class="icon-btn" data-preset-edit={String(index)} aria-label={`Edit preset ${preset.name}`} title="Edit preset" onClick={() => filterDialog.editPreset(index)}><span class="material-symbol-icon">edit_note</span></button>
               </div>
             ))
           ) : (

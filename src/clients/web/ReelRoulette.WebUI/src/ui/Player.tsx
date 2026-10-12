@@ -152,10 +152,12 @@ function ReconnectingIndicator() {
 
 /**
  * Opens the panel on its last tab, or closes it. Its icon shows the panel's side and whether it is open, and it is
- * orange while the panel is open. It takes focus back when the panel closes with focus inside it.
+ * orange while the panel is open. While the Filter or Tags tab holds unsaved changes, an orange dot marks it and its
+ * name says so, so they aren't forgotten while the panel is closed. It takes focus back when the panel closes with
+ * focus inside it.
  */
 function PanelButton() {
-  const { panel } = useApp();
+  const { panel, unsaved } = useApp();
   const button = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
     panel.attachButton(button.current);
@@ -163,10 +165,12 @@ function PanelButton() {
   }, []);
 
   const open = panel.isOpen.value;
-  const label = open ? "Close panel" : "Open panel";
+  const held = unsaved.value.filter || unsaved.value.tags;
+  const label = (open ? "Close panel" : "Open panel") + (held ? ", unsaved changes" : "");
   return (
     <button id="panel-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, open)} aria-label={label} title={label} aria-expanded={open ? "true" : "false"} aria-controls="panel" ref={button} onClick={press(panel.toggle)}>
       <span class="material-symbol-icon">{`${panel.side.value}_panel_${open ? "close" : "open"}`}</span>
+      <span class="unsaved-dot" hidden={!held}></span>
     </button>
   );
 }

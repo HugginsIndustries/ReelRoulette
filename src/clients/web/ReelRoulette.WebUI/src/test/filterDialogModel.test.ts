@@ -259,18 +259,40 @@ describe("filterTagCategories", () => {
     const blocks = filterTagCategories(model, filter(), new Set());
     expect(blocks.map((block) => block.name)).toEqual(["Places", "mood", "People"]);
     expect(blocks[2]!.chips.map((chip) => chip.name)).toEqual(["alice", "Bob"]);
-    expect(blocks[0]).toMatchObject({ id: "places", collapseKey: "places", collapsed: false, localMode: TAG_MATCH_MODE.And });
+    // Every category starts collapsed.
+    expect(blocks[0]).toMatchObject({ id: "places", collapseKey: "places", collapsed: true, localMode: TAG_MATCH_MODE.And });
   });
 
-  it("marks included and excluded tags, collapsed categories, and each category's match mode", () => {
+  it("marks included and excluded tags, expanded categories, and each category's match mode", () => {
     const blocks = filterTagCategories(
       model,
       filter({ selectedTags: ["beach"], excludedTags: ["BOB"], categoryLocalMatchModes: { people: TAG_MATCH_MODE.Or } }),
       new Set(["people"])
     );
     expect(blocks[0]!.chips).toEqual([{ name: "Beach", included: true, excluded: false }]);
-    expect(blocks[2]).toMatchObject({ collapsed: true, localMode: TAG_MATCH_MODE.Or });
+    expect(blocks[0]!.collapsed).toBe(true);
+    expect(blocks[2]).toMatchObject({ collapsed: false, localMode: TAG_MATCH_MODE.Or });
     expect(blocks[2]!.chips[1]).toEqual({ name: "Bob", included: false, excluded: true });
+  });
+
+  it("counts each category's tags the filter uses, and marks one whose tags differ from the applied filter", () => {
+    const applied = filter({ selectedTags: ["beach"], excludedTags: ["bob"] });
+    const same = filterTagCategories(model, applied, new Set(), applied);
+    expect(same.map((block) => [block.name, block.inUse, block.unsaved])).toEqual([
+      ["Places", 1, false],
+      ["mood", 0, false],
+      ["People", 1, false]
+    ]);
+    // Bob moves from excluded to included, and Alice is excluded: People changes, and Places stays as applied.
+    const working = filter({ selectedTags: ["beach", "Bob"], excludedTags: ["alice"] });
+    const changed = filterTagCategories(model, working, new Set(), applied);
+    expect(changed.map((block) => [block.name, block.inUse, block.unsaved])).toEqual([
+      ["Places", 1, false],
+      ["mood", 0, false],
+      ["People", 2, true]
+    ]);
+    // Without an applied filter, the filter is its own.
+    expect(filterTagCategories(model, working, new Set()).some((block) => block.unsaved)).toBe(false);
   });
 
   it("puts filter tags the catalog does not have last, in an Uncategorized row", () => {
@@ -283,12 +305,14 @@ describe("filterTagCategories", () => {
       id: null,
       name: "Uncategorized",
       collapseKey: UNCATEGORIZED_COLLAPSE_KEY,
-      collapsed: true,
+      collapsed: false,
       localMode: TAG_MATCH_MODE.Or,
       chips: [
         { name: "Alps", included: false, excluded: true },
         { name: "Ghost", included: true, excluded: true }
-      ]
+      ],
+      inUse: 2,
+      unsaved: false
     });
     expect(filterTagCategories(null, filter({ selectedTags: ["Ghost"] }), new Set()).map((block) => block.name)).toEqual([
       "Uncategorized"
@@ -308,7 +332,9 @@ describe("presets and sources", () => {
     expect(rows[0]!.filterState.favoritesMode).toBe("only");
   });
 
-  it("labels a source by display name, then root path, then id", () => {
-    expect(SOURCES.map(sourceLabel)).toEqual(["Movies", "C:\\photos", "source-3"]);
+  it("labels a source by its display name and its folder, or whichever it has, then its id", () => {
+    expect(SOURCES.map(sourceLabel)).toEqual(["Movies (C:\\movies)", "C:\\photos", "source-3"]);
+    expect(sourceLabel({ id: "s", displayName: "C:\\movies", rootPath: "C:\\movies" })).toBe("C:\\movies");
+    expect(sourceLabel({ id: "s", displayName: "Movies" })).toBe("Movies");
   });
 });

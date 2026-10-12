@@ -1,3 +1,4 @@
+import { computed, type ReadonlySignal } from "@preact/signals";
 import { getClientId, getClientType, getDeviceName, getSessionId } from "../api/coreApi";
 import { createDialogs, type Dialogs } from "../dialogs/dialogs";
 import { createFilterDialog, type FilterDialog } from "../filter/filterDialog";
@@ -11,6 +12,12 @@ import { createAppApi, type AppApi } from "./appApi";
 import { createAppStore, type AppStore } from "./appStore";
 import { createDeviceStore } from "./deviceStore";
 import { createServerConnection, type ServerConnection } from "./serverConnection";
+
+/** Whether the Filter and Tags tabs hold unsaved changes, which their tab icons and the panel button mark with a dot. */
+export interface UnsavedTabs {
+  filter: boolean;
+  tags: boolean;
+}
 
 /**
  * One page's runtime config, shared state, server requests, in-app dialogs, server connection, player, fullscreen,
@@ -28,6 +35,8 @@ export interface AppServices {
   library: Library;
   filterDialog: FilterDialog;
   tagEditor: TagEditor;
+  /** Whether the Filter and Tags tabs hold unsaved changes, which the tabs' dots and the panel button's dot both show. */
+  unsaved: ReadonlySignal<UnsavedTabs>;
 }
 
 export function createAppServices(config: RuntimeConfig): AppServices {
@@ -62,8 +71,8 @@ export function createAppServices(config: RuntimeConfig): AppServices {
   const player = createPlayer({ apiBaseUrl: config.apiBaseUrl, store, api, connection, dialogs });
   // After the player, so the player handles an item-state event before the library does.
   const library = createLibrary({ config, store, api, connection, player, panel, device });
-  const filterDialog = createFilterDialog({ store, api, connection, library, panel, storage: sessionStorage, dialogs });
-  const tagEditor = createTagEditor({ store, api, connection, library, player, panel, sessionStorage, localStorage, dialogs });
+  const filterDialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs });
+  const tagEditor = createTagEditor({ store, api, connection, library, filter: filterDialog, player, device, localStorage, dialogs });
   panel.connectTabs({
     library: {
       enter: () => library.open(),
@@ -81,7 +90,10 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     },
     tags: {
       enter: () => tagEditor.open(),
-      leave: () => tagEditor.close()
+      leave() {
+        tagEditor.close();
+        return true;
+      }
     }
   });
   // A panel remembered open starts its tab once the server has passed or failed the compatibility check.
@@ -102,6 +114,10 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     panel,
     library,
     filterDialog,
-    tagEditor
+    tagEditor,
+    unsaved: computed(() => ({
+      filter: filterDialog.view.value?.unsaved ?? false,
+      tags: tagEditor.view.value?.savePending ?? false
+    }))
   };
 }

@@ -1,14 +1,15 @@
 import { effect } from "@preact/signals";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { useApp } from "./appContext";
+import { AutoTag } from "./AutoTag";
 import { DialogHost } from "./Dialog";
 import { Panel } from "./Panel";
 import { Player } from "./Player";
 import { ScreenBoundary } from "./ScreenBoundary";
 
 /**
- * The part of the page that goes fullscreen: the player, the side panel with its tabs, and the in-app dialogs, which
- * stay inside it so they show in fullscreen too. The panel's side, where it goes, and its width are set on the stage
+ * The part of the page that goes fullscreen: the player, the side panel with its tabs, Auto Tag, and the in-app
+ * dialogs, which stay inside it so they show in fullscreen too. The panel's side, where it goes, and its width are set on the stage
  * as they change, without rendering it again, so dragging the panel's handle doesn't render the player.
  */
 export function Stage() {
@@ -31,8 +32,8 @@ export function Stage() {
     []
   );
 
-  // Escape closes the panel when it is open, and otherwise leaves pseudo-fullscreen. While a dialog is open, Escape is
-  // the dialog's: it closes the top one.
+  // Escape closes the panel when it is open, and otherwise leaves pseudo-fullscreen. While a dialog or Auto Tag is open,
+  // Escape is theirs: it closes the top one.
   useLayoutEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -56,6 +57,9 @@ export function Stage() {
       </main>
       <ScreenBoundary screen="panel" relay={api.relayLog}>
         <Panel />
+      </ScreenBoundary>
+      <ScreenBoundary screen="autotag" relay={api.relayLog}>
+        <AutoTag />
       </ScreenBoundary>
       <ScreenBoundary screen="dialogs" relay={api.relayLog}>
         <DialogHost />

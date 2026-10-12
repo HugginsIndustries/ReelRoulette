@@ -2985,10 +2985,18 @@ function resetUncheckedModes() {
   if (!$("filter-bl").checked) $("filter-bl-mode").value = "excluded";
 }
 
+// A duration still being typed isn't read into the filter until its field changes, so its text counts as an unsaved
+// change for the dots while it reads as another duration than the applied one, or as none, though Apply's star waits.
+function durationTyped(field) {
+  const applied = snapshot?.find(([el]) => el === field.input)?.[1] ?? "";
+  const typed = parseDuration(field.input.value);
+  return typed === "invalid" || typed !== parseDuration(applied);
+}
+
 function renderApply() {
   const apply = $("filter-apply");
   $("filter-apply-label").textContent = filterPending ? "Apply*" : "Apply";
-  unsaved.filter = filterPending;
+  unsaved.filter = filterPending || [minField, maxField].some(durationTyped);
   renderUnsaved();
   apply.classList.toggle("has-pending", filterPending);
   const generalTab = document.querySelector('.filter-tab[data-sub="general"]');
@@ -3311,9 +3319,15 @@ function categoryEl(view, id, name, { handle: handleEl, controls, inUse = 0, inU
     setCategoryExpanded(view, id, !expandedCategories[view].has(id));
     show();
   });
-  // A tap on the header's padding toggles too; its other controls keep their own actions.
+  // A tap on the header's padding toggles too; its other controls keep their own actions. A press and a release on
+  // different parts of the header, such as a drag's drop with the pointer on the name, click the header itself, so only
+  // a press that started on its padding toggles it.
+  let pressOnHeader = null;
+  header.addEventListener("pointerdown", (event) => (pressOnHeader = event.target === header));
   header.addEventListener("click", (event) => {
-    if (event.target === header) toggle.click();
+    const startedOnHeader = pressOnHeader;
+    pressOnHeader = null;
+    if (event.target === header && startedOnHeader !== false) toggle.click();
   });
   if (handleEl) header.append(handleEl);
   header.append(toggle);

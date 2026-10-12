@@ -334,6 +334,52 @@ html.theme-light .app-dialog {
   color: var(--error);
 }
 
+/* Icon-only buttons in the panel's tabs and Auto Tag. */
+.icon-btn {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--icon);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+}
+.icon-btn:hover:not(:disabled) { opacity: var(--icon-hover-opacity); }
+.icon-btn:active:not(:disabled) { opacity: var(--icon-pressed-opacity); }
+.icon-btn:disabled { opacity: var(--icon-disabled-opacity); cursor: default; }
+.icon-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+
+/* Text buttons, selects, and text fields in the panel's tabs and Auto Tag. */
+.btn, .ctl {
+  min-height: 44px;
+  font-size: 1rem;
+  font-family: inherit;
+  background: var(--control-bg);
+  color: var(--control-fg);
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+}
+.btn {
+  padding: 8px 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) { background: var(--control-bg-hover); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:focus-visible, .ctl:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.btn.has-pending { color: var(--huggins-orange); }
+.ctl { padding: 0 10px; min-width: 0; }
+input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
+
 .icon-glyph-base {
   background: transparent;
   border: 0;
@@ -684,6 +730,9 @@ body {
 .diagnostics-mobile {
   display: none;
 }
+/* The Filter and Tags tabs, as the mockup lays them out: a head with the heading and icon buttons, a bordered body
+   that scrolls, and a footer. */
+.filter-dialog,
 .tag-editor {
   flex: 1;
   min-height: 0;
@@ -693,417 +742,186 @@ body {
   padding: 12px;
   gap: 10px;
 }
+.filter-dialog-header,
 .tag-editor-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.tag-editor-header h2 {
-  margin: 0;
-}
-.tag-editor-actions {
-  display: flex;
   gap: 8px;
-}
-.tag-editor button,
-.tag-editor select,
-.tag-editor input {
   min-height: 44px;
-  font-size: 1rem;
-}
-.tag-editor button {
-  padding: 8px 12px;
-  border: 1px solid #555;
-  border-radius: 8px;
-  background: #2a2a2a;
-  color: #fff;
-  cursor: pointer;
-}
-.tag-editor button:hover:not(:disabled) {
-  background: #353535;
-  border-color: #7a7a7a;
-}
-.tag-editor button:active:not(:disabled) {
-  background: #414141;
-  transform: translateY(1px);
-}
-.tag-editor button:focus-visible,
-.tag-editor input:focus-visible,
-.tag-editor select:focus-visible {
-  outline: 2px solid #7aa7ff;
-  outline-offset: 1px;
-}
-.tag-editor button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.tag-editor button.icon-glyph-base {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--icon-foreground);
-  width: 44px;
-  min-width: 44px;
-}
-.tag-editor button.icon-glyph-button:hover:not(:disabled) {
-  background: transparent;
-  border-color: transparent;
-}
-.tag-editor button.icon-glyph-button:active:not(:disabled) {
-  background: transparent;
-  transform: none;
-}
-#tag-editor-apply-btn.has-pending,
-#filter-apply-btn.has-pending {
-  color: var(--huggins-orange);
-}
-.tag-editor-tabstrip {
   flex: 0 0 auto;
 }
-.tag-editor-panel-stack {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-.tag-editor-panel {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-.tag-editor-panel > .tag-editor-body {
-  flex: 1;
-  min-height: 0;
-}
-.tag-autotag-body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 0;
-}
-.tag-autotag-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  align-items: center;
-}
-.tag-autotag-check-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  cursor: pointer;
-}
-.tag-autotag-hint {
+.filter-dialog-header h2,
+.tag-editor-header h2 {
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
-  font-size: 0.85rem;
-  opacity: 0.75;
-}
-.tag-autotag-actions-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-}
-.tag-autotag-scan-btn {
-  margin-left: auto;
-}
-.tag-autotag-progress {
-  height: 4px;
-  width: 100%;
-  border-radius: 4px;
+  font-size: 1.15rem;
+  white-space: nowrap;
   overflow: hidden;
-  background: #333;
+  text-overflow: ellipsis;
 }
-.tag-autotag-progress::after {
+.icon-btn.has-pending { color: var(--huggins-orange); }
+/* Auto Tag, over the whole page: a modal in the top layer that fills the viewport. */
+.autotag-overlay {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  color: var(--page-fg);
+  background: rgba(16, 16, 16, 0.96);
+  flex-direction: column;
+  gap: 12px;
+  padding: calc(max(16px, var(--safe-area-top))) calc(max(16px, var(--safe-area-right))) calc(max(16px, var(--safe-area-bottom))) calc(max(16px, var(--safe-area-left)));
+  --autotag-count: 7rem;
+}
+.autotag-overlay[open] { display: flex; }
+.autotag-overlay::backdrop { background: transparent; }
+html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
+.autotag-head { display: flex; align-items: center; justify-content: space-between; }
+.autotag-head h2 { margin: 0; }
+.autotag-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.autotag-hint { margin: 0; }
+.autotag-scan { margin-left: auto; }
+.autotag-results { flex: 1; overflow: auto; border: 1px solid var(--surface-border); border-radius: 8px; padding: 8px; min-height: 120px; }
+.autotag-progress { height: 4px; border-radius: 4px; overflow: hidden; background: var(--control-bg); flex: 0 0 auto; }
+.autotag-progress[hidden] { display: none; }
+.autotag-progress::after {
   content: "";
   display: block;
   height: 100%;
   width: 40%;
   background: linear-gradient(90deg, transparent, var(--huggins-orange), transparent);
-  animation: tag-autotag-indeterminate 1s ease-in-out infinite;
+  animation: autotag-indeterminate 1s ease-in-out infinite;
 }
-@keyframes tag-autotag-indeterminate {
+@keyframes autotag-indeterminate {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(350%); }
 }
-.tag-autotag-status {
-  font-size: 0.9rem;
-  opacity: 0.85;
-  min-height: 1.2em;
-}
-.tag-autotag-results {
-  flex: 1;
-  min-height: 120px;
-  overflow: auto;
-  border: 1px solid #333;
-  border-radius: 8px;
-  padding: 8px;
-  background: #0a0a0a;
-}
-.tag-autotag-table-head {
+.autotag-status { font-size: 0.9rem; opacity: 0.85; min-height: 1.2em; }
+/* The header and every row share one column template, so each count sits under its own header. */
+.autotag-table-head, .autotag-row-main {
   display: grid;
-  grid-template-columns: 44px 44px minmax(0, 1fr) auto auto;
-  gap: 8px;
-  align-items: center;
-  padding: 6px 4px;
-  font-weight: 600;
-  font-size: 0.85rem;
-  border-bottom: 1px solid #333;
-  margin-bottom: 6px;
-}
-.tag-autotag-row {
-  border-bottom: 1px solid #2a2a2a;
-  padding: 6px 4px;
-}
-.tag-autotag-row-main {
-  display: grid;
-  grid-template-columns: 44px 44px minmax(0, 1fr) auto auto;
-  gap: 8px;
+  grid-template-columns: 40px 40px minmax(0, 1fr) var(--autotag-count) var(--autotag-count);
+  column-gap: 12px;
   align-items: center;
 }
-.tag-autotag-row-files {
-  margin: 8px 0 4px 96px;
-  padding-left: 0;
+.autotag-count { text-align: center; font-variant-numeric: tabular-nums; }
+.autotag-tag { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.autotag-empty { margin: 0; padding: 32px 12px; text-align: center; color: var(--muted-fg); }
+.autotag-table-head { padding: 6px 4px; font-weight: 600; font-size: 0.85rem; border-bottom: 1px solid var(--surface-border); margin-bottom: 6px; }
+.autotag-result { border-bottom: 1px solid var(--surface-border); padding: 4px; }
+.autotag-files { margin: 4px 0 4px 104px; }
+.autotag-file { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; align-items: center; padding: 2px 0; font-size: 0.9rem; }
+.autotag-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.autotag-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+@media (max-width: 600px) {
+  .autotag-overlay { --autotag-count: 4.75rem; }
 }
-.tag-autotag-file-row {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  gap: 8px;
-  align-items: center;
-  padding: 4px 0;
-}
-.tag-autotag-file-path {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.9rem;
-}
+
+/* The line that names the item the Tags tab edits while it isn't the one playing. */
+.tags-target { margin: 0; font-size: 0.9rem; color: var(--muted-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 0 auto; }
+.tags-target b { color: var(--page-fg); font-weight: 600; }
 .tag-editor-body {
   flex: 1;
+  min-height: 0;
   overflow: auto;
-  border: 1px solid #333;
+  border: 1px solid var(--surface-border);
   border-radius: 8px;
-  padding: 12px;
-  background: #111;
+  padding: 10px;
 }
-.tag-editor-category { margin-bottom: 12px; }
-.tag-editor-category-header {
+.tag-editor-body .tag-category { background: var(--surface); }
+/* The footer's two rows: add category and the new tag's category, then its name, Add tag, and Save. */
+.tag-editor-footer { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
+.tag-editor-footer-row { display: flex; align-items: center; gap: 8px; }
+.tag-editor-footer-row > .ctl,
+.tag-editor-footer-row > .vfield { flex: 1 1 auto; }
+
+/* Tag categories, in the Tags tab and the Filter tab's Tags section: the header's name toggles it; the handle, Edit,
+   and Local select keep their own actions. */
+.tag-category { margin-bottom: 12px; }
+.tag-category.is-collapsed { margin-bottom: 8px; }
+.tag-category-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 4px;
   margin-bottom: 8px;
   background: #2d2d30;
   border: 1px solid #3b3b40;
   border-radius: 4px;
-  padding: 8px 6px;
+  padding: 2px 6px 2px 4px;
+  cursor: pointer;
 }
-.tag-editor-category-left {
+html.theme-light .tag-category-header { background: #e4e6ec; border-color: #c8ced8; }
+.tag-category.is-collapsed .tag-category-header { margin-bottom: 0; }
+.tag-category-toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  font-size: 1.1rem;
+  text-align: left;
+  cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 0;
 }
-.tag-editor-category-toggle,
-.tag-editor-category-btn {
-  min-width: 44px;
-  width: 44px;
-  padding: 0;
-}
-.tag-editor-category-toggle.icon-glyph-base,
-.tag-editor-category-btn.icon-glyph-base {
-  border-radius: 0;
-}
-.tag-editor-category-title {
+.tag-category-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.tag-category-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A collapsed category's header: a count of its tags in use, and the unsaved-changes dot. */
+.category-count {
+  flex: 0 0 auto;
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--control-border);
+  background: var(--control-bg);
+  font-size: 0.78rem;
   font-weight: 600;
-  font-size: 1.2rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.4;
+  text-align: center;
 }
-.tag-editor-category-controls {
-  display: inline-flex;
-  gap: 6px;
-}
-.tag-editor-tag-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
+.category-count[hidden] { display: none; }
+.unsaved-dot.category-dot { position: static; flex: 0 0 auto; box-shadow: none; }
+.tag-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.tag-grid[hidden] { display: none; }
 .tag-chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 2px;
+  padding: 0 4px 0 10px;
   min-height: 44px;
   border-radius: 10px;
   border: 1px solid var(--violet-soft-border);
   background: var(--violet);
 }
-.tag-chip.state-all {
-  background: var(--lime-green);
-  border-color: var(--lime-green-soft-border);
-  box-shadow: 0 0 0 1px var(--lime-green-soft-inset) inset;
-}
-.tag-chip.state-some {
-  background: var(--huggins-orange);
-  border-color: var(--huggins-orange-soft-border);
-  box-shadow: 0 0 0 1px var(--huggins-orange-soft-inset) inset;
-}
-.tag-chip.state-none {
-  background: var(--violet);
-  border-color: var(--violet-soft-border);
-}
-.tag-chip-label {
-  font-weight: 700;
-  text-shadow: 0 0 8px rgba(0, 0, 0, 0.62);
-  color: #ffffff;
-}
-.tag-chip .chip-btn {
-  min-width: 44px;
-  width: 44px;
-  min-height: 44px;
-  height: 44px;
-  padding: 0;
-  background: transparent;
-  color: #ffffff;
-  border-radius: 0;
-  border: 0;
-}
-.tag-chip .chip-btn .material-symbol-icon {
-  font-size: 32px;
-  font-weight: 700;
-  text-shadow: 0 0 8px rgba(0, 0, 0, 0.62);
-}
-.tag-chip .chip-btn.icon-glyph-button:hover:not(:disabled),
-.tag-chip .chip-btn.icon-glyph-toggle:hover:not(:disabled),
-.tag-chip .chip-btn.icon-glyph-button:active:not(:disabled),
-.tag-chip .chip-btn.icon-glyph-toggle:active:not(:disabled) {
-  background: transparent;
-  border-color: transparent;
-  transform: none;
-}
-.tag-chip .chip-btn.is-selected {
-  color: var(--huggins-orange);
-}
-.tag-editor-footer {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 10px;
-  align-items: center;
-}
-.tag-editor-footer > button {
-  flex: 0 0 44px;
-}
-.tag-editor-footer select {
-  flex: 0 1 180px;
-  min-width: 120px;
-  background: #2a2a2a;
-  color: #fff;
-  border: 1px solid #555;
-  border-radius: 8px;
-  padding: 0 12px;
-}
-.tag-editor-footer input {
-  flex: 1 1 auto;
-  min-width: 0;
-  background: #2a2a2a;
-  color: #fff;
-  border: 1px solid #555;
-  border-radius: 8px;
-  padding: 0 12px;
-}
-/* The new tag name's field validation wrapper takes the input's place in the row. */
-.tag-editor-footer > .vfield {
-  flex: 1 1 auto;
-  min-width: 0;
-}
+.tag-chip.state-all { background: var(--lime-green); border-color: var(--lime-green-soft-border); box-shadow: 0 0 0 1px var(--lime-green-soft-inset) inset; }
+.tag-chip.state-some { background: var(--huggins-orange); border-color: var(--huggins-orange-soft-border); box-shadow: 0 0 0 1px var(--huggins-orange-soft-inset) inset; }
+.tag-chip-label { font-weight: 700; text-shadow: 0 0 8px rgba(0, 0, 0, 0.62); color: #fff; margin-right: 4px; }
+.tag-chip .icon-btn { color: #fff; text-shadow: 0 0 8px rgba(0, 0, 0, 0.62); }
+.tag-chip .icon-btn.is-selected { color: var(--huggins-orange); }
 
-html.theme-light .tag-editor button:not(.icon-glyph-base) {
-  background: var(--panel-bg);
-  color: var(--page-fg);
-  border-color: var(--panel-border);
-}
-html.theme-light .tag-editor button:not(.icon-glyph-base):hover:not(:disabled) {
-  background: #e8eaef;
-  border-color: #9aa3af;
-}
-html.theme-light .tag-editor-body {
-  background: #f4f5f8;
-  border-color: var(--panel-border);
-}
-html.theme-light .tag-autotag-results {
-  background: #f4f5f8;
-  border-color: var(--panel-border);
-}
-html.theme-light .tag-autotag-table-head,
-html.theme-light .tag-autotag-row {
-  border-color: var(--panel-border);
-}
-html.theme-light .tag-autotag-progress {
-  background: #dde1e8;
-}
-html.theme-light .tag-editor-category-header {
-  background: #e4e6ec;
-  border-color: #c8ced8;
-}
-html.theme-light .tag-editor-footer select,
-html.theme-light .tag-editor-footer input {
-  background: var(--panel-bg);
-  color: var(--page-fg);
-  border-color: var(--panel-border);
-}
-html.theme-light .tag-editor button.icon-glyph-base {
-  color: var(--icon-dark-grey);
-}
-html.theme-light .tag-editor .tag-chip .chip-btn.icon-glyph-base {
-  color: #ffffff;
-}
-html.theme-light .tag-editor .tag-chip .chip-btn.icon-glyph-base.is-selected {
-  color: var(--huggins-orange);
-}
-
-.filter-dialog {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 12px;
-  gap: 10px;
-}
-.filter-dialog-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.filter-dialog-header h2 {
-  margin: 0;
-  font-size: 1.15rem;
-}
-.filter-dialog-actions {
-  display: flex;
-  gap: 8px;
-}
-.filter-dialog-tabstrip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
+/* The Filter tab's sections. */
+.filter-dialog-tabstrip { display: flex; flex-wrap: wrap; gap: 8px; flex: 0 0 auto; }
 .filter-tab {
   min-height: 44px;
   padding: 8px 16px;
-  border: 1px solid #555;
+  border: 1px solid var(--control-border);
   border-radius: 8px;
-  background: #2a2a2a;
-  color: #fff;
+  background: var(--control-bg);
+  color: var(--control-fg);
   cursor: pointer;
   font-size: 1rem;
+  font-family: inherit;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1114,232 +932,79 @@ html.theme-light .tag-editor .tag-chip .chip-btn.icon-glyph-base.is-selected {
 }
 .filter-dialog-body {
   flex: 1;
+  min-height: 0;
   overflow: auto;
-  border: 1px solid #333;
+  border: 1px solid var(--surface-border);
   border-radius: 8px;
   padding: 12px;
-  background: #111;
 }
-.filter-panel {
-  width: 100%;
-  min-width: 0;
-}
-#filter-panel-presets {
-  display: flex;
-  flex-direction: column;
-  min-height: 100%;
-}
-.filter-section {
-  margin-bottom: 20px;
-}
-.filter-section-manage {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-.filter-section h3 {
-  margin: 0 0 8px;
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-.filter-hint {
-  font-size: 0.85rem;
-  opacity: 0.75;
-  margin: 0 0 8px;
-}
-.filter-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-.filter-row label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-}
+.filter-panel { width: 100%; min-width: 0; }
+#filter-panel-presets { flex-direction: column; }
+.filter-section { margin-bottom: 20px; }
+.filter-section h3 { margin: 0 0 8px; font-size: 0.95rem; font-weight: 600; }
+.filter-hint { font-size: 0.85rem; opacity: 0.75; margin: 0 0 8px; }
+.filter-stack { display: flex; flex-direction: column; gap: 4px; }
+.filter-stack > label { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+/* Stacked text fields sit 10px apart. */
+.duration-stack { gap: 10px; }
 /* The Favorites and Blacklisted filters: a checkbox and an only-or-excluded dropdown, usable while it is checked. */
-.mode-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 40px;
-}
-.mode-row > label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 7.5rem;
-}
-.mode-select:disabled {
-  opacity: 0.5;
-}
-.duration-field {
-  width: 14rem;
-  max-width: 100%;
-}
-.filter-dialog input[type="text"],
-.filter-dialog input[type="number"],
-.filter-dialog select {
-  min-height: 44px;
-  font-size: 1rem;
-  padding: 0 10px;
-  background: #2a2a2a;
-  color: #fff;
-  border: 1px solid #555;
-  border-radius: 8px;
-}
-/* The flag filters' dropdown is the small one the mockup shows. */
-.filter-dialog .mode-select {
-  min-height: 36px;
-  padding: 0 8px;
-}
-.filter-dialog button:not(.icon-glyph-base) {
-  min-height: 44px;
-  padding: 8px 14px;
-  border: 1px solid #555;
-  border-radius: 8px;
-  background: #2a2a2a;
-  color: #fff;
-  cursor: pointer;
-  font-size: 1rem;
-}
-.filter-dialog button:not(.icon-glyph-base):hover:not(:disabled) {
-  background: #353535;
-}
-.filter-dialog button.icon-glyph-base {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--icon-foreground);
-  width: 44px;
-  min-width: 44px;
-}
-.filter-dialog-footer {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
-}
-.filter-preset-list {
-  border: 1px solid #444;
-  border-radius: 8px;
-  padding: 8px;
-  flex: 1;
-  min-height: 0;
-  max-height: none;
-  overflow: auto;
-}
-.filter-preset-row {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 4px;
-  border-bottom: 1px solid #333;
-}
-.filter-preset-row:last-child {
-  border-bottom: 0;
-}
-.filter-preset-name {
-  flex: 1 1 140px;
-  min-width: 0;
-  font-weight: 600;
-}
+.mode-row { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.mode-row > label { display: flex; align-items: center; gap: 8px; min-width: 7.5rem; }
+.mode-select { min-height: 36px; padding: 0 8px; }
+.mode-select:disabled { opacity: 0.5; }
+.filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.filter-row > label { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.grow { flex: 1 1 auto; min-width: 0; }
+.duration-field { width: 14rem; max-width: 100%; }
+.new-preset-field { flex: 1 1 180px; }
+.filter-local { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+.filter-local select { min-height: 36px; }
+.filter-dialog-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; flex: 0 0 auto; }
+.filter-preset-list { border: 1px solid var(--panel-border); border-radius: 8px; padding: 4px 8px 4px 4px; }
+.filter-preset-row { display: flex; align-items: center; gap: 2px; padding: 2px 0; border-bottom: 1px solid var(--surface-border); background: var(--surface); }
+.filter-preset-row:last-child { border-bottom: 0; }
+.filter-preset-name { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* Reordering: a row moves only by its handle, so a drag anywhere else on it still scrolls on a touch screen. */
-.tag-editor button.drag-handle,
-.filter-dialog button.drag-handle {
+.drag-handle {
   width: 32px;
   min-width: 32px;
   height: 44px;
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-fg);
   cursor: grab;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
 }
-.drag-handle .material-symbol-icon {
-  font-size: 26px;
-  color: var(--muted-fg);
-}
-.drag-handle:hover:not(:disabled) .material-symbol-icon,
-.drag-handle:focus-visible .material-symbol-icon {
-  color: inherit;
-}
-.drag-handle.icon-glyph-button:hover:not(:disabled) {
-  opacity: 1;
-}
-.tag-editor button.drag-handle:disabled,
-.filter-dialog button.drag-handle:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-.is-dragging .drag-handle .material-symbol-icon {
-  color: var(--huggins-orange);
-}
-.tag-editor-category.is-dragging,
+.drag-handle .material-symbol-icon { font-size: 26px; }
+.drag-handle:hover:not(:disabled) { color: var(--icon); }
+.drag-handle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; color: var(--icon); }
+.drag-handle:disabled { opacity: 0.3; cursor: not-allowed; color: var(--muted-fg); }
+.is-dragging .drag-handle { cursor: grabbing; color: var(--huggins-orange); }
+.tag-category.is-dragging,
 .filter-preset-row.is-dragging {
   position: relative;
   z-index: 5;
-}
-.tag-editor-category.is-dragging .tag-editor-category-header {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
-.filter-preset-row.is-dragging {
-  background: var(--surface-raised);
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-}
+.tag-category.is-dragging { border-radius: 6px; }
+.filter-preset-row.is-dragging { background: var(--surface-raised); border-radius: 6px; }
 /* A dragged category hides its tags until it is dropped, so only its header moves, however many tags it has. */
-.tag-editor-category.is-dragging .tag-editor-tag-grid {
-  display: none;
-}
+.tag-category.is-dragging .tag-grid { display: none; }
 body.sorting,
 body.sorting * {
   cursor: grabbing !important;
   user-select: none;
   -webkit-user-select: none;
-}
-html.theme-light .filter-dialog-body {
-  background: #f4f5f8;
-  border-color: var(--panel-border);
-}
-html.theme-light .filter-tab {
-  background: var(--panel-bg);
-  color: var(--page-fg);
-  border-color: var(--panel-border);
-}
-html.theme-light .filter-dialog input[type="text"],
-html.theme-light .filter-dialog select {
-  background: var(--panel-bg);
-  color: var(--page-fg);
-  border-color: var(--panel-border);
-}
-html.theme-light .filter-dialog button:not(.icon-glyph-base) {
-  background: var(--panel-bg);
-  color: var(--page-fg);
-  border-color: var(--panel-border);
-}
-html.theme-light .filter-dialog button.icon-glyph-base {
-  color: var(--icon-dark-grey);
-}
-html.theme-light .filter-dialog .tag-chip .chip-btn.icon-glyph-base {
-  color: #ffffff;
-}
-html.theme-light .filter-dialog .tag-chip .chip-btn.icon-glyph-base.is-selected {
-  color: var(--huggins-orange);
 }
 
 .library-overlay {
@@ -1662,17 +1327,6 @@ html.theme-light .library-overlay-result-row {
   border-bottom-color: rgba(0, 0, 0, 0.08);
 }
 
-/* The tabs' narrow layouts follow the panel's width, which beside the player is narrow at any window width. */
-@container panel (max-width: 600px) {
-  .tag-editor-footer {
-    gap: 6px;
-  }
-  .tag-editor-footer select {
-    flex-basis: 120px;
-    min-width: 96px;
-  }
-}
-
 .player-col {
   flex: 1 1 0;
   min-width: 0;
@@ -1785,6 +1439,20 @@ html.theme-light .panel {
   align-items: center;
   justify-content: center;
 }
+/* A dot marks the Filter and Tags tabs, and the player's panel button, while they hold unsaved changes. */
+.unsaved-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--huggins-orange);
+  box-shadow: 0 0 0 2px var(--surface);
+  pointer-events: none;
+}
+.unsaved-dot[hidden] { display: none; }
+#panel-btn .unsaved-dot { top: 6px; right: 5px; box-shadow: 0 0 0 2px #000; }
 .panel-tab:hover {
   background: rgba(127, 127, 127, 0.16);
 }
@@ -1911,6 +1579,10 @@ body.short-screen .tag-editor {
   padding: 6px 10px;
   gap: 6px;
 }
+body.short-screen .filter-dialog-header,
+body.short-screen .tag-editor-header {
+  min-height: 36px;
+}
 body.short-screen .library-overlay-header h2,
 body.short-screen .filter-dialog-header h2,
 body.short-screen .tag-editor-header h2 {
@@ -1920,16 +1592,11 @@ body.short-screen .library-overlay button:not(.icon-glyph-base):not(.library-fil
 body.short-screen .library-overlay-search,
 body.short-screen .library-controls select,
 body.short-screen .filter-tab,
-body.short-screen .filter-dialog button:not(.icon-glyph-base),
-body.short-screen .filter-dialog input[type="text"],
-body.short-screen .filter-dialog input[type="number"],
-body.short-screen .filter-dialog select,
-body.short-screen .tag-editor button:not(.icon-glyph-base),
-body.short-screen .tag-editor select,
-body.short-screen .tag-editor input[type="text"],
 body.short-screen .app-dialog button,
 body.short-screen .app-dialog input[type="text"],
-body.short-screen .app-dialog select {
+body.short-screen .app-dialog select,
+body.short-screen .btn,
+body.short-screen .ctl {
   min-height: 38px;
 }
 body.short-screen .filter-tab {

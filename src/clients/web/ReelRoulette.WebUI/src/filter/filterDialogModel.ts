@@ -100,11 +100,15 @@ export interface FilterTagCategory {
   /** The category id, or null for the Uncategorized row of filter tags the catalog does not have. */
   id: string | null;
   name: string;
-  /** The key the collapsed state is stored under. */
+  /** The key this device remembers it expanded under. */
   collapseKey: string;
   collapsed: boolean;
   localMode: TagMatchMode;
   chips: FilterTagChip[];
+  /** How many of its tags the filter includes or excludes, which its header shows while it is collapsed. */
+  inUse: number;
+  /** One of its tags is included or excluded differently from the applied filter, until Apply. */
+  unsaved: boolean;
 }
 
 export function namesEqualIgnoringCase(a: string, b: string): boolean {
@@ -122,8 +126,14 @@ function removeIgnoringCase(list: string[], value: string): void {
   }
 }
 
+/** A source's name and, when it has a different one, its folder: "Videos (/media/videos)". */
 export function sourceLabel(source: FilterSource): string {
-  return source.displayName || source.rootPath || source.id;
+  const name = source.displayName || "";
+  const path = source.rootPath || "";
+  if (name && path && name !== path) {
+    return `${name} (${path})`;
+  }
+  return name || path || source.id;
 }
 
 function flagChoice(mode: FlagFilterMode, fallback: FlagFilterChoice): FlagFilterChoice {
@@ -181,6 +191,26 @@ export function filterWithGeneralDraft(
   const checked = sources.filter((_, index) => draft.sourceChecked[index]).map((source) => source.id);
   next.includedSourceIds = checked.length === sources.length ? [] : checked;
   return next;
+}
+
+/**
+ * Whether a duration field's text differs from the filter's duration: it reads as another duration, or isn't a valid
+ * one. Text that reads as the same duration, such as "90" for 01:30, is no change.
+ */
+function durationTextChanged(text: string, seconds: number | null): boolean {
+  if (text === (seconds != null ? formatDurationForDisplay(seconds) : "")) {
+    return false;
+  }
+  const typed = parseTypedDuration(text);
+  return typed === "invalid" || typed !== seconds;
+}
+
+/**
+ * Whether the General tab's duration fields differ from the filter's durations. Typing doesn't read them into the
+ * working filter, so this is how a duration still being typed counts as an unsaved change.
+ */
+export function generalDurationsChanged(draft: GeneralDraft, filter: FilterState): boolean {
+  return durationTextChanged(draft.minText, filter.minDurationSeconds) || durationTextChanged(draft.maxText, filter.maxDurationSeconds);
 }
 
 /**
@@ -295,7 +325,8 @@ export function toggleFilterTag(filter: FilterState, tag: string, action: TagChi
 export function filterTagCategories(
   model: FilterTagModel | null,
   filter: FilterState,
-  collapsed: ReadonlySet<string>
+  expanded: ReadonlySet<string>,
+  applied: FilterState = filter
 ): FilterTagCategory[] {
   const categories = (model?.categories || [])
     .slice()
@@ -306,6 +337,18 @@ export function filterTagCategories(
     included: containsIgnoringCase(filter.selectedTags, name),
     excluded: containsIgnoringCase(filter.excludedTags, name)
   });
+  const changed = (name: string): boolean => {
+    const now = chip(name);
+    return now.included !== containsIgnoringCase(applied.selectedTags, name) || now.excluded !== containsIgnoringCase(applied.excludedTags, name);
+  };
+  const counts = (names: readonly string[]) => {
+    const chips = names.map(chip);
+    return {
+      chips,
+      inUse: chips.filter((entry) => entry.included || entry.excluded).length,
+      unsaved: names.some(changed)
+    };
+  };
 
   const blocks: FilterTagCategory[] = [];
   const catalogNames = new Set<string>();
@@ -325,9 +368,9 @@ export function filterTagCategories(
       id: category.id,
       name: category.name,
       collapseKey,
-      collapsed: collapsed.has(collapseKey),
+      collapsed: !expanded.has(collapseKey),
       localMode: filter.categoryLocalMatchModes?.[category.id] ?? TAG_MATCH_MODE.And,
-      chips: names.map(chip)
+      ...counts(names)
     });
   }
 
@@ -339,9 +382,9 @@ export function filterTagCategories(
       id: null,
       name: "Uncategorized",
       collapseKey: UNCATEGORIZED_COLLAPSE_KEY,
-      collapsed: collapsed.has(UNCATEGORIZED_COLLAPSE_KEY),
+      collapsed: !expanded.has(UNCATEGORIZED_COLLAPSE_KEY),
       localMode: filter.categoryLocalMatchModes?.[""] ?? TAG_MATCH_MODE.And,
-      chips: missing.map(chip)
+      ...counts(missing)
     });
   }
   return blocks;

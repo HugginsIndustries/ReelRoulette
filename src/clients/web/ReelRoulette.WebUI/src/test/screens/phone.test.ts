@@ -75,7 +75,8 @@ function statusLineShows(): boolean {
 }
 
 function tab(name: "Library" | "Filter" | "Tags"): HTMLButtonElement {
-  return within(panel().querySelector(".panel-tablist") as HTMLElement).getByRole("tab", { name, hidden: true }) as HTMLButtonElement;
+  // A tab's name says so while it holds unsaved changes.
+  return within(panel().querySelector(".panel-tablist") as HTMLElement).getByRole("tab", { name: new RegExp(`^${name}(, unsaved changes)?$`), hidden: true }) as HTMLButtonElement;
 }
 
 function topDialog(): HTMLDialogElement | null {
@@ -214,14 +215,22 @@ describe("a phone on its side", () => {
     await click(tab("Filter"));
     await waitFor(() => expect(document.getElementById("filter-min-dur-text")).not.toBeNull());
     expect(currentStyle(document.getElementById("filter-dialog-heading")!).fontSize).toBe("16px");
+    expect(currentStyle(panel().querySelector(".filter-dialog-header")!).minHeight).toBe("36px");
     expect(currentStyle(document.getElementById("filter-min-dur-text")!).minHeight).toBe("38px");
     expect(currentStyle(document.getElementById("filter-dialog-preset-select")!).minHeight).toBe("38px");
     expect(currentStyle(document.getElementById("filter-update-preset-btn")!).minHeight).toBe("38px");
     await click(tab("Tags"));
     expect(currentStyle(panel().querySelector(".tag-editor-header h2")!).fontSize).toBe("16px");
-    expect(currentStyle(document.getElementById("tag-editor-refresh-btn")!).minHeight).toBe("44px");
+    // The tabs' icon buttons keep their size.
+    expect(currentStyle(document.getElementById("tag-editor-refresh-btn")!).height).toBe("44px");
+    expect(currentStyle(document.getElementById("tag-editor-refresh-btn")!).minHeight).not.toBe("38px");
+    expect(currentStyle(panel().querySelector(".tag-editor-header")!).minHeight).toBe("36px");
     expect(currentStyle(document.getElementById("tag-editor-new-tag")!).minHeight).toBe("38px");
-    expect(currentStyle(document.getElementById("tag-autotag-scan-full")!).minHeight).not.toBe("38px");
+    fireEvent.click(document.getElementById("tag-editor-autotag-btn")!);
+    await settle();
+    expect(currentStyle(document.getElementById("autotag-scan")!).minHeight).toBe("38px");
+    expect(currentStyle(document.getElementById("autotag-close")!).minHeight).not.toBe("38px");
+    expect(currentStyle(document.getElementById("autotag-full")!).minHeight).not.toBe("38px");
   });
 
   it("puts the Library tab's four controls in two rows, as the mockup does", async () => {

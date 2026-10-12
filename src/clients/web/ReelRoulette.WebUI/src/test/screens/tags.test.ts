@@ -170,6 +170,19 @@ function serveTags(server: FakeServer): FakeTags {
       if (failure) {
         return status(failure);
       }
+      // The catalog takes item tag changes, so the tags the tab loads again once a save lands show them.
+      if (path === "/api/tag-editor/apply-item-tags") {
+        const ids: string[] = call.body?.itemIds ?? [];
+        for (const item of tags.model.items.filter((candidate) => ids.includes(candidate.itemId))) {
+          const removed = new Set((call.body?.removeTags ?? []).map((tag: string) => tag.toLowerCase()));
+          item.tags = item.tags.filter((tag) => !removed.has(tag.toLowerCase()));
+          for (const tag of call.body?.addTags ?? []) {
+            if (!item.tags.some((existing) => existing.toLowerCase() === tag.toLowerCase())) {
+              item.tags.push(tag);
+            }
+          }
+        }
+      }
       if (path === "/api/autotag/apply") {
         const assignments: Array<{ tagName: string; itemPaths: string[] }> = call.body?.assignments ?? [];
         return json({
@@ -258,9 +271,10 @@ function isOpen(): boolean {
   return !panel().hidden && !byId("panel-page-tags").hidden;
 }
 
-/** A tab of the panel's own tab row, apart from the tag editor's Edit Tags and Auto Tag tabs. */
+/** A tab of the panel's own tab row. */
 function panelTab(name: "Library" | "Filter" | "Tags"): HTMLButtonElement {
-  return within(panel().querySelector(".panel-tablist") as HTMLElement).getByRole("tab", { name, hidden: true }) as HTMLButtonElement;
+  // A tab's name says so while it holds unsaved changes.
+  return within(panel().querySelector(".panel-tablist") as HTMLElement).getByRole("tab", { name: new RegExp(`^${name}(, unsaved changes)?$`), hidden: true }) as HTMLButtonElement;
 }
 
 /** Opens the panel with the panel button, unless it is open, and chooses the Tags tab. */
@@ -277,7 +291,7 @@ function closeButton(): HTMLButtonElement {
   return byId<HTMLButtonElement>("panel-close-btn");
 }
 
-function headerButton(name: "Refresh"): HTMLButtonElement {
+function headerButton(name: "Refresh" | "Auto Tag"): HTMLButtonElement {
   return within(editor().querySelector(".tag-editor-header") as HTMLElement).getByRole("button", { name }) as HTMLButtonElement;
 }
 
@@ -298,21 +312,13 @@ async function save(): Promise<void> {
   await click(saveButton());
 }
 
-async function showTab(name: "Edit Tags" | "Auto Tag"): Promise<void> {
-  await click(within(editor()).getByRole("tab", { name }));
-}
-
-function selectedTab(): string {
-  return within(editor()).getByRole("tab", { selected: true }).textContent ?? "";
-}
-
 function body(): HTMLElement {
   return byId("tag-editor-body");
 }
 
 function category(title: string): HTMLElement {
-  const found = Array.from(body().querySelectorAll<HTMLElement>(".tag-editor-category")).find(
-    (candidate) => candidate.querySelector(".tag-editor-category-title")?.textContent === title
+  const found = Array.from(body().querySelectorAll<HTMLElement>(".tag-category")).find(
+    (candidate) => candidate.querySelector(".tag-category-name")?.textContent === title
   );
   if (!found) {
     throw new Error(`No tag category named ${title}.`);
@@ -321,7 +327,7 @@ function category(title: string): HTMLElement {
 }
 
 function categoryTitles(): string[] {
-  return Array.from(body().querySelectorAll(".tag-editor-category-title")).map((node) => node.textContent ?? "");
+  return Array.from(body().querySelectorAll(".tag-category-name")).map((node) => node.textContent ?? "");
 }
 
 function chipNames(title: string): string[] {
@@ -332,6 +338,11 @@ function categoryButton(title: string, label: string): HTMLButtonElement {
   return within(category(title)).getAllByTitle(label)[0] as HTMLButtonElement;
 }
 
+/** The button in a category's header that expands and collapses it. */
+function categoryToggle(title: string): HTMLButtonElement {
+  return category(title).querySelector(".tag-category-toggle") as HTMLButtonElement;
+}
+
 /** The category's drag handle, which is Uncategorized's dimmed one for Uncategorized. */
 function handle(title: string): HTMLButtonElement {
   return category(title).querySelector(".drag-handle") as HTMLButtonElement;
@@ -339,11 +350,11 @@ function handle(title: string): HTMLButtonElement {
 
 /** What screen readers last heard about a category moving. */
 function reorderAnnouncement(): string {
-  return byId("tag-editor-panel-edit").querySelector("[aria-live]")?.textContent ?? "";
+  return editor().querySelector(".visually-hidden[aria-live]")?.textContent ?? "";
 }
 
 function categoryGrid(title: string): HTMLElement {
-  return category(title).querySelector(".tag-editor-tag-grid") as HTMLElement;
+  return category(title).querySelector(".tag-grid") as HTMLElement;
 }
 
 function chip(name: string): HTMLElement {
@@ -503,20 +514,43 @@ function statusLine(): string {
   return byId("status")?.textContent ?? "";
 }
 
+/** Auto Tag, over the whole page, or null while it is closed. */
+function findAutoTag(): HTMLDialogElement | null {
+  return document.getElementById("autotag") as HTMLDialogElement | null;
+}
+
+function autoTag(): HTMLDialogElement {
+  const found = findAutoTag();
+  if (!found) {
+    throw new Error("Auto Tag is not open.");
+  }
+  return found;
+}
+
+/** Opens Auto Tag with the Tags tab's Auto Tag button. */
+async function openAutoTag(): Promise<void> {
+  await press(headerButton("Auto Tag"));
+  autoTag();
+}
+
+function autoTagButton(name: "Close" | "Cancel" | "Apply" | "Select all" | "Deselect all" | "Scan Files"): HTMLButtonElement {
+  return within(autoTag()).getByRole("button", { name }) as HTMLButtonElement;
+}
+
 function autoTagStatus(): string {
-  return byId("tag-autotag-status").textContent ?? "";
+  return byId("autotag-status").textContent ?? "";
 }
 
 function results(): HTMLElement {
-  return byId("tag-autotag-results");
+  return byId("autotag-results");
 }
 
 function progressShown(): boolean {
-  return byId("tag-autotag-progress").style.display === "block";
+  return !byId("autotag-progress").hidden;
 }
 
 function scanButton(): HTMLButtonElement {
-  return within(editor()).getByRole("button", { name: "Scan Files" }) as HTMLButtonElement;
+  return autoTagButton("Scan Files");
 }
 
 async function scan(): Promise<void> {
@@ -524,11 +558,11 @@ async function scan(): Promise<void> {
 }
 
 function autoTagBox(label: "Scan full library" | "View all matches"): HTMLInputElement {
-  return within(editor()).getByLabelText(label) as HTMLInputElement;
+  return within(autoTag()).getByLabelText(label) as HTMLInputElement;
 }
 
 function row(tagName: string): HTMLElement {
-  const found = Array.from(results().querySelectorAll<HTMLElement>(".tag-autotag-row")).find(
+  const found = Array.from(results().querySelectorAll<HTMLElement>(".autotag-result")).find(
     (candidate) => rowCells(candidate)[0] === tagName
   );
   if (!found) {
@@ -539,28 +573,29 @@ function row(tagName: string): HTMLElement {
 
 /** The tag name, total matched, and to-be-changed count a row shows. */
 function rowCells(element: HTMLElement): string[] {
-  return Array.from(element.querySelectorAll(".tag-autotag-row-main > span")).map((node) => node.textContent ?? "");
+  return Array.from(element.querySelectorAll(".autotag-row-main > span")).map((node) => node.textContent ?? "");
 }
 
 function rowNames(): string[] {
-  return Array.from(results().querySelectorAll<HTMLElement>(".tag-autotag-row")).map((element) => rowCells(element)[0]!);
+  return Array.from(results().querySelectorAll<HTMLElement>(".autotag-result")).map((element) => rowCells(element)[0]!);
 }
 
 function rowCheck(tagName: string): HTMLInputElement {
-  return row(tagName).querySelector(".tag-autotag-row-main input[type=checkbox]") as HTMLInputElement;
+  return row(tagName).querySelector(".autotag-row-main input[type=checkbox]") as HTMLInputElement;
 }
 
-function rowFiles(tagName: string): HTMLElement {
-  return row(tagName).querySelector(".tag-autotag-row-files") as HTMLElement;
+/** A row's files, or null while it is collapsed. */
+function rowFiles(tagName: string): HTMLElement | null {
+  return row(tagName).querySelector(".autotag-files");
 }
 
 function fileNames(tagName: string): string[] {
-  return Array.from(rowFiles(tagName).querySelectorAll(".tag-autotag-file-path")).map((node) => node.textContent ?? "");
+  return Array.from(rowFiles(tagName)?.querySelectorAll(".autotag-file span") ?? []).map((node) => node.textContent ?? "");
 }
 
 function fileCheck(tagName: string, displayPath: string): HTMLInputElement {
-  const found = Array.from(rowFiles(tagName).querySelectorAll<HTMLElement>(".tag-autotag-file-row")).find(
-    (candidate) => candidate.querySelector(".tag-autotag-file-path")?.textContent === displayPath
+  const found = Array.from(rowFiles(tagName)?.querySelectorAll<HTMLElement>(".autotag-file") ?? []).find(
+    (candidate) => candidate.querySelector("span")?.textContent === displayPath
   );
   if (!found) {
     throw new Error(`No file ${displayPath} under ${tagName}.`);
@@ -619,15 +654,13 @@ beforeEach(() => {
 });
 
 describe("opening and closing", () => {
-  it("opens on Edit Tags after loading the tags of the playing item, or of no item when nothing plays", async () => {
+  it("opens after loading the tags of the playing item, or of no item when nothing plays", async () => {
     const { tags } = await mountTags({ play: false });
     expect(isOpen()).toBe(false);
 
     await openEditor();
     expect(tags.modelRequests()).toEqual([{ itemIds: [] }]);
-    expect(selectedTab()).toBe("Edit Tags");
-    expect(byId("tag-editor-panel-edit").style.display).toBe("flex");
-    expect(byId("tag-editor-panel-autotag").style.display).toBe("none");
+    expect(within(editor()).queryAllByRole("tab")).toEqual([]);
     expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
     expect(savePending()).toBe(false);
 
@@ -639,54 +672,45 @@ describe("opening and closing", () => {
     expect(chipState("Beach").has).toBe("all");
   });
 
-  it("closes without asking when nothing changed, and asks before dropping changes", async () => {
+  it("keeps its changes without asking when the panel closes or another tab shows, until Refresh drops them after asking", async () => {
     const { tags } = await mountTags();
     await openEditor();
+    await click(chipButton("Calm", "Add tag"));
+    await editCategory("Places");
+    await typeInto(nameField("Edit Category"), "Scenery");
+    await press(dialogButton(nameDialog("Edit Category"), "Save"));
     await click(closeButton());
     expect(appDialogs()).toEqual([]);
     expect(isOpen()).toBe(false);
 
     await openEditor();
-    await click(chipButton("Calm", "Add tag"));
-    await press(closeButton());
+    expect(chipState("Calm").pending).toBe("add");
+    expect(categoryTitles()).toContain("Scenery");
+    expect(savePending()).toBe(true);
+    await click(panelTab("Library"));
+    expect(appDialogs()).toEqual([]);
+    await click(panelTab("Tags"));
+    expect(chipState("Calm").pending).toBe("add");
+
+    await press(headerButton("Refresh"));
     expect(confirmMessage()).toBe("Discard changes?");
     expect(document.activeElement).toBe(dialogButton(confirmation(), "Cancel"));
     expect(dialogButton(confirmation(), "Discard").classList.contains("btn-danger")).toBe(true);
     expect(dialogButton(confirmation(), "Cancel").classList.contains("btn-danger")).toBe(false);
     await answer("Cancel");
     expect(appDialogs()).toEqual([]);
-    expect(isOpen()).toBe(true);
     expect(chipState("Calm").pending).toBe("add");
-    expect(document.activeElement).toBe(closeButton());
+    expect(document.activeElement).toBe(headerButton("Refresh"));
 
-    await press(closeButton());
+    await press(headerButton("Refresh"));
     await answer("Discard");
     expect(appDialogs()).toEqual([]);
-    expect(isOpen()).toBe(false);
+    expect(isOpen()).toBe(true);
     expect(tags.saves()).toEqual([]);
-    await openEditor();
     expect(chipState("Calm").pending).toBe(null);
+    expect(categoryTitles()).toContain("Places");
     expect(savePending()).toBe(false);
-    expect(tags.modelRequests()).toHaveLength(3);
-  });
-
-  it("opens on Edit Tags each time, with Scan full library as last set and View all matches off", async () => {
-    await mountTags();
-    await openEditor();
-    await showTab("Auto Tag");
-    expect(selectedTab()).toBe("Auto Tag");
-    expect(byId("tag-editor-panel-edit").style.display).toBe("none");
-    expect(byId("tag-editor-panel-autotag").style.display).toBe("flex");
-    await click(autoTagBox("Scan full library"));
-    await click(autoTagBox("View all matches"));
-    await click(closeButton());
-
-    await openEditor();
-    expect(selectedTab()).toBe("Edit Tags");
-    expect(byId("tag-editor-panel-edit").style.display).toBe("flex");
-    expect(byId("tag-editor-panel-autotag").style.display).toBe("none");
-    expect(autoTagBox("Scan full library").checked).toBe(true);
-    expect(autoTagBox("View all matches").checked).toBe(false);
+    expect(tags.modelRequests()).toHaveLength(4);
   });
 
   it("stays open and says why when the tags cannot load", async () => {
@@ -704,8 +728,8 @@ describe("opening and closing", () => {
     expect(isOpen()).toBe(true);
   });
 
-  it("keeps its markup on each tab and in the Edit Tag dialog", async () => {
-    sessionStorage.setItem("rr_tagEditorCollapsed", JSON.stringify(["cat-mood"]));
+  it("keeps its markup, and Auto Tag's and the Edit Tag dialog's", async () => {
+    localStorage.setItem("rr_device.tags.expandedCategories", JSON.stringify(["cat-places", "cat-people", "uncategorized"]));
     await mountTags();
     await openEditor();
     await click(chipButton("alps", "Add tag"));
@@ -716,11 +740,11 @@ describe("opening and closing", () => {
     expect(normalizedMarkup(modal(), { liveFormState: true })).toMatchSnapshot("edit tag dialog");
     await click(modalButton("Cancel"));
 
-    await showTab("Auto Tag");
+    await openAutoTag();
     await scan();
     await expand("beach");
     await click(fileCheck("beach", "beach a.mp4"));
-    expect(normalizedMarkup(editor(), { liveFormState: true })).toMatchSnapshot("auto tag");
+    expect(normalizedMarkup(autoTag(), { liveFormState: true })).toMatchSnapshot("auto tag");
   });
 
   it("shows category, tag, and file names as text", async () => {
@@ -747,12 +771,121 @@ describe("opening and closing", () => {
     expect(within(body()).getByText("<em>Places</em>")).toBeTruthy();
     expect(within(body()).getByText("<i>Beach</i>")).toBeTruthy();
     expect(optionLabels(footerCategory())).toContain("<em>Places</em>");
-    await showTab("Auto Tag");
+    await openAutoTag();
     await scan();
     await expand("<u>Sun</u>");
     expect(fileNames("<u>Sun</u>")).toEqual(["<b>sun</b>.mp4"]);
-    expect((rowFiles("<u>Sun</u>").querySelector(".tag-autotag-file-path") as HTMLElement).title).toBe("C:\\<s>sun</s>.mp4");
+    expect((rowFiles("<u>Sun</u>")!.querySelector(".autotag-file span") as HTMLElement).title).toBe("C:\\<s>sun</s>.mp4");
     expect(editor().querySelector("b, em, i, u, s")).toBeNull();
+    expect(autoTag().querySelector("b, em, i, u, s")).toBeNull();
+  });
+});
+
+describe("following the playing item", () => {
+  const OTHER_ITEM = {
+    ...VIDEO_ITEM,
+    id: "C:\\media\\other clip.mp4",
+    itemId: "item-other",
+    displayName: "other clip.mp4",
+    mediaUrl: "/api/media/item-other?token=t"
+  };
+
+  /** Plays `item` as the next random pick, with Next beside the open panel. */
+  async function playNext(server: FakeServer, item: typeof VIDEO_ITEM): Promise<void> {
+    server.on("POST", "/api/random", () => json(item));
+    await click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => expect((document.getElementById("video") as HTMLVideoElement).src).toContain(item.mediaUrl.split("?")[0]));
+    await settle();
+  }
+
+  function targetLine(): HTMLElement {
+    return byId("tag-editor-target");
+  }
+
+  function withOtherItem(_server: FakeServer, tags: FakeTags): void {
+    tags.model.items.push({ itemId: "item-other", tags: ["Calm"] });
+  }
+
+  it("shows the new item's tags when the playing item changes", async () => {
+    const { server, tags } = await mountTags({ setup: withOtherItem });
+    await openEditor();
+    expect(chipState("Beach").has).toBe("all");
+    expect(targetLine().hidden).toBe(true);
+
+    await playNext(server, OTHER_ITEM);
+    expect(tags.modelRequests().at(-1)).toEqual({ itemIds: ["item-other"] });
+    expect(chipState("Beach").has).toBe("none");
+    expect(chipState("Calm").has).toBe("all");
+    expect(targetLine().hidden).toBe(true);
+    expect(targetLine().textContent).toBe("");
+  });
+
+  it("follows the playing item while the panel is closed, and shows its tags when the tab shows again", async () => {
+    const { server, tags } = await mountTags({ setup: withOtherItem });
+    await openEditor();
+    await click(closeButton());
+    await playNext(server, OTHER_ITEM);
+    expect(tags.modelRequests()).toHaveLength(1);
+    await openEditor();
+    expect(tags.modelRequests().at(-1)).toEqual({ itemIds: ["item-other"] });
+    expect(chipState("Calm").has).toBe("all");
+  });
+
+  it("stays on its item with an Editing tags for line while it has adds or removes, and follows once they are saved", async () => {
+    const { server, tags } = await mountTags({ setup: withOtherItem });
+    await openEditor();
+    await click(chipButton("Calm", "Add tag"));
+
+    await playNext(server, OTHER_ITEM);
+    expect(tags.modelRequests()).toHaveLength(1);
+    expect(targetLine().hidden).toBe(false);
+    expect(targetLine().textContent).toBe("Editing tags for holiday clip.mp4");
+    expect(targetLine().querySelector("b")?.textContent).toBe("holiday clip.mp4");
+    expect(targetLine().title).toBe("holiday clip.mp4");
+    expect(targetLine().getAttribute("aria-live")).toBe("polite");
+    expect(chipState("Beach").has).toBe("all");
+    expect(chipState("Calm").pending).toBe("add");
+
+    await save();
+    expect(tags.saves()).toEqual([
+      { path: "/api/tag-editor/apply-item-tags", body: { itemIds: ["item-video"], addTags: ["Calm"], removeTags: [] } }
+    ]);
+    await waitFor(() => expect(targetLine().hidden).toBe(true));
+    expect(tags.modelRequests().at(-1)).toEqual({ itemIds: ["item-other"] });
+    expect(chipState("Beach").has).toBe("none");
+    expect(chipState("Calm")).toEqual({ has: "all", pending: null });
+  });
+
+  it("follows the playing item once Refresh discards its adds or removes", async () => {
+    const { server, tags } = await mountTags({ setup: withOtherItem });
+    await openEditor();
+    await click(chipButton("Bob", "Remove tag"));
+    await playNext(server, OTHER_ITEM);
+    expect(targetLine().hidden).toBe(false);
+
+    await press(headerButton("Refresh"));
+    await answer("Discard");
+    expect(targetLine().hidden).toBe(true);
+    expect(tags.modelRequests().at(-1)).toEqual({ itemIds: ["item-other"] });
+    expect(chipState("Bob")).toEqual({ has: "none", pending: null });
+    expect(tags.saves()).toEqual([]);
+  });
+
+  it("isn't held by a category rename or reorder, which it keeps", async () => {
+    const { server, tags } = await mountTags({ setup: withOtherItem });
+    await openEditor();
+    await editCategory("Places");
+    await typeInto(nameField("Edit Category"), "Scenery");
+    await press(dialogButton(nameDialog("Edit Category"), "Save"));
+    await press(handle("People"));
+    await pressKey(handle("People"), "ArrowUp");
+
+    await playNext(server, OTHER_ITEM);
+    expect(targetLine().hidden).toBe(true);
+    expect(tags.modelRequests().at(-1)).toEqual({ itemIds: ["item-other"] });
+    expect(categoryTitles()).toEqual(["Scenery", "People", "Mood", "Uncategorized"]);
+    expect(chipState("Calm").has).toBe("all");
+    expect(savePending()).toBe(true);
   });
 });
 
@@ -828,32 +961,137 @@ describe("Edit Tags", () => {
     await click(chipButton("Calm", "Add tag"));
     await click(chipButton("Bob", "Remove tag"));
     await save();
-    expect(isOpen()).toBe(false);
+    // It stays open, showing the changes as saved.
+    expect(isOpen()).toBe(true);
+    expect(chipState("Calm")).toEqual({ has: "all", pending: null });
+    expect(chipState("Bob")).toEqual({ has: "none", pending: null });
+    expect(savePending()).toBe(false);
     expect(tags.saves()).toEqual([
       { path: "/api/tag-editor/apply-item-tags", body: { itemIds: ["item-video"], addTags: ["Calm"], removeTags: ["Bob"] } }
     ]);
     await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
   });
 
-  it("keeps collapsed categories collapsed when it opens again, for this session", async () => {
+  it("start collapsed, and the header's name or padding expands and collapses one, with no arrows, while its drag handle and Edit keep their own actions", async () => {
     await mountTags();
     await openEditor();
+    for (const title of categoryTitles()) {
+      expect(categoryGrid(title).hidden, title).toBe(true);
+      expect(categoryToggle(title).getAttribute("aria-expanded"), title).toBe("false");
+    }
+    expect(categoryToggle("Places").getAttribute("aria-controls")).toBe(categoryGrid("Places").id);
+    expect(categoryToggle("Places").title).toBe("Expand category");
+    expect(body().querySelector(".tag-category-toggle .material-symbol-icon")).toBeNull();
 
-    await click(categoryButton("Places", "Collapse category"));
-    expect(categoryGrid("Places").style.display).toBe("none");
-    expect(categoryButton("Places", "Expand category").textContent).toBe("keyboard_arrow_right");
-    await click(categoryButton("Uncategorized", "Collapse category"));
-    expect(JSON.parse(sessionStorage.getItem("rr_tagEditorCollapsed") ?? "")).toEqual(["cat-places", "uncategorized"]);
+    await click(categoryToggle("Places"));
+    expect(categoryGrid("Places").hidden).toBe(false);
+    expect(categoryToggle("Places").getAttribute("aria-expanded")).toBe("true");
+    expect(categoryToggle("Places").title).toBe("Collapse category");
     expect(savePending()).toBe(false);
+    await click(category("Places").querySelector(".tag-category-header")!);
+    expect(categoryGrid("Places").hidden).toBe(true);
+
+    await click(handle("Mood"));
+    await click(handle("Mood").querySelector(".material-symbol-icon")!);
+    await click(handle("Uncategorized"));
+    expect(categoryGrid("Mood").hidden).toBe(true);
+    expect(categoryGrid("Uncategorized").hidden).toBe(true);
+    await press(within(category("Mood")).getByRole("button", { name: "Edit category Mood" }));
+    expect(findNameDialog("Edit Category")).not.toBeNull();
+    await click(dialogButton(nameDialog("Edit Category"), "Cancel"));
+    expect(categoryGrid("Mood").hidden).toBe(true);
+  });
+
+  it("remember on this device which are expanded, apart from the Filter tab's, after a page refresh too", async () => {
+    const { page } = await mountTags();
+    await openEditor();
+    await click(categoryToggle("Places"));
+    await click(categoryToggle("Uncategorized"));
+    expect(JSON.parse(localStorage.getItem("rr_device.tags.expandedCategories") ?? "")).toEqual(["cat-places", "uncategorized"]);
+    expect(localStorage.getItem("rr_device.filter.expandedTagCategories")).toBeNull();
 
     await click(closeButton());
     await openEditor();
-    expect(categoryGrid("Places").style.display).toBe("none");
-    expect(categoryGrid("Mood").style.display).toBe("");
-    await click(categoryButton("Places", "Expand category"));
-    expect(categoryGrid("Places").style.display).toBe("");
-    expect(categoryButton("Places", "Collapse category").textContent).toBe("keyboard_arrow_down");
-    expect(JSON.parse(sessionStorage.getItem("rr_tagEditorCollapsed") ?? "")).toEqual(["uncategorized"]);
+    expect(categoryGrid("Places").hidden).toBe(false);
+    expect(categoryGrid("Mood").hidden).toBe(true);
+
+    page.unmount();
+    await mountTags();
+    await openEditor();
+    expect(categoryGrid("Places").hidden).toBe(false);
+    expect(categoryGrid("Uncategorized").hidden).toBe(false);
+    expect(categoryGrid("People").hidden).toBe(true);
+    // A new category starts collapsed too.
+    await newCategory();
+    await typeInto(nameField("New Category"), "Food");
+    await press(dialogButton(nameDialog("New Category"), "Save"));
+    expect(categoryGrid("Food").hidden).toBe(true);
+  });
+
+  it("expand when a tag is added to one or moved into one, and Uncategorized when a deleted category's tags move into it", async () => {
+    await mountTags();
+    await openEditor();
+    await addTag("Sunset", "cat-mood");
+    expect(categoryGrid("Mood").hidden).toBe(false);
+
+    await click(chipButton("Bob", "Edit tag"));
+    await choose(modalCategory(), "cat-places");
+    await click(modalButton("Save"));
+    expect(categoryGrid("Places").hidden).toBe(false);
+    expect(categoryGrid("People").hidden).toBe(true);
+
+    // A rename that keeps the tag where it is expands nothing.
+    await click(chipButton("Alice", "Edit tag"));
+    await typeInto(modalName(), "Alicia");
+    await click(modalButton("Save"));
+    expect(categoryGrid("People").hidden).toBe(true);
+
+    await editCategory("People");
+    await press(dialogButton(nameDialog("Edit Category"), "Delete"));
+    await answer("Delete");
+    expect(chipNames("Uncategorized")).toEqual(["Alicia", "Loose"]);
+    expect(categoryGrid("Uncategorized").hidden).toBe(false);
+  });
+
+  it("show, while collapsed, how many of their tags the item has, and the dot while they hold unsaved changes", async () => {
+    await mountTags();
+    await openEditor();
+    const count = (title: string) => category(title).querySelector<HTMLElement>(".category-count")!;
+    const dot = (title: string) => category(title).querySelector<HTMLElement>(".category-dot")!;
+    // The playing item has Beach and Bob.
+    expect([count("Places").hidden, count("Places").textContent, count("Places").title]).toEqual([false, "1", "1 tag on this item"]);
+    expect([count("People").hidden, count("People").textContent]).toEqual([false, "1"]);
+    expect(count("Mood").hidden).toBe(true);
+    expect(dot("Mood").hidden).toBe(true);
+    expect(categoryToggle("Places").getAttribute("aria-label")).toBe("Places, 1 tag on this item");
+
+    // A held add marks its category with the dot, which shows only while it is collapsed.
+    await click(chipButton("Calm", "Add tag"));
+    expect(dot("Mood").hidden).toBe(false);
+    expect(dot("Mood").title).toBe("Unsaved changes");
+    expect(count("Mood").hidden).toBe(true);
+    expect(categoryToggle("Mood").getAttribute("aria-label")).toBe("Mood, unsaved changes");
+    await click(categoryToggle("Mood"));
+    expect(dot("Mood").hidden).toBe(true);
+    expect(categoryToggle("Mood").getAttribute("aria-label")).toBe("Mood");
+    await click(categoryToggle("Mood"));
+
+    // A renamed category, and the categories a tag moves between, hold unsaved changes too; a new order alone doesn't.
+    await editCategory("Places");
+    await typeInto(nameField("Edit Category"), "Scenery");
+    await press(dialogButton(nameDialog("Edit Category"), "Save"));
+    expect(dot("Scenery").hidden).toBe(false);
+    await press(handle("People"));
+    await pressKey(handle("People"), "ArrowUp");
+    expect(dot("People").hidden).toBe(true);
+    expect(savePending()).toBe(true);
+
+    await save();
+    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
+    for (const title of categoryTitles()) {
+      expect(dot(title).hidden, title).toBe(true);
+    }
+    expect(count("Mood").textContent).toBe("1");
   });
 
   it("each chip has add, remove, and edit, and each category a drag handle and Edit, except Uncategorized", async () => {
@@ -862,15 +1100,15 @@ describe("Edit Tags", () => {
     const titles = (element: HTMLElement) => Array.from(element.querySelectorAll("button")).map((button) => button.title);
     expect(titles(chip("Beach"))).toEqual(["Add tag", "Remove tag", "Edit tag"]);
     expect(within(chip("Beach")).queryByTitle("Delete tag")).toBeNull();
-    const header = (title: string) => category(title).querySelector(".tag-editor-category-header") as HTMLElement;
-    expect(titles(header("Places"))).toEqual(["Drag to reorder", "Collapse category", "Edit category"]);
+    const header = (title: string) => category(title).querySelector(".tag-category-header") as HTMLElement;
+    expect(titles(header("Places"))).toEqual(["Drag to reorder", "Expand category", "Edit category"]);
     const places = handle("Places");
     expect(places.getAttribute("aria-label")).toBe("Reorder Places");
     expect(places.textContent).toBe("drag_indicator");
     expect(places.disabled).toBe(false);
     expect(byId(places.getAttribute("aria-describedby") ?? "").textContent).toBe("Drag to reorder, or press the up and down arrow keys.");
     expect(within(category("Places")).getByRole("button", { name: "Edit category Places" }).textContent).toBe("edit_note");
-    expect(titles(header("Uncategorized"))).toEqual(["Uncategorized stays last", "Collapse category"]);
+    expect(titles(header("Uncategorized"))).toEqual(["Uncategorized stays last", "Expand category"]);
     expect(handle("Uncategorized").disabled).toBe(true);
     expect(handle("Uncategorized").getAttribute("aria-label")).toBe("Uncategorized stays last");
     expect(handle("Uncategorized").hasAttribute("aria-describedby")).toBe(false);
@@ -919,15 +1157,17 @@ describe("Edit Tags", () => {
 
   describe("dragging a category", () => {
     async function mountLaidOut(): Promise<TagPage> {
+      // Every category expanded, so their tags show until one is dragged.
+      localStorage.setItem("rr_device.tags.expandedCategories", JSON.stringify(["cat-places", "cat-mood", "cat-people", "uncategorized"]));
       const page = await mountTags();
       await openEditor();
       useStylesheet();
       // Categories 100 px tall, or 40 px while one is dragged and hides its tags, 12 px apart.
-      stubRowLayout("#tag-editor-body .tag-editor-category", (row) => (row.classList.contains("is-dragging") ? 40 : 100), 12);
+      stubRowLayout("#tag-editor-body .tag-category", (row) => (row.classList.contains("is-dragging") ? 40 : 100), 12);
       return page;
     }
 
-    const transforms = () => Array.from(body().querySelectorAll<HTMLElement>(".tag-editor-category")).map((section) => section.style.transform);
+    const transforms = () => Array.from(body().querySelectorAll<HTMLElement>(".tag-category")).map((section) => section.style.transform);
 
     it("hides its tags, follows the pointer past each category its middle crosses, and saves the new order", async () => {
       const { tags } = await mountLaidOut();
@@ -1016,14 +1256,38 @@ describe("Edit Tags", () => {
       expect(savePending()).toBe(false);
     });
 
+    it("leaves a category expanded after a drop, or a press on Edit, let go elsewhere on its header, which the browser then clicks", async () => {
+      await mountLaidOut();
+      const header = (title: string) => category(title).querySelector(".tag-category-header")!;
+
+      // The pointer drifted onto the name as it dragged, so the browser clicks the header, which holds both.
+      pointerDown(handle("Places"), 20);
+      await pointerMove(30);
+      await pointerMove(110);
+      await pointerUp();
+      await click(header("Places"));
+      expect(categoryTitles()).toEqual(["Mood", "Places", "People", "Uncategorized"]);
+      expect(categoryGrid("Places").hidden).toBe(false);
+
+      fireEvent.pointerDown(within(category("Mood")).getByRole("button", { name: "Edit category Mood" }));
+      await click(header("Mood"));
+      expect(categoryGrid("Mood").hidden).toBe(false);
+      expect(findNameDialog("Edit Category")).toBeNull();
+
+      // A press on the header's own padding still toggles it.
+      fireEvent.pointerDown(header("Mood"));
+      await click(header("Mood"));
+      expect(categoryGrid("Mood").hidden).toBe(true);
+    });
+
     it("starts only on the handle, so a drag anywhere else on a category scrolls", async () => {
       await mountLaidOut();
       expect(getComputedStyle(handle("Places")).touchAction).toBe("none");
-      for (const part of [category("Places"), category("Places").querySelector(".tag-editor-category-header")!, chip("Beach")]) {
+      for (const part of [category("Places"), category("Places").querySelector(".tag-category-header")!, chip("Beach")]) {
         expect(getComputedStyle(part).touchAction).not.toBe("none");
       }
 
-      for (const start of [category("Places").querySelector(".tag-editor-category-title")!, chip("Beach")]) {
+      for (const start of [category("Places").querySelector(".tag-category-name")!, chip("Beach")]) {
         pointerDown(start, 20);
         await pointerMove(200);
         expect(category("Places").classList.contains("is-dragging")).toBe(false);
@@ -1162,6 +1426,29 @@ describe("Edit Tags", () => {
     expect(tags.saves()[0]!.body.id).not.toBe("");
   });
 
+  it("Enter in New tag name adds the tag while Add tag is enabled, and does nothing while the name is empty or another tag's", async () => {
+    const { tags } = await mountTags();
+    await openEditor();
+    await choose(footerCategory(), "cat-people");
+
+    await pressEnter(newTagField());
+    await typeInto(newTagField(), "beach");
+    expect(addTagButton().disabled).toBe(true);
+    await pressEnter(newTagField());
+    expect(chipNames("People")).toEqual(["Alice", "Bob"]);
+    expect(newTagField().value).toBe("beach");
+    expect(savePending()).toBe(false);
+
+    await typeInto(newTagField(), "Sunset");
+    newTagField().focus();
+    await pressEnter(newTagField());
+    expect(chipNames("People")).toEqual(["Alice", "Bob", "Sunset"]);
+    expect(newTagField().value).toBe("");
+    expect(chipState("Sunset")).toEqual({ has: "none", pending: null });
+    expect(document.activeElement).toBe(chipButton("Sunset", "Add tag"));
+    expect(tags.saves()).toEqual([]);
+  });
+
   it("adds a tag to the chosen category, not to the playing item, and clears the name", async () => {
     const { tags } = await mountTags();
     await openEditor();
@@ -1185,11 +1472,11 @@ describe("Edit Tags", () => {
     it(`Add tag pressed with ${how} moves to the new chip's add, opening its category, and one more press puts it on the item`, async () => {
       await mountTags();
       await openEditor();
-      await click(categoryButton("Mood", "Collapse category"));
+      expect(categoryGrid("Mood").hidden).toBe(true);
       await choose(footerCategory(), "cat-mood");
       await typeInto(newTagField(), "Sunset");
       await activate(addTagButton());
-      expect(categoryGrid("Mood").style.display).toBe("");
+      expect(categoryGrid("Mood").hidden).toBe(false);
       expect(document.activeElement).toBe(chipButton("Sunset", "Add tag"));
 
       await activate(chipButton("Sunset", "Add tag"));
@@ -1234,7 +1521,7 @@ describe("Edit Tags", () => {
     await mountTags();
     await openEditor();
     const field = newTagField();
-    expect(field.closest(".vfield")?.parentElement?.classList.contains("tag-editor-footer")).toBe(true);
+    expect(field.closest(".vfield")?.parentElement?.classList.contains("tag-editor-footer-row")).toBe(true);
     expect(fieldProblem(field)).toBeNull();
     expect(disabledWithoutIcon(addTagButton())).toBe(true);
     expect(addTagButton().title).toBe("Add tag");
@@ -1445,7 +1732,7 @@ describe("Edit Tags", () => {
 });
 
 describe("saving", () => {
-  it("sends each kind of change in order, Auto Tag last, and closes before the server answers", async () => {
+  it("sends each kind of change in order, staying open and showing them as saved before the server answers", async () => {
     const { tags } = await mountTags();
     await openEditor();
     await editCategory("Places");
@@ -1461,14 +1748,17 @@ describe("saving", () => {
     await click(modalButton("Save"));
     await deleteTag("Bob");
     await click(chipButton("Alice", "Add tag"));
-    await showTab("Auto Tag");
-    await scan();
-    await click(rowCheck("Sunset"));
 
     tags.holding = true;
     await save();
-    expect(isOpen()).toBe(false);
+    expect(isOpen()).toBe(true);
     expect(statusLine()).not.toBe("Tag editor changes applied");
+    expect(categoryTitles()).toEqual(["Scenery", "People", "Uncategorized"]);
+    expect(chipNames("People")).toEqual(["Alice", "Sunset"]);
+    expect(chipState("Shore").has).toBe("all");
+    expect(chipState("Sunset").has).toBe("all");
+    expect(savePending()).toBe(false);
+    expect(tags.modelRequests()).toHaveLength(1);
     await tags.release();
     await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
 
@@ -1479,12 +1769,11 @@ describe("saving", () => {
       { path: "/api/tag-editor/upsert-tag", body: { name: "Sunset", categoryId: "cat-people" } },
       { path: "/api/tag-editor/rename-tag", body: { oldName: "Beach", newName: "Shore", newCategoryId: null } },
       { path: "/api/tag-editor/delete-tag", body: { name: "Bob" } },
-      { path: "/api/tag-editor/apply-item-tags", body: { itemIds: ["item-video"], addTags: ["Sunset", "Alice"], removeTags: [] } },
-      { path: "/api/autotag/apply", body: { assignments: [{ tagName: "Sunset", itemPaths: ["C:\\media\\sunset 1.mp4"] }] } }
+      { path: "/api/tag-editor/apply-item-tags", body: { itemIds: ["item-video"], addTags: ["Sunset", "Alice"], removeTags: [] } }
     ]);
   });
 
-  it("stops at a step the server refuses, says which, and does not load the tags again", async () => {
+  it("stops at a step the server refuses, says which, and loads the tags again", async () => {
     const { tags } = await mountTags({ setup: (_server, fake) => fake.failures.set("/api/tag-editor/rename-tag", 500) });
     await openEditor();
     await click(chipButton("Beach", "Edit tag"));
@@ -1495,9 +1784,12 @@ describe("saving", () => {
 
     await save();
     await waitFor(() => expect(statusLine()).toBe("Tag rename failed (500)"));
-    expect(isOpen()).toBe(false);
+    expect(isOpen()).toBe(true);
     expect(tags.saves().map((call) => call.path)).toEqual(["/api/tag-editor/rename-tag"]);
-    expect(tags.modelRequests()).toHaveLength(1);
+    // The tags load again, so the tab shows the server's tags in place of the changes it showed as saved.
+    expect(tags.modelRequests()).toHaveLength(2);
+    expect(chipNames("Places")).toEqual(["alps", "Beach"]);
+    expect(chipState("Alice").has).toBe("none");
   });
 
   // Kept as it was before the tag editor moved to Preact, and recorded in WebUI Notifications: a save that
@@ -1575,6 +1867,38 @@ describe("saving", () => {
     expect(pick.presetId).toBe("preset-beach");
   });
 
+  it("a renamed tag reaches the Filter tab's unsaved changes and preset list, so its Apply doesn't put the old name back", async () => {
+    const { server } = await mountTags({
+      setup: (fake) => {
+        serveLibrary(fake);
+        fake.on("GET", "/api/presets", () => json([BEACH_PRESET]));
+        fake.on("POST", "/api/presets", () => json({}));
+      }
+    });
+    await pickPreset("preset-beach");
+    await click(panelTab("Filter"));
+    await click(within(byId("filter-dialog")).getByRole("tab", { name: /^Presets/ }));
+    await typeInto(byId("filter-new-preset-name"), "Mine");
+    await click(byId("filter-add-preset-btn"));
+
+    await openEditor();
+    await click(chipButton("Beach", "Edit tag"));
+    await typeInto(modalName(), "Shore");
+    await click(modalButton("Save"));
+    await save();
+    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
+
+    await click(panelTab("Filter"));
+    await click(byId("filter-apply-btn"));
+    const posted = server.requests("POST", "/api/presets").at(-1)!.body;
+    expect(posted.map((preset: any) => [preset.name, preset.filterState.selectedTags])).toEqual([
+      ["Beach days", ["Shore"]],
+      ["Mine", ["Shore"]]
+    ]);
+    const pick = await nextPick(server);
+    expect(pick.filterState.selectedTags).toEqual(["Shore"]);
+  });
+
   it("a deleted tag leaves the applied filter, its preset, the Filters line, and the device's memory", async () => {
     const { server } = await mountTags({
       setup: (fake) => {
@@ -1635,10 +1959,52 @@ describe("saving", () => {
 });
 
 describe("Auto Tag", () => {
+  it("opens over the whole page from the Tags tab, with focus on its X, and gives focus back to its button when it closes", async () => {
+    await mountTags();
+    await openEditor();
+    expect(findAutoTag()).toBeNull();
+    await openAutoTag();
+    expect(byId("fullscreen-stage").contains(autoTag())).toBe(true);
+    expect(panel().contains(autoTag())).toBe(false);
+    expect(autoTag().open).toBe(true);
+    expect(autoTag().getAttribute("aria-labelledby")).toBe("autotag-title");
+    expect(byId("autotag-title").textContent).toBe("Auto Tag");
+    expect(document.activeElement).toBe(autoTagButton("Close"));
+    // Its footer has Cancel, then Apply at its right.
+    expect(Array.from(autoTag().querySelectorAll(".autotag-footer button")).map((button) => button.textContent)).toEqual(["Cancel", "Apply"]);
+    expect(autoTagButton("Apply").disabled).toBe(true);
+
+    await press(autoTagButton("Close"));
+    expect(findAutoTag()).toBeNull();
+    await settle();
+    expect(document.activeElement).toBe(headerButton("Auto Tag"));
+    expect(isOpen()).toBe(true);
+
+    // Escape closes Auto Tag, not the panel.
+    await openAutoTag();
+    fireEvent.keyDown(autoTag(), { key: "Escape" });
+    await settle();
+    expect(findAutoTag()).toBeNull();
+    expect(isOpen()).toBe(true);
+  });
+
+  it("shows a placeholder before any scan, and another when a scan finds nothing", async () => {
+    const { tags } = await mountTags();
+    await openEditor();
+    await openAutoTag();
+    expect(results().querySelector(".autotag-empty")?.textContent).toBe("Scan to find files whose names contain a tag's name.");
+    expect(autoTagStatus()).toBe("");
+
+    tags.scan = { rows: [] };
+    await scan();
+    expect(results().querySelector(".autotag-empty")?.textContent).toBe("No file names contain any tag's name.");
+    expect(autoTagStatus()).toBe("Scan complete: no matching tags found.");
+  });
+
   it("scans enabled sources, or the full library once that is checked, which it remembers", async () => {
     const { tags } = await mountTags();
     await openEditor();
-    await showTab("Auto Tag");
+    await openAutoTag();
     expect(autoTagBox("Scan full library").checked).toBe(false);
 
     await scan();
@@ -1651,11 +2017,13 @@ describe("Auto Tag", () => {
     expect(localStorage.getItem("rr_autoTagScanFullLibrary")).toBe("false");
   });
 
-  it("shows progress and turns off Scan Files, the panel's Close, Refresh, and Save while it scans, and the Tags tab can't be left", async () => {
+  it("shows progress and turns off Scan Files, Apply, the X, Cancel, and Escape while it scans", async () => {
     const { tags } = await mountTags();
     await openEditor();
-    await click(chipButton("Calm", "Add tag"));
-    await showTab("Auto Tag");
+    await openAutoTag();
+    await scan();
+    await click(rowCheck("beach"));
+    expect(autoTagButton("Apply").disabled).toBe(false);
     expect(progressShown()).toBe(false);
 
     tags.holding = true;
@@ -1663,32 +2031,39 @@ describe("Auto Tag", () => {
     expect(progressShown()).toBe(true);
     expect(autoTagStatus()).toBe("Scanning…");
     expect(scanButton().disabled).toBe(true);
-    expect(closeButton().disabled).toBe(true);
-    expect(headerButton("Refresh").disabled).toBe(true);
-    expect(saveButton().disabled).toBe(true);
-    await click(panelTab("Library"));
-    fireEvent.keyDown(document, { key: "Escape" });
+    expect(autoTagButton("Apply").disabled).toBe(true);
+    expect(autoTagButton("Close").disabled).toBe(true);
+    expect(autoTagButton("Cancel").disabled).toBe(true);
+    fireEvent.keyDown(autoTag(), { key: "Escape" });
     await settle();
-    expect(isOpen()).toBe(true);
-    expect(appDialogs()).toEqual([]);
+    expect(findAutoTag()).not.toBeNull();
+    // The browser cancelling or closing it, as Android's back gesture does, waits too: a close opens it again.
+    const cancel = new Event("cancel", { cancelable: true });
+    autoTag().dispatchEvent(cancel);
+    expect(cancel.defaultPrevented).toBe(true);
+    autoTag().close();
+    await settle();
+    expect(autoTag().open).toBe(true);
 
     await tags.release();
     expect(progressShown()).toBe(false);
     expect(scanButton().disabled).toBe(false);
-    expect(closeButton().disabled).toBe(false);
-    expect(headerButton("Refresh").disabled).toBe(false);
-    expect(savePending()).toBe(true);
-    expect(tags.scans()).toHaveLength(1);
+    expect(autoTagButton("Close").disabled).toBe(false);
+    expect(autoTagButton("Cancel").disabled).toBe(false);
+    expect(tags.scans()).toHaveLength(2);
+    // It covers the page, so a click on its own padding isn't a click outside it.
+    await click(autoTag());
+    expect(findAutoTag()).not.toBeNull();
   });
 
   it("lists the tags with files to change by name, each collapsed, with a summary", async () => {
     await mountTags();
     await openEditor();
-    await showTab("Auto Tag");
+    await openAutoTag();
     await scan();
 
     expect(autoTagStatus()).toBe("Scan complete: 3 matching tags, 6 matches, 0/3 selected changes.");
-    expect(Array.from(results().querySelectorAll(".tag-autotag-table-head span")).map((node) => node.textContent)).toEqual([
+    expect(Array.from(results().querySelectorAll(".autotag-table-head span")).map((node) => node.textContent)).toEqual([
       "",
       "Apply",
       "Tag / File",
@@ -1697,24 +2072,43 @@ describe("Auto Tag", () => {
     ]);
     expect(rowNames()).toEqual(["beach", "Sunset"]);
     expect(rowCells(row("beach"))).toEqual(["beach", "3", "2"]);
-    expect(rowFiles("beach").style.display).toBe("none");
+    expect(rowFiles("beach")).toBeNull();
     expect(rowCheck("beach").checked).toBe(false);
-    expect(savePending()).toBe(false);
+    expect(rowCheck("beach").getAttribute("aria-label")).toBe("Apply beach");
+    expect(autoTagButton("Apply").disabled).toBe(true);
 
     await expand("beach");
-    expect(rowFiles("beach").style.display).toBe("block");
     expect(within(row("beach")).getByRole("button", { name: "Collapse" }).textContent).toBe("expand_more");
     expect(fileNames("beach")).toEqual(["beach a.mp4", "beach b.mp4"]);
-    expect((rowFiles("beach").querySelector(".tag-autotag-file-path") as HTMLElement).title).toBe("C:\\media\\beach a.mp4");
+    expect((rowFiles("beach")!.querySelector(".autotag-file span") as HTMLElement).title).toBe("C:\\media\\beach a.mp4");
     await click(within(row("beach")).getByRole("button", { name: "Collapse" }));
-    expect(rowFiles("beach").style.display).toBe("none");
+    expect(rowFiles("beach")).toBeNull();
     expect(within(row("beach")).getByRole("button", { name: "Expand" }).textContent).toBe("chevron_right");
+  });
+
+  it("lines each count up under its header: the header and every row share one column template", async () => {
+    useStylesheet();
+    await mountTags();
+    await openEditor();
+    await openAutoTag();
+    await scan();
+    const head = results().querySelector(".autotag-table-head") as HTMLElement;
+    const columns = getComputedStyle(head).gridTemplateColumns;
+    // Both counts take a fixed width rather than their own content's.
+    expect(columns).toBe("40px 40px minmax(0, 1fr) 7rem 7rem");
+    for (const name of rowNames()) {
+      expect(getComputedStyle(row(name).querySelector(".autotag-row-main") as HTMLElement).gridTemplateColumns).toBe(columns);
+    }
+    expect(getComputedStyle(head).columnGap).toBe("12px");
+    for (const cell of results().querySelectorAll(".autotag-count")) {
+      expect(getComputedStyle(cell).textAlign).toBe("center");
+    }
   });
 
   it("a row's box selects its files, and shows when only some are selected", async () => {
     await mountTags();
     await openEditor();
-    await showTab("Auto Tag");
+    await openAutoTag();
     await scan();
     await expand("beach");
 
@@ -1724,7 +2118,8 @@ describe("Auto Tag", () => {
     expect(rowCheck("beach").checked).toBe(true);
     expect(rowCheck("beach").indeterminate).toBe(false);
     expect(autoTagStatus()).toBe("Scan complete: 3 matching tags, 6 matches, 2/3 selected changes.");
-    expect(savePending()).toBe(true);
+    expect(autoTagButton("Apply").disabled).toBe(false);
+    expect(savePending()).toBe(false);
 
     await click(fileCheck("beach", "beach b.mp4"));
     expect(rowCheck("beach").checked).toBe(false);
@@ -1736,13 +2131,13 @@ describe("Auto Tag", () => {
     expect(rowCheck("beach").indeterminate).toBe(false);
     await click(rowCheck("beach"));
     expect(fileCheck("beach", "beach a.mp4").checked).toBe(false);
-    expect(savePending()).toBe(false);
+    expect(autoTagButton("Apply").disabled).toBe(true);
   });
 
-  it("View all matches shows tags and files with nothing to change, and only changes count", async () => {
+  it("View all matches shows files that have the tag checked and disabled, which are never sent", async () => {
     const { tags } = await mountTags();
     await openEditor();
-    await showTab("Auto Tag");
+    await openAutoTag();
     await scan();
     await expand("beach");
     await click(fileCheck("beach", "beach a.mp4"));
@@ -1750,55 +2145,69 @@ describe("Auto Tag", () => {
     await click(autoTagBox("View all matches"));
     expect(rowNames()).toEqual(["Alps", "beach", "Sunset"]);
     expect(fileNames("beach")).toEqual(["beach a.mp4", "beach b.mp4", "beach c.mp4"]);
+    const tagged = fileCheck("beach", "beach c.mp4");
+    expect(tagged.checked).toBe(true);
+    expect(tagged.disabled).toBe(true);
+    expect(tagged.title).toBe("Already has this tag");
+    expect(fileCheck("beach", "beach b.mp4").disabled).toBe(false);
+    // Two of beach's three files show checked: the one selected and the one that has the tag.
     expect(rowCheck("beach").indeterminate).toBe(true);
+    // Alps has nothing to change: its file shows checked, and so does its box, which can't change anything.
+    expect(rowCheck("Alps").checked).toBe(true);
+    expect(rowCheck("Alps").disabled).toBe(true);
     await expand("Alps");
-    await click(fileCheck("Alps", "alps.mp4"));
+    expect(fileCheck("Alps", "alps.mp4")).toMatchObject({ checked: true, disabled: true });
     expect(autoTagStatus()).toBe("Scan complete: 3 matching tags, 6 matches, 1/3 selected changes.");
 
-    await click(fileCheck("beach", "beach a.mp4"));
-    expect(savePending()).toBe(false);
-    await click(fileCheck("beach", "beach a.mp4"));
-    await click(fileCheck("beach", "beach c.mp4"));
-
+    await click(fileCheck("beach", "beach b.mp4"));
+    expect(rowCheck("beach").checked).toBe(true);
     await click(autoTagBox("View all matches"));
     expect(rowNames()).toEqual(["beach", "Sunset"]);
     expect(fileNames("beach")).toEqual(["beach a.mp4", "beach b.mp4"]);
+    // Alps showed no files without View all, so it collapsed.
     await click(autoTagBox("View all matches"));
-    expect(rowFiles("Alps").style.display).toBe("none");
-    expect(rowFiles("beach").style.display).toBe("block");
+    expect(rowFiles("Alps")).toBeNull();
+    expect(rowFiles("beach")).not.toBeNull();
 
-    await save();
+    await click(autoTagButton("Apply"));
     expect(tags.saves()).toEqual([
       {
         path: "/api/autotag/apply",
-        body: {
-          assignments: [
-            { tagName: "beach", itemPaths: ["C:\\media\\beach a.mp4", "C:\\media\\beach c.mp4"] },
-            { tagName: "Alps", itemPaths: ["C:\\media\\alps.mp4"] }
-          ]
-        }
+        body: { assignments: [{ tagName: "beach", itemPaths: ["C:\\media\\beach a.mp4", "C:\\media\\beach b.mp4"] }] }
       }
     ]);
   });
 
-  it("Select all and Deselect all change every file shown", async () => {
+  it("Select all checks every file without its tag, and Apply sends them, keeps Auto Tag open, and shows them as tagged", async () => {
     const { tags } = await mountTags();
     await openEditor();
-    await showTab("Auto Tag");
+    await openAutoTag();
     await scan();
 
-    await click(within(editor()).getByRole("button", { name: "Select all" }));
+    await click(autoTagButton("Select all"));
     expect(rowCheck("beach").checked).toBe(true);
     expect(rowCheck("Sunset").checked).toBe(true);
     expect(autoTagStatus()).toBe("Scan complete: 3 matching tags, 6 matches, 3/3 selected changes.");
-    await click(within(editor()).getByRole("button", { name: "Deselect all" }));
+    await click(autoTagButton("Deselect all"));
     expect(rowCheck("beach").checked).toBe(false);
     expect(autoTagStatus()).toBe("Scan complete: 3 matching tags, 6 matches, 0/3 selected changes.");
-    expect(savePending()).toBe(false);
+    expect(autoTagButton("Apply").disabled).toBe(true);
 
-    await click(within(editor()).getByRole("button", { name: "Select all" }));
-    await save();
-    expect(isOpen()).toBe(false);
+    await click(autoTagButton("Select all"));
+    tags.holding = true;
+    await click(autoTagButton("Apply"));
+    // Before the server answers, the files show as having their tag, and nothing is left to change.
+    expect(findAutoTag()).not.toBeNull();
+    expect(isOpen()).toBe(true);
+    expect(results().querySelector(".filter-hint")?.textContent).toBe("No rows to show.");
+    expect(autoTagStatus()).toBe("Scan complete: 3 matching tags, 6 matches, 0/0 selected changes.");
+    expect(autoTagButton("Apply").disabled).toBe(true);
+    await click(autoTagBox("View all matches"));
+    await expand("beach");
+    expect(fileCheck("beach", "beach a.mp4")).toMatchObject({ checked: true, disabled: true });
+    expect(rowCells(row("beach"))).toEqual(["beach", "3", "0"]);
+    await tags.release();
+    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
     expect(tags.saves()).toEqual([
       {
         path: "/api/autotag/apply",
@@ -1810,46 +2219,32 @@ describe("Auto Tag", () => {
         }
       }
     ]);
-    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
   });
 
-  it("the panel's Close and Refresh ask before dropping selected files, and Refresh clears the results", async () => {
+  it("Cancel clears the scan and closes; the X closes and keeps it; the Tags tab's Refresh and Save leave it", async () => {
     const { tags } = await mountTags();
     await openEditor();
-    await showTab("Auto Tag");
+    await openAutoTag();
     await scan();
     await click(rowCheck("Sunset"));
 
-    await press(closeButton());
-    expect(confirmMessage()).toBe("Discard changes?");
-    await answer("Cancel");
-    expect(isOpen()).toBe(true);
-    expect(rowCheck("Sunset").checked).toBe(true);
-
-    await press(headerButton("Refresh"));
-    expect(confirmMessage()).toBe("Discard changes?");
-    await answer("Discard");
-    expect(selectedTab()).toBe("Auto Tag");
-    expect(autoTagStatus()).toBe("");
-    expect(results().textContent).toBe("");
-    expect(tags.modelRequests()).toHaveLength(2);
-
-    await click(closeButton());
+    await press(autoTagButton("Close"));
+    expect(findAutoTag()).toBeNull();
+    await click(headerButton("Refresh"));
     expect(appDialogs()).toEqual([]);
-    expect(isOpen()).toBe(false);
-    await openEditor();
-    await showTab("Auto Tag");
-    expect(autoTagStatus()).toBe("");
-    expect(results().textContent).toBe("");
-  });
+    expect(tags.modelRequests()).toHaveLength(2);
+    await openAutoTag();
+    expect(rowCheck("Sunset").checked).toBe(true);
+    expect(autoTagStatus()).toBe("Scan complete: 3 matching tags, 6 matches, 1/3 selected changes.");
+    expect(savePending()).toBe(false);
 
-  it("says when no tags match", async () => {
-    await mountTags({ setup: (_server, tags) => (tags.scan = { rows: [] }) });
-    await openEditor();
-    await showTab("Auto Tag");
-    await scan();
-    expect(autoTagStatus()).toBe("Scan complete: no matching tags found.");
-    expect(results().querySelector(".tag-autotag-hint")?.textContent).toBe("Scan complete: no matching tags found.");
+    await press(autoTagButton("Cancel"));
+    expect(findAutoTag()).toBeNull();
+    expect(appDialogs()).toEqual([]);
+    expect(tags.saves()).toEqual([]);
+    await openAutoTag();
+    expect(autoTagStatus()).toBe("");
+    expect(results().querySelector(".autotag-empty")?.textContent).toBe("Scan to find files whose names contain a tag's name.");
   });
 
   // Kept as it was before the tag editor moved to Preact, and recorded in WebUI Notifications: the status
@@ -1857,9 +2252,9 @@ describe("Auto Tag", () => {
   it("shows no rows when every match already has its tag, and leaves the status on Scanning…", async () => {
     await mountTags({ setup: (_server, tags) => (tags.scan = { rows: [SCAN.rows[2]] }) });
     await openEditor();
-    await showTab("Auto Tag");
+    await openAutoTag();
     await scan();
-    expect(results().querySelector(".tag-autotag-hint")?.textContent).toBe("No rows to show.");
+    expect(results().querySelector(".filter-hint")?.textContent).toBe("No rows to show.");
     expect(autoTagStatus()).toBe("Scanning…");
     expect(progressShown()).toBe(false);
 
@@ -1873,31 +2268,34 @@ describe("Auto Tag", () => {
   it("a failed scan shows that no tags matched", async () => {
     await mountTags({ setup: (_server, tags) => (tags.scanStatus = 500) });
     await openEditor();
-    await showTab("Auto Tag");
+    await openAutoTag();
     await scan();
     expect(autoTagStatus()).toBe("Scan complete: no matching tags found.");
-    expect(results().querySelector(".tag-autotag-hint")?.textContent).toBe("Scan complete: no matching tags found.");
+    expect(results().querySelector(".autotag-empty")?.textContent).toBe("No file names contain any tag's name.");
     expect(progressShown()).toBe(false);
     expect(scanButton().disabled).toBe(false);
   });
 });
 
 describe("storage", () => {
-  it("adds only the collapsed categories and Scan full library keys to browser storage", async () => {
+  it("adds only its expanded categories to the device's memory, and Scan full library to browser storage", async () => {
     await mountTags();
     await openEditor();
-    await click(categoryButton("Mood", "Collapse category"));
+    await click(categoryToggle("Mood"));
     await click(chipButton("Calm", "Add tag"));
-    await showTab("Auto Tag");
+    await openAutoTag();
     await click(autoTagBox("Scan full library"));
     await scan();
     await click(rowCheck("beach"));
+    await click(autoTagButton("Apply"));
+    await click(autoTagButton("Close"));
     await save();
     await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
 
     // The panel and the Library tab remember their state on this device, which their own tests cover.
     expect(storageKeys(localStorage).filter((key) => !key.startsWith("rr_device."))).toEqual(["rr_autoTagScanFullLibrary", "rr_clientId"]);
-    expect(storageKeys(sessionStorage)).toEqual(["rr_sessionId", "rr_tagEditorCollapsed"]);
+    expect(storageKeys(localStorage)).toContain("rr_device.tags.expandedCategories");
+    expect(storageKeys(sessionStorage)).toEqual(["rr_sessionId"]);
   });
 });
 
@@ -1914,13 +2312,13 @@ describe("controls kept in place", () => {
     expect(chipState("Calm").pending).toBe("add");
     expect(chipButton("Calm", "Add tag")).toBe(add);
     expect(document.activeElement).toBe(add);
-    const toggle = categoryButton("Places", "Collapse category");
+    const toggle = categoryToggle("Places");
     toggle.focus();
     await click(toggle);
-    expect(categoryButton("Places", "Expand category")).toBe(toggle);
+    expect(categoryButton("Places", "Collapse category")).toBe(toggle);
     expect(document.activeElement).toBe(toggle);
 
-    await showTab("Auto Tag");
+    await openAutoTag();
     await scan();
     const expandButton = within(row("beach")).getByRole("button", { name: "Expand" });
     expandButton.focus();

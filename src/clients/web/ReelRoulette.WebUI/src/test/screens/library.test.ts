@@ -184,7 +184,8 @@ function isOpen(): boolean {
 
 /** The panel's own tab, apart from the Filter and Tags tabs' section tabs. */
 function panelTab(name: "Library" | "Filter" | "Tags"): HTMLElement {
-  return within(panel().querySelector(".panel-tablist") as HTMLElement).getByRole("tab", { name, hidden: true });
+  // A tab's name says so while it holds unsaved changes.
+  return within(panel().querySelector(".panel-tablist") as HTMLElement).getByRole("tab", { name: new RegExp(`^${name}(, unsaved changes)?$`), hidden: true });
 }
 
 /** Opens the panel with the panel button, then shows its Library tab if it opened on another. */

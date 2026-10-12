@@ -133,73 +133,7 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 ## Active Milestones
 
-Last milestone completed: M12f5
-
-### M12f6 - WebUI Tags and Filter Tabs
-
-- **Status**: ⏳ Planned
-- **Goal**: The Tags tab follows the playing item, unsaved Tags and Filter changes survive closing the panel, tag categories collapse and show what's in use, and Auto Tag opens over the whole page.
-- **Depends on**: WebUI Responsive Layout and Panels, whose panel holds the tabs, and WebUI In-App Dialogs, whose dialog Refresh asks in, and WebUI Drag Reordering, whose handle a category header keeps.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Scope
-
-- The Tags tab edits the playing item's tags and follows the playing item when it changes, unless the tab has unsaved changes to its item's tags.
-- With unsaved changes to its item's tags, the Tags tab stays on that item and shows a line naming it, "Editing tags for {file name}", until those changes are saved or discarded (Refresh discards them, asking first), and then follows the playing item.
-- Unsaved changes that are not to the item's tags, such as a category reorder or rename, don't hold the Tags tab on its item.
-- Unsaved changes survive closing the panel and switching tabs: the Filter tab's until Apply or Cancel, and the Tags tab's until Save, or Refresh, which discards them after asking.
-- Leaving the Tags tab, for another tab or by closing the panel, no longer asks "Discard changes?".
-- The Tags tab's Save leaves the panel open, beside the player and as the overlay, as the mockup shows.
-- While the Filter or Tags tab holds unsaved changes, a small orange dot marks its tab icon, and the player's panel button while either does, so they aren't forgotten when the panel is closed, and their accessible names say so.
-- Tag categories, in the Tags tab and the Filter tab's Tags section, collapse and expand when their header is tapped or clicked, and their expand and collapse arrows go.
-- A category header's drag handle, its Edit button, and the Filter tab's Local match select keep their own actions.
-- Tag categories remember per device whether each is collapsed, separately for the Tags tab and the Filter tab's Tags section, and start collapsed, new categories included.
-- A category expands by itself when a tag is added to it or moved into it, so the change is visible; so does Uncategorized when a deleted category's tags move into it.
-- A collapsed category's header shows a small count of what's in use: in the Tags tab, how many of its tags the item has (or, with WebUI Multi-Select and Bulk Actions, the selection); in the Filter tab, how many of its tags the current filter uses.
-- A collapsed category with unsaved changes also shows the orange unsaved-changes dot, so the dot keeps one meaning throughout the app. In the Tags tab that is a pending Add or Remove on one of its tags, or a name or tags that differ from the saved ones; in the Filter tab, a change to its tags that Apply hasn't applied.
-- Auto Tag opens from the Tags tab as an overlay over the whole page, as its tab does today, instead of as a tab of the tag editor, so its file list keeps its width.
-- Auto Tag covers the player.
-- Auto Tag has its own Apply for its selected changes, which today the tag editor's Save applies.
-- Auto Tag's Close is disabled while a scan runs, as the tag editor's Refresh and the panel's Close are today.
-- Auto Tag's Apply sits at the right of its footer with Cancel to its left.
-- Auto Tag's Cancel clears the scan and closes Auto Tag, while the X at the top right closes it and keeps the last scan; both wait while a scan runs.
-- With View all matches, files that already have the tag show checked and disabled, so they can't be unchecked.
-- Each scan starts with nothing checked, as today, and Select all checks everything.
-- Auto Tag's results area shows a placeholder before any scan, "Scan to find files whose names contain a tag's name.", and a different one when a scan finds nothing, "No file names contain any tag's name.".
-- Auto Tag's Total matched and To be changed counts each line up under their own header, with room between the two columns.
-- The Filter tab's message for a library with no tags reads "No tags yet. Add them in the Tags tab." in place of "No tags available. Use Edit tags to create tags.".
-- Enter in the Tags tab's New tag name adds the tag while Add tag is enabled, as the mockup shows, and does nothing while the name is empty or another tag's.
-
-#### Traps
-
-- Enter in the tag editor's New tag name does nothing: the field has no key handler and no form (`TagEditor.tsx`).
-- The tag editor's footer, with Add tag, also shows under the Auto Tag tab, where the new chip is hidden, so focus drops to the page after Add tag (`TagEditor.tsx`). Auto Tag opening as its own overlay over the whole page ends that case.
-- The Tags tab's tag editor takes the item playing when the tab shows (`open` in `src/tags/tagEditor.ts`) and keeps it. Beside the player, Next, Previous, and a swipe still change the item playing, so the tab can show and save an item that is no longer on screen.
-- Leaving the Tags tab, for another tab or by closing the panel, asks "Discard changes?" when it has changes (`close` in `src/tags/tagEditor.ts`).
-- Showing the Filter tab again rebuilds its draft from the applied filter and the server's presets, dropping unsaved filter and preset changes (`open` in `src/filter/filterDialog.ts`).
-- With View all matches, files that already have the tag show as ordinary checkboxes that start unchecked, and checking one sends the file again (`visibleAutoTagFiles` and `autoTagAssignments` in `src/tags/autoTagModel.ts`).
-- Auto Tag's results area is empty before a scan, and after one that finds nothing it repeats the status line's "Scan complete: no matching tags found." (`autoTagResults` in `src/tags/autoTagModel.ts`).
-- Auto Tag's header and each row are separate grids whose count columns size to their own content (`.tag-autotag-table-head` and `.tag-autotag-row-main` in `src/styles.css`), so the numbers drift from their headers.
-
-#### Acceptance
-
-- When the playing item changes, the Tags tab shows the new item's tags, unless it has unsaved changes to its item's tags. Then it stays on its item with an "Editing tags for {file name}" line, and follows the playing item once those changes are saved or discarded. Shown by component tests of the Tags tab following the playing item and staying on its item with the "Editing tags for" line while it has unsaved changes to that item's tags.
-- Closing the panel or switching tabs keeps unsaved Filter and Tags changes, the Filter tab's until Apply or Cancel and the Tags tab's until Save or Refresh, and closing never asks "Discard changes?", in component tests of unsaved Filter and Tags changes surviving closing the panel and switching tabs.
-- While the Filter or Tags tab holds unsaved changes, its tab icon shows a dot, and the player's panel button shows one while either does, each with an accessible name that says so. The dots go once the changes are applied, saved, canceled, or discarded. Shown by component tests of the dots on the tabs and the panel button.
-- Tapping or clicking a tag category's header collapses or expands it, with no arrows. Its drag handle, its Edit button, and the Filter tab's Local select keep their own actions. Shown by component tests of category headers toggling while their other controls don't.
-- Tag categories start collapsed, new ones included, and each tab remembers which are expanded per device, after a page refresh too. A category expands when a tag is added to it or moved into it. A collapsed category's header shows how many of its tags the item has, in the Tags tab, or the filter uses, in the Filter tab, and the orange dot while it holds unsaved changes. Shown by component tests of categories starting collapsed and remembered per tab across a page refresh, expanding when a tag is added or moved into them, and a collapsed header's count and unsaved-changes dot.
-- Auto Tag opens from the Tags tab over the whole page, applies its selected changes with its own Apply, and its Close is disabled while a scan runs, in component tests of Auto Tag's Apply and its Close during a scan.
-- Auto Tag's Cancel, left of Apply, clears the scan and closes it, and the X closes it and keeps the last scan. With View all matches, files that already have the tag are checked and disabled. Its results area shows one placeholder before any scan and another when a scan finds nothing, and its two count columns line up under their headers. Shown by component tests of Auto Tag's Cancel, X, View all matches, and placeholders.
-- The Tags tab's Save leaves the panel open beside the player and as the overlay, in component tests of Save at each width.
-- The Filter tab's no-tags message names the Tags tab.
-- Enter in New tag name adds the tag, and does nothing while Add tag is disabled, in component tests of New tag name.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and one quick spot check.
-
-#### Not included
-
-- Pointing the Tags tab at several selected items, with "Editing tags for {n} items", which is WebUI Multi-Select and Bulk Actions.
-- Pausing playback for Auto Tag, which is WebUI Auto-Pause and Photo Scrub Bar.
+Last milestone completed: M12f6
 
 ### M12f7 - WebUI Auto-Pause and Photo Scrub Bar
 
@@ -345,7 +279,7 @@ Last milestone completed: M12f5
 - A message that moves to a dialog keeps its `last.log` line with the same text, as the notice in WebUI In-App Dialogs is relayed, and a popup or lasting state relays its text as a status line message is relayed today.
 - A field message is no longer relayed.
 - A failed Auto Tag scan shows its error.
-- The Auto Tag panel's status leaves "Scanning…" when the scan finishes.
+- Auto Tag's status leaves "Scanning…" when the scan finishes.
 - A tag save shows its own error.
 - The JSON responses that `getJson` in `src/state/appApi.ts`, the random pick in `src/playback/randomPick.ts`, `requestPlayItem` in `src/api/coreApi.ts`, the filter's tag model in `loadRemote` in `src/filter/filterDialog.ts`, and the tag editor's model and the Auto Tag scan in `loadModel` and `scan` in `src/tags/tagEditor.ts` read go through one helper that checks the content type and reports a clear error.
 - When it completes, the Release Specific check in `docs/checklists/testing-checklist.md` that pauses the server expects the indicator's Loading… and the in-app notice's "No response from the server. Try again." in place of the status line's messages.
@@ -362,9 +296,9 @@ Last milestone completed: M12f5
 - The playing video's `playing` event sets the status to "Playing". On a connection where the video keeps buffering, that hides "Loading..." while a random pick waits and "No response from the server. Try again." after one times out.
 - `pickRandom` in `player.ts` and `play` in `library.ts` set the pairing prompt just before "Unauthorized. Pair first.". The 401 case in `mapPlayItemErrorToStatus` is never reached, since `play` handles 401 first.
 - Tests lock today's three wrong Auto Tag and tag save messages below as they are, marked as recorded in this milestone.
-- A failed Auto Tag scan shows "Scan complete: no matching tags found." in the panel's status and results, as a scan that found nothing does: `scan` in `src/tags/tagEditor.ts` treats a failure as no rows.
+- A failed Auto Tag scan shows "Scan complete: no matching tags found." in Auto Tag's status and "No file names contain any tag's name." in its results, as a scan that found nothing does: `scan` in `src/tags/tagEditor.ts` treats a failure as no rows.
 - Before the WebUI Preact Migration, `app.js` set "Auto-tag scan failed. Core runtime is unavailable or still recovering." and overwrote it at once.
-- A scan where every match already has its tag shows "No rows to show." and leaves the panel's status on "Scanning…": `autoTagStatusAfterChange` in `src/tags/autoTagModel.ts` keeps the status while no row shows.
+- A scan where every match already has its tag shows "No rows to show." and leaves Auto Tag's status on "Scanning…": `autoTagStatusAfterChange` in `src/tags/autoTagModel.ts` keeps the status while no row shows.
 - A tag save that cannot reach the server shows the message of the last step the server refused on the page, or "Tag apply failed" when none was: `lastSaveError` in `src/tags/tagEditor.ts` lasts for the page.
 - `getJson`, the random pick's `request` in `src/playback/randomPick.ts`, `requestPlayItem` in `src/api/coreApi.ts`, `loadRemote` in `src/filter/filterDialog.ts`, and `loadModel` and `scan` in `src/tags/tagEditor.ts` call `response.json()` without checking the content type, so an HTML error page from a proxy surfaces as a `SyntaxError`. Pairing reads no JSON, and refresh status arrives only over the event stream.
 - `itemStateChanged` in `src/playback/player.ts` reads any event that leaves an item neither favorite nor blacklisted as "Synced: Removed from favorites: {file}", an item leaving the blacklist too.
@@ -401,7 +335,7 @@ Last milestone completed: M12f5
 - A popup or lasting state relays its text to `last.log` as a status line message is relayed today, and a field message is no longer relayed, in WebUI tests of the relay.
 - None of the dialog and field messages moved by earlier milestones pops up or shows on the indicator, checked against the sorted list for every message the WebUI sends.
 - A random pick or library play answered with 401 shows the header's pairing prompt, shows "Unauthorized. Pair first." nowhere, and relays its `last.log` line as before, in tests of a 401 on a random pick and a library play.
-- A failed Auto Tag scan shows its error instead of "Scan complete: no matching tags found.", in a test that replaces the one locking it today.
+- A failed Auto Tag scan shows its error instead of "Scan complete: no matching tags found." and the results' "No file names contain any tag's name.", in a test that replaces the one locking it today.
 - A scan where every match already has its tag clears "Scanning…", in a test that replaces the one locking it today.
 - A tag save that fails on a network error shows that error, not one from an earlier save, in a test that replaces the one locking it today.
 - A response that isn't JSON, such as a proxy's HTML error page, shows a clear error, not a `SyntaxError`, in tests of such a response for `getJson`, the random pick, a library play, the filter's tag model, the tag editor's model, and an Auto Tag scan.
@@ -1572,7 +1506,7 @@ Last milestone completed: M12f5
   - It uses the browser's frame timings (`requestVideoFrameCallback`) where the browser provides them, and, where it doesn't, an assumed frame rate that this milestone decides.
   - It replaces the desktop's Frame seek step (Shift and the arrow keys), which LibVLC drives.
 - Shortcuts do nothing while focus is in a text field.
-- Esc closes the first of these that is open: the bell's list, Auto Tag (not while a scan runs), the panel, and then pseudo-fullscreen. An open dialog takes Esc itself.
+- Esc closes the first of these that is open: the bell's list, the panel, and then pseudo-fullscreen. An open dialog, Auto Tag included, takes Esc itself.
 - A shortcut reference in the Settings tab's Keyboard shortcuts section, collapsed by default with a chevron. `?`, pressed anywhere outside a text field, opens Settings with it expanded, and the reference lists `?` too.
 - The seek step survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
 
@@ -1581,12 +1515,13 @@ Last milestone completed: M12f5
 - The WebUI handles only Escape, which closes overlays, and Enter or Space on a focused library tile (measured).
 - The desktop binds K play or pause, J and L seek, Left and Right previous and next, R random, F favorite, B blacklist, A autoplay, M mute, comma and period volume, T tags, P player view, S settings, O import folder, Q quit, F11 fullscreen, and 1 to 5 to show or hide parts of the window. It also swallows 6 to 8 and Space, which do nothing (measured).
 - The browser keeps Ctrl+Q, Ctrl+O, and F11, for its own fullscreen (inferred).
+- Auto Tag is already an in-app dialog (`src/ui/AutoTag.tsx`): Esc does what its X does and waits while a scan runs, and the stage's Escape handler leaves Esc to any open dialog (`src/ui/Stage.tsx`), so the Esc order needs nothing for it (measured).
 
 #### Acceptance
 
 - Each bound shortcut does what the desktop's does, in keyboard tests per binding under `happy-dom`.
 - 1 to 5 open the panel on Library, Filter, Tags, Stats, and Settings, T and S on Tags and Settings, and the open tab's key closes the panel; P shows or hides the panel. Shown by keyboard tests per binding.
-- Esc closes the bell's list, Auto Tag, the panel, and pseudo-fullscreen, in that order, and leaves Auto Tag open while a scan runs, in tests of the Esc order.
+- Esc closes the bell's list, the panel, and pseudo-fullscreen, in that order, in tests of the Esc order.
 - Shortcuts are ignored while a text field has focus, in keyboard tests per binding.
 - [ and ] change the volume by the volume step, and do nothing on a photo, in keyboard tests per binding.
 - J and L seek by the seek step, and the Settings tab offers the desktop's seek step choices, in keyboard tests per binding.
@@ -2142,13 +2077,13 @@ Last milestone completed: M12f5
 - Enter or Space on a tile still chooses it.
 - Selection updates the tiles in place, as WebUI Grid Row Reuse patches a tile, so focus is never lost to a redraw.
 - Every other screen works from the keyboard, each control in a sensible Tab order and with an accessible name: the player's controls and seek bar; the notifications bell, its list with Clear, Close, and Notification settings, and the popups' Dismiss; the panel button and tab row, where the arrow keys, Home, and End move between tabs; the Library controls; the Filter tab and its sections; the Tags tab, its chips, category headers, and drag handles, and Auto Tag; the Stats tab; the Settings tab, including the Ambient mode settings section and its sliders and the Keyboard shortcuts section; the in-app dialogs; the admin view, its sections, the Log Viewer, duplicate review, and the control-token gate; and the recovery page.
-- What covers the page keeps Tab inside it while open and returns focus where it was on close: the panel as a full-screen overlay and Auto Tag, as the in-app dialogs already do.
+- What covers the page keeps Tab inside it while open and returns focus where it was on close: the panel as a full-screen overlay, as Auto Tag and the in-app dialogs already do.
 - The keyboard shortcuts stay as WebUI Keyboard Shortcuts binds them.
 - Where the arrow keys have a local job, in the grid, the tab row, sliders, and on a focused drag handle, they keep it instead of playing the previous or next item.
 
 #### Traps
 
-- Only the pairing prompt, the tag editor, the library overlay's buttons, and the grid's tiles style their focus, in blue (`#7aa7ff`, and `#2563eb` for tiles in the light theme, in `src/styles.css`); other controls show the browser's own ring or none.
+- The pairing prompt, the library overlay's buttons, and the grid's tiles style their focus in blue (`#7aa7ff`, and `#2563eb` for tiles in the light theme, in `src/styles.css`). In the Filter and Tags tabs and Auto Tag, the controls with the shared `.btn`, `.ctl`, and `.icon-btn` classes and the drag handles already show the orange ring 1 px outside, and the tag category headers' toggles 2 px inside; their section tabs, checkboxes, and radio buttons don't. The in-app dialogs' buttons, fields, and selects and the panel's tabs and Close show it 1 px outside too. Other controls show the browser's own ring or none.
 - Every grid tile is a tab stop (`tabindex="0"` in `renderGridTileHtml`, `src/library/libraryGridTileModel.ts`), and Enter or Space on one plays it.
 - The grid's keyboard model uses WebUI Multi-Select and Bulk Actions' check icons.
 - In the mockup, the thumbnail's frame fills the tile and paints over anything the tile itself draws, an outline or an inset shadow alike, so a focused tile's border drawn by the tile is invisible.
@@ -2160,7 +2095,7 @@ Last milestone completed: M12f5
 - A focused tile shows an orange border above its thumbnail, and a focused check icon a thick orange ring, starting at its edge, that the tile crops, in WebUI tests of a focus style on each kind of control.
 - In the panel's tab row, the arrow keys, Home, and End move between tabs, in WebUI tests of the tab row's keys.
 - On every screen listed in Scope, each control is reached by Tab in a sensible order and has an accessible name, in WebUI tests of each screen's Tab order and its controls' accessible names.
-- The full-screen panel and Auto Tag keep Tab inside them while open and return focus on close, in WebUI tests of focus staying inside the full-screen panel and Auto Tag.
+- The full-screen panel keeps Tab inside it while open and returns focus on close, in WebUI tests of focus staying inside the full-screen panel.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick keyboard-only spot check.
 
@@ -2588,6 +2523,7 @@ Last milestone completed: M12f5
 - On the desktop, that drop was seen with a probe against its build (measured).
 - This is the same client-held whole-catalog pattern as the tag sync routes removed in v0.13.0.
 - With the WebUI as the only client, two devices still overwrite each other the same way.
+- The WebUI's Filter tab keeps a preset list Apply hasn't saved while it is hidden and the panel is closed, for as long as the page stays open, and doesn't take the server's list while it holds one, so its Apply can overwrite preset changes another client made hours earlier (inferred).
 
 #### Acceptance
 

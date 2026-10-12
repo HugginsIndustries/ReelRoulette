@@ -1,17 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
+  AUTO_TAG_BEFORE_SCAN,
   AUTO_TAG_NO_MATCHES,
   AUTO_TAG_NO_ROWS,
+  AUTO_TAG_NOTHING_FOUND,
   autoTagApplyPending,
   autoTagAssignments,
+  autoTagFileChecked,
   autoTagResults,
+  autoTagRowsAfterApply,
+  autoTagRowsAfterRefusal,
   autoTagRowsFromScan,
+  autoTagRowsLeftCatalog,
   autoTagStatusAfterChange,
   autoTagSummary,
   collapseEmptyAutoTagRows,
+  selectAllAutoTagFiles,
   selectFile,
   selectRowFiles,
-  selectVisibleAutoTagFiles,
   visibleAutoTagRows,
   type AutoTagRow
 } from "../tags/autoTagModel";
@@ -77,9 +83,11 @@ describe("scan rows", () => {
 });
 
 describe("results and status", () => {
-  it("shows nothing before a scan, a hint for no matches or no rows, and otherwise each row with its box", () => {
-    expect(autoTagResults(rows(), false, false)).toEqual({ kind: "none" });
-    expect(autoTagResults([], false, true)).toEqual({ kind: "hint", text: AUTO_TAG_NO_MATCHES });
+  it("shows a placeholder before a scan and another after one that found nothing, a hint for no rows, and otherwise each row with its box", () => {
+    expect(autoTagResults(rows(), false, false)).toEqual({ kind: "placeholder", text: AUTO_TAG_BEFORE_SCAN });
+    expect(AUTO_TAG_BEFORE_SCAN).toBe("Scan to find files whose names contain a tag's name.");
+    expect(autoTagResults([], false, true)).toEqual({ kind: "placeholder", text: AUTO_TAG_NOTHING_FOUND });
+    expect(AUTO_TAG_NOTHING_FOUND).toBe("No file names contain any tag's name.");
     expect(autoTagResults([byName(rows(), "Alps")], false, true)).toEqual({ kind: "hint", text: AUTO_TAG_NO_ROWS });
 
     const list = select(rows(), "beach", "b1");
@@ -87,12 +95,26 @@ describe("results and status", () => {
     if (shown.kind !== "rows") {
       throw new Error("Expected rows.");
     }
-    expect(shown.rows.map((entry) => [entry.row.tagName, entry.files.length, entry.checked, entry.indeterminate])).toEqual([
-      ["beach", 2, false, true],
-      ["Sunset", 1, false, false]
+    expect(shown.rows.map((entry) => [entry.row.tagName, entry.files.length, entry.checked, entry.indeterminate, entry.disabled])).toEqual([
+      ["beach", 2, false, true, false],
+      ["Sunset", 1, false, false, false]
     ]);
     const all = autoTagResults(select(list, "beach", "b2"), false, true);
     expect(all.kind === "rows" && all.rows[0]!.checked).toBe(true);
+  });
+
+  it("with View all matches, counts a file that has the tag as checked, and turns off a row with nothing to change", () => {
+    const shown = autoTagResults(rows(), true, true);
+    if (shown.kind !== "rows") {
+      throw new Error("Expected rows.");
+    }
+    expect(shown.rows.map((entry) => [entry.row.tagName, entry.checked, entry.indeterminate, entry.disabled])).toEqual([
+      ["Alps", true, false, true],
+      ["beach", false, false, false],
+      ["Sunset", false, true, false]
+    ]);
+    const sunset = byName(rows(), "Sunset");
+    expect(sunset.files.map(autoTagFileChecked)).toEqual([false, true]);
   });
 
   it("counts only selected files that would change, among the files shown", () => {
@@ -114,37 +136,72 @@ describe("results and status", () => {
 });
 
 describe("selection and save", () => {
-  it("has work to save only while a selected file shown would change", () => {
-    expect(autoTagApplyPending(select(rows(), "Alps", "a1"), true, true)).toBe(false);
-    expect(autoTagApplyPending(select(rows(), "beach", "b1"), false, true)).toBe(true);
-    expect(autoTagApplyPending(select(rows(), "beach", "b1"), false, false)).toBe(false);
-    expect(autoTagApplyPending(select(rows(), "Sunset", "s2"), false, true)).toBe(false);
+  it("has work to apply only while a file is selected, which only a file without the tag can be", () => {
+    expect(autoTagApplyPending(select(rows(), "Alps", "a1"), true)).toBe(false);
+    expect(autoTagApplyPending(select(rows(), "beach", "b1"), true)).toBe(true);
+    expect(autoTagApplyPending(select(rows(), "beach", "b1"), false)).toBe(false);
+    expect(autoTagApplyPending(select(rows(), "Sunset", "s2"), true)).toBe(false);
   });
 
-  it("assigns each row's selected files shown, in scan order, with files that have the tag only under View all", () => {
+  it("assigns each row's selected files in scan order, and never a file that has the tag", () => {
     let list = select(rows(), "beach", "b2");
     list = select(list, "Sunset", "s2");
     list = select(list, "Sunset", "s1");
-    expect(autoTagAssignments(list, false)).toEqual([
+    expect(autoTagAssignments(list)).toEqual([
       { tagName: "Sunset", itemPaths: ["C:\\sunset 1.mp4"], itemIds: ["s1"] },
       { tagName: "beach", itemPaths: ["C:\\beach 2.mp4"], itemIds: ["b2"] }
     ]);
-    expect(autoTagAssignments(list, true)[0]).toEqual({
-      tagName: "Sunset",
-      itemPaths: ["C:\\sunset 1.mp4", "C:\\sunset 2.mp4"],
-      itemIds: ["s1", "s2"]
-    });
   });
 
-  it("selects and clears only the files and rows shown", () => {
-    const all = selectVisibleAutoTagFiles(rows(), false, true);
+  it("selects and clears every file without its tag, in every row, and leaves a file that has it", () => {
+    const all = selectAllAutoTagFiles(rows(), true);
     expect(byName(all, "Sunset").files.map((file) => file.selected)).toEqual([true, false]);
+    expect(byName(all, "beach").files.map((file) => file.selected)).toEqual([true, true]);
     expect(byName(all, "Alps").files[0]!.selected).toBe(false);
-    expect(byName(selectVisibleAutoTagFiles(all, false, false), "beach").files.some((file) => file.selected)).toBe(false);
+    expect(byName(selectAllAutoTagFiles(all, false), "beach").files.some((file) => file.selected)).toBe(false);
 
-    const row = selectRowFiles(byName(rows(), "Sunset"), true, true);
-    expect(row.files.map((file) => file.selected)).toEqual([true, true]);
+    const row = selectRowFiles(byName(rows(), "Sunset"), true);
+    expect(row.files.map((file) => file.selected)).toEqual([true, false]);
+    expect(selectFile(row, "s2", true)).toBe(row);
     expect(selectFile(row, "missing", false)).toBe(row);
+  });
+
+  it("after Apply, shows the selected files as having their tag, unselected, with fewer to change", () => {
+    let list = select(rows(), "beach", "b1");
+    list = select(list, "Sunset", "s1").map((row) => ({ ...row, expanded: true }));
+    const applied = autoTagRowsAfterApply(list, false);
+    expect(byName(applied, "beach").files.map((file) => [file.needsChange, file.selected])).toEqual([
+      [false, false],
+      [true, false]
+    ]);
+    expect(byName(applied, "beach").wouldChangeCount).toBe(1);
+    expect(byName(applied, "beach").expanded).toBe(true);
+    // Sunset has nothing left to change, so it shows nothing without View all and collapses.
+    expect(byName(applied, "Sunset")).toMatchObject({ wouldChangeCount: 0, expanded: false });
+    expect(autoTagApplyPending(applied, true)).toBe(false);
+    expect(byName(autoTagRowsAfterApply(list, true), "Sunset").expanded).toBe(true);
+  });
+
+  it("after a refused Apply, shows the files it sent as needing their tag again, selected, keeping later changes", () => {
+    let list = select(rows(), "beach", "b1");
+    list = select(list, "Sunset", "s1");
+    // Sunset collapsed after Apply, and the user expanded it again before the server refused.
+    const changed = autoTagRowsAfterApply(list, false).map((row) => (row.tagName === "Sunset" ? { ...row, expanded: true } : row));
+    const refused = autoTagRowsAfterRefusal(changed, list);
+    expect(byName(refused, "beach").files.map((file) => [file.needsChange, file.selected])).toEqual([
+      [true, true],
+      [true, false]
+    ]);
+    expect(byName(refused, "beach").wouldChangeCount).toBe(2);
+    expect(byName(refused, "Sunset")).toMatchObject({ wouldChangeCount: 1, expanded: true });
+    expect(autoTagApplyPending(refused, true)).toBe(true);
+    expect(autoTagRowsAfterRefusal(list, list)).toEqual(list);
+  });
+
+  it("finds a scan's tag no longer in the catalog, by name ignoring case", () => {
+    expect(autoTagRowsLeftCatalog(rows(), ["sunset", "Beach", "alps", "Bob"])).toBe(false);
+    expect(autoTagRowsLeftCatalog(rows(), ["Sunset", "beach"])).toBe(true);
+    expect(autoTagRowsLeftCatalog([], [])).toBe(false);
   });
 
   it("collapses rows that show no files", () => {

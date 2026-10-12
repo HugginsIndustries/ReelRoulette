@@ -1,45 +1,24 @@
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
-import type { TagEditorTab, TagEditorView } from "../tags/tagEditor";
-import type { AutoTagResults, AutoTagRowView } from "../tags/autoTagModel";
-import { normalizeTagKey, type TagCategory, type TagCategoryRow, type TagChipRow } from "../tags/tagEditorModel";
+import type { TagEditorView } from "../tags/tagEditor";
+import { normalizeTagKey, type TagCategory as CatalogCategory, type TagCategoryRow, type TagChipRow } from "../tags/tagEditorModel";
 import { useApp } from "./appContext";
 import { NameDialog } from "./Dialog";
 import { ValidatedField } from "./FieldValidation";
 import { DragHandle, ReorderStatus, useReorder, type Reorder } from "./Reorder";
-
-// The `data-*` attributes keep the markup as it was before the editor moved to a component; nothing reads them.
-
-const BUTTON = "icon-glyph-base icon-glyph-button";
-const TOGGLE = "icon-glyph-base icon-glyph-toggle";
-
-const TABS: readonly { tab: TagEditorTab; label: string }[] = [
-  { tab: "edit", label: "Edit Tags" },
-  { tab: "autotag", label: "Auto Tag" }
-];
-
-/** Before the editor first opens, the panels keep the page's starting markup, where only Auto Tag has a style. */
-function panelStyle(shown: TagEditorTab | null, panel: TagEditorTab) {
-  if (shown === null) {
-    return panel === "edit" ? undefined : { display: "none" };
-  }
-  return { display: shown === panel ? "flex" : "none" };
-}
+import { TagCategory, tagsInUse } from "./TagCategory";
 
 function Icon({ name }: { name: string }) {
   return <span class="material-symbol-icon">{name}</span>;
 }
 
 /**
- * The Tags tab's tag editor, with its Edit Tags and Auto Tag tabs, and its Edit Tag, Edit Category, and New Category
- * dialogs. The panel shows and hides the tab, and the editor's panels are empty until it first opens. The dialogs
- * render after it rather than inside, so the editor's own button styles don't reach them.
+ * The Tags tab's tag editor, with its Edit Tag, Edit Category, and New Category dialogs, and the button that opens
+ * Auto Tag over the whole page. The panel shows and hides the tab, which is empty until it first opens. The dialogs
+ * render after it rather than inside, so the editor's own styles don't reach them.
  */
 export function TagEditor() {
   const { tagEditor } = useApp();
   const view = tagEditor.view.value;
-  const shown = tagEditor.tab.value;
-  const active = shown ?? "edit";
-  const scanning = view?.autoTag.scanning ?? false;
   // Every category but Uncategorized, which stays last, moves by its drag handle.
   const movable = (view?.categories ?? []).filter((category) => !category.uncategorized);
   const reorder = useReorder({
@@ -56,43 +35,57 @@ export function TagEditor() {
       addedChipFocus(name)?.focus();
     }
   });
+  const saveClass = view?.savePending ? "icon-btn has-pending" : "icon-btn";
   return (
     <>
       <div id="tag-editor" class="tag-editor">
         <div class="tag-editor-header">
           <h2>Tag Editor</h2>
-          <div class="tag-editor-actions">
-            <button id="tag-editor-refresh-btn" class={BUTTON} title="Refresh" aria-label="Refresh" disabled={scanning} onClick={() => void tagEditor.refresh()}><Icon name="refresh" /></button>
-          </div>
+          <button id="tag-editor-autotag-btn" class="icon-btn" type="button" title="Auto Tag" aria-label="Auto Tag" onClick={() => tagEditor.openAutoTag()}><Icon name="auto_awesome" /></button>
+          <button id="tag-editor-refresh-btn" class="icon-btn" type="button" title="Refresh" aria-label="Refresh" onClick={() => void tagEditor.refresh()}><Icon name="refresh" /></button>
         </div>
-        <div class="filter-dialog-tabstrip tag-editor-tabstrip" role="tablist">
-          {TABS.map(({ tab, label }) => (
-            <button key={tab} type="button" class={tab === active ? "filter-tab is-active" : "filter-tab"} role="tab" data-tag-editor-tab={tab} aria-selected={tab === active ? "true" : "false"} onClick={() => tagEditor.showTab(tab)}>{label}</button>
-          ))}
+        <p id="tag-editor-target" class="tags-target" aria-live="polite" title={view?.heldName ?? undefined} hidden={!view?.heldName}>
+          {view?.heldName ? <>Editing tags for <b>{view.heldName}</b></> : null}
+        </p>
+        <div id="tag-editor-body" class="tag-editor-body themed-scrollbar">
+          {view?.categories ? view.categories.map((category) => <Category key={category.id} category={category} reorder={reorder} />) : view?.noModel ? "No tag model available." : null}
         </div>
-        <div class="tag-editor-panel-stack">
-          <div id="tag-editor-panel-edit" class="tag-editor-panel" style={panelStyle(shown, "edit")}>
-            <div id="tag-editor-body" class="tag-editor-body themed-scrollbar">
-              {view?.categories ? view.categories.map((category) => <Category key={category.id} category={category} reorder={reorder} />) : view?.noModel ? "No tag model available." : null}
-            </div>
-            {view ? <ReorderStatus reorder={reorder} /> : null}
-          </div>
-          <div id="tag-editor-panel-autotag" class="tag-editor-panel" style={panelStyle(shown, "autotag")}>
-            <AutoTagPanel view={view} />
-          </div>
-        </div>
+        {view ? <ReorderStatus reorder={reorder} /> : null}
         <div class="tag-editor-footer">
-          <button id="tag-editor-add-category-btn" class={BUTTON} title="Add category" aria-label="Add category" onClick={() => tagEditor.addCategory()}><Icon name="add" /></button>
-          <select id="tag-editor-category-select" value={view?.newTagCategoryId} onChange={(event) => tagEditor.chooseNewTagCategory(event.currentTarget.value)}>
-            <CategoryOptions options={view?.categoryOptions ?? []} />
-          </select>
-          <ValidatedField problem={view?.newTagProblem ?? null} flagged={view?.newTagFlagged ?? false}>
-            {(control) => (
-              <input {...control} id="tag-editor-new-tag" type="text" placeholder="New tag name" value={view?.newTagName ?? ""} onInput={(event) => tagEditor.typeNewTag(event.currentTarget.value)} />
-            )}
-          </ValidatedField>
-          <button id="tag-editor-add-tag-btn" class={BUTTON} title="Add tag" aria-label="Add tag" disabled={!view || view.addTagDisabled} onClick={() => (addedTag.current = tagEditor.addTag())}><Icon name="add" /></button>
-          <button id="tag-editor-apply-btn" class={view?.savePending ? `${BUTTON} has-pending` : BUTTON} title="Save" aria-label="Save" disabled={view ? !view.savePending || scanning : undefined} onClick={() => tagEditor.save()}><Icon name="save" /></button>
+          <div class="tag-editor-footer-row">
+            <button id="tag-editor-add-category-btn" class="icon-btn" type="button" title="Add category" aria-label="Add category" onClick={() => tagEditor.addCategory()}><Icon name="add" /></button>
+            <select id="tag-editor-category-select" class="ctl" aria-label="Category for new tag" value={view?.newTagCategoryId} onChange={(event) => tagEditor.chooseNewTagCategory(event.currentTarget.value)}>
+              <CategoryOptions options={view?.categoryOptions ?? []} />
+            </select>
+          </div>
+          <div class="tag-editor-footer-row">
+            <ValidatedField problem={view?.newTagProblem ?? null} flagged={view?.newTagFlagged ?? false}>
+              {(control) => (
+                <input
+                  {...control}
+                  id="tag-editor-new-tag"
+                  class="ctl"
+                  type="text"
+                  placeholder="New tag name"
+                  aria-label="New tag name"
+                  autocomplete="off"
+                  value={view?.newTagName ?? ""}
+                  onInput={(event) => tagEditor.typeNewTag(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    // Enter adds the tag while Add tag is enabled, and otherwise does nothing.
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      if (view && !view.addTagDisabled) {
+                        addedTag.current = tagEditor.addTag();
+                      }
+                    }
+                  }}
+                />
+              )}
+            </ValidatedField>
+            <button id="tag-editor-add-tag-btn" class="icon-btn" type="button" title="Add tag" aria-label="Add tag" disabled={!view || view.addTagDisabled} onClick={() => (addedTag.current = tagEditor.addTag())}><Icon name="add" /></button>
+            <button id="tag-editor-apply-btn" class={saveClass} type="button" title="Save" aria-label="Save" disabled={view ? !view.savePending : undefined} onClick={() => tagEditor.save()}><Icon name="save" /></button>
+          </div>
         </div>
       </div>
       {view?.editing && view.edit ? <EditTagDialog view={view} /> : null}
@@ -102,7 +95,7 @@ export function TagEditor() {
   );
 }
 
-function CategoryOptions({ options }: { options: readonly TagCategory[] }) {
+function CategoryOptions({ options }: { options: readonly CatalogCategory[] }) {
   return (
     <>
       {options.map((option) => (
@@ -112,104 +105,44 @@ function CategoryOptions({ options }: { options: readonly TagCategory[] }) {
   );
 }
 
-/** A category, which moves by its drag handle. Uncategorized's handle is dimmed, since it stays last. */
+/** A category, which moves by its drag handle. Uncategorized's handle is dimmed, since it stays last, and it has no Edit. */
 function Category({ category, reorder }: { category: TagCategoryRow; reorder: Reorder }) {
   const { tagEditor } = useApp();
   const fixed = category.uncategorized;
   return (
-    <section class={reorder.dragging === category.id ? "tag-editor-category is-dragging" : "tag-editor-category"} ref={fixed ? undefined : reorder.row(category.id)}>
-      <div class="tag-editor-category-header">
-        <div class="tag-editor-category-left">
-          {fixed ? <DragHandle fixed="Uncategorized stays last" /> : <DragHandle control={reorder.handle(category.id)} />}
-          <button class={`tag-editor-category-toggle ${BUTTON}`} title={category.collapsed ? "Expand category" : "Collapse category"} onClick={() => tagEditor.toggleCategory(category.id)}><Icon name={category.collapsed ? "keyboard_arrow_right" : "keyboard_arrow_down"} /></button>
-          <div class="tag-editor-category-title">{category.name}</div>
-        </div>
-        <div class="tag-editor-category-controls">
-          {fixed ? null : (
-            <button class={`tag-editor-category-btn ${BUTTON}`} title="Edit category" aria-label={`Edit category ${category.name}`} onClick={() => tagEditor.editCategory(category.id)}><Icon name="edit_note" /></button>
-          )}
-        </div>
-      </div>
-      <div class="tag-editor-tag-grid" style={category.collapsed ? { display: "none" } : undefined}>
-        {category.chips.map((chip) => (
-          <Chip key={chip.name} chip={chip} />
-        ))}
-      </div>
-    </section>
+    <TagCategory
+      name={category.name}
+      gridId={`tag-grid-${category.id}`}
+      collapsed={category.collapsed}
+      inUse={category.inUse}
+      inUseTitle={tagsInUse(category.inUse, "on this item")}
+      unsaved={category.unsaved}
+      onToggle={() => tagEditor.toggleCategory(category.id)}
+      handle={fixed ? <DragHandle fixed="Uncategorized stays last" /> : <DragHandle control={reorder.handle(category.id)} />}
+      controls={
+        fixed ? null : (
+          <button class="icon-btn" type="button" title="Edit category" aria-label={`Edit category ${category.name}`} onClick={() => tagEditor.editCategory(category.id)}><Icon name="edit_note" /></button>
+        )
+      }
+      class={reorder.dragging === category.id ? "is-dragging" : undefined}
+      sectionRef={fixed ? undefined : reorder.row(category.id)}
+    >
+      {category.chips.map((chip) => (
+        <Chip key={chip.name} chip={chip} />
+      ))}
+    </TagCategory>
   );
 }
 
+/** A tag: green when the item has it, its add, remove, and Edit. */
 function Chip({ chip }: { chip: TagChipRow }) {
   const { tagEditor } = useApp();
   return (
     <div class={`tag-chip ${chip.state}`}>
       <span class="tag-chip-label">{chip.name}</span>
-      <button class={`chip-btn ${TOGGLE}${chip.pending === "add" ? " is-selected" : ""}`} title="Add tag" disabled={!chip.canChangeItems} onClick={() => tagEditor.toggleTag(chip.name, "add")}><Icon name="add" /></button>
-      <button class={`chip-btn ${TOGGLE}${chip.pending === "remove" ? " is-selected" : ""}`} title="Remove tag" disabled={!chip.canChangeItems} onClick={() => tagEditor.toggleTag(chip.name, "remove")}><Icon name="remove" /></button>
-      <button class={`chip-btn ${BUTTON}`} title="Edit tag" onClick={() => tagEditor.editTag(chip.name)}><Icon name="edit_note" /></button>
-    </div>
-  );
-}
-
-function AutoTagPanel({ view }: { view: TagEditorView | null }) {
-  const { tagEditor } = useApp();
-  const autoTag = view?.autoTag;
-  return (
-    <div class="tag-editor-body tag-autotag-body themed-scrollbar">
-      <div class="tag-autotag-toolbar">
-        <label class="tag-autotag-check-label"><input type="checkbox" id="tag-autotag-scan-full" checked={autoTag?.scanFull ?? false} onChange={(event) => tagEditor.setScanFullLibrary(event.currentTarget.checked)} /> Scan full library</label>
-        <label class="tag-autotag-check-label"><input type="checkbox" id="tag-autotag-view-all" checked={autoTag?.viewAll ?? false} onChange={(event) => tagEditor.setViewAll(event.currentTarget.checked)} /> View all matches</label>
-      </div>
-      <p class="tag-autotag-hint">Use Scan Files to find matching tags. File name matching ignores extension.</p>
-      <div class="tag-autotag-actions-row">
-        <button type="button" id="tag-autotag-select-all" class="tag-autotag-row-btn" onClick={() => tagEditor.selectAll()}>Select all</button>
-        <button type="button" id="tag-autotag-deselect-all" class="tag-autotag-row-btn" onClick={() => tagEditor.deselectAll()}>Deselect all</button>
-        <button type="button" id="tag-autotag-scan-btn" class="tag-autotag-scan-btn" disabled={autoTag?.scanning ?? false} onClick={() => void tagEditor.scan()}>Scan Files</button>
-      </div>
-      <div id="tag-autotag-progress" class="tag-autotag-progress" style={{ display: autoTag?.scanning ? "block" : "none" }} role="progressbar" aria-label="Scan in progress"></div>
-      <div id="tag-autotag-status" class="tag-autotag-status" aria-live="polite">{autoTag?.status ?? ""}</div>
-      <div id="tag-autotag-results" class="tag-autotag-results themed-scrollbar">
-        {view ? <Results results={view.results} /> : null}
-      </div>
-    </div>
-  );
-}
-
-function Results({ results }: { results: AutoTagResults }) {
-  if (results.kind === "none") {
-    return null;
-  }
-  if (results.kind === "hint") {
-    return <p class="tag-autotag-hint">{results.text}</p>;
-  }
-  return (
-    <>
-      <div class="tag-autotag-table-head"><span></span><span>Apply</span><span>Tag / File</span><span>Total matched</span><span>To be changed</span></div>
-      {results.rows.map((entry) => (
-        <ResultRow key={entry.row.rowId} entry={entry} />
-      ))}
-    </>
-  );
-}
-
-function ResultRow({ entry }: { entry: AutoTagRowView }) {
-  const { tagEditor } = useApp();
-  const { row } = entry;
-  const rowId = String(row.rowId);
-  return (
-    <div class="tag-autotag-row" data-autotag-row={rowId}>
-      <div class="tag-autotag-row-main">
-        <button type="button" class={BUTTON} data-autotag-expand={rowId} aria-label={row.expanded ? "Collapse" : "Expand"} onClick={(event) => { event.preventDefault(); tagEditor.toggleRowExpanded(row.rowId); }}><Icon name={row.expanded ? "expand_more" : "chevron_right"} /></button>
-        <input type="checkbox" data-autotag-row-check={rowId} checked={entry.checked} indeterminate={entry.indeterminate} onChange={(event) => tagEditor.checkRow(row.rowId, event.currentTarget.checked)} />
-        <span style="font-weight:600">{row.tagName || ""}</span>
-        <span>{row.totalMatchedCount}</span>
-        <span>{row.wouldChangeCount}</span>
-      </div>
-      <div class="tag-autotag-row-files" style={{ display: row.expanded ? "block" : "none" }}>
-        {entry.files.map((file) => (
-          <div key={file.itemId} class="tag-autotag-file-row"><label><input type="checkbox" data-autotag-file="" data-row-id={rowId} data-item-id={file.itemId || ""} checked={file.selected} onChange={(event) => tagEditor.checkFile(row.rowId, file.itemId, event.currentTarget.checked)} /></label><span class="tag-autotag-file-path" title={file.fullPath || ""}>{file.displayPath || file.fullPath || ""}</span></div>
-        ))}
-      </div>
+      <button class={chip.pending === "add" ? "icon-btn is-selected" : "icon-btn"} type="button" title="Add tag" aria-label={`Add tag ${chip.name}`} disabled={!chip.canChangeItems} onClick={() => tagEditor.toggleTag(chip.name, "add")}><Icon name="add" /></button>
+      <button class={chip.pending === "remove" ? "icon-btn is-selected" : "icon-btn"} type="button" title="Remove tag" aria-label={`Remove tag ${chip.name}`} disabled={!chip.canChangeItems} onClick={() => tagEditor.toggleTag(chip.name, "remove")}><Icon name="remove" /></button>
+      <button class="icon-btn" type="button" title="Edit tag" aria-label={`Edit tag ${chip.name}`} onClick={() => tagEditor.editTag(chip.name)}><Icon name="edit_note" /></button>
     </div>
   );
 }
@@ -298,7 +231,7 @@ function EditTagDialog({ view }: { view: TagEditorView }) {
  * previous one's when the deleted one was the last with an Edit button.
  */
 function categoryEditButton(index: number): HTMLElement | null {
-  const categories = document.querySelectorAll("#tag-editor-body .tag-editor-category");
+  const categories = document.querySelectorAll("#tag-editor-body .tag-category");
   const at = (position: number) => categories[position]?.querySelector<HTMLElement>('[title="Edit category"]') ?? null;
   return at(index) ?? at(index - 1);
 }

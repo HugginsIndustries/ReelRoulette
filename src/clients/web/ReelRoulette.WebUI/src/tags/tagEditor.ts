@@ -1,5 +1,6 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
 import type { Dialogs } from "../dialogs/dialogs";
+import type { FilterDialog } from "../filter/filterDialog";
 import { cloneFilterState } from "../filter/filterStateModel";
 import type { Library } from "../library/library";
 import { createAutoTagScanRequest, libraryQueryTagSaveEffect } from "../library/libraryQuerySession";
@@ -12,10 +13,10 @@ import {
   type TagSaveStep,
   type TaggedItem
 } from "../library/tagSave";
-import type { PanelHost } from "../panel/panelHost";
 import type { Player } from "../playback/player";
 import type { AppApi } from "../state/appApi";
 import type { AppStore, StorageLike } from "../state/appStore";
+import type { DeviceStore } from "../state/deviceStore";
 import type { ServerConnection } from "../state/serverConnection";
 import { actionBlock, isFlagged, type FieldProblem } from "../validation/fieldValidation";
 import {
@@ -23,12 +24,16 @@ import {
   autoTagApplyPending,
   autoTagAssignments,
   autoTagResults,
+  autoTagRowsAfterApply,
+  autoTagRowsAfterRefusal,
   autoTagRowsFromScan,
+  autoTagRowsLeftCatalog,
   autoTagStatusAfterChange,
+  autoTagSummary,
   collapseEmptyAutoTagRows,
+  selectAllAutoTagFiles,
   selectFile,
   selectRowFiles,
-  selectVisibleAutoTagFiles,
   type AutoTagResults,
   type AutoTagRow
 } from "./autoTagModel";
@@ -45,7 +50,10 @@ import {
   moveCategoryInOrder,
   newTagNameProblem,
   normalizeTagKey,
+  planAutoTagApply,
   planTagEdits,
+  retargetHeldTag,
+  savedTagModel,
   tagCategoryRows,
   tagEditorDisplay,
   tagSaveRequest,
@@ -59,11 +67,9 @@ import {
   type TagSelection
 } from "./tagEditorModel";
 
-const COLLAPSED_CATEGORIES_KEY = "rr_tagEditorCollapsed";
+const EXPANDED_CATEGORIES_KEY = "tags.expandedCategories";
 const SCAN_FULL_LIBRARY_KEY = "rr_autoTagScanFullLibrary";
 const SAVE_SUCCEEDED = "Tag editor changes applied";
-
-export type TagEditorTab = "edit" | "autotag";
 
 /** The Edit Tag dialog: the tag as it was, and the name and category typed and chosen. */
 export interface TagEditDraft {
@@ -92,14 +98,19 @@ interface AutoTagState {
 interface TagEditorState {
   /** The last tag model loaded, kept while a new one loads and while the editor is closed. */
   model: TagEditorModel | null;
-  /** The items being edited: the item playing when the editor opened. */
+  /**
+   * The items being edited: the item playing, which the editor follows unless it holds changes to the item's tags or
+   * a save hasn't landed yet.
+   */
   itemIds: string[];
+  /** The file name of the item being edited, for the line that names it while it isn't the one playing. */
+  itemName: string;
   order: string[];
   orderChanged: boolean;
   selections: ReadonlyMap<string, TagSelection>;
   pending: PendingTagEdits;
-  /** The categories collapsed, kept for the browser session. */
-  collapsed: ReadonlySet<string>;
+  /** The categories expanded, which this device remembers; every other category is collapsed. */
+  expanded: ReadonlySet<string>;
   /** The new tag's name and category, kept while the editor is closed. */
   newTagName: string;
   newTagCategoryId: string;
@@ -124,6 +135,10 @@ export interface TagEditorView extends TagEditorState {
   /** Save is enabled and marked while there is something to save. */
   savePending: boolean;
   results: AutoTagResults;
+  /** Auto Tag's Apply is enabled while a file is selected and no scan runs. */
+  autoTagApplyPending: boolean;
+  /** The file name of the item being edited while it isn't the one playing, which the tab then names, or null. */
+  heldName: string | null;
   /** The Edit Tag name's problem, which disables its Save, or null. */
   editNameProblem: FieldProblem | null;
   editNameFlagged: boolean;
@@ -141,37 +156,35 @@ export interface TagEditorView extends TagEditorState {
 }
 
 /**
- * The Tags tab's tag editor: the playing item's tags and the tag catalog on Edit Tags, file name matches on Auto Tag,
- * and Save, which sends all of their changes in the background after closing the panel. The panel shows and hides
- * the tab.
+ * The Tags tab's tag editor: the playing item's tags and the tag catalog, with Save, which sends their changes in the
+ * background; and Auto Tag, which opens over the whole page from the tab to find files whose names hold a tag's name,
+ * with its own Apply. The panel shows and hides the tab, and the editor keeps its changes while it is hidden. It
+ * follows the playing item unless it holds changes to its item's tags.
  */
 export interface TagEditor {
   /** Whether the Tags tab shows. */
   readonly isOpen: ReadonlySignal<boolean>;
-  /** The tab shown, or null before the editor first opens. */
-  readonly tab: ReadonlySignal<TagEditorTab | null>;
+  /** Whether Auto Tag shows, over the whole page. */
+  readonly autoTagOpen: ReadonlySignal<boolean>;
   /** Null before the editor first opens. */
   readonly view: ReadonlySignal<TagEditorView | null>;
 
   /**
-   * The tab shows: pauses playback, shows Edit Tags, and loads the tags of the item playing, which it doesn't while the
-   * server fails the compatibility check.
+   * The tab shows: pauses playback and loads the tags of the item it edits, which it doesn't while the server fails the
+   * compatibility check, nor while a save is on its way, which loads them once it lands. Its changes are as it was left
+   * with them.
    */
   open(): void;
+  /** The tab hides: closes the editor's dialogs and resumes playback, keeping the changes. */
+  close(): void;
   /**
-   * The tab is about to hide: asks first when there are changes, then closes the editor's dialogs and resumes
-   * playback. Says whether the tab can hide, which it can't while a scan runs or when the user keeps the changes.
-   */
-  close(): Promise<boolean>;
-  showTab(tab: TagEditorTab): void;
-  /**
-   * Asks first when there are changes, then drops them, closes the editor's dialogs, and loads the tags again. Not
-   * while a scan runs.
+   * Asks first when there are changes, then drops them, closes the editor's dialogs, follows the playing item, and
+   * loads the tags again, or once a save on its way lands.
    */
   refresh(): Promise<void>;
   /**
-   * Closes the editor and the panel, and sends the changes in the background. Not while the server fails the
-   * compatibility check.
+   * Shows the changes as saved and sends them in the background, leaving the panel open. Once the save lands, the
+   * editor follows the playing item and loads the tags again. Not while the server fails the compatibility check.
    */
   save(): void;
 
@@ -198,7 +211,7 @@ export interface TagEditor {
   typeNewTag(text: string): void;
   chooseNewTagCategory(categoryId: string): void;
   /**
-   * Creates the tag in the chosen category, until Save, opening the category so its chip shows, and returns its name.
+   * Creates the tag in the chosen category, until Save, expanding the category so its chip shows, and returns its name.
    * It doesn't put the tag on the playing item; the chip's add does. Does nothing while the name is empty or another
    * tag's, and returns null.
    */
@@ -214,8 +227,20 @@ export interface TagEditor {
   /** Asks first about the tag as it was when the dialog opened, then deletes it and closes the dialog. */
   deleteEditedTag(): Promise<void>;
 
+  /** Opens Auto Tag over the whole page, with its last scan. */
+  openAutoTag(): void;
+  /** The X: closes Auto Tag and keeps its last scan. Not while a scan runs. */
+  closeAutoTag(): void;
+  /** Cancel: clears the scan and closes Auto Tag. Not while a scan runs. */
+  cancelAutoTag(): void;
+  /**
+   * Sends the selected files in the background, and shows them as having their tag, until another scan. A refused
+   * apply puts the rows back. Not while a scan runs, nor while the server fails the compatibility check.
+   */
+  applyAutoTag(): void;
   setScanFullLibrary(checked: boolean): void;
   setViewAll(checked: boolean): void;
+  /** Selects every file without its tag; a file that has it can't be selected. */
   selectAll(): void;
   deselectAll(): void;
   scan(): Promise<void>;
@@ -229,11 +254,11 @@ export interface TagEditorOptions {
   api: AppApi;
   connection: Pick<ServerConnection, "on">;
   library: Pick<Library, "session">;
+  /** The Filter tab, whose unsaved changes take a tag renamed or deleted. */
+  filter: Pick<FilterDialog, "reviseTags">;
   player: Pick<Player, "pauseForTagEditor" | "resumeAfterTagEditor">;
-  /** Save closes the panel, at every width, as it closed the tag editor. */
-  panel: Pick<PanelHost, "close">;
-  /** Browser `sessionStorage`, for the collapsed categories. */
-  sessionStorage: StorageLike;
+  /** This device's memory, for the categories expanded. */
+  device: DeviceStore;
   /** Browser `localStorage`, for Scan full library. */
   localStorage: StorageLike;
   /** The in-app dialogs, for the confirmations. */
@@ -246,6 +271,10 @@ function errorText(error: unknown): string {
   return (error as { message?: string } | null)?.message || String(error);
 }
 
+function isIdList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((id) => typeof id === "string");
+}
+
 function emptyAutoTag(scanFull: boolean, viewAll: boolean): AutoTagState {
   return { scanFull, viewAll, rows: [], hasRun: false, scanning: false, status: "" };
 }
@@ -255,39 +284,38 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
   const newId = options.newId ?? (() => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`));
 
   const isOpen = signal(false);
-  const tab = signal<TagEditorTab | null>(null);
+  const autoTagOpen = signal(false);
   const view = signal<TagEditorView | null>(null);
   let state: TagEditorState = {
     model: null,
     itemIds: [],
+    itemName: "",
     order: [],
     orderChanged: false,
     selections: new Map(),
     pending: createPendingTagEdits(),
-    collapsed: new Set(),
+    expanded: new Set(options.device.read(EXPANDED_CATEGORIES_KEY, [] as string[], isIdList)),
     newTagName: "",
     newTagCategoryId: "",
     edit: null,
     editing: false,
     categoryEdit: null,
     newCategory: null,
-    autoTag: emptyAutoTag(false, false)
+    autoTag: emptyAutoTag(readScanFull(), false)
   };
 
   const saves = createTagSaveSession();
   /** The message of the last refused save step on this page (recorded in WebUI Notifications). */
   let lastSaveError = "";
-
-  function manualPending(current: TagEditorState): boolean {
-    return current.orderChanged || current.selections.size > 0 || hasPendingTagEdits(current.pending);
-  }
-
-  function autoTagPending(current: TagEditorState): boolean {
-    return autoTagApplyPending(current.autoTag.rows, current.autoTag.viewAll, current.autoTag.hasRun);
-  }
+  /** Saves and Auto Tag applies sent and not yet landed. The editor follows the playing item and loads the tags only once they land. */
+  let savesInFlight = 0;
+  /** Counts tag model loads, and saves, so only the latest load's reply is taken. */
+  let loads = 0;
+  /** Counts Auto Tag scans and their clearing, so a refused Apply only puts back rows a new scan hasn't replaced. */
+  let scans = 0;
 
   function hasChanges(current: TagEditorState): boolean {
-    return manualPending(current) || autoTagPending(current);
+    return current.orderChanged || current.selections.size > 0 || hasPendingTagEdits(current.pending);
   }
 
   /**
@@ -301,7 +329,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     if (next.model) {
       const display = tagEditorDisplay(next.model, next.pending, next.order);
       tags = display.tags;
-      categories = tagCategoryRows(display, next.collapsed, next.selections);
+      categories = tagCategoryRows(display, next.expanded, next.selections, next.model);
       options = categoryOptions(display.categories);
       const newTagCategoryId = options.some((option) => option.id === next.newTagCategoryId)
         ? next.newTagCategoryId
@@ -316,13 +344,16 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       : null;
     const newCategoryProblem = next.newCategory ? categoryNameProblem(next.newCategory.name, categories ?? [], null) : null;
     const newTagProblem = newTagNameProblem(next.newTagName, tags);
+    const playingId = store.current.peek()?.itemId || "";
     view.value = {
       ...next,
       categories,
       categoryOptions: options,
-      noModel: !next.model && manualPending(next),
+      noModel: !next.model && hasChanges(next),
       savePending: hasChanges(next),
       results: autoTagResults(next.autoTag.rows, next.autoTag.viewAll, next.autoTag.hasRun),
+      autoTagApplyPending: !next.autoTag.scanning && autoTagApplyPending(next.autoTag.rows, next.autoTag.hasRun),
+      heldName: next.itemIds.length > 0 && next.itemIds[0] !== playingId ? next.itemName : null,
       editNameProblem,
       editNameFlagged: isFlagged(editNameProblem),
       categoryEditProblem,
@@ -358,22 +389,18 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     return dialogs.confirm({ message: "Discard changes?", confirmLabel: "Discard", danger: true });
   }
 
-  function readCollapsed(): Set<string> {
-    try {
-      const raw = options.sessionStorage.getItem(COLLAPSED_CATEGORIES_KEY);
-      const parsed: unknown = raw ? JSON.parse(raw) : null;
-      return Array.isArray(parsed) ? new Set(parsed.map((id) => String(id || ""))) : new Set();
-    } catch {
-      return new Set();
+  /** The categories expanded with these changed, which this device then remembers. */
+  function withExpanded(ids: readonly string[], open: boolean): Set<string> {
+    const expanded = new Set(state.expanded);
+    for (const id of ids) {
+      if (open) {
+        expanded.add(id);
+      } else {
+        expanded.delete(id);
+      }
     }
-  }
-
-  function saveCollapsed(collapsed: ReadonlySet<string>): void {
-    try {
-      options.sessionStorage.setItem(COLLAPSED_CATEGORIES_KEY, JSON.stringify(Array.from(collapsed)));
-    } catch {
-      // Best effort: the categories open expanded next time.
-    }
+    options.device.write(EXPANDED_CATEGORIES_KEY, Array.from(expanded));
+    return expanded;
   }
 
   function readScanFull(): boolean {
@@ -392,31 +419,78 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     }
   }
 
-  function currentItemIds(): string[] {
-    if (state.itemIds.length > 0) {
-      return state.itemIds.slice();
+  /**
+   * Takes the playing item as the item being edited, unless the editor holds changes to its item's tags or a save
+   * hasn't landed. Says whether the item changed. Before the editor first opens, it only notes the item.
+   */
+  function follow(): boolean {
+    if (state.selections.size > 0 || savesInFlight > 0) {
+      return false;
     }
     const current = store.current.peek();
-    return current?.itemId ? [current.itemId] : [];
+    const itemIds = current?.itemId ? [current.itemId] : [];
+    if (itemIds.length === state.itemIds.length && itemIds.every((id, index) => id === state.itemIds[index])) {
+      return false;
+    }
+    const change = { itemIds, itemName: current?.displayName || "" };
+    if (view.peek()) {
+      update(change);
+    } else {
+      state = { ...state, ...change };
+    }
+    return true;
   }
 
-  /** Nothing loads while the server fails the compatibility check. */
+  /** Loads the tags of the item being edited; only the latest load is taken. Nothing loads while the server fails the compatibility check. */
   async function loadModel(): Promise<void> {
     if (store.compatibilityBlocked.peek()) {
       return;
     }
-    const response = await api.post("/api/tag-editor/model", { itemIds: currentItemIds() });
+    const load = ++loads;
+    const response = await api.post("/api/tag-editor/model", { itemIds: state.itemIds.slice() });
     if (!response.ok) {
       throw new Error(`tag-model:${response.status}`);
     }
     const model = ((await response.json()) as TagEditorModel | null) || { categories: [], tags: [], items: [] };
-    update({ model, order: state.order.length > 0 ? state.order : initialCategoryOrder(model) });
+    if (load === loads) {
+      update({ model, order: state.order.length > 0 ? state.order : initialCategoryOrder(model) });
+    }
   }
 
-  function closeEditor(): void {
-    update({ ...dialogsClosed(), itemIds: [], ...cleared(), autoTag: emptyAutoTag(state.autoTag.scanFull, state.autoTag.viewAll) });
-    isOpen.value = false;
-    options.player.resumeAfterTagEditor();
+  /** Loads the tags again, unless a save is on its way, which loads them once it lands, so a reply can't undo it. */
+  function reload(failure: string): void {
+    if (savesInFlight > 0) {
+      return;
+    }
+    loadModel().catch((error) => {
+      store.setStatus(`${failure}: ${errorText(error)}`);
+    });
+  }
+
+  /** Follows the playing item, as `follow` does, and while the tab shows, loads its tags. Says whether the item changed. */
+  function followAndLoad(): boolean {
+    if (!follow()) {
+      return false;
+    }
+    if (isOpen.peek()) {
+      reload("Tag editor unavailable");
+    }
+    return true;
+  }
+
+  /** Clears Auto Tag's scan, so an Apply sent from it no longer puts its rows back. */
+  function clearScan(): void {
+    scans += 1;
+    update({ autoTag: emptyAutoTag(state.autoTag.scanFull, state.autoTag.viewAll) });
+  }
+
+  /** A save or Auto Tag apply landed: the editor follows the playing item, and while it shows, loads the tags again. */
+  function saveLanded(): void {
+    savesInFlight -= 1;
+    follow();
+    if (isOpen.peek()) {
+      reload("Tag refresh failed");
+    }
   }
 
   // Tiles and filters the save changes.
@@ -441,12 +515,9 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
   /**
    * Renames or removes a renamed or deleted tag in the presets, in place, then in the applied filter, which is replaced,
    * so the Filters line and the device's memory follow and see it still as its preset's own, and in the library's
-   * filter. The preset dropdown is rebuilt.
+   * filter and the Filter tab's unsaved changes. The preset dropdown is rebuilt.
    */
   function retargetFilters(step: TagSaveStep): void {
-    if (step.kind !== "rename-tag" && step.kind !== "delete-tag") {
-      return;
-    }
     let presetsChanged = false;
     for (const preset of store.presets.peek() || []) {
       const filter = preset?.filterState as { selectedTags?: unknown; excludedTags?: unknown } | undefined;
@@ -463,8 +534,40 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     library.session.reviseStoredFilter((selected, excluded) => {
       retargetTagFilter(selected, excluded, step);
     });
+    options.filter.reviseTags((selected, excluded) => {
+      retargetTagFilter(selected, excluded, step);
+    });
     if (filterChanged || presetsChanged) {
       store.syncHeaderPresets();
+    }
+  }
+
+  /**
+   * A tag renamed or deleted, by this page's save or another client: the filters take the change, and a kept Auto Tag
+   * scan, which may name the old tag, is cleared, so its Apply can't create the tag again. The editor's held changes
+   * take it too, so Save doesn't send the old name back, and while the tab shows the tags load again. Other steps
+   * change nothing.
+   */
+  function retargetTag(step: TagSaveStep): void {
+    if (step.kind !== "rename-tag" && step.kind !== "delete-tag") {
+      return;
+    }
+    // A rename that keeps the name only moves the tag to another category, as the server's event treats it. A rename
+    // that only changes the case still retargets.
+    if (step.kind === "rename-tag" && step.oldName.trim() === step.newName.trim()) {
+      return;
+    }
+    retargetFilters(step);
+    if (state.autoTag.hasRun && !state.autoTag.scanning) {
+      clearScan();
+    }
+    const held = retargetHeldTag(state.selections, state.pending, step);
+    if (held.selections !== state.selections || held.pending !== state.pending) {
+      update(held);
+    }
+    // A deleted tag's add or remove may have been the last one holding the item.
+    if (!followAndLoad() && isOpen.peek()) {
+      reload("Tag refresh failed");
     }
   }
 
@@ -478,7 +581,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     if (step.kind === "apply-auto-tag") {
       saves.noteAutoTagResult(handle, autoTagAppliedFromResponse(await response.json().catch(() => null)));
     }
-    retargetFilters(step);
+    retargetTag(step);
     return true;
   }
 
@@ -495,20 +598,21 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     return rolledBack;
   }
 
-  async function saveInBackground(handle: TagSaveHandle, steps: TagSaveStep[]): Promise<void> {
+  /** Sends the save's steps, and says whether the server took them all. */
+  async function saveInBackground(handle: TagSaveHandle, steps: TagSaveStep[]): Promise<boolean> {
     let result;
     try {
       result = await runTagEditorSave(steps, { post: (step) => postStep(handle, step) });
     } catch (error) {
       const rolledBack = failSave(handle, []);
       store.setStatus(rolledBack ? (error as Error | null)?.message || `Tag apply failed: ${error}` : SAVE_SUCCEEDED);
-      return;
+      return false;
     }
     if (!result.ok) {
       // A step the server confirmed through its event before refusing a later one is not rolled back.
       const rolledBack = failSave(handle, result.accepted);
       store.setStatus(rolledBack ? lastSaveError || "Tag apply failed" : SAVE_SUCCEEDED);
-      return;
+      return false;
     }
     try {
       projectLoadedTagItems();
@@ -519,6 +623,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     } catch (error) {
       store.setStatus((error as Error | null)?.message || SAVE_SUCCEEDED);
     }
+    return true;
   }
 
   /** An item-tags event: this page's own save, or another client's change, possibly a catalog rename or delete. */
@@ -539,7 +644,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       },
       {
         tagFilterCanChangeMembership,
-        retarget: retargetFilters,
+        retarget: retargetTag,
         afterRetarget(handling) {
           const decision = saves.onEcho(echo, handling.hadTagFilter || reloadOnLand());
           if (decision.skipPatch) {
@@ -567,6 +672,25 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
 
   connection.on("itemTagsChanged", applyItemTagsEvent);
 
+  // A rename or delete of a tag no file has comes only as a catalog change, without the old name, so a kept scan that
+  // names a tag no longer in the catalog is cleared, and its Apply can't create the tag again.
+  connection.on("tagCatalogChanged", (payload) => {
+    const tags: unknown = payload?.tags ?? payload?.Tags;
+    if (!Array.isArray(tags) || !state.autoTag.hasRun || state.autoTag.scanning) {
+      return;
+    }
+    if (autoTagRowsLeftCatalog(state.autoTag.rows, tags.map((tag) => tag?.name ?? tag?.Name))) {
+      clearScan();
+    }
+  });
+
+  // The editor follows the playing item, and the line naming a held item follows it too.
+  store.current.subscribe(() => {
+    if (!followAndLoad() && view.peek()) {
+      update({});
+    }
+  });
+
   function findCategory(categoryId: string): TagCategoryRow | undefined {
     return view.peek()?.categories?.find((category) => category.id === categoryId);
   }
@@ -585,14 +709,21 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       pending: { ...state.pending, deleteTags: new Map(state.pending.deleteTags).set(key, { name: tagName }), upsertTags, renameTags },
       selections
     });
+    // A deleted tag's add or remove may have been the last one holding the item.
+    followAndLoad();
   }
 
-  /** Deletes a category, its tags becoming Uncategorized, as part of `change`. */
+  /**
+   * Deletes a category, its tags becoming Uncategorized, as part of `change`. Uncategorized expands when tags move into
+   * it, so the change is visible.
+   */
   function deleteCategory(categoryId: string, change: Partial<TagEditorState>): void {
     const upsertCategories = new Map(state.pending.upsertCategories);
     upsertCategories.delete(categoryId);
+    const hadTags = (findCategory(categoryId)?.chips.length ?? 0) > 0;
     update({
       ...change,
+      ...(hadTags ? { expanded: withExpanded([UNCATEGORIZED_CATEGORY_ID], true) } : {}),
       pending: { ...state.pending, deleteCategoryIds: new Set(state.pending.deleteCategoryIds).add(categoryId), upsertCategories },
       order: state.order.filter((id) => id !== categoryId)
     });
@@ -600,71 +731,42 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
 
   const editor: TagEditor = {
     isOpen,
-    tab,
+    autoTagOpen,
     view,
 
     open() {
-      const current = store.current.peek();
-      update({
-        itemIds: current?.itemId ? [current.itemId] : [],
-        order: [],
-        collapsed: readCollapsed(),
-        ...cleared(),
-        autoTag: emptyAutoTag(readScanFull(), false)
-      });
-      tab.value = "edit";
+      follow();
+      // A moved category keeps its place; otherwise the categories take the order of the tags about to load.
+      update({ order: state.orderChanged ? state.order : [] });
       options.player.pauseForTagEditor();
       isOpen.value = true;
-      loadModel().catch((error) => {
-        store.setStatus(`Tag editor unavailable: ${errorText(error)}`);
-      });
+      reload("Tag editor unavailable");
     },
 
-    async close() {
+    close() {
       if (!isOpen.peek()) {
-        return true;
+        return;
       }
-      if (state.autoTag.scanning) {
-        return false;
-      }
-      // With no changes it closes at once. The editor may have closed, or a scan started, while it asked.
-      if (hasChanges(state)) {
-        const discard = await confirmDiscard();
-        if (!isOpen.peek()) {
-          return true;
-        }
-        if (!discard || state.autoTag.scanning) {
-          return false;
-        }
-      }
-      closeEditor();
-      return true;
-    },
-
-    showTab(next) {
-      tab.value = next;
+      update(dialogsClosed());
+      isOpen.value = false;
+      options.player.resumeAfterTagEditor();
     },
 
     async refresh() {
-      if (state.autoTag.scanning) {
-        return;
-      }
-      if (hasChanges(state) && (!(await confirmDiscard()) || state.autoTag.scanning)) {
+      if (hasChanges(state) && !(await confirmDiscard())) {
         return;
       }
       update({
         ...cleared(),
         ...dialogsClosed(),
-        order: [],
-        autoTag: emptyAutoTag(state.autoTag.scanFull, state.autoTag.viewAll)
+        order: []
       });
-      loadModel().catch((error) => {
-        store.setStatus(`Tag refresh failed: ${errorText(error)}`);
-      });
+      follow();
+      reload("Tag refresh failed");
     },
 
     save() {
-      if (state.autoTag.scanning || !hasChanges(state) || store.compatibilityBlocked.peek()) {
+      if (!hasChanges(state) || store.compatibilityBlocked.peek()) {
         return;
       }
       const steps = planTagEdits({
@@ -672,31 +774,36 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
         pending: state.pending,
         order: state.order,
         selections: state.selections,
-        itemIds: currentItemIds(),
-        autoTagAssignments: autoTagAssignments(state.autoTag.rows, state.autoTag.viewAll)
+        itemIds: state.itemIds.slice()
       });
       if (steps.length === 0) {
+        // The changes cancel out, so they are dropped, and their dots go.
+        update(cleared());
+        followAndLoad();
         store.setStatus("No tag changes to save.");
         return;
       }
       const loaded = loadedTagItems();
       const handle = saves.begin(loaded, steps, false, tagFilterCanChangeMembership());
       writeLoadedTagItems(loaded);
-      closeEditor();
-      // The editor is closed, so the Tags tab lets the panel close without asking.
-      void options.panel.close();
-      void saveInBackground(handle, steps);
+      // The editor shows the changes as saved until the tags load again once the save lands. A load sent before now
+      // answers with the tags as they were, so its reply is dropped.
+      const before = state.model;
+      const model = savedTagModel(state.model, state.pending, state.order, state.selections);
+      loads += 1;
+      update({ model, order: initialCategoryOrder(model), ...cleared() });
+      savesInFlight += 1;
+      void saveInBackground(handle, steps).then((saved) => {
+        // A refused save shows the tags as they were, unless they have loaded since, in case they can't load again.
+        if (!saved && state.model === model) {
+          update({ model: before, order: before ? initialCategoryOrder(before) : [] });
+        }
+        saveLanded();
+      });
     },
 
     toggleCategory(categoryId) {
-      const collapsed = new Set(state.collapsed);
-      if (collapsed.has(categoryId)) {
-        collapsed.delete(categoryId);
-      } else {
-        collapsed.add(categoryId);
-      }
-      saveCollapsed(collapsed);
-      update({ collapsed });
+      update({ expanded: withExpanded([categoryId], !state.expanded.has(categoryId)) });
     },
 
     moveCategory(categoryId, to) {
@@ -781,6 +888,8 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
 
     toggleTag(tagName, action) {
       update({ selections: toggleTagSelection(state.selections, tagName, action) });
+      // Undoing the last add or remove ends the hold on the item.
+      followAndLoad();
     },
 
     typeNewTag(text) {
@@ -802,11 +911,8 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       const deleteTags = new Map(state.pending.deleteTags);
       deleteTags.delete(key);
       const upsertTags = new Map(state.pending.upsertTags).set(key, { name, categoryId });
-      const collapsed = new Set(state.collapsed);
-      if (collapsed.delete(categoryId)) {
-        saveCollapsed(collapsed);
-      }
-      update({ pending: { ...state.pending, deleteTags, upsertTags }, collapsed, newTagName: "" });
+      const expanded = state.expanded.has(categoryId) ? state.expanded : withExpanded([categoryId], true);
+      update({ pending: { ...state.pending, deleteTags, upsertTags }, expanded, newTagName: "" });
       return name;
     },
 
@@ -866,7 +972,9 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
         newName: name,
         newCategoryId: categoryChanged ? categoryId : null
       });
-      update({ pending: { ...state.pending, deleteTags, renameTags }, editing: false });
+      // The category a tag moves into expands, so the change is visible.
+      const expanded = categoryChanged && !state.expanded.has(categoryId) ? withExpanded([categoryId], true) : state.expanded;
+      update({ pending: { ...state.pending, deleteTags, renameTags }, expanded, editing: false });
     },
 
     cancelEdit() {
@@ -887,6 +995,51 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       }
     },
 
+    openAutoTag() {
+      autoTagOpen.value = true;
+    },
+
+    closeAutoTag() {
+      if (!state.autoTag.scanning) {
+        autoTagOpen.value = false;
+      }
+    },
+
+    cancelAutoTag() {
+      if (state.autoTag.scanning) {
+        return;
+      }
+      clearScan();
+      autoTagOpen.value = false;
+    },
+
+    applyAutoTag() {
+      const autoTag = state.autoTag;
+      if (autoTag.scanning || !autoTagApplyPending(autoTag.rows, autoTag.hasRun) || store.compatibilityBlocked.peek()) {
+        return;
+      }
+      const steps = planAutoTagApply(autoTagAssignments(autoTag.rows));
+      if (steps.length === 0) {
+        return;
+      }
+      const loaded = loadedTagItems();
+      const handle = saves.begin(loaded, steps, false, tagFilterCanChangeMembership());
+      writeLoadedTagItems(loaded);
+      const sent = autoTag.rows;
+      const scan = scans;
+      const applied = autoTagRowsAfterApply(sent, autoTag.viewAll);
+      update({ autoTag: { ...autoTag, rows: applied, status: autoTagSummary(applied, autoTag.viewAll) } });
+      savesInFlight += 1;
+      void saveInBackground(handle, steps).then((saved) => {
+        // Unless a new scan has replaced them, a refused apply shows the files it sent as without their tag again.
+        if (!saved && scans === scan) {
+          const rows = autoTagRowsAfterRefusal(state.autoTag.rows, sent);
+          update({ autoTag: { ...state.autoTag, rows, status: autoTagSummary(rows, state.autoTag.viewAll) } });
+        }
+        saveLanded();
+      });
+    },
+
     setScanFullLibrary(checked) {
       saveScanFull(checked);
       update({ autoTag: { ...state.autoTag, scanFull: checked } });
@@ -897,11 +1050,11 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     },
 
     selectAll() {
-      updateRows(selectVisibleAutoTagFiles(state.autoTag.rows, state.autoTag.viewAll, true));
+      updateRows(selectAllAutoTagFiles(state.autoTag.rows, true));
     },
 
     deselectAll() {
-      updateRows(selectVisibleAutoTagFiles(state.autoTag.rows, state.autoTag.viewAll, false));
+      updateRows(selectAllAutoTagFiles(state.autoTag.rows, false));
     },
 
     async scan() {
@@ -920,6 +1073,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
         // A failed scan reads as one that found nothing (recorded in WebUI Notifications).
         rows = [];
       }
+      scans += 1;
       updateRows(rows, { hasRun: true });
       update({ autoTag: { ...state.autoTag, scanning: false } });
     },
@@ -929,7 +1083,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     },
 
     checkRow(rowId, checked) {
-      updateRows(state.autoTag.rows.map((row) => (row.rowId === rowId ? selectRowFiles(row, state.autoTag.viewAll, checked) : row)));
+      updateRows(state.autoTag.rows.map((row) => (row.rowId === rowId ? selectRowFiles(row, checked) : row)));
     },
 
     checkFile(rowId, itemId, checked) {

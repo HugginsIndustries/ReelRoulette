@@ -173,7 +173,8 @@ function isOpen(): boolean {
 
 /** A tab of the panel's own tab row, apart from the Filter tab's section tabs. */
 function panelTab(name: "Library" | "Filter" | "Tags"): HTMLButtonElement {
-  return within(panel().querySelector(".panel-tablist") as HTMLElement).getByRole("tab", { name, hidden: true }) as HTMLButtonElement;
+  // A tab's name says so while it holds unsaved changes.
+  return within(panel().querySelector(".panel-tablist") as HTMLElement).getByRole("tab", { name: new RegExp(`^${name}(, unsaved changes)?$`), hidden: true }) as HTMLButtonElement;
 }
 
 /** Opens the panel with the panel button, unless it is open, and chooses the Filter tab. */
@@ -327,8 +328,8 @@ async function excludeTag(name: string): Promise<void> {
 }
 
 function category(title: string): HTMLElement {
-  const found = Array.from(dialog().querySelectorAll<HTMLElement>(".tag-editor-category")).find(
-    (candidate) => candidate.querySelector(".tag-editor-category-title")?.textContent === title
+  const found = Array.from(dialog().querySelectorAll<HTMLElement>(".tag-category")).find(
+    (candidate) => candidate.querySelector(".tag-category-name")?.textContent === title
   );
   if (!found) {
     throw new Error(`No tag category named ${title}.`);
@@ -337,7 +338,7 @@ function category(title: string): HTMLElement {
 }
 
 function categoryTitles(): string[] {
-  return Array.from(dialog().querySelectorAll(".tag-editor-category-title")).map((node) => node.textContent ?? "");
+  return Array.from(dialog().querySelectorAll(".tag-category-name")).map((node) => node.textContent ?? "");
 }
 
 function chipNames(title: string): string[] {
@@ -345,11 +346,11 @@ function chipNames(title: string): string[] {
 }
 
 function categoryGrid(title: string): HTMLElement {
-  return category(title).querySelector(".tag-editor-tag-grid") as HTMLElement;
+  return category(title).querySelector(".tag-grid") as HTMLElement;
 }
 
 function categoryToggle(title: string): HTMLButtonElement {
-  return category(title).querySelector(".tag-editor-category-toggle") as HTMLButtonElement;
+  return category(title).querySelector(".tag-category-toggle") as HTMLButtonElement;
 }
 
 function presetSelectInDialog(): HTMLSelectElement {
@@ -513,12 +514,41 @@ describe("opening and closing", () => {
     expect(byId("filter-panel-presets").style.display).toBe("none");
   });
 
-  it("the panel's Close, another tab, and Cancel drop its changes without applying or saving presets, and it shows the applied filter and the saved presets again", async () => {
+  it("the panel's Close and another tab keep its changes and its section, applying and saving nothing, and the changes show again", async () => {
     const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET, RECENT_PRESET]);
     const queries = libraryQueries(server).length;
-    const leave: Array<[string, () => Promise<void>]> = [
+    await openDialog();
+    await click(box("Favorites"));
+    await showTab("Presets");
+    await addPreset("Draft");
+    await pressKey(presetHandle("Favorites"), "ArrowDown");
+    await deletePreset("Recent");
+    expect(presetRows()).toEqual(["Beach days", "Favorites", "Draft"]);
+
+    for (const [way, leaveTab] of [
       ["the panel's Close", closePanel],
-      ["another tab", () => click(panelTab("Library"))],
+      ["another tab", () => click(panelTab("Library"))]
+    ] as Array<[string, () => Promise<void>]>) {
+      await leaveTab();
+      expect(appDialogs(), way).toEqual([]);
+      await openDialog();
+      expect(selectedTab(), way).toBe("Presets");
+      expect(presetRows(), way).toEqual(["Beach days", "Favorites", "Draft"]);
+      expect(applyButton().textContent, way).toBe("Apply*");
+      await showTab("General");
+      expect(flagRow("Favorites").checked, way).toBe(true);
+      await showTab("Presets");
+    }
+
+    expect(presets.saves()).toHaveLength(0);
+    expect(libraryQueries(server)).toHaveLength(queries);
+    expect((await nextPick(server)).filterState.favoritesOnly).toBe(false);
+  });
+
+  it("Cancel drops its changes, beside the player and as the overlay, and it shows the applied filter and the saved presets again", async () => {
+    const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET, RECENT_PRESET]);
+    const queries = libraryQueries(server).length;
+    const cancel: Array<[string, () => Promise<void>]> = [
       [
         "Cancel beside the player",
         async () => {
@@ -543,7 +573,7 @@ describe("opening and closing", () => {
       ]
     ];
 
-    for (const [way, leaveTab] of leave) {
+    for (const [way, cancelTab] of cancel) {
       await openDialog();
       await click(box("Favorites"));
       expect(applyButton().textContent, way).toBe("Apply*");
@@ -553,7 +583,7 @@ describe("opening and closing", () => {
       await pressKey(presetHandle("Favorites"), "ArrowDown");
       await deletePreset("Recent");
       expect(presetRows()).toEqual(["Beach days", "Favorites", "Draft"]);
-      await leaveTab();
+      await cancelTab();
       expect(isOpen(), way).toBe(false);
     }
 
@@ -610,13 +640,13 @@ describe("opening and closing", () => {
     await click(dialogButton("Refresh"));
     expect(statusLine()).toBe("Filter data refreshed.");
     expect(selectedTab()).toBe("General");
-    expect(box("Movies").checked).toBe(true);
+    expect(box("Movies (C:\\media\\movies)").checked).toBe(true);
   });
 
   it("keeps its markup on each tab", async () => {
     await mountFilter([RICH_PRESET, FAVORITES_PRESET]);
     await pickPreset("preset-rich");
-    sessionStorage.setItem("rr_filterDialogCollapsedCategories", JSON.stringify(["cat-mood"]));
+    localStorage.setItem("rr_device.filter.expandedTagCategories", JSON.stringify(["cat-places", "cat-people", "__filter_uncategorized__"]));
 
     await openDialog();
     expect(normalizedMarkup(dialog(), { liveFormState: true })).toMatchSnapshot("general");
@@ -635,7 +665,7 @@ describe("opening and closing", () => {
 
     expect(within(dialog()).getByText("No sources returned from server.")).toBeTruthy();
     await showTab("Tags");
-    expect(within(dialog()).getByText("No tags available. Use Edit tags to create tags.")).toBeTruthy();
+    expect(within(dialog()).getByText("No tags yet. Add them in the Tags tab.")).toBeTruthy();
     expect(byId("filter-global-match")).toBeNull();
     await showTab("Presets");
     expect(within(dialog()).getByText("No presets")).toBeTruthy();
@@ -655,10 +685,10 @@ describe("General tab", () => {
     expect(box("Videos only").checked).toBe(true);
     expect(box("All (Videos and Photos)").checked).toBe(false);
     expect(box("Only videos without audio").checked).toBe(true);
-    expect(box("Movies").checked).toBe(true);
+    expect(box("Movies (C:\\media\\movies)").checked).toBe(true);
     expect(box("C:\\media\\photos").checked).toBe(false);
-    expect(box("Archive").checked).toBe(false);
-    expect(box("Archive").disabled).toBe(true);
+    expect(box("Archive (D:\\archive)").checked).toBe(false);
+    expect(box("Archive (D:\\archive)").disabled).toBe(true);
     expect(byId<HTMLInputElement>("filter-min-dur-text").value).toBe("01:30");
     expect(byId<HTMLInputElement>("filter-max-dur-text").value).toBe("01:01:40");
   });
@@ -853,16 +883,16 @@ describe("General tab", () => {
   it("stores only the checked sources, and no sources once all are checked", async () => {
     const { server } = await mountFilter();
     await openDialog();
-    expect(box("Movies").checked).toBe(true);
+    expect(box("Movies (C:\\media\\movies)").checked).toBe(true);
     expect(box("C:\\media\\photos").checked).toBe(true);
-    expect(box("Archive").checked).toBe(true);
+    expect(box("Archive (D:\\archive)").checked).toBe(true);
 
-    await click(box("Movies"));
+    await click(box("Movies (C:\\media\\movies)"));
     expect((await applyAndWait(server)).includedSourceIds).toEqual(["source-2", "source-3"]);
 
     await openDialog();
-    expect(box("Movies").checked).toBe(false);
-    await click(box("Movies"));
+    expect(box("Movies (C:\\media\\movies)").checked).toBe(false);
+    await click(box("Movies (C:\\media\\movies)"));
     expect((await applyAndWait(server)).includedSourceIds).toEqual([]);
   });
 });
@@ -954,6 +984,8 @@ describe("Favorites and Blacklisted filters", () => {
     await click(dialogButton("Clear all filters"));
     expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
     expect(flagRow("Blacklisted")).toEqual(BLACKLISTED_DEFAULT);
+    // The applied filter is the default, so there is nothing to apply.
+    expect(applyButton().textContent).toBe("Apply");
   });
 
   it("choosing a preset shows its modes, with the default choice for a filter that is off", async () => {
@@ -1146,36 +1178,87 @@ describe("Tags tab", () => {
     expect(categoryTitles()).toEqual(["Places", "Mood", "People"]);
   });
 
-  it("keeps a collapsed category collapsed when the dialog opens again, for this session", async () => {
+  it("start collapsed, and the header's name or padding expands and collapses one, with no arrows, while its Local select keeps its own action", async () => {
     await mountFilter([RICH_PRESET]);
     await pickPreset("preset-rich");
     await openDialog();
     await showTab("Tags");
+    for (const title of categoryTitles()) {
+      expect(categoryGrid(title).hidden, title).toBe(true);
+      expect(categoryToggle(title).getAttribute("aria-expanded"), title).toBe("false");
+    }
+    expect(categoryToggle("Places").getAttribute("aria-controls")).toBe(categoryGrid("Places").id);
+    expect(categoryToggle("Places").title).toBe("Expand category");
+    expect(dialog().querySelector(".tag-category-header .material-symbol-icon")).toBeNull();
 
     await click(categoryToggle("Places"));
-    expect(categoryGrid("Places").style.display).toBe("none");
-    expect(categoryToggle("Places").title).toBe("Expand category");
-    expect(categoryToggle("Places").textContent).toBe("keyboard_arrow_right");
+    expect(categoryGrid("Places").hidden).toBe(false);
+    expect(categoryToggle("Places").getAttribute("aria-expanded")).toBe("true");
+    expect(categoryToggle("Places").title).toBe("Collapse category");
+    await click(category("Places").querySelector(".tag-category-header")!);
+    expect(categoryGrid("Places").hidden).toBe(true);
+
+    const local = category("People").querySelector<HTMLSelectElement>(".filter-local-mode")!;
+    await click(local);
+    await click(local.closest("label")!);
+    fireEvent.change(local, { target: { value: "0" } });
+    await settle();
+    expect(categoryGrid("People").hidden).toBe(true);
+    expect(applyButton().textContent).toBe("Apply*");
+  });
+
+  it("remember on this device which are expanded, apart from the Tags tab's, after a page refresh too", async () => {
+    const { page } = await mountFilter([RICH_PRESET]);
+    await pickPreset("preset-rich");
+    await openDialog();
+    await showTab("Tags");
+    await click(categoryToggle("Places"));
     await click(categoryToggle("Uncategorized"));
-    expect(categoryGrid("Uncategorized").style.display).toBe("none");
-    expect(JSON.parse(sessionStorage.getItem("rr_filterDialogCollapsedCategories") ?? "")).toEqual([
-      "cat-places",
-      "__filter_uncategorized__"
-    ]);
-    expect(applyButton().textContent).toBe("Apply");
+    expect(JSON.parse(localStorage.getItem("rr_device.filter.expandedTagCategories") ?? "")).toEqual(["cat-places", "__filter_uncategorized__"]);
+    expect(localStorage.getItem("rr_device.tags.expandedCategories")).toBeNull();
 
     await closePanel();
     await openDialog();
+    expect(categoryGrid("Places").hidden).toBe(false);
+    expect(categoryGrid("People").hidden).toBe(true);
+
+    page.unmount();
+    await mountFilter([RICH_PRESET]);
+    await pickPreset("preset-rich");
+    await openDialog();
     await showTab("Tags");
-    expect(categoryGrid("Places").style.display).toBe("none");
-    expect(categoryGrid("Mood").style.display).toBe("");
+    expect(categoryGrid("Places").hidden).toBe(false);
+    expect(categoryGrid("Uncategorized").hidden).toBe(false);
+    expect(categoryGrid("Mood").hidden).toBe(true);
+  });
+
+  it("show, while collapsed, how many of their tags the filter uses, and the dot while that differs from the applied filter", async () => {
+    const { server } = await mountFilter([RICH_PRESET]);
+    await pickPreset("preset-rich");
+    await openDialog();
+    await showTab("Tags");
+    const count = (title: string) => category(title).querySelector<HTMLElement>(".category-count")!;
+    const dot = (title: string) => category(title).querySelector<HTMLElement>(".category-dot")!;
+    // Rich includes Beach and excludes Bob.
+    expect([count("Places").hidden, count("Places").textContent, count("Places").title]).toEqual([false, "1", "1 tag in the filter"]);
+    expect(count("Mood").hidden).toBe(true);
+    expect(dot("Places").hidden).toBe(true);
+    expect(categoryToggle("Places").getAttribute("aria-label")).toBe("Places, 1 tag in the filter");
+
     await click(categoryToggle("Places"));
-    expect(categoryGrid("Places").style.display).toBe("");
-    expect(categoryToggle("Places").title).toBe("Collapse category");
-    expect(categoryToggle("Places").textContent).toBe("keyboard_arrow_down");
-    expect(JSON.parse(sessionStorage.getItem("rr_filterDialogCollapsedCategories") ?? "")).toEqual([
-      "__filter_uncategorized__"
-    ]);
+    await includeTag("alps");
+    expect(count("Places").hidden).toBe(true);
+    expect(dot("Places").hidden).toBe(true);
+    await click(categoryToggle("Places"));
+    expect([count("Places").hidden, count("Places").textContent, count("Places").title]).toEqual([false, "2", "2 tags in the filter"]);
+    expect(dot("Places").hidden).toBe(false);
+    expect(dot("Places").title).toBe("Unsaved changes");
+    expect(categoryToggle("Places").getAttribute("aria-label")).toBe("Places, 2 tags in the filter, unsaved changes");
+    expect(dot("People").hidden).toBe(true);
+
+    await applyAndWait(server);
+    expect(dot("Places").hidden).toBe(true);
+    expect(count("Places").textContent).toBe("2");
   });
 });
 
@@ -1391,11 +1474,7 @@ describe("Presets tab", () => {
 
     for (const name of ["Favorites", "Beach days"]) {
       const row = presetRow(name);
-      expect(Array.from(row.children).map((child) => child.className), name).toEqual([
-        "drag-handle icon-glyph-base icon-glyph-button",
-        "filter-preset-name",
-        "icon-glyph-base icon-glyph-button"
-      ]);
+      expect(Array.from(row.children).map((child) => child.className), name).toEqual(["drag-handle", "filter-preset-name", "icon-btn"]);
       const buttons = Array.from(row.querySelectorAll("button"));
       expect(buttons.map((button) => button.getAttribute("aria-label")), name).toEqual([`Reorder ${name}`, `Edit preset ${name}`]);
       expect(buttons.map((button) => button.title), name).toEqual(["Drag to reorder", "Edit preset"]);
@@ -1447,8 +1526,9 @@ describe("Presets tab", () => {
 
     it("stays under the pointer while the list scrolls, and lands where the pointer is", async () => {
       await mountLaidOut();
-      const list = dialog().querySelector<HTMLElement>(".filter-preset-list")!;
-      // A list reaching well past the presets, so the pointer stays away from its edges and it scrolls only when told to.
+      // The tab's body scrolls the preset list with the rest of its section. It reaches well past the presets, so the
+      // pointer stays away from its edges and it scrolls only when told to.
+      const list = dialog().querySelector<HTMLElement>(".filter-dialog-body")!;
       stubScroller(list, -200, 600, 1200);
 
       pointerDown(presetHandle("Favorites"), 20);
@@ -1466,8 +1546,9 @@ describe("Presets tab", () => {
 
     it("keeps the list where it was scrolled after a drop, and focuses the dropped handle without scrolling", async () => {
       await mountLaidOut();
-      const list = dialog().querySelector<HTMLElement>(".filter-preset-list")!;
-      // A list reaching well past the presets, so the pointer stays away from its edges and it scrolls only when told to.
+      // The tab's body scrolls the preset list with the rest of its section. It reaches well past the presets, so the
+      // pointer stays away from its edges and it scrolls only when told to.
+      const list = dialog().querySelector<HTMLElement>(".filter-dialog-body")!;
       stubScroller(list, -200, 600, 1200);
       list.scrollTop = 30;
       const focusCalls = scrollOnFocus(list);
@@ -1700,8 +1781,11 @@ describe("preset dropdown, refresh, and clear all", () => {
     await openDialog();
     await click(box("Only never played"));
     expect(applyButton().textContent).toBe("Apply*");
+    expect(panelTab("Filter").getAttribute("aria-label")).toBe("Filter, unsaved changes");
 
+    // The pick is made on the Library tab, while the Filter tab is hidden, and drops its changes then.
     await pickPreset("preset-favorites");
+    expect(panelTab("Filter").getAttribute("aria-label")).toBe("Filter");
     expect(isOpen()).toBe(true);
     expect(flagRow("Favorites")).toEqual({ checked: true, choice: "only", disabled: false });
     expect(box("Only never played").checked).toBe(false);
@@ -1728,7 +1812,7 @@ describe("preset dropdown, refresh, and clear all", () => {
     await click(dialogButton("Refresh"));
 
     expect(statusLine()).toBe("Filter data refreshed.");
-    expect(box("Phone").checked).toBe(true);
+    expect(box("Phone (E:\\phone)").checked).toBe(true);
     expect(box("Only never played").checked).toBe(true);
     expect(applyButton().textContent).toBe("Apply*");
     await showTab("Tags");
@@ -1770,12 +1854,13 @@ describe("preset dropdown, refresh, and clear all", () => {
 
     await click(dialogButton("Clear all filters"));
     expect(heading()).toBe("Preset: None");
-    expect(applyButton().textContent).toBe("Apply");
+    // Rich is applied, so Apply has the default filter to apply.
+    expect(applyButton().textContent).toBe("Apply*");
     expect(presetRows()).toEqual(["Rich", "Favorites"]);
     expect(presetSelectInDialog().value).toBe("");
     expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
     expect(box("All (Videos and Photos)").checked).toBe(true);
-    expect(box("Movies").checked && box("C:\\media\\photos").checked && box("Archive").checked).toBe(true);
+    expect(box("Movies (C:\\media\\movies)").checked && box("C:\\media\\photos").checked && box("Archive (D:\\archive)").checked).toBe(true);
     expect(byId<HTMLInputElement>("filter-min-dur-text").value).toBe("");
     await showTab("Tags");
     expect(chipState("Beach")).toBe("none");
@@ -1789,6 +1874,30 @@ describe("preset dropdown, refresh, and clear all", () => {
     expect(presets.saves()).toHaveLength(0);
     await waitFor(() => expect(selectedPresetLabel()).toBe("None"));
   });
+
+  it("Clear all is kept, with its dots and Apply's star, through another tab until Apply", async () => {
+    const { server } = await mountFilter([RICH_PRESET]);
+    await pickPreset("preset-rich");
+    await openDialog();
+    await click(dialogButton("Clear all filters"));
+    expect(applyButton().textContent).toBe("Apply*");
+    expect(panelTab("Filter").getAttribute("aria-label")).toBe("Filter, unsaved changes");
+    await showTab("Tags");
+    // Rich includes Beach, which Clear all took out.
+    expect(category("Places").querySelector<HTMLElement>(".category-dot")!.hidden).toBe(false);
+
+    await click(panelTab("Library"));
+    await openDialog();
+    expect(applyButton().textContent).toBe("Apply*");
+    expect(chipState("Beach")).toBe("none");
+    await showTab("General");
+    expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
+    expect(byId<HTMLInputElement>("filter-min-dur-text").value).toBe("");
+
+    const applied = await applyAndWait(server);
+    expect(applied).toMatchObject({ favoritesOnly: false, selectedTags: [] });
+    expect(panelTab("Filter").getAttribute("aria-label")).toBe("Filter");
+  });
 });
 
 describe("names and storage", () => {
@@ -1801,14 +1910,14 @@ describe("names and storage", () => {
     });
     await openDialog();
 
-    expect(within(dialog()).getByText("<b>Movies</b>")).toBeTruthy();
+    expect(within(dialog()).getByText("<b>Movies</b> (C:\\m)")).toBeTruthy();
     expect(within(dialog()).getByText("<em>Places</em>")).toBeTruthy();
     expect(within(dialog()).getByText("<i>Beach</i>")).toBeTruthy();
     expect(within(dialog()).getByText("<u>Mine</u>", { selector: ".filter-preset-name" })).toBeTruthy();
     expect(dialog().querySelector("b, em, i, u")).toBeNull();
   });
 
-  it("adds only the collapsed categories key to browser storage", async () => {
+  it("adds only its expanded categories to the device's memory, and nothing to browser storage of its own", async () => {
     const { server } = await mountFilter([FAVORITES_PRESET]);
     await openDialog();
     await click(box("Favorites"));
@@ -1821,7 +1930,8 @@ describe("names and storage", () => {
 
     // The panel and the Library tab remember their state on this device, which their own tests cover.
     expect(storageKeys(localStorage).filter((key) => !key.startsWith("rr_device."))).toEqual(["rr_clientId"]);
-    expect(storageKeys(sessionStorage)).toEqual(["rr_filterDialogCollapsedCategories", "rr_sessionId"]);
+    expect(storageKeys(localStorage)).toContain("rr_device.filter.expandedTagCategories");
+    expect(storageKeys(sessionStorage)).toEqual(["rr_sessionId"]);
   });
 });
 

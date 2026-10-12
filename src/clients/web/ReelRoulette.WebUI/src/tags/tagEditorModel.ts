@@ -77,6 +77,13 @@ export interface TagCategoryRow {
   uncategorized: boolean;
   collapsed: boolean;
   chips: TagChipRow[];
+  /** How many of its tags the items being edited have, which its header shows while it is collapsed. */
+  inUse: number;
+  /**
+   * It holds unsaved changes: a held add or remove on one of its tags, or a name or tags that differ from the saved
+   * ones, as a new category's always do. A new order alone doesn't count.
+   */
+  unsaved: boolean;
 }
 
 /**
@@ -161,6 +168,48 @@ export function hasPendingTagEdits(pending: PendingTagEdits): boolean {
     pending.renameTags.size > 0 ||
     pending.deleteTags.size > 0
   );
+}
+
+/** Moves the entry held under `oldKey` to `newKey`, unless one is already held there, or drops it when `newKey` is null. */
+function moveHeld<T>(entries: ReadonlyMap<string, T>, oldKey: string, newKey: string | null, rename: (entry: T) => T): ReadonlyMap<string, T> {
+  const entry = entries.get(oldKey);
+  if (entry === undefined) {
+    return entries;
+  }
+  const next = new Map(entries);
+  next.delete(oldKey);
+  if (newKey !== null && (newKey === oldKey || !next.has(newKey))) {
+    next.set(newKey, rename(entry));
+  }
+  return next;
+}
+
+/**
+ * The held adds and removes and tag edits once a tag is renamed or deleted elsewhere, so Save doesn't send the old
+ * name back: a rename moves each one held for the old name to the new one, unless one is already held for the new
+ * name, and a delete drops them. A held rename keeps the name the user gave, or takes the new one when it only moved
+ * the tag's category. Gives back the same objects when nothing held names the tag.
+ */
+export function retargetHeldTag(
+  selections: ReadonlyMap<string, TagSelection>,
+  pending: PendingTagEdits,
+  step: Extract<TagSaveStep, { kind: "rename-tag" | "delete-tag" }>
+): { selections: ReadonlyMap<string, TagSelection>; pending: PendingTagEdits } {
+  const oldKey = normalizeTagKey(step.kind === "rename-tag" ? step.oldName : step.name);
+  const newName = step.kind === "rename-tag" ? step.newName.trim() : "";
+  const newKey = newName ? normalizeTagKey(newName) : null;
+  const upsertTags = moveHeld(pending.upsertTags, oldKey, newKey, (tag) => ({ ...tag, name: newName }));
+  const renameTags = moveHeld(pending.renameTags, oldKey, newKey, (rename) => ({
+    ...rename,
+    oldName: newName,
+    newName: normalizeTagKey(rename.newName) === oldKey ? newName : rename.newName
+  }));
+  const deleteTags = moveHeld(pending.deleteTags, oldKey, newKey, () => ({ name: newName }));
+  const changed = upsertTags !== pending.upsertTags || renameTags !== pending.renameTags || deleteTags !== pending.deleteTags;
+  return {
+    selections: moveHeld(selections, oldKey, newKey, (selection) => ({ ...selection, name: newName })),
+    pending: changed ? { ...pending, upsertTags, renameTags, deleteTags } : pending
+  };
 }
 
 /** One entry per category id, with any Uncategorized category under the Uncategorized id and name. */
@@ -310,6 +359,39 @@ export function tagEditorDisplay(model: TagEditorModel | null, pending: PendingT
   return { categories: arranged.ordered, tags, items, order: arranged.order };
 }
 
+/**
+ * The tag model as it will be once a save of these changes lands: the catalog with the pending edits applied, in the
+ * editor's order, and the items with the held adds and removes applied and deleted tags gone. The editor shows it
+ * until the tags load again.
+ */
+export function savedTagModel(
+  model: TagEditorModel | null,
+  pending: PendingTagEdits,
+  order: readonly string[],
+  selections: ReadonlyMap<string, TagSelection>
+): TagEditorModel {
+  const display = tagEditorDisplay(model, pending, order);
+  const items = display.items.map((item) => {
+    let tags = item.tags.filter((tag) => !pending.deleteTags.has(normalizeTagKey(tag)));
+    for (const selection of selections.values()) {
+      const key = normalizeTagKey(selection.name);
+      if (selection.action === "remove") {
+        tags = tags.filter((tag) => normalizeTagKey(tag) !== key);
+      } else if (!tags.some((tag) => normalizeTagKey(tag) === key)) {
+        tags.push(selection.name);
+      }
+    }
+    return { itemId: item.itemId, tags };
+  });
+  return {
+    categories: display.categories
+      .filter((category) => !isUncategorizedCategoryId(category.id))
+      .map((category) => ({ id: category.id, name: category.name, sortOrder: category.sortOrder })),
+    tags: display.tags.map((tag) => ({ name: tag.name, categoryId: isUncategorizedCategoryId(tag.categoryId) ? "" : tag.categoryId })),
+    items
+  };
+}
+
 /** Whether all, some, or none of the items have the tag. */
 export function chipState(tagName: string, items: readonly ItemTags[]): ChipState {
   if (items.length === 0) {
@@ -320,13 +402,31 @@ export function chipState(tagName: string, items: readonly ItemTags[]): ChipStat
   return withTag === 0 ? "state-none" : withTag === items.length ? "state-all" : "state-some";
 }
 
-/** The Edit Tags tab's categories, each with its controls and its tags by name. */
+/** Each category's name and its tags' names in order, as the model saved them. */
+function savedCategoryShapes(model: TagEditorModel | null): Map<string, string> {
+  const saved = tagEditorDisplay(model, createPendingTagEdits(), []);
+  return new Map(saved.categories.map((category) => [category.id, categoryShape(category, saved.tags)]));
+}
+
+function categoryShape(category: TagCategory, tags: readonly CatalogTag[]): string {
+  const names = tags
+    .filter((tag) => (isUncategorizedCategoryId(tag.categoryId) ? UNCATEGORIZED_CATEGORY_ID : tag.categoryId) === category.id)
+    .map((tag) => tag.name);
+  return JSON.stringify([category.name, names]);
+}
+
+/**
+ * The Tags tab's categories, each with its controls and its tags by name. A category is collapsed unless `expanded`
+ * holds it, and the saved `model` tells which ones hold unsaved changes.
+ */
 export function tagCategoryRows(
   display: TagEditorDisplay,
-  collapsed: ReadonlySet<string>,
-  selections: ReadonlyMap<string, TagSelection>
+  expanded: ReadonlySet<string>,
+  selections: ReadonlyMap<string, TagSelection>,
+  model: TagEditorModel | null
 ): TagCategoryRow[] {
   const canChangeItems = display.items.length > 0;
+  const saved = savedCategoryShapes(model);
   return display.categories.map((category) => {
     const isUncategorized = isUncategorizedCategoryId(category.id);
     const chips = display.tags
@@ -341,8 +441,10 @@ export function tagCategoryRows(
       id: category.id,
       name: category.name,
       uncategorized: isUncategorized,
-      collapsed: collapsed.has(category.id),
-      chips
+      collapsed: !expanded.has(category.id),
+      chips,
+      inUse: chips.filter((chip) => chip.state !== "state-none").length,
+      unsaved: chips.some((chip) => chip.pending !== null) || saved.get(category.id) !== categoryShape(category, display.tags)
     };
   });
 }
@@ -398,7 +500,6 @@ export interface TagSavePlanState {
   order: readonly string[];
   selections: ReadonlyMap<string, TagSelection>;
   itemIds: readonly string[];
-  autoTagAssignments: readonly AutoTagSaveAssignment[];
 }
 
 /** The requests that save the editor's changes, in the order they are sent. */
@@ -424,7 +525,23 @@ export function planTagEdits(state: TagSavePlanState): TagSaveStep[] {
     itemIds: state.itemIds,
     addTags,
     removeTags,
-    autoTagAssignments: state.autoTagAssignments
+    autoTagAssignments: []
+  });
+}
+
+/** The request that applies Auto Tag's selected files, or none while there are none. */
+export function planAutoTagApply(assignments: readonly AutoTagSaveAssignment[]): TagSaveStep[] {
+  return planTagEditorSave({
+    baselineCategories: [],
+    displayCategories: [],
+    deleteCategoryIds: [],
+    upsertTags: [],
+    renameTags: [],
+    deleteTags: [],
+    itemIds: [],
+    addTags: [],
+    removeTags: [],
+    autoTagAssignments: assignments
   });
 }
 

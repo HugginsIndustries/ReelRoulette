@@ -1,256 +1,85 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`opening and closing > keeps its markup on each tab and in the Edit Tag dialog > auto tag 1`] = `
-"<div class="tag-editor" id="tag-editor">
-  <div class="tag-editor-header">
-    <h2>
-      "Tag Editor"
-    <div class="tag-editor-actions">
-      <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="tag-editor-refresh-btn" title="Refresh">
-        <span class="material-symbol-icon">
-          "refresh"
-  <div class="filter-dialog-tabstrip tag-editor-tabstrip" role="tablist">
-    <button aria-selected="false" class="filter-tab" data-tag-editor-tab="edit" role="tab" type="button">
-      "Edit Tags"
-    <button aria-selected="true" class="filter-tab is-active" data-tag-editor-tab="autotag" role="tab" type="button">
+exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag dialog's > auto tag 1`] = `
+"<dialog aria-labelledby="autotag-title" class="autotag-overlay" id="autotag" open="">
+  <div class="autotag-head">
+    <h2 id="autotag-title">
       "Auto Tag"
-  <div class="tag-editor-panel-stack">
-    <div class="tag-editor-panel" id="tag-editor-panel-edit" style="display: none">
-      <div class="tag-editor-body themed-scrollbar" id="tag-editor-body">
-        <section class="tag-editor-category">
-          <div class="tag-editor-category-header">
-            <div class="tag-editor-category-left">
-              <button aria-describedby="P0-2" aria-label="Reorder Places" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
-                <span class="material-symbol-icon">
-                  "drag_indicator"
-              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Collapse category">
-                <span class="material-symbol-icon">
-                  "keyboard_arrow_down"
-              <div class="tag-editor-category-title">
-                "Places"
-            <div class="tag-editor-category-controls">
-              <button aria-label="Edit category Places" class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Edit category">
-                <span class="material-symbol-icon">
-                  "edit_note"
-          <div class="tag-editor-tag-grid">
-            <div class="tag-chip state-none">
-              <span class="tag-chip-label">
-                "alps"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle is-selected" title="Add tag">
-                <span class="material-symbol-icon">
-                  "add"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
-                <span class="material-symbol-icon">
-                  "remove"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
-                <span class="material-symbol-icon">
-                  "edit_note"
-            <div class="tag-chip state-all">
-              <span class="tag-chip-label">
-                "Beach"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
-                <span class="material-symbol-icon">
-                  "add"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
-                <span class="material-symbol-icon">
-                  "remove"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
-                <span class="material-symbol-icon">
-                  "edit_note"
-        <section class="tag-editor-category">
-          <div class="tag-editor-category-header">
-            <div class="tag-editor-category-left">
-              <button aria-describedby="P0-2" aria-label="Reorder Mood" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
-                <span class="material-symbol-icon">
-                  "drag_indicator"
-              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Expand category">
-                <span class="material-symbol-icon">
-                  "keyboard_arrow_right"
-              <div class="tag-editor-category-title">
-                "Mood"
-            <div class="tag-editor-category-controls">
-              <button aria-label="Edit category Mood" class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Edit category">
-                <span class="material-symbol-icon">
-                  "edit_note"
-          <div class="tag-editor-tag-grid" style="display: none">
-            <div class="tag-chip state-none">
-              <span class="tag-chip-label">
-                "Calm"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
-                <span class="material-symbol-icon">
-                  "add"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
-                <span class="material-symbol-icon">
-                  "remove"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
-                <span class="material-symbol-icon">
-                  "edit_note"
-        <section class="tag-editor-category">
-          <div class="tag-editor-category-header">
-            <div class="tag-editor-category-left">
-              <button aria-describedby="P0-2" aria-label="Reorder People" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
-                <span class="material-symbol-icon">
-                  "drag_indicator"
-              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Collapse category">
-                <span class="material-symbol-icon">
-                  "keyboard_arrow_down"
-              <div class="tag-editor-category-title">
-                "People"
-            <div class="tag-editor-category-controls">
-              <button aria-label="Edit category People" class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Edit category">
-                <span class="material-symbol-icon">
-                  "edit_note"
-          <div class="tag-editor-tag-grid">
-            <div class="tag-chip state-none">
-              <span class="tag-chip-label">
-                "Alice"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
-                <span class="material-symbol-icon">
-                  "add"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
-                <span class="material-symbol-icon">
-                  "remove"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
-                <span class="material-symbol-icon">
-                  "edit_note"
-            <div class="tag-chip state-all">
-              <span class="tag-chip-label">
-                "Bob"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
-                <span class="material-symbol-icon">
-                  "add"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle is-selected" title="Remove tag">
-                <span class="material-symbol-icon">
-                  "remove"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
-                <span class="material-symbol-icon">
-                  "edit_note"
-        <section class="tag-editor-category">
-          <div class="tag-editor-category-header">
-            <div class="tag-editor-category-left">
-              <button aria-label="Uncategorized stays last" class="drag-handle icon-glyph-base icon-glyph-button" disabled="" title="Uncategorized stays last" type="button">
-                <span class="material-symbol-icon">
-                  "drag_indicator"
-              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Collapse category">
-                <span class="material-symbol-icon">
-                  "keyboard_arrow_down"
-              <div class="tag-editor-category-title">
-                "Uncategorized"
-            <div class="tag-editor-category-controls">
-          <div class="tag-editor-tag-grid">
-            <div class="tag-chip state-none">
-              <span class="tag-chip-label">
-                "Loose"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
-                <span class="material-symbol-icon">
-                  "add"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
-                <span class="material-symbol-icon">
-                  "remove"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
-                <span class="material-symbol-icon">
-                  "edit_note"
-      <p class="visually-hidden" id="P0-2">
-        "Drag to reorder, or press the up and down arrow keys."
-      <div aria-live="polite" class="visually-hidden">
-    <div class="tag-editor-panel" id="tag-editor-panel-autotag" style="display: flex">
-      <div class="tag-editor-body tag-autotag-body themed-scrollbar">
-        <div class="tag-autotag-toolbar">
-          <label class="tag-autotag-check-label">
-            <input checked="false" id="tag-autotag-scan-full" type="checkbox">
-            "Scan full library"
-          <label class="tag-autotag-check-label">
-            <input checked="false" id="tag-autotag-view-all" type="checkbox">
-            "View all matches"
-        <p class="tag-autotag-hint">
-          "Use Scan Files to find matching tags. File name matching ignores extension."
-        <div class="tag-autotag-actions-row">
-          <button class="tag-autotag-row-btn" id="tag-autotag-select-all" type="button">
-            "Select all"
-          <button class="tag-autotag-row-btn" id="tag-autotag-deselect-all" type="button">
-            "Deselect all"
-          <button class="tag-autotag-scan-btn" id="tag-autotag-scan-btn" type="button">
-            "Scan Files"
-        <div aria-label="Scan in progress" class="tag-autotag-progress" id="tag-autotag-progress" role="progressbar" style="display: none">
-        <div aria-live="polite" class="tag-autotag-status" id="tag-autotag-status">
-          "Scan complete: 3 matching tags, 6 matches, 1/3 selected changes."
-        <div class="tag-autotag-results themed-scrollbar" id="tag-autotag-results">
-          <div class="tag-autotag-table-head">
-            <span>
-            <span>
-              "Apply"
-            <span>
-              "Tag / File"
-            <span>
-              "Total matched"
-            <span>
-              "To be changed"
-          <div class="tag-autotag-row" data-autotag-row="1">
-            <div class="tag-autotag-row-main">
-              <button aria-label="Collapse" class="icon-glyph-base icon-glyph-button" data-autotag-expand="1" type="button">
-                <span class="material-symbol-icon">
-                  "expand_more"
-              <input checked="false" data-autotag-row-check="1" type="checkbox">
-              <span style="font-weight: 600">
-                "beach"
-              <span>
-                "3"
-              <span>
-                "2"
-            <div class="tag-autotag-row-files" style="display: block">
-              <div class="tag-autotag-file-row">
-                <label>
-                  <input checked="true" data-autotag-file="" data-item-id="item-1" data-row-id="1" type="checkbox">
-                <span class="tag-autotag-file-path" title="C:\\media\\beach a.mp4">
-                  "beach a.mp4"
-              <div class="tag-autotag-file-row">
-                <label>
-                  <input checked="false" data-autotag-file="" data-item-id="item-2" data-row-id="1" type="checkbox">
-                <span class="tag-autotag-file-path" title="C:\\media\\beach b.mp4">
-                  "beach b.mp4"
-          <div class="tag-autotag-row" data-autotag-row="0">
-            <div class="tag-autotag-row-main">
-              <button aria-label="Expand" class="icon-glyph-base icon-glyph-button" data-autotag-expand="0" type="button">
-                <span class="material-symbol-icon">
-                  "chevron_right"
-              <input checked="false" data-autotag-row-check="0" type="checkbox">
-              <span style="font-weight: 600">
-                "Sunset"
-              <span>
-                "2"
-              <span>
-                "1"
-            <div class="tag-autotag-row-files" style="display: none">
-              <div class="tag-autotag-file-row">
-                <label>
-                  <input checked="false" data-autotag-file="" data-item-id="item-3" data-row-id="0" type="checkbox">
-                <span class="tag-autotag-file-path" title="C:\\media\\sunset 1.mp4">
-                  "sunset 1.mp4"
-  <div class="tag-editor-footer">
-    <button aria-label="Add category" class="icon-glyph-base icon-glyph-button" id="tag-editor-add-category-btn" title="Add category">
+    <button aria-label="Close" class="icon-btn" id="autotag-close" title="Close" type="button">
       <span class="material-symbol-icon">
-        "add"
-    <select id="tag-editor-category-select">
-      <option selected="true" value="cat-places">
-        "Places"
-      <option selected="false" value="cat-mood">
-        "Mood"
-      <option selected="false" value="cat-people">
-        "People"
-      <option selected="false" value="uncategorized">
-        "Uncategorized"
-    <span class="vfield">
-      <input id="tag-editor-new-tag" placeholder="New tag name" type="text" value="">
-    <button aria-label="Add tag" class="icon-glyph-base icon-glyph-button" disabled="" id="tag-editor-add-tag-btn" title="Add tag">
-      <span class="material-symbol-icon">
-        "add"
-    <button aria-label="Save" class="icon-glyph-base icon-glyph-button has-pending" id="tag-editor-apply-btn" title="Save">
-      <span class="material-symbol-icon">
-        "save"
+        "close"
+  <div class="autotag-row">
+    <label>
+      <input checked="false" id="autotag-full" type="checkbox">
+      "Scan full library"
+    <label>
+      <input checked="false" id="autotag-all" type="checkbox">
+      "View all matches"
+  <p class="filter-hint autotag-hint">
+    "Use Scan Files to find matching tags. File name matching ignores extension."
+  <div class="autotag-row">
+    <button class="btn" id="autotag-select-all" type="button">
+      "Select all"
+    <button class="btn" id="autotag-deselect-all" type="button">
+      "Deselect all"
+    <button class="btn autotag-scan" id="autotag-scan" type="button">
+      "Scan Files"
+  <div aria-label="Scan in progress" class="autotag-progress" hidden="" id="autotag-progress" role="progressbar">
+  <div aria-live="polite" class="autotag-status" id="autotag-status">
+    "Scan complete: 3 matching tags, 6 matches, 1/3 selected changes."
+  <div class="autotag-results themed-scrollbar" id="autotag-results">
+    <div class="autotag-table-head">
+      <span>
+      <span>
+        "Apply"
+      <span>
+        "Tag / File"
+      <span class="autotag-count">
+        "Total matched"
+      <span class="autotag-count">
+        "To be changed"
+    <div class="autotag-result">
+      <div class="autotag-row-main">
+        <button aria-expanded="true" aria-label="Collapse" class="icon-btn" type="button">
+          <span class="material-symbol-icon">
+            "expand_more"
+        <input aria-label="Apply beach" checked="false" type="checkbox">
+        <span class="autotag-tag">
+          "beach"
+        <span class="autotag-count">
+          "3"
+        <span class="autotag-count">
+          "2"
+      <div class="autotag-files">
+        <label class="autotag-file">
+          <input checked="true" type="checkbox">
+          <span title="C:\\media\\beach a.mp4">
+            "beach a.mp4"
+        <label class="autotag-file">
+          <input checked="false" type="checkbox">
+          <span title="C:\\media\\beach b.mp4">
+            "beach b.mp4"
+    <div class="autotag-result">
+      <div class="autotag-row-main">
+        <button aria-expanded="false" aria-label="Expand" class="icon-btn" type="button">
+          <span class="material-symbol-icon">
+            "chevron_right"
+        <input aria-label="Apply Sunset" checked="false" type="checkbox">
+        <span class="autotag-tag">
+          "Sunset"
+        <span class="autotag-count">
+          "2"
+        <span class="autotag-count">
+          "1"
+  <div class="autotag-footer">
+    <button class="btn" id="autotag-cancel" type="button">
+      "Cancel"
+    <button class="btn" id="autotag-apply" type="button">
+      "Apply"
 "
 `;
 
-exports[`opening and closing > keeps its markup on each tab and in the Edit Tag dialog > edit tag dialog 1`] = `
+exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag dialog's > edit tag dialog 1`] = `
 "<dialog aria-labelledby="P0-4" class="app-dialog" open="">
   <div class="dialog-body">
     <h3 id="P0-4">
@@ -282,200 +111,173 @@ exports[`opening and closing > keeps its markup on each tab and in the Edit Tag 
 "
 `;
 
-exports[`opening and closing > keeps its markup on each tab and in the Edit Tag dialog > edit tags 1`] = `
+exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag dialog's > edit tags 1`] = `
 "<div class="tag-editor" id="tag-editor">
   <div class="tag-editor-header">
     <h2>
       "Tag Editor"
-    <div class="tag-editor-actions">
-      <button aria-label="Refresh" class="icon-glyph-base icon-glyph-button" id="tag-editor-refresh-btn" title="Refresh">
-        <span class="material-symbol-icon">
-          "refresh"
-  <div class="filter-dialog-tabstrip tag-editor-tabstrip" role="tablist">
-    <button aria-selected="true" class="filter-tab is-active" data-tag-editor-tab="edit" role="tab" type="button">
-      "Edit Tags"
-    <button aria-selected="false" class="filter-tab" data-tag-editor-tab="autotag" role="tab" type="button">
-      "Auto Tag"
-  <div class="tag-editor-panel-stack">
-    <div class="tag-editor-panel" id="tag-editor-panel-edit" style="display: flex">
-      <div class="tag-editor-body themed-scrollbar" id="tag-editor-body">
-        <section class="tag-editor-category">
-          <div class="tag-editor-category-header">
-            <div class="tag-editor-category-left">
-              <button aria-describedby="P0-2" aria-label="Reorder Places" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
-                <span class="material-symbol-icon">
-                  "drag_indicator"
-              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Collapse category">
-                <span class="material-symbol-icon">
-                  "keyboard_arrow_down"
-              <div class="tag-editor-category-title">
-                "Places"
-            <div class="tag-editor-category-controls">
-              <button aria-label="Edit category Places" class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Edit category">
-                <span class="material-symbol-icon">
-                  "edit_note"
-          <div class="tag-editor-tag-grid">
-            <div class="tag-chip state-none">
-              <span class="tag-chip-label">
-                "alps"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle is-selected" title="Add tag">
-                <span class="material-symbol-icon">
-                  "add"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
-                <span class="material-symbol-icon">
-                  "remove"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
-                <span class="material-symbol-icon">
-                  "edit_note"
-            <div class="tag-chip state-all">
-              <span class="tag-chip-label">
-                "Beach"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
-                <span class="material-symbol-icon">
-                  "add"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
-                <span class="material-symbol-icon">
-                  "remove"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
-                <span class="material-symbol-icon">
-                  "edit_note"
-        <section class="tag-editor-category">
-          <div class="tag-editor-category-header">
-            <div class="tag-editor-category-left">
-              <button aria-describedby="P0-2" aria-label="Reorder Mood" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
-                <span class="material-symbol-icon">
-                  "drag_indicator"
-              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Expand category">
-                <span class="material-symbol-icon">
-                  "keyboard_arrow_right"
-              <div class="tag-editor-category-title">
-                "Mood"
-            <div class="tag-editor-category-controls">
-              <button aria-label="Edit category Mood" class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Edit category">
-                <span class="material-symbol-icon">
-                  "edit_note"
-          <div class="tag-editor-tag-grid" style="display: none">
-            <div class="tag-chip state-none">
-              <span class="tag-chip-label">
-                "Calm"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
-                <span class="material-symbol-icon">
-                  "add"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
-                <span class="material-symbol-icon">
-                  "remove"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
-                <span class="material-symbol-icon">
-                  "edit_note"
-        <section class="tag-editor-category">
-          <div class="tag-editor-category-header">
-            <div class="tag-editor-category-left">
-              <button aria-describedby="P0-2" aria-label="Reorder People" class="drag-handle icon-glyph-base icon-glyph-button" title="Drag to reorder" type="button">
-                <span class="material-symbol-icon">
-                  "drag_indicator"
-              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Collapse category">
-                <span class="material-symbol-icon">
-                  "keyboard_arrow_down"
-              <div class="tag-editor-category-title">
-                "People"
-            <div class="tag-editor-category-controls">
-              <button aria-label="Edit category People" class="tag-editor-category-btn icon-glyph-base icon-glyph-button" title="Edit category">
-                <span class="material-symbol-icon">
-                  "edit_note"
-          <div class="tag-editor-tag-grid">
-            <div class="tag-chip state-none">
-              <span class="tag-chip-label">
-                "Alice"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
-                <span class="material-symbol-icon">
-                  "add"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
-                <span class="material-symbol-icon">
-                  "remove"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
-                <span class="material-symbol-icon">
-                  "edit_note"
-            <div class="tag-chip state-all">
-              <span class="tag-chip-label">
-                "Bob"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
-                <span class="material-symbol-icon">
-                  "add"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle is-selected" title="Remove tag">
-                <span class="material-symbol-icon">
-                  "remove"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
-                <span class="material-symbol-icon">
-                  "edit_note"
-        <section class="tag-editor-category">
-          <div class="tag-editor-category-header">
-            <div class="tag-editor-category-left">
-              <button aria-label="Uncategorized stays last" class="drag-handle icon-glyph-base icon-glyph-button" disabled="" title="Uncategorized stays last" type="button">
-                <span class="material-symbol-icon">
-                  "drag_indicator"
-              <button class="tag-editor-category-toggle icon-glyph-base icon-glyph-button" title="Collapse category">
-                <span class="material-symbol-icon">
-                  "keyboard_arrow_down"
-              <div class="tag-editor-category-title">
-                "Uncategorized"
-            <div class="tag-editor-category-controls">
-          <div class="tag-editor-tag-grid">
-            <div class="tag-chip state-none">
-              <span class="tag-chip-label">
-                "Loose"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Add tag">
-                <span class="material-symbol-icon">
-                  "add"
-              <button class="chip-btn icon-glyph-base icon-glyph-toggle" title="Remove tag">
-                <span class="material-symbol-icon">
-                  "remove"
-              <button class="chip-btn icon-glyph-base icon-glyph-button" title="Edit tag">
-                <span class="material-symbol-icon">
-                  "edit_note"
-      <p class="visually-hidden" id="P0-2">
-        "Drag to reorder, or press the up and down arrow keys."
-      <div aria-live="polite" class="visually-hidden">
-    <div class="tag-editor-panel" id="tag-editor-panel-autotag" style="display: none">
-      <div class="tag-editor-body tag-autotag-body themed-scrollbar">
-        <div class="tag-autotag-toolbar">
-          <label class="tag-autotag-check-label">
-            <input checked="false" id="tag-autotag-scan-full" type="checkbox">
-            "Scan full library"
-          <label class="tag-autotag-check-label">
-            <input checked="false" id="tag-autotag-view-all" type="checkbox">
-            "View all matches"
-        <p class="tag-autotag-hint">
-          "Use Scan Files to find matching tags. File name matching ignores extension."
-        <div class="tag-autotag-actions-row">
-          <button class="tag-autotag-row-btn" id="tag-autotag-select-all" type="button">
-            "Select all"
-          <button class="tag-autotag-row-btn" id="tag-autotag-deselect-all" type="button">
-            "Deselect all"
-          <button class="tag-autotag-scan-btn" id="tag-autotag-scan-btn" type="button">
-            "Scan Files"
-        <div aria-label="Scan in progress" class="tag-autotag-progress" id="tag-autotag-progress" role="progressbar" style="display: none">
-        <div aria-live="polite" class="tag-autotag-status" id="tag-autotag-status">
-        <div class="tag-autotag-results themed-scrollbar" id="tag-autotag-results">
+    <button aria-label="Auto Tag" class="icon-btn" id="tag-editor-autotag-btn" title="Auto Tag" type="button">
+      <span class="material-symbol-icon">
+        "auto_awesome"
+    <button aria-label="Refresh" class="icon-btn" id="tag-editor-refresh-btn" title="Refresh" type="button">
+      <span class="material-symbol-icon">
+        "refresh"
+  <p aria-live="polite" class="tags-target" hidden="" id="tag-editor-target">
+  <div class="tag-editor-body themed-scrollbar" id="tag-editor-body">
+    <section class="tag-category">
+      <div class="tag-category-header">
+        <button aria-describedby="P0-2" aria-label="Reorder Places" class="drag-handle" title="Drag to reorder" type="button">
+          <span class="material-symbol-icon">
+            "drag_indicator"
+        <button aria-controls="tag-grid-cat-places" aria-expanded="true" aria-label="Places" class="tag-category-toggle" title="Collapse category" type="button">
+          <span class="tag-category-name">
+            "Places"
+          <span class="category-count" hidden="" title="1 tag on this item">
+            "1"
+          <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
+        <button aria-label="Edit category Places" class="icon-btn" title="Edit category" type="button">
+          <span class="material-symbol-icon">
+            "edit_note"
+      <div class="tag-grid" id="tag-grid-cat-places">
+        <div class="tag-chip state-none">
+          <span class="tag-chip-label">
+            "alps"
+          <button aria-label="Add tag alps" class="icon-btn is-selected" title="Add tag" type="button">
+            <span class="material-symbol-icon">
+              "add"
+          <button aria-label="Remove tag alps" class="icon-btn" title="Remove tag" type="button">
+            <span class="material-symbol-icon">
+              "remove"
+          <button aria-label="Edit tag alps" class="icon-btn" title="Edit tag" type="button">
+            <span class="material-symbol-icon">
+              "edit_note"
+        <div class="tag-chip state-all">
+          <span class="tag-chip-label">
+            "Beach"
+          <button aria-label="Add tag Beach" class="icon-btn" title="Add tag" type="button">
+            <span class="material-symbol-icon">
+              "add"
+          <button aria-label="Remove tag Beach" class="icon-btn" title="Remove tag" type="button">
+            <span class="material-symbol-icon">
+              "remove"
+          <button aria-label="Edit tag Beach" class="icon-btn" title="Edit tag" type="button">
+            <span class="material-symbol-icon">
+              "edit_note"
+    <section class="tag-category is-collapsed">
+      <div class="tag-category-header">
+        <button aria-describedby="P0-2" aria-label="Reorder Mood" class="drag-handle" title="Drag to reorder" type="button">
+          <span class="material-symbol-icon">
+            "drag_indicator"
+        <button aria-controls="tag-grid-cat-mood" aria-expanded="false" aria-label="Mood" class="tag-category-toggle" title="Expand category" type="button">
+          <span class="tag-category-name">
+            "Mood"
+          <span class="category-count" hidden="" title="0 tags on this item">
+            "0"
+          <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
+        <button aria-label="Edit category Mood" class="icon-btn" title="Edit category" type="button">
+          <span class="material-symbol-icon">
+            "edit_note"
+      <div class="tag-grid" hidden="" id="tag-grid-cat-mood">
+        <div class="tag-chip state-none">
+          <span class="tag-chip-label">
+            "Calm"
+          <button aria-label="Add tag Calm" class="icon-btn" title="Add tag" type="button">
+            <span class="material-symbol-icon">
+              "add"
+          <button aria-label="Remove tag Calm" class="icon-btn" title="Remove tag" type="button">
+            <span class="material-symbol-icon">
+              "remove"
+          <button aria-label="Edit tag Calm" class="icon-btn" title="Edit tag" type="button">
+            <span class="material-symbol-icon">
+              "edit_note"
+    <section class="tag-category">
+      <div class="tag-category-header">
+        <button aria-describedby="P0-2" aria-label="Reorder People" class="drag-handle" title="Drag to reorder" type="button">
+          <span class="material-symbol-icon">
+            "drag_indicator"
+        <button aria-controls="tag-grid-cat-people" aria-expanded="true" aria-label="People" class="tag-category-toggle" title="Collapse category" type="button">
+          <span class="tag-category-name">
+            "People"
+          <span class="category-count" hidden="" title="1 tag on this item">
+            "1"
+          <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
+        <button aria-label="Edit category People" class="icon-btn" title="Edit category" type="button">
+          <span class="material-symbol-icon">
+            "edit_note"
+      <div class="tag-grid" id="tag-grid-cat-people">
+        <div class="tag-chip state-none">
+          <span class="tag-chip-label">
+            "Alice"
+          <button aria-label="Add tag Alice" class="icon-btn" title="Add tag" type="button">
+            <span class="material-symbol-icon">
+              "add"
+          <button aria-label="Remove tag Alice" class="icon-btn" title="Remove tag" type="button">
+            <span class="material-symbol-icon">
+              "remove"
+          <button aria-label="Edit tag Alice" class="icon-btn" title="Edit tag" type="button">
+            <span class="material-symbol-icon">
+              "edit_note"
+        <div class="tag-chip state-all">
+          <span class="tag-chip-label">
+            "Bob"
+          <button aria-label="Add tag Bob" class="icon-btn" title="Add tag" type="button">
+            <span class="material-symbol-icon">
+              "add"
+          <button aria-label="Remove tag Bob" class="icon-btn is-selected" title="Remove tag" type="button">
+            <span class="material-symbol-icon">
+              "remove"
+          <button aria-label="Edit tag Bob" class="icon-btn" title="Edit tag" type="button">
+            <span class="material-symbol-icon">
+              "edit_note"
+    <section class="tag-category">
+      <div class="tag-category-header">
+        <button aria-label="Uncategorized stays last" class="drag-handle" disabled="" title="Uncategorized stays last" type="button">
+          <span class="material-symbol-icon">
+            "drag_indicator"
+        <button aria-controls="tag-grid-uncategorized" aria-expanded="true" aria-label="Uncategorized" class="tag-category-toggle" title="Collapse category" type="button">
+          <span class="tag-category-name">
+            "Uncategorized"
+          <span class="category-count" hidden="" title="0 tags on this item">
+            "0"
+          <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
+      <div class="tag-grid" id="tag-grid-uncategorized">
+        <div class="tag-chip state-none">
+          <span class="tag-chip-label">
+            "Loose"
+          <button aria-label="Add tag Loose" class="icon-btn" title="Add tag" type="button">
+            <span class="material-symbol-icon">
+              "add"
+          <button aria-label="Remove tag Loose" class="icon-btn" title="Remove tag" type="button">
+            <span class="material-symbol-icon">
+              "remove"
+          <button aria-label="Edit tag Loose" class="icon-btn" title="Edit tag" type="button">
+            <span class="material-symbol-icon">
+              "edit_note"
+  <p class="visually-hidden" id="P0-2">
+    "Drag to reorder, or press the up and down arrow keys."
+  <div aria-live="polite" class="visually-hidden">
   <div class="tag-editor-footer">
-    <button aria-label="Add category" class="icon-glyph-base icon-glyph-button" id="tag-editor-add-category-btn" title="Add category">
-      <span class="material-symbol-icon">
-        "add"
-    <select id="tag-editor-category-select">
-      <option selected="true" value="cat-places">
-        "Places"
-      <option selected="false" value="cat-mood">
-        "Mood"
-      <option selected="false" value="cat-people">
-        "People"
-      <option selected="false" value="uncategorized">
-        "Uncategorized"
-    <span class="vfield">
-      <input id="tag-editor-new-tag" placeholder="New tag name" type="text" value="">
-    <button aria-label="Add tag" class="icon-glyph-base icon-glyph-button" disabled="" id="tag-editor-add-tag-btn" title="Add tag">
-      <span class="material-symbol-icon">
-        "add"
-    <button aria-label="Save" class="icon-glyph-base icon-glyph-button has-pending" id="tag-editor-apply-btn" title="Save">
-      <span class="material-symbol-icon">
-        "save"
+    <div class="tag-editor-footer-row">
+      <button aria-label="Add category" class="icon-btn" id="tag-editor-add-category-btn" title="Add category" type="button">
+        <span class="material-symbol-icon">
+          "add"
+      <select aria-label="Category for new tag" class="ctl" id="tag-editor-category-select">
+        <option selected="true" value="cat-places">
+          "Places"
+        <option selected="false" value="cat-mood">
+          "Mood"
+        <option selected="false" value="cat-people">
+          "People"
+        <option selected="false" value="uncategorized">
+          "Uncategorized"
+    <div class="tag-editor-footer-row">
+      <span class="vfield">
+        <input aria-label="New tag name" autocomplete="off" class="ctl" id="tag-editor-new-tag" placeholder="New tag name" type="text" value="">
+      <button aria-label="Add tag" class="icon-btn" disabled="" id="tag-editor-add-tag-btn" title="Add tag" type="button">
+        <span class="material-symbol-icon">
+          "add"
+      <button aria-label="Save" class="icon-btn has-pending" id="tag-editor-apply-btn" title="Save" type="button">
+        <span class="material-symbol-icon">
+          "save"
 "
 `;

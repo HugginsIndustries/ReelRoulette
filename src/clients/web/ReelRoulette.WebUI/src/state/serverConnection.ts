@@ -19,6 +19,8 @@ export interface ServerConnectionEvents {
   itemStateChanged: (payload: any) => void;
   playbackRecorded: (payload: any) => void;
   itemTagsChanged: (payload: any) => void;
+  /** The tag catalog changed, with its categories and tags as they now are. */
+  tagCatalogChanged: (payload: any) => void;
   /** A refresh run finished. Sent once per run. */
   refreshCompleted: () => void;
   /** The server could not replay missed events. Presets have started reloading. */
@@ -63,6 +65,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     itemStateChanged: [],
     playbackRecorded: [],
     itemTagsChanged: [],
+    tagCatalogChanged: [],
     refreshCompleted: [],
     resyncRequired: []
   };
@@ -165,6 +168,9 @@ export function createServerConnection(options: ServerConnectionOptions): Server
         },
         itemTagsChanged(payload) {
           emit("itemTagsChanged", payload);
+        },
+        tagCatalogChanged(payload) {
+          emit("tagCatalogChanged", payload);
         },
         refreshStatusChanged(payload) {
           const raw = payload?.snapshot || payload?.Snapshot;

@@ -66,25 +66,31 @@ export function Panel() {
   );
 }
 
-/** The row of icon-only tabs, and the panel's Close, which waits while Auto Tag scans as the tag editor's Close did. */
+/**
+ * The row of icon-only tabs, and the panel's Close. While the Filter or Tags tab holds unsaved changes, an orange dot
+ * marks its icon and its name says so.
+ */
 function PanelTabs() {
-  const { panel, tagEditor } = useApp();
+  const { panel, unsaved } = useApp();
   const shown = panel.tab.value;
-  const scanning = shown === "tags" && (tagEditor.view.value?.autoTag.scanning ?? false);
+  // The Library tab holds no changes, so it has no dot.
+  const dots: Record<PanelTab, boolean | null> = { library: null, ...unsaved.value };
   return (
     <div class="panel-tabs">
       <div class="panel-tablist" role="tablist" aria-label="Panel tabs">
         {PANEL_TABS.map((name) => {
           const { label, icon } = TABS[name];
+          const held = dots[name];
           return (
-            <button key={name} type="button" id={`panel-tab-${name}`} class="panel-tab" role="tab" aria-selected={name === shown ? "true" : "false"} aria-controls={`panel-page-${name}`} aria-label={label} title={label} onClick={() => void panel.showTab(name)}>
+            <button key={name} type="button" id={`panel-tab-${name}`} class="panel-tab" role="tab" aria-selected={name === shown ? "true" : "false"} aria-controls={`panel-page-${name}`} aria-label={held ? `${label}, unsaved changes` : label} title={held ? `${label} (unsaved changes)` : label} onClick={() => void panel.showTab(name)}>
               <span class="material-symbol-icon">{icon}</span>
+              {held === null ? null : <span class="unsaved-dot" hidden={!held}></span>}
             </button>
           );
         })}
       </div>
       <span class="panel-tabs-spacer"></span>
-      <button type="button" id="panel-close-btn" class="icon-glyph-base icon-glyph-button panel-close" aria-label="Close panel" title="Close" disabled={scanning} onClick={() => void panel.close()}>
+      <button type="button" id="panel-close-btn" class="icon-glyph-base icon-glyph-button panel-close" aria-label="Close panel" title="Close" onClick={() => void panel.close()}>
         <span class="material-symbol-icon">close</span>
       </button>
     </div>

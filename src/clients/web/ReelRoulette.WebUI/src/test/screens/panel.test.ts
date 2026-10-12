@@ -107,14 +107,15 @@ function tabRow(): HTMLElement {
 }
 
 function tab(name: "Library" | "Filter" | "Tags"): HTMLButtonElement {
-  return within(tabRow()).getByRole("tab", { name, hidden: true }) as HTMLButtonElement;
+  // A tab's name says so while it holds unsaved changes.
+  return within(tabRow()).getByRole("tab", { name: new RegExp(`^${name}(, unsaved changes)?$`), hidden: true }) as HTMLButtonElement;
 }
 
 /** The tab pages showing, by the tab that labels them. */
 function shownPages(): string[] {
   return Array.from(panel().querySelectorAll<HTMLElement>("[role=tabpanel]"))
     .filter((page) => !page.hidden)
-    .map((page) => document.getElementById(page.getAttribute("aria-labelledby")!)!.getAttribute("aria-label")!);
+    .map((page) => document.getElementById(page.getAttribute("aria-labelledby")!)!.getAttribute("aria-label")!.replace(", unsaved changes", ""));
 }
 
 function selectedTab(): string | null {
@@ -608,27 +609,123 @@ describe("Tags tab", () => {
     await click(addAlice()!);
   }
 
-  it("asks before it is left with changes, and stays when the user keeps them", async () => {
+  it("keeps its changes when it is left for another tab or the panel closes, without asking", async () => {
     await openTagsWithChange();
 
     await click(tab("Library"));
-    expect(topDialog()?.textContent).toContain("Discard changes?");
-    await click(within(topDialog()!).getByRole("button", { name: "Cancel" }));
-    expect(shownPages()).toEqual(["Tags"]);
+    expect(topDialog()).toBeNull();
+    expect(shownPages()).toEqual(["Library"]);
+    await click(tab("Tags"));
+    expect(addAlice()!.classList.contains("is-selected")).toBe(true);
 
     fireEvent.keyDown(document, { key: "Escape" });
     await settle();
-    expect(topDialog()?.textContent).toContain("Discard changes?");
-    await click(within(topDialog()!).getByRole("button", { name: "Discard" }));
+    expect(topDialog()).toBeNull();
     expect(isOpen()).toBe(false);
+    await click(panelButton());
+    expect(shownPages()).toEqual(["Tags"]);
+    expect(addAlice()!.classList.contains("is-selected")).toBe(true);
   });
 
-  it("Save closes the panel beside the player, as the tag editor closed", async () => {
+  it("Save leaves the panel open beside the player", async () => {
     await openTagsWithChange();
+    expect(stage().dataset.panelMode).toBe("side");
 
     await click(document.getElementById("tag-editor-apply-btn")!);
 
-    expect(isOpen()).toBe(false);
+    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
+    expect(isOpen()).toBe(true);
+    expect(shownPages()).toEqual(["Tags"]);
+  });
+
+  it("Save leaves the panel open as the overlay", async () => {
+    setViewport({ width: 600, height: 800 });
+    await openTagsWithChange();
+    expect(stage().dataset.panelMode).toBe("overlay");
+
+    await click(document.getElementById("tag-editor-apply-btn")!);
+
+    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
+    expect(isOpen()).toBe(true);
+    expect(shownPages()).toEqual(["Tags"]);
+  });
+});
+
+describe("unsaved changes", () => {
+  /** Whether the element's dot shows, and the name it has. */
+  function marked(element: HTMLElement): { dot: boolean; name: string; title: string } {
+    const dot = element.querySelector<HTMLElement>(".unsaved-dot");
+    return { dot: !!dot && !dot.hidden, name: element.getAttribute("aria-label") ?? "", title: element.title };
+  }
+
+  it("mark the Filter tab and the panel button with a dot, and their names say so, until Apply or Cancel", async () => {
+    await mount();
+    await click(panelButton());
+    expect(marked(tab("Filter"))).toEqual({ dot: false, name: "Filter", title: "Filter" });
+    expect(marked(panelButton())).toEqual({ dot: false, name: "Close panel", title: "Close panel" });
+    await click(tab("Filter"));
+    await click(neverPlayed());
+
+    expect(marked(tab("Filter"))).toEqual({ dot: true, name: "Filter, unsaved changes", title: "Filter (unsaved changes)" });
+    expect(marked(tab("Tags"))).toEqual({ dot: false, name: "Tags", title: "Tags" });
+    expect(marked(tab("Library")).dot).toBe(false);
+    expect(marked(panelButton())).toEqual({ dot: true, name: "Close panel, unsaved changes", title: "Close panel, unsaved changes" });
+    await click(document.getElementById("panel-close-btn")!);
+    expect(marked(panelButton())).toEqual({ dot: true, name: "Open panel, unsaved changes", title: "Open panel, unsaved changes" });
+
+    await click(panelButton());
+    expect(neverPlayed().checked).toBe(true);
+    await click(applyButton());
+    expect(marked(tab("Filter")).dot).toBe(false);
+    expect(marked(panelButton())).toEqual({ dot: false, name: "Close panel", title: "Close panel" });
+
+    await click(neverPlayed());
+    expect(marked(tab("Filter")).dot).toBe(true);
+    await click(within(panel()).getByRole("button", { name: "Cancel" }));
+    expect(marked(tab("Filter")).dot).toBe(false);
+    expect(marked(panelButton()).dot).toBe(false);
+  });
+
+  it("mark the Tags tab and the panel button with a dot until Save, or until Refresh discards the changes", async () => {
+    await mount();
+    await click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
+    await waitFor(() => expect(videoSrc()).toContain("/api/media/item-1"));
+    await click(panelButton());
+    await click(tab("Tags"));
+    const alice = () => panel().querySelector<HTMLButtonElement>(".tag-chip [title='Add tag']")!;
+    await waitFor(() => expect(alice()).not.toBeNull());
+
+    await click(alice());
+    expect(marked(tab("Tags"))).toEqual({ dot: true, name: "Tags, unsaved changes", title: "Tags (unsaved changes)" });
+    expect(marked(panelButton()).dot).toBe(true);
+    await click(document.getElementById("tag-editor-apply-btn")!);
+    expect(marked(tab("Tags")).dot).toBe(false);
+    expect(marked(panelButton()).dot).toBe(false);
+
+    await click(alice());
+    expect(marked(tab("Tags")).dot).toBe(true);
+    await click(document.getElementById("tag-editor-refresh-btn")!);
+    await click(within(topDialog()!).getByRole("button", { name: "Discard" }));
+    expect(marked(tab("Tags")).dot).toBe(false);
+    expect(marked(panelButton()).dot).toBe(false);
+  });
+
+  it("show the dot on the panel button while either tab holds changes", async () => {
+    await mount();
+    await click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
+    await waitFor(() => expect(videoSrc()).toContain("/api/media/item-1"));
+    await click(panelButton());
+    await click(tab("Filter"));
+    await click(neverPlayed());
+    await click(tab("Tags"));
+    const alice = () => panel().querySelector<HTMLButtonElement>(".tag-chip [title='Add tag']")!;
+    await waitFor(() => expect(alice()).not.toBeNull());
+    await click(alice());
+
+    await click(document.getElementById("tag-editor-apply-btn")!);
+    expect(marked(tab("Tags")).dot).toBe(false);
+    expect(marked(tab("Filter")).dot).toBe(true);
+    expect(marked(panelButton()).dot).toBe(true);
   });
 });
 

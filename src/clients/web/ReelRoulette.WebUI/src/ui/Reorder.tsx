@@ -360,7 +360,7 @@ export function useReorder(options: ReorderOptions): Reorder {
   };
 }
 
-const HANDLE = "drag-handle icon-glyph-base icon-glyph-button";
+const HANDLE = "drag-handle";
 
 /** A row's drag handle, or with `fixed`, a dimmed one for a row that can't move, whose name says why. */
 export function DragHandle(props: { control: DragHandleControl } | { fixed: string }) {

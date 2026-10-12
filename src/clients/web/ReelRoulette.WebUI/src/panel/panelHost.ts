@@ -46,7 +46,7 @@ function isWidth(value: unknown): value is number {
 export interface PanelTabHooks {
   /** The tab shows, its page already shown: the panel opened on it, or it was chosen. */
   enter(): void;
-  /** The tab is about to hide. False keeps it showing, as the tag editor does while a scan runs or the user keeps changes. */
+  /** The tab is about to hide. False keeps it showing; each tab now agrees, keeping its changes while it is hidden. */
   leave(): boolean | Promise<boolean>;
 }
 
@@ -183,7 +183,7 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
   let button: { focus(options?: FocusOptions): void } | null = null;
   let stopWatching: (() => void) | null = null;
   let stageObserver: ResizeObserver | null = null;
-  /** A tab is deciding whether it can be left, as the tag editor asks about its changes. */
+  /** A tab is deciding whether it can be left. */
   let leaving = false;
   /** The panel was remembered open, and its tab waits for the server's compatibility check. */
   let rememberedTabWaits = false;

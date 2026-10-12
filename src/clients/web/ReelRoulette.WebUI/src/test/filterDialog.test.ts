@@ -91,11 +91,12 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
       steps.push(`commitQuery favoritesMode=${store.appliedFilter.peek().favoritesMode}`);
     })
   };
-  const session = new Map<string, string>();
-  const storage = {
-    getItem: (key: string) => session.get(key) ?? null,
-    setItem: (key: string, value: string) => void session.set(key, value)
-  };
+  /** The dialog's own memory on this device, by key. */
+  const remembered = new Map<string, string>();
+  const device = createDeviceStore({
+    getItem: (key: string) => remembered.get(key) ?? null,
+    setItem: (key: string, value: string) => void remembered.set(key, value)
+  });
   const confirm = vi.fn(async (_request: ConfirmRequest) => true);
   /** The panel, which Apply and Cancel close as the overlay. */
   const panel = {
@@ -103,9 +104,9 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
       steps.push("closeIfOverlay");
     })
   };
-  const dialog = createFilterDialog({ store, api, connection, library, panel, storage, dialogs: { confirm } });
+  const dialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs: { confirm } });
   const view = () => dialog.view.value!;
-  return { dialog, view, store, server, statuses, steps, library, session, confirm, panel, deviceWrites };
+  return { dialog, view, store, server, statuses, steps, library, remembered, confirm, panel, deviceWrites };
 }
 
 /** An action that is neither disabled nor held. */
@@ -179,7 +180,7 @@ describe("opening", () => {
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites"]);
   });
 
-  it("starts over on General from the applied filter and the saved presets each time it shows, before it loads again", async () => {
+  it("keeps its changes and its section while it hides, and shows them again as it loads again", async () => {
     const { dialog, view, server } = setup([FAVORITES, RECENT]);
     await dialog.open();
     dialog.changeGeneral({ onlyNeverPlayed: true });
@@ -189,23 +190,67 @@ describe("opening", () => {
     expect(view().pending).toBe(true);
     dialog.close();
     expect(dialog.isOpen.value).toBe(false);
+    expect(view().pending).toBe(true);
 
     const release = server.hold();
     const opening = dialog.open();
-    const startedOver = () => {
+    const kept = () => {
       expect(dialog.isOpen.value).toBe(true);
-      expect(dialog.tab.value).toBe("general");
-      expect(view().working.onlyNeverPlayed).toBe(false);
-      expect(view().general.onlyNeverPlayed).toBe(false);
-      expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
-      expect(view().presetsChanged).toBe(false);
-      expect(view().newPresetName).toBe("");
-      expect(view().pending).toBe(false);
+      expect(dialog.tab.value).toBe("presets");
+      expect(view().working.onlyNeverPlayed).toBe(true);
+      expect(view().general.onlyNeverPlayed).toBe(true);
+      expect(view().presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites"]);
+      expect(view().presetsChanged).toBe(true);
+      expect(view().newPresetName).toBe("Draft");
+      expect(view().pending).toBe(true);
     };
-    startedOver();
+    kept();
     release();
     await opening;
-    startedOver();
+    kept();
+  });
+
+  it("counts a duration still being typed as an unsaved change, without Apply's star, and keeps it while it hides, until Apply takes it", async () => {
+    const { dialog, view, store } = setup([FAVORITES, RECENT]);
+    await dialog.open();
+    dialog.typeDuration("max", "10:00");
+    expect(view().working.maxDurationSeconds).toBeNull();
+    expect(view()).toMatchObject({ unsaved: true, pending: false });
+    dialog.close();
+    await dialog.open();
+    expect(view().general.maxText).toBe("10:00");
+    expect(view()).toMatchObject({ unsaved: true, pending: false });
+
+    dialog.typeDuration("max", "1:7x");
+    expect(view().unsaved).toBe(true);
+    dialog.typeDuration("max", "");
+    expect(view().unsaved).toBe(false);
+
+    // Text that reads as the applied duration is no change, so the change is gone once Apply takes "90" as 01:30.
+    dialog.typeDuration("min", "90");
+    expect(view().unsaved).toBe(true);
+    await dialog.apply();
+    expect(store.appliedFilter.peek().minDurationSeconds).toBe(90);
+    expect(view().general.minText).toBe("90");
+    expect(view().unsaved).toBe(false);
+
+    // Any other change is unsaved too.
+    dialog.changeGeneral({ onlyNeverPlayed: true });
+    expect(view()).toMatchObject({ unsaved: true, pending: true });
+  });
+
+  it("without unsaved changes, starts over from the applied filter when it shows, keeping its section", async () => {
+    const { dialog, view, store } = setup([FAVORITES, RECENT]);
+    await dialog.open();
+    dialog.showTab("tags");
+    dialog.close();
+    store.appliedFilter.value = { ...createDefaultFilterState(), onlyNeverPlayed: true };
+
+    await dialog.open();
+    expect(dialog.tab.value).toBe("tags");
+    expect(view().working.onlyNeverPlayed).toBe(true);
+    expect(view().general.onlyNeverPlayed).toBe(true);
+    expect(view().pending).toBe(false);
   });
 
   it("keeps changes made while it loads again, and the section they were made in, and takes what loaded", async () => {
@@ -391,18 +436,18 @@ describe("Tags tab", () => {
     expect(view().heading).toBe("Preset: None*");
   });
 
-  it("keeps collapsed categories for the session and ignores a stored value it cannot read", async () => {
-    const { dialog, view, session } = setup();
-    session.set("rr_filterDialogCollapsedCategories", "not json");
+  it("remembers on this device which categories are expanded, starting with none, and ignores a value it cannot read", async () => {
+    const { dialog, view, remembered } = setup();
+    remembered.set("rr_device.filter.expandedTagCategories", "not json");
     await dialog.open();
-    expect([...view().collapsed]).toEqual([]);
+    expect([...view().expanded]).toEqual([]);
 
     dialog.toggleCategory("places");
-    expect(session.get("rr_filterDialogCollapsedCategories")).toBe('["places"]');
+    expect(remembered.get("rr_device.filter.expandedTagCategories")).toBe('["places"]');
     await dialog.open();
-    expect([...view().collapsed]).toEqual(["places"]);
+    expect([...view().expanded]).toEqual(["places"]);
     dialog.toggleCategory("places");
-    expect(session.get("rr_filterDialogCollapsedCategories")).toBe("[]");
+    expect(remembered.get("rr_device.filter.expandedTagCategories")).toBe("[]");
   });
 });
 
@@ -800,25 +845,48 @@ describe("applying", () => {
     expect(view().working).toEqual(createDefaultFilterState());
     expect(view().general).toMatchObject({ favoritesOn: false, favoritesChoice: "only" });
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites"]);
-    expect(view().pending).toBe(false);
     expect(view().heading).toBe("Preset: None");
+
+    // It differs from the applied filter, so Apply has something to apply, and it is an unsaved change, which the tab
+    // keeps while it hides.
+    expect(view().pending).toBe(true);
+    expect(view().unsaved).toBe(true);
+    dialog.close();
+    await dialog.open();
+    expect(view().working).toEqual(createDefaultFilterState());
+    expect(view()).toMatchObject({ pending: true, unsaved: true });
+  });
+
+  it("has nothing to apply after Clear all while the applied filter is the default", async () => {
+    const { dialog, view } = setup([FAVORITES]);
+    await dialog.open();
+    dialog.changeGeneral({ onlyNeverPlayed: true });
+    expect(view().pending).toBe(true);
+
+    dialog.clearAll();
+    expect(view()).toMatchObject({ pending: false, unsaved: false });
   });
 });
 
 describe("preset dropdown changes", () => {
-  it("start the open dialog over from the preset dropdown's filter, and leave a closed one alone", async () => {
-    const { dialog, view, store } = setup([FAVORITES]);
+  it("start the dialog over from the preset dropdown's filter and the saved presets, whether or not it shows, dropping its changes", async () => {
+    const { dialog, view, store } = setup([FAVORITES, RECENT]);
     await dialog.open();
     dialog.changeGeneral({ onlyNeverPlayed: true });
+    dialog.movePreset(0, 1);
 
     store.pickHeaderPreset("preset-favorites");
     expect(view().working).toMatchObject({ favoritesMode: "only", onlyNeverPlayed: false });
     expect(view().general).toMatchObject({ favoritesOn: true, favoritesChoice: "only" });
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
     expect(view().pending).toBe(false);
     expect(view().heading).toBe("Preset: Favorites");
 
+    dialog.changeGeneral({ onlyNeverPlayed: true });
     dialog.close();
+    expect(view().pending).toBe(true);
     store.pickHeaderPreset("");
-    expect(view().working.favoritesMode).toBe("only");
+    expect(view().working).toMatchObject({ favoritesMode: "off", onlyNeverPlayed: false });
+    expect(view().pending).toBe(false);
   });
 });

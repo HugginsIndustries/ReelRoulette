@@ -7,7 +7,8 @@ import { HeldButton, ValidatedField } from "./FieldValidation";
 
 // The WebUI's dialog: a themed modal in the browser's top layer, so each one opens above any dialog already open, and
 // above the overlays and fullscreen. It is rendered inside the fullscreen stage, so it shows in iOS pseudo-fullscreen
-// too. Escape or a click outside closes only the top one, and focus returns to where it was.
+// too. Escape or a click outside closes only the top one, and focus returns to where it was. Auto Tag, which covers the
+// whole page, is one too, with its own class, no outside to click, and a scan to wait for.
 
 export interface DialogProps {
   /** The id of what names it: its heading, or a confirmation's or notice's message. */
@@ -26,16 +27,25 @@ export interface DialogProps {
    */
   fallbackFocus?: () => HTMLElement | null;
   id?: string;
+  /** In place of the in-app dialog's own `app-dialog`. */
+  class?: string;
+  /** False when a click on the dialog itself isn't a click outside it, as for one that covers the whole page. */
+  backdropCancels?: boolean;
+  /** Whether a close the browser makes anyway, after its cancel, opens it again, as Auto Tag does while a scan runs. */
+  stayOpen?: () => boolean;
   children: ComponentChildren;
 }
 
 /** A modal that opens when it renders and closes when it stops rendering. */
-export function Dialog({ labelledBy, role, onCancel, initialFocus, selectInitial, fallbackFocus, id, children }: DialogProps) {
+export function Dialog(props: DialogProps) {
+  const { labelledBy, role, onCancel, initialFocus, selectInitial, fallbackFocus, id, backdropCancels = true, stayOpen, children } = props;
   const ref = useRef<HTMLDialogElement>(null);
   const cancel = useRef(onCancel);
   cancel.current = onCancel;
   const fallback = useRef(fallbackFocus);
   fallback.current = fallbackFocus;
+  const keepOpen = useRef(stayOpen);
+  keepOpen.current = stayOpen;
   /** Whether the last press on the dialog started on its backdrop, or null before any press. */
   const pressOnBackdrop = useRef<boolean | null>(null);
 
@@ -48,19 +58,27 @@ export function Dialog({ labelledBy, role, onCancel, initialFocus, selectInitial
       event.preventDefault();
       cancel.current();
     };
-    // Some browsers close it anyway after repeated requests, so a close this page didn't make is a cancel.
+    const show = () => {
+      if (typeof dialog.showModal === "function") {
+        dialog.showModal();
+      } else {
+        dialog.setAttribute("open", "");
+      }
+    };
+    // Some browsers close it anyway after repeated requests, so a close this page didn't make is a cancel, and one that
+    // should stay open opens again.
     const onBrowserClose = () => {
-      if (!closing) {
-        cancel.current();
+      if (closing) {
+        return;
+      }
+      cancel.current();
+      if (keepOpen.current?.()) {
+        show();
       }
     };
     dialog.addEventListener("cancel", onBrowserCancel);
     dialog.addEventListener("close", onBrowserClose);
-    if (typeof dialog.showModal === "function") {
-      dialog.showModal();
-    } else {
-      dialog.setAttribute("open", "");
-    }
+    show();
     const target = initialFocus.current;
     target?.focus();
     if (selectInitial && target instanceof HTMLInputElement) {
@@ -85,7 +103,7 @@ export function Dialog({ labelledBy, role, onCancel, initialFocus, selectInitial
     <dialog
       ref={ref}
       id={id}
-      class="app-dialog"
+      class={props.class ?? "app-dialog"}
       role={role}
       aria-labelledby={labelledBy}
       onKeyDown={(event) => {
@@ -104,7 +122,7 @@ export function Dialog({ labelledBy, role, onCancel, initialFocus, selectInitial
         // inside, such as selecting a field's text, doesn't count.
         const startedOnBackdrop = pressOnBackdrop.current;
         pressOnBackdrop.current = null;
-        if (event.target === event.currentTarget && startedOnBackdrop !== false) {
+        if (backdropCancels && event.target === event.currentTarget && startedOnBackdrop !== false) {
           cancel.current();
         }
       }}

@@ -477,6 +477,13 @@ for (const width of [1280, 390]) {
     dot("tab-btn-filter") && dot("panel-btn") && !dot("tab-btn-tags") && $("tab-btn-filter").getAttribute("aria-label") === "Filter, unsaved changes" && $("panel-btn").getAttribute("aria-label").endsWith(", unsaved changes"));
   apply.click();
   check(`layout@${width}: Apply clears the dots`, !dot("tab-btn-filter") && !dot("panel-btn"));
+  // A duration still being typed is an unsaved change for the dots, as in the app, though Apply's star waits.
+  const appliedMin = min.value;
+  input(min, "7:07");
+  check(`layout@${width}: a duration being typed marks the Filter tab and the panel button, without Apply's star`,
+    dot("tab-btn-filter") && dot("panel-btn") && $("filter-apply-label").textContent === "Apply");
+  input(min, appliedMin);
+  check(`layout@${width}: the dots go once the typed duration is the applied one again`, !dot("tab-btn-filter") && !dot("panel-btn"));
   check(`layout@${width}: valid Apply applies${overlay ? " and closes the overlay" : " and stays open"}`,
     said("Filters applied.") && $("panel").hidden === overlay);
   check(`layout@${width}: closing resumes playback`, overlay ? chip().includes("Playing") : true);
@@ -723,6 +730,16 @@ for (const width of [1280, 390]) {
     JSON.parse(window.localStorage.getItem("rr-mockup.tagsExpanded")).includes("people") && collapsedNow(filterSection("people")));
   header.click();
   check(`layout@${width}: clicking the header itself collapses it again`, peopleGrid.hidden);
+  // A press on the handle or Edit let go elsewhere on the header, as a drag's drop often is, has the browser click the
+  // header itself.
+  for (const [name, control] of [["the handle", header.querySelector(".drag-handle")], ["Edit", header.querySelector('[title="Edit category"]')]]) {
+    if (!peopleGrid.hidden) header.querySelector(".tag-category-toggle").click();
+    control.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+    document.dispatchEvent(new window.PointerEvent("pointerup", { bubbles: true, button: 0 }));
+    header.click();
+    check(`layout@${width}: a press on ${name} let go elsewhere on the header leaves the category collapsed`,
+      peopleGrid.hidden && openDialogs().length === 0);
+  }
   // A collapsed header counts the item's tags in it.
   const playingItem = items.find((item) => item.name === np());
   const usedCategory = window.mockup.tags.find((category) => category.id !== "people" && category.chips.some((chip) => playingItem.tags.has(chip.key)));

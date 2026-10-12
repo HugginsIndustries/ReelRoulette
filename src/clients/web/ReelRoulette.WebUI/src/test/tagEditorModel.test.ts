@@ -11,7 +11,10 @@ import {
   initialCategoryOrder,
   moveCategoryInOrder,
   newTagNameProblem,
+  planAutoTagApply,
   planTagEdits,
+  retargetHeldTag,
+  savedTagModel,
   tagCategoryRows,
   tagEditorDisplay,
   tagSaveRequest,
@@ -151,12 +154,13 @@ describe("category order and options", () => {
 describe("rows and chips", () => {
   it("gives each category its controls and its tags with what the items have and what is held", () => {
     const display = tagEditorDisplay(MODEL, createPendingTagEdits(), ORDER);
-    const rows = tagCategoryRows(display, new Set(["mood"]), new Map([["calm", { action: "add" as const, name: "Calm" }]]));
+    const rows = tagCategoryRows(display, new Set(["mood"]), new Map([["calm", { action: "add" as const, name: "Calm" }]]), MODEL);
+    // Only the categories expanded show their tags.
     expect(rows.map((row) => [row.name, row.collapsed, row.uncategorized])).toEqual([
-      ["Places", false, false],
-      ["Mood", true, false],
-      ["People", false, false],
-      ["Uncategorized", false, true]
+      ["Places", true, false],
+      ["Mood", false, false],
+      ["People", true, false],
+      ["Uncategorized", true, true]
     ]);
     expect(rows[0]!.chips).toEqual([
       { name: "alps", state: "state-none", pending: null, canChangeItems: true },
@@ -166,7 +170,47 @@ describe("rows and chips", () => {
     expect(rows[3]!.chips.map((chip) => chip.name)).toEqual(["Loose"]);
 
     const alone = tagEditorDisplay({ ...MODEL, items: [] }, createPendingTagEdits(), ["places"]);
-    expect(tagCategoryRows(alone, new Set(), new Map())[0]!.chips[0]!.canChangeItems).toBe(false);
+    expect(tagCategoryRows(alone, new Set(), new Map(), MODEL)[0]!.chips[0]!.canChangeItems).toBe(false);
+  });
+
+  it("counts each category's tags the items have, and marks one with a held change or a name or tags unlike the saved ones", () => {
+    const rows = (edits: PendingTagEdits, selections = new Map<string, { action: "add" | "remove"; name: string }>()) =>
+      tagCategoryRows(tagEditorDisplay(MODEL, edits, ORDER), new Set(), selections, MODEL).map((row) => [row.name, row.inUse, row.unsaved]);
+    expect(rows(createPendingTagEdits())).toEqual([
+      ["Places", 1, false],
+      ["Mood", 0, false],
+      ["People", 1, false],
+      ["Uncategorized", 0, false]
+    ]);
+    // A held add marks its category; it counts what the items have now.
+    expect(rows(createPendingTagEdits(), new Map([["calm", { action: "add", name: "Calm" }]]))[1]).toEqual(["Mood", 0, true]);
+    // A renamed category, and a tag moved from Places to People, mark those categories.
+    expect(
+      rows(
+        pending({
+          upsertCategories: new Map([["mood", { id: "mood", name: "Feel", sortOrder: 1 }]]),
+          renameTags: new Map([["beach", { oldName: "Beach", newName: "Beach", newCategoryId: "people" }]])
+        })
+      )
+    ).toEqual([
+      ["Places", 0, true],
+      ["Feel", 0, true],
+      ["People", 2, true],
+      ["Uncategorized", 0, false]
+    ]);
+    // A new category always holds unsaved changes; a new order alone doesn't count.
+    const added = tagEditorDisplay(
+      MODEL,
+      pending({ upsertCategories: new Map([["food", { id: "food", name: "Food", sortOrder: 3 }]]) }),
+      ["people", "mood", "places", "food", "uncategorized"]
+    );
+    expect(tagCategoryRows(added, new Set(), new Map(), MODEL).map((row) => [row.name, row.unsaved])).toEqual([
+      ["People", false],
+      ["Mood", false],
+      ["Places", false],
+      ["Food", true],
+      ["Uncategorized", false]
+    ]);
   });
 
   it("says whether all, some, or none of the items have a tag, ignoring case", () => {
@@ -188,6 +232,45 @@ describe("rows and chips", () => {
     expect(toggleTagSelection(selections, "CALM", "remove").size).toBe(0);
     expect(hasPendingTagEdits(createPendingTagEdits())).toBe(false);
     expect(hasPendingTagEdits(pending({ deleteTags: new Map([["bob", { name: "Bob" }]]) }))).toBe(true);
+  });
+
+  it("moves held changes to a tag renamed elsewhere, keeps one already held for the new name, and drops them for a deleted tag", () => {
+    const selections = new Map([
+      ["bob", { action: "add" as const, name: "Bob" }],
+      ["robert", { action: "remove" as const, name: "Robert" }],
+      ["beach", { action: "remove" as const, name: "Beach" }]
+    ]);
+    const held = pending({
+      upsertTags: new Map([["beach", { name: "Beach", categoryId: "people" }]]),
+      renameTags: new Map([
+        ["bob", { oldName: "Bob", newName: "Bobby", newCategoryId: null }],
+        ["sunset", { oldName: "Sunset", newName: "sunset", newCategoryId: "places" }]
+      ]),
+      deleteTags: new Map([["calm", { name: "Calm" }]])
+    });
+
+    const renamed = retargetHeldTag(selections, held, { kind: "rename-tag", oldName: "Bob", newName: "Robert", newCategoryId: null });
+    expect([...renamed.selections]).toEqual([
+      ["robert", { action: "remove", name: "Robert" }],
+      ["beach", { action: "remove", name: "Beach" }]
+    ]);
+    expect([...renamed.pending.renameTags.values()]).toEqual([
+      { oldName: "Sunset", newName: "sunset", newCategoryId: "places" },
+      { oldName: "Robert", newName: "Bobby", newCategoryId: null }
+    ]);
+
+    // A held rename that only moved the tag's category takes the new name.
+    const moved = retargetHeldTag(selections, held, { kind: "rename-tag", oldName: "sunset", newName: "Dusk", newCategoryId: null });
+    expect(moved.pending.renameTags.get("dusk")).toEqual({ oldName: "Dusk", newName: "Dusk", newCategoryId: "places" });
+
+    const deleted = retargetHeldTag(renamed.selections, held, { kind: "delete-tag", name: "BEACH" });
+    expect([...deleted.selections.keys()]).toEqual(["robert"]);
+    expect(deleted.pending.upsertTags.size).toBe(0);
+    expect(retargetHeldTag(selections, held, { kind: "delete-tag", name: "Calm" }).pending.deleteTags.size).toBe(0);
+
+    const untouched = retargetHeldTag(selections, held, { kind: "rename-tag", oldName: "Nobody", newName: "Someone", newCategoryId: null });
+    expect(untouched.selections).toBe(selections);
+    expect(untouched.pending).toBe(held);
   });
 });
 
@@ -239,7 +322,39 @@ describe("name problems", () => {
 });
 
 describe("saving", () => {
-  it("plans only changed categories, then deletes, tags, renames, item tags, and Auto Tag", () => {
+  it("shows the model as a save of the changes leaves it: the catalog edited, in the editor's order, and the items' adds and removes applied", () => {
+    const saved = savedTagModel(
+      MODEL,
+      pending({
+        upsertCategories: new Map([["food", { id: "food", name: "Food", sortOrder: 9 }]]),
+        deleteCategoryIds: new Set(["mood"]),
+        renameTags: new Map([["beach", { oldName: "Beach", newName: "Shore", newCategoryId: null }]]),
+        deleteTags: new Map([["bob", { name: "Bob" }]])
+      }),
+      ["people", "places", "food", "uncategorized"],
+      new Map([
+        ["calm", { action: "add" as const, name: "Calm" }],
+        ["shore", { action: "remove" as const, name: "Shore" }]
+      ])
+    );
+    expect(saved.categories.map((category) => [category.id, category.name, category.sortOrder])).toEqual([
+      ["people", "People", 0],
+      ["places", "Places", 1],
+      ["food", "Food", 2]
+    ]);
+    expect(saved.tags.find((tag) => tag.name === "Calm")).toEqual({ name: "Calm", categoryId: "" });
+    expect(saved.tags.some((tag) => tag.name === "Bob" || tag.name === "Beach")).toBe(false);
+    expect(saved.items).toEqual([{ itemId: "item-1", tags: ["Calm"] }]);
+    // Shown again with nothing pending, it reads as the save leaves it.
+    expect(tagEditorDisplay(saved, createPendingTagEdits(), []).categories.map((category) => category.id)).toEqual([
+      "people",
+      "places",
+      "food",
+      "uncategorized"
+    ]);
+  });
+
+  it("plans only changed categories, then deletes, tags, renames, and item tags", () => {
     const steps = planTagEdits({
       model: MODEL,
       pending: pending({ deleteCategoryIds: new Set(["mood"]), deleteTags: new Map([["bob", { name: "Bob" }]]) }),
@@ -248,16 +363,21 @@ describe("saving", () => {
         ["calm", { action: "add" as const, name: "Calm" }],
         ["beach", { action: "remove" as const, name: "Beach" }]
       ]),
-      itemIds: ["item-1"],
-      autoTagAssignments: [{ tagName: "Sunset", itemPaths: ["C:\\sunset.mp4"], itemIds: ["item-2"] }]
+      itemIds: ["item-1"]
     });
     expect(steps).toEqual([
       { kind: "upsert-category", id: "people", name: "People", sortOrder: 1 },
       { kind: "delete-category", categoryId: "mood" },
       { kind: "delete-tag", name: "Bob" },
-      { kind: "apply-item-tags", itemIds: ["item-1"], addTags: ["Calm"], removeTags: ["Beach"] },
+      { kind: "apply-item-tags", itemIds: ["item-1"], addTags: ["Calm"], removeTags: ["Beach"] }
+    ]);
+  });
+
+  it("plans Auto Tag's Apply as one step of its trimmed assignments, and none without files", () => {
+    expect(planAutoTagApply([{ tagName: " Sunset ", itemPaths: ["C:\\sunset.mp4 "], itemIds: ["item-2"] }])).toEqual([
       { kind: "apply-auto-tag", assignments: [{ tagName: "Sunset", itemPaths: ["C:\\sunset.mp4"], itemIds: ["item-2"] }] }
     ]);
+    expect(planAutoTagApply([{ tagName: "Sunset", itemPaths: [], itemIds: [] }])).toEqual([]);
   });
 
   it("sends each step to its route, and Auto Tag files by path", () => {
