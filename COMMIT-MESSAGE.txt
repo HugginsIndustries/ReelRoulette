@@ -19,11 +19,7 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan the server console and last.log follow-ups from the console logging report
+Chore: Show a test fails without git, and send the advisor the same message the user sees
 
-- Structured Log Schema, Writer, and Ingestion takes framework entries into last.log only at warn and above, so an API request writes none, and keeps the console as its own provider that picks by logger category: Microsoft.Hosting.Lifetime, the server's start, shutdown, restart request, and update apply, warnings, and errors, with update checks and tray actions in last.log only.
-- It also gives entries without comp or op a mapping, with framework entries as comp framework, writes logged exceptions as data.error, and drops the paths from the ILogger calls that pass one.
-- It writes an event that is logged and also appended by hand once, at one level, so a catalog backup failure, a checkpoint failure, and a tray that fails to start each write one error.
-- It reports the writer's own failures on standard error instead of dropping them, writes a startup failure such as a port in use before exit, and keeps a self-restart's replacement server out of the old run's console.
-- Structured Log API and Privacy Rules adds framework to the server comp baseline and writes framework entries with their unfilled message template, with the URL and path traps that call for it.
-- Server Instrumentation records that Kestrel's Debug timeout entries reach neither output under the new filters, notes the source import and backup paths in last.log, and keeps per-request entries off the console.
+- AGENTS.md says to break the code by editing it and restore it from a copy under artifacts/scratch/ when showing that a test fails without its fix, and never to use git stash, checkout, restore, or reset for this, since they can change what the user has staged.
+- CLAUDE.md sends the advisor exactly the message shown to the user, as one message with anything else meant for the advisor, such as which shared files changed, and never a separate or different one.
