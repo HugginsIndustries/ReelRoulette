@@ -56,7 +56,7 @@ export function createDefaultFilterState(): FilterState {
   };
 }
 
-/** Header preset dropdown. None selects the default filter; a named preset selects that preset's filter. */
+/** The preset dropdown. None selects the default filter; a named preset selects that preset's filter. */
 export function filterStateForHeaderPresetSelection(
   preset: { filterState?: ApiFilterState | null } | null | undefined
 ): FilterState {
@@ -84,6 +84,21 @@ export type HeaderPresetPick = "keep" | "default" | "named";
 
 function presetNamesEqual(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
+}
+
+/** The saved preset with this name, matched as the preset dropdown matches names, ignoring case. */
+export function findPresetByName<T extends { id: string; name: string }>(presets: readonly T[], name: string): T | undefined {
+  return presets.find((preset) => presetNamesEqual(String(preset.name || preset.id || ""), name));
+}
+
+/** Whether `filter` is the named saved preset's own filter, unchanged, as the preset dropdown shows it without a star. */
+export function isPresetOwnFilter(
+  filter: FilterState,
+  presets: readonly { id: string; name: string; filterState?: ApiFilterState | null }[],
+  name: string | null
+): boolean {
+  const preset = name === null ? undefined : findPresetByName(presets, name);
+  return !!preset && filterStatesEqualForPresetMatch(filterStateForHeaderPresetSelection(preset), filter);
 }
 
 function describePresetAnchor(baseName: string | null, starred: boolean): PresetAnchor {

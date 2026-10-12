@@ -152,7 +152,7 @@ describe("randomPickRequest", () => {
     selectedPresetValue: " preset-favorites "
   };
 
-  it("names the header's preset while its filter equals the applied filter", () => {
+  it("names the preset dropdown's preset while its filter equals the applied filter", () => {
     const body = randomPickRequest(inputs);
     expect(body).toMatchObject({
       clientId: "client-1",

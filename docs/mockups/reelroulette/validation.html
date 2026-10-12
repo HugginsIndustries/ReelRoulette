@@ -914,6 +914,13 @@ function parseDuration(text) {
   }
   return /^\d+(\.\d+)?$/.test(raw) ? Number(raw) : "invalid";
 }
+// A duration as the WebUI's Filter tab shows it: MM:SS under an hour, HH:MM:SS from one hour up, each part two digits.
+function formatDuration(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  const two = (n) => String(n).padStart(2, "0");
+  const [hours, minutes, secs] = [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60];
+  return hours >= 1 ? `${two(hours)}:${two(minutes)}:${two(secs)}` : `${two(minutes)}:${two(secs)}`;
+}
 
 const DURATION_PROBLEM = "Use MM:SS, HH:MM:SS, or seconds.";
 function checkDuration(value) {

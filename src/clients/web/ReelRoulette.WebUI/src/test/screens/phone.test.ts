@@ -224,6 +224,20 @@ describe("a phone on its side", () => {
     expect(currentStyle(document.getElementById("tag-autotag-scan-full")!).minHeight).not.toBe("38px");
   });
 
+  it("puts the Library tab's four controls in two rows, as the mockup does", async () => {
+    stubCoarsePointer();
+    setViewport(ON_ITS_SIDE);
+    await mount();
+
+    await click(panelButton());
+    const controls = document.getElementById("library-controls")!;
+    expect(currentStyle(controls).display).toBe("grid");
+    expect(currentStyle(controls).gridTemplateColumns).toBe("1fr 1fr");
+    expect(currentStyle(controls.querySelector(".library-controls-pair")!).display).toBe("contents");
+    expect(currentStyle(document.getElementById("preset-select")!).minHeight).toBe("38px");
+    expect(currentStyle(document.getElementById("library-search-input")!).minHeight).toBe("38px");
+  });
+
   it("keeps the panel's and the dialogs' sizes on a tablet", async () => {
     const server = new FakeServer();
     server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, capabilities: [] }));

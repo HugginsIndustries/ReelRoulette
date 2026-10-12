@@ -2,9 +2,10 @@ import type { LibraryMediaType, LibraryProjectionItem } from "./libraryProjectio
 
 export type LibraryGridMediaType = "video" | "photo";
 
-export const TARGET_ROW_HEIGHT = 300;
-export const MIN_ROW_HEIGHT = 200;
-export const MAX_ROW_HEIGHT = 400;
+/** The Library tab's justified rows aim for this height, and stay within the minimum and maximum. */
+export const TARGET_ROW_HEIGHT = 160;
+export const MIN_ROW_HEIGHT = 100;
+export const MAX_ROW_HEIGHT = 240;
 export const HORIZONTAL_GAP = 2;
 export const VERTICAL_ROW_GAP = 1;
 export const MIN_LAYOUT_WIDTH = 280;

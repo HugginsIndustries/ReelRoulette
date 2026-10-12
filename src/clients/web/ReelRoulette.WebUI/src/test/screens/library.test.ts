@@ -1,18 +1,26 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   API_BASE_URL,
   COMPATIBLE_VERSION,
   FakeServer,
+  currentStyle,
   json,
   mountPage,
   normalizedMarkup,
+  pickPreset,
+  presetSelect,
   resetPage,
+  selectedPresetLabel,
   setViewport,
   settle,
   status,
   stubLayoutSize,
+  useStylesheet,
   type MountedPage
 } from "./pageHarness";
 
@@ -203,8 +211,9 @@ function summary(): HTMLElement {
   return document.getElementById("library-overlay-summary") as HTMLElement;
 }
 
-function toolbarShown(): boolean {
-  return (document.getElementById("library-overlay-toolbar") as HTMLElement).style.display !== "none";
+/** The controls show, not collapsed. They show while the library loads, is empty, or fails too. */
+function controlsShown(): boolean {
+  return !(document.getElementById("library-controls") as HTMLElement).classList.contains("is-collapsed");
 }
 
 function searchBox(): HTMLInputElement {
@@ -258,11 +267,6 @@ function storageKeys(storage: Storage): string[] {
   return keys.sort();
 }
 
-async function choosePreset(value: string): Promise<void> {
-  fireEvent.change(screen.getByRole("combobox", { name: "Choose preset" }), { target: { value } });
-  await flush();
-}
-
 const FINISHED_REFRESH = { isRunning: false, runId: "run-1", completedUtc: "2026-10-07T00:00:00Z", stages: [] };
 
 beforeEach(() => {
@@ -298,7 +302,11 @@ describe("overlay", () => {
     await openLibrary();
     expect(isOpen()).toBe(true);
     expect(within(overlay()).getByRole("alert").textContent).toBe("Server missing required capabilities: api.presets.match.");
-    expect(toolbarShown()).toBe(false);
+    expect(controlsShown()).toBe(true);
+    // Nothing loads, so search and sort have nothing to change, and the preset dropdown says why.
+    expect([searchBox().disabled, sortSelect().disabled, directionButton().disabled]).toEqual([true, true, true]);
+    expect(presetSelect().disabled).toBe(true);
+    expect(selectedPresetLabel()).toBe("Server compatibility check failed");
     expect(summary().hidden).toBe(true);
     expect(tileNames()).toEqual([]);
     expect(server.requests("POST", "/api/library/query")).toHaveLength(0);
@@ -343,7 +351,7 @@ describe("first page", () => {
     await openLibrary();
     expect(summary().hidden).toBe(false);
     expect(summary().textContent).toBe("Showing 3 of 3 items");
-    expect(toolbarShown()).toBe(true);
+    expect(controlsShown()).toBe(true);
     expect(tileNames()).toEqual(["clip 1.mp4", "clip 2.mp4", "clip 3.mp4"]);
     expect(library.queries()).toHaveLength(1);
   });
@@ -355,14 +363,14 @@ describe("first page", () => {
 
     await openLibrary();
     expect(within(overlay()).getByText("Loading library…")).toBeTruthy();
-    expect(toolbarShown()).toBe(false);
+    expect(controlsShown()).toBe(true);
     expect(summary().hidden).toBe(true);
 
     await library.release();
     expect(within(overlay()).queryByText("Loading library…")).toBeNull();
     expect(tileNames()).toEqual(["clip 1.mp4", "clip 2.mp4"]);
     expect(summary().textContent).toBe("Showing 2 of 2 items");
-    expect(toolbarShown()).toBe(true);
+    expect(controlsShown()).toBe(true);
   });
 
   it("shows a first page that fails as an alert and in the status line, and opening again loads it", async () => {
@@ -377,7 +385,7 @@ describe("first page", () => {
     expect(tileNames()).toEqual(["clip 1.mp4", "clip 2.mp4"]);
   });
 
-  it("shows the load error as an alert, without the toolbar", async () => {
+  it("shows the load error as an alert, keeping the controls", async () => {
     const { library } = await mountLibrary(libraryItems(2));
     await openLibrary();
 
@@ -387,7 +395,7 @@ describe("first page", () => {
 
     expect(within(overlay()).getByRole("alert").textContent).toBe("HTTP 503");
     expect(statusLine()).toBe("Library load failed: HTTP 503");
-    expect(toolbarShown()).toBe(false);
+    expect(controlsShown()).toBe(true);
     expect(summary().hidden).toBe(true);
     expect(tileNames()).toEqual([]);
   });
@@ -397,7 +405,7 @@ describe("first page", () => {
     await openLibrary();
 
     expect(within(overlay()).getByText("No media in library.")).toBeTruthy();
-    expect(toolbarShown()).toBe(false);
+    expect(controlsShown()).toBe(true);
     expect(summary().hidden).toBe(true);
   });
 
@@ -407,9 +415,9 @@ describe("first page", () => {
     });
     await openLibrary();
 
-    expect(within(overlay()).getByText("No items match the current filter.")).toBeTruthy();
+    expect(within(overlay()).getByText("Nothing matches the search or filters.")).toBeTruthy();
     expect(summary().textContent).toBe("Showing 0 of 5 items");
-    expect(toolbarShown()).toBe(true);
+    expect(controlsShown()).toBe(true);
   });
 });
 
@@ -431,7 +439,7 @@ describe("search and sort", () => {
     await flush();
     expect(library.queries()).toHaveLength(2);
     expect(library.queries()[1]).toMatchObject({ search: "hol", sortMode: "Name", offset: 0, limit: 200 });
-    expect(within(overlay()).getByText("No matches for “hol”.")).toBeTruthy();
+    expect(within(overlay()).getByText("Nothing matches the search or filters.")).toBeTruthy();
     expect(summary().textContent).toBe("Showing 0 of 3 items");
     expect(searchBox().value).toBe("hol");
   });
@@ -591,10 +599,10 @@ describe("fill on scroll", () => {
     const { page, library } = await mountLibrary(libraryItems(450, { isFavorite: true }), (server) => {
       server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
     });
-    await waitFor(() => expect(screen.getAllByRole("option").map((option) => option.textContent)).toContain("Favorites"));
-    await choosePreset("preset-favorites");
+    // The Library tab, shown for the preset pick, fills its second page before and after it.
+    await pickPreset("preset-favorites");
     await openLibrary();
-    await waitFor(() => expect(library.queries()).toHaveLength(3));
+    await waitFor(() => expect(library.queries()).toHaveLength(4));
     await flush();
     await scrollGridTo(600);
     const host = body();
@@ -607,8 +615,8 @@ describe("fill on scroll", () => {
     library.holding = true;
     page.stream().emit("refreshStatusChanged", 2, { snapshot: FINISHED_REFRESH });
     await flush();
-    expect(library.queries()).toHaveLength(4);
-    expect(library.queries()[3]).toMatchObject({ offset: 0, limit: 400 });
+    expect(library.queries()).toHaveLength(5);
+    expect(library.queries()[4]).toMatchObject({ offset: 0, limit: 400 });
     expect(within(overlay()).queryByText("Loading library…")).toBeNull();
     expect(tileNames().length).toBeGreaterThan(0);
     await library.release();
@@ -623,8 +631,8 @@ describe("fill on scroll", () => {
       previousIsBlacklisted: false
     });
     await flush();
-    expect(library.queries()).toHaveLength(5);
-    expect(library.queries()[4]).toMatchObject({ filterState: { favoritesOnly: true }, offset: 0, limit: 400 });
+    expect(library.queries()).toHaveLength(6);
+    expect(library.queries()[5]).toMatchObject({ filterState: { favoritesOnly: true }, offset: 0, limit: 400 });
     expect(within(overlay()).queryByText("Loading library…")).toBeNull();
     await library.release();
 
@@ -639,21 +647,17 @@ describe("fill on scroll", () => {
 });
 
 describe("starting over", () => {
-  it("a header preset starts over while the tab is hidden, and reopening shows the new totals", async () => {
+  it("a preset pick starts over from the first page, and the tab shows the new totals", async () => {
     const { library } = await mountLibrary(libraryItems(3), (server) => {
       server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
     });
     await openLibrary();
     expect(summary().textContent).toBe("Showing 3 of 3 items");
-    await closeLibrary();
 
     library.items = [libraryItem(2, { isFavorite: true })];
     library.searchBaselineCount = 3;
-    await waitFor(() => expect(screen.getAllByRole("option").map((option) => option.textContent)).toContain("Favorites"));
-    await choosePreset("preset-favorites");
+    await pickPreset("preset-favorites");
     expect(library.queries()[1]).toMatchObject({ filterState: { favoritesOnly: true }, offset: 0, limit: 200 });
-
-    await openLibrary();
     expect(summary().textContent).toBe("Showing 1 of 3 items");
     expect(tileNames()).toEqual(["clip 2.mp4"]);
   });
@@ -697,8 +701,7 @@ describe("live updates", () => {
     const { page, library } = await mountLibrary(libraryItems(3, { isFavorite: true }), (server) => {
       server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
     });
-    await waitFor(() => expect(screen.getAllByRole("option").map((option) => option.textContent)).toContain("Favorites"));
-    await choosePreset("preset-favorites");
+    await pickPreset("preset-favorites");
     await openLibrary();
     expect(library.queries()).toHaveLength(2);
 
@@ -739,8 +742,7 @@ describe("live updates", () => {
     const { page, library } = await mountLibrary(libraryItems(3, { tags: ["Beach"] }), (server) => {
       server.on("GET", "/api/presets", () => json([BEACH_PRESET]));
     });
-    await waitFor(() => expect(screen.getAllByRole("option").map((option) => option.textContent)).toContain("Beach"));
-    await choosePreset("preset-beach");
+    await pickPreset("preset-beach");
     await openLibrary();
     expect(library.queries()).toHaveLength(2);
 
@@ -884,14 +886,14 @@ describe("tiles", () => {
     await openLibrary();
 
     expect(within(overlay()).getByText("<b>bold</b> clip.mp4")).toBeTruthy();
-    expect(overlay().querySelector("b")).toBeNull();
+    expect(body().querySelector("b")).toBeNull();
     expect(tile("item-1")?.querySelector("img")).toBeNull();
     expect(tile("item-2")?.querySelector("img")?.getAttribute("src")).toBe(`${API_BASE_URL}/api/thumbnail/item-2?v=v7`);
     expect(tile("item-2")?.querySelector(".library-grid-tile-badge")).toBeNull();
     expect(tile("item-3")?.querySelector(".library-grid-tile-badge")?.textContent).toBe("favoritethumb_down");
   });
 
-  it("add no browser storage keys while browsing and playing, besides the panel's own", async () => {
+  it("add no browser storage keys while browsing and playing, besides the device's own, and not the search", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await mountLibrary(libraryItems(3), (fake) => {
       fake.on("POST", "/api/play/item-1", () => json(playResponse(1)));
@@ -906,7 +908,412 @@ describe("tiles", () => {
     await openLibrary();
     await click(tile("item-1")!);
 
-    expect(storageKeys(localStorage)).toEqual(["rr_clientId", "rr_device.panel.open", "rr_device.panel.tab"]);
+    expect(storageKeys(localStorage)).toEqual(["rr_clientId", "rr_device.library.sort", "rr_device.panel.open", "rr_device.panel.tab"]);
     expect(storageKeys(sessionStorage)).toEqual(["rr_sessionId"]);
+  });
+});
+
+/** The Library tab's controls and Filters line, which collapse together. */
+function controls(): HTMLElement {
+  return document.getElementById("library-controls") as HTMLElement;
+}
+
+function filtersLine(): HTMLButtonElement {
+  return document.getElementById("library-filter-summary") as HTMLButtonElement;
+}
+
+function collapseButton(): HTMLButtonElement {
+  return document.getElementById("library-controls-toggle") as HTMLButtonElement;
+}
+
+function randomizationModeSelect(): HTMLSelectElement {
+  return within(overlay()).getByRole("combobox", { name: "Choose randomization mode", hidden: true }) as HTMLSelectElement;
+}
+
+function selectedOption(select: HTMLSelectElement): string {
+  return select.options[select.selectedIndex]?.textContent ?? "";
+}
+
+/** The tiles' row heights and widths as the grid laid them out, gaps included. */
+function rowLayout(): Array<{ height: number; width: number }> {
+  return Array.from(overlay().querySelectorAll<HTMLElement>(".library-grid-row")).map((row) => {
+    const tiles = Array.from(row.querySelectorAll<HTMLElement>(".library-grid-tile"));
+    const width = tiles.reduce((sum, tile) => sum + Number.parseFloat(tile.style.width), 0) + 2 * (tiles.length - 1);
+    return { height: Number.parseFloat(row.style.height), width };
+  });
+}
+
+/** Unmounts the page and mounts it again with what this device remembers, as a page refresh does. */
+async function refresh(
+  page: MountedPage,
+  items: LibraryRow[],
+  setup: (server: FakeServer, library: FakeLibrary) => void = () => {}
+): Promise<LibraryPage> {
+  page.unmount();
+  return mountLibrary(items, setup);
+}
+
+const RICH_PRESET = {
+  id: "preset-rich",
+  name: "Rich",
+  filterState: {
+    favoritesMode: "only",
+    blacklistedMode: "excluded",
+    onlyNeverPlayed: true,
+    mediaTypeFilter: 2,
+    minDuration: "00:01:30",
+    selectedTags: ["Beach", "Sunset"],
+    excludedTags: ["Rain"],
+    includedSourceIds: []
+  }
+};
+
+const BLACKLISTED_ONLY_PRESET = {
+  id: "preset-blacklisted",
+  name: "Blacklisted",
+  filterState: { blacklistedMode: "only", selectedTags: [], excludedTags: [], includedSourceIds: [] }
+};
+
+const ONE_SOURCE_PRESET = {
+  id: "preset-one-source",
+  name: "Movies",
+  filterState: { selectedTags: [], excludedTags: [], includedSourceIds: ["source-1"] }
+};
+
+const SOURCES = [
+  { id: "source-1", rootPath: "C:\\media\\movies", displayName: "Movies", isEnabled: true },
+  { id: "source-2", rootPath: "C:\\media\\photos", displayName: "Photos", isEnabled: true },
+  { id: "source-3", rootPath: "C:\\media\\archive", displayName: "Archive", isEnabled: false }
+];
+
+const REMEMBERED_FILTER_KEY = "rr_device.filter.applied";
+
+describe("controls", () => {
+  it("sit above the grid in order: preset, randomization mode, sort with its direction, and search, and the header has neither dropdown", async () => {
+    await mountLibrary(libraryItems(3));
+    expect(document.querySelector("header")!.querySelectorAll("select")).toHaveLength(0);
+    await openLibrary();
+
+    const named = Array.from(controls().querySelectorAll("select, button, input")).map((control) => control.getAttribute("aria-label"));
+    expect(named).toEqual(["Choose preset", "Choose randomization mode", "Sort library", "Toggle sort direction", "Search library"]);
+    const parts = Array.from(overlay().children).map((child) => child.id || child.className);
+    expect(parts).toEqual(["library-overlay-header", "library-filter-summary", "library-controls", "library-overlay-body"]);
+    expect(controlsShown()).toBe(true);
+  });
+
+  it("put the preset and randomization dropdowns in one row from a panel about 440 px wide", async () => {
+    await mountLibrary(libraryItems(3));
+    await openLibrary();
+    const pair = presetSelect().parentElement!;
+    expect(pair.classList.contains("library-controls-pair")).toBe(true);
+    expect(randomizationModeSelect().parentElement).toBe(pair);
+
+    // happy-dom doesn't apply container queries (measured), so the rule's text stands in for the layout.
+    const stylesheet = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../styles.css"), "utf8");
+    expect(stylesheet).toMatch(/\.library-controls \{\s*container: library-controls \/ inline-size;/);
+    expect(stylesheet).toMatch(
+      /@container library-controls \(min-width: 414px\) \{\s*\.library-controls-pair \{\s*flex-direction: row;\s*\}\s*\.library-controls-pair > select \{\s*flex: 1 1 0;\s*\}\s*\}/
+    );
+    expect(stylesheet).toMatch(/\.library-controls-pair \{\s*display: flex;\s*flex-direction: column;/);
+  });
+
+  it("collapse and expand together with the Filters line, say which, and stay collapsed after a page refresh", async () => {
+    useStylesheet();
+    const { page } = await mountLibrary(libraryItems(3), (server) => {
+      server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
+    });
+    await openLibrary();
+    await pickPreset("preset-favorites");
+    expect(currentStyle(filtersLine()).display).toBe("block");
+    expect(collapseButton().title).toBe("Hide controls & filters");
+    expect(collapseButton().getAttribute("aria-label")).toBe("Hide library controls and filters");
+    expect(collapseButton().getAttribute("aria-expanded")).toBe("true");
+    expect(collapseButton().textContent).toBe("unfold_less");
+
+    await click(collapseButton());
+    expect(currentStyle(controls()).display).toBe("none");
+    expect(currentStyle(filtersLine()).display).toBe("none");
+    expect(collapseButton().title).toBe("Show controls & filters");
+    expect(collapseButton().getAttribute("aria-label")).toBe("Show library controls and filters");
+    expect(collapseButton().getAttribute("aria-expanded")).toBe("false");
+    expect(collapseButton().textContent).toBe("unfold_more");
+
+    await refresh(page, libraryItems(3), (server) => {
+      server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
+    });
+    await openLibrary();
+    expect(currentStyle(controls()).display).toBe("none");
+    expect(currentStyle(filtersLine()).display).toBe("none");
+
+    await click(collapseButton());
+    expect(currentStyle(controls()).display).not.toBe("none");
+    expect(currentStyle(filtersLine()).display).toBe("block");
+    expect(collapseButton().getAttribute("aria-expanded")).toBe("true");
+  });
+});
+
+describe("Filters line", () => {
+  it("shows while a filter applies, naming each applied filter after a bold Filters:", async () => {
+    await mountLibrary(libraryItems(3), (server) => {
+      server.on("GET", "/api/presets", () => json([RICH_PRESET, BLACKLISTED_ONLY_PRESET]));
+    });
+    await openLibrary();
+    expect(filtersLine().hidden).toBe(true);
+
+    await pickPreset("preset-rich");
+    expect(filtersLine().hidden).toBe(false);
+    expect(filtersLine().querySelector("b")!.textContent).toBe("Filters: ");
+    expect(filtersLine().textContent).toBe("Filters: Favorites only · Only never played · Photos only · Min 01:30 · 2 tags · 1 tag excluded");
+
+    await pickPreset("preset-blacklisted");
+    expect(filtersLine().textContent).toBe("Filters: Blacklisted only");
+
+    // Blacklisted excluded is the default, which the line doesn't name.
+    await pickPreset("");
+    expect(filtersLine().hidden).toBe(true);
+  });
+
+  it("counts the chosen sources out of all the sources, loading them for a source filter", async () => {
+    const { server } = await mountLibrary(libraryItems(3), (fake) => {
+      fake.on("GET", "/api/presets", () => json([ONE_SOURCE_PRESET]));
+      fake.on("GET", "/api/sources", () => json(SOURCES));
+    });
+    expect(server.requests("GET", "/api/sources")).toHaveLength(0);
+    await openLibrary();
+
+    await pickPreset("preset-one-source");
+    await waitFor(() => expect(filtersLine().textContent).toBe("Filters: 1 of 3 sources"));
+    expect(server.requests("GET", "/api/sources")).toHaveLength(1);
+  });
+
+  it("opens the Filter tab when tapped or clicked", async () => {
+    await mountLibrary(libraryItems(3), (server) => {
+      server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
+      server.on("GET", "/api/sources", () => json([]));
+      server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
+    });
+    await openLibrary();
+    await pickPreset("preset-favorites");
+
+    await click(filtersLine());
+    expect(isOpen()).toBe(false);
+    expect((document.getElementById("panel-page-filter") as HTMLElement).hidden).toBe(false);
+    expect(panelTab("Filter").getAttribute("aria-selected")).toBe("true");
+  });
+});
+
+describe("rows", () => {
+  const MIXED = [
+    { thumbnailWidth: 1920, thumbnailHeight: 1080 },
+    { thumbnailWidth: 1080, thumbnailHeight: 1920 },
+    { thumbnailWidth: 1200, thumbnailHeight: 900 },
+    { thumbnailWidth: 3000, thumbnailHeight: 1000 },
+    { thumbnailWidth: 800, thumbnailHeight: 800 }
+  ];
+  const items = Array.from({ length: 60 }, (_, index) => libraryItem(index + 1, MIXED[index % MIXED.length]));
+
+  for (const [where, viewport, width] of [
+    ["beside the player", { width: 1024, height: 768 }, 394],
+    ["as the overlay", { width: 600, height: 800 }, 574]
+  ] as const) {
+    it(`fit the panel's width at 100 to 240 px high, ${where}`, async () => {
+      setViewport(viewport);
+      await mountLibrary(items, () => stubLayoutSize(width, 600));
+      await openLibrary();
+      expect(document.getElementById("fullscreen-stage")!.dataset.panelMode).toBe(where === "as the overlay" ? "overlay" : "side");
+
+      const rows = rowLayout();
+      expect(rows.length).toBeGreaterThan(3);
+      for (const row of rows) {
+        expect(row.height).toBeGreaterThanOrEqual(100);
+        expect(row.height).toBeLessThanOrEqual(240);
+      }
+      // Every row but the last fills the width; the last keeps its tiles' shapes at 160 px.
+      for (const row of rows.slice(0, -1)) {
+        expect(row.width).toBeCloseTo(width, 6);
+      }
+      expect(rows.some((row) => Math.abs(row.height - 160) > 1)).toBe(true);
+    });
+  }
+});
+
+describe("tile icons and tooltip", () => {
+  it("show favorite and blacklist as filled icons with a drop shadow and no dark rectangle", async () => {
+    useStylesheet();
+    await mountLibrary([libraryItem(1, { isFavorite: true, isBlacklisted: true })]);
+    await openLibrary();
+
+    const badge = tile("item-1")!.querySelector<HTMLElement>(".library-grid-tile-badge")!;
+    expect(currentStyle(badge).backgroundColor).toBe("");
+    expect(currentStyle(badge).padding).toBe("");
+    for (const icon of Array.from(badge.querySelectorAll<HTMLElement>(".material-symbol-icon"))) {
+      const style = currentStyle(icon);
+      expect(style.fontVariationSettings).toBe('"FILL" 1, "wght" 700, "GRAD" 0, "opsz" 20');
+      expect(style.filter).toBe("drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.5))");
+    }
+  });
+
+  it("show the playing icon on the playing tile only, and move it to the next tile played", async () => {
+    useStylesheet();
+    const { server } = await mountLibrary(libraryItems(3), (fake) => {
+      fake.on("POST", "/api/play/item-1", () => json(playResponse(1)));
+      fake.on("POST", "/api/play/item-2", () => json(playResponse(2)));
+    });
+    await openLibrary();
+    const ids = ["item-1", "item-2", "item-3"];
+    // Restyling changes the page, which would wake waitFor again, so it waits for the class and reads styles after.
+    const playingShown = () => ids.filter((id) => currentStyle(tile(id)!.querySelector(".library-grid-tile-playing")!).display === "flex");
+    const playingMarked = () => ids.filter((id) => tile(id)!.classList.contains("is-playing"));
+    expect(playingShown()).toEqual([]);
+
+    await click(tile("item-1")!);
+    await waitFor(() => expect(playingMarked()).toEqual(["item-1"]));
+    expect(playingShown()).toEqual(["item-1"]);
+    const icon = tile("item-1")!.querySelector<HTMLElement>(".library-grid-tile-playing .material-symbol-icon")!;
+    expect(icon.textContent).toBe("play_circle");
+    expect(currentStyle(icon).fontVariationSettings).toBe('"FILL" 1, "wght" 700, "GRAD" 0, "opsz" 20');
+    expect(currentStyle(icon).opacity).toBe("0.8");
+
+    await click(tile("item-2")!);
+    await waitFor(() => expect(playingMarked()).toEqual(["item-2"]));
+    expect(playingShown()).toEqual(["item-2"]);
+    expect(server.requests("POST", "/api/play/item-2")).toHaveLength(1);
+
+    // The tiles rendered again for a new order still mark it.
+    await click(directionButton());
+    await waitFor(() => expect(server.requests("POST", "/api/library/query").at(-1)!.body.sortDescending).toBe(true));
+    await settle();
+    expect(playingMarked()).toEqual(["item-2"]);
+    expect(playingShown()).toEqual(["item-2"]);
+  });
+
+  it("show the file name as the tile's tooltip, and on the tile", async () => {
+    await mountLibrary(libraryItems(2));
+    await openLibrary();
+    expect(tile("item-1")!.title).toBe("clip 1.mp4");
+    expect(tile("item-1")!.querySelector(".library-grid-tile-filename")!.textContent).toBe("clip 1.mp4");
+  });
+});
+
+describe("memory", () => {
+  it("keeps the collapsed controls, the preset and its filter, randomization mode, and sort and direction after a page refresh, and not the search", async () => {
+    const presets = (server: FakeServer) => {
+      server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
+      server.on("POST", "/api/random", () => json(playResponse(1)));
+    };
+    const first = await mountLibrary(libraryItems(3), presets);
+    await openLibrary();
+    await pickPreset("preset-favorites");
+    fireEvent.change(randomizationModeSelect(), { target: { value: "SpreadMode" } });
+    fireEvent.change(sortSelect(), { target: { value: "Duration" } });
+    await click(directionButton());
+    fireEvent.input(searchBox(), { target: { value: "clip" } });
+    await waitFor(() => expect(first.library.queries().at(-1)!.search).toBe("clip"));
+    await click(collapseButton());
+    const page = first.page;
+
+    const { server, library } = await refresh(page, libraryItems(3), presets);
+    expect(library.queries()[0]).toMatchObject({
+      filterState: { favoritesOnly: true },
+      search: "",
+      sortMode: "Duration",
+      sortDescending: false
+    });
+    await openLibrary();
+    expect(selectedPresetLabel()).toBe("Favorites");
+    expect(selectedOption(randomizationModeSelect())).toBe("Spread Mode");
+    expect(sortSelect().value).toBe("Duration");
+    expect(directionButton().textContent).toBe("Shortest → Longest");
+    expect(searchBox().value).toBe("");
+    expect(controlsShown()).toBe(false);
+
+    await click(screen.getByRole("button", { name: "Play/Pause" }));
+    const pick = server.requests("POST", "/api/random")[0]!.body;
+    expect(pick).toMatchObject({ presetId: "preset-favorites", randomizationMode: "SpreadMode", filterState: { favoritesOnly: true } });
+  });
+
+  it("keeps None, held over a preset with the default filter, after a page refresh", async () => {
+    const everything = { id: "preset-everything", name: "Everything", filterState: { selectedTags: [], excludedTags: [] } };
+    const presets = (server: FakeServer) => server.on("GET", "/api/presets", () => json([everything]));
+    const { page } = await mountLibrary(libraryItems(3), presets);
+    await openLibrary();
+    await waitFor(() => expect(selectedPresetLabel()).toBe("Everything"));
+    await pickPreset("");
+    expect(selectedPresetLabel()).toBe("None");
+
+    await refresh(page, libraryItems(3), presets);
+    await waitFor(() => expect(presetSelect().disabled).toBe(false));
+    expect(selectedPresetLabel()).toBe("None");
+  });
+
+  it("shows a remembered preset renamed elsewhere by its new name, and one deleted as None*, keeping its filter", async () => {
+    const { page } = await mountLibrary(libraryItems(3), (server) => {
+      server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
+    });
+    await pickPreset("preset-favorites");
+
+    const renamed = { ...ALL_FAVORITES_PRESET, id: "Faves", name: "Faves" };
+    const second = await refresh(page, libraryItems(3), (server) => server.on("GET", "/api/presets", () => json([renamed])));
+    await waitFor(() => expect(selectedPresetLabel()).toBe("Faves"));
+    expect(second.library.queries().at(-1)).toMatchObject({ filterState: { favoritesOnly: true } });
+
+    const third = await refresh(second.page, libraryItems(3), (server) => server.on("GET", "/api/presets", () => json([])));
+    await waitFor(() => expect(selectedPresetLabel()).toBe("None*"));
+    expect(third.library.queries().at(-1)).toMatchObject({ filterState: { favoritesOnly: true } });
+  });
+
+  it("takes a tag renamed or deleted elsewhere into a remembered preset's own filter, as the open page does", async () => {
+    const { page } = await mountLibrary(libraryItems(3), (server) => {
+      server.on("GET", "/api/presets", () => json([BEACH_PRESET]));
+    });
+    await pickPreset("preset-beach");
+    expect(JSON.parse(localStorage.getItem(REMEMBERED_FILTER_KEY)!)).toMatchObject({ preset: "Beach", unchanged: true });
+
+    const shore = { ...BEACH_PRESET, filterState: { ...BEACH_PRESET.filterState, selectedTags: ["Shore"] } };
+    const second = await refresh(page, libraryItems(3), (server) => {
+      server.on("GET", "/api/presets", () => json([shore]));
+      server.on("POST", "/api/random", () => json(playResponse(1)));
+    });
+    await waitFor(() => expect(second.library.queries().at(-1)!.filterState.selectedTags).toEqual(["Shore"]));
+    expect(selectedPresetLabel()).toBe("Beach");
+    await click(screen.getByRole("button", { name: "Play/Pause" }));
+    expect(second.server.requests("POST", "/api/random")[0]!.body.filterState.selectedTags).toEqual(["Shore"]);
+
+    const emptied = { ...BEACH_PRESET, filterState: { ...BEACH_PRESET.filterState, selectedTags: [] } };
+    const third = await refresh(second.page, libraryItems(3), (server) => server.on("GET", "/api/presets", () => json([emptied])));
+    await waitFor(() => expect(third.library.queries().at(-1)!.filterState.selectedTags).toEqual([]));
+    expect(selectedPresetLabel()).toBe("Beach");
+  });
+
+  it("keeps a changed filter's tags as remembered, starred, as the open page keeps a tag no item held", async () => {
+    localStorage.setItem(
+      REMEMBERED_FILTER_KEY,
+      JSON.stringify({
+        filter: { selectedTags: ["Beach"], excludedTags: [], includedSourceIds: [], onlyNeverPlayed: true },
+        preset: "Beach",
+        holdNone: false,
+        unchanged: false
+      })
+    );
+    const shore = { ...BEACH_PRESET, filterState: { ...BEACH_PRESET.filterState, selectedTags: ["Shore"] } };
+    const { library } = await mountLibrary(libraryItems(3), (server) => server.on("GET", "/api/presets", () => json([shore])));
+    await waitFor(() => expect(selectedPresetLabel()).toBe("Beach*"));
+    expect(library.queries().every((query) => query.filterState.selectedTags[0] === "Beach")).toBe(true);
+  });
+
+  it("sends a remembered source as it was, and counts it out of the sources there are now", async () => {
+    localStorage.setItem(
+      REMEMBERED_FILTER_KEY,
+      JSON.stringify({
+        filter: { selectedTags: [], excludedTags: [], includedSourceIds: ["source-gone"] },
+        preset: null,
+        holdNone: false,
+        unchanged: false
+      })
+    );
+    const { library } = await mountLibrary(libraryItems(3), (server) => server.on("GET", "/api/sources", () => json(SOURCES)));
+    expect(library.queries()[0].filterState.includedSourceIds).toEqual(["source-gone"]);
+    await openLibrary();
+    await waitFor(() => expect(filtersLine().textContent).toBe("Filters: 0 of 3 sources"));
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createDefaultFilterState, HEADER_PRESET_STARRED_VALUE, serializeFilterStateForApi } from "../filter/filterStateModel";
 import { createAppStore, type AppStoreOptions, type PlayingItem } from "../state/appStore";
+import { createDeviceStore } from "../state/deviceStore";
 
 const FAVORITES = {
   id: "preset-favorites",
@@ -15,10 +16,13 @@ const EVERYTHING = {
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial));
+  const writtenKeys: string[] = [];
   return {
     values,
+    writtenKeys,
     getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => {
+      writtenKeys.push(key);
       values.set(key, value);
     }
   };
@@ -33,7 +37,8 @@ function setup(options: Partial<AppStoreOptions> & { saved?: Record<string, stri
     storage,
     relay: (_level, message) => relayed.push(message),
     now: () => now,
-    ...options
+    ...options,
+    device: options.device ?? createDeviceStore(storage)
   });
   return {
     store,
@@ -57,7 +62,7 @@ describe("createAppStore", () => {
 
     const empty = setup().store;
     expect(empty.photoDurationSeconds.value).toBe(15);
-    expect(empty.presetMenu.value).toEqual({ entries: [{ label: "Loading...", value: "" }], selectedValue: "" });
+    expect(empty.presetMenu.value).toEqual({ entries: [{ label: "Loading...", value: "" }], selectedValue: "", message: true });
   });
 
   it("saves a photo duration from 1 to 300 seconds, tells listeners, and ignores anything else", () => {
@@ -118,7 +123,8 @@ describe("createAppStore", () => {
         { label: "None", value: "" },
         { label: "Favorites", value: "preset-favorites" }
       ],
-      selectedValue: ""
+      selectedValue: "",
+      message: false
     });
     expect(store.activePresetName.value).toBeNull();
 
@@ -188,7 +194,7 @@ describe("createAppStore", () => {
     store.presets.value = [FAVORITES];
     store.syncHeaderPresets();
     store.showPresetMenuMessage("Error loading presets");
-    expect(store.presetMenu.value).toEqual({ entries: [{ label: "Error loading presets", value: "" }], selectedValue: "" });
+    expect(store.presetMenu.value).toEqual({ entries: [{ label: "Error loading presets", value: "" }], selectedValue: "", message: true });
     expect(store.selectedPresetValue()).toBe("");
   });
 
@@ -226,5 +232,160 @@ describe("createAppStore", () => {
     expect(store.stepHistory(1)).toBe(false);
     expect(store.stepHistory(-1)).toBe(false);
     expect(store.current.value).toBeNull();
+  });
+});
+
+describe("remembered filter", () => {
+  const KEY = "rr_device.filter.applied";
+  const BEACH = {
+    id: "Beach",
+    name: "Beach",
+    filterState: serializeFilterStateForApi({ ...createDefaultFilterState(), selectedTags: ["Beach"] })
+  };
+
+  function remembered(storage: { values: Map<string, string> }): any {
+    const raw = storage.values.get(KEY);
+    return raw === undefined ? undefined : JSON.parse(raw);
+  }
+
+  function record(filter: Partial<ReturnType<typeof createDefaultFilterState>>, preset: string | null, unchanged: boolean) {
+    return JSON.stringify({
+      filter: serializeFilterStateForApi({ ...createDefaultFilterState(), ...filter }),
+      preset,
+      holdNone: false,
+      unchanged
+    });
+  }
+
+  it("keeps the applied filter and its preset, round trip, and writes only when they change", () => {
+    const first = setup();
+    first.store.presets.value = [FAVORITES];
+    first.store.presetsLoaded();
+    expect(remembered(first.storage)).toBeUndefined();
+
+    const full = {
+      ...createDefaultFilterState(),
+      favoritesMode: "excluded" as const,
+      blacklistedMode: "only" as const,
+      onlyNeverPlayed: true,
+      onlyKnownLoudness: true,
+      audioFilter: 2 as const,
+      mediaTypeFilter: 1 as const,
+      globalMatchMode: false,
+      categoryLocalMatchModes: { "cat-mood": 1 as const },
+      selectedTags: ["Beach", "Sunset"],
+      excludedTags: ["Rain"],
+      includedSourceIds: ["source-1"],
+      minDurationSeconds: 90,
+      maxDurationSeconds: 3600
+    };
+    first.store.appliedFilter.value = full;
+    first.store.syncHeaderPresets();
+    expect(remembered(first.storage)).toMatchObject({ preset: null, holdNone: false, unchanged: false });
+
+    const again = setup({ saved: Object.fromEntries(first.storage.values) });
+    expect(again.store.appliedFilter.value).toEqual(full);
+    expect(again.store.activePresetName.value).toBeNull();
+
+    // Nothing is written while presets load, nor when they bring back the remembered preset unchanged.
+    const quiet = setup({ saved: { [KEY]: record({ favoritesMode: "only" }, "Favorites", true) } });
+    expect(quiet.storage.writtenKeys).toEqual([]);
+    quiet.store.presets.value = [FAVORITES];
+    quiet.store.presetsLoaded();
+    expect(quiet.storage.writtenKeys).toEqual([]);
+    expect(quiet.storage.values.get(KEY)).toBe(record({ favoritesMode: "only" }, "Favorites", true));
+  });
+
+  it("writes one record for each preset pick", () => {
+    const { store, storage } = setup();
+    store.presets.value = [FAVORITES];
+    store.presetsLoaded();
+    const writes = () => storage.writtenKeys.filter((key) => key === KEY).length;
+
+    store.pickHeaderPreset(FAVORITES.id);
+    expect(writes()).toBe(1);
+    expect(remembered(storage)).toMatchObject({ preset: "Favorites", holdNone: false, unchanged: true });
+
+    store.pickHeaderPreset("");
+    expect(writes()).toBe(2);
+    expect(remembered(storage)).toMatchObject({ preset: null, holdNone: true, unchanged: false });
+  });
+
+  it("keeps the remembered preset to apply again on a later load when presets never load", () => {
+    const first = setup({ saved: { [KEY]: record({ selectedTags: ["Beach"] }, "Beach", true) } });
+    first.store.showPresetMenuMessage("Error loading presets");
+    expect(first.storage.writtenKeys).toEqual([]);
+
+    const again = setup({ saved: Object.fromEntries(first.storage.values) });
+    again.store.presets.value = [{ ...BEACH, filterState: serializeFilterStateForApi({ ...createDefaultFilterState(), selectedTags: ["Shore"] }) }];
+    again.store.presetsLoaded();
+    expect(again.store.appliedFilter.value.selectedTags).toEqual(["Shore"]);
+    expect(again.store.selectedPresetValue()).toBe("Beach");
+  });
+
+  it("restores a held None, and reads a record it can't use as the default filter on None", () => {
+    const held = setup({ saved: { [KEY]: JSON.stringify({ ...JSON.parse(record({}, null, false)), holdNone: true }) } });
+    held.store.presets.value = [EVERYTHING];
+    held.store.presetsLoaded();
+    expect(held.store.selectedPresetValue()).toBe("");
+
+    for (const raw of ["{", "[]", JSON.stringify({ filter: {}, preset: 3, holdNone: false, unchanged: true })]) {
+      const { store } = setup({ saved: { [KEY]: raw } });
+      expect(store.appliedFilter.value).toEqual(createDefaultFilterState());
+      expect(store.activePresetName.value).toBeNull();
+    }
+  });
+
+  it("applies a remembered preset's own filter again as the server has it now, so a tag renamed elsewhere follows", () => {
+    const { store, storage } = setup({ saved: { [KEY]: record({ selectedTags: ["Beach"] }, "Beach", true) } });
+    const changed = vi.fn();
+    store.on("headerFilterChanged", changed);
+    expect(store.appliedFilter.value.selectedTags).toEqual(["Beach"]);
+
+    store.presets.value = [{ ...BEACH, filterState: serializeFilterStateForApi({ ...createDefaultFilterState(), selectedTags: ["Shore"] }) }];
+    store.presetsLoaded();
+    expect(store.appliedFilter.value.selectedTags).toEqual(["Shore"]);
+    expect(store.presetMenu.value.entries.map((entry) => entry.label)).toEqual(["None", "Beach"]);
+    expect(store.selectedPresetValue()).toBe("Beach");
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(remembered(storage)).toMatchObject({ preset: "Beach", unchanged: true, filter: { selectedTags: ["Shore"] } });
+
+    // Only the first load applies it again; later loads leave the filter to the user.
+    store.presets.value = [{ ...BEACH, filterState: serializeFilterStateForApi({ ...createDefaultFilterState(), selectedTags: ["Coast"] }) }];
+    store.presetsLoaded();
+    expect(store.appliedFilter.value.selectedTags).toEqual(["Shore"]);
+    expect(store.presetMenu.value.entries[0]!.label).toBe("Beach*");
+  });
+
+  it("keeps a remembered changed filter as it was, starred, and drops a deleted preset to None*", () => {
+    const starred = setup({ saved: { [KEY]: record({ selectedTags: ["Beach"], onlyNeverPlayed: true }, "Beach", false) } });
+    starred.store.presets.value = [{ ...BEACH, filterState: serializeFilterStateForApi({ ...createDefaultFilterState(), selectedTags: ["Shore"] }) }];
+    starred.store.presetsLoaded();
+    expect(starred.store.appliedFilter.value.selectedTags).toEqual(["Beach"]);
+    expect(starred.store.presetMenu.value.entries[0]!.label).toBe("Beach*");
+
+    const deleted = setup({ saved: { [KEY]: record({ selectedTags: ["Beach"] }, "Beach", true) } });
+    deleted.store.presets.value = [FAVORITES];
+    deleted.store.presetsLoaded();
+    expect(deleted.store.appliedFilter.value.selectedTags).toEqual(["Beach"]);
+    expect(deleted.store.presetMenu.value.entries[0]!.label).toBe("None*");
+    expect(deleted.store.activePresetName.value).toBeNull();
+  });
+
+  it("finds a remembered preset renamed elsewhere by its filter", () => {
+    const { store } = setup({ saved: { [KEY]: record({ favoritesMode: "only" }, "Old favorites", true) } });
+    store.presets.value = [FAVORITES];
+    store.presetsLoaded();
+    expect(store.selectedPresetValue()).toBe("preset-favorites");
+    expect(store.activePresetName.value).toBe("Favorites");
+  });
+
+  it("doesn't apply the remembered preset again once another filter applied before presets loaded", () => {
+    const { store } = setup({ saved: { [KEY]: record({ selectedTags: ["Beach"] }, "Beach", true) } });
+    store.appliedFilter.value = { ...createDefaultFilterState(), onlyNeverPlayed: true };
+    store.activePresetName.value = null;
+    store.presets.value = [{ ...BEACH, filterState: serializeFilterStateForApi({ ...createDefaultFilterState(), selectedTags: ["Shore"] }) }];
+    store.presetsLoaded();
+    expect(store.appliedFilter.value).toEqual({ ...createDefaultFilterState(), onlyNeverPlayed: true });
   });
 });

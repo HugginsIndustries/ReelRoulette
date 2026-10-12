@@ -11,7 +11,10 @@ import { serverCompatibilityError } from "./serverCompatibility";
 
 /** Server events and connection changes that the screens act on. */
 export interface ServerConnectionEvents {
-  /** The server passed the version check, so the library can load. */
+  /**
+   * The server passed the version check, so the library can load. A check that fails to reach the server runs again
+   * when the event stream opens, until one passes.
+   */
   serverReady: () => void;
   itemStateChanged: (payload: any) => void;
   playbackRecorded: (payload: any) => void;
@@ -65,6 +68,9 @@ export function createServerConnection(options: ServerConnectionOptions): Server
   };
   let eventStream: SseClient | null = null;
   let lastAppliedRefreshRunId: string | null = null;
+  /** The server has passed the version check. */
+  let serverReady = false;
+  let versionCheckInFlight = false;
 
   function emit<K extends keyof ServerConnectionEvents>(event: K, ...args: Parameters<ServerConnectionEvents[K]>): void {
     for (const listener of listeners[event]) {
@@ -75,6 +81,8 @@ export function createServerConnection(options: ServerConnectionOptions): Server
   function blockForCompatibility(message: string): void {
     store.compatibilityMessage.value = message;
     store.compatibilityBlocked.value = true;
+    // Nothing a preset picks can load, so the preset dropdown says why in place of the presets.
+    store.showPresetMenuMessage(PRESET_MENU_BLOCKED);
     eventStream?.stop();
     store.reconnecting.value = false;
     store.setStatus(message);
@@ -89,7 +97,12 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     try {
       const presets = await api.getJson("/api/presets");
       store.presets.value = Array.isArray(presets) ? presets : [];
-      store.syncHeaderPresets();
+      // The server failed the compatibility check while they loaded; a pairing that passes it loads them again.
+      if (store.compatibilityBlocked.peek()) {
+        store.showPresetMenuMessage(PRESET_MENU_BLOCKED);
+        return;
+      }
+      store.presetsLoaded();
     } catch (error) {
       store.showPresetMenuMessage(PRESET_MENU_LOAD_FAILED);
       store.setStatus(`Error loading presets: ${(error as Error)?.message || error}`);
@@ -97,6 +110,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
   }
 
   async function loadVersion(): Promise<boolean> {
+    versionCheckInFlight = true;
     try {
       const version = await api.getJson("/api/version");
       const compatibilityError = serverCompatibilityError(version);
@@ -108,11 +122,14 @@ export function createServerConnection(options: ServerConnectionOptions): Server
       store.compatibilityMessage.value = null;
       store.pairingRequired.value = false;
       store.setStatus(`Ready (API ${version.apiVersion || "unknown"})`);
+      serverReady = true;
       emit("serverReady");
       return true;
     } catch {
       store.setStatus("Ready (API offline)");
       return false;
+    } finally {
+      versionCheckInFlight = false;
     }
   }
 
@@ -124,6 +141,16 @@ export function createServerConnection(options: ServerConnectionOptions): Server
       onOpen() {
         store.reconnecting.value = false;
         store.setStatus("SSE connected");
+        // A version check that failed to reach the server, at page load or since, runs again now that it answers, so
+        // the library loads without a page reload, and once it passes the presets load again, since they likely failed
+        // too.
+        if (!serverReady && !versionCheckInFlight) {
+          void loadVersion().then((versionOk) => {
+            if (versionOk) {
+              void loadPresets();
+            }
+          });
+        }
       },
       onError() {
         store.reconnecting.value = true;

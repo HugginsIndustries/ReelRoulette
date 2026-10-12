@@ -125,6 +125,11 @@ html.theme-light {
   -webkit-font-smoothing: antialiased;
   font-variation-settings: "FILL" 0, "wght" 700, "GRAD" 0, "opsz" 48;
 }
+/* Filled icons are plain flat shapes. At weight 700 the font's fill closes the outline's hole only at optical sizes 20
+   and 24, so a filled icon uses 20 at any size; at 48 it shows an outline around a filled center. */
+.material-symbol-icon.is-filled {
+  font-variation-settings: "FILL" 1, "wght" 700, "GRAD" 0, "opsz" 20;
+}
 
 /* The field validation pattern: a red icon inside a field that holds a value that is not valid, whose tooltip says
    what the field expects. */
@@ -522,16 +527,6 @@ body {
 .pair-section button:focus-visible {
   outline: 2px solid #7aa7ff;
   outline-offset: 1px;
-}
-.top-bar select {
-  padding: 8px 12px;
-  font-size: 1rem;
-  background: var(--input-bg);
-  color: var(--input-fg);
-  border: 1px solid var(--panel-border);
-  border-radius: 6px;
-  min-height: 40px;
-  min-width: 160px;
 }
 .photo-duration-wrap input[type="number"] {
   width: 4ch;
@@ -1455,25 +1450,40 @@ html.theme-light .library-grid-tile:focus-visible {
   height: 100%;
   object-fit: cover;
 }
+/* The tiles' icons are filled, with a soft drop shadow so they stay readable on bright thumbnails. */
+.library-grid-tile .material-symbol-icon.is-filled {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.5));
+}
 .library-grid-tile-badge {
   position: absolute;
   top: 4px;
   right: 4px;
   display: flex;
   flex-direction: row;
-  gap: 4px;
-  padding: 2px 3px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.6);
+  gap: 2px;
   z-index: 1;
 }
 .library-grid-tile-badge-icon {
-  font-family: "Material Symbols Outlined";
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1;
+  font-size: 20px;
   color: var(--huggins-orange);
-  font-variation-settings: "FILL" 0, "wght" 700, "GRAD" 0, "opsz" 20;
+}
+/* Only the playing tile shows its playing icon, modest and slightly translucent so the thumbnail shows through. */
+.library-grid-tile-playing {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+.library-grid-tile.is-playing .library-grid-tile-playing {
+  display: flex;
+}
+.library-grid-tile-playing .material-symbol-icon {
+  font-size: 40px;
+  color: var(--huggins-orange);
+  opacity: 0.8;
 }
 .library-grid-tile-filename {
   position: absolute;
@@ -1539,14 +1549,35 @@ html.theme-light .library-overlay-status-error {
   color: #b42318;
 }
 
-.library-overlay-toolbar {
+/* The Library tab's controls, in order: the preset and randomization mode, sort with its direction, and search. They
+   collapse with the Filters line. */
+.library-controls {
+  container: library-controls / inline-size;
+  flex: 0 0 auto;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
 }
+.library-controls-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* The preset and randomization mode share a row from a panel about 440 px wide, the controls being 26 px narrower. */
+@container library-controls (min-width: 414px) {
+  .library-controls-pair {
+    flex-direction: row;
+  }
+  .library-controls-pair > select {
+    flex: 1 1 0;
+  }
+}
+.library-controls-sort {
+  display: flex;
+  gap: 8px;
+}
+.library-controls select,
 .library-overlay-search {
-  flex: 1 1 160px;
   min-width: 0;
   min-height: 44px;
   padding: 8px 12px;
@@ -1556,28 +1587,47 @@ html.theme-light .library-overlay-status-error {
   color: #fff;
   font: inherit;
 }
-.library-overlay-sort-cluster {
-  display: flex;
-  flex: 1 1 280px;
-  align-items: stretch;
-  gap: 8px;
-  min-width: 0;
+.library-controls select:disabled,
+.library-overlay-search:disabled,
+.library-overlay-sort-direction:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
-.library-overlay-sort-select {
+.library-controls-sort select {
   flex: 1 1 auto;
-  min-width: 0;
-  min-height: 44px;
-  padding: 8px 12px;
-  border: 1px solid #555;
-  border-radius: 8px;
-  background: #1a1a1a;
-  color: #fff;
-  font: inherit;
 }
 .library-overlay-sort-direction {
   flex: 0 0 auto;
   min-width: 128px;
   white-space: nowrap;
+}
+.library-controls.is-collapsed,
+.library-filter-summary.is-collapsed {
+  display: none !important;
+}
+/* The Filters line: one line naming the applied filters, which opens the Filter tab. */
+.library-overlay button.library-filter-summary {
+  flex: 0 0 auto;
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-fg);
+  font-size: 0.85rem;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.library-overlay button.library-filter-summary[hidden] {
+  display: none;
+}
+.library-filter-summary b {
+  color: var(--page-fg);
+  font-weight: 600;
 }
 .library-overlay-results-list {
   list-style: none;
@@ -1595,7 +1645,7 @@ html.theme-light .library-overlay-status-error {
   border-bottom: none;
 }
 html.theme-light .library-overlay-search,
-html.theme-light .library-overlay-sort-select {
+html.theme-light .library-controls select {
   background: #fff;
   color: var(--page-fg);
   border-color: var(--panel-border);
@@ -1603,22 +1653,17 @@ html.theme-light .library-overlay-sort-select {
 html.theme-light .library-overlay-summary {
   color: #555;
 }
+html.theme-light .library-overlay button.library-filter-summary {
+  background: transparent;
+  color: var(--muted-fg);
+  border-color: var(--surface-border);
+}
 html.theme-light .library-overlay-result-row {
   border-bottom-color: rgba(0, 0, 0, 0.08);
 }
 
 /* The tabs' narrow layouts follow the panel's width, which beside the player is narrow at any window width. */
 @container panel (max-width: 600px) {
-  .library-overlay-search {
-    flex: 1 1 100%;
-  }
-  .library-overlay-sort-cluster {
-    flex: 1 1 100%;
-  }
-  .library-overlay-sort-direction {
-    min-width: 0;
-    flex: 1 1 auto;
-  }
   .tag-editor-footer {
     gap: 6px;
   }
@@ -1663,10 +1708,6 @@ html.theme-light .library-overlay-result-row {
   .pair-section button {
     flex: 0 0 auto;
     align-self: center;
-  }
-  .top-bar > select {
-    width: 100%;
-    max-width: 100%;
   }
   .top-bar > .photo-duration-wrap {
     width: 100%;
@@ -1875,9 +1916,9 @@ body.short-screen .filter-dialog-header h2,
 body.short-screen .tag-editor-header h2 {
   font-size: 1rem;
 }
-body.short-screen .library-overlay button:not(.icon-glyph-base),
+body.short-screen .library-overlay button:not(.icon-glyph-base):not(.library-filter-summary),
 body.short-screen .library-overlay-search,
-body.short-screen .library-overlay-sort-select,
+body.short-screen .library-controls select,
 body.short-screen .filter-tab,
 body.short-screen .filter-dialog button:not(.icon-glyph-base),
 body.short-screen .filter-dialog input[type="text"],
@@ -1893,6 +1934,15 @@ body.short-screen .app-dialog select {
 }
 body.short-screen .filter-tab {
   padding: 4px 12px;
+}
+/* The Library tab's four controls take two rows. */
+body.short-screen .library-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+body.short-screen .library-controls-pair {
+  display: contents;
 }
 body.short-screen .app-dialog {
   max-height: calc(100dvh - 12px);

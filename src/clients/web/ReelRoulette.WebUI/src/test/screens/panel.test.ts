@@ -672,7 +672,8 @@ describe("compatibility failure", () => {
     expect(isOpen()).toBe(true);
     const library = document.getElementById("panel-page-library")!;
     expect(within(library).getByRole("alert").textContent).toBe(message);
-    expect(document.getElementById("library-overlay-toolbar")!.style.display).toBe("none");
+    // The controls stay, but search and sort have nothing to load.
+    expect((document.getElementById("library-search-input") as HTMLInputElement).disabled).toBe(true);
     expect(server.requests("POST", "/api/library/query")).toHaveLength(0);
 
     await click(screen.getByRole("button", { name: "Play/Pause" }));

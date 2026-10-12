@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ScreenBoundary } from "../../ui/ScreenBoundary";
-import { FakeServer, json, mountPage, resetPage, status } from "./pageHarness";
+import { FakeServer, json, mountPage, pickPreset, resetPage, status } from "./pageHarness";
 
 const failing = vi.hoisted(() => ({ player: false, header: false, library: false, filter: false, tags: false, panel: false }));
 
@@ -125,6 +125,11 @@ function Broken(): never {
 
 const EMPTY_STATE_TEXT = "Tap to play, or open the panel to choose a preset or filter.";
 
+/** The header's photo duration, which shows that the header renders. */
+function photoDuration(): HTMLElement {
+  return screen.getByRole("spinbutton", { name: "Photo duration in seconds" });
+}
+
 type PanelTabName = "Library" | "Filter" | "Tags";
 
 function panel(): HTMLElement {
@@ -195,13 +200,13 @@ describe("ScreenBoundary", () => {
     );
     const page = mountPage({ server });
     await screen.findByText("Ready (API 1)");
-    expect(screen.getByRole("combobox", { name: "Choose preset" })).toBeTruthy();
+    expect(photoDuration()).toBeTruthy();
 
     fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
 
     await waitFor(() => expect(server.logLines()).toContain("ui-error screen=header error=TypeError"));
     expect(server.logLines().some((line) => line.includes("holiday"))).toBe(false);
-    expect(screen.queryByRole("combobox", { name: "Choose preset" })).toBeNull();
+    expect(screen.queryByRole("spinbutton", { name: "Photo duration in seconds" })).toBeNull();
     expect((page.root.querySelector("video") as HTMLVideoElement).src).toContain("/api/media/item-video");
 
     page.stream().open();
@@ -223,8 +228,7 @@ describe("ScreenBoundary", () => {
     expect(page.root.querySelector("video")).toBeNull();
     expect(page.root.querySelector("#fullscreen-stage #library-overlay")).not.toBeNull();
 
-    await waitFor(() => expect(screen.getAllByRole("option").map((option) => option.textContent)).toContain("Favorites"));
-    fireEvent.change(screen.getByRole("combobox", { name: "Choose preset" }), { target: { value: "preset-1" } });
+    await pickPreset("preset-1");
     await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(2));
     page.stream().open();
     await screen.findByText("SSE connected");
@@ -257,7 +261,7 @@ describe("ScreenBoundary", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open panel" }));
     fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
     await waitFor(() => expect((page.root.querySelector("video") as HTMLVideoElement).src).toContain("/api/media/item-video"));
-    expect(screen.getByRole("combobox", { name: "Choose preset" })).toBeTruthy();
+    expect(photoDuration()).toBeTruthy();
     page.stream().open();
     await screen.findByText("SSE connected");
   });
@@ -296,7 +300,7 @@ describe("ScreenBoundary", () => {
     await waitFor(() => expect(isShowing("Library")).toBe(true));
     fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
     await waitFor(() => expect((page.root.querySelector("video") as HTMLVideoElement).src).toContain("/api/media/item-video"));
-    expect(screen.getByRole("combobox", { name: "Choose preset" })).toBeTruthy();
+    expect(photoDuration()).toBeTruthy();
     showPanelTab("Filter");
     await waitFor(() => expect(isShowing("Filter")).toBe(true));
     expect(page.root.querySelector("#panel-page-filter #filter-dialog")).not.toBeNull();
@@ -334,7 +338,7 @@ describe("ScreenBoundary", () => {
 
     fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
     await waitFor(() => expect((page.root.querySelector("video") as HTMLVideoElement).src).toContain("/api/media/item-video"));
-    expect(screen.getByRole("combobox", { name: "Choose preset" })).toBeTruthy();
+    expect(photoDuration()).toBeTruthy();
     showPanelTab("Library");
     await waitFor(() => expect(isShowing("Library")).toBe(true));
     await waitFor(() => expect(within(page.root.querySelector("#library-overlay") as HTMLElement).getByText("No media in library.")).toBeTruthy());
@@ -377,7 +381,7 @@ describe("ScreenBoundary", () => {
 
     fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
     await waitFor(() => expect((page.root.querySelector("video") as HTMLVideoElement).src).toContain("/api/media/item-video"));
-    expect(screen.getByRole("combobox", { name: "Choose preset" })).toBeTruthy();
+    expect(photoDuration()).toBeTruthy();
     showPanelTab("Library");
     await waitFor(() => expect(isShowing("Library")).toBe(true));
     await waitFor(() => expect(within(page.root.querySelector("#library-overlay") as HTMLElement).getByText("No media in library.")).toBeTruthy());

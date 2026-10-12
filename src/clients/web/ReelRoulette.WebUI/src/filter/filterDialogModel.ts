@@ -1,6 +1,8 @@
 import { compareTagNames } from "../library/tagNameOrder";
 import { EMPTY_FIELD, type FieldProblem } from "../validation/fieldValidation";
 import {
+  AUDIO_FILTER,
+  MEDIA_TYPE_FILTER,
   TAG_MATCH_MODE,
   cloneFilterState,
   filterStateFromApiObject,
@@ -17,6 +19,31 @@ import {
 
 /** The key the Uncategorized row's collapsed state is stored under. */
 export const UNCATEGORIZED_COLLAPSE_KEY = "__filter_uncategorized__";
+
+/** The General tab's Basic Filters, each a checkbox, in the order they show. */
+export const BASIC_FILTERS: readonly {
+  id: string;
+  field: "onlyNeverPlayed" | "onlyKnownDuration" | "onlyKnownLoudness";
+  label: string;
+}[] = [
+  { id: "filter-never-played", field: "onlyNeverPlayed", label: "Only never played" },
+  { id: "filter-known-dur", field: "onlyKnownDuration", label: "Only videos with known duration" },
+  { id: "filter-known-loud", field: "onlyKnownLoudness", label: "Only videos with known loudness" }
+];
+
+/** The General tab's media type choices. The first is no filter. */
+export const MEDIA_TYPES = [
+  { value: MEDIA_TYPE_FILTER.All, label: "All (Videos and Photos)" },
+  { value: MEDIA_TYPE_FILTER.VideosOnly, label: "Videos only" },
+  { value: MEDIA_TYPE_FILTER.PhotosOnly, label: "Photos only" }
+] as const;
+
+/** The General tab's audio choices. The first is no filter. */
+export const AUDIO_FILTERS = [
+  { value: AUDIO_FILTER.PlayAll, label: "All videos" },
+  { value: AUDIO_FILTER.WithAudioOnly, label: "Only videos with audio" },
+  { value: AUDIO_FILTER.WithoutAudioOnly, label: "Only videos without audio" }
+] as const;
 
 /** A media source as `GET /api/sources` returns it. */
 export interface FilterSource {
@@ -84,7 +111,7 @@ export function namesEqualIgnoringCase(a: string, b: string): boolean {
   return String(a || "").toLowerCase() === String(b || "").toLowerCase();
 }
 
-function containsIgnoringCase(list: readonly string[], value: string): boolean {
+export function containsIgnoringCase(list: readonly string[], value: string): boolean {
   return list.some((entry) => namesEqualIgnoringCase(entry, value));
 }
 

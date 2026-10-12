@@ -157,11 +157,11 @@ describe("libraryGridController empty scroll reset", () => {
     const container = new FakeElement();
     container.layoutWidth = 800;
     const grid = createLibraryGridController(container as unknown as HTMLElement, "http://localhost");
-    grid.setBrowseContent({ visibleItems: [item("a"), item("b")], searchQuery: "" });
+    grid.setBrowseContent({ visibleItems: [item("a"), item("b")] });
     const scroll = scroller(container);
     scroll.scrollTop = 400;
 
-    grid.setBrowseContent({ visibleItems: [], searchQuery: "", resetScroll: true });
+    grid.setBrowseContent({ visibleItems: [], resetScroll: true });
 
     expect(scroll.scrollTop).toBe(0);
     grid.destroy();
@@ -172,19 +172,15 @@ describe("libraryGridController empty scroll reset", () => {
     const container = new FakeElement();
     container.layoutWidth = 800;
     const grid = createLibraryGridController(container as unknown as HTMLElement, "http://localhost");
-    grid.setBrowseContent({ visibleItems: [item("a"), item("b")], searchQuery: "" });
+    grid.setBrowseContent({ visibleItems: [item("a"), item("b")] });
     const scroll = scroller(container);
     scroll.scrollTop = 400;
 
     container.layoutWidth = 0;
-    grid.setBrowseContent({ visibleItems: [], searchQuery: "gone", resetScroll: true });
+    grid.setBrowseContent({ visibleItems: [], resetScroll: true });
     container.layoutWidth = 800;
     grid.flushDeferredLayout();
-    grid.setBrowseContent({
-      visibleItems: [item("a"), item("b")],
-      searchQuery: "",
-      resetScroll: false
-    });
+    grid.setBrowseContent({ visibleItems: [item("a"), item("b")], resetScroll: false });
 
     expect(scroll.scrollTop).toBe(0);
     grid.destroy();
@@ -195,11 +191,11 @@ describe("libraryGridController empty scroll reset", () => {
     const container = new FakeElement();
     container.layoutWidth = 800;
     const grid = createLibraryGridController(container as unknown as HTMLElement, "http://localhost");
-    grid.setBrowseContent({ visibleItems: [item("a")], searchQuery: "" });
+    grid.setBrowseContent({ visibleItems: [item("a")] });
     const scroll = scroller(container);
     scroll.scrollTop = 400;
 
-    grid.setBrowseContent({ visibleItems: [], searchQuery: "", resetScroll: false });
+    grid.setBrowseContent({ visibleItems: [], resetScroll: false });
 
     expect(scroll.scrollTop).toBe(400);
     grid.destroy();
@@ -214,15 +210,16 @@ describe("libraryGridController coverage", () => {
   it("reports the height of the rows holding the last page of loaded tiles", () => {
     installDocument();
     const container = new FakeElement();
-    container.layoutWidth = 800;
+    // Two tiles to a row, so the second page starts a row of its own.
+    container.layoutWidth = 480;
     const grid = createLibraryGridController(container as unknown as HTMLElement, "http://localhost");
     const tiles = (count: number) => Array.from({ length: count }, (_, index) => item(`t-${index}`));
 
-    grid.setBrowseContent({ visibleItems: tiles(LIBRARY_QUERY_WINDOW_SIZE), searchQuery: "" });
+    grid.setBrowseContent({ visibleItems: tiles(LIBRARY_QUERY_WINDOW_SIZE) });
     const onePage = grid.measureCoverage();
     expect(onePage?.lastPageHeight).toBe(onePage?.extentHeight);
 
-    grid.setBrowseContent({ visibleItems: tiles(2 * LIBRARY_QUERY_WINDOW_SIZE), searchQuery: "", resetScroll: false });
+    grid.setBrowseContent({ visibleItems: tiles(2 * LIBRARY_QUERY_WINDOW_SIZE), resetScroll: false });
     const twoPages = grid.measureCoverage();
     expect(twoPages?.extentHeight).toBeGreaterThan(0);
     expect(twoPages?.lastPageHeight).toBeCloseTo((twoPages?.extentHeight ?? 0) / 2);

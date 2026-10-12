@@ -77,7 +77,7 @@ describe("libraryGridVirtualizer", () => {
 
   it("measures the trailing items from the top of the row holding the first of them", () => {
     const aspects = Array.from({ length: 40 }, () => 16 / 9);
-    const rows = buildRows(aspects, 0, aspects.length, 640).rows;
+    const rows = buildRows(aspects, 0, aspects.length, 480).rows;
     const state = { rows, offsetIndex: rebuildOffsetIndex(rows) };
     expect(rows.every((row) => row.itemCount === 2)).toBe(true);
     const { rowTopOffsets, totalExtentHeight } = state.offsetIndex;
@@ -86,7 +86,7 @@ describe("libraryGridVirtualizer", () => {
     expect(measureTrailingItemsHeight(state, 11)).toBe(totalExtentHeight - rowTopOffsets[14]!);
     expect(measureTrailingItemsHeight(state, 40)).toBe(totalExtentHeight);
     expect(measureTrailingItemsHeight(state, 200)).toBe(totalExtentHeight);
-    expect(measureTrailingItemsHeight(createVirtualizerState([], 640), 200)).toBe(0);
+    expect(measureTrailingItemsHeight(createVirtualizerState([], 480), 200)).toBe(0);
   });
 
   it("includes single row for small libraries", () => {

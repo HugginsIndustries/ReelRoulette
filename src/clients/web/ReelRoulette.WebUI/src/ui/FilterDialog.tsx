@@ -2,7 +2,10 @@ import type { JSX, RefObject } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import type { FilterDialogTab, FilterDialogView } from "../filter/filterDialog";
 import {
+  AUDIO_FILTERS,
+  BASIC_FILTERS,
   FILTER_FIELD_SECTION,
+  MEDIA_TYPES,
   filterHeldReason,
   filterTagCategories,
   sourceLabel,
@@ -13,7 +16,7 @@ import {
   type FlagFilterChoice,
   type GeneralDraft
 } from "../filter/filterDialogModel";
-import { AUDIO_FILTER, MEDIA_TYPE_FILTER, TAG_MATCH_MODE } from "../filter/filterStateModel";
+import { TAG_MATCH_MODE } from "../filter/filterStateModel";
 import { useApp } from "./appContext";
 import { NameDialog } from "./Dialog";
 import {
@@ -34,14 +37,6 @@ const TABS: readonly { tab: FilterDialogTab; label: string; display: string }[] 
   { tab: "presets", label: "Presets", display: "flex" }
 ];
 
-type BasicField = "onlyNeverPlayed" | "onlyKnownDuration" | "onlyKnownLoudness";
-
-const BASIC_FILTERS: readonly { id: string; field: BasicField; label: string }[] = [
-  { id: "filter-never-played", field: "onlyNeverPlayed", label: "Only never played" },
-  { id: "filter-known-dur", field: "onlyKnownDuration", label: "Only videos with known duration" },
-  { id: "filter-known-loud", field: "onlyKnownLoudness", label: "Only videos with known loudness" }
-];
-
 /** The Favorites and Blacklisted filters, each a checkbox with an only-or-excluded dropdown that works while it is on. */
 interface FlagFilter {
   id: string;
@@ -60,18 +55,6 @@ const FLAG_CHOICES: readonly FlagFilterChoice[] = ["only", "excluded"];
 function isFlagChoice(value: string): value is FlagFilterChoice {
   return (FLAG_CHOICES as readonly string[]).includes(value);
 }
-
-const MEDIA_TYPES = [
-  { value: MEDIA_TYPE_FILTER.All, label: "All (Videos and Photos)" },
-  { value: MEDIA_TYPE_FILTER.VideosOnly, label: "Videos only" },
-  { value: MEDIA_TYPE_FILTER.PhotosOnly, label: "Photos only" }
-] as const;
-
-const AUDIO_FILTERS = [
-  { value: AUDIO_FILTER.PlayAll, label: "All videos" },
-  { value: AUDIO_FILTER.WithAudioOnly, label: "Only videos with audio" },
-  { value: AUDIO_FILTER.WithoutAudioOnly, label: "Only videos without audio" }
-] as const;
 
 /** Whether a field in the section is flagged, which marks its tab. */
 function sectionFlagged(view: FilterDialogView | null, section: FilterDialogTab): boolean {

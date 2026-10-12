@@ -179,7 +179,7 @@ describe("filterStateModel", () => {
     expect(body[0].filterState.excludeBlacklisted).toBe(true);
   });
 
-  it("header None selects the default filter and a named preset selects that filter", () => {
+  it("the preset dropdown's None selects the default filter and a named preset selects that filter", () => {
     const none = filterStateForHeaderPresetSelection(null);
     expect(none).toEqual(createDefaultFilterState());
     const named = filterStateForHeaderPresetSelection({
@@ -231,7 +231,7 @@ describe("filterStateModel", () => {
     expect(dialogPresetBase(favorites.filterState, presets, "YouTube")).toBe("Favorites");
   });
 
-  it("rebuilds the header list without a starred row after None or a named preset", () => {
+  it("rebuilds the preset dropdown's list without a starred row after None or a named preset", () => {
     const youtube = {
       id: "yt",
       name: "YouTube",

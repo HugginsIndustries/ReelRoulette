@@ -82,6 +82,7 @@ These need a person, real devices, or the Windows VM.
 - [ ] On a phone, a tablet, and a desktop browser, and as an installed app on Android and iOS, the panel opens beside the player or as an overlay by width, and a phone on its side fills the screen with the player.
 - [ ] As an installed app on an iPhone and an Android phone, the header (upright) and the panel and the player's controls (upright, on its side, and on Android in fullscreen) stay clear of the notch, the status bar, and the home indicator; with the phone on its side, stopping the server shows the reconnecting indicator on the player.
 - [ ] As an installed app on an iPad, launched in landscape and in portrait, the page and pseudo-fullscreen reach the bottom of the screen, and still do after turning it.
+- [ ] In the WebUI's Library tab on a phone, a tablet, and a desktop browser, the preset and randomization dropdowns share a row in a panel about 440 px wide or wider and stack in a narrower one, the four controls take two rows on a phone on its side, and the tiles' favorite, blacklist, and playing icons show solid, with no gap between outline and fill.
 
 ## Release Flow
 

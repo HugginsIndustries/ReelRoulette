@@ -6,6 +6,140 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12f5 - WebUI Library Tab
+
+- **Status**: ✅ Complete
+- **Goal**: The Library tab holds the library's controls above a grid of smaller tiles, laid out like the desktop library panel, with a line that sums up the applied filters.
+- **Depends on**: WebUI Responsive Layout and Panels, whose panel holds the tab, and Favorite and Blacklist Filter Modes, whose modes the filter summary line names.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- The preset dropdown and randomization mode leave the header for the Library tab.
+- The Library tab is laid out like the desktop library panel: above the grid, the preset, then randomization mode, then sort with its direction toggle, then search.
+- The preset and randomization dropdowns share one row from a panel width of about 440 px.
+- The controls collapse to give the grid more room, together with the filter summary line, and stay collapsed or open per device.
+- The collapse button's tooltip reads "Hide controls & filters" or "Show controls & filters".
+- The Library tab's justified rows fit the panel width, 100–240 px high, aiming for 160 px, beside the player and as the overlay.
+- When nothing matches the search or the filters, the grid says "Nothing matches the search or filters."; its other messages stay as they are today.
+- The favorite and blacklist icons on tiles lose their dark rectangle and become filled icons, by the icon font's FILL axis, with a soft drop shadow, so they stay readable on bright thumbnails.
+- The playing tile shows a filled play icon in its middle, modest in size and slightly translucent so the thumbnail shows through, in the same style.
+- With a mouse, hovering a tile shows its file name as a tooltip.
+- File names keep showing on tiles.
+- Filled icons, these and the check icons WebUI Multi-Select and Bulk Actions adds, are plain flat shapes, at the font's FILL 1, with the weight 700 and optical size 20 the badges used before (`.library-grid-tile-badge-icon` in `src/styles.css`).
+- The desktop's filter summary line: while a filter applies, the Library tab shows one line above the grid listing the applied filters, as the desktop lists them above its library panel, and tapping or clicking it opens the Filter tab.
+- The summary line collapses with the Library tab's controls.
+- The summary line names Favorites only or excluded and Blacklisted only, the modes from Favorite and Blacklist Filter Modes. Blacklisted excluded, the default, isn't named, as the desktop's summary doesn't name Exclude blacklisted today.
+- The summary line reads "Filters:" and then each applied filter, separated by " · ": Favorites only or excluded, Blacklisted only, each checked Basic Filters option by its label, a media type or audio choice other than the first, "{n} of {total} sources", "Min {duration}" and "Max {duration}", "{n} tags", and "{n} tags excluded".
+- The tab remembers per device whether its controls are collapsed, the active preset (including None) and applied filter, randomization mode, and sort and direction.
+- The search text is not remembered.
+- The randomization mode already stored per device carries over.
+- Presets stay on the server: the WebUI remembers only which preset is active and the filter it applied.
+- A remembered preset, tag, or source that was renamed or deleted on another device in the meantime is handled as it is when that happens while the WebUI is open.
+
+#### Traps
+
+- Today the library's rows are 200–400 px high, aiming for 300 px (`libraryGridLayout.ts`).
+- Today's tile badges are outlined orange icons on a dark rectangle (`.library-grid-tile-badge` in `src/styles.css`).
+- The grid doesn't mark the playing tile.
+- Every tile shows its name in a bar, which alone carries the tooltip (`renderGridTileHtml` in `src/library/libraryGridTileModel.ts`).
+- In the mockup, with the WebUI's font, a filled glyph draws its outline and its fill as separate shapes, and at weight 700 the fill closes the outline's hole only at optical sizes 20 and 24. From 32 up the fill falls short, so at the optical size 48 the WebUI's other icons use, each filled icon shows as an outline around a filled center with a thin gap between them (measured).
+- The WebUI library's summary today shows only how many items are showing out of how many.
+
+#### Acceptance
+
+- The header no longer shows the preset dropdown or randomization mode. The Library tab shows, above the grid and in this order, the preset dropdown, randomization mode, sort with its direction toggle, and search. The preset and randomization dropdowns share a row from a panel width of about 440 px, and the controls and the filter summary line collapse and expand together. Shown by component tests of the control order, the dropdowns sharing a line, and the controls and summary line collapsing together.
+- The Library tab's rows fit the panel width at 100–240 px high, beside the player and as the overlay, in component tests of the row heights.
+- Tile badges are filled icons with a drop shadow and no dark rectangle, only the playing tile shows the playing icon in its middle, and hovering a tile with a mouse shows its file name as a tooltip, in component tests of the tile badges, the playing icon, and the hover tooltip.
+- A search or filter with no results shows "Nothing matches the search or filters.".
+- While a filter applies, the Library tab shows the filter summary line above the grid, in the format above, without naming Blacklisted excluded, and tapping or clicking it opens the Filter tab, in component tests of the summary line's text for each kind of filter and of its opening the Filter tab.
+- After a page refresh, whether the controls are collapsed, the active preset and applied filter, randomization mode, and sort and direction are each as they were, and the search box is empty, in component tests of a page refresh keeping each remembered setting and clearing the search text.
+- After a page refresh, a remembered preset, tag, or source that was renamed or deleted elsewhere is handled as it is when that happens while the WebUI is open.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check.
+
+#### Evidence
+
+- The Library tab's header with its collapse button, the Filters line, and the controls are in `src/ui/LibraryOverlay.tsx`. The Filters line's text is `filterSummaryParts` in `src/filter/filterSummaryModel.ts`, which names the Filter tab's options by the label lists `src/filter/filterDialogModel.ts` now holds for both. The per-device store keeps whether the controls are collapsed and the sort as `library.controlsCollapsed` and `library.sort` (`src/library/library.ts`), and the applied filter, its preset, the None hold, and whether the filter is the preset's own as `filter.applied` (`src/state/appStore.ts`). The randomization mode stays under `rr_randomizationMode`.
+- The Filters line sits between the tab's header and the controls, as the mockup has it.
+- One tag reads "1 tag" and "1 tag excluded", as the mockup has it, where the entry wrote "{n} tags".
+- Durations read as the Filter tab shows them after a reload, such as "Min 02:00", where the mockup showed them as typed; the mockup now formats them the same way.
+- The sources' total comes from `GET /api/sources`: the Filter tab hands the list it loads to the store, and the Library tab loads it once when a source filter applies and no list is known. Until then the part reads "{n} sources", and a failed load relays `library=filter-summary-sources-failed`.
+- The controls show while the library loads, is empty, or fails, where today's toolbar hid, so the preset and randomization dropdowns stay reachable. Search, sort, and direction are disabled while the server fails the compatibility check, and the preset dropdown while it shows a message in place of the presets; the mockup disables and dims them the same way.
+- When the server fails the compatibility check, the preset dropdown now says so even when presets loaded before the check failed, as the mockup has it; before, it kept the presets unless they loaded after the failure (found during implementation).
+- Nothing is queried before the server has passed the compatibility check, nor while it fails it: a query started over waits for it, and so does the first page when the tab opens, which opening the tab used to load before the check passed. The first page then loads with what applies by then. The controls now show before the check finishes, and a remembered preset can apply again before it does. A version check that fails to reach the server, at page load or later, runs again when the event stream opens, until one passes, so the tab then loads without a page reload, and the presets load again once it passes, since they likely failed with it; before, only pairing ran it again. WebUI Notifications, which checks again each time the stream opens or fails, notes that this part is done.
+- After a page refresh, a remembered preset whose own filter applied, and that no other filter has replaced since the page loaded, applies again on the first preset load as the server has it, so a tag renamed or deleted elsewhere follows, as in the open page. Waiver (criterion partly met): a starred filter keeps its tags as remembered, which differs from the open page for a tag that items hold: the open page renames or removes it when the item-tags event arrives, while after a refresh the old name stays, since nothing tells the page of a rename made before it loaded (inferred). For a tag no item held, the open page keeps it too. A preset renamed elsewhere shows by its new name when its filter matches, and one deleted shows None\* with the filter kept. Remembered sources are sent as they were and counted against the sources listed now. A preset edited elsewhere comes back with its edits, where the open page would show it starred with the old filter, accepted when this was chosen.
+- Nothing is written until presets have loaded once, since before then no filter reads as a preset's own, so a page whose presets never load leaves the record as it was for the next. After that, the remembered filter is written only when its record differs from the one kept, so a page load that changes nothing writes nothing, and a preset pick or an Apply changes the filter and its preset in one batch, so each writes once.
+- A tag rename or delete now changes the presets in place first and then replaces the applied filter, where both were changed in place, so the Filters line and the memory follow. In the other order the record took the filter as changed from its preset (measured).
+- The store's names keep "header" (`pickHeaderPreset`, `headerFilterChanged`, `headerExplicitNone`, `syncHeaderPresets`) though the dropdown moved; their comments name the preset dropdown.
+- Every tile has the playing icon, which the stylesheet shows on the tile with `is-playing`. The grid controller moves the class between the tiles shown (`setPlayingItemId`) and renders new tiles with it. The badges and the playing icon take `.material-symbol-icon.is-filled`, and the tiles' icons a two-layer drop shadow. The tooltip moved from the name bar to the tile.
+- "No matches for “{search}”." and "No items match the current filter." became "Nothing matches the search or filters."; "No media in library." and the other messages stay.
+- The mockup's grid now has the app's minimum layout width of 280 px, where it had 200 px.
+- happy-dom applies no container query (measured before implementation), so the test of the dropdowns' row reads the rule's text, and the release check covers the layout.
+- A test that read a computed style inside `waitFor` looped instead of failing with the playing icon broken, since restyling changes the page and wakes `waitFor` again (measured); it waits for the class and reads the styles after.
+- The mockup formats the Filters line's durations as the app does, its index no longer says the Mockup tab sets how the playing tile is marked, and its check now covers the control order, the header without the dropdowns, the no-match message for a search and for a filter, the Filters line's sources, tags, and label, its opening the Filter tab, the collapse button's tooltip, name, and state both ways, search, sort, and direction disabled and dimmed to half while the server fails the compatibility check and working again once it passes, and the preset dropdown dimmed the same way then; each new check failed with its rule broken. Until WebUI Settings Panel, the app differs from it as the entry says: file names show on tiles, which the mockup hides by default. `check.mjs` passes 879 checks.
+- New WebUI tests:
+  - the Filters line's parts for each kind of filter, in order, with sources counted with and without the list;
+  - the store: the remembered filter's round trip and writes, a held None, an unreadable record, nothing written before presets first load, so a page whose presets never load keeps the preset to apply again, a preset applied again as the server has it, only on the first load, a starred filter kept, a deleted preset on None\*, a renamed one found by its filter, none applied again after a newer filter, and one write for each preset pick;
+  - the library: nothing sent before the server passes the check nor while it fails it, and the first page loaded with what applied meanwhile; opening the tab before the check passes sending nothing, and the first page loading once it does;
+  - the Filter tab: one write of the remembered filter for an Apply that changes the filter and its preset;
+  - the server connection: the compatibility message in the preset dropdown when presets load before the failure and after it, the version checked again when the event stream opens after a check that failed to reach the server, only until one passes and not while one is under way, and the presets loaded again once it passes after both failed at start;
+  - the page: the controls' order and the header without the dropdowns, the dropdowns' row, collapsing and expanding with the Filters line and after a refresh, the Filters line's text, sources, and opening the Filter tab, rows beside the player and as the overlay, filled badges with a drop shadow and no rectangle, the playing icon moving and kept after a new order, the tile's tooltip, a refresh keeping each setting but the search, a held None after a refresh, a preset renamed and deleted, a tag renamed and deleted in the preset, a starred filter, and a remembered source, the controls in two rows on a phone on its side, and a tag rename and delete reaching the Filters line and the memory.
+- Existing tests now pick presets in the Library tab through a shared helper, read the randomization mode there, and mark the header by its photo duration. Tests that hid the toolbar now expect the controls, the no-match tests expect the new message, the storage key tests allow the device store's keys, two layout tests use a 480 px width where two tiles fill a row, and four library tests now emit the server's readiness before they query or open the tab. Picking a preset in the Library tab fills its second page first, so a fill test counts one more query.
+- The starting markup snapshot changed by the controls moving from the header to the Library tab, with the collapse button and the Filters line, and the library's snapshots by the controls, the collapse button, the Filters line, the 160 px rows, the tiles' tooltip, playing icon, and filled badges, and nothing else.
+- Each guard was broken on purpose and its tests failed (measured, of 940):
+  - the controls out of order: 3;
+  - a dropdown left in the header: 2;
+  - the dropdowns not in a row from 414 px: 1;
+  - the dropdowns not sharing their pair: 3;
+  - the Filters line not collapsing: 1;
+  - the collapse not remembered: 2;
+  - its tooltip not changing: 1;
+  - the old row heights: 3;
+  - the badges' dark rectangle: 1;
+  - the badges not filled: 3;
+  - filled icons at optical size 48: 2;
+  - no drop shadow: 1;
+  - the playing icon on every tile: 1;
+  - the playing icon not following the playing item: 1;
+  - the playing icon lost when the tiles render again: 1;
+  - the tooltip only on the name bar: 3;
+  - the old no-match message: 2;
+  - Blacklisted excluded named: 13;
+  - "1 tags": 5;
+  - the Filters line not opening the Filter tab: 1;
+  - no sources loaded for it: 1;
+  - the sort not remembered: 2;
+  - the search remembered: 1;
+  - the filter not remembered: 9;
+  - the filter written on every check: 3;
+  - the remembered preset not applied again: 2;
+  - a starred filter applied again: 2;
+  - the preset applied again after a newer filter: 1;
+  - the None hold not restored: 2;
+  - a tag retarget changing the filter in place: 1;
+  - a tag retarget replacing the filter before the presets: 1;
+  - a query before the server is ready: 1;
+  - search and sort enabled while the check fails: 2;
+  - the preset dropdown enabled with a message: 1;
+  - the controls not in two rows on a phone on its side: 1.
+- The guards for the compatibility message failed the same way (measured, of 941): no message when the check fails: 2; presets that arrive after it replacing the message: 1.
+- The guard for opening the tab failed the same way (measured, of 942): the first page loaded on opening before the server passes the check: 1.
+- The guards for the first write of the remembered filter and the version check failed the same way (measured, of 945): the filter written before presets load: 2; the version not checked again when the stream opens: 1; the server's readiness not kept, so every open checks again: 2; a second check while one is under way: 1.
+- The tests for the presets loading again after the version check passes, one write for each preset pick, and one for each Apply each failed before their fix (measured).
+- `npm run verify` passed: 53 test files, 948 tests, the build, and the build output check.
+- `CHANGELOG.md`, `CONTEXT.md`, `docs/architecture.md`, and `docs/domain-inventory.md` are updated, WebUI Notifications names the Library tab's preset dropdown where it named the header's, WebUI Multi-Select and Bulk Actions has the filled icon and playing tile traps, and the testing checklist's Release Specific checks have this milestone's release check.
+- The spot check passed on a desktop browser and a phone.
+
+#### Release checks
+
+- Manual: In the WebUI's Library tab on a phone, a tablet, and a desktop browser, the preset and randomization dropdowns share a row in a panel about 440 px wide or wider and stack in a narrower one, the four controls take two rows on a phone on its side, and the tiles' favorite, blacklist, and playing icons show solid, with no gap between outline and fill.
+
+#### Not included
+
+- The setting that turns off file names on tiles, which is WebUI Settings Panel.
+- The tile check icons, which is WebUI Multi-Select and Bulk Actions.
+
 ### M12f4 - WebUI Responsive Layout and Panels
 
 - **Status**: ✅ Complete

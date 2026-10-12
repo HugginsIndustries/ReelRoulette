@@ -1,5 +1,6 @@
 import { computeAvailableLayoutWidth } from "./libraryGridLayout";
 import { renderGridRowHtml } from "./libraryGridRowModel";
+import { PLAYING_TILE_CLASS } from "./libraryGridTileModel";
 import {
   countVisibleRows,
   createVirtualizerState,
@@ -8,6 +9,7 @@ import {
   type LibraryGridVirtualizerState
 } from "./libraryGridVirtualizer";
 import type { LibraryProjectionItem } from "./libraryProjectionModel";
+import { LIBRARY_NO_MATCH_MESSAGE } from "./libraryOverlayModel";
 import { LIBRARY_QUERY_WINDOW_SIZE } from "./libraryQuerySession";
 
 const RESIZE_DEBOUNCE_MS = 90;
@@ -22,11 +24,9 @@ export interface LibraryGridCoverage {
 }
 
 export interface LibraryGridController {
-  setBrowseContent(input: {
-    visibleItems: readonly LibraryProjectionItem[];
-    searchQuery: string;
-    resetScroll?: boolean;
-  }): void;
+  setBrowseContent(input: { visibleItems: readonly LibraryProjectionItem[]; resetScroll?: boolean }): void;
+  /** Marks the playing item's tile, or none, on the tiles shown and on those rendered later. */
+  setPlayingItemId(itemId: string | null): void;
   measureCoverage(): LibraryGridCoverage | null;
   flushDeferredLayout(): void;
   destroy(): void;
@@ -45,6 +45,7 @@ export function createLibraryGridController(
   let emptyEl: HTMLElement | null = null;
 
   let items: readonly LibraryProjectionItem[] = [];
+  let playingItemId: string | null = null;
   let virtualizerState: LibraryGridVirtualizerState = { rows: [], offsetIndex: { rowTopOffsets: [], rowBottomOffsets: [], totalExtentHeight: 0 } };
   let layoutWidth = computeAvailableLayoutWidth(container.clientWidth || MIN_FALLBACK_WIDTH);
   let lastVisibleStart = -1;
@@ -146,7 +147,7 @@ export function createLibraryGridController(
     bottomSpacerEl.style.height = `${window.bottomSpacerHeight}px`;
 
     const visibleRows = virtualizerState.rows.slice(window.firstVisibleRow, window.endExclusive);
-    const html = visibleRows.map((row) => renderGridRowHtml(row, items, apiBaseUrl)).join("");
+    const html = visibleRows.map((row) => renderGridRowHtml(row, items, apiBaseUrl, playingItemId)).join("");
     rowsEl.innerHTML = html;
     reportCoverage();
   }
@@ -196,11 +197,7 @@ export function createLibraryGridController(
     }, RESIZE_DEBOUNCE_MS);
   }
 
-  function setBrowseContent(input: {
-    visibleItems: readonly LibraryProjectionItem[];
-    searchQuery: string;
-    resetScroll?: boolean;
-  }): void {
+  function setBrowseContent(input: { visibleItems: readonly LibraryProjectionItem[]; resetScroll?: boolean }): void {
     ensureBrowseShell();
     items = input.visibleItems;
 
@@ -217,10 +214,7 @@ export function createLibraryGridController(
       }
 
       if (emptyEl && scrollEl) {
-        const trimmed = String(input.searchQuery || "").trim();
-        emptyEl.textContent = trimmed
-          ? `No matches for “${trimmed}”.`
-          : "No items match the current filter.";
+        emptyEl.textContent = LIBRARY_NO_MATCH_MESSAGE;
         emptyEl.hidden = false;
         scrollEl.hidden = true;
       }
@@ -248,6 +242,17 @@ export function createLibraryGridController(
     layoutStale = false;
     pendingScrollReset = false;
     rebuildVirtualizer(wantsReset);
+  }
+
+  // Moves the class between the tiles shown, so the grid doesn't render them again.
+  function setPlayingItemId(itemId: string | null): void {
+    playingItemId = itemId;
+    if (!rowsEl) {
+      return;
+    }
+    for (const tile of rowsEl.querySelectorAll<HTMLElement>(".library-grid-tile")) {
+      tile.classList.toggle(PLAYING_TILE_CLASS, itemId !== null && tile.dataset.itemId === itemId);
+    }
   }
 
   function flushDeferredLayout(): void {
@@ -289,6 +294,7 @@ export function createLibraryGridController(
 
   return {
     setBrowseContent,
+    setPlayingItemId,
     measureCoverage,
     flushDeferredLayout,
     destroy

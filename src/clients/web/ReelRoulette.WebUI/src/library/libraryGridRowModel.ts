@@ -5,7 +5,8 @@ import { buildThumbnailUrl, renderGridTileHtml } from "./libraryGridTileModel";
 export function renderGridRowHtml(
   row: LibraryGridRowLayout,
   items: readonly LibraryProjectionItem[],
-  apiBaseUrl: string
+  apiBaseUrl: string,
+  playingItemId: string | null = null
 ): string {
   const tiles = row.tiles
     .map((tileLayout) => {
@@ -22,7 +23,8 @@ export function renderGridRowHtml(
           itemId: item.id,
           hasThumbnail: item.hasThumbnail,
           isFavorite: item.isFavorite,
-          isBlacklisted: item.isBlacklisted
+          isBlacklisted: item.isBlacklisted,
+          isPlaying: playingItemId !== null && item.id === playingItemId
         },
         thumbnailUrl
       );

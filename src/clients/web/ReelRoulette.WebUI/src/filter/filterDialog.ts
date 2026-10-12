@@ -1,4 +1,4 @@
-import { signal, type ReadonlySignal } from "@preact/signals";
+import { batch, signal, type ReadonlySignal } from "@preact/signals";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { Library } from "../library/library";
 import type { PanelHost } from "../panel/panelHost";
@@ -64,7 +64,7 @@ interface FilterDialogState {
   presetsChanged: boolean;
   /** The preset the dialog's preset list shows, or null for None. */
   presetName: string | null;
-  /** A copy of the header's None hold, which a preset chosen in the dialog ends. */
+  /** A copy of the preset dropdown's None hold, which a preset chosen in the dialog ends. */
   holdNone: boolean;
   /** The tag categories collapsed on the Tags tab, kept for the browser session. */
   collapsed: ReadonlySet<string>;
@@ -289,14 +289,17 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     }
     const tagModel = (await response.json()) as FilterTagModel | null;
     await connection.loadPresets();
+    const sourceList: FilterSource[] = Array.isArray(sources) ? sources : [];
+    // The Library tab's Filters line counts the sources the Filter tab shows.
+    store.sources.value = sourceList;
     return {
-      sources: Array.isArray(sources) ? sources : [],
+      sources: sourceList,
       tagModel,
       presets: presetRowsFromApi(store.presets.peek())
     };
   }
 
-  /** Starts the dialog over from the applied filter and the header's preset. */
+  /** Starts the dialog over from the applied filter and the preset dropdown's preset. */
   function workingFromHeader(): Pick<FilterDialogState, "working" | "original" | "presetName" | "holdNone"> {
     const working = cloneFilterState(store.appliedFilter.peek());
     return {
@@ -448,11 +451,14 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       const current = view.peek()!;
       const working = readGeneral(current);
       const appliedDefault = filterStatesEqualForPresetMatch(working, createDefaultFilterState());
-      store.headerExplicitNone.value = current.holdNone && appliedDefault;
-      store.activePresetName.value = store.headerExplicitNone.peek()
-        ? null
-        : dialogPresetBase(working, current.presets, current.presetName);
-      store.appliedFilter.value = cloneFilterState(working);
+      // One batch, so the device's memory takes the applied filter and its preset once.
+      batch(() => {
+        store.headerExplicitNone.value = current.holdNone && appliedDefault;
+        store.activePresetName.value = store.headerExplicitNone.peek()
+          ? null
+          : dialogPresetBase(working, current.presets, current.presetName);
+        store.appliedFilter.value = cloneFilterState(working);
+      });
       update({ working, original: cloneFilterState(working), presetName: store.activePresetName.peek() });
       await connection.loadPresets();
       void panel.closeIfOverlay();
@@ -674,7 +680,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     }
   };
 
-  // A header preset picked while the dialog is open starts it over from the new filter.
+  // A preset picked in the preset dropdown while the dialog is open starts it over from the new filter.
   store.on("headerFilterChanged", () => {
     const current = view.peek();
     if (!isOpen.peek() || !current) {

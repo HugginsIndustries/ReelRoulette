@@ -6,6 +6,9 @@ export interface LibraryProjectionSummary {
   hasItems: boolean;
 }
 
+/** What the grid says when the library has media but none matches the search or the applied filter. */
+export const LIBRARY_NO_MATCH_MESSAGE = "Nothing matches the search or filters.";
+
 export const LIBRARY_OVERLAY_FETCH_ERROR =
   "Could not load library. Core runtime is unavailable or still recovering.";
 

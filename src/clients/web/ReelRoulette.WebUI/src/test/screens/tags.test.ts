@@ -6,12 +6,14 @@ import {
   json,
   mountPage,
   normalizedMarkup,
+  pickPreset,
   pointerDown,
   pointerMove,
   pointerUp,
   pressKey,
   resetPage,
   scrollOnFocus,
+  selectedPresetLabel,
   settle,
   status,
   stubRowLayout,
@@ -579,21 +581,6 @@ async function nextPick(server: FakeServer): Promise<any> {
   await click(screen.getByRole("button", { name: "Next" }));
   const picks = server.requests("POST", "/api/random");
   return picks[picks.length - 1]!.body;
-}
-
-function headerPresetSelect(): HTMLSelectElement {
-  return screen.getByRole("combobox", { name: "Choose preset" }) as HTMLSelectElement;
-}
-
-function headerSelectedLabel(): string {
-  const select = headerPresetSelect();
-  return select.options[select.selectedIndex]?.textContent ?? "";
-}
-
-async function pickHeaderPreset(id: string): Promise<void> {
-  await waitFor(() => expect(Array.from(headerPresetSelect().options).map((option) => option.value)).toContain(id));
-  fireEvent.change(headerPresetSelect(), { target: { value: id } });
-  await settle();
 }
 
 /** A library of the playing item and one more, so tag saves have loaded tiles. */
@@ -1551,7 +1538,7 @@ describe("saving", () => {
     await settle();
     expect(libraryQueries(server)).toHaveLength(queriesWithoutFilter);
 
-    await pickHeaderPreset("preset-beach");
+    await pickPreset("preset-beach");
     const before = libraryQueries(server).length;
     await openEditor();
     await click(chipButton("Alice", "Add tag"));
@@ -1571,7 +1558,7 @@ describe("saving", () => {
         fake.on("GET", "/api/presets", () => json([BEACH_PRESET]));
       }
     });
-    await pickHeaderPreset("preset-beach");
+    await pickPreset("preset-beach");
     const before = libraryQueries(server).length;
     await openEditor();
     await click(chipButton("Beach", "Edit tag"));
@@ -1582,20 +1569,21 @@ describe("saving", () => {
     await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
     expect(libraryQueries(server)).toHaveLength(before + 1);
     expect(libraryQueries(server)[before].filterState.selectedTags).toEqual(["Shore"]);
-    expect(headerSelectedLabel()).toBe("Beach days");
+    expect(selectedPresetLabel()).toBe("Beach days");
     const pick = await nextPick(server);
     expect(pick.filterState.selectedTags).toEqual(["Shore"]);
     expect(pick.presetId).toBe("preset-beach");
   });
 
-  it("a deleted tag leaves the applied filter and its preset", async () => {
+  it("a deleted tag leaves the applied filter, its preset, the Filters line, and the device's memory", async () => {
     const { server } = await mountTags({
       setup: (fake) => {
         serveLibrary(fake);
         fake.on("GET", "/api/presets", () => json([BEACH_PRESET]));
       }
     });
-    await pickHeaderPreset("preset-beach");
+    await pickPreset("preset-beach");
+    expect(document.getElementById("library-filter-summary")!.textContent).toBe("Filters: 1 tag");
     const before = libraryQueries(server).length;
     await openEditor();
     await deleteTag("Beach");
@@ -1604,7 +1592,9 @@ describe("saving", () => {
     await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
     expect(libraryQueries(server)).toHaveLength(before + 1);
     expect(libraryQueries(server)[before].filterState.selectedTags).toEqual([]);
-    expect(headerSelectedLabel()).toBe("Beach days");
+    expect(selectedPresetLabel()).toBe("Beach days");
+    expect((document.getElementById("library-filter-summary") as HTMLElement).hidden).toBe(true);
+    expect(JSON.parse(localStorage.getItem("rr_device.filter.applied")!).filter.selectedTags).toEqual([]);
     const pick = await nextPick(server);
     expect(pick.filterState.selectedTags).toEqual([]);
     expect(pick.presetId).toBe("preset-beach");
@@ -1617,7 +1607,7 @@ describe("saving", () => {
         fake.on("GET", "/api/presets", () => json([BEACH_PRESET]));
       }
     });
-    await pickHeaderPreset("preset-beach");
+    await pickPreset("preset-beach");
     const before = libraryQueries(server).length;
 
     page.stream().emit("itemTagsChanged", 2, {
@@ -1632,7 +1622,12 @@ describe("saving", () => {
 
     expect(libraryQueries(server)).toHaveLength(before + 1);
     expect(libraryQueries(server)[before].filterState.selectedTags).toEqual(["Shore"]);
-    expect(headerSelectedLabel()).toBe("Beach days");
+    expect(selectedPresetLabel()).toBe("Beach days");
+    expect(JSON.parse(localStorage.getItem("rr_device.filter.applied")!)).toMatchObject({
+      filter: { selectedTags: ["Shore"] },
+      preset: "Beach days",
+      unchanged: true
+    });
     const pick = await nextPick(server);
     expect(pick.filterState.selectedTags).toEqual(["Shore"]);
     expect(pick.presetId).toBe("preset-beach");
@@ -1900,8 +1895,8 @@ describe("storage", () => {
     await save();
     await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
 
-    // The panel remembers on this device whether it is open and its tab, which the panel's own tests cover.
-    expect(storageKeys(localStorage).filter((key) => !key.startsWith("rr_device.panel."))).toEqual(["rr_autoTagScanFullLibrary", "rr_clientId"]);
+    // The panel and the Library tab remember their state on this device, which their own tests cover.
+    expect(storageKeys(localStorage).filter((key) => !key.startsWith("rr_device."))).toEqual(["rr_autoTagScanFullLibrary", "rr_clientId"]);
     expect(storageKeys(sessionStorage)).toEqual(["rr_sessionId", "rr_tagEditorCollapsed"]);
   });
 });

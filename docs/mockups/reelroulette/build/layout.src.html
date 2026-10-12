@@ -337,6 +337,9 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
 .lib-sort { display: flex; gap: 8px; }
 .lib-sort select { flex: 1 1 auto; }
 .lib-sort .btn { flex: 0 0 auto; min-width: 128px; }
+/* Sort, its direction, and search are disabled while the server fails the compatibility check, and the preset dropdown
+   while it shows a message in place of the presets; each is dimmed to half then, as the app dims them. */
+#lib-preset:disabled, #lib-sort:disabled, #lib-dir:disabled, #lib-search:disabled { opacity: 0.5; cursor: not-allowed; }
 /* The grid's text isn't selectable, so Shift+click selects tiles and not the text across them. */
 .lib-grid {
   user-select: none;
@@ -2727,7 +2730,7 @@ function gridMessage(grid, text, error) {
 function layoutGrid(force) {
   const grid = $("lib-grid");
   if (grid.offsetParent === null) return;
-  const width = Math.max(200, grid.clientWidth);
+  const width = Math.max(280, grid.clientWidth);
   if (!force && width === lastGridWidth && grid.childElementCount) return;
   lastGridWidth = width;
   grid.className = `lib-grid scroll-y themed-scrollbar${state.tileNames ? " show-names" : ""}${selecting ? " selecting" : ""}`;
@@ -2873,9 +2876,13 @@ $("lib-search").addEventListener("input", (event) => {
   lib.search = event.target.value;
   reloadGrid();
 });
+// Sort, its direction, and search. Nothing loads while the server fails the compatibility check, so the three are
+// disabled then, as the app has them.
 function renderSortControls() {
   $("lib-sort").value = lib.sort;
   $("lib-dir").textContent = DIRECTION_LABELS[lib.sort][lib.descending ? 1 : 0];
+  const blocked = state.situation === "incompatible";
+  ["lib-sort", "lib-dir", "lib-search"].forEach((id) => ($(id).disabled = blocked));
 }
 $("lib-sort").addEventListener("change", (event) => {
   lib.sort = event.target.value;
@@ -2890,8 +2897,9 @@ $("lib-dir").addEventListener("click", () => {
   renderSortControls();
   reloadGrid();
 });
-// The preset menu, as the header's is today: "Loading..." until presets arrive, "Error loading presets" when they
-// can't load, and a starred row, such as "Favorites*", once the applied filter differs from the chosen preset.
+// The preset menu, as the Library tab's preset dropdown shows it: "Loading..." until presets arrive, "Error loading
+// presets" when they can't load, and a starred row, such as "Favorites*", once the applied filter differs from the
+// chosen preset.
 function renderLibPresets() {
   const select = $("lib-preset");
   select.textContent = "";
@@ -3861,6 +3869,7 @@ function applySituation(situation) {
   if (was === "reconnecting" && situation !== "reconnecting") notes.notify({ kind: "connection", text: "Reconnected.", key: "connection" });
   renderMockLasting();
   renderLibPresets();
+  renderSortControls();
   renderPresets();
   renderFilterTags();
   renderFilterEmpty();
@@ -4003,8 +4012,9 @@ function readApplied() {
   if (on.length < boxes.length) parts.push(`${on.length} of ${boxes.length} sources`);
   const min = minField.input.value && !minField.holds ? parseDuration(minField.input.value) : null;
   const max = maxField.input.value && !maxField.holds ? parseDuration(maxField.input.value) : null;
-  if (min !== null) parts.push(`Min ${minField.input.value.trim()}`);
-  if (max !== null) parts.push(`Max ${maxField.input.value.trim()}`);
+  // Durations read as the Filter tab shows them after a reload, not as typed: 2:00 reads 02:00.
+  if (min !== null) parts.push(`Min ${formatDuration(min)}`);
+  if (max !== null) parts.push(`Max ${formatDuration(max)}`);
   const include = [...filterTagState].filter(([, mode]) => mode === "inc").map(([key]) => key);
   const exclude = [...filterTagState].filter(([, mode]) => mode === "exc").map(([key]) => key);
   if (include.length) parts.push(`${include.length} tag${include.length === 1 ? "" : "s"}`);

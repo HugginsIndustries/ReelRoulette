@@ -3,6 +3,7 @@ import type { ConfirmRequest } from "../dialogs/dialogs";
 import { createDefaultFilterState } from "../filter/filterStateModel";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type ApiPreset, type PlayingItem } from "../state/appStore";
+import { createDeviceStore } from "../state/deviceStore";
 import { createTagEditor } from "../tags/tagEditor";
 import type { TagEditorModel } from "../tags/tagEditorModel";
 import { EMPTY_FIELD } from "../validation/fieldValidation";
@@ -76,6 +77,7 @@ function setup() {
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
     storage: { getItem: () => null, setItem: () => {} },
+    device: createDeviceStore(null),
     relay: () => {}
   });
   const setStatus = store.setStatus;

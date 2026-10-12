@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createDefaultFilterState } from "../filter/filterStateModel";
 import { createLibrary } from "../library/library";
 import type { LibraryGridController, LibraryGridCoverage } from "../library/libraryGridController";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type PlayingItem } from "../state/appStore";
+import { createDeviceStore } from "../state/deviceStore";
 import type { ServerConnection, ServerConnectionEvents } from "../state/serverConnection";
 
 const PLAYED: PlayingItem = {
@@ -40,17 +42,18 @@ interface FakePage {
 function fakeGrid(onCoverage: (coverage: LibraryGridCoverage) => void, page: FakePage) {
   const grid = {
     onCoverage,
-    contents: [] as Array<{ ids: string[]; searchQuery: string; resetScroll: boolean | undefined }>,
+    contents: [] as Array<{ ids: string[]; resetScroll: boolean | undefined }>,
+    /** Each playing item id the library marked, the first when the grid was created. */
+    playing: [] as Array<string | null>,
     /** Whether the tab's page was shown or hidden each time the deferred layout was flushed. */
     flushes: [] as string[],
     destroyed: false,
     coverage: null as LibraryGridCoverage | null,
     setBrowseContent(input: Parameters<LibraryGridController["setBrowseContent"]>[0]) {
-      grid.contents.push({
-        ids: input.visibleItems.map((item) => item.id),
-        searchQuery: input.searchQuery,
-        resetScroll: input.resetScroll
-      });
+      grid.contents.push({ ids: input.visibleItems.map((item) => item.id), resetScroll: input.resetScroll });
+    },
+    setPlayingItemId(itemId: string | null) {
+      grid.playing.push(itemId);
     },
     measureCoverage: () => grid.coverage,
     flushDeferredLayout() {
@@ -99,6 +102,7 @@ function setup() {
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
     storage: { getItem: () => null, setItem: () => {} },
+    device: createDeviceStore(null),
     relay: (_level, message) => relayed.push(message)
   });
   const api = createAppApi("http://server", { onUnauthorized: () => {}, fetch: fetchImpl });
@@ -112,7 +116,7 @@ function setup() {
     }
   } as unknown as ServerConnection;
   const page: FakePage = { hidden: true };
-  const panel = { closeIfOverlay: vi.fn(() => Promise.resolve()) };
+  const panel = { closeIfOverlay: vi.fn(() => Promise.resolve()), showTab: vi.fn(() => Promise.resolve()) };
   const playCalls: string[] = [];
   const player = {
     playCurrent: vi.fn((options?: { recordPlayback?: boolean }) => {
@@ -130,6 +134,7 @@ function setup() {
     connection,
     player,
     panel,
+    device: createDeviceStore(null),
     fetch: fetchImpl,
     createGrid(_host, onCoverage) {
       const grid = fakeGrid(onCoverage, page);
@@ -201,7 +206,6 @@ describe("library window", () => {
     ]);
     expect(t.queries()[0].filterState).toMatchObject({ favoritesOnly: false, excludeBlacklisted: true });
     expect(t.library.body.peek()).toEqual({ kind: "blank" });
-    expect(t.library.toolbarShown.peek()).toBe(false);
     expect(t.library.summary.peek()).toBeNull();
     expect(t.grids).toHaveLength(0);
   });
@@ -214,10 +218,9 @@ describe("library window", () => {
     t.showTab();
     expect(t.library.isOpen()).toBe(true);
     expect(t.library.body.peek()).toEqual({ kind: "grid" });
-    expect(t.library.toolbarShown.peek()).toBe(true);
     expect(t.library.summary.peek()).toBe("Showing 3 of 3 items");
     const grid = t.mountGrid();
-    expect(grid.contents).toEqual([{ ids: ["item-1", "item-2", "item-3"], searchQuery: "", resetScroll: false }]);
+    expect(grid.contents).toEqual([{ ids: ["item-1", "item-2", "item-3"], resetScroll: false }]);
     expect(t.queries()).toHaveLength(1);
 
     t.hideTab();
@@ -227,6 +230,7 @@ describe("library window", () => {
   it("shows loading, error, and empty messages in place of the grid while open", async () => {
     const t = setup();
     t.fakeLibrary.failures.push(500);
+    t.emit("serverReady");
     t.showTab();
     expect(t.library.body.peek()).toEqual({
       kind: "message",
@@ -237,7 +241,6 @@ describe("library window", () => {
     await settle();
     expect(t.library.body.peek()).toEqual({ kind: "message", message: { text: "HTTP 500", error: true, live: false } });
     expect(t.store.status.peek()).toBe("Library load failed: HTTP 500");
-    expect(t.library.toolbarShown.peek()).toBe(false);
 
     t.fakeLibrary.items = [];
     await t.library.commitQuery();
@@ -265,7 +268,6 @@ describe("library window", () => {
     t.showTab();
     expect(t.library.body.peek()).toMatchObject({ kind: "message", message: { text: "Loading library…" } });
     expect(t.library.summary.peek()).toBeNull();
-    expect(t.library.toolbarShown.peek()).toBe(false);
     expect(t.queries()).toHaveLength(3);
     expect(grid.flushes).toEqual([]);
   });
@@ -281,7 +283,7 @@ describe("library window", () => {
     t.fakeLibrary.items = libraryItems(2);
     t.emit("refreshCompleted");
     await settle();
-    expect(grid.contents.at(-1)).toEqual({ ids: ["item-1", "item-2"], searchQuery: "", resetScroll: false });
+    expect(grid.contents.at(-1)).toEqual({ ids: ["item-1", "item-2"], resetScroll: false });
     expect(t.library.summary.peek()).toBe("Showing 2 of 2 items");
 
     t.showTab();
@@ -297,7 +299,7 @@ describe("library window", () => {
     await t.library.commitQuery();
 
     const grid = t.mountGrid();
-    expect(grid.contents).toEqual([{ ids: ["item-1", "item-2", "item-3"], searchQuery: "", resetScroll: true }]);
+    expect(grid.contents).toEqual([{ ids: ["item-1", "item-2", "item-3"], resetScroll: true }]);
   });
 
   it("a reload while the grid shows keeps it and the scroll position", async () => {
@@ -378,11 +380,48 @@ describe("fill", () => {
     expect(t.queries()).toHaveLength(2);
   });
 
+  it("sends nothing before the server passes the compatibility check, nor while it fails it, and loads with the filter applied meanwhile", async () => {
+    const t = setup();
+    t.store.appliedFilter.value = { ...createDefaultFilterState(), favoritesMode: "only" };
+    await t.library.commitQuery();
+    t.library.setSortMode("Duration");
+    await settle();
+    expect(t.queries()).toHaveLength(0);
+
+    t.emit("serverReady");
+    await settle();
+    expect(t.queries()).toEqual([expect.objectContaining({ filterState: expect.objectContaining({ favoritesOnly: true }), sortMode: "Duration" })]);
+
+    t.store.compatibilityBlocked.value = true;
+    await t.library.commitQuery();
+    expect(t.queries()).toHaveLength(1);
+  });
+
   it("opening loads the first page when there is none yet", async () => {
+    const t = setup();
+    t.fakeLibrary.failures.push(500);
+    t.emit("serverReady");
+    await settle();
+    expect(t.queries()).toHaveLength(1);
+
+    t.showTab();
+    await settle();
+    expect(t.queries()).toHaveLength(2);
+    expect(t.library.body.peek()).toEqual({ kind: "grid" });
+  });
+
+  it("opening before the server passes the compatibility check sends nothing, and the first page loads once it does", async () => {
     const t = setup();
     t.showTab();
     await settle();
+    expect(t.queries()).toHaveLength(0);
+    expect(t.library.body.peek()).toEqual({
+      kind: "message",
+      message: { text: "Loading library…", error: false, live: true }
+    });
 
+    t.emit("serverReady");
+    await settle();
     expect(t.queries()).toHaveLength(1);
     expect(t.library.body.peek()).toEqual({ kind: "grid" });
   });
@@ -392,18 +431,21 @@ describe("search and sort", () => {
   it("search waits until typing stops, and a commit drops the waiting search", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const t = setup();
+    t.emit("serverReady");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.queries().map((query) => query.search)).toEqual([""]);
     t.library.setSearch("ho");
     await vi.advanceTimersByTimeAsync(299);
     t.library.setSearch("hol");
     await vi.advanceTimersByTimeAsync(299);
-    expect(t.queries()).toHaveLength(0);
+    expect(t.queries()).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(1);
-    expect(t.queries()).toEqual([expect.objectContaining({ search: "hol", offset: 0 })]);
+    expect(t.queries()[1]).toEqual(expect.objectContaining({ search: "hol", offset: 0 }));
 
     t.library.setSearch("holi");
     await t.library.commitQuery();
     await vi.advanceTimersByTimeAsync(1000);
-    expect(t.queries().map((query) => query.search)).toEqual(["hol", "holi"]);
+    expect(t.queries().map((query) => query.search)).toEqual(["", "hol", "holi"]);
   });
 
   it("a sort mode starts in its default direction, and the direction label changes when its page arrives", async () => {
@@ -512,7 +554,6 @@ describe("play", () => {
       kind: "message",
       message: { text: "Server API version 0 is not supported.", error: true, live: false }
     });
-    expect(t.library.toolbarShown.peek()).toBe(false);
     expect(t.library.summary.peek()).toBeNull();
     expect(t.panel.closeIfOverlay).not.toHaveBeenCalled();
     expect(t.player.playCurrent).not.toHaveBeenCalled();
@@ -523,7 +564,7 @@ describe("play", () => {
 });
 
 describe("events", () => {
-  it("a header filter change and a resync start over or reload, and favorite and playback events update the window", async () => {
+  it("a preset pick and a resync start over or reload, and favorite and playback events update the window", async () => {
     const t = setup();
     t.emit("serverReady");
     await settle();

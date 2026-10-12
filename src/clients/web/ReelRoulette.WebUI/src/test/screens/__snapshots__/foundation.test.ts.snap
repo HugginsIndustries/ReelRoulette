@@ -15,20 +15,6 @@ exports[`page structure > keeps the starting markup 1`] = `
       <button class="held-action" disabled="" id="pair-btn" type="button">
         <span class="btn-label">
           "Pair"
-    <select aria-label="Choose preset" id="preset-select">
-      <option value="">
-        "None"
-    <select aria-label="Choose randomization mode" id="randomization-mode-select">
-      <option value="SmartShuffle">
-        "Smart Shuffle"
-      <option value="PureRandom">
-        "Pure Random"
-      <option value="WeightedRandom">
-        "Weighted Random"
-      <option value="SpreadMode">
-        "Spread Mode"
-      <option value="WeightedWithSpread">
-        "Weighted with Spread"
     <div class="photo-duration-wrap">
       <label>
         "Photo Duration:"
@@ -109,9 +95,29 @@ exports[`page structure > keeps the starting markup 1`] = `
             <h2>
               "Library"
             <p aria-live="polite" class="library-overlay-summary" hidden="" id="library-overlay-summary">
-          <div class="library-overlay-toolbar" id="library-overlay-toolbar" style="display: none">
-            <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
-            <div class="library-overlay-sort-cluster">
+            <button aria-controls="library-filter-summary library-controls" aria-expanded="true" aria-label="Hide library controls and filters" class="icon-glyph-base icon-glyph-button library-controls-toggle" id="library-controls-toggle" title="Hide controls & filters" type="button">
+              <span aria-hidden="true" class="material-symbol-icon">
+                "unfold_less"
+          <button class="library-filter-summary" hidden="" id="library-filter-summary" title="Open the Filter tab" type="button">
+            <b>
+              "Filters:"
+          <div class="library-controls" id="library-controls">
+            <div class="library-controls-pair">
+              <select aria-label="Choose preset" id="preset-select">
+                <option value="">
+                  "None"
+              <select aria-label="Choose randomization mode" id="randomization-mode-select">
+                <option value="SmartShuffle">
+                  "Smart Shuffle"
+                <option value="PureRandom">
+                  "Pure Random"
+                <option value="WeightedRandom">
+                  "Weighted Random"
+                <option value="SpreadMode">
+                  "Spread Mode"
+                <option value="WeightedWithSpread">
+                  "Weighted with Spread"
+            <div class="library-controls-sort">
               <select aria-label="Sort library" class="library-overlay-sort-select" id="library-sort-select">
                 <option value="Name">
                   "Name"
@@ -125,6 +131,7 @@ exports[`page structure > keeps the starting markup 1`] = `
                   "Date added"
               <button aria-label="Toggle sort direction" class="library-overlay-sort-direction" id="library-sort-direction-btn" type="button">
                 "A–Z"
+            <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
           <div class="library-overlay-body" id="library-overlay-body">
       <section aria-labelledby="panel-tab-filter" class="panel-page" hidden="" id="panel-page-filter" role="tabpanel">
         <div class="filter-dialog" id="filter-dialog">

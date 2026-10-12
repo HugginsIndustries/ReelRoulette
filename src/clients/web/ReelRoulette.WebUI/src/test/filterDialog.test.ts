@@ -5,6 +5,7 @@ import { DURATION_PROBLEM, FLAG_MODES_PROBLEM } from "../filter/filterDialogMode
 import { createDefaultFilterState } from "../filter/filterStateModel";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type ApiPreset } from "../state/appStore";
+import { createDeviceStore } from "../state/deviceStore";
 import { EMPTY_FIELD } from "../validation/fieldValidation";
 
 const FAVORITES: ApiPreset = { id: "preset-favorites", name: "Favorites", filterState: { favoritesOnly: true } };
@@ -61,9 +62,12 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
   }) as typeof fetch;
 
   const statuses: string[] = [];
+  /** The keys the device store wrote, in order. */
+  const deviceWrites: string[] = [];
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
     storage: { getItem: () => null, setItem: () => {} },
+    device: createDeviceStore({ getItem: () => null, setItem: (key) => void deviceWrites.push(key) }),
     relay: () => {}
   });
   store.presets.value = presets.slice();
@@ -101,7 +105,7 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
   };
   const dialog = createFilterDialog({ store, api, connection, library, panel, storage, dialogs: { confirm } });
   const view = () => dialog.view.value!;
-  return { dialog, view, store, server, statuses, steps, library, session, confirm, panel };
+  return { dialog, view, store, server, statuses, steps, library, session, confirm, panel, deviceWrites };
 }
 
 /** An action that is neither disabled nor held. */
@@ -113,7 +117,7 @@ function heldBy(field: string) {
 }
 
 describe("opening", () => {
-  it("loads sources, tags, and presets, then starts on General from the applied filter and the header's preset", async () => {
+  it("loads sources, tags, and presets, then starts on General from the applied filter and the preset dropdown's preset", async () => {
     const { dialog, view, store, server } = setup();
     store.pickHeaderPreset("preset-favorites");
     expect(dialog.view.value).toBeNull();
@@ -233,7 +237,7 @@ describe("opening", () => {
     expect(view().pending).toBe(true);
   });
 
-  it("opens on None while the header holds None, even when a saved preset has the default filter", async () => {
+  it("opens on None while the preset dropdown holds None, even when a saved preset has the default filter", async () => {
     const { dialog, view, store } = setup([EVERYTHING]);
     await dialog.open();
     expect(view().heading).toBe("Preset: Everything");
@@ -687,7 +691,19 @@ describe("applying", () => {
     expect(statuses.at(-1)).toBe("Filters applied.");
   });
 
-  it("keeps the header's None hold only while the applied filter is the default", async () => {
+  it("writes the remembered filter once for an Apply that changes the filter and its preset", async () => {
+    const { dialog, store, deviceWrites } = setup([FAVORITES]);
+    store.presetsLoaded();
+    await dialog.open();
+    dialog.choosePreset("Favorites");
+
+    await dialog.apply();
+
+    expect(store.activePresetName.value).toBe("Favorites");
+    expect(deviceWrites).toEqual(["rr_device.filter.applied"]);
+  });
+
+  it("keeps the preset dropdown's None hold only while the applied filter is the default", async () => {
     const { dialog, store } = setup([EVERYTHING]);
     store.pickHeaderPreset("");
     await dialog.open();
@@ -789,8 +805,8 @@ describe("applying", () => {
   });
 });
 
-describe("header changes", () => {
-  it("start the open dialog over from the header's filter, and leave a closed one alone", async () => {
+describe("preset dropdown changes", () => {
+  it("start the open dialog over from the preset dropdown's filter, and leave a closed one alone", async () => {
     const { dialog, view, store } = setup([FAVORITES]);
     await dialog.open();
     dialog.changeGeneral({ onlyNeverPlayed: true });

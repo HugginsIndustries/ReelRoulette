@@ -1,13 +1,16 @@
-import { signal, type ReadonlySignal } from "@preact/signals";
+import { computed, signal, type ReadonlySignal } from "@preact/signals";
 import { requestPlayItem } from "../api/coreApi";
+import { filterSummaryParts } from "../filter/filterSummaryModel";
 import { playbackTraceLine } from "../logging/relayLogLines";
 import type { PanelHost } from "../panel/panelHost";
 import type { Player } from "../playback/player";
 import type { AppApi } from "../state/appApi";
 import type { AppStore } from "../state/appStore";
+import type { DeviceStore } from "../state/deviceStore";
 import type { ServerConnection } from "../state/serverConnection";
 import type { RuntimeConfig } from "../types/runtimeConfig";
 import {
+  LIBRARY_SORT_MODES,
   createDefaultBrowseControls,
   getSortDirectionLabel,
   isDefaultDescendingForSortMode,
@@ -39,22 +42,47 @@ export type LibraryBody =
   | { kind: "message"; message: LibraryOverlayMessage }
   | { kind: "grid" };
 
+const CONTROLS_COLLAPSED_KEY = "library.controlsCollapsed";
+const SORT_KEY = "library.sort";
+
+/** The sort and its direction, as remembered across a page refresh. */
+interface RememberedSort {
+  mode: LibrarySortMode;
+  descending: boolean;
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === "boolean";
+}
+
+function isRememberedSort(value: unknown): value is RememberedSort {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (LIBRARY_SORT_MODES as readonly unknown[]).includes(record.mode) && typeof record.descending === "boolean";
+}
+
 export type CreateLibraryGrid = (
   host: HTMLElement,
   onCoverage: (coverage: LibraryGridCoverage) => void
 ) => LibraryGridController;
 
 /**
- * The Library tab's browse window, search and sort, and tile play. The first page loads once the server is ready, and
- * the window keeps its tiles and scroll position while the tab is hidden. The panel shows and hides the tab.
+ * The Library tab's browse window, controls, Filters line, and tile play. The first page loads once the server is
+ * ready, and the window keeps its tiles and scroll position while the tab is hidden. The panel shows and hides the
+ * tab. The tab remembers on this device whether its controls are collapsed, and its sort and direction.
  */
 export interface Library {
   /** The loaded window, which the tag editor reads and updates. */
   readonly session: LibraryQuerySession;
-  /** The search text and sort the toolbar shows, as the user sets them. */
+  /** The search text and sort the controls show, as the user sets them. */
   readonly controls: ReadonlySignal<LibraryBrowseControls>;
-  readonly toolbarShown: ReadonlySignal<boolean>;
-  /** The header's "Showing N of M items", or null while it is hidden. */
+  /** The controls and the Filters line are collapsed, giving the grid more room. */
+  readonly controlsCollapsed: ReadonlySignal<boolean>;
+  /** The applied filters as the Filters line names them, empty when no filter applies. */
+  readonly filterSummary: ReadonlySignal<string[]>;
+  /** The tab's "Showing N of M items", or null while it is hidden. */
   readonly summary: ReadonlySignal<string | null>;
   /** The sort direction button's label. It changes when a page in the new order arrives. */
   readonly directionLabel: ReadonlySignal<string>;
@@ -68,19 +96,27 @@ export interface Library {
   attachGrid(host: HTMLElement): () => void;
   isOpen(): boolean;
   /**
-   * The tab shows, its page already shown. While the server fails the compatibility check, the body shows why, in
-   * place of the grid.
+   * The tab shows, its page already shown, and loads the first page when there is none. While the server fails the
+   * compatibility check, the body shows why, in place of the grid, and before it has passed the check the first page
+   * waits for it.
    */
   open(): void;
   /** The tab hides. */
   close(): void;
-  /** Starts over from the first page with the applied filter and the current search and sort. */
+  /**
+   * Starts over from the first page with the applied filter and the current search and sort. Before the server has
+   * passed the compatibility check, or while it fails it, nothing is sent: the first page loads with them once it passes.
+   */
   commitQuery(): Promise<void>;
   /** Takes the search box's text, and starts over once typing stops. */
   setSearch(text: string): void;
   /** Starts over sorted by `mode` in its default direction. */
   setSortMode(mode: string): void;
   toggleSortDirection(): void;
+  /** Collapses or expands the controls and the Filters line. */
+  toggleControls(): void;
+  /** Shows the Filter tab, as the Filters line does. */
+  openFilterTab(): Promise<void>;
   /** Plays a tile's item through the server, closes the panel as the overlay, and hands the item to the player. */
   play(itemId: string): Promise<void>;
 }
@@ -92,7 +128,9 @@ export interface LibraryOptions {
   connection: ServerConnection;
   player: Pick<Player, "playCurrent">;
   /** Choosing a tile closes the panel as the overlay; beside the player it stays open. */
-  panel: Pick<PanelHost, "closeIfOverlay">;
+  panel: Pick<PanelHost, "closeIfOverlay" | "showTab">;
+  /** Remembers whether the controls are collapsed, and the sort and direction. */
+  device: DeviceStore;
   /** Defaults to the global `fetch`, looked up on each request. */
   fetch?: typeof fetch;
   /** Defaults to the grid controller. */
@@ -106,7 +144,7 @@ function errorText(error: unknown): string {
 }
 
 export function createLibrary(options: LibraryOptions): Library {
-  const { store, api, connection, player, panel } = options;
+  const { store, api, connection, player, panel, device } = options;
   const apiBaseUrl = String(options.config.apiBaseUrl || "").replace(/\/+$/, "");
   const sseUrl = options.config.sseUrl;
   const send: typeof fetch = options.fetch ?? ((input, init) => fetch(input, init));
@@ -114,9 +152,14 @@ export function createLibrary(options: LibraryOptions): Library {
     options.createGrid ?? ((host, onCoverage) => createLibraryGridController(host, apiBaseUrl, { onCoverage }));
   const requestFrame = options.requestFrame ?? ((callback: () => void) => void requestAnimationFrame(() => callback()));
 
-  const initialControls = createDefaultBrowseControls();
+  // The search text isn't remembered.
+  const rememberedSort = device.read<RememberedSort | null>(SORT_KEY, null, isRememberedSort);
+  const initialControls: LibraryBrowseControls = rememberedSort
+    ? { ...createDefaultBrowseControls(), sortMode: rememberedSort.mode, sortDescending: rememberedSort.descending }
+    : createDefaultBrowseControls();
   const controls = signal(initialControls);
-  const toolbarShown = signal(false);
+  const controlsCollapsed = signal(device.read(CONTROLS_COLLAPSED_KEY, false, isBoolean));
+  const filterSummary = computed(() => filterSummaryParts(store.appliedFilter.value, store.sources.value));
   const summary = signal<string | null>(null);
   const directionLabel = signal(getSortDirectionLabel(initialControls.sortMode, initialControls.sortDescending));
   const body = signal<LibraryBody>({ kind: "blank" });
@@ -128,6 +171,9 @@ export function createLibrary(options: LibraryOptions): Library {
   let pendingScrollTop = false;
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
   let playInFlight = false;
+  /** The server passed the compatibility check, so the library can load. */
+  let serverReady = false;
+  let sourcesInFlight = false;
 
   const session = createLibraryQuerySession((request, signal) => postQuery(request, signal));
   session.setListener((event) => {
@@ -163,7 +209,6 @@ export function createLibrary(options: LibraryOptions): Library {
       return;
     }
     const current = controls.peek();
-    toolbarShown.value = true;
     directionLabel.value = getSortDirectionLabel(current.sortMode, current.sortDescending);
     summary.value = snap.summaryText || null;
   }
@@ -174,11 +219,7 @@ export function createLibrary(options: LibraryOptions): Library {
       pendingScrollTop ||= scroll === "top";
       return;
     }
-    grid.setBrowseContent({
-      visibleItems: session.snapshot().items,
-      searchQuery: controls.peek().searchQuery,
-      resetScroll: scroll === "top"
-    });
+    grid.setBrowseContent({ visibleItems: session.snapshot().items, resetScroll: scroll === "top" });
   }
 
   /**
@@ -200,14 +241,12 @@ export function createLibrary(options: LibraryOptions): Library {
 
     const blockedBy = store.compatibilityBlocked.peek() ? store.compatibilityMessage.peek() : null;
     if (blockedBy !== null) {
-      toolbarShown.value = false;
       summary.value = null;
       body.value = { kind: "message", message: { text: blockedBy, error: true, live: false } };
       return;
     }
 
     if (!ready) {
-      toolbarShown.value = false;
       summary.value = null;
       const phase = snap.phase === "error" ? "error" : snap.phase === "empty" ? "empty" : "loading";
       body.value = { kind: "message", message: libraryOverlayMessage(phase, snap.errorMessage || LIBRARY_OVERLAY_FETCH_ERROR) };
@@ -234,7 +273,34 @@ export function createLibrary(options: LibraryOptions): Library {
       clearTimeout(searchTimer);
       searchTimer = null;
     }
+    if (!serverReady || store.compatibilityBlocked.peek()) {
+      return Promise.resolve();
+    }
     return session.resetQuery(store.appliedFilter.peek(), controls.peek());
+  }
+
+  function rememberSort(): void {
+    const current = controls.peek();
+    device.write(SORT_KEY, { mode: current.sortMode, descending: current.sortDescending } satisfies RememberedSort);
+  }
+
+  /** Loads the sources for the Filters line, which counts them, when the applied filter chooses some. */
+  async function loadSourcesForSummary(): Promise<void> {
+    if (store.sources.peek() !== null || sourcesInFlight || store.appliedFilter.peek().includedSourceIds.length === 0) {
+      return;
+    }
+    sourcesInFlight = true;
+    try {
+      const sources = await api.getJson("/api/sources");
+      if (store.sources.peek() === null) {
+        store.sources.value = Array.isArray(sources) ? sources : [];
+      }
+    } catch {
+      // The Filters line counts the chosen sources without their total until a later load succeeds.
+      void api.relayLog("warn", "library=filter-summary-sources-failed");
+    } finally {
+      sourcesInFlight = false;
+    }
   }
 
   function close(): void {
@@ -305,9 +371,14 @@ export function createLibrary(options: LibraryOptions): Library {
 
   store.on("headerFilterChanged", () => {
     void commitQuery();
+    if (serverReady) {
+      void loadSourcesForSummary();
+    }
   });
   connection.on("serverReady", () => {
+    serverReady = true;
     void session.ensureLoaded(store.appliedFilter.peek(), controls.peek());
+    void loadSourcesForSummary();
   });
   // The player updates the playing item and the status line first.
   connection.on("itemStateChanged", (payload) => {
@@ -330,11 +401,16 @@ export function createLibrary(options: LibraryOptions): Library {
       renderWindow("keep");
     }
   });
+  // The playing item's tile shows the playing icon.
+  store.current.subscribe((item) => {
+    grid?.setPlayingItemId(item?.itemId ?? null);
+  });
 
   return {
     session,
     controls,
-    toolbarShown,
+    controlsCollapsed,
+    filterSummary,
     summary,
     directionLabel,
     body,
@@ -354,15 +430,12 @@ export function createLibrary(options: LibraryOptions): Library {
     attachGrid(host) {
       const created = createGrid(host, onCoverage);
       grid = created;
+      created.setPlayingItemId(store.current.peek()?.itemId ?? null);
       const resetScroll = pendingScrollTop;
       pendingScrollTop = false;
       const snap = session.snapshot();
       if (snap.phase === "ready") {
-        created.setBrowseContent({
-          visibleItems: snap.items,
-          searchQuery: controls.peek().searchQuery,
-          resetScroll
-        });
+        created.setBrowseContent({ visibleItems: snap.items, resetScroll });
       }
       return () => {
         created.destroy();
@@ -395,7 +468,8 @@ export function createLibrary(options: LibraryOptions): Library {
         showChrome(snap);
         grid.flushDeferredLayout();
       }
-      if (!snap.hasResult) {
+      // Before the server has passed the compatibility check, the first page waits for it, as `commitQuery` does.
+      if (!snap.hasResult && serverReady) {
         void session.ensureLoaded(store.appliedFilter.peek(), controls.peek());
       }
       requestFrame(() => {
@@ -429,12 +503,23 @@ export function createLibrary(options: LibraryOptions): Library {
         sortMode,
         sortDescending: isDefaultDescendingForSortMode(sortMode)
       };
+      rememberSort();
       void commitQuery();
     },
 
     toggleSortDirection() {
       controls.value = { ...controls.peek(), sortDescending: !controls.peek().sortDescending };
+      rememberSort();
       void commitQuery();
+    },
+
+    toggleControls() {
+      controlsCollapsed.value = !controlsCollapsed.peek();
+      device.write(CONTROLS_COLLAPSED_KEY, controlsCollapsed.peek());
+    },
+
+    openFilterTab() {
+      return panel.showTab("filter");
     },
 
     play

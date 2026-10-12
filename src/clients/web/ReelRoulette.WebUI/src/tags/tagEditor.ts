@@ -1,5 +1,6 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
 import type { Dialogs } from "../dialogs/dialogs";
+import { cloneFilterState } from "../filter/filterStateModel";
 import type { Library } from "../library/library";
 import { createAutoTagScanRequest, libraryQueryTagSaveEffect } from "../library/libraryQuerySession";
 import {
@@ -438,15 +439,14 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
   }
 
   /**
-   * Renames or removes a renamed or deleted tag in the applied filter and the presets, in place, and in the
-   * library's filter. Nothing renders from the applied filter, so the header preset list is rebuilt here.
+   * Renames or removes a renamed or deleted tag in the presets, in place, then in the applied filter, which is replaced,
+   * so the Filters line and the device's memory follow and see it still as its preset's own, and in the library's
+   * filter. The preset dropdown is rebuilt.
    */
   function retargetFilters(step: TagSaveStep): void {
     if (step.kind !== "rename-tag" && step.kind !== "delete-tag") {
       return;
     }
-    const applied = store.appliedFilter.peek();
-    const filterChanged = applied ? retargetTagFilter(applied.selectedTags || [], applied.excludedTags || [], step) : false;
     let presetsChanged = false;
     for (const preset of store.presets.peek() || []) {
       const filter = preset?.filterState as { selectedTags?: unknown; excludedTags?: unknown } | undefined;
@@ -454,6 +454,11 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
         continue;
       }
       presetsChanged = retargetTagFilter(filter.selectedTags, filter.excludedTags, step) || presetsChanged;
+    }
+    const applied = cloneFilterState(store.appliedFilter.peek());
+    const filterChanged = retargetTagFilter(applied.selectedTags, applied.excludedTags, step);
+    if (filterChanged) {
+      store.appliedFilter.value = applied;
     }
     library.session.reviseStoredFilter((selected, excluded) => {
       retargetTagFilter(selected, excluded, step);

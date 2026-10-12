@@ -9,6 +9,8 @@ import {
   json,
   mountPage,
   normalizedMarkup,
+  pickPreset,
+  presetSelect,
   resetPage,
   settle,
   status
@@ -54,8 +56,11 @@ const PHOTO_ITEM = {
   isBlacklisted: false
 };
 
-function presetSelect(): HTMLSelectElement {
-  return screen.getByRole("combobox", { name: "Choose preset" }) as HTMLSelectElement;
+/** The Library tab's randomization mode, its tab shown so the user can reach it. */
+async function randomizationModeSelect(): Promise<HTMLSelectElement> {
+  fireEvent.click(document.getElementById("panel-tab-library")!);
+  await settle();
+  return screen.getByRole("combobox", { name: "Choose randomization mode" }) as HTMLSelectElement;
 }
 
 function optionLabels(select: HTMLSelectElement): string[] {
@@ -227,7 +232,7 @@ describe("status line relay", () => {
   });
 });
 
-describe("header preset dropdown", () => {
+describe("preset dropdown", () => {
   it("lists None and the saved presets, and a pick sets the library query and the next random pick", async () => {
     const server = new FakeServer();
     server.on("GET", "/api/presets", () => json([FAVORITES_PRESET]));
@@ -236,9 +241,10 @@ describe("header preset dropdown", () => {
 
     await waitFor(() => expect(optionLabels(presetSelect())).toEqual(["None", "Favorites"]));
     expect(selectedLabel(presetSelect())).toBe("None");
+    expect(presetSelect().disabled).toBe(false);
     await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(1));
 
-    fireEvent.change(presetSelect(), { target: { value: "preset-favorites" } });
+    await pickPreset("preset-favorites");
     await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(2));
     expect(server.requests("POST", "/api/library/query")[1]!.body.filterState.favoritesOnly).toBe(true);
     expect(selectedLabel(presetSelect())).toBe("Favorites");
@@ -249,7 +255,7 @@ describe("header preset dropdown", () => {
     expect(pick.filterState.favoritesOnly).toBe(true);
     expect(pick.randomizationMode).toBe("SmartShuffle");
 
-    fireEvent.change(presetSelect(), { target: { value: "" } });
+    await pickPreset("");
     await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(3));
     expect(server.requests("POST", "/api/library/query")[2]!.body.filterState.favoritesOnly).toBe(false);
     await waitFor(() => expect(selectedLabel(presetSelect())).toBe("None"));
@@ -261,13 +267,15 @@ describe("header preset dropdown", () => {
     expect(next.filterState.favoritesOnly).toBe(false);
   });
 
-  it("shows Loading... until presets arrive and an error entry when they cannot load", async () => {
+  it("shows Loading... until presets arrive and an error entry when they cannot load, with nothing to choose", async () => {
     const server = new FakeServer();
     server.on("GET", "/api/presets", () => status(500));
     mountPage({ server });
     expect(optionLabels(presetSelect())).toEqual(["Loading..."]);
+    expect(presetSelect().disabled).toBe(true);
 
     await waitFor(() => expect(optionLabels(presetSelect())).toEqual(["Error loading presets"]));
+    expect(presetSelect().disabled).toBe(true);
     await waitFor(() => expect(server.logLines()).toContain("status=Error loading presets: HTTP 500 hasCurrent=false attempt=0"));
   });
 });
@@ -277,7 +285,7 @@ describe("randomization mode", () => {
     const server = new FakeServer();
     server.on("POST", "/api/random", () => json(VIDEO_ITEM));
     mountPage({ server });
-    const select = screen.getByRole("combobox", { name: "Choose randomization mode" }) as HTMLSelectElement;
+    const select = await randomizationModeSelect();
     expect(selectedLabel(select)).toBe("Smart Shuffle");
     expect(optionLabels(select)).toEqual([
       "Smart Shuffle",
@@ -297,12 +305,12 @@ describe("randomization mode", () => {
   it("restores a saved mode and ignores an unknown one", async () => {
     localStorage.setItem("rr_randomizationMode", "SpreadMode");
     mountPage();
-    expect(selectedLabel(screen.getByRole("combobox", { name: "Choose randomization mode" }) as HTMLSelectElement)).toBe("Spread Mode");
+    expect(selectedLabel(await randomizationModeSelect())).toBe("Spread Mode");
 
     resetPage();
     localStorage.setItem("rr_randomizationMode", "NotAMode");
     mountPage();
-    expect(selectedLabel(screen.getByRole("combobox", { name: "Choose randomization mode" }) as HTMLSelectElement)).toBe("Smart Shuffle");
+    expect(selectedLabel(await randomizationModeSelect())).toBe("Smart Shuffle");
   });
 });
 
@@ -536,8 +544,7 @@ describe("page structure", () => {
     seek.value = "40";
 
     await screen.findByText("Ready (API 1)");
-    await waitFor(() => expect(optionLabels(presetSelect())).toEqual(["None", "Favorites"]));
-    fireEvent.change(presetSelect(), { target: { value: "preset-favorites" } });
+    await pickPreset("preset-favorites");
     await startRandomPick();
     await screen.findByTitle("holiday clip.mp4");
     page.stream().open();

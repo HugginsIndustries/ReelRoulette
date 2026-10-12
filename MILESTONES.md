@@ -133,64 +133,7 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 ## Active Milestones
 
-Last milestone completed: M12f4
-
-### M12f5 - WebUI Library Tab
-
-- **Status**: ⏳ Planned
-- **Goal**: The Library tab holds the library's controls above a grid of smaller tiles, laid out like the desktop library panel, with a line that sums up the applied filters.
-- **Depends on**: WebUI Responsive Layout and Panels, whose panel holds the tab, and Favorite and Blacklist Filter Modes, whose modes the filter summary line names.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Scope
-
-- The preset dropdown and randomization mode leave the header for the Library tab.
-- The Library tab is laid out like the desktop library panel: above the grid, the preset, then randomization mode, then sort with its direction toggle, then search.
-- The preset and randomization dropdowns share one row from a panel width of about 440 px.
-- The controls collapse to give the grid more room, together with the filter summary line below, and stay collapsed or open per device.
-- The collapse button's tooltip reads "Hide controls & filters" or "Show controls & filters".
-- The Library tab's justified rows fit the panel width, 100–240 px high, aiming for 160 px, beside the player and as the overlay.
-- When nothing matches the search or the filters, the grid says "Nothing matches the search or filters."; its other messages stay as they are today.
-- The favorite and blacklist icons on tiles lose their dark rectangle and become filled icons, by the icon font's FILL axis, with a soft drop shadow, so they stay readable on bright thumbnails.
-- The playing tile shows a filled play icon in its middle, modest in size and slightly translucent so the thumbnail shows through, in the same style.
-- With a mouse, hovering a tile shows its file name as a tooltip.
-- File names keep showing on tiles.
-- Filled icons, these and the check icons WebUI Multi-Select and Bulk Actions adds, are plain flat shapes, at the font's FILL 1, weight 700, and optical size 20, as today's badges use (`.library-grid-tile-badge-icon` in `src/styles.css`).
-- The desktop's filter summary line: while a filter applies, the Library tab shows one line above the grid listing the applied filters, as the desktop lists them above its library panel, and tapping or clicking it opens the Filter tab.
-- The summary line collapses with the Library tab's controls.
-- The summary line names Favorites only or excluded and Blacklisted only, the modes from Favorite and Blacklist Filter Modes. Blacklisted excluded, the default, isn't named, as the desktop's summary doesn't name Exclude blacklisted today.
-- The summary line reads "Filters:" and then each applied filter, separated by " · ": Favorites only or excluded, Blacklisted only, each checked Basic Filters option by its label, a media type or audio choice other than the first, "{n} of {total} sources", "Min {duration}" and "Max {duration}", "{n} tags", and "{n} tags excluded".
-- The tab remembers per device whether its controls are collapsed, the active preset (including None) and applied filter, randomization mode, and sort and direction.
-- The search text is not remembered.
-- The randomization mode already stored per device carries over.
-- Presets stay on the server: the WebUI remembers only which preset is active and the filter it applied.
-- A remembered preset, tag, or source that was renamed or deleted on another device in the meantime is handled as it is when that happens while the WebUI is open.
-
-#### Traps
-
-- Today the library's rows are 200–400 px high, aiming for 300 px (`libraryGridLayout.ts`).
-- Today's tile badges are outlined orange icons on a dark rectangle (`.library-grid-tile-badge` in `src/styles.css`).
-- The grid doesn't mark the playing tile.
-- Every tile shows its name in a bar, which alone carries the tooltip (`renderGridTileHtml` in `src/library/libraryGridTileModel.ts`).
-- In the mockup, with the WebUI's font, a filled glyph draws its outline and its fill as separate shapes, and at weight 700 the fill closes the outline's hole only at optical sizes 20 and 24. From 32 up the fill falls short, so at the optical size 48 the WebUI's other icons use, each filled icon shows as an outline around a filled center with a thin gap between them (measured).
-- The WebUI library's summary today shows only how many items are showing out of how many.
-
-#### Acceptance
-
-- The header no longer shows the preset dropdown or randomization mode. The Library tab shows, above the grid and in this order, the preset dropdown, randomization mode, sort with its direction toggle, and search. The preset and randomization dropdowns share a row from a panel width of about 440 px, and the controls and the filter summary line collapse and expand together. Shown by component tests of the control order, the dropdowns sharing a line, and the controls and summary line collapsing together.
-- The Library tab's rows fit the panel width at 100–240 px high, beside the player and as the overlay, in component tests of the row heights.
-- Tile badges are filled icons with a drop shadow and no dark rectangle, only the playing tile shows the playing icon in its middle, and hovering a tile with a mouse shows its file name as a tooltip, in component tests of the tile badges, the playing icon, and the hover tooltip.
-- A search or filter with no results shows "Nothing matches the search or filters.".
-- While a filter applies, the Library tab shows the filter summary line above the grid, in the format above, without naming Blacklisted excluded, and tapping or clicking it opens the Filter tab, in component tests of the summary line's text for each kind of filter and of its opening the Filter tab.
-- After a page refresh, whether the controls are collapsed, the active preset and applied filter, randomization mode, and sort and direction are each as they were, and the search box is empty, in component tests of a page refresh keeping each remembered setting and clearing the search text.
-- After a page refresh, a remembered preset, tag, or source that was renamed or deleted elsewhere is handled as it is when that happens while the WebUI is open.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and one quick spot check.
-
-#### Not included
-
-- The setting that turns off file names on tiles, which is WebUI Settings Panel.
-- The tile check icons, which is WebUI Multi-Select and Bulk Actions.
+Last milestone completed: M12f5
 
 ### M12f6 - WebUI Tags and Filter Tabs
 
@@ -335,7 +278,7 @@ Last milestone completed: M12f4
   - A one-off message pops up briefly, and the list behind the bell keeps it.
   - Anything the user must notice or act on shows in the in-app notice, as WebUI In-App Dialogs sets out, and the list keeps it too.
   - A field problem shows in its field, with the pattern from WebUI Field Validation Pattern, and the list doesn't keep it.
-  - An error already shown in place, such as in the header's preset list or the library's body, stays there and doesn't pop up.
+  - An error already shown in place, such as in the Library tab's preset dropdown or the library's body, stays there and doesn't pop up.
 - The player's indicator, today's "Reconnecting…" indicator extended to every width:
   - It shows one lasting state at a time, the first active one in this order, which is the precedence rule, so it never alternates: Reconnecting…, Server not compatible, Running without a library, Loading…, and a library refresh.
   - Reconnecting… shows while the event stream is lost or the server can't be reached, which today's "SSE reconnecting..." and "Ready (API offline)" report. The WebUI checks `/api/version` again each time the event stream opens or fails, and Reconnecting… ends only once the stream is open and that check succeeds.
@@ -387,7 +330,7 @@ Last milestone completed: M12f4
     - Library refresh: the "Core refresh complete | …" summary becomes "Library refresh finished", with the summary's segments after it, joined by " · ", on its second line; and "Core refresh failed: {error}" becomes the warning "Library refresh failed", with the error on its second line.
     - Other devices: "Synced: Added to favorites: {file}", "Synced: Removed from favorites: {file}", and "Synced: Blacklisted: {file}" become "Added to favorites on another device", "Removed from favorites on another device", and "Blacklisted on another device", with the file name on the second line. An item leaving the blacklist, which today also reads "Synced: Removed from favorites: {file}", becomes "Removed from blacklist on another device", told apart by the event's `previousIsBlacklisted`.
     - Your actions, the acknowledgments of the user's own actions, with today's wording: "Added to favorites", "Removed from favorites", "Blacklisted", and "Removed from blacklist", with the file name on the second line, "Filters applied.", "Filter data refreshed.", "Updated preset "{name}" locally — Apply to save.", "Paired.", and "Tag editor changes applied". They are not the rule's confirmations, which are prompts that ask before an action.
-  - In place, with no popup: "Error loading presets: {error}", which the header's preset list shows as "Error loading presets", and "Library load failed: {error}", which the library shows in its body.
+  - In place, with no popup: "Error loading presets: {error}", which the Library tab's preset dropdown shows as "Error loading presets", and "Library load failed: {error}", which the library shows in its body.
   - A dialog, moves to the in-app notice, and the list keeps it:
     - Playback: "No response from the server. Try again.", "Random selection failed ({status}).", "Random selection failed: {error}", "No eligible media for current filters.", "Video file not found.", and "Photo file not found.".
     - Library play: "Cannot play: server compatibility check failed.", which Play already shows in the notice, "Playback unavailable: no library item was selected.", "Media not found. The file may have moved or been deleted.", "This item is unavailable.", "This file type is not supported.", the server's error text, "Playback failed.", and "Playback failed: {error}".
@@ -414,7 +357,7 @@ Last milestone completed: M12f4
 - The v0.14.1 release notes still list the WebUI status line flipping between messages as a known issue.
 - `getJson` in `src/state/appApi.ts` throws `HTTP {status}` and drops the response body, so the server's library message in a 503 never reaches the status line.
 - Without a library, the server refuses the event stream with 503, as it does every route but version, capabilities, pair, the web runtime, backup, and refresh settings, and client logs (`LibraryRouteGate.cs`), so today the WebUI reads it as a lost connection and shows "SSE reconnecting...". Only `/control/status` reports `libraryState` and `libraryMessage`, and it needs the control token from another machine.
-- The WebUI checks `/api/version` only at start and after pairing (`loadVersion` in `src/state/serverConnection.ts`), and the event stream reopening doesn't check it again, so a server that couldn't be reached at page load and comes back never fires `serverReady`.
+- The WebUI checks `/api/version` at start, after pairing, and, until a check passes, each time the event stream opens (`loadVersion` and `onOpen` in `src/state/serverConnection.ts`), so a server that couldn't be reached at page load fires `serverReady` once it answers, and the presets load again. That part of checking again is done; once a check has passed, the stream opening or failing doesn't check again.
 - On a phone on its side the stylesheet hides the status line (`body.short-screen .status` in `src/styles.css`), so until they move to the notice, the messages sorted as a dialog, such as "No eligible media for current filters." after Play, show nothing there.
 - The playing video's `playing` event sets the status to "Playing". On a connection where the video keeps buffering, that hides "Loading..." while a random pick waits and "No response from the server. Try again." after one times out.
 - `pickRandom` in `player.ts` and `play` in `library.ts` set the pairing prompt just before "Unauthorized. Pair first.". The 401 case in `mapPlayItemErrorToStatus` is never reached, since `play` handles 401 first.
@@ -2094,6 +2037,8 @@ Last milestone completed: M12f4
 
 - The desktop library grid selects several items (click, Ctrl+click, Shift+click).
 - The WebUI library plays one item per click and has no selection.
+- Filled icons take `.material-symbol-icon.is-filled` (FILL 1, weight 700, optical size 20), and icons on a tile take the drop shadow from `.library-grid-tile .material-symbol-icon.is-filled` (`src/styles.css`).
+- Every tile has the playing icon, which the stylesheet shows only on the tile with `is-playing`, and the grid controller moves that class between the tiles shown without rendering them again (`setPlayingItemId` in `libraryGridController.ts`).
 
 **Acceptance**
 

@@ -13,7 +13,8 @@ describe("libraryGridTileModel", () => {
     itemId: "item-1",
     hasThumbnail: true,
     isFavorite: false,
-    isBlacklisted: false
+    isBlacklisted: false,
+    isPlaying: false
   };
 
   it("buildThumbnailUrl uses api base and encoded item id", () => {
@@ -33,7 +34,7 @@ describe("libraryGridTileModel", () => {
       { ...baseTile, isFavorite: true },
       buildThumbnailUrl("http://localhost:51301", "item-1")
     );
-    expect(html).toContain("material-symbol-icon library-grid-tile-badge-icon");
+    expect(html).toContain("material-symbol-icon is-filled library-grid-tile-badge-icon");
     expect(html).toContain("favorite");
     expect(html).toContain("library-grid-tile-badge");
     expect(html).not.toContain("material-symbols-outlined");
@@ -44,9 +45,22 @@ describe("libraryGridTileModel", () => {
       { ...baseTile, isBlacklisted: true },
       buildThumbnailUrl("http://localhost:51301", "item-1")
     );
-    expect(html).toContain("material-symbol-icon library-grid-tile-badge-icon");
+    expect(html).toContain("material-symbol-icon is-filled library-grid-tile-badge-icon");
     expect(html).toContain("thumb_down");
     expect(html).not.toContain("material-symbols-outlined");
+  });
+
+  it("gives every tile the playing icon, and marks only the playing one", () => {
+    const thumbnail = buildThumbnailUrl("http://localhost:51301", "item-1");
+    const playing = renderGridTileHtml({ ...baseTile, isPlaying: true }, thumbnail);
+    const other = renderGridTileHtml(baseTile, thumbnail);
+    expect(playing).toContain('class="library-grid-tile is-playing"');
+    expect(other).toContain('class="library-grid-tile"');
+    for (const html of [playing, other]) {
+      expect(html).toContain(
+        '<div class="library-grid-tile-playing" aria-hidden="true"><span class="material-symbol-icon is-filled">play_circle</span></div>'
+      );
+    }
   });
 
   it("omits img when hasThumbnail is false", () => {
@@ -62,6 +76,12 @@ describe("libraryGridTileModel", () => {
     );
     expect(html).toContain("a&lt;b&gt;&quot;c&quot;");
     expect(html).not.toContain('a<b>"c"');
+  });
+
+  it("makes the file name the whole tile's tooltip, and keeps it in the name bar", () => {
+    const html = renderGridTileHtml(baseTile, buildThumbnailUrl("http://localhost:51301", "item-1"));
+    expect(html).toMatch(/^<div class="library-grid-tile"[^>]* title="clip\.mp4"/);
+    expect(html).toContain('<div class="library-grid-tile-filename">clip.mp4</div>');
   });
 
   it("includes data-item-id and keyboard activation attributes", () => {

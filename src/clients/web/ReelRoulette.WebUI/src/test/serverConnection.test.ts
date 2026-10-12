@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createAppApi } from "../state/appApi";
 import { createAppStore } from "../state/appStore";
+import { createDeviceStore } from "../state/deviceStore";
 import { createServerConnection } from "../state/serverConnection";
 
 const COMPATIBLE_VERSION = {
@@ -67,6 +68,7 @@ function setup(routes: Record<string, () => Response> = {}, pairToken?: string) 
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
     storage: { getItem: () => null, setItem: () => {} },
+    device: createDeviceStore(null),
     relay: () => {}
   });
   const setStatus = store.setStatus;
@@ -170,6 +172,8 @@ describe("createServerConnection", () => {
     expect(store.compatibilityBlocked.value).toBe(true);
     expect(sources[0]!.closed).toBe(true);
     expect(statuses).toContain("Unsupported server API version: 7.");
+    // The presets the start loaded give way to the message.
+    expect(store.presetMenu.value.entries).toEqual([{ label: "Server compatibility check failed", value: "" }]);
 
     await connection.loadPresets();
     expect(store.presetMenu.value.entries).toEqual([{ label: "Server compatibility check failed", value: "" }]);
@@ -178,6 +182,27 @@ describe("createServerConnection", () => {
     expect(notices).toEqual(["Pairing blocked by server compatibility check."]);
     expect(statuses).toHaveLength(statusCount);
     expect(requests).not.toContain("POST /api/pair");
+  });
+
+  it("keeps saying the server failed the compatibility check when presets arrive after it", async () => {
+    let answerPresets: () => void = () => {};
+    const presetsAnswered = new Promise<void>((resolve) => {
+      answerPresets = resolve;
+    });
+    const { store, connection } = setup({
+      "GET /api/version": () => json({ ...COMPATIBLE_VERSION, apiVersion: "7" }),
+      "GET /api/presets": (async () => {
+        await presetsAnswered;
+        return json([{ id: "p1", name: "Favorites", filterState: { favoritesOnly: true } }]);
+      }) as unknown as () => Response
+    });
+    connection.start();
+    await settle();
+    expect(store.compatibilityBlocked.value).toBe(true);
+
+    answerPresets();
+    await settle();
+    expect(store.presetMenu.value).toEqual({ entries: [{ label: "Server compatibility check failed", value: "" }], selectedValue: "", message: true });
   });
 
   it("says the event stream is reconnecting from a lost connection until it opens again or stops", async () => {
@@ -197,6 +222,69 @@ describe("createServerConnection", () => {
     expect(store.reconnecting.value).toBe(true);
     connection.stop();
     expect(store.reconnecting.value).toBe(false);
+  });
+
+  it("checks the version again when the event stream opens while a failed check left the server not ready", async () => {
+    let versionFails = true;
+    const { connection, requests, sources, statuses } = setup({
+      "GET /api/version": () => {
+        if (versionFails) {
+          throw new TypeError("Failed to fetch");
+        }
+        return json(COMPATIBLE_VERSION);
+      }
+    });
+    const ready = vi.fn();
+    connection.on("serverReady", ready);
+    connection.start();
+    await settle();
+    expect(statuses).toContain("Ready (API offline)");
+    expect(ready).not.toHaveBeenCalled();
+
+    versionFails = false;
+    sources[0]!.onopen?.(new Event("open"));
+    await settle();
+    expect(ready).toHaveBeenCalledTimes(1);
+
+    // Once the server is ready, the stream opening again checks nothing.
+    sources[0]!.onopen?.(new Event("open"));
+    await settle();
+    expect(requests.filter((request) => request === "GET /api/version")).toHaveLength(2);
+    expect(ready).toHaveBeenCalledTimes(1);
+  });
+
+  it("loads presets again when the version check passes on the event stream opening after both failed at start", async () => {
+    let serverDown = true;
+    const offline = (reply: () => Response) => () => {
+      if (serverDown) {
+        throw new TypeError("Failed to fetch");
+      }
+      return reply();
+    };
+    const { store, connection, sources } = setup({
+      "GET /api/version": offline(() => json(COMPATIBLE_VERSION)),
+      "GET /api/presets": offline(() => json([{ id: "p1", name: "Favorites", filterState: { favoritesOnly: true } }]))
+    });
+    connection.start();
+    await settle();
+    expect(store.presetMenu.value).toEqual({ entries: [{ label: "Error loading presets", value: "" }], selectedValue: "", message: true });
+
+    serverDown = false;
+    sources[0]!.onopen?.(new Event("open"));
+    await settle();
+    expect(store.presetMenu.value.message).toBe(false);
+    expect(store.presetMenu.value.entries.map((entry) => entry.label)).toEqual(["None", "Favorites"]);
+  });
+
+  it("doesn't check the version again when the event stream opens while the first check is under way", async () => {
+    const { connection, requests, sources } = setup();
+    const ready = vi.fn();
+    connection.on("serverReady", ready);
+    connection.start();
+    sources[0]!.onopen?.(new Event("open"));
+    await settle();
+    expect(requests.filter((request) => request === "GET /api/version")).toHaveLength(1);
+    expect(ready).toHaveBeenCalledTimes(1);
   });
 
   it("stops saying the event stream is reconnecting when the server fails the compatibility check", async () => {

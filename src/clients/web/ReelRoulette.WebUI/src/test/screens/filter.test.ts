@@ -11,12 +11,14 @@ import {
   json,
   mountPage,
   normalizedMarkup,
+  pickPreset,
   pointerDown,
   pointerMove,
   pointerUp,
   pressKey,
   resetPage,
   scrollOnFocus,
+  selectedPresetLabel,
   setViewport,
   settle,
   status,
@@ -440,21 +442,6 @@ async function addPreset(name: string): Promise<void> {
   await click(dialogButton("Add Preset"));
 }
 
-function headerPresetSelect(): HTMLSelectElement {
-  return screen.getByRole("combobox", { name: "Choose preset" }) as HTMLSelectElement;
-}
-
-function headerSelectedLabel(): string {
-  const select = headerPresetSelect();
-  return select.options[select.selectedIndex]?.textContent ?? "";
-}
-
-async function pickHeaderPreset(id: string): Promise<void> {
-  await waitFor(() => expect(Array.from(headerPresetSelect().options).map((option) => option.value)).toContain(id));
-  fireEvent.change(headerPresetSelect(), { target: { value: id } });
-  await settle();
-}
-
 function statusLine(): string {
   return document.getElementById("status")?.textContent ?? "";
 }
@@ -628,7 +615,7 @@ describe("opening and closing", () => {
 
   it("keeps its markup on each tab", async () => {
     await mountFilter([RICH_PRESET, FAVORITES_PRESET]);
-    await pickHeaderPreset("preset-rich");
+    await pickPreset("preset-rich");
     sessionStorage.setItem("rr_filterDialogCollapsedCategories", JSON.stringify(["cat-mood"]));
 
     await openDialog();
@@ -658,7 +645,7 @@ describe("opening and closing", () => {
 describe("General tab", () => {
   it("shows the applied filter", async () => {
     await mountFilter([RICH_PRESET]);
-    await pickHeaderPreset("preset-rich");
+    await pickPreset("preset-rich");
     await openDialog();
 
     expect(heading()).toBe("Preset: Rich");
@@ -691,7 +678,7 @@ describe("General tab", () => {
     expect(heading()).toBe("Preset: None");
   });
 
-  it("applies to the library, the next random pick, and the header", async () => {
+  it("applies to the library, the next random pick, and the preset dropdown", async () => {
     const { server } = await mountFilter();
     await openDialog();
 
@@ -707,12 +694,12 @@ describe("General tab", () => {
     const pick = await nextPick(server);
     expect(pick.filterState).toMatchObject(expected);
     expect(pick.presetId).toBeUndefined();
-    expect(headerSelectedLabel()).toBe("None*");
+    expect(selectedPresetLabel()).toBe("None*");
   });
 
   it("has no No minimum or No maximum boxes: an empty duration means no limit, as its placeholder says", async () => {
     const { server } = await mountFilter([RICH_PRESET]);
-    await pickHeaderPreset("preset-rich");
+    await pickPreset("preset-rich");
     await openDialog();
     const min = byId<HTMLInputElement>("filter-min-dur-text");
     const max = byId<HTMLInputElement>("filter-max-dur-text");
@@ -843,7 +830,7 @@ describe("General tab", () => {
       filterState: { minDuration: "00:01:30.5000000", maxDuration: "01:00:00.2500000" }
     };
     const { server } = await mountFilter([fractional]);
-    await pickHeaderPreset("preset-fraction");
+    await pickPreset("preset-fraction");
     await openDialog();
     expect(byId<HTMLInputElement>("filter-min-dur-text").value).toBe("01:30");
     expect(byId<HTMLInputElement>("filter-max-dur-text").value).toBe("01:00:00");
@@ -999,7 +986,7 @@ describe("Favorites and Blacklisted filters", () => {
 
   it("shows a preset the desktop saved with Favorites excluded and Blacklisted only", async () => {
     await mountFilter([{ id: "preset-desktop", name: "Desktop", filterState: DESKTOP_WRITTEN_FILTER }]);
-    await pickHeaderPreset("preset-desktop");
+    await pickPreset("preset-desktop");
     await openDialog();
 
     expect(heading()).toBe("Preset: Desktop");
@@ -1135,7 +1122,7 @@ describe("Tags tab", () => {
 
   it("shows filter tags missing from the catalog under Uncategorized", async () => {
     const { server } = await mountFilter([RICH_PRESET]);
-    await pickHeaderPreset("preset-rich");
+    await pickPreset("preset-rich");
     await openDialog();
     await showTab("Tags");
 
@@ -1161,7 +1148,7 @@ describe("Tags tab", () => {
 
   it("keeps a collapsed category collapsed when the dialog opens again, for this session", async () => {
     await mountFilter([RICH_PRESET]);
-    await pickHeaderPreset("preset-rich");
+    await pickPreset("preset-rich");
     await openDialog();
     await showTab("Tags");
 
@@ -1227,7 +1214,7 @@ describe("Presets tab", () => {
     expect(chipState("Beach")).toBe("include");
   });
 
-  it("a chosen preset applies as that preset in the header and in random picks", async () => {
+  it("a chosen preset applies as that preset in the preset dropdown and in random picks", async () => {
     const { server } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
     await showTab("Presets");
@@ -1235,7 +1222,7 @@ describe("Presets tab", () => {
     await chooseInDialog("Beach days");
     const applied = await applyAndWait(server);
     expect(applied.selectedTags).toEqual(["Beach"]);
-    expect(headerSelectedLabel()).toBe("Beach days");
+    expect(selectedPresetLabel()).toBe("Beach days");
     expect((await nextPick(server)).presetId).toBe("preset-beach");
     expect(server.requests("POST", "/api/presets")).toHaveLength(0);
   });
@@ -1310,7 +1297,7 @@ describe("Presets tab", () => {
     expect(presets.saves()[0].map((preset: any) => preset.name)).toEqual(["Favorites", "Beach days", "Unplayed"]);
     expect(presets.saves()[0][2].filterState).toMatchObject({ onlyNeverPlayed: true, favoritesOnly: false });
     expect(presets.saves()[0][0].filterState).toMatchObject({ favoritesOnly: true });
-    await waitFor(() => expect(headerSelectedLabel()).toBe("Unplayed"));
+    await waitFor(() => expect(selectedPresetLabel()).toBe("Unplayed"));
     expect((await nextPick(server)).presetId).toBe("saved-3");
   });
 
@@ -1340,7 +1327,7 @@ describe("Presets tab", () => {
       filterState: { favoritesMode: "only", favoritesOnly: true, blacklistedMode: "off", excludeBlacklisted: false }
     });
     expect(presets.saves()[0][1]).toMatchObject({ name: "Beach days", filterState: { selectedTags: ["Beach"] } });
-    await waitFor(() => expect(headerSelectedLabel()).toBe("Favorites"));
+    await waitFor(() => expect(selectedPresetLabel()).toBe("Favorites"));
   });
 
   for (const [how, activate] of [
@@ -1565,7 +1552,7 @@ describe("Presets tab", () => {
 
     await applyAndWait(server);
     expect(presets.saves()[0].map((preset: any) => preset.name)).toEqual(["Favorites"]);
-    await waitFor(() => expect(headerSelectedLabel()).toBe("None*"));
+    await waitFor(() => expect(selectedPresetLabel()).toBe("None*"));
   });
 
   it("Edit Preset flags a name another preset has, disables Save for it and an empty name, and renames, keeping the heading on the renamed preset", async () => {
@@ -1626,7 +1613,7 @@ describe("Presets tab", () => {
 
     await applyAndWait(server);
     expect(presets.saves()[0].map((preset: any) => preset.name)).toEqual(["Favorites", "Sunny days"]);
-    await waitFor(() => expect(headerSelectedLabel()).toBe("Sunny days"));
+    await waitFor(() => expect(selectedPresetLabel()).toBe("Sunny days"));
   });
 
   it("after Save renames a preset, focus goes to its row's Edit, and after Delete to the next row's, or the previous one's", async () => {
@@ -1676,16 +1663,16 @@ describe("Presets tab", () => {
   });
 });
 
-describe("header, refresh, and clear all", () => {
-  it("opens on None while the header holds None, and a preset chosen in the dialog ends the hold", async () => {
+describe("preset dropdown, refresh, and clear all", () => {
+  it("opens on None while the preset dropdown holds None, and a preset chosen in the dialog ends the hold", async () => {
     const { server } = await mountFilter([EVERYTHING_PRESET, FAVORITES_PRESET]);
-    await waitFor(() => expect(headerSelectedLabel()).toBe("Everything"));
+    await waitFor(() => expect(selectedPresetLabel()).toBe("Everything"));
     await openDialog();
     expect(heading()).toBe("Preset: Everything");
     await closePanel();
 
-    await pickHeaderPreset("");
-    expect(headerSelectedLabel()).toBe("None");
+    await pickPreset("");
+    expect(selectedPresetLabel()).toBe("None");
     await openDialog();
     expect(heading()).toBe("Preset: None");
     await showTab("Presets");
@@ -1693,7 +1680,7 @@ describe("header, refresh, and clear all", () => {
     await apply();
     expect(isOpen()).toBe(true);
     await waitFor(() => expect(statusLine()).toBe("Filters applied."));
-    expect(headerSelectedLabel()).toBe("None");
+    expect(selectedPresetLabel()).toBe("None");
 
     await closePanel();
     await openDialog();
@@ -1704,16 +1691,17 @@ describe("header, refresh, and clear all", () => {
     await chooseInDialog("");
     expect(heading()).toBe("Preset: Everything");
     await applyAndWait(server);
-    await waitFor(() => expect(headerSelectedLabel()).toBe("Everything"));
+    await waitFor(() => expect(selectedPresetLabel()).toBe("Everything"));
   });
 
-  it("starts the open dialog over from a header preset picked meanwhile", async () => {
+  // The tab shows the applied filter again after a preset is picked in the Library tab, which it leaves for that.
+  it("shows a preset picked in the Library tab when it shows again, without the changes it was left with", async () => {
     await mountFilter([FAVORITES_PRESET]);
     await openDialog();
     await click(box("Only never played"));
     expect(applyButton().textContent).toBe("Apply*");
 
-    await pickHeaderPreset("preset-favorites");
+    await pickPreset("preset-favorites");
     expect(isOpen()).toBe(true);
     expect(flagRow("Favorites")).toEqual({ checked: true, choice: "only", disabled: false });
     expect(box("Only never played").checked).toBe(false);
@@ -1775,7 +1763,7 @@ describe("header, refresh, and clear all", () => {
 
   it("Clear all filters goes back to the default filter and drops unsaved preset changes", async () => {
     const { server, presets } = await mountFilter([RICH_PRESET, FAVORITES_PRESET]);
-    await pickHeaderPreset("preset-rich");
+    await pickPreset("preset-rich");
     await openDialog();
     await showTab("Presets");
     await addPreset("Temporary");
@@ -1799,7 +1787,7 @@ describe("header, refresh, and clear all", () => {
     expect(applied).toMatchObject({ favoritesOnly: false, mediaTypeFilter: 0, selectedTags: [], includedSourceIds: [] });
     expect(applied.minDuration).toBeUndefined();
     expect(presets.saves()).toHaveLength(0);
-    await waitFor(() => expect(headerSelectedLabel()).toBe("None"));
+    await waitFor(() => expect(selectedPresetLabel()).toBe("None"));
   });
 });
 
@@ -1831,8 +1819,8 @@ describe("names and storage", () => {
     await addPreset("Beach favorites");
     await applyAndWait(server);
 
-    // The panel remembers on this device whether it is open and its tab, which the panel's own tests cover.
-    expect(storageKeys(localStorage).filter((key) => !key.startsWith("rr_device.panel."))).toEqual(["rr_clientId"]);
+    // The panel and the Library tab remember their state on this device, which their own tests cover.
+    expect(storageKeys(localStorage).filter((key) => !key.startsWith("rr_device."))).toEqual(["rr_clientId"]);
     expect(storageKeys(sessionStorage)).toEqual(["rr_filterDialogCollapsedCategories", "rr_sessionId"]);
   });
 });

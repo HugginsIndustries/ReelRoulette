@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { fireEvent } from "@testing-library/preact";
+import { fireEvent, waitFor } from "@testing-library/preact";
 import type { Window as HappyDomWindow } from "happy-dom";
 import { vi } from "vitest";
 import { renderApp } from "../../shell";
@@ -474,6 +474,42 @@ export async function settle(rounds = 5): Promise<void> {
   for (let i = 0; i < rounds; i++) {
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
+}
+
+/** The Library tab's preset dropdown, found while its tab is hidden too. */
+export function presetSelect(): HTMLSelectElement {
+  return document.getElementById("preset-select") as HTMLSelectElement;
+}
+
+/** The label of the entry the preset dropdown shows. */
+export function selectedPresetLabel(): string {
+  const select = presetSelect();
+  return select.options[select.selectedIndex]?.textContent ?? "";
+}
+
+/**
+ * Picks `value` in the Library tab's preset dropdown as the user does: shows the Library tab, opening the panel on it
+ * when it is closed, picks once the dropdown lists the value, and leaves the panel as it was, closed or on its tab.
+ */
+export async function pickPreset(value: string): Promise<void> {
+  const panel = document.getElementById("panel")!;
+  const wasClosed = panel.hidden;
+  const previous = panel.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+  fireEvent.click(document.getElementById("panel-tab-library")!);
+  await settle();
+  await waitFor(() => {
+    if (!Array.from(presetSelect().options).some((option) => option.value === value)) {
+      throw new Error(`The preset dropdown doesn't list "${value}".`);
+    }
+  });
+  fireEvent.change(presetSelect(), { target: { value } });
+  await settle();
+  if (wasClosed) {
+    fireEvent.click(document.getElementById("panel-close-btn")!);
+  } else if (previous && previous.id !== "panel-tab-library") {
+    fireEvent.click(previous);
+  }
+  await settle();
 }
 
 /**

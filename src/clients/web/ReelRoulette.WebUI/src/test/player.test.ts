@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPlayer, type PlayerElements } from "../playback/player";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type PlayingItem } from "../state/appStore";
+import { createDeviceStore } from "../state/deviceStore";
 import type { ServerConnection, ServerConnectionEvents } from "../state/serverConnection";
 
 const VIDEO: PlayingItem = {
@@ -71,6 +72,7 @@ function setup() {
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
     storage: { getItem: () => null, setItem: () => {} },
+    device: createDeviceStore(null),
     relay: (_level, message) => relayed.push(message)
   });
   const api = createAppApi("http://server", { onUnauthorized: () => {}, fetch: fetchImpl });

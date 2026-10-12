@@ -579,7 +579,7 @@ th { font-weight: 600; }
       <li>Settings, in sections: Playback (autoplay mode, Advance after, seek step), Audio (volume step, Enhanced audio, and Loudness normalization with its settings), Player controls (when they hide), Appearance (theme, ambient mode and its settings, file names on tiles), Notifications (whether popups show, and under Popup settings, for which kinds, where, whether in fullscreen, and for how long), Panel (side, Auto-Pause), Keyboard shortcuts (collapsed; <b>?</b> opens it), and Diagnostics. Checkboxes, radio buttons, and sliders use the orange accent.</li>
       <li>Keyboard focus shows in orange everywhere. In the Library, Tab enters the grid once, the arrow keys move between tiles, Tab from a tile reaches its check icon, Space or Enter toggles it, and Tab again leaves the grid.</li>
       <li>Keyboard shortcuts work: ? (shows them), K or Space, J, L, arrows, R, F, B, A, M, comma and period (one frame, while paused), [ and ] (volume), 1 to 5, T, S, P, and Shift+F.</li>
-      <li>The <b>Mockup</b> tab on the left edge sets the situation: the server reconnecting, not answering, running without a library, failing the compatibility check, or with an empty library; pairing asked for (a token of "wrong" fails); the server machine; a read-only volume; a phone on its side; and how the playing tile is marked. It also starts and ends each lasting state, sends a test notification of each kind, a favorite from another device, and a runtime config failure, tunes ambient mode, and can hide every mockup note to show screens as they will ship.</li>
+      <li>The <b>Mockup</b> tab on the left edge sets the situation: the server reconnecting, not answering, running without a library, failing the compatibility check, or with an empty library; pairing asked for (a token of "wrong" fails); the server machine; a read-only volume; and a phone on its side. It also starts and ends each lasting state, sends a test notification of each kind, a favorite from another device, and a runtime config failure, tunes ambient mode, and can hide every mockup note to show screens as they will ship.</li>
     </ul>
   </a>
 
@@ -707,6 +707,13 @@ function parseDuration(text) {
     return m < 60 && s < 60 ? h * 3600 + m * 60 + s : "invalid";
   }
   return /^\d+(\.\d+)?$/.test(raw) ? Number(raw) : "invalid";
+}
+// A duration as the WebUI's Filter tab shows it: MM:SS under an hour, HH:MM:SS from one hour up, each part two digits.
+function formatDuration(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  const two = (n) => String(n).padStart(2, "0");
+  const [hours, minutes, secs] = [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60];
+  return hours >= 1 ? `${two(hours)}:${two(minutes)}:${two(secs)}` : `${two(minutes)}:${two(secs)}`;
 }
 
 const DURATION_PROBLEM = "Use MM:SS, HH:MM:SS, or seconds.";

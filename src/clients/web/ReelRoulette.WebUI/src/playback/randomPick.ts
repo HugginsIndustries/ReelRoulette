@@ -17,13 +17,13 @@ export interface RandomPickInputs {
   randomizationMode: string;
   appliedFilter: FilterState;
   presets: readonly { id: string; filterState?: ApiFilterState | null }[];
-  /** The header preset dropdown's value: a preset id, empty for None, or the starred row. */
+  /** The preset dropdown's value: a preset id, empty for None, or the starred row. */
   selectedPresetValue: string;
 }
 
 /**
- * The body of `POST /api/random`. It names the header's preset only while that preset's filter still equals the
- * applied filter.
+ * The body of `POST /api/random`. It names the preset dropdown's preset only while that preset's filter still equals
+ * the applied filter.
  */
 export function randomPickRequest(inputs: RandomPickInputs): RandomPickRequest {
   const selectedPreset =

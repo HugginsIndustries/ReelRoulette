@@ -25,7 +25,12 @@ export interface GridTileRenderInput {
   hasThumbnail: boolean;
   isFavorite: boolean;
   isBlacklisted: boolean;
+  /** The playing item's tile, which shows the playing icon. */
+  isPlaying: boolean;
 }
+
+/** The class that marks the playing item's tile. */
+export const PLAYING_TILE_CLASS = "is-playing";
 
 export function hasGridStateIndicator(isFavorite: boolean, isBlacklisted: boolean): boolean {
   return isFavorite || isBlacklisted;
@@ -39,20 +44,25 @@ export function renderGridTileHtml(tile: GridTileRenderInput, thumbnailUrl: stri
       : "";
 
   const favoriteBadge = tile.isFavorite
-    ? `<span class="material-symbol-icon library-grid-tile-badge-icon" aria-hidden="true">favorite</span>`
+    ? `<span class="material-symbol-icon is-filled library-grid-tile-badge-icon" aria-hidden="true">favorite</span>`
     : "";
   const blacklistBadge = tile.isBlacklisted
-    ? `<span class="material-symbol-icon library-grid-tile-badge-icon" aria-hidden="true">thumb_down</span>`
+    ? `<span class="material-symbol-icon is-filled library-grid-tile-badge-icon" aria-hidden="true">thumb_down</span>`
     : "";
   const badgeHtml = hasGridStateIndicator(tile.isFavorite, tile.isBlacklisted)
     ? `<div class="library-grid-tile-badge">${favoriteBadge}${blacklistBadge}</div>`
     : "";
+  const tileClass = tile.isPlaying ? `library-grid-tile ${PLAYING_TILE_CLASS}` : "library-grid-tile";
+  const name = escapeHtml(tile.fileName);
 
-  return `<div class="library-grid-tile" style="${style}" data-item-id="${escapeHtml(tile.itemId)}" tabindex="0" role="button">
+  // Every tile has the playing icon, which the stylesheet shows only on the playing tile, so the grid can move it
+  // without rendering the tiles again. The name is the whole tile's tooltip.
+  return `<div class="${tileClass}" style="${style}" data-item-id="${escapeHtml(tile.itemId)}" title="${name}" tabindex="0" role="button">
   <div class="library-grid-tile-media">
     <div class="library-grid-tile-scrim">${imgHtml}</div>
     ${badgeHtml}
-    <div class="library-grid-tile-filename" title="${escapeHtml(tile.fileName)}">${escapeHtml(tile.fileName)}</div>
+    <div class="library-grid-tile-playing" aria-hidden="true"><span class="material-symbol-icon is-filled">play_circle</span></div>
+    <div class="library-grid-tile-filename">${name}</div>
   </div>
 </div>`;
 }

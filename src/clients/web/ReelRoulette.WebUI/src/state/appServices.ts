@@ -31,6 +31,7 @@ export interface AppServices {
 }
 
 export function createAppServices(config: RuntimeConfig): AppServices {
+  const device = createDeviceStore(localStorage);
   const api = createAppApi(config.apiBaseUrl, {
     onUnauthorized() {
       store.pairingRequired.value = true;
@@ -44,6 +45,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
       deviceName: getDeviceName()
     },
     storage: localStorage,
+    device,
     relay(level, message) {
       void api.relayLog(level, message);
     }
@@ -56,10 +58,10 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     api,
     dialogs
   });
-  const panel = createPanelHost({ device: createDeviceStore(localStorage) });
+  const panel = createPanelHost({ device });
   const player = createPlayer({ apiBaseUrl: config.apiBaseUrl, store, api, connection, dialogs });
   // After the player, so the player handles an item-state event before the library does.
-  const library = createLibrary({ config, store, api, connection, player, panel });
+  const library = createLibrary({ config, store, api, connection, player, panel, device });
   const filterDialog = createFilterDialog({ store, api, connection, library, panel, storage: sessionStorage, dialogs });
   const tagEditor = createTagEditor({ store, api, connection, library, player, panel, sessionStorage, localStorage, dialogs });
   panel.connectTabs({

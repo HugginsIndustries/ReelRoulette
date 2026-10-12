@@ -400,11 +400,16 @@ for (const width of [1280, 390]) {
   situation("incompatible");
   check(`layout@${width}: a failed compatibility check opens the panel and shows its message in the Library tab (${gridText()})`,
     !$("panel").hidden && gridText() === "Unsupported server API version: 2." && indicatorText() === "Server not compatible");
+  check(`layout@${width}: and disables search, sort, and its direction, dimmed to half as the app has them`,
+    ["lib-search", "lib-sort", "lib-dir"].every((id) => $(id).disabled && window.getComputedStyle($(id)).opacity === "0.5"));
+  check(`layout@${width}: and the preset dropdown, which says so, is disabled and dimmed the same way`,
+    $("lib-preset").disabled && window.getComputedStyle($("lib-preset")).opacity === "0.5");
   press("r");
   check(`layout@${width}: and Play shows its notice (${notice()})`, notice() === "Cannot play: server compatibility check failed.");
   dismissNotices();
   situation("empty");
   check(`layout@${width}: an empty library says No media in library.`, gridText() === "No media in library.");
+  check(`layout@${width}: and search, sort, and its direction work again once the check passes`, ["lib-search", "lib-sort", "lib-dir"].every((id) => !$(id).disabled));
   openTab("filter");
   document.querySelector('[data-sub="tags"]').click();
   check(`layout@${width}: the Filter tab names the Tags tab when there are no tags`, $("filter-tag-categories").textContent === "No tags yet. Add them in the Tags tab.");
@@ -573,7 +578,8 @@ for (const width of [1280, 390]) {
   input($("filter-min"), "2:00");
   $("filter-apply").click();
   await tick();
-  check(`layout@${width}: a typed minimum applies (${$("lib-filters").textContent})`, !$("lib-filters").hidden && $("lib-filters").textContent.includes("Min 2:00"));
+  check(`layout@${width}: a typed minimum applies, read as the Filter tab shows it after a reload (${$("lib-filters").textContent})`,
+    !$("lib-filters").hidden && $("lib-filters").textContent === "Filters: Min 02:00");
   openTab("filter");
   document.querySelector('[data-sub="general"]').click();
   input($("filter-min"), "");
@@ -582,6 +588,52 @@ for (const width of [1280, 390]) {
   $("filter-apply").click();
   await tick();
   check(`layout@${width}: applying it empty removes the minimum`, $("lib-filters").hidden || !$("lib-filters").textContent.includes("Min"));
+  openTab("library");
+
+  // When nothing matches the search or the filters, the grid says so.
+  const nothingMatches = "Nothing matches the search or filters.";
+  input($("lib-search"), "no file has this name");
+  await tick();
+  check(`layout@${width}: a search that matches nothing says ${nothingMatches} (${gridText()})`, gridText() === nothingMatches && tiles().length === 0);
+  input($("lib-search"), "");
+  await tick();
+  openTab("filter");
+  document.querySelector('[data-sub="general"]').click();
+  input($("filter-min"), "1:00:00");
+  $("filter-apply").click();
+  await tick();
+  openTab("library");
+  check(`layout@${width}: a minimum longer than every video matches nothing and says so too, and the Filters line reads it as HH:MM:SS (${$("lib-filters").textContent} | ${gridText()})`,
+    gridText() === nothingMatches && tiles().length === 0 && $("lib-filters").textContent === "Filters: Min 01:00:00");
+  $("lib-filters").click();
+  check(`layout@${width}: clicking the Filters line opens the Filter tab`,
+    !$("panel").hidden && !$("tab-filter").hidden && $("tab-library").hidden && $("tab-btn-filter").getAttribute("aria-selected") === "true");
+  // The Filters line counts sources and tags, after a bold "Filters: " and separated by " · ".
+  const videosSource = () => [...document.querySelectorAll('[data-subpanel="general"] label')].find((label) => label.textContent.includes("(/media/videos)")).querySelector("input");
+  const filterTagButtons = (title) => [...document.querySelectorAll(`#filter-tag-categories button[title="${title}"]`)];
+  const applyCounts = async (includeCount, excludeCount) => {
+    openTab("filter");
+    $("filter-clear").click();
+    change(videosSource(), false);
+    // Each click redraws the chips, so each looks its button up again; includes take the first chips, excludes the next.
+    for (let i = 0; i < includeCount; i++) filterTagButtons("Include")[i].click();
+    for (let i = 0; i < excludeCount; i++) filterTagButtons("Exclude")[includeCount + i].click();
+    $("filter-apply").click();
+    await tick();
+    openTab("library");
+  };
+  const filtersLabel = () => $("lib-filters").firstElementChild;
+  await applyCounts(1, 2);
+  check(`layout@${width}: the Filters line names unchecked sources and one included tag (${$("lib-filters").textContent})`,
+    $("lib-filters").textContent === "Filters: 2 of 3 sources · 1 tag · 2 tags excluded" && filtersLabel()?.tagName === "B" && filtersLabel().textContent === "Filters: ");
+  await applyCounts(2, 1);
+  check(`layout@${width}: and tags in the plural, with one excluded tag (${$("lib-filters").textContent})`,
+    $("lib-filters").textContent === "Filters: 2 of 3 sources · 2 tags · 1 tag excluded");
+  openTab("filter");
+  $("filter-clear").click();
+  $("filter-apply").click();
+  await tick();
+  check(`layout@${width}: Clear all filters then Apply hides the Filters line`, $("lib-filters").hidden);
   openTab("library");
 
   // Choosing a preset applies its filter, and a change to that filter stars it.
@@ -1505,9 +1557,20 @@ for (const width of [1280, 390]) {
   // Library controls collapse, and the preset and randomization dropdowns share a row.
   openTab("library");
   check(`layout@${width}: preset and randomization sit in one row`, $("lib-preset").parentElement === $("lib-mode").parentElement && $("lib-preset").parentElement.classList.contains("lib-pair"));
+  const libraryOrder = [...$("lib-controls").querySelectorAll("select, button, input")].map((el) => el.id).join(",");
+  check(`layout@${width}: the Library tab's controls are preset, randomization, sort with its direction, then search, after the Filters line (${libraryOrder})`,
+    libraryOrder === "lib-preset,lib-mode,lib-sort,lib-dir,lib-search" &&
+    !!($("lib-filters").compareDocumentPosition($("lib-controls")) & window.Node.DOCUMENT_POSITION_FOLLOWING));
+  check(`layout@${width}: the header has no preset or randomization dropdown`,
+    !document.querySelector(".top-bar select") && !document.querySelector('.top-bar [aria-label="Choose preset"], .top-bar [aria-label="Choose randomization mode"]'));
+  const collapseSays = (title, label, expanded) =>
+    $("lib-collapse").title === title && $("lib-collapse").getAttribute("aria-label") === label && $("lib-collapse").getAttribute("aria-expanded") === expanded;
+  check(`layout@${width}: while open, the collapse button says Hide controls & filters (${$("lib-collapse").title}, ${$("lib-collapse").getAttribute("aria-label")})`,
+    !$("lib-controls").classList.contains("is-collapsed") && collapseSays("Hide controls & filters", "Hide library controls and filters", "true"));
   $("lib-collapse").click();
-  check(`layout@${width}: the controls and the Filters line collapse, stay collapsed on this device, and say so (${$("lib-collapse").title})`,
-    $("lib-controls").classList.contains("is-collapsed") && $("lib-filters").classList.contains("is-collapsed") && window.localStorage.getItem("rr-mockup.libCollapsed") === "true" && $("lib-collapse").title === "Show controls & filters");
+  check(`layout@${width}: the controls and the Filters line collapse, stay collapsed on this device, and say so (${$("lib-collapse").title}, ${$("lib-collapse").getAttribute("aria-label")})`,
+    $("lib-controls").classList.contains("is-collapsed") && $("lib-filters").classList.contains("is-collapsed") && window.localStorage.getItem("rr-mockup.libCollapsed") === "true" &&
+    collapseSays("Show controls & filters", "Show library controls and filters", "false"));
   $("lib-collapse").click();
   // A phone on its side: the header hides, the panel opens as the overlay, and the player's indicator still shows.
   $("mock-short").click();
