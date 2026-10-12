@@ -19,10 +19,7 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan the logging, stalled-storage, and notification follow-ups from the playback stall report
+Chore: Hide ASP.NET Core's per-request lines from the server console
 
-- Structured Log Schema, Writer, and Ingestion settles that startup keeps the previous run's last.log, with rotation bounding its size, and writes a startup entry with version, process id, and listen URL so the kept log shows where each run starts.
-- Server Instrumentation adds refresh run, stage, and source walk durations, warnings for a slow source walk or file check, and Kestrel's request timeouts as warnings, with sources identified by id; WebUI Instrumentation adds the media error code to video error entries and the server's answer to video and photo ones.
-- Browser-Playable Filter's Contract slice adds a 503 with its own play error code from the media and play routes for a file the server can't read, and its Error message slice adds a couldn't-load message that stops the player instead of skipping, so only a successful answer reads as an unplayable format.
-- WebUI Notifications adds a timeout message for a library load answered with 408 or 504, and an in-app notice when a refresh keeps the items of a source whose folder lists no media files, through a refresh status field of source ids that only adds, with the WebUI looking up each folder in the source list, and Per-User Source Permissions has that notice leave out sources the session's list doesn't include.
-- Server Robustness Findings adds stopping a refresh on a source whose storage stops responding and checking each file once, with the stall's measured timings as traps.
+- ServerApp's appsettings.json sets Microsoft.AspNetCore to Warning and Microsoft.Hosting.Lifetime to Information, so the console keeps the listen URL, start and stop, the server's own messages, and warnings and errors without a set of lines for every request.
+- docs/dev-setup.md shows how to turn the request lines back on for one run with Logging__LogLevel__Microsoft.AspNetCore=Information.

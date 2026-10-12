@@ -153,6 +153,10 @@ server {
 ## Logging and Diagnostics
 
 - Server diagnostics are available through `last.log` and `/control/logs/server`.
+- The server console shows the listen URL, start and stop, the server's own messages, and warnings and errors. ASP.NET Core's per-request lines are off (`Logging:LogLevel` in ServerApp's `appsettings.json`). To turn them on for one run, set `Logging__LogLevel__Microsoft.AspNetCore=Information`:
+  - Linux/macOS: `env Logging__LogLevel__Microsoft.AspNetCore=Information pwsh ./tools/scripts/run-server.ps1`
+  - Any OS: `pwsh -c '${env:Logging__LogLevel__Microsoft.AspNetCore} = "Information"; ./tools/scripts/run-server.ps1'`, which drops the variable when that shell exits.
+  - The dot in the name rules out the `NAME=value command` form in bash, zsh, and fish.
 - Clients can relay logs to server ingestion endpoint:
   - `POST /api/logs/client`
 - Every `last.log` line, from the server or relayed by a client, is written by one writer under a process-wide lock, and line breaks in it become a literal `\n`, so each entry stays one line.
