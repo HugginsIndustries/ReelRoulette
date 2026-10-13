@@ -260,6 +260,11 @@ function statusLine(): string {
   return document.getElementById("status")?.textContent ?? "";
 }
 
+/** The state the player's indicator shows, by its id, or null while it shows none. */
+function indicatorState(): string | null {
+  return document.querySelector<HTMLElement>("#player-indicator .player-indicator")?.dataset.state ?? null;
+}
+
 function video(): HTMLVideoElement {
   return document.getElementById("video") as HTMLVideoElement;
 }
@@ -302,7 +307,8 @@ describe("overlay", () => {
       json({ ...COMPATIBLE_VERSION, capabilities: COMPATIBLE_VERSION.capabilities.filter((c) => c !== "api.presets.match") })
     );
     mountPage({ server });
-    await screen.findByText("Server missing required capabilities: api.presets.match.");
+    await waitFor(() => expect(server.requests("GET", "/api/version")).toHaveLength(1));
+    await flush();
 
     await openLibrary();
     expect(isOpen()).toBe(true);
@@ -337,6 +343,40 @@ describe("overlay", () => {
     fireEvent.change(sortSelect(), { target: { value: "Duration" } });
     await flush();
     expect(normalizedMarkup(overlay())).toMatchSnapshot("error");
+  });
+});
+
+describe("without a library", () => {
+  const NO_LIBRARY_MESSAGE = "The library was made by a newer version of ReelRoulette. Update ReelRoulette to open it.";
+
+  it("says why in place of the library, loads nothing, disables search and sort, and loads once the library is ready", async () => {
+    stubLayoutSize();
+    const server = new FakeServer();
+    const library = serveLibrary(server, libraryItems(3));
+    let version: object = { ...COMPATIBLE_VERSION, libraryState: "newer", libraryMessage: NO_LIBRARY_MESSAGE };
+    server.on("GET", "/api/version", () => json(version));
+    const page = mountPage({ server });
+    await waitFor(() => expect(server.requests("GET", "/api/version")).toHaveLength(1));
+    await flush();
+
+    await openLibrary();
+    expect(within(overlay()).getByRole("alert").textContent).toBe(`Running without a library. ${NO_LIBRARY_MESSAGE}`);
+    expect([searchBox().disabled, sortSelect().disabled, directionButton().disabled]).toEqual([true, true, true]);
+    expect(summary().hidden).toBe(true);
+    fireEvent.input(searchBox(), { target: { value: "clip" } });
+    fireEvent.change(sortSelect(), { target: { value: "PlayCount" } });
+    await new Promise<void>((resolve) => setTimeout(resolve, 400));
+    await flush();
+    expect(library.queries()).toHaveLength(0);
+    expect(server.requests("GET", "/api/sources")).toHaveLength(0);
+
+    // The server opens its library; the event stream opening has the page check again.
+    version = COMPATIBLE_VERSION;
+    page.stream().open();
+    await waitFor(() => expect(library.queries()).toHaveLength(1));
+    await flush();
+    expect(tileNames()).toEqual(["clip 1.mp4", "clip 2.mp4", "clip 3.mp4"]);
+    expect([searchBox().disabled, sortSelect().disabled, directionButton().disabled]).toEqual([false, false, false]);
   });
 });
 
@@ -441,6 +481,36 @@ describe("first page", () => {
     expect(openNotices()).toEqual([]);
   });
 
+  it("loads the library and the presets again once after pairing, when the server forgot the device's pairing", async () => {
+    const { page, server, library } = await mountLibrary(libraryItems(2));
+    await openLibrary();
+    page.stream().open();
+    await flush();
+    const presetLoads = server.requests("GET", "/api/presets").length;
+
+    // The server forgot the device's pairing, as after a restart: it refuses the stream and the version check, and the
+    // query a new sort sends.
+    server.on("GET", "/api/version", () => status(401));
+    page.stream().fail();
+    await flush();
+    await waitFor(() => expect((document.getElementById("pair-section") as HTMLElement).style.display).toBe("flex"));
+    library.failures.push(401);
+    fireEvent.change(sortSelect(), { target: { value: "PlayCount" } });
+    await flush();
+    expect(tileNames()).toEqual([]);
+    const queries = library.queries().length;
+
+    server.on("GET", "/api/version", () => json(COMPATIBLE_VERSION));
+    server.on("POST", "/api/pair", () => json({ paired: true }));
+    fireEvent.input(screen.getByLabelText("Pairing token"), { target: { value: "token-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Pair" }));
+    await waitFor(() => expect(tileNames()).toEqual(["clip 1.mp4", "clip 2.mp4"]));
+    await settle();
+    expect(library.queries()).toHaveLength(queries + 1);
+    expect(library.queries().at(-1).sortMode).toBe("PlayCount");
+    expect(server.requests("GET", "/api/presets")).toHaveLength(presetLoads + 1);
+  });
+
   it("keeps the preset dropdown on Loading... while the presets need pairing, with only the pairing prompt", async () => {
     const server = new FakeServer();
     server.on("GET", "/api/version", () => status(401));
@@ -453,8 +523,8 @@ describe("first page", () => {
     // Neither 401 shows on the status line, which keeps what it showed: the server answered, so it isn't offline.
     expect(statusLine()).toBe("Ready");
     expect((document.getElementById("pair-section") as HTMLElement).style.display).toBe("flex");
-    await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("GET /api/presets")));
-    await settle();
+    // The presets load once the server is ready, which it isn't until the device pairs.
+    expect(server.requests("GET", "/api/presets")).toHaveLength(0);
     expect(server.logLines()).not.toContain(statusLogLine("Error loading presets: Unauthorized", null, 0));
     expect(server.logLines()).not.toContain(statusLogLine("Ready (API offline)", null, 0));
   });
@@ -882,12 +952,14 @@ describe("playing a tile", () => {
         "Playback failed: The server sent an unexpected response (text/html)."
       ]
     ];
+    const statusBefore = statusLine();
     for (const [reply, message] of cases) {
       replies.push(reply);
       await click(tile("item-1")!);
       expect(openNotices()).toEqual([message]);
-      // The status line drops the play's "Loading..." without showing the failure.
-      expect(statusLine()).toBe("");
+      // The status line keeps what it showed, and the player's indicator shows nothing.
+      expect(statusLine()).toBe(statusBefore);
+      expect(indicatorState()).toBeNull();
       expect(isOpen()).toBe(true);
       await closeNotices();
     }
@@ -912,12 +984,13 @@ describe("playing a tile", () => {
       fake.on("POST", "/api/play/item-1", () => status(401));
     });
     await openLibrary();
+    const statusBefore = statusLine();
 
     await click(tile("item-1")!);
 
     expect((document.getElementById("pair-section") as HTMLElement).style.display).toBe("flex");
     expect(screen.queryByText("Unauthorized. Pair first.")).toBeNull();
-    expect(statusLine()).toBe("");
+    expect(statusLine()).toBe(statusBefore);
     expect(openNotices()).toEqual([]);
     await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("POST /api/play/{itemId}")));
     await settle();
@@ -939,17 +1012,22 @@ describe("playing a tile", () => {
     });
     await openLibrary();
 
+    const statusBefore = statusLine();
     await click(tile("item-1")!);
-    expect(statusLine()).toBe("Loading...");
     await click(tile("item-1")!);
     await click(tile("item-2")!);
     expect(server.requests("POST", "/api/play/item-1")).toHaveLength(1);
     expect(server.requests("POST", "/api/play/item-2")).toHaveLength(0);
+    // The play waits, so after half a second the player's indicator says Loading…, and the status line nothing new.
+    await waitFor(() => expect(indicatorState()).toBe("loading"));
+    expect(statusLine()).toBe(statusBefore);
 
     answer();
     await flush();
     expect(video().src).toBe(`${API_BASE_URL}/api/media/item-1?token=t`);
     expect(isOpen()).toBe(false);
+    // The video plays, which ends the one loading period.
+    await waitFor(() => expect(indicatorState()).toBeNull());
   });
 
   it.each(["Failed to fetch", "Load failed", "NetworkError when attempting to fetch resource."])(
@@ -962,11 +1040,12 @@ describe("playing a tile", () => {
         });
       });
       await openLibrary();
+      const statusBefore = statusLine();
 
       await click(tile("item-1")!);
 
       expect(openNotices()).toEqual(["Playback failed: Couldn't reach the server."]);
-      expect(statusLine()).toBe("");
+      expect(statusLine()).toBe(statusBefore);
       expect(isOpen()).toBe(true);
       await waitFor(() =>
         expect(server.logLines()).toEqual(

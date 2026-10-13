@@ -261,4 +261,15 @@ describe("Auto-Pause with the panel and the player", () => {
     expect(page.requests("/api/random")).toHaveLength(1);
     expect(page.requests("/api/record-playback")).toHaveLength(2);
   });
+
+  it("ends Loading… for a video still loading as the overlay pauses it", async () => {
+    vi.useFakeTimers();
+    const page = setup("responsive", PHONE);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(page.store.loading.shown.value).toBe(true);
+
+    await page.panel.showTab("library");
+    expect(page.playing()).toBe(false);
+    expect(page.store.loading.shown.value).toBe(false);
+  });
 });

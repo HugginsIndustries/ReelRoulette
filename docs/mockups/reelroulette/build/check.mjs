@@ -266,6 +266,9 @@ for (const width of [1280, 390]) {
   $("mute-btn").click();
   check(`layout@${width}: there is no status line, and while connected nothing shows on the player and nothing pops up`,
     !$("status") && !document.querySelector(".status") && $("player-indicator").hidden && messages.toasts().length === 0 && messages.entries().length === 0);
+  const indicatorRegion = $("player-indicator").parentElement;
+  check(`layout@${width}: the indicator's live region stays in the page while nothing shows, and only the box inside it hides`,
+    indicatorRegion.getAttribute("role") === "status" && !indicatorRegion.hidden && !$("player-indicator").hasAttribute("role"));
   // Popups sit beside the player, which clips what it holds, and above the overlay panel, so nothing between them may
   // make a stacking context: no z-index, containment, or container on the player column or the stage.
   const rulesFor = (selector) => Array.from(document.styleSheets).flatMap((sheet) => Array.from(sheet.cssRules)).filter((rule) => rule.selectorText === selector);
@@ -378,7 +381,24 @@ for (const width of [1280, 390]) {
   // its text short with an ellipsis instead.
   check(`layout@${width}: at the top, the indicator stops short of the corner buttons, ending its text with an ellipsis (${ruleStyle(".player-indicator", "max-width")})`,
     ruleStyle(".player-indicator", "max-width") === "calc(100% - 336px)" && ruleStyle(".player-indicator-text", "text-overflow") === "ellipsis" &&
+    // Its clip box reaches past its line box, so a descender isn't cut off, without making the pill taller.
+    ruleStyle(".player-indicator-text", "padding-block") === "0.15em" && ruleStyle(".player-indicator-text", "margin-block") === "-0.15em" &&
     $("player-indicator").querySelector(".player-indicator-text")?.textContent === "Reconnecting…");
+  // Narrower than 600 px is one class on the player column, set from its measured width, which the indicator and the
+  // popups at the top both use; no container query applies a second rule.
+  const playerCol = document.querySelector(".player-col");
+  const narrowAt = (measured) => {
+    Object.defineProperty(playerCol, "clientWidth", { configurable: true, get: () => measured });
+    window.dispatchEvent(new window.Event("resize"));
+    return playerCol.classList.contains("is-narrow");
+  };
+  const narrow = [narrowAt(599), narrowAt(600), narrowAt(1200)];
+  delete playerCol.clientWidth;
+  window.dispatchEvent(new window.Event("resize"));
+  const containerRules = Array.from(document.styleSheets).flatMap((sheet) => Array.from(sheet.cssRules)).filter((rule) => rule.constructor.name === "CSSContainerRule");
+  check(`layout@${width}: a player narrower than 600 px, not one 600 px wide, puts the indicator below the corner buttons (${narrow})`,
+    narrow.join() === "true,false,false" && ruleStyle(".player-col.is-narrow .player-indicator", "top") === "64px" &&
+    !containerRules.some((rule) => rule.cssText.includes("player-indicator") || rule.cssText.includes("mock-chip")));
   press("r");
   check(`layout@${width}: a random pick then fails with a notice (${notice()})`, notice() === "Random selection failed: Couldn't reach the server.");
   dismissNotices();
@@ -403,11 +423,41 @@ for (const width of [1280, 390]) {
   situation("nolibrary");
   openTab("library");
   check(`layout@${width}: without a library the grid shows the server's message (${gridText().slice(0, 40)})`,
-    gridText().startsWith("Running without a library.") && !!$("lib-grid").querySelector(".lib-empty.is-error") && $("lib-preset").disabled && $("lib-preset").textContent === "Error loading presets");
+    gridText().startsWith("Running without a library.") && !!$("lib-grid").querySelector(".lib-empty.is-error") && $("lib-preset").disabled && $("lib-preset").textContent === "Running without a library" &&
+    ["lib-search", "lib-sort", "lib-dir"].every((id) => $(id).disabled));
   check(`layout@${width}: and the player's indicator says so (${indicatorText()})`, indicatorText() === "Running without a library" && $("player-indicator").classList.contains("is-warning"));
   press("r");
-  check(`layout@${width}: and random picks fail with a notice (${notice()})`, notice() === "Random selection failed (503).");
+  check(`layout@${width}: and Play shows its notice, sending nothing (${notice()})`, notice() === "Cannot play: the server is running without a library.");
   dismissNotices();
+  // While the server runs without a library or fails the compatibility check, the Filter and Tags tabs load nothing,
+  // the Filter tab's Refresh and Apply, the Tags tab's Save, and Auto Tag do nothing, and the Tags tab's Refresh, which
+  // still asks to discard changes, loads nothing, as in the app.
+  const styleHidden = (el) => {
+    const copy = el.cloneNode(true);
+    copy.removeAttribute("id");
+    el.after(copy);
+    const hidden = window.getComputedStyle(copy).display === "none";
+    copy.remove();
+    return hidden;
+  };
+  const checkTabsHeldBack = (why) => {
+    const entriesBefore = messages.entries().length;
+    openTab("filter");
+    const sectionsHidden = styleHidden(document.querySelector('#filter-body > [data-subpanel="general"]'));
+    $("filter-refresh").click();
+    $("filter-apply").click();
+    openTab("tags");
+    const tagsEmpty = $("tags-body").textContent === "";
+    $("tags-save").click();
+    $("open-autotag").click();
+    $("autotag-scan").click();
+    const scanIdle = $("autotag-status").textContent === "" && $("autotag-progress").hidden;
+    $("autotag-close").click();
+    check(`layout@${width}: ${why}, the Filter and Tags tabs load nothing, and Refresh, Apply, Save, and an Auto Tag scan do nothing`,
+      sectionsHidden && tagsEmpty && scanIdle && messages.entries().length === entriesBefore && openDialogs().length === 0);
+    openTab("library");
+  };
+  checkTabsHeldBack("without a library");
   situation("incompatible");
   check(`layout@${width}: a failed compatibility check opens the panel and shows its message in the Library tab (${gridText()})`,
     !$("panel").hidden && gridText() === "Unsupported server API version: 2." && indicatorText() === "Server not compatible");
@@ -418,6 +468,7 @@ for (const width of [1280, 390]) {
   press("r");
   check(`layout@${width}: and Play shows its notice (${notice()})`, notice() === "Cannot play: server compatibility check failed.");
   dismissNotices();
+  checkTabsHeldBack("while the server fails the compatibility check");
   situation("empty");
   check(`layout@${width}: an empty library says No media in library.`, gridText() === "No media in library.");
   const libraryLoad = (value) => document.querySelector(`input[name="mock-library-load"][value="${value}"]`).click();
@@ -1814,7 +1865,9 @@ for (const width of [1280, 390]) {
   const toggleLasting = (id, on) => change(lastingBox(id), on);
   toggleLasting("refresh", true);
   check(`layout@${width}: a library refresh shows its stage and progress, only while the controls show (${indicatorText()})`,
-    indicatorText() === "Library refresh: Refreshing sources (10%)" && $("player-indicator").classList.contains("follows-controls") && lastingBox("refresh").checked);
+    indicatorText() === "Library refresh: Starting (0%)" && $("player-indicator").classList.contains("follows-controls") && lastingBox("refresh").checked);
+  check(`layout@${width}: and each stage reads by its label (${window.mockup.refreshStages})`,
+    window.mockup.refreshStages.join() === "Starting,Refreshing sources,Sorting names,Fingerprinting files,Scanning durations,Scanning loudness,Generating thumbnails");
   toggleLasting("loading", true);
   await tick();
   check(`layout@${width}: Loading… comes before a refresh (${indicatorText()})`, indicatorText() === "Loading…" && lastingBox("loading").checked);

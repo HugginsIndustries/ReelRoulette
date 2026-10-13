@@ -239,6 +239,37 @@ describe("opening and closing", () => {
     expect(editor.isOpen.value).toBe(false);
   });
 
+  it("loads once the server is ready while it shows, keeping its changes, and not while it is hidden", async () => {
+    const context = setup();
+    const { editor, server, listeners } = context;
+    // It showed while the server had no library, as a tab remembered open does, and loaded nothing.
+    context.store.libraryState.value = "missing";
+    await openOn(context);
+    expect(server.posts).toEqual([]);
+    context.store.libraryState.value = "ready";
+    listeners.serverReady!(undefined);
+    await settle();
+    expect(context.modelRequests()).toEqual([["item-1"]]);
+    expect(context.titles()).toEqual(["Places", "People"]);
+
+    // The server restarted without its library while the tab held changes, and came back with it.
+    editor.toggleTag("Bob", "add");
+    context.store.libraryState.value = "newer";
+    context.store.libraryState.value = "ready";
+    listeners.serverReady!(undefined);
+    await settle();
+    expect(context.modelRequests()).toEqual([["item-1"], ["item-1"]]);
+    expect(context.view().selections.get("bob")).toEqual({ action: "add", name: "Bob" });
+    expect(context.view().savePending).toBe(true);
+
+    // Hidden, it loads as it shows again.
+    editor.close();
+    listeners.serverReady!(undefined);
+    await settle();
+    expect(context.modelRequests()).toHaveLength(2);
+    expect(context.notices).toEqual([]);
+  });
+
   it("says why when the tags cannot load, and stays open", async () => {
     const context = setup();
     context.server.modelStatus = 500;
@@ -1059,6 +1090,41 @@ describe("Auto Tag", () => {
       }
     ]
   };
+
+  it("loads, saves, scans, and applies Auto Tag's rows nothing while the server runs without a library, with no notice", async () => {
+    const context = setup();
+    const { editor, server } = context;
+    server.scan = SCAN;
+    context.store.libraryState.value = "unreadable";
+    await openOn(context);
+    expect(editor.isOpen.value).toBe(true);
+    await editor.refresh();
+    await settle();
+    expect(server.posts).toEqual([]);
+    expect(context.view().categories).toBeNull();
+
+    // The server restarted without its library after the tab loaded and Auto Tag scanned.
+    context.store.libraryState.value = "ready";
+    await editor.refresh();
+    await settle();
+    await editor.scan();
+    editor.checkRow(0, true);
+    editor.addCategory();
+    editor.typeNewCategoryName("Food");
+    editor.saveNewCategory();
+    expect(context.view().savePending).toBe(true);
+    expect(context.view().autoTagApplyPending).toBe(true);
+    const posted = server.posts.length;
+    context.store.libraryState.value = "unreadable";
+    editor.save();
+    editor.applyAutoTag();
+    await editor.scan();
+    await settle();
+
+    expect(server.posts).toHaveLength(posted);
+    expect(context.notices).toEqual([]);
+    expect(context.statuses).toEqual([]);
+  });
 
   it("scans with Scan full library, stores the box, and applies the selected files with its own Apply, not Save", async () => {
     const context = setup();

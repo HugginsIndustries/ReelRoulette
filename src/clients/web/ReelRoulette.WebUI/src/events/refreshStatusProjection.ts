@@ -268,17 +268,45 @@ export function settledKeptSources(snapshotInput: RefreshSnapshotInput): Refresh
   return (snapshot.keptSources ?? []).filter((kept) => kept.sourceId.trim() !== "");
 }
 
+/** A running refresh's progress, as the player's indicator shows it: its stage's label and that stage's percent. */
+export interface RefreshProgress {
+  stage: string;
+  percent: number;
+}
+
+/**
+ * Each refresh stage's label on the player's indicator, in place of the server's stage message, which runs long with
+ * counts. A run before its first stage reads "Starting", and a stage without a label its id.
+ */
+export const REFRESH_STAGE_LABELS: Readonly<Record<string, string>> = {
+  sourcerefresh: "Refreshing sources",
+  namesortkeys: "Sorting names",
+  fingerprintscan: "Fingerprinting files",
+  durationscan: "Scanning durations",
+  loudnessscan: "Scanning loudness",
+  thumbnailgeneration: "Generating thumbnails"
+};
+
+/** The progress of a refresh that is running, or null when none is. */
+export function refreshProgress(snapshotInput: RefreshSnapshotInput): RefreshProgress | null {
+  const snapshot = normalizeSnapshot(snapshotInput);
+  if (!snapshot.isRunning) {
+    return null;
+  }
+  const stage = snapshot.currentStage?.trim() || "";
+  if (!stage) {
+    return { stage: "Starting", percent: 0 };
+  }
+  const active = snapshot.stages.find((s) => s.stage.toLowerCase() === stage.toLowerCase());
+  return { stage: REFRESH_STAGE_LABELS[stage.toLowerCase()] ?? stage, percent: active?.percent ?? 0 };
+}
+
+/**
+ * How a refresh that isn't running ended, for the status line: its failure, its completion summary, or idle. A running
+ * refresh shows on the player's indicator instead, from `refreshProgress`.
+ */
 export function buildRefreshStatusMessage(snapshotInput: RefreshSnapshotInput): string {
   const snapshot = normalizeSnapshot(snapshotInput);
-
-  if (snapshot.isRunning) {
-    const stageRaw = snapshot.currentStage?.trim();
-    const stage = stageRaw || "initializing";
-    const active = snapshot.stages.find((s) => s.stage.toLowerCase() === stage.toLowerCase());
-    const percent = active?.percent ?? 0;
-    const message = active?.message?.trim() ? active.message : stage;
-    return `Core refresh: ${message} (${percent}%)`;
-  }
 
   if (snapshot.lastError) {
     return `Core refresh failed: ${snapshot.lastError}`;

@@ -172,7 +172,8 @@ export interface TagEditor {
 
   /**
    * The tab shows: loads the tags of the item it edits, which it doesn't while the server fails the compatibility
-   * check, nor while a save is on its way, which loads them once it lands. Its changes are as it was left with them.
+   * check or runs without a library, nor while a save is on its way, which loads them once it lands. A tab that shows
+   * while the server has no library loads once it is ready. Its changes are as it was left with them.
    */
   open(): void;
   /** The tab hides: closes the editor's dialogs, keeping the changes. */
@@ -184,7 +185,8 @@ export interface TagEditor {
   refresh(): Promise<void>;
   /**
    * Shows the changes as saved and sends them in the background, leaving the panel open. Once the save lands, the
-   * editor follows the playing item and loads the tags again. Not while the server fails the compatibility check.
+   * editor follows the playing item and loads the tags again. Not while the server fails the compatibility check or
+   * runs without a library.
    */
   save(): void;
 
@@ -235,7 +237,8 @@ export interface TagEditor {
   cancelAutoTag(): void;
   /**
    * Sends the selected files in the background, and shows them as having their tag, until another scan. A refused
-   * apply puts the rows back. Not while a scan runs, nor while the server fails the compatibility check.
+   * apply puts the rows back. Not while a scan runs, nor while the server fails the compatibility check or runs without
+   * a library.
    */
   applyAutoTag(): void;
   setScanFullLibrary(checked: boolean): void;
@@ -434,9 +437,12 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     return true;
   }
 
-  /** Loads the tags of the item being edited; only the latest load is taken. Nothing loads while the server fails the compatibility check. */
+  /**
+   * Loads the tags of the item being edited; only the latest load is taken. Nothing loads while the server fails the
+   * compatibility check or runs without a library.
+   */
   async function loadModel(): Promise<void> {
-    if (store.compatibilityBlocked.peek()) {
+    if (store.heldBack.peek()) {
       return;
     }
     const load = ++loads;
@@ -672,6 +678,14 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
 
   connection.on("itemTagsChanged", applyItemTagsEvent);
 
+  // A tab that showed while the server had no library loaded nothing, so while it shows it loads once the server is
+  // ready, keeping its changes.
+  connection.on("serverReady", () => {
+    if (isOpen.peek()) {
+      reload("Tag editor unavailable");
+    }
+  });
+
   // A rename or delete of a tag no file has comes only as a catalog change, without the old name, so a kept scan that
   // names a tag no longer in the catalog is cleared, and its Apply can't create the tag again.
   connection.on("tagCatalogChanged", (payload) => {
@@ -764,7 +778,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     },
 
     save() {
-      if (!hasChanges(state) || store.compatibilityBlocked.peek()) {
+      if (!hasChanges(state) || store.heldBack.peek()) {
         return;
       }
       const steps = planTagEdits({
@@ -1013,7 +1027,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
 
     applyAutoTag() {
       const autoTag = state.autoTag;
-      if (autoTag.scanning || !autoTagApplyPending(autoTag.rows, autoTag.hasRun) || store.compatibilityBlocked.peek()) {
+      if (autoTag.scanning || !autoTagApplyPending(autoTag.rows, autoTag.hasRun) || store.heldBack.peek()) {
         return;
       }
       const steps = planAutoTagApply(autoTagAssignments(autoTag.rows));
@@ -1056,7 +1070,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     },
 
     async scan() {
-      if (state.autoTag.scanning || store.compatibilityBlocked.peek()) {
+      if (state.autoTag.scanning || store.heldBack.peek()) {
         return;
       }
       update({ autoTag: { ...state.autoTag, scanning: true, status: AUTO_TAG_SCANNING } });

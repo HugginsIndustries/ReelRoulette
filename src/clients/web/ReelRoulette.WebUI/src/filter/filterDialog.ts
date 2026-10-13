@@ -121,7 +121,8 @@ export interface FilterDialog {
   /**
    * The tab shows, on the section it was left on, General the first time. Without unsaved changes it starts over from
    * the applied filter and the saved presets. It then loads the sources, tags, and presets, keeping the working copy,
-   * as Refresh does. Nothing loads while the server fails the compatibility check.
+   * as Refresh does. Nothing loads while the server fails the compatibility check or runs without a library; a tab that
+   * shows then loads once the server is ready.
    */
   open(): Promise<void>;
   /** The tab hides without applying anything, keeping its changes. */
@@ -129,8 +130,8 @@ export interface FilterDialog {
   showTab(tab: FilterDialogTab): void;
   /**
    * Loads the sources, tags, and presets again, keeping the working filter, and the preset list while it has
-   * changes Apply hasn't saved. Before they have loaded once, it loads them as showing the tab does, which it doesn't
-   * while the server fails the compatibility check.
+   * changes Apply hasn't saved. Before they have loaded once, it loads them as showing the tab does. It does nothing
+   * while the server fails the compatibility check or runs without a library.
    */
   refresh(): Promise<void>;
   /**
@@ -193,7 +194,7 @@ export interface FilterDialog {
 export interface FilterDialogOptions {
   store: AppStore;
   api: AppApi;
-  connection: Pick<ServerConnection, "loadPresets">;
+  connection: Pick<ServerConnection, "loadPresets" | "on">;
   library: Pick<Library, "commitQuery">;
   /** Apply and Cancel close the panel as the overlay; beside the player it stays open. */
   panel: Pick<PanelHost, "closeIfOverlay">;
@@ -329,10 +330,10 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
    * Loads the sources, tags, and presets. The first time, it starts the working copy from the applied filter, on
    * General; after that it keeps the working copy and only takes what loaded, as Refresh does. Says whether it loaded;
    * a failure shows in the in-app notice with `failure` before the reason, except a 401, whose pairing prompt is the
-   * thing to act on. Nothing loads while the server fails the compatibility check.
+   * thing to act on. Nothing loads while the server fails the compatibility check or runs without a library.
    */
   async function start(failure: string): Promise<boolean> {
-    if (store.compatibilityBlocked.peek()) {
+    if (store.heldBack.peek()) {
       return false;
     }
     let remote: Awaited<ReturnType<typeof loadRemote>>;
@@ -389,6 +390,14 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     });
   }
 
+  // A tab that showed while the server had no library loaded nothing, so while it shows it loads once the server is
+  // ready, keeping its changes, as Refresh does.
+  connection.on("serverReady", () => {
+    if (isOpen.peek()) {
+      void start("Filter load failed");
+    }
+  });
+
   const dialog: FilterDialog = {
     isOpen,
     tab,
@@ -414,6 +423,9 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     },
 
     async refresh() {
+      if (store.heldBack.peek()) {
+        return;
+      }
       if (!view.peek()) {
         if (await start("Filter refresh failed")) {
           store.setStatus("Filter data refreshed.");
@@ -434,7 +446,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
 
     async apply() {
       const before = view.peek();
-      if (!before || blocked("apply")) {
+      if (!before || store.heldBack.peek() || blocked("apply")) {
         return;
       }
       update({ working: readGeneral(before) });

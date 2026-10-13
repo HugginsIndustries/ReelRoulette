@@ -1,10 +1,15 @@
 // @vitest-environment happy-dom
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { h, render as renderInto } from "preact";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { statusLogLine } from "../../logging/relayLogLines";
+import { createAppServices, type AppServices } from "../../state/appServices";
+import { App } from "../../ui/App";
 import {
   API_BASE_URL,
+  COMPATIBLE_VERSION,
   FakeServer,
+  SSE_URL,
   IPHONE_USER_AGENT,
   closeNotices,
   json,
@@ -191,6 +196,16 @@ function statusLine(): string {
   return document.getElementById("status")?.textContent ?? "";
 }
 
+/** The player's indicator: its live region, which always stays in the page. */
+function indicatorRegion(): HTMLElement {
+  return document.getElementById("player-indicator") as HTMLElement;
+}
+
+/** The state the player's indicator shows, by its id, or null while it shows none. */
+function indicatorState(): string | null {
+  return indicatorRegion().querySelector<HTMLElement>(".player-indicator")?.dataset.state ?? null;
+}
+
 function controlsShown(): boolean {
   return mediaArea().classList.contains("controls-visible");
 }
@@ -221,8 +236,33 @@ async function swipe(target: Element, from: { x: number; y: number }, to: { x: n
   await flush();
 }
 
+/** Unmounts what `mountWithServices` mounted. */
+let unmountServices: (() => void) | null = null;
+
+/**
+ * Mounts the page with services the test holds, without connecting to the server, so a test sets the lasting states
+ * on the store itself and nothing the connection does changes them.
+ */
+async function mountWithServices(server = new FakeServer()): Promise<AppServices> {
+  vi.stubGlobal("fetch", server.fetch);
+  const root = document.createElement("div");
+  root.id = "app";
+  document.body.appendChild(root);
+  const services = createAppServices({ apiBaseUrl: API_BASE_URL, sseUrl: SSE_URL });
+  services.connection.start = () => {};
+  renderInto(h(App, { services }), root);
+  unmountServices = () => renderInto(null, root);
+  await flush();
+  return services;
+}
+
 beforeEach(() => {
   resetPage();
+});
+
+afterEach(() => {
+  unmountServices?.();
+  unmountServices = null;
 });
 
 describe("random pick", () => {
@@ -267,7 +307,6 @@ describe("random pick", () => {
     await waitFor(() =>
       expect(server.logLines()).toEqual(
         expect.arrayContaining([
-          "status=Loading... hasCurrent=false attempt=0",
           "playback=start attempt=1 hasCurrent=true mediaType=video",
           "playback=video-onplaying attempt=1 hasCurrent=true",
           "status=Playing hasCurrent=true attempt=1"
@@ -275,6 +314,8 @@ describe("random pick", () => {
       )
     );
     expect(server.logLines().some((line) => line.includes("holiday") || line.includes("token") || line.includes("item-video"))).toBe(false);
+    // A load quicker than half a second shows no Loading… on the indicator, so relays none.
+    expect(server.logLines().some((line) => line.startsWith("status=Loading"))).toBe(false);
   });
 
   it("starts from the Play button and from a click on the media area when nothing is playing", async () => {
@@ -338,7 +379,8 @@ describe("random pick", () => {
   });
 
   it("opens a missing photo's notice once under Autoplay, though its timer moves on and fails again, and relays each failure", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    // The clock moves with the timers, so the relay, which drops a line repeated within a second, sees the photo's time pass.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const server = serverPicking(PHOTO_ITEM);
     await mount(server);
     await click(button("Autoplay"));
@@ -362,6 +404,7 @@ describe("random pick", () => {
   it("shows no eligible media, a refused pick, and a pick that cannot reach the server in the notice, not on the status line", async () => {
     const server = serverPicking({ mediaUrl: null });
     await mount(server);
+    const statusBefore = statusLine();
     const failures: Array<[() => Response, string]> = [
       [() => json({ mediaUrl: null }), "No eligible media for current filters."],
       [() => status(500), "Random selection failed (500)."],
@@ -380,8 +423,8 @@ describe("random pick", () => {
       server.on("POST", "/api/random", answer);
       await click(emptyState());
       expect(openNotices()).toEqual([notice]);
-      // The status line drops the pick's "Loading..." without showing the failure.
-      expect(statusLine()).toBe("");
+      expect(statusLine()).toBe(statusBefore);
+      expect(indicatorState()).toBeNull();
       await waitFor(() => expect(server.logLines()).toContain(statusLogLine(notice, null, 0)));
       await closeNotices();
     }
@@ -395,15 +438,19 @@ describe("random pick", () => {
     server.on("POST", "/api/random", () => new Promise<Response>(() => {}));
     await mount(server);
 
+    const statusBefore = statusLine();
     await click(emptyState());
-    expect(statusLine()).toBe("Loading...");
     await click(button("Next"));
     await click(button("Play/Pause"));
     expect(randomPicks(server)).toBe(1);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(indicatorState()).toBe("loading");
+    expect(statusLine()).toBe(statusBefore);
 
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(9_500);
     expect(openNotices()).toEqual(["No response from the server. Try again."]);
-    expect(statusLine()).toBe("");
+    expect(indicatorState()).toBeNull();
+    expect(statusLine()).toBe(statusBefore);
     expect(server.logLines()).toEqual(
       expect.arrayContaining([
         "playback=random-pick-timeout attempt=0 hasCurrent=false timeoutMs=10000",
@@ -1384,5 +1431,239 @@ describe("page structure", () => {
 
     expect(storageKeys(localStorage)).toEqual(["rr_clientId"]);
     expect(storageKeys(sessionStorage)).toEqual(["rr_sessionId"]);
+  });
+});
+
+describe("the player's indicator", () => {
+  function indicatorBox(): HTMLElement {
+    const box = indicatorRegion().querySelector<HTMLElement>(".player-indicator");
+    if (!box) {
+      throw new Error("The indicator shows no state.");
+    }
+    return box;
+  }
+
+  function indicatorIcon(): HTMLElement {
+    return indicatorBox().querySelector<HTMLElement>(".material-symbol-icon")!;
+  }
+
+  function indicatorText(): HTMLElement {
+    return indicatorBox().querySelector<HTMLElement>(".player-indicator-text")!;
+  }
+
+  it("is a polite live region that stays in the page, holding the state's box only while one shows", async () => {
+    const { store } = await mountWithServices();
+    const region = indicatorRegion();
+    expect(mediaArea().contains(region)).toBe(true);
+    expect(region.getAttribute("role")).toBe("status");
+    expect(region.getAttribute("aria-live")).toBe("polite");
+    expect(region.hasAttribute("hidden")).toBe(false);
+    expect(region.childElementCount).toBe(0);
+
+    store.reconnecting.value = true;
+    await flush();
+    expect(indicatorState()).toBe("reconnecting");
+    expect(indicatorIcon().textContent).toBe("sync");
+    expect(indicatorIcon().getAttribute("aria-hidden")).toBe("true");
+    expect(indicatorIcon().classList.contains("spins")).toBe(true);
+    expect(indicatorText().textContent).toBe("Reconnecting…");
+    // The icon's ligature is its only other text, which screen readers skip.
+    expect(within(stage()).getByRole("status").textContent).toBe("syncReconnecting…");
+
+    store.reconnecting.value = false;
+    await flush();
+    expect(indicatorRegion()).toBe(region);
+    expect(region.hasAttribute("hidden")).toBe(false);
+    expect(region.childElementCount).toBe(0);
+  });
+
+  it("shows the first active lasting state in the precedence order, alone and together, so it never alternates", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { store } = await mountWithServices();
+    store.refreshProgress.value = { stage: "Scanning durations", percent: 42 };
+    store.loading.hold("pick");
+    await vi.advanceTimersByTimeAsync(500);
+    store.libraryState.value = "missing";
+    store.compatibilityBlocked.value = true;
+    store.reconnecting.value = true;
+    await flush();
+
+    const seen: Array<[string | null, string, boolean, boolean, boolean]> = [];
+    const note = () => {
+      const box = indicatorBox();
+      seen.push([
+        indicatorState(),
+        indicatorText().textContent ?? "",
+        box.classList.contains("is-warning"),
+        indicatorIcon().classList.contains("spins"),
+        box.classList.contains("follows-controls")
+      ]);
+    };
+    note();
+    store.reconnecting.value = false;
+    await flush();
+    note();
+    store.compatibilityBlocked.value = false;
+    await flush();
+    note();
+    store.libraryState.value = "ready";
+    await flush();
+    note();
+    store.loading.release("pick");
+    await flush();
+    note();
+
+    expect(seen).toEqual([
+      ["reconnecting", "Reconnecting…", false, true, false],
+      ["incompatible", "Server not compatible", true, false, false],
+      ["nolibrary", "Running without a library", true, false, false],
+      ["loading", "Loading…", false, true, false],
+      ["refresh", "Library refresh: Scanning durations", false, true, true]
+    ]);
+
+    // Each alone.
+    store.refreshProgress.value = null;
+    for (const [set, clear, id] of [
+      [() => (store.reconnecting.value = true), () => (store.reconnecting.value = false), "reconnecting"],
+      [() => (store.compatibilityBlocked.value = true), () => (store.compatibilityBlocked.value = false), "incompatible"],
+      [() => (store.libraryState.value = "damaged"), () => (store.libraryState.value = "ready"), "nolibrary"]
+    ] as const) {
+      set();
+      await flush();
+      expect(indicatorState()).toBe(id);
+      clear();
+      await flush();
+      expect(indicatorState()).toBeNull();
+    }
+  });
+
+  it("hides a refresh's percentage from screen readers, outside the text that ends in an ellipsis", async () => {
+    const { store } = await mountWithServices();
+    store.refreshProgress.value = { stage: "Generating thumbnails", percent: 7 };
+    await flush();
+
+    const box = indicatorBox();
+    expect(box.textContent).toBe("autorenewLibrary refresh: Generating thumbnails (7%)");
+    expect(indicatorText().textContent).toBe("Library refresh: Generating thumbnails");
+    const percent = Array.from(box.querySelectorAll("span")).find((span) => span.textContent === "(7%)")!;
+    expect(percent.getAttribute("aria-hidden")).toBe("true");
+    expect(indicatorText().contains(percent)).toBe(false);
+  });
+
+  it("shows nothing while the server asks for pairing, whose prompt is the thing to act on", async () => {
+    const { store } = await mountWithServices();
+    store.reconnecting.value = true;
+    store.pairingRequired.value = true;
+    await flush();
+    expect(indicatorState()).toBeNull();
+    expect(indicatorRegion().getAttribute("role")).toBe("status");
+
+    store.pairingRequired.value = false;
+    await flush();
+    expect(indicatorState()).toBe("reconnecting");
+  });
+
+  it("shows a refresh only while the player's controls show, and other states whether they show or not", async () => {
+    useStylesheet();
+    const { store } = await mountWithServices(serverPicking(VIDEO_ITEM));
+    await click(emptyState());
+    store.refreshProgress.value = { stage: "Refreshing sources", percent: 3 };
+    await flush();
+    // happy-dom reports no opacity where no rule sets one, which is fully shown.
+    expect(currentStyle(indicatorBox()).opacity).not.toBe("0");
+
+    await click(video());
+    expect(controlsShown()).toBe(false);
+    expect(currentStyle(indicatorBox()).opacity).toBe("0");
+    await click(video());
+    expect(controlsShown()).toBe(true);
+    expect(currentStyle(indicatorBox()).opacity).not.toBe("0");
+
+    await click(video());
+    store.reconnecting.value = true;
+    await flush();
+    expect(controlsShown()).toBe(false);
+    expect(indicatorState()).toBe("reconnecting");
+    expect(currentStyle(indicatorBox()).opacity).not.toBe("0");
+  });
+
+  it("sits at the player's top center, clear of the corner buttons on both sides, a long state ending in an ellipsis", async () => {
+    useStylesheet();
+    const { store } = await mountWithServices();
+    store.refreshProgress.value = { stage: "Fingerprinting files", percent: 50 };
+    await flush();
+
+    const box = currentStyle(indicatorBox());
+    expect([box.position, box.top, box.left, box.transform]).toEqual(["absolute", "14px", "50%", "translateX(-50%)"]);
+    // The corner buttons take the last 160 px at the right, so the indicator leaves that much on both sides.
+    expect(box.maxWidth).toBe("calc(100% - 336px)");
+    expect(box.pointerEvents).toBe("none");
+    const text = currentStyle(indicatorText());
+    expect([text.overflow, text.whiteSpace, text.textOverflow, text.minWidth]).toEqual(["hidden", "nowrap", "ellipsis", "0"]);
+    // Its clip box reaches past the line box, so a descender isn't cut off, and the pill's height stays as it was.
+    expect([text.getPropertyValue("padding-block"), text.getPropertyValue("margin-block")]).toEqual(["0.15em", "-0.15em"]);
+    expect(currentStyle(indicatorRegion()).pointerEvents).toBe("none");
+
+    store.compatibilityBlocked.value = true;
+    await flush();
+    expect(currentStyle(indicatorIcon()).color).toBe(currentStyle(document.documentElement).getPropertyValue("--huggins-orange").trim());
+  });
+
+  it("moves below the corner buttons on a player narrower than 600 px, by the player column's measured width", async () => {
+    useStylesheet();
+    stubLayoutSize(599);
+    const { store } = await mountWithServices();
+    store.reconnecting.value = true;
+    await flush();
+    const column = stage().querySelector("main.player-col") as HTMLElement;
+
+    expect(column.classList.contains("is-narrow")).toBe(true);
+    expect(currentStyle(indicatorBox()).top).toBe("64px");
+    expect(currentStyle(indicatorBox()).maxWidth).toBe("calc(100% - 24px)");
+
+    stubLayoutSize(600);
+    setViewport({ width: 1000, height: 768 });
+    await flush();
+    expect(column.classList.contains("is-narrow")).toBe(false);
+    expect(currentStyle(indicatorBox()).top).toBe("14px");
+
+    stubLayoutSize(1200);
+    setViewport({ width: 1200, height: 768 });
+    await flush();
+    expect(column.classList.contains("is-narrow")).toBe(false);
+  });
+
+  it("slows its spin under reduced motion", async () => {
+    useStylesheet();
+    await mountWithServices();
+    const reduced = Array.from(document.styleSheets)
+      .flatMap((sheet) => Array.from(sheet.cssRules))
+      .filter((rule): rule is CSSMediaRule => (rule as CSSMediaRule).media?.mediaText?.includes("prefers-reduced-motion") ?? false)
+      .flatMap((rule) => Array.from(rule.cssRules) as CSSStyleRule[])
+      .find((rule) => rule.selectorText === ".player-indicator .material-symbol-icon.spins");
+    expect(reduced?.style.animationDuration).toBe("3s");
+  });
+});
+
+describe("without a library", () => {
+  it("Play, a click on the media area, and Next show the notice and send nothing, while the indicator says so", async () => {
+    const server = serverPicking(VIDEO_ITEM);
+    server.on("GET", "/api/version", () =>
+      json({ ...COMPATIBLE_VERSION, libraryState: "missing", libraryMessage: "The library file is missing." })
+    );
+    const page = await mount(server);
+    await waitFor(() => expect(indicatorState()).toBe("nolibrary"));
+    // The server refuses the event stream until it has a library, which isn't a lost connection.
+    page.stream().fail();
+    await flush();
+    expect(indicatorState()).toBe("nolibrary");
+
+    for (const target of [() => button("Play/Pause"), () => emptyState(), () => button("Next")]) {
+      await click(target());
+      expect(openNotices()).toEqual(["Cannot play: the server is running without a library."]);
+      await closeNotices();
+    }
+    expect(randomPicks(server)).toBe(0);
+    expect(playRecords(server)).toBe(0);
   });
 });

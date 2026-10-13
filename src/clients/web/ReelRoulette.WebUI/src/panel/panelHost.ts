@@ -18,6 +18,11 @@ export const OVERLAY_BELOW_WIDTH = 800;
  * only the player.
  */
 export const OVERLAY_TOUCH_BELOW_HEIGHT = 500;
+/**
+ * A player narrower than this is narrow: the player's indicator moves below its corner buttons. It goes by the player
+ * column's measured width, since the panel beside it narrows it too.
+ */
+export const NARROW_PLAYER_BELOW_WIDTH = 600;
 /** The resize handle's width as the stylesheet sets it, for a mouse and for a touch screen, while it can't be measured. */
 const HANDLE_WIDTH = { fine: 12, coarse: 20 };
 
@@ -60,6 +65,11 @@ export interface PanelViewport {
   watch(listener: () => void): () => void;
 }
 
+/** An element the host measures. */
+export interface MeasuredElement {
+  readonly clientWidth: number;
+}
+
 /** An element the host shows and hides by its `hidden`. */
 export interface HiddenElement {
   hidden: boolean;
@@ -92,17 +102,25 @@ export interface PanelHost {
   readonly width: ReadonlySignal<number>;
   /** The widest the panel can be while leaving the player its minimum width. */
   readonly maxWidth: ReadonlySignal<number>;
+  /** The player column is narrower than 600 px, so the player's indicator sits below its corner buttons. */
+  readonly playerNarrow: ReadonlySignal<boolean>;
 
   /** Gives the host each tab's hooks. Called once, after the tabs' services exist. */
   connectTabs(hooks: Record<PanelTab, PanelTabHooks>): void;
   /** Takes the rendered elements and shows a panel remembered open. Its tab waits for `startRememberedTab`. */
   attach(elements: PanelElements): void;
   /**
-   * Starts the tab of a panel remembered open, once the server has passed or failed the compatibility check, so the
-   * tab loads nothing before then. Does nothing once the panel has been opened or closed since the page loaded.
+   * Starts the tab of a panel remembered open, once the server has passed or failed the compatibility check or found no
+   * library, so the tab loads nothing before then. Does nothing once the panel has been opened or closed since the page
+   * loaded.
    */
   startRememberedTab(): void;
   detach(): void;
+  /**
+   * Takes the player column, or lets it go with null. Its width is measured whenever the host measures, as the window,
+   * the stage, or the column itself resizes, the panel opens or closes, or its handle changes its width.
+   */
+  attachPlayer(column: MeasuredElement | null): void;
   /** The element that takes focus when the panel closes with focus inside it or on its handle: the panel button. */
   attachButton(button: { focus(options?: FocusOptions): void } | null): void;
   /** The panel button: opens the panel on its last tab, or closes it. */
@@ -171,6 +189,7 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
   const coarse = signal(viewport.coarsePointer());
   /** The handle's width while it shows, or 0 before it has been measured. */
   const handleWidth = signal(0);
+  const playerNarrow = signal(false);
 
   const maxWidth = computed(() => {
     const handle = handleWidth.value || (coarse.value ? HANDLE_WIDTH.coarse : HANDLE_WIDTH.fine);
@@ -183,9 +202,11 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
   let button: { focus(options?: FocusOptions): void } | null = null;
   let stopWatching: (() => void) | null = null;
   let stageObserver: ResizeObserver | null = null;
+  let playerColumn: MeasuredElement | null = null;
+  let playerObserver: ResizeObserver | null = null;
   /** A tab is deciding whether it can be left. */
   let leaving = false;
-  /** The panel was remembered open, and its tab waits for the server's compatibility check. */
+  /** The panel was remembered open, and its tab waits for the server's compatibility check or its library state. */
   let rememberedTabWaits = false;
 
   /**
@@ -200,6 +221,13 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
     if (elements?.handle.offsetWidth) {
       handleWidth.value = elements.handle.offsetWidth;
     }
+    measurePlayer();
+  }
+
+  /** Reads the player column's width. A column not laid out, which measures 0, is not narrow. */
+  function measurePlayer(): void {
+    const columnWidth = playerColumn?.clientWidth ?? 0;
+    playerNarrow.value = columnWidth > 0 && columnWidth < NARROW_PLAYER_BELOW_WIDTH;
   }
 
   function render(): void {
@@ -214,6 +242,9 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
     }
     if (open) {
       measure();
+    } else {
+      // The player widens as the panel beside it closes.
+      measurePlayer();
     }
   }
 
@@ -281,6 +312,7 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
     shortScreen,
     width,
     maxWidth,
+    playerNarrow,
 
     connectTabs(connected) {
       hooks = connected;
@@ -313,6 +345,17 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
       elements = null;
     },
 
+    attachPlayer(column) {
+      playerObserver?.disconnect();
+      playerObserver = null;
+      playerColumn = column;
+      if (column && typeof ResizeObserver !== "undefined" && typeof Element !== "undefined" && column instanceof Element) {
+        playerObserver = new ResizeObserver(() => measurePlayer());
+        playerObserver.observe(column);
+      }
+      measurePlayer();
+    },
+
     attachButton(attached) {
       button = attached;
     },
@@ -330,6 +373,8 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
 
     setWidth(next, remember) {
       remembered.value = Math.round(Math.min(Math.max(next, PANEL_MIN_WIDTH), maxWidth.peek()));
+      // The stage has taken the new width by now, so the player column measures what is left beside the panel.
+      measurePlayer();
       if (remember) {
         device.write(WIDTH_KEY, remembered.peek());
       }

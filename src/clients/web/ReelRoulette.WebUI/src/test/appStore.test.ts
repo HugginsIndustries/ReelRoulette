@@ -114,19 +114,6 @@ describe("createAppStore", () => {
     expect(relayed).toHaveLength(3);
   });
 
-  it("empties the status line only while it still shows the message, and relays nothing", () => {
-    const { store, relayed } = setup();
-    store.setStatus("Loading...");
-    store.clearStatus("Loading...");
-    expect(store.status.value).toBe("");
-
-    store.setStatus("Loading...");
-    store.setStatus("SSE connected");
-    store.clearStatus("Loading...");
-    expect(store.status.value).toBe("SSE connected");
-    expect(relayed.map((line) => line.split(" hasCurrent")[0])).toEqual(["status=Loading...", "status=SSE connected"]);
-  });
-
   it("lists None and the presets, and selects the preset that matches the applied filter", () => {
     const { store } = setup();
     store.presets.value = [FAVORITES];

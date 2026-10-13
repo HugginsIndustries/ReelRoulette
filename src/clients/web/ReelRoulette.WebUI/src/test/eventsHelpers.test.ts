@@ -4,7 +4,8 @@ import {
   buildRefreshStatusMessage,
   coerceRefreshSnapshot,
   newRefreshCompletionRunId,
-  settledKeptSources
+  settledKeptSources,
+  refreshProgress
 } from "../events/refreshStatusProjection";
 
 describe("event helpers", () => {
@@ -36,13 +37,7 @@ describe("event helpers", () => {
     expect(envelope.payload.value).toBe(5);
   });
 
-  it("builds refresh status messages", () => {
-    const running = buildRefreshStatusMessage({
-      isRunning: true,
-      trigger: "manual",
-      currentStage: "thumbnailGeneration",
-      stages: [{ stage: "thumbnailGeneration", percent: 52, message: "generating", isComplete: false }]
-    });
+  it("builds a failed refresh's status message", () => {
     const failed = buildRefreshStatusMessage({
       isRunning: false,
       trigger: "manual",
@@ -50,7 +45,6 @@ describe("event helpers", () => {
       stages: []
     });
 
-    expect(running).toBe("Core refresh: generating (52%)");
     expect(failed).toContain("failed");
   });
 
@@ -91,16 +85,6 @@ describe("event helpers", () => {
     expect(line).toContain("Thumbnails: generated 3, reused 2");
   });
 
-  it("uses initializing when running with empty currentStage", () => {
-    const line = buildRefreshStatusMessage({
-      isRunning: true,
-      trigger: "manual",
-      currentStage: null,
-      stages: []
-    });
-    expect(line).toBe("Core refresh: initializing (0%)");
-  });
-
   it("reports each finished refresh run once", () => {
     const running = { isRunning: true, runId: "run-1", completedUtc: null, stages: [] };
     const finished = { isRunning: false, runId: "run-1", completedUtc: "2026-10-06T12:00:00Z", stages: [] };
@@ -133,5 +117,28 @@ describe("event helpers", () => {
     // A run that failed or was cancelled in its source stage kept them all the same.
     expect(settledKeptSources({ isRunning: false, stages: [sourceStage(false)], keptSources })).toEqual(keptSources);
     expect(settledKeptSources({ isRunning: false, stages: [] })).toEqual([]);
+  });
+
+  it("gives a running refresh's stage label and percent, Starting before its first stage, and nothing once it stops", () => {
+    const stages = [
+      ["sourceRefresh", "Refreshing sources"],
+      ["nameSortKeys", "Sorting names"],
+      ["fingerprintScan", "Fingerprinting files"],
+      ["durationScan", "Scanning durations"],
+      ["loudnessScan", "Scanning loudness"],
+      ["thumbnailGeneration", "Generating thumbnails"],
+      ["newStage", "newStage"]
+    ];
+    for (const [stage, label] of stages) {
+      const snapshot = {
+        isRunning: true,
+        trigger: "manual",
+        currentStage: stage,
+        stages: [{ stage, percent: 35, message: "Thumbnails 1200/49000 (new 3, regen 0, reused 1197, failed 0, missing 0)", isComplete: false }]
+      };
+      expect(refreshProgress(snapshot)).toEqual({ stage: label, percent: 35 });
+    }
+    expect(refreshProgress({ isRunning: true, trigger: "manual", currentStage: null, stages: [] })).toEqual({ stage: "Starting", percent: 0 });
+    expect(refreshProgress({ isRunning: false, trigger: "manual", completedUtc: "2026-10-13T10:00:00Z", stages: [] })).toBeNull();
   });
 });

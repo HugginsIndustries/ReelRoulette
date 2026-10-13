@@ -17,6 +17,7 @@ import {
   status,
   stubCoarsePointer,
   stubFullscreenApi,
+  stubLayoutSize,
   stubSafeAreaInsets,
   useStylesheet,
   type MountedPage
@@ -26,9 +27,10 @@ import {
 const UPRIGHT = { width: 390, height: 844 };
 const ON_ITS_SIDE = { width: 844, height: 390 };
 
+/** Mounts the page and waits for its first version check to be answered. */
 async function mount(server = new FakeServer()): Promise<MountedPage> {
   const page = mountPage({ server });
-  await screen.findByText(/^Ready \(API|^SSE|Server missing/);
+  await waitFor(() => expect(server.requests("GET", "/api/version").length).toBeGreaterThan(0));
   await settle();
   return page;
 }
@@ -62,8 +64,14 @@ function controls(): HTMLElement {
   return document.getElementById("overlay-controls")!;
 }
 
+/** The player's indicator: its live region, which always stays in the page. */
 function indicator(): HTMLElement {
-  return document.getElementById("conn-indicator")!;
+  return document.getElementById("player-indicator")!;
+}
+
+/** The state's box in the player's indicator, or null while it shows none. */
+function indicatorBox(): HTMLElement | null {
+  return indicator().querySelector<HTMLElement>(".player-indicator");
 }
 
 function shows(element: Element): boolean {
@@ -279,7 +287,7 @@ describe("a phone on its side", () => {
     // The server refuses the event stream until the device pairs, so it fails, but the prompt is what to act on.
     page.stream().fail();
     await settle();
-    expect(indicator().hidden).toBe(true);
+    expect(indicatorBox()).toBeNull();
 
     fireEvent.input(screen.getByLabelText("Pairing token"), { target: { value: "wrong" } });
     await click(pairButton);
@@ -298,7 +306,7 @@ describe("a phone on its side", () => {
     await waitFor(() => expect(shows(header())).toBe(false));
     page.stream().fail();
     await settle();
-    expect(indicator().hidden).toBe(false);
+    expect(indicatorBox()?.dataset.state).toBe("reconnecting");
   });
 
   it("hides the diagnostics line with the status line", async () => {
@@ -387,53 +395,75 @@ describe("the page's height", () => {
   });
 });
 
-describe("reconnecting indicator", () => {
-  it("shows on the player while the connection is lost on a phone on its side, and goes once it reconnects", async () => {
+describe("player's indicator", () => {
+  it("shows Reconnecting… on the player while the connection is lost on a phone on its side, and goes once it reconnects", async () => {
     stubCoarsePointer();
     setViewport(ON_ITS_SIDE);
     const page = await mount();
     page.stream().open();
     await settle();
-    expect(indicator().hidden).toBe(true);
+    expect(indicatorBox()).toBeNull();
 
     page.stream().fail();
     await settle();
-    expect(indicator().hidden).toBe(false);
-    expect(shows(indicator())).toBe(true);
-    expect(within(stage()).getByRole("status").textContent).toContain("Reconnecting…");
+    expect(indicatorBox()?.dataset.state).toBe("reconnecting");
+    expect(shows(indicatorBox()!)).toBe(true);
+    expect(within(stage()).getByRole("status").querySelector(".player-indicator-text")?.textContent).toBe("Reconnecting…");
     expect(statusLineShows()).toBe(false);
 
     window.dispatchEvent(new Event("focus"));
     page.stream().open();
     await settle();
-    expect(indicator().hidden).toBe(true);
-    expect(shows(indicator())).toBe(false);
+    expect(indicatorBox()).toBeNull();
+    // The live region stays, so its announcements aren't lost.
+    expect(indicator().getAttribute("role")).toBe("status");
   });
 
-  it("stays off the player while the status line shows, which says the connection is reconnecting", async () => {
-    const page = await mount();
-    page.stream().fail();
-    await settle();
-
-    expect(document.getElementById("status")!.textContent).toBe("SSE reconnecting...");
-    expect(statusLineShows()).toBe(true);
-    expect(indicator().hidden).toBe(true);
-  });
-
-  it("shows when the phone turns on its side while the connection is lost", async () => {
+  it("shows on the player at every width, and not on the status line", async () => {
     stubCoarsePointer();
     setViewport(UPRIGHT);
     const page = await mount();
     page.stream().fail();
     await settle();
-    expect(indicator().hidden).toBe(true);
+
+    expect(indicatorBox()?.dataset.state).toBe("reconnecting");
+    expect(statusLineShows()).toBe(true);
+    expect(document.getElementById("status")!.textContent).not.toMatch(/reconnecting/i);
 
     setViewport(ON_ITS_SIDE);
     await settle();
-    expect(indicator().hidden).toBe(false);
+    expect(indicatorBox()?.dataset.state).toBe("reconnecting");
 
     setViewport(UPRIGHT);
     await settle();
-    expect(indicator().hidden).toBe(true);
+    expect(indicatorBox()?.dataset.state).toBe("reconnecting");
+  });
+
+  it("keeps clear of the status bar on a phone on its side, and below the corner buttons on a player narrower than 600 px", async () => {
+    stubSafeAreaInsets({ top: 20 });
+    stubCoarsePointer();
+    stubLayoutSize(844);
+    setViewport(ON_ITS_SIDE);
+    const page = await mount();
+    page.stream().fail();
+    await settle();
+
+    const column = stage().querySelector("main.player-col")!;
+    expect(column.classList.contains("is-narrow")).toBe(false);
+    expect(currentStyle(indicatorBox()!).top).toBe("calc(max(14px, 20px))");
+
+    stubLayoutSize(560);
+    setViewport({ width: 667, height: 375 });
+    await settle();
+    expect(column.classList.contains("is-narrow")).toBe(true);
+    expect(currentStyle(indicatorBox()!).top).toBe("calc(max(12px, 20px) + 52px)");
+    expect(currentStyle(indicatorBox()!).maxWidth).toBe("calc(100% - 24px)");
+
+    // Upright, the page shows the header above the player, and the indicator sits 64 px down the narrow player.
+    stubLayoutSize(390);
+    setViewport(UPRIGHT);
+    await settle();
+    expect(column.classList.contains("is-narrow")).toBe(true);
+    expect(currentStyle(indicatorBox()!).top).toBe("64px");
   });
 });

@@ -113,7 +113,7 @@ export function Player() {
       ></video>
       <img id="photo" alt="Photo" style="display:none" ref={photo} onLoad={player.photoLoaded} onError={player.photoFailed} />
       <div id="empty-state" class="empty-state" ref={emptyState}>Tap to play, or open the panel to choose a preset or filter.</div>
-      <ReconnectingIndicator />
+      <PlayerIndicator />
       <div id="overlay-controls" class="overlay-controls" onTouchStart={stopPropagation} onTouchMove={stopPropagation} onTouchEnd={stopPropagation} onClick={stopPropagation}>
         <PanelButton />
         <button id="favorite-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, player.favorite.value)} aria-label="Favorite" title="Favorite" onClick={press(player.toggleFavorite)}><span class="material-symbol-icon">favorite</span></button>
@@ -137,16 +137,33 @@ export function Player() {
 }
 
 /**
- * Shows on the player on a phone on its side, where the status line that says so is hidden, while the connection is
- * lost and reconnecting. While the server asks for pairing it refuses the connection, and the header's prompt shows
- * instead.
+ * The player's indicator: one lasting state at a time, the first active one in the precedence order (Reconnecting…,
+ * Server not compatible, Running without a library, Loading…, then a library refresh), at the player's top center, or
+ * below the corner buttons on a narrow player. Nothing shows while the server asks for pairing. The live region always
+ * stays in the page, so its announcements aren't lost, and the state's box renders inside it only while one shows. A
+ * long state ends in an ellipsis, and a refresh's percentage, outside the text, is hidden from screen readers, so each
+ * step isn't announced. A refresh shows only while the player's controls do.
  */
-function ReconnectingIndicator() {
-  const { store, panel } = useApp();
-  const shown = store.reconnecting.value && !store.pairingRequired.value && panel.shortScreen.value;
+function PlayerIndicator() {
+  const { indicator } = useApp();
+  const state = indicator.value;
   return (
-    <div id="conn-indicator" class="conn-indicator" role="status" hidden={!shown}>
-      <span class="material-symbol-icon" aria-hidden="true">sync</span>Reconnecting…
+    <div id="player-indicator" class="player-indicator-region" role="status" aria-live="polite">
+      {state ? (
+        <div
+          class={["player-indicator", state.warning ? "is-warning" : "", state.followsControls ? "follows-controls" : ""].filter(Boolean).join(" ")}
+          data-state={state.id}
+        >
+          <span class={state.spins ? "material-symbol-icon spins" : "material-symbol-icon"} aria-hidden="true">{state.icon}</span>
+          <span class="player-indicator-text">{state.title}</span>
+          {state.progress ? (
+            <>
+              {" "}
+              <span aria-hidden="true">{state.progress}</span>
+            </>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

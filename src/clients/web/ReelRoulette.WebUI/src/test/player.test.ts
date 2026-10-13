@@ -4,6 +4,7 @@ import { createPlayer, type PlayerElements } from "../playback/player";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type PlayingItem } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
+import { NO_LIBRARY_PLAY_NOTICE } from "../state/lastingStates";
 import type { ServerConnection, ServerConnectionEvents } from "../state/serverConnection";
 
 const VIDEO: PlayingItem = {
@@ -262,7 +263,7 @@ describe("createPlayer", () => {
     expect(page.requests("/api/random")).toHaveLength(1);
   });
 
-  it("shows each pick that ends without playing in the notice, and drops the status line's Loading...", async () => {
+  it("shows each pick that ends without playing in the notice, leaving the status line as it was", async () => {
     const page = setup();
     const answers: Array<[() => Response, string]> = [
       [() => json({}, 503), "Random selection failed (503)."],
@@ -273,7 +274,7 @@ describe("createPlayer", () => {
       page.store.setStatus("Before");
       await page.player.pickRandom();
       expect(page.notices.at(-1)).toBe(notice);
-      expect(page.store.status.value).toBe("");
+      expect(page.store.status.value).toBe("Before");
     }
     expect(page.store.current.value).toBeNull();
   });
@@ -308,10 +309,12 @@ describe("createPlayer", () => {
     const page = setup();
     page.replies.set("/api/random", () => new Promise<Response>(() => {}) as unknown as Response);
     const pick = page.player.pickRandom();
-    expect(page.store.status.value).toBe("Loading...");
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(page.store.loading.shown.value).toBe(true);
+    await vi.advanceTimersByTimeAsync(9_500);
     await pick;
     expect(page.notices).toEqual(["No response from the server. Try again."]);
+    expect(page.store.loading.shown.value).toBe(false);
     expect(page.store.status.value).toBe("");
   });
 
@@ -579,7 +582,6 @@ describe("createPlayer", () => {
   it("stops moving the bar once a video fails to load, and shows it can't be found in the notice", () => {
     const page = setup();
     page.play(VIDEO);
-    page.store.setStatus("Loading...");
     expect(page.frames.pending()).toBe(1);
 
     // A source that fails fires no pause, so the video still reads as playing.
@@ -803,5 +805,206 @@ describe("createPlayer", () => {
     expect([seekSlider.value, page.player.timeText.value]).toEqual(["61.9", "1:01 / 2:05"]);
     page.player.seek("90");
     expect(video.currentTime).toBe(90);
+  });
+});
+
+describe("Loading… on the player's indicator", () => {
+  /** Records each change of whether Loading… shows, and every status line message, from here on. */
+  function watchLoading(page: ReturnType<typeof setup>) {
+    const shown: boolean[] = [];
+    const statuses: string[] = [];
+    page.store.loading.shown.subscribe((value) => shown.push(value));
+    page.store.status.subscribe((value) => statuses.push(value));
+    return { shown, statuses };
+  }
+
+  /** Answers the next random pick only when the test says so. */
+  function holdRandom(page: ReturnType<typeof setup>) {
+    let answer: (response: Response) => void = () => {};
+    page.replies.set("/api/random", () => new Promise<Response>((resolve) => (answer = resolve)) as unknown as Response);
+    return (item: unknown) => answer(json(item));
+  }
+
+  it("shows only after half a second, counted once across a pick and its media load, and never on the status line", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    const watched = watchLoading(page);
+    const answer = holdRandom(page);
+
+    const pick = page.player.pickRandom();
+    await vi.advanceTimersByTimeAsync(300);
+    answer(VIDEO);
+    await pick;
+    expect(page.elements.video.src).toContain("item-video");
+    expect(page.store.loading.shown.value).toBe(false);
+    await vi.advanceTimersByTimeAsync(199);
+    expect(page.store.loading.shown.value).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(page.store.loading.shown.value).toBe(true);
+
+    page.player.videoPlaying();
+    expect(page.store.loading.shown.value).toBe(false);
+    // One loading period: it showed once and ended once.
+    expect(watched.shown).toEqual([false, true, false]);
+    expect(watched.statuses).not.toContain("Loading...");
+    expect(page.store.status.value).toBe("Playing");
+  });
+
+  it("shows nothing for a load quicker than half a second", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    const watched = watchLoading(page);
+    page.answerRandom(VIDEO);
+
+    await page.player.pickRandom();
+    await vi.advanceTimersByTimeAsync(499);
+    page.player.videoPlaying();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(watched.shown).toEqual([false]);
+  });
+
+  it("ends when a photo loads or fails", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.play(PHOTO);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(page.store.loading.shown.value).toBe(true);
+    page.player.photoLoaded();
+    expect(page.store.loading.shown.value).toBe(false);
+
+    page.play(PHOTO);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(page.store.loading.shown.value).toBe(true);
+    page.player.photoFailed();
+    expect(page.store.loading.shown.value).toBe(false);
+  });
+
+  it("ends when a video fails, when the browser won't play it, when the user pauses it, on Auto-Pause, and when the player detaches", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    const ends: Array<() => void> = [
+      () => page.player.videoFailed(),
+      () => page.player.playOrPause(),
+      () => page.player.autoPause()
+    ];
+    for (const end of ends) {
+      page.play(VIDEO);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(page.store.loading.shown.value).toBe(true);
+      end();
+      expect(page.store.loading.shown.value).toBe(false);
+    }
+
+    // The browser refuses to play it, as when it blocks autoplay.
+    page.elements.video.play = () => Promise.reject(new DOMException("Not allowed", "NotAllowedError"));
+    page.play(VIDEO);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(page.store.loading.shown.value).toBe(false);
+
+    page.elements.video.play = () => Promise.resolve();
+    page.play(VIDEO);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(page.store.loading.shown.value).toBe(true);
+    page.player.detach();
+    expect(page.store.loading.shown.value).toBe(false);
+  });
+
+  it("lets an earlier attempt's events release nothing", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    let refuseFirst: (reason: unknown) => void = () => {};
+    page.elements.video.play = () => new Promise<void>((_resolve, reject) => (refuseFirst = reject));
+    page.play(VIDEO);
+    page.elements.video.play = () => Promise.resolve();
+    page.play(SECOND_VIDEO);
+
+    // The first play is cut short by the second's source, and its rejection arrives after the second started.
+    refuseFirst(new DOMException("Interrupted", "AbortError"));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(page.store.loading.shown.value).toBe(true);
+
+    // A photo's events while a video plays, and a video's events once another item is current, are stale.
+    page.player.photoLoaded();
+    page.player.photoFailed();
+    page.store.pushHistory({ ...VIDEO });
+    page.player.videoPlaying();
+    page.player.videoFailed();
+    expect(page.store.loading.shown.value).toBe(true);
+  });
+
+  it("holds nothing more for a press while a pick waits, and ends when that pick gives up", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.replies.set("/api/random", () => new Promise<Response>(() => {}) as unknown as Response);
+    const pick = page.player.pickRandom();
+    await vi.advanceTimersByTimeAsync(400);
+    await page.player.pickRandom();
+    page.player.next();
+    expect(page.requests("/api/random")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(page.store.loading.shown.value).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(9_500);
+    await pick;
+    expect(page.notices).toEqual(["No response from the server. Try again."]);
+    expect(page.store.loading.shown.value).toBe(false);
+  });
+
+  it("holds for a history step and a photo shown again", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.play(VIDEO);
+    page.player.videoPlaying();
+    page.play(SECOND_VIDEO);
+    page.player.videoPlaying();
+
+    page.player.previous();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(page.store.loading.shown.value).toBe(true);
+    page.player.videoPlaying();
+    expect(page.store.loading.shown.value).toBe(false);
+
+    page.play(PHOTO);
+    page.player.photoLoaded();
+    page.player.toggleLoop();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(page.store.loading.shown.value).toBe(true);
+    page.player.photoLoaded();
+    page.store.setPhotoDuration("4");
+    await vi.advanceTimersByTimeAsync(500);
+    expect(page.store.loading.shown.value).toBe(true);
+    page.player.photoLoaded();
+    expect(page.store.loading.shown.value).toBe(false);
+  });
+});
+
+describe("without a library", () => {
+  it("Play and Next at the end of history show the notice and send nothing, after the compatibility check's notice", async () => {
+    const page = setup();
+    page.store.libraryState.value = "missing";
+
+    await page.player.pickRandom();
+    page.player.next();
+    page.player.playOrPause();
+    await vi.waitFor(() => expect(page.notices).toHaveLength(3));
+    expect(page.notices).toEqual([NO_LIBRARY_PLAY_NOTICE, NO_LIBRARY_PLAY_NOTICE, NO_LIBRARY_PLAY_NOTICE]);
+    expect(page.requests("/api/random")).toHaveLength(0);
+    expect(page.store.loading.shown.value).toBe(false);
+
+    page.store.compatibilityBlocked.value = true;
+    await page.player.pickRandom();
+    expect(page.notices.at(-1)).toBe("Cannot play: server compatibility check failed.");
+  });
+
+  it("records no play", async () => {
+    const page = setup();
+    page.store.libraryState.value = "newer";
+    page.play(VIDEO);
+    await Promise.resolve();
+    expect(page.requests("/api/record-playback")).toHaveLength(0);
+
+    page.store.libraryState.value = "ready";
+    page.play(VIDEO);
+    await vi.waitFor(() => expect(page.requests("/api/record-playback")).toHaveLength(1));
   });
 });

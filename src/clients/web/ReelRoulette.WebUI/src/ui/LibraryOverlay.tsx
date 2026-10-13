@@ -30,8 +30,9 @@ export function LibraryOverlay() {
   const collapsed = library.controlsCollapsed.value;
   const summary = library.summary.value;
   const body = library.body.value;
-  // Nothing loads while the server fails the compatibility check, so search and sort have nothing to change.
-  const blocked = store.compatibilityBlocked.value;
+  // Nothing loads while the server fails the compatibility check or runs without a library, so search and sort have
+  // nothing to change.
+  const blocked = store.heldBack.value;
   return (
     <div id="library-overlay" class="library-overlay">
       <div class="library-overlay-header">
@@ -98,7 +99,10 @@ function FilterSummary({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-/** While it shows a message in place of the presets (loading, failed, or the compatibility check), it is disabled. */
+/**
+ * While it shows a message in place of the presets (loading, failed, the compatibility check, or running without a
+ * library), it is disabled.
+ */
 function PresetSelect() {
   const { store } = useApp();
   const menu = store.presetMenu.value;

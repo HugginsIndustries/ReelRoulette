@@ -93,13 +93,24 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
     fetch: fetchImpl
   });
   const steps: string[] = [];
+  const connectionListeners: Record<string, () => void> = {};
   const connection = {
     async loadPresets() {
       steps.push("loadPresets");
       store.presets.value = (await api.getJson("/api/presets")) as ApiPreset[];
       store.syncHeaderPresets();
+    },
+    on(event: string, listener: () => void) {
+      connectionListeners[event] = listener;
     }
   };
+  /** Tells the dialog the server is ready, as the connection does, and lets what it loads arrive. */
+  async function serverReady(): Promise<void> {
+    connectionListeners.serverReady?.();
+    for (let i = 0; i < 5; i++) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+  }
   const library = {
     commitQuery: vi.fn(async () => {
       steps.push(`commitQuery favoritesMode=${store.appliedFilter.peek().favoritesMode}`);
@@ -125,7 +136,7 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
   };
   const dialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs: { confirm, notice } });
   const view = () => dialog.view.value!;
-  return { dialog, view, store, server, statuses, notices, steps, library, remembered, confirm, panel, deviceWrites };
+  return { dialog, view, store, server, statuses, notices, steps, library, remembered, confirm, panel, deviceWrites, serverReady };
 }
 
 /** An action that is neither disabled nor held. */
@@ -180,6 +191,65 @@ describe("opening", () => {
     expect(dialog.isOpen.value).toBe(true);
     expect(dialog.view.value).toBeNull();
     expect(dialog.tab.value).toBeNull();
+  });
+
+  it("loads, refreshes, and applies nothing while the server runs without a library, with no notice", async () => {
+    const { dialog, view, store, server, statuses, notices, steps, library, panel } = setup();
+    store.libraryState.value = "damaged";
+    await dialog.open();
+    expect(server.requests).toHaveLength(0);
+    expect(dialog.isOpen.value).toBe(true);
+    expect(dialog.view.value).toBeNull();
+    await dialog.refresh();
+    expect(server.requests).toHaveLength(0);
+    expect(dialog.view.value).toBeNull();
+    dialog.close();
+
+    // The server restarted without its library after the tab loaded.
+    store.libraryState.value = "ready";
+    await dialog.open();
+    const loaded = server.requests.length;
+    steps.length = 0;
+    dialog.changeGeneral({ onlyNeverPlayed: true });
+    expect(view().pending).toBe(true);
+    store.libraryState.value = "newer";
+    await dialog.refresh();
+    await dialog.apply();
+    expect(server.requests).toHaveLength(loaded);
+    expect(steps).toEqual([]);
+    expect(library.commitQuery).not.toHaveBeenCalled();
+    expect(panel.closeIfOverlay).not.toHaveBeenCalled();
+    expect(store.appliedFilter.value.onlyNeverPlayed).toBe(false);
+    expect(notices).toEqual([]);
+    expect(statuses).toEqual([]);
+  });
+
+  it("loads once the server is ready while it shows, keeping its changes, and not while it is hidden", async () => {
+    const { dialog, view, store, server, notices, serverReady } = setup();
+    // It showed while the server had no library, as a tab remembered open does, and loaded nothing.
+    store.libraryState.value = "damaged";
+    await dialog.open();
+    expect(dialog.view.value).toBeNull();
+    store.libraryState.value = "ready";
+    await serverReady();
+    expect(server.requests.map((request) => request.path)).toEqual(["/api/sources", "/api/tag-editor/model", "/api/presets"]);
+    expect(view().sources.map((source) => source.id)).toEqual(["source-1", "source-2"]);
+    expect(dialog.tab.value).toBe("general");
+
+    // The server restarted without its library while the tab held changes, and came back with it.
+    dialog.changeGeneral({ onlyNeverPlayed: true });
+    store.libraryState.value = "newer";
+    store.libraryState.value = "ready";
+    await serverReady();
+    expect(server.requests).toHaveLength(6);
+    expect(view().general.onlyNeverPlayed).toBe(true);
+    expect(view().unsaved).toBe(true);
+
+    // Hidden, it loads as it shows again.
+    dialog.close();
+    await serverReady();
+    expect(server.requests).toHaveLength(6);
+    expect(notices).toEqual([]);
   });
 
   it("Refresh before anything has loaded loads as showing the tab does, and says so", async () => {

@@ -13,6 +13,7 @@ import type { RuntimeConfig } from "../types/runtimeConfig";
 import { createAppApi, type AppApi } from "./appApi";
 import { createAppStore, type AppStore } from "./appStore";
 import { createDeviceStore } from "./deviceStore";
+import { createPlayerIndicator, type LastingState } from "./lastingStates";
 import { createServerConnection, type ServerConnection } from "./serverConnection";
 
 /** Whether the Filter and Tags tabs hold unsaved changes, which their tab icons and the panel button mark with a dot. */
@@ -40,6 +41,8 @@ export interface AppServices {
   tagEditor: TagEditor;
   /** Whether the Filter and Tags tabs hold unsaved changes, which the tabs' dots and the panel button's dot both show. */
   unsaved: ReadonlySignal<UnsavedTabs>;
+  /** The lasting state the player's indicator shows, or null. */
+  indicator: ReadonlySignal<LastingState | null>;
 }
 
 export function createAppServices(config: RuntimeConfig): AppServices {
@@ -103,10 +106,16 @@ export function createAppServices(config: RuntimeConfig): AppServices {
       }
     }
   });
-  // A panel remembered open starts its tab once the server has passed or failed the compatibility check.
+  // A panel remembered open starts its tab once the server has passed or failed the compatibility check, or turned out
+  // to have no library, so the Library tab can say why.
   connection.on("serverReady", () => panel.startRememberedTab());
   store.compatibilityBlocked.subscribe((blocked) => {
     if (blocked) {
+      panel.startRememberedTab();
+    }
+  });
+  store.noLibrary.subscribe((noLibrary) => {
+    if (noLibrary) {
       panel.startRememberedTab();
     }
   });
@@ -125,6 +134,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     unsaved: computed(() => ({
       filter: filterDialog.view.value?.unsaved ?? false,
       tags: tagEditor.view.value?.savePending ?? false
-    }))
+    })),
+    indicator: createPlayerIndicator(store)
   };
 }

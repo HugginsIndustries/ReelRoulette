@@ -66,9 +66,10 @@ function panelServer(): FakeServer {
   return server;
 }
 
+/** Mounts the page and waits for its version check, which shows on the status line only when it finds the server ready. */
 async function mount(server = panelServer()): Promise<MountedPage> {
   const page = mountPage({ server });
-  await screen.findByText(/^Ready \(API|^SSE|Server missing/);
+  await waitFor(() => expect(server.requests("GET", "/api/version").length).toBeGreaterThan(0));
   await settle();
   return page;
 }
@@ -768,13 +769,14 @@ describe("compatibility failure", () => {
     const server = panelServer();
     server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, capabilities: [] }));
     await mount(server);
-    const message = statusLine();
-    expect(message).toMatch(/^Server missing required capabilities: /);
+    expect(statusLine()).not.toMatch(/^Server missing required capabilities: /);
 
     await click(panelButton());
     expect(isOpen()).toBe(true);
     const library = document.getElementById("panel-page-library")!;
-    expect(within(library).getByRole("alert").textContent).toBe(message);
+    expect(within(library).getByRole("alert").textContent).toBe(
+      `Server missing required capabilities: ${COMPATIBLE_VERSION.capabilities.join(", ")}.`
+    );
     // The controls stay, but search and sort have nothing to load.
     expect((document.getElementById("library-search-input") as HTMLInputElement).disabled).toBe(true);
     expect(server.requests("POST", "/api/library/query")).toHaveLength(0);
@@ -802,14 +804,13 @@ describe("compatibility failure", () => {
     localStorage.setItem("rr_device.panel.tab", '"library"');
     const server = panelServer();
     server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, capabilities: [] }));
-    // The message shows twice, on the status line and in the tab, so the page is mounted without waiting on its text.
-    mountPage({ server });
-    await waitFor(() => expect(statusLine()).toMatch(/^Server missing required capabilities: /));
-    await settle();
+    await mount(server);
 
     expect(shownPages()).toEqual(["Library"]);
     const library = document.getElementById("panel-page-library")!;
-    expect(within(library).getByRole("alert").textContent).toBe(statusLine());
+    expect(within(library).getByRole("alert").textContent).toBe(
+      `Server missing required capabilities: ${COMPATIBLE_VERSION.capabilities.join(", ")}.`
+    );
   });
 
   it("loads nothing into a Tags tab remembered open, nor on its Refresh", async () => {
@@ -822,5 +823,74 @@ describe("compatibility failure", () => {
 
     await click(within(document.getElementById("panel-page-tags")!).getByRole("button", { name: "Refresh" }));
     expect(server.requests("POST", "/api/tag-editor/model")).toHaveLength(0);
+  });
+});
+
+describe("running without a library", () => {
+  const NO_LIBRARY = { ...COMPATIBLE_VERSION, libraryState: "damaged", libraryMessage: "The library file is damaged." };
+
+  it("loads nothing into a Filter tab remembered open, nor on its Refresh or Apply", async () => {
+    localStorage.setItem("rr_device.panel.open", "true");
+    localStorage.setItem("rr_device.panel.tab", '"filter"');
+    const server = panelServer();
+    server.on("GET", "/api/version", () => json(NO_LIBRARY));
+    await mount(server);
+    expect(shownPages()).toEqual(["Filter"]);
+
+    await click(within(panel()).getByRole("button", { name: "Refresh" }));
+    await click(applyButton());
+    expect(server.requests("GET", "/api/sources")).toHaveLength(0);
+    expect(server.requests("POST", "/api/tag-editor/model")).toHaveLength(0);
+    expect(server.requests("GET", "/api/presets")).toHaveLength(0);
+    expect(server.requests("POST", "/api/library/query")).toHaveLength(0);
+    expect(topDialog()).toBeNull();
+  });
+
+  it("loads nothing into a Tags tab remembered open, nor on its Refresh", async () => {
+    localStorage.setItem("rr_device.panel.open", "true");
+    localStorage.setItem("rr_device.panel.tab", '"tags"');
+    const server = panelServer();
+    server.on("GET", "/api/version", () => json(NO_LIBRARY));
+    await mount(server);
+    expect(shownPages()).toEqual(["Tags"]);
+
+    await click(within(document.getElementById("panel-page-tags")!).getByRole("button", { name: "Refresh" }));
+    expect(server.requests("POST", "/api/tag-editor/model")).toHaveLength(0);
+    expect(topDialog()).toBeNull();
+  });
+
+  it("loads a Filter tab remembered open once the server has its library", async () => {
+    localStorage.setItem("rr_device.panel.open", "true");
+    localStorage.setItem("rr_device.panel.tab", '"filter"');
+    const server = panelServer();
+    let version: object = NO_LIBRARY;
+    server.on("GET", "/api/version", () => json(version));
+    const page = await mount(server);
+    expect(shownPages()).toEqual(["Filter"]);
+    expect(server.requests("GET", "/api/sources")).toHaveLength(0);
+
+    version = COMPATIBLE_VERSION;
+    page.stream().open();
+    await waitFor(() => expect(server.requests("GET", "/api/sources")).toHaveLength(1));
+    await waitFor(() => expect(server.requests("POST", "/api/tag-editor/model")).toHaveLength(1));
+    expect(shownPages()).toEqual(["Filter"]);
+    expect(topDialog()).toBeNull();
+  });
+
+  it("loads a Tags tab remembered open once the server has its library", async () => {
+    localStorage.setItem("rr_device.panel.open", "true");
+    localStorage.setItem("rr_device.panel.tab", '"tags"');
+    const server = panelServer();
+    let version: object = NO_LIBRARY;
+    server.on("GET", "/api/version", () => json(version));
+    const page = await mount(server);
+    expect(shownPages()).toEqual(["Tags"]);
+    expect(server.requests("POST", "/api/tag-editor/model")).toHaveLength(0);
+
+    version = COMPATIBLE_VERSION;
+    page.stream().open();
+    await waitFor(() => expect(server.requests("POST", "/api/tag-editor/model")).toHaveLength(1));
+    expect(shownPages()).toEqual(["Tags"]);
+    expect(topDialog()).toBeNull();
   });
 });

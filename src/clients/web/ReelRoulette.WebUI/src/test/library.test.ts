@@ -7,6 +7,7 @@ import type { LibraryGridController, LibraryGridCoverage } from "../library/libr
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type PlayingItem } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
+import { NO_LIBRARY_PLAY_NOTICE, noLibraryText } from "../state/lastingStates";
 import type { ServerConnection, ServerConnectionEvents } from "../state/serverConnection";
 
 const PLAYED: PlayingItem = {
@@ -582,7 +583,6 @@ describe("play", () => {
     );
 
     const first = t.library.play("item-1");
-    expect(t.store.status.peek()).toBe("Loading...");
     await t.library.play("item-1");
     answer();
     await first;
@@ -591,7 +591,46 @@ describe("play", () => {
     expect(t.player.playCurrent).toHaveBeenCalledTimes(1);
   });
 
-  it("shows a refused, unreachable, or empty play in the notice, drops Loading..., and leaves the panel open", async () => {
+  it("holds Loading… while the play waits, handing it to the media before letting go, and never shows it on the status line", async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    const shown: boolean[] = [];
+    const statuses: string[] = [];
+    t.store.loading.shown.subscribe((value) => shown.push(value));
+    t.store.status.subscribe((value) => statuses.push(value));
+    // As the player does: every play attempt holds its media until it plays.
+    t.player.playCurrent.mockImplementation(() => t.store.loading.hold("media"));
+    let answer: () => void = () => {};
+    t.replies.set("/api/play/item-1", () => new Promise<Response>((resolve) => (answer = () => resolve(json(PLAYED)))));
+
+    const play = t.library.play("item-1");
+    await vi.advanceTimersByTimeAsync(499);
+    expect(t.store.loading.shown.value).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(t.store.loading.shown.value).toBe(true);
+    answer();
+    await play;
+    expect(t.store.loading.shown.value).toBe(true);
+    t.store.loading.release("media");
+    expect(t.store.loading.shown.value).toBe(false);
+    expect(shown).toEqual([false, true, false]);
+    expect(statuses).not.toContain("Loading...");
+  });
+
+  it("lets go of Loading… when a play ends without playing", async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    for (const answer of [() => json({}, 500), () => json({}, 401), () => Promise.reject(new TypeError("Failed to fetch"))]) {
+      t.replies.set("/api/play/item-1", answer);
+      const play = t.library.play("item-1");
+      await vi.advanceTimersByTimeAsync(500);
+      await play;
+      expect(t.store.loading.shown.value).toBe(false);
+    }
+    expect(t.player.playCurrent).not.toHaveBeenCalled();
+  });
+
+  it("shows a refused, unreachable, or empty play in the notice, leaving the status line as it was and the panel open", async () => {
     const t = setup();
     t.showTab();
 
@@ -676,6 +715,78 @@ describe("play", () => {
     expect(t.notices).toEqual(["Cannot play: server compatibility check failed."]);
     expect(t.requests("/api/play/item-1")).toHaveLength(0);
     expect(t.queries()).toHaveLength(0);
+  });
+});
+
+describe("without a library", () => {
+  const MESSAGE = "The library was made by a newer version of ReelRoulette.";
+
+  it("shows the server's message in place of the library, and neither loads nor plays", async () => {
+    const t = setup();
+    t.store.libraryMessage.value = MESSAGE;
+    t.store.libraryState.value = "newer";
+
+    t.showTab();
+    await t.library.play("item-1");
+    await t.library.commitQuery();
+    t.library.setSortMode("Duration");
+    t.store.presets.value = [{ id: "fav", name: "Favorites", filterState: { favoritesOnly: true, includedSourceIds: ["source-1"] } }];
+    t.store.pickHeaderPreset("fav");
+    await settle();
+
+    expect(t.library.body.peek()).toEqual({ kind: "message", message: { text: noLibraryText(MESSAGE), error: true, live: false } });
+    expect(t.library.summary.peek()).toBeNull();
+    expect(t.notices).toEqual([NO_LIBRARY_PLAY_NOTICE]);
+    expect(t.requests("/api/play/item-1")).toHaveLength(0);
+    expect(t.requests("/api/sources")).toHaveLength(0);
+    expect(t.queries()).toHaveLength(0);
+    expect(t.player.playCurrent).not.toHaveBeenCalled();
+  });
+
+  it("shows the compatibility check's notice first while both hold", async () => {
+    const t = setup();
+    t.store.libraryState.value = "missing";
+    t.store.compatibilityMessage.value = "Server API version 0 is not supported.";
+    t.store.compatibilityBlocked.value = true;
+
+    t.showTab();
+    await t.library.play("item-1");
+    expect(t.notices).toEqual(["Cannot play: server compatibility check failed."]);
+    expect(t.library.body.peek()).toMatchObject({ message: { text: "Server API version 0 is not supported." } });
+  });
+
+  it("follows the server's message while open, and loads once the library is ready and the server says so", async () => {
+    const t = setup();
+    t.showTab();
+    t.store.libraryState.value = "missing";
+    expect(t.library.body.peek()).toEqual({ kind: "message", message: { text: "Running without a library.", error: true, live: false } });
+    t.store.libraryMessage.value = MESSAGE;
+    expect(t.library.body.peek()).toMatchObject({ message: { text: noLibraryText(MESSAGE) } });
+
+    t.store.libraryState.value = "ready";
+    t.store.libraryMessage.value = null;
+    expect(t.library.body.peek()).toEqual({ kind: "message", message: { text: "Loading library…", error: false, live: true } });
+    t.emit("serverReady");
+    await settle();
+    expect(t.queries()).toHaveLength(1);
+    expect(t.library.body.peek()).toEqual({ kind: "grid" });
+  });
+
+  it("shows the message in place of loaded tiles when the library goes, and the tiles again when it is back", async () => {
+    const t = setup();
+    t.emit("serverReady");
+    await settle();
+    t.showTab();
+    expect(t.library.body.peek()).toEqual({ kind: "grid" });
+
+    t.store.libraryState.value = "unreadable";
+    expect(t.library.body.peek()).toMatchObject({ kind: "message", message: { text: "Running without a library." } });
+    t.library.toggleSortDirection();
+    await settle();
+    expect(t.queries()).toHaveLength(1);
+
+    t.store.libraryState.value = "ready";
+    expect(t.library.body.peek()).toEqual({ kind: "grid" });
   });
 });
 

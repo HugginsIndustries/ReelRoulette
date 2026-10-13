@@ -624,13 +624,33 @@ describe("opening and closing", () => {
       json({ ...COMPATIBLE_VERSION, capabilities: COMPATIBLE_VERSION.capabilities.filter((c) => c !== "api.presets.match") })
     );
     mountPage({ server });
-    await screen.findByText("Server missing required capabilities: api.presets.match.");
+    await waitFor(() => expect(selectedPresetLabel()).toBe("Server compatibility check failed"));
 
     await chooseFilterTab();
     expect(isOpen()).toBe(true);
     expect(server.requests("GET", "/api/sources")).toHaveLength(0);
     expect(server.requests("POST", "/api/tag-editor/model")).toHaveLength(0);
     expect(dialog().querySelector("input")).toBeNull();
+  });
+
+  it("shows but loads nothing while the server runs without a library, nor on Refresh, with no notice", async () => {
+    const server = new FakeServer();
+    server.on("GET", "/api/sources", () => json(SOURCES));
+    server.on("POST", "/api/tag-editor/model", () => json(TAG_MODEL));
+    server.on("GET", "/api/version", () =>
+      json({ ...COMPATIBLE_VERSION, libraryState: "missing", libraryMessage: "The library file is missing." })
+    );
+    mountPage({ server });
+    await waitFor(() => expect(selectedPresetLabel()).toBe("Running without a library"));
+
+    await chooseFilterTab();
+    expect(isOpen()).toBe(true);
+    await click(dialogButton("Refresh"));
+    expect(server.requests("GET", "/api/sources")).toHaveLength(0);
+    expect(server.requests("POST", "/api/tag-editor/model")).toHaveLength(0);
+    expect(server.requests("GET", "/api/presets")).toHaveLength(0);
+    expect(dialog().querySelector("input")).toBeNull();
+    expect(openNotices()).toEqual([]);
   });
 
   it("says why when its sources or tags cannot load, and loads them when it shows again or on Refresh", async () => {

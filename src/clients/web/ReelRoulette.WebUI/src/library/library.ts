@@ -10,6 +10,7 @@ import type { Player } from "../playback/player";
 import type { AppApi } from "../state/appApi";
 import type { AppStore } from "../state/appStore";
 import type { DeviceStore } from "../state/deviceStore";
+import { noLibraryText, playRefusalNotice } from "../state/lastingStates";
 import type { ServerConnection } from "../state/serverConnection";
 import type { RuntimeConfig } from "../types/runtimeConfig";
 import type { RefreshKeptSource } from "../types/serverContracts";
@@ -107,15 +108,16 @@ export interface Library {
   isOpen(): boolean;
   /**
    * The tab shows, its page already shown, and loads the first page when there is none. While the server fails the
-   * compatibility check, the body shows why, in place of the grid, and before it has passed the check the first page
-   * waits for it.
+   * compatibility check or runs without a library, the body shows why, in place of the grid, and before the server is
+   * ready the first page waits for it.
    */
   open(): void;
   /** The tab hides. */
   close(): void;
   /**
-   * Starts over from the first page with the applied filter and the current search and sort. Before the server has
-   * passed the compatibility check, or while it fails it, nothing is sent: the first page loads with them once it passes.
+   * Starts over from the first page with the applied filter and the current search and sort. Before the server is
+   * ready, while it fails the compatibility check, or while it runs without a library, nothing is sent: the first page
+   * loads with them once it is ready.
    */
   commitQuery(): Promise<void>;
   /** Takes the search box's text, and starts over once typing stops. */
@@ -179,7 +181,7 @@ export function createLibrary(options: LibraryOptions): Library {
   let pendingScrollTop = false;
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
   let playInFlight = false;
-  /** The server passed the compatibility check, so the library can load. */
+  /** The server passed the compatibility check with a library, so the library can load. */
   let serverReady = false;
   /** The source list's load under way, which a second caller waits for rather than sending another. */
   let sourcesLoad: Promise<SourcesLoad> | null = null;
@@ -241,9 +243,20 @@ export function createLibrary(options: LibraryOptions): Library {
   }
 
   /**
+   * Nothing loads while the server fails the compatibility check or runs without a library, and the tab says why in
+   * place of the grid: the compatibility message, or the server's message for its library state.
+   */
+  function blockedMessage(): string | null {
+    if (store.compatibilityBlocked.peek()) {
+      return store.compatibilityMessage.peek();
+    }
+    return store.noLibrary.peek() ? noLibraryText(store.libraryMessage.peek()) : null;
+  }
+
+  /**
    * While hidden, only a grid already shown is updated, and its layout waits until the tab shows. While shown, a
    * window without a result shows its message in place of the grid, and so does a server that failed the
-   * compatibility check.
+   * compatibility check or runs without a library.
    */
   function renderWindow(scroll: "top" | "keep"): void {
     const snap = session.snapshot();
@@ -257,7 +270,7 @@ export function createLibrary(options: LibraryOptions): Library {
       return;
     }
 
-    const blockedBy = store.compatibilityBlocked.peek() ? store.compatibilityMessage.peek() : null;
+    const blockedBy = blockedMessage();
     if (blockedBy !== null) {
       summary.value = null;
       body.value = { kind: "message", message: { text: blockedBy, error: true, live: false } };
@@ -291,7 +304,7 @@ export function createLibrary(options: LibraryOptions): Library {
       clearTimeout(searchTimer);
       searchTimer = null;
     }
-    if (!serverReady || store.compatibilityBlocked.peek()) {
+    if (!serverReady || store.heldBack.peek()) {
       return Promise.resolve();
     }
     return session.resetQuery(store.appliedFilter.peek(), controls.peek());
@@ -390,8 +403,9 @@ export function createLibrary(options: LibraryOptions): Library {
       return;
     }
 
-    if (store.compatibilityBlocked.peek()) {
-      void dialogs.notice("Cannot play: server compatibility check failed.");
+    const refusal = playRefusalNotice(store);
+    if (refusal) {
+      void dialogs.notice(refusal);
       return;
     }
 
@@ -400,9 +414,8 @@ export function createLibrary(options: LibraryOptions): Library {
     }
 
     playInFlight = true;
-    store.setStatus("Loading...");
+    store.loading.hold("play");
     trace("info", "library-play-start");
-    let played = false;
 
     try {
       const result = await requestPlayItem(
@@ -431,7 +444,6 @@ export function createLibrary(options: LibraryOptions): Library {
       store.pushHistory(data);
       void panel.closeIfOverlay();
       trace("info", "library-play-success");
-      played = true;
       player.playCurrent({ recordPlayback: false });
     } catch (error) {
       if (error instanceof UnauthorizedError) {
@@ -442,16 +454,14 @@ export function createLibrary(options: LibraryOptions): Library {
       void dialogs.notice(`Playback failed: ${errorText(error)}`);
     } finally {
       playInFlight = false;
-      // A play that ends without playing shows its failure in the notice, so the status line drops its "Loading...".
-      if (!played) {
-        store.clearStatus("Loading...");
-      }
+      // The media holds Loading… by now when the play went ahead, so the play and its media load are one loading period.
+      store.loading.release("play");
     }
   }
 
   store.on("headerFilterChanged", () => {
     void commitQuery();
-    if (serverReady) {
+    if (serverReady && !store.heldBack.peek()) {
       void loadSourcesForSummary();
     }
   });
@@ -478,12 +488,16 @@ export function createLibrary(options: LibraryOptions): Library {
   connection.on("refreshKeptSources", (keptSources) => {
     keptSourcesQueue = keptSourcesQueue.then(() => noticeKeptSources(keptSources));
   });
-  // The tab says why while the server fails the compatibility check, and shows the library again once it passes.
-  store.compatibilityBlocked.subscribe(() => {
+  // The tab says why while the server fails the compatibility check or runs without a library, and shows the library
+  // again once it can load, which `serverReady` then starts.
+  const rerenderShown = () => {
     if (open) {
       renderWindow("keep");
     }
-  });
+  };
+  store.compatibilityBlocked.subscribe(rerenderShown);
+  store.noLibrary.subscribe(rerenderShown);
+  store.libraryMessage.subscribe(rerenderShown);
   // The playing item's tile shows the playing icon.
   store.current.subscribe((item) => {
     grid?.setPlayingItemId(item?.itemId ?? null);
@@ -540,7 +554,7 @@ export function createLibrary(options: LibraryOptions): Library {
 
       open = true;
       session.setOverlayVisible(true);
-      if (store.compatibilityBlocked.peek()) {
+      if (store.heldBack.peek()) {
         renderWindow("keep");
         return;
       }
@@ -551,7 +565,7 @@ export function createLibrary(options: LibraryOptions): Library {
         showChrome(snap);
         grid.flushDeferredLayout();
       }
-      // Before the server has passed the compatibility check, the first page waits for it, as `commitQuery` does.
+      // Before the server is ready, the first page waits for it, as `commitQuery` does.
       if (!snap.hasResult && serverReady) {
         void session.ensureLoaded(store.appliedFilter.peek(), controls.peek());
       }

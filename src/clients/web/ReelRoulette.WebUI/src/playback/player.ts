@@ -5,6 +5,7 @@ import { applyItemStateToCurrent } from "../library/currentItemState";
 import { playbackTraceLine } from "../logging/relayLogLines";
 import type { AppApi } from "../state/appApi";
 import type { AppStore, PlayingItem } from "../state/appStore";
+import { playRefusalNotice } from "../state/lastingStates";
 import type { ServerConnection } from "../state/serverConnection";
 import { basenameFromPath, formatPlaybackPosition } from "./nowPlaying";
 import { createPhotoTimer } from "./photoTimer";
@@ -204,14 +205,19 @@ export function createPlayer(options: PlayerOptions): Player {
   let autoHeldPhoto = false;
   /** The play attempt Auto-Pause paused; once another has started, there is nothing to resume. */
   let autoPausedAttempt = 0;
+  /** A random pick waits for the server, holding Loading…. */
+  let pickWaiting = false;
 
   function trace(level: string, message: string, context: Record<string, unknown> = {}): void {
     void api.relayLog(level, playbackTraceLine(message, store.current.peek(), store.playAttemptId.peek(), context));
   }
 
-  /** Records the play on start, as the desktop does, so random picks and filters use fresh play counts. */
+  /**
+   * Records the play on start, as the desktop does, so random picks and filters use fresh play counts. Nothing is
+   * recorded while the server fails the compatibility check or runs without a library.
+   */
   function notifyPlaybackStarted(item: PlayingItem): void {
-    if (!item?.itemId || store.compatibilityBlocked.peek()) return;
+    if (!item?.itemId || store.heldBack.peek()) return;
     void api
       .post("/api/record-playback", {
         path: item.itemId,
@@ -328,6 +334,14 @@ export function createPlayer(options: PlayerOptions): Player {
     next();
   }
 
+  /**
+   * The media of the attempt playing now has loaded, failed, or been paused, so the player no longer waits for it.
+   * Loading… keeps showing while a pick or a library play still waits.
+   */
+  function mediaSettled(): void {
+    store.loading.release("media");
+  }
+
   /** An attempt is stale once another item or attempt has started; its events are only traced. */
   function isStale(attempt: ArmedAttempt): boolean {
     const current = store.current.peek();
@@ -351,6 +365,8 @@ export function createPlayer(options: PlayerOptions): Player {
     const { video, photo, emptyState, seekSlider } = elements;
     store.playAttemptId.value += 1;
     const attemptId = store.playAttemptId.peek();
+    // Every attempt waits for its media, a history step or a photo shown again too, until it plays, loads, or fails.
+    store.loading.hold("media");
     trace("info", "start", { mediaType: item.mediaType });
     if (playOptions.recordPlayback !== false) {
       notifyPlaybackStarted(item);
@@ -385,15 +401,22 @@ export function createPlayer(options: PlayerOptions): Player {
       video.loop = store.loop.peek();
       armed = { mediaType: "video", id: item.id, attemptId };
       video.muted = muted.peek();
-      void video.play().catch(() => {});
+      // A browser that won't play it, as when it blocks autoplay, leaves it waiting for the user. A rejection that
+      // arrives after another attempt has started is that earlier play's, cut short by the new source.
+      void video.play().catch(() => {
+        if (store.playAttemptId.peek() === attemptId) {
+          mediaSettled();
+        }
+      });
     }
 
     showToggles();
   }
 
   async function pickRandom(): Promise<void> {
-    if (store.compatibilityBlocked.peek()) {
-      void dialogs.notice("Cannot play: server compatibility check failed.");
+    const refusal = playRefusalNotice(store);
+    if (refusal) {
+      void dialogs.notice(refusal);
       return;
     }
 
@@ -406,37 +429,42 @@ export function createPlayer(options: PlayerOptions): Player {
       selectedPresetValue: store.selectedPresetValue()
     });
 
-    store.setStatus("Loading...");
-    // A press while a pick is waiting sends nothing; the status above shows it is still loading.
+    // A press while a pick is waiting sends nothing and holds nothing more; the pick that waits shows Loading….
+    if (!pickWaiting) {
+      pickWaiting = true;
+      store.loading.hold("pick");
+    }
     const outcome = await randomPicker.pick(body);
     if (outcome.kind === "busy") {
       return;
     }
-    if (outcome.kind !== "picked") {
-      // The failure shows in the notice, or the pairing prompt shows, so the status line drops its "Loading...".
-      store.clearStatus("Loading...");
-    }
-    switch (outcome.kind) {
-      case "timedOut":
-        trace("warn", "random-pick-timeout", { timeoutMs: outcome.timeoutMs });
-        void dialogs.notice("No response from the server. Try again.");
-        return;
-      case "unauthorized":
-        // The request asked for pairing, whose prompt is the only signal, and sent its line.
-        return;
-      case "failed":
-        void dialogs.notice(`Random selection failed (${outcome.statusCode}).`);
-        return;
-      case "error":
-        void dialogs.notice(`Random selection failed: ${outcome.message}`);
-        return;
-      case "none":
-        void dialogs.notice("No eligible media for current filters.");
-        return;
-    }
+    pickWaiting = false;
+    try {
+      switch (outcome.kind) {
+        case "timedOut":
+          trace("warn", "random-pick-timeout", { timeoutMs: outcome.timeoutMs });
+          void dialogs.notice("No response from the server. Try again.");
+          return;
+        case "unauthorized":
+          // The request asked for pairing, whose prompt is the only signal, and sent its line.
+          return;
+        case "failed":
+          void dialogs.notice(`Random selection failed (${outcome.statusCode}).`);
+          return;
+        case "error":
+          void dialogs.notice(`Random selection failed: ${outcome.message}`);
+          return;
+        case "none":
+          void dialogs.notice("No eligible media for current filters.");
+          return;
+      }
 
-    store.pushHistory(outcome.item);
-    playCurrent();
+      // The media holds Loading… before the pick lets go of it, so a pick and its media load are one loading period.
+      store.pushHistory(outcome.item);
+      playCurrent();
+    } finally {
+      store.loading.release("pick");
+    }
   }
 
   function next(): void {
@@ -545,6 +573,7 @@ export function createPlayer(options: PlayerOptions): Player {
       stopMovingBar();
       armed = null;
       elements = null;
+      store.loading.releaseAll();
     },
 
     playCurrent,
@@ -572,7 +601,9 @@ export function createPlayer(options: PlayerOptions): Player {
         if (elements.video.paused) {
           void elements.video.play().catch(() => {});
         } else {
+          // A video the user pauses while it still loads no longer shows Loading….
           elements.video.pause();
+          mediaSettled();
         }
         showPlayState();
       }
@@ -621,6 +652,7 @@ export function createPlayer(options: PlayerOptions): Player {
     autoPause() {
       handBackToUser();
       autoPausedAttempt = store.playAttemptId.peek();
+      mediaSettled();
       if (photoShown()) {
         autoHeldPhoto = photoTimer.running;
         photoTimer.hold();
@@ -661,6 +693,7 @@ export function createPlayer(options: PlayerOptions): Player {
         return;
       }
       trace("info", "video-onplaying");
+      mediaSettled();
       store.setStatus("Playing");
     },
 
@@ -674,7 +707,7 @@ export function createPlayer(options: PlayerOptions): Player {
       trace("warn", "video-onerror");
       // A source that fails fires no pause, so the video still reads as playing; its bar has nothing more to show.
       stopMovingBar();
-      store.clearStatus("Loading...");
+      mediaSettled();
       void dialogs.notice("Video file not found.");
     },
 
@@ -707,6 +740,7 @@ export function createPlayer(options: PlayerOptions): Player {
         return;
       }
       trace("info", "photo-onload");
+      mediaSettled();
       store.setStatus("Playing");
     },
 
@@ -718,7 +752,7 @@ export function createPlayer(options: PlayerOptions): Player {
         return;
       }
       trace("warn", "photo-onerror");
-      store.clearStatus("Loading...");
+      mediaSettled();
       // Under Autoplay or Loop the photo's timer runs on and can fail again; the notice already open doesn't stack.
       void dialogs.notice("Photo file not found.");
     }

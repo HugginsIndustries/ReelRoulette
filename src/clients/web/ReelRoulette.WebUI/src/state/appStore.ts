@@ -1,4 +1,5 @@
-import { batch, effect, signal, type Signal } from "@preact/signals";
+import { batch, computed, effect, signal, type ReadonlySignal, type Signal } from "@preact/signals";
+import type { RefreshProgress } from "../events/refreshStatusProjection";
 import type { FilterSource } from "../filter/filterDialogModel";
 import {
   createDefaultFilterState,
@@ -17,6 +18,7 @@ import {
 } from "../filter/filterStateModel";
 import { createItemStateCache, type ItemStateCache } from "../library/currentItemState";
 import { statusLogLine } from "../logging/relayLogLines";
+import { createLoadingHolds, type LoadingHolds } from "../playback/loadingHolds";
 import type { components } from "../types/openapi.generated";
 import type { DeviceStore } from "./deviceStore";
 
@@ -41,6 +43,7 @@ export const RANDOMIZATION_MODES: readonly { value: string; label: string }[] = 
 export const PRESET_MENU_LOADING = "Loading...";
 export const PRESET_MENU_LOAD_FAILED = "Error loading presets";
 export const PRESET_MENU_BLOCKED = "Server compatibility check failed";
+export const PRESET_MENU_NO_LIBRARY = "Running without a library";
 
 /** The playing item, as the random and play responses describe it. */
 export type PlayingItem = components["schemas"]["RandomResponse"];
@@ -132,18 +135,28 @@ export interface AppStore {
   /** Why the server failed the compatibility check, while it has. */
   readonly compatibilityMessage: Signal<string | null>;
   readonly pairingRequired: Signal<boolean>;
-  /** The event stream was lost and is reconnecting. */
+  /**
+   * The server can't be reached: the event stream isn't open, or the last version check didn't reach the server. False
+   * while the last check found no library, since the server then refuses the stream.
+   */
   readonly reconnecting: Signal<boolean>;
+  /** The library state the last version check reported: "ready", or why there is no library. */
+  readonly libraryState: Signal<string>;
+  /** The server's message for its library state, while it has no library. */
+  readonly libraryMessage: Signal<string | null>;
+  /** The server runs without a library, so the page loads nothing, as while it fails the compatibility check. */
+  readonly noLibrary: ReadonlySignal<boolean>;
+  /** The server fails the compatibility check or runs without a library, so the page loads and sends nothing. */
+  readonly heldBack: ReadonlySignal<boolean>;
+  /** A running refresh's stage and percent, or null while none runs. */
+  readonly refreshProgress: Signal<RefreshProgress | null>;
+  /** What the player is waiting for, which shows Loading… once it has waited half a second. */
+  readonly loading: LoadingHolds;
 
   /** `logText` replaces `message` in the server log when `message` shows a file, preset, or server error text. */
   setStatus(message: string, logText?: string): void;
   /** Relays a status message's text to the server log without showing it, as `setStatus` relays it. */
   relayStatus(logText: string): void;
-  /**
-   * Empties the status line while it still shows `message`, without relaying anything, such as "Loading..." once a
-   * pick ends without playing and its failure shows in the notice instead.
-   */
-  clearStatus(message: string): void;
   /** Rebuilds the preset dropdown from the presets and the applied filter. */
   syncHeaderPresets(): void;
   /**
@@ -223,6 +236,10 @@ export function createAppStore(options: AppStoreOptions): AppStore {
   /** Presets have loaded once, so whether the filter is a preset's own can be told, and the filter is remembered. */
   const presetsLoadedOnce = signal(false);
 
+  const compatibilityBlocked = signal(false);
+  const libraryState = signal("ready");
+  const noLibrary = computed(() => libraryState.value !== "ready");
+
   const store: AppStore = {
     identity: options.identity,
     status: signal(""),
@@ -241,20 +258,20 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     randomizationMode: signal(readRandomizationMode(options.storage)),
     photoDurationSeconds: signal(readPhotoDuration(options.storage)),
     sources: signal<FilterSource[] | null>(null),
-    compatibilityBlocked: signal(false),
+    compatibilityBlocked,
     compatibilityMessage: signal<string | null>(null),
     pairingRequired: signal(false),
     reconnecting: signal(false),
+    libraryState,
+    libraryMessage: signal<string | null>(null),
+    noLibrary,
+    heldBack: computed(() => compatibilityBlocked.value || noLibrary.value),
+    refreshProgress: signal<RefreshProgress | null>(null),
+    loading: createLoadingHolds(),
 
     setStatus(message, logText = message) {
       store.status.value = message;
       store.relayStatus(logText);
-    },
-
-    clearStatus(message) {
-      if (store.status.peek() === message) {
-        store.status.value = "";
-      }
     },
 
     relayStatus(logText) {

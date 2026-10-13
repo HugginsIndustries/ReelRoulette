@@ -73,6 +73,20 @@ function selectedLabel(select: HTMLSelectElement): string {
   return select.options[select.selectedIndex]?.textContent ?? "";
 }
 
+/** The lasting state the player's indicator shows, or null. */
+function indicatorState(): string | null {
+  return document.querySelector<HTMLElement>("#player-indicator .player-indicator")?.dataset.state ?? null;
+}
+
+function indicatorTitle(): string {
+  return document.querySelector("#player-indicator .player-indicator-text")?.textContent ?? "";
+}
+
+function selectedPresetLabelText(): string {
+  const select = presetSelect();
+  return select.options[select.selectedIndex]?.textContent ?? "";
+}
+
 function statusLine(): string {
   return document.getElementById("status")?.textContent ?? "";
 }
@@ -114,7 +128,7 @@ describe("startup and connection", () => {
     expect(page.stream().param("sessionId")).toBe(page.sessionId());
   });
 
-  it("shows the event stream opening and reconnecting with the last event ID", async () => {
+  it("shows the event stream opening, and reconnects with the last event ID, off the status line", async () => {
     vi.useFakeTimers();
     const page = mountPage();
     await vi.advanceTimersByTimeAsync(0);
@@ -127,12 +141,101 @@ describe("startup and connection", () => {
     first.emit("streamOpened", 7, {});
     first.fail();
     await vi.advanceTimersByTimeAsync(0);
-    expect(statusLine()).toBe("SSE reconnecting...");
+    expect(statusLine()).toBe("SSE connected");
     expect(first.closed).toBe(true);
 
     await vi.advanceTimersByTimeAsync(1000);
     expect(page.streams()).toHaveLength(2);
     expect(page.stream().param("lastEventId")).toBe("7");
+  });
+
+  it("says Reconnecting… while the server can't be reached, relayed once, until the stream opens and a check reaches it", async () => {
+    const page = mountPage();
+    await screen.findByText("Ready (API 1)");
+    let reachable = true;
+    page.server.on("GET", "/api/version", () => {
+      if (!reachable) {
+        throw new TypeError("Load failed");
+      }
+      return json(COMPATIBLE_VERSION);
+    });
+    page.stream().open();
+    await settle();
+    expect(indicatorState()).toBeNull();
+
+    reachable = false;
+    page.stream().fail();
+    await settle();
+    expect(indicatorState()).toBe("reconnecting");
+    expect(indicatorTitle()).toBe("Reconnecting…");
+    page.stream().fail();
+    await settle();
+    expect(indicatorState()).toBe("reconnecting");
+    expect(page.server.logLines().filter((line) => line.startsWith("status=Reconnecting…"))).toHaveLength(1);
+    expect(statusLine()).not.toMatch(/reconnecting|offline/i);
+
+    // The stream opening isn't enough: the check on the open has to reach the server.
+    page.stream().open();
+    await settle();
+    expect(indicatorState()).toBe("reconnecting");
+    reachable = true;
+    page.stream().open();
+    await settle();
+    expect(indicatorState()).toBeNull();
+  });
+
+  it("loads the page once a server that couldn't be reached at page load answers, ending Reconnecting…", async () => {
+    const server = new FakeServer();
+    let reachable = false;
+    server.on("GET", "/api/version", () => {
+      if (!reachable) {
+        throw new TypeError("Failed to fetch");
+      }
+      return json(COMPATIBLE_VERSION);
+    });
+    const page = mountPage({ server });
+    await waitFor(() => expect(indicatorState()).toBe("reconnecting"));
+    expect(server.requests("GET", "/api/presets")).toHaveLength(0);
+
+    reachable = true;
+    page.stream().open();
+    await waitFor(() => expect(indicatorState()).toBeNull());
+    await waitFor(() => expect(server.requests("GET", "/api/presets")).toHaveLength(1));
+    // The check that finds it ready runs after the stream opens.
+    expect(statusLine()).toBe("Ready (API 1)");
+  });
+
+  it("says Running without a library while the server has none, not Reconnecting… for the stream it refuses, and loads once it has one", async () => {
+    const server = new FakeServer();
+    let library = "damaged";
+    server.on("GET", "/api/version", () =>
+      json({ ...COMPATIBLE_VERSION, libraryState: library, libraryMessage: library === "ready" ? null : "The library is damaged." })
+    );
+    const page = mountPage({ server });
+    await waitFor(() => expect(indicatorState()).toBe("nolibrary"));
+    expect(indicatorTitle()).toBe("Running without a library");
+    expect(selectedPresetLabelText()).toBe("Running without a library");
+    page.stream().fail();
+    await settle();
+    page.stream().fail();
+    await settle();
+    expect(indicatorState()).toBe("nolibrary");
+    expect(server.requests("GET", "/api/presets")).toHaveLength(0);
+    expect(server.requests("POST", "/api/library/query")).toHaveLength(0);
+
+    library = "ready";
+    page.stream().open();
+    await waitFor(() => expect(indicatorState()).toBeNull());
+    await waitFor(() => expect(server.requests("GET", "/api/presets")).toHaveLength(1));
+  });
+
+  it("says Server not compatible while the server fails the compatibility check", async () => {
+    const server = new FakeServer();
+    server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, apiVersion: "99", supportedApiVersions: ["99"], minimumCompatibleApiVersion: "99" }));
+    mountPage({ server });
+    await waitFor(() => expect(indicatorState()).toBe("incompatible"));
+    expect(indicatorTitle()).toBe("Server not compatible");
+    expect(document.querySelector("#player-indicator .player-indicator")!.classList.contains("is-warning")).toBe(true);
   });
 
   it("reconnects the event stream when the page becomes visible, gains focus, is shown, or comes online", async () => {
@@ -151,7 +254,7 @@ describe("startup and connection", () => {
     expect(streams.slice(0, 4).every((stream) => stream.closed)).toBe(true);
   });
 
-  it("shows refresh progress, keeps a failed refresh's error out of the log, and reloads the library once per finished run", async () => {
+  it("keeps refresh progress off the status line, a failed refresh's error out of the log, and reloads the library once per finished run", async () => {
     const page = mountPage();
     await screen.findByText("Ready (API 1)");
     const stream = page.stream();
@@ -163,7 +266,12 @@ describe("startup and connection", () => {
         stages: [{ stage: "thumbnailGeneration", percent: 40, message: "Thumbnails", isComplete: false }]
       }
     });
-    await screen.findByText("Core refresh: Thumbnails (40%)");
+    // The player's indicator shows the stage's label, and relays it.
+    await waitFor(() =>
+      expect(page.server.logLines()).toContain("status=Library refresh: Generating thumbnails (40%) hasCurrent=false attempt=0")
+    );
+    expect(statusLine()).toBe("Ready (API 1)");
+    expect(page.server.logLines().some((line) => line.includes("Core refresh: "))).toBe(false);
 
     stream.emit("refreshStatusChanged", 3, {
       snapshot: { isRunning: false, lastError: "Cannot read C:\\secret\\folder", stages: [] }
@@ -185,7 +293,7 @@ describe("startup and connection", () => {
     const page = mountPage({ server });
     await screen.findByText("Ready (API 1)");
     await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(1));
-    expect(optionLabels(presetSelect())).toEqual(["None"]);
+    await waitFor(() => expect(optionLabels(presetSelect())).toEqual(["None"]));
 
     server.on("GET", "/api/presets", () => json([FAVORITES_PRESET]));
     page.stream().emit("resyncRequired", 30, { reason: "gap" });
@@ -481,6 +589,7 @@ describe("pairing", () => {
     await screen.findByText("Ready (API 1)");
     const prompt = screen.getByRole("button", { name: "Pair", hidden: true }).closest(".pair-section") as HTMLElement;
     expect(prompt.style.display).toBe("none");
+    const before = statusLine();
 
     await startRandomPick();
     await waitFor(() => expect(prompt.style.display).toBe("flex"));
@@ -488,7 +597,7 @@ describe("pairing", () => {
     await settle();
     expect(server.logLines()).not.toContain("status=Unauthorized. Pair first. hasCurrent=false attempt=0");
     expect(screen.queryByText("Unauthorized. Pair first.")).toBeNull();
-    expect(document.getElementById("status")!.textContent).toBe("");
+    expect(statusLine()).toBe(before);
     expect(openNotices()).toEqual([]);
   });
 });
@@ -501,7 +610,12 @@ describe("server compatibility", () => {
     );
     const page = mountPage({ server });
 
-    await screen.findByText("Server missing required capabilities: api.presets.match.");
+    // The player's indicator and the Library tab show it, and the log keeps the full message.
+    await waitFor(() => expect(optionLabels(presetSelect())).toEqual(["Server compatibility check failed"]));
+    await waitFor(() =>
+      expect(page.server.logLines()).toContain("status=Server missing required capabilities: api.presets.match. hasCurrent=false attempt=0")
+    );
+    expect(statusLine()).toBe("Ready");
     expect(page.stream().closed).toBe(true);
 
     fireEvent.input(screen.getByLabelText("Pairing token"), { target: { value: "token-1" } });
@@ -521,13 +635,15 @@ describe("server compatibility", () => {
     const server = new FakeServer();
     server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, apiVersion: "2" }));
     mountPage({ server });
-    await screen.findByText("Unsupported server API version: 2.");
+    await waitFor(() => expect(server.logLines()).toContain("status=Unsupported server API version: 2. hasCurrent=false attempt=0"));
 
     resetPage();
     const newer = new FakeServer();
     newer.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, minimumCompatibleApiVersion: "3" }));
     mountPage({ server: newer });
-    await screen.findByText("Server requires client API version 3 or newer.");
+    await waitFor(() =>
+      expect(newer.logLines()).toContain("status=Server requires client API version 3 or newer. hasCurrent=false attempt=0")
+    );
   });
 });
 

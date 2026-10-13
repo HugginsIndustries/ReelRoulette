@@ -209,6 +209,49 @@ describe("panel host", () => {
     });
   });
 
+  describe("player width", () => {
+    it("is narrow below 600 px of the player column's width, and not at 600 px or wider, or before the column is laid out", () => {
+      const { panel, viewport } = setup({ width: 1200 });
+      const column = { clientWidth: 0 };
+      expect(panel.playerNarrow.value).toBe(false);
+      panel.attachPlayer(column);
+      expect(panel.playerNarrow.value).toBe(false);
+
+      column.clientWidth = 599;
+      viewport.set({});
+      expect(panel.playerNarrow.value).toBe(true);
+      column.clientWidth = 600;
+      viewport.set({});
+      expect(panel.playerNarrow.value).toBe(false);
+      column.clientWidth = 320;
+      panel.attachPlayer(column);
+      expect(panel.playerNarrow.value).toBe(true);
+
+      panel.attachPlayer(null);
+      expect(panel.playerNarrow.value).toBe(false);
+    });
+
+    it("measures the column again as the panel beside it opens, closes, and changes width by its handle", async () => {
+      const { panel, elements } = setup({ width: 1000 });
+      // The column is what the stage leaves beside the panel and its 12 px handle.
+      panel.attachPlayer({
+        get clientWidth() {
+          return elements.panel.hidden ? 1000 : 1000 - panel.width.peek() - 12;
+        }
+      });
+      expect(panel.playerNarrow.value).toBe(false);
+
+      await panel.toggle();
+      expect(panel.playerNarrow.value).toBe(true);
+      panel.setWidth(360, false);
+      expect(panel.playerNarrow.value).toBe(false);
+      panel.setWidth(420, true);
+      expect(panel.playerNarrow.value).toBe(true);
+      await panel.close();
+      expect(panel.playerNarrow.value).toBe(false);
+    });
+  });
+
   describe("opening, tabs, and closing", () => {
     it("opens on Library the first time, then on its last tab, and shows one tab at a time", async () => {
       const { panel, elements, tabs, shownPages } = setup();
