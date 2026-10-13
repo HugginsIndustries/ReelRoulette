@@ -5,6 +5,7 @@ import type { FilterDialog } from "../filter/filterDialog";
 import { cloneFilterState } from "../filter/filterStateModel";
 import type { Library } from "../library/library";
 import { createAutoTagScanRequest, libraryQueryTagSaveEffect } from "../library/libraryQuerySession";
+import type { Notifications } from "../notifications/notifications";
 import {
   createTagSaveSession,
   handleIncomingItemTags,
@@ -265,6 +266,8 @@ export interface TagEditorOptions {
   localStorage: StorageLike;
   /** The in-app dialogs, for the confirmations and the notices of what failed. */
   dialogs: Pick<Dialogs, "confirm" | "notice">;
+  /** The one-off messages: a save that landed says so. */
+  notifications: Pick<Notifications, "notify">;
   /** Ids for new categories. */
   newId?: () => string;
 }
@@ -278,7 +281,7 @@ function emptyAutoTag(scanFull: boolean, viewAll: boolean): AutoTagState {
 }
 
 export function createTagEditor(options: TagEditorOptions): TagEditor {
-  const { store, api, connection, library, dialogs } = options;
+  const { store, api, connection, library, dialogs, notifications } = options;
   const newId = options.newId ?? (() => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`));
 
   const isOpen = signal(false);
@@ -599,6 +602,10 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     return rolledBack;
   }
 
+  function savedMessage(): void {
+    notifications.notify({ kind: "actions", text: SAVE_SUCCEEDED, key: "tags" });
+  }
+
   /**
    * Sends the save's steps, and says whether the server took them all. A failed save shows its own error in the
    * in-app notice. A landed save says so, even when the library's reload after it fails, which the library reports.
@@ -616,7 +623,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
           void dialogs.notice(result.error);
         }
       } else {
-        store.setStatus(SAVE_SUCCEEDED);
+        savedMessage();
       }
       return false;
     }
@@ -628,7 +635,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
         // The library reports its own failed load; the save has landed either way.
       }
     }
-    store.setStatus(SAVE_SUCCEEDED);
+    savedMessage();
     return true;
   }
 

@@ -7,6 +7,8 @@ export interface ItemStateChangedPayload {
   isBlacklisted?: boolean;
   previousIsFavorite?: boolean | null;
   previousIsBlacklisted?: boolean | null;
+  /** The device whose favorite or blacklist request made the change, when it sent one. */
+  clientId?: string | null;
 }
 
 export interface PlaybackRecordedPayload {

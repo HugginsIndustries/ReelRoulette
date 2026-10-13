@@ -11,7 +11,7 @@ export interface RelayLogCurrentItem {
 /** Playback context keys whose values hold no item details. Any other key is left out of the line. */
 const SAFE_TRACE_CONTEXT_KEYS = new Set(["mediaType", "statusCode", "code", "expectedPlayAttemptId", "message", "timeoutMs"]);
 
-/** Builds the line relayed to the server log when the status text changes. */
+/** Builds the `status=` line relayed to the server log for a message: a popup, a notice, a lasting state, or a text that shows nothing. */
 export function statusLogLine(
   status: string,
   current: RelayLogCurrentItem | null | undefined,

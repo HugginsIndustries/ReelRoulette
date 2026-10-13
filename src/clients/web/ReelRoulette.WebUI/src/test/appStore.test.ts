@@ -93,24 +93,23 @@ describe("createAppStore", () => {
     expect(storage.values.get("rr_randomizationMode")).toBe("SmartShuffle");
   });
 
-  it("relays a status change with the playing state, uses the log text when given, and relays a repeat once a second", () => {
+  it("relays a message's text with the playing state, and relays a repeat once a second", () => {
     const { store, relayed, advance } = setup();
-    store.setStatus("Ready");
+    store.relayStatus("Ready");
     store.current.value = { id: "C:\\clip.mp4", itemId: "item-1" } as PlayingItem;
     store.playAttemptId.value = 3;
-    store.setStatus("Synced: Blacklisted: clip.mp4", "Synced: Blacklisted");
-    expect(store.status.value).toBe("Synced: Blacklisted: clip.mp4");
+    store.relayStatus("Blacklisted on another device");
     expect(relayed).toEqual([
       "status=Ready hasCurrent=false attempt=0",
-      "status=Synced: Blacklisted hasCurrent=true attempt=3"
+      "status=Blacklisted on another device hasCurrent=true attempt=3"
     ]);
 
-    store.setStatus("Synced: Blacklisted: other.mp4", "Synced: Blacklisted");
+    store.relayStatus("Blacklisted on another device");
     advance(1_000);
-    store.setStatus("Synced: Blacklisted: other.mp4", "Synced: Blacklisted");
+    store.relayStatus("Blacklisted on another device");
     expect(relayed).toHaveLength(2);
     advance(1);
-    store.setStatus("Synced: Blacklisted: other.mp4", "Synced: Blacklisted");
+    store.relayStatus("Blacklisted on another device");
     expect(relayed).toHaveLength(3);
   });
 

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { fireEvent, screen, waitFor } from "@testing-library/preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { statusLogLine } from "../../logging/relayLogLines";
 import { renderStartupError } from "../../shell";
 import {
   COMPATIBLE_VERSION,
@@ -10,6 +11,7 @@ import {
   mountPage,
   normalizedMarkup,
   openNotices,
+  pageReady,
   pickPreset,
   presetSelect,
   resetPage,
@@ -87,8 +89,9 @@ function selectedPresetLabelText(): string {
   return select.options[select.selectedIndex]?.textContent ?? "";
 }
 
-function statusLine(): string {
-  return document.getElementById("status")?.textContent ?? "";
+/** The lines the page relayed for `text`, a message or a state with no message, whatever was playing. */
+function relayedLines(server: FakeServer, text: string): string[] {
+  return server.logLines().filter((line) => line.startsWith(`status=${text} hasCurrent=`));
 }
 
 async function startRandomPick(): Promise<void> {
@@ -106,7 +109,7 @@ describe("startup and connection", () => {
     sessionStorage.setItem("rr_sessionId", "session-kept");
     const page = mountPage();
 
-    await screen.findByText("Ready (API 1)");
+    await pageReady(page.server);
     expect(page.server.requests("GET", "/api/version")).toHaveLength(1);
     expect(page.server.requests("GET", "/api/presets")).toHaveLength(1);
 
@@ -128,7 +131,7 @@ describe("startup and connection", () => {
     expect(page.stream().param("sessionId")).toBe(page.sessionId());
   });
 
-  it("shows the event stream opening, and reconnects with the last event ID, off the status line", async () => {
+  it("relays the event stream opening, which shows nothing, and reconnects with the last event ID", async () => {
     vi.useFakeTimers();
     const page = mountPage();
     await vi.advanceTimersByTimeAsync(0);
@@ -136,12 +139,13 @@ describe("startup and connection", () => {
     const first = page.stream();
     first.open();
     await vi.advanceTimersByTimeAsync(0);
-    expect(statusLine()).toBe("SSE connected");
+    expect(page.server.logLines()).toContain(statusLogLine("SSE connected", null, 0));
 
     first.emit("streamOpened", 7, {});
     first.fail();
     await vi.advanceTimersByTimeAsync(0);
-    expect(statusLine()).toBe("SSE connected");
+    // The stream is still down, so Reconnecting… hasn't ended, and the first open said nothing either.
+    expect(relayedLines(page.server, "Reconnected.")).toEqual([]);
     expect(first.closed).toBe(true);
 
     await vi.advanceTimersByTimeAsync(1000);
@@ -149,9 +153,9 @@ describe("startup and connection", () => {
     expect(page.stream().param("lastEventId")).toBe("7");
   });
 
-  it("says Reconnecting… while the server can't be reached, relayed once, until the stream opens and a check reaches it", async () => {
+  it("says Reconnecting… while the server can't be reached, relayed once, until the stream opens and a check reaches it, then Reconnected.", async () => {
     const page = mountPage();
-    await screen.findByText("Ready (API 1)");
+    await pageReady(page.server);
     let reachable = true;
     page.server.on("GET", "/api/version", () => {
       if (!reachable) {
@@ -172,16 +176,18 @@ describe("startup and connection", () => {
     await settle();
     expect(indicatorState()).toBe("reconnecting");
     expect(page.server.logLines().filter((line) => line.startsWith("status=Reconnecting…"))).toHaveLength(1);
-    expect(statusLine()).not.toMatch(/reconnecting|offline/i);
 
     // The stream opening isn't enough: the check on the open has to reach the server.
     page.stream().open();
     await settle();
     expect(indicatorState()).toBe("reconnecting");
+    expect(relayedLines(page.server, "Reconnected.")).toEqual([]);
     reachable = true;
     page.stream().open();
     await settle();
     expect(indicatorState()).toBeNull();
+    // Reconnected. pops up once Reconnecting… ends, and relays its text.
+    await waitFor(() => expect(page.server.logLines()).toContain(statusLogLine("Reconnected.", null, 0)));
   });
 
   it("loads the page once a server that couldn't be reached at page load answers, ending Reconnecting…", async () => {
@@ -201,8 +207,9 @@ describe("startup and connection", () => {
     page.stream().open();
     await waitFor(() => expect(indicatorState()).toBeNull());
     await waitFor(() => expect(server.requests("GET", "/api/presets")).toHaveLength(1));
-    // The check that finds it ready runs after the stream opens.
-    expect(statusLine()).toBe("Ready (API 1)");
+    // The check that finds it ready runs after the stream opens, and ends Reconnecting….
+    expect(server.logLines()).toContain(statusLogLine("Ready (API 1)", null, 0));
+    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Reconnected.", null, 0)));
   });
 
   it("says Running without a library while the server has none, not Reconnecting… for the stream it refuses, and loads once it has one", async () => {
@@ -240,7 +247,7 @@ describe("startup and connection", () => {
 
   it("reconnects the event stream when the page becomes visible, gains focus, is shown, or comes online", async () => {
     const page = mountPage();
-    await screen.findByText("Ready (API 1)");
+    await pageReady(page.server);
     page.stream().emit("streamOpened", 12, {});
 
     document.dispatchEvent(new Event("visibilitychange"));
@@ -254,9 +261,9 @@ describe("startup and connection", () => {
     expect(streams.slice(0, 4).every((stream) => stream.closed)).toBe(true);
   });
 
-  it("keeps refresh progress off the status line, a failed refresh's error out of the log, and reloads the library once per finished run", async () => {
+  it("shows refresh progress on the indicator, pops up how it ended with a failed refresh's error out of the log, and reloads the library once per finished run", async () => {
     const page = mountPage();
-    await screen.findByText("Ready (API 1)");
+    await pageReady(page.server);
     const stream = page.stream();
 
     stream.emit("refreshStatusChanged", 2, {
@@ -270,14 +277,13 @@ describe("startup and connection", () => {
     await waitFor(() =>
       expect(page.server.logLines()).toContain("status=Library refresh: Generating thumbnails (40%) hasCurrent=false attempt=0")
     );
-    expect(statusLine()).toBe("Ready (API 1)");
+    expect(page.server.logLines().some((line) => line.startsWith("status=Library refresh f"))).toBe(false);
     expect(page.server.logLines().some((line) => line.includes("Core refresh: "))).toBe(false);
 
     stream.emit("refreshStatusChanged", 3, {
       snapshot: { isRunning: false, lastError: "Cannot read C:\\secret\\folder", stages: [] }
     });
-    await screen.findByText("Core refresh failed: Cannot read C:\\secret\\folder");
-    await waitFor(() => expect(page.server.logLines()).toContain("status=Core refresh failed hasCurrent=false attempt=0"));
+    await waitFor(() => expect(page.server.logLines()).toContain(statusLogLine("Library refresh failed", null, 0)));
     expect(page.server.logLines().some((line) => line.includes("secret"))).toBe(false);
 
     await waitFor(() => expect(page.server.requests("POST", "/api/library/query")).toHaveLength(1));
@@ -286,12 +292,20 @@ describe("startup and connection", () => {
     stream.emit("refreshStatusChanged", 5, { snapshot: finished });
     await settle();
     expect(page.server.requests("POST", "/api/library/query")).toHaveLength(2);
+    // The finished summary's segments go to the log, as its counts did.
+    expect(page.server.logLines().filter((line) => line.startsWith("status=Library refresh finished"))).toEqual([
+      statusLogLine(
+        "Library refresh finished: Source: no data · Fingerprint: no data · Duration: no data · Loudness: no data · Thumbnails: no data",
+        null,
+        0
+      )
+    ]);
   });
 
   it("reloads presets and the library when the server asks for a resync", async () => {
     const server = new FakeServer();
     const page = mountPage({ server });
-    await screen.findByText("Ready (API 1)");
+    await pageReady(server);
     await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(1));
     await waitFor(() => expect(optionLabels(presetSelect())).toEqual(["None"]));
 
@@ -303,24 +317,31 @@ describe("startup and connection", () => {
     await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(2));
   });
 
-  it("passes favorite and blacklist events to the status line", async () => {
+  it("pops up another device's favorite and blacklist changes, not this device's own, leaving the file name out of the log", async () => {
     const page = mountPage();
-    await screen.findByText("Ready (API 1)");
+    await pageReady(page.server);
+    const change = { itemId: "item-video", path: "C:\\media\\holiday clip.mp4", isFavorite: false, isBlacklisted: false };
 
-    page.stream().emit("itemStateChanged", 3, {
-      itemId: "item-video",
-      path: "C:\\media\\holiday clip.mp4",
-      isFavorite: true,
-      isBlacklisted: false
-    });
+    // This device's own change already said so.
+    page.stream().emit("itemStateChanged", 3, { ...change, isBlacklisted: true, clientId: page.clientId() });
+    page.stream().emit("itemStateChanged", 4, { ...change, isFavorite: true, clientId: "another-client" });
+    page.stream().emit("itemStateChanged", 5, { ...change, previousIsBlacklisted: true });
 
-    await screen.findByText("Synced: Added to favorites: holiday clip.mp4");
-    await waitFor(() => expect(page.server.logLines()).toContain("status=Synced: Added to favorites hasCurrent=false attempt=0"));
+    await waitFor(() =>
+      expect(page.server.logLines()).toEqual(
+        expect.arrayContaining([
+          statusLogLine("Added to favorites on another device", null, 0),
+          statusLogLine("Removed from blacklist on another device", null, 0)
+        ])
+      )
+    );
+    expect(relayedLines(page.server, "Blacklisted on another device")).toEqual([]);
+    expect(page.server.logLines().some((line) => line.includes("holiday"))).toBe(false);
   });
 });
 
-describe("status line relay", () => {
-  it("relays each status change to the server log, and the same status only once a second", async () => {
+describe("message relay", () => {
+  it("relays each message and each state with no message to the server log, and the same text only once a second", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const page = mountPage();
     await vi.advanceTimersByTimeAsync(0);
@@ -519,7 +540,7 @@ describe("pairing", () => {
     fireEvent.input(screen.getByLabelText("Pairing token"), { target: { value: " token-1 " } });
     fireEvent.click(pairButton);
 
-    await screen.findByText("Ready (API 1)");
+    await pageReady(server);
     expect(server.requests("POST", "/api/pair")[0]!.body).toEqual({ token: "token-1" });
     await waitFor(() => expect(prompt.style.display).toBe("none"));
     await waitFor(() => expect(optionLabels(presetSelect())).toEqual(["None", "Favorites"]));
@@ -533,8 +554,9 @@ describe("pairing", () => {
     server.on("POST", "/api/pair", () => status(403));
     mountPage({ server });
     await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("GET /api/version")));
-    // The server answered, so the status line doesn't say it is offline: the pairing prompt is the only signal.
-    expect(document.getElementById("status")!.textContent).toBe("Ready");
+    // The server answered, so nothing says it is offline: the pairing prompt is the only signal.
+    expect(indicatorState()).toBeNull();
+    expect(relayedLines(server, "Reconnecting…")).toEqual([]);
     const pairButton = screen.getByRole("button", { name: "Pair" }) as HTMLButtonElement;
     const token = screen.getByLabelText("Pairing token");
 
@@ -549,7 +571,6 @@ describe("pairing", () => {
     fireEvent.click(pairButton);
     const notice = await screen.findByText("Pairing failed.");
     expect(notice.closest("dialog.app-dialog")).not.toBeNull();
-    expect(document.getElementById("status")!.textContent).toBe("Ready");
     await waitFor(() => expect(server.logLines()).toContain("status=Pairing failed. hasCurrent=false attempt=0"));
     expect((pairButton.closest(".pair-section") as HTMLElement).style.display).toBe("flex");
   });
@@ -582,14 +603,29 @@ describe("pairing", () => {
     expect(server.requests("POST", "/api/pair")[0]!.body).toEqual({ token: "config-token" });
   });
 
+  it("pops nothing up and adds nothing to the list when it pairs on startup with the config's token, and only relays it", async () => {
+    const server = new FakeServer();
+    server.on("POST", "/api/pair", () => json({ paired: true }));
+    mountPage({ server, config: { pairToken: "config-token" } });
+    await waitFor(() => expect(server.logLines()).toContain("status=Paired. hasCurrent=false attempt=0"));
+    await pageReady(server);
+    await settle();
+
+    expect(document.querySelectorAll("#toasts .toast")).toHaveLength(0);
+    // Its name would count an unread message.
+    fireEvent.click(screen.getByRole("button", { name: "Notifications" }));
+    const list = document.getElementById("notify-list")!;
+    expect(list.hidden).toBe(false);
+    expect(list.querySelectorAll(".notify-entry")).toHaveLength(0);
+  });
+
   it("shows only the pairing prompt when a random pick is unauthorized, and still relays its line", async () => {
     const server = new FakeServer();
     server.on("POST", "/api/random", () => status(401));
     mountPage({ server });
-    await screen.findByText("Ready (API 1)");
+    await pageReady(server);
     const prompt = screen.getByRole("button", { name: "Pair", hidden: true }).closest(".pair-section") as HTMLElement;
     expect(prompt.style.display).toBe("none");
-    const before = statusLine();
 
     await startRandomPick();
     await waitFor(() => expect(prompt.style.display).toBe("flex"));
@@ -597,7 +633,6 @@ describe("pairing", () => {
     await settle();
     expect(server.logLines()).not.toContain("status=Unauthorized. Pair first. hasCurrent=false attempt=0");
     expect(screen.queryByText("Unauthorized. Pair first.")).toBeNull();
-    expect(statusLine()).toBe(before);
     expect(openNotices()).toEqual([]);
   });
 });
@@ -615,7 +650,6 @@ describe("server compatibility", () => {
     await waitFor(() =>
       expect(page.server.logLines()).toContain("status=Server missing required capabilities: api.presets.match. hasCurrent=false attempt=0")
     );
-    expect(statusLine()).toBe("Ready");
     expect(page.stream().closed).toBe(true);
 
     fireEvent.input(screen.getByLabelText("Pairing token"), { target: { value: "token-1" } });
@@ -647,37 +681,26 @@ describe("server compatibility", () => {
   });
 });
 
-describe("mobile diagnostics", () => {
-  it("shows the client and session ids on a mobile browser", async () => {
+describe("mobile browsers", () => {
+  it("tell the server their client type and device name", async () => {
     resetPage(IPHONE_USER_AGENT);
     const page = mountPage();
     await settle();
 
-    const line = screen.getByText(/^Diagnostics:/);
-    expect(line.textContent).toBe(
-      `Diagnostics: clientId=${page.clientId().slice(0, 10)}..., sessionId=${page.sessionId().slice(0, 10)}..., type=mobile-web`
-    );
-    expect(line.style.display).toBe("block");
     expect(page.stream().param("clientType")).toBe("mobile-web");
     expect(page.stream().param("deviceName")).toMatch(/^Mobile Browser \(/);
-  });
-
-  it("stays hidden on a desktop browser", async () => {
-    mountPage();
-    await settle();
-    expect(screen.queryByText(/^Diagnostics:/)).toBeNull();
   });
 });
 
 describe("page structure", () => {
   it("keeps the starting markup", async () => {
     const page = mountPage();
-    await screen.findByText("Ready (API 1)");
+    await pageReady(page.server);
     await settle();
     expect(normalizedMarkup(page.root)).toMatchSnapshot();
   });
 
-  it("keeps the same video element while the header and status line change", async () => {
+  it("keeps the same video element while the header changes and the event stream opens", async () => {
     const server = new FakeServer();
     server.on("GET", "/api/presets", () => json([FAVORITES_PRESET]));
     server.on("POST", "/api/random", () => json(VIDEO_ITEM));
@@ -685,14 +708,14 @@ describe("page structure", () => {
     const video = page.root.querySelector("video");
     const seek = screen.getByRole("slider", { name: "Seek", hidden: true }) as HTMLInputElement;
 
-    await screen.findByText("Ready (API 1)");
+    await pageReady(server);
     await startRandomPick();
     await screen.findByTitle("holiday clip.mp4");
     // Each start empties the bar; after that only the player moves it.
     seek.value = "40";
     await pickPreset("preset-favorites");
     page.stream().open();
-    await screen.findByText("SSE connected");
+    await waitFor(() => expect(relayedLines(server, "SSE connected")).toHaveLength(1));
 
     expect(page.root.querySelector("video")).toBe(video);
     expect(video?.isConnected).toBe(true);

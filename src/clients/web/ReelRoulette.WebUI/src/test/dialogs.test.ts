@@ -3,8 +3,9 @@ import { createDialogs } from "../dialogs/dialogs";
 
 function setup() {
   const relayed: string[] = [];
-  const dialogs = createDialogs({ relayStatus: (logText) => relayed.push(logText) });
-  return { dialogs, relayed };
+  const recorded: string[] = [];
+  const dialogs = createDialogs({ relayStatus: (logText) => relayed.push(logText), record: (message) => recorded.push(message) });
+  return { dialogs, relayed, recorded };
 }
 
 describe("dialogs", () => {
@@ -50,7 +51,7 @@ describe("dialogs", () => {
   });
 
   it("doesn't open a notice whose message is already open, still relays it, and settles both when it closes", async () => {
-    const { dialogs, relayed } = setup();
+    const { dialogs, relayed, recorded } = setup();
     const settled: string[] = [];
     void dialogs.notice("Photo file not found.").then(() => settled.push("first"));
     void dialogs.notice("No eligible media for current filters.");
@@ -62,6 +63,9 @@ describe("dialogs", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(settled).toEqual(["first", "second"]);
+
+    // The list behind the bell keeps each notice that opened, not one already open.
+    expect(recorded).toEqual(["Photo file not found.", "No eligible media for current filters."]);
 
     // Once it has closed, the same message opens again.
     void dialogs.notice("Photo file not found.");

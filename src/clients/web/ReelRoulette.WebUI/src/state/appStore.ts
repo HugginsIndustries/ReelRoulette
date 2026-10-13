@@ -29,7 +29,7 @@ const MIN_PHOTO_DURATION_SECONDS = 1;
 const MAX_PHOTO_DURATION_SECONDS = 300;
 const DEFAULT_RANDOMIZATION_MODE = "SmartShuffle";
 const APPLIED_FILTER_KEY = "filter.applied";
-/** A repeated status is relayed to the server log at most once in this window. */
+/** A repeated message is relayed to the server log at most once in this window. */
 const STATUS_RELAY_REPEAT_MS = 1000;
 
 export const RANDOMIZATION_MODES: readonly { value: string; label: string }[] = [
@@ -106,8 +106,6 @@ export interface AppStoreEvents {
 /** State several screens use, and the actions that cross screens. */
 export interface AppStore {
   readonly identity: ClientIdentity;
-  /** The status line. Write it through `setStatus`, which also relays it to the server log. */
-  readonly status: Signal<string>;
   readonly current: Signal<PlayingItem | null>;
   /** Counts playback attempts, so relayed lines from one attempt can be told apart. */
   readonly playAttemptId: Signal<number>;
@@ -153,9 +151,10 @@ export interface AppStore {
   /** What the player is waiting for, which shows Loading… once it has waited half a second. */
   readonly loading: LoadingHolds;
 
-  /** `logText` replaces `message` in the server log when `message` shows a file, preset, or server error text. */
-  setStatus(message: string, logText?: string): void;
-  /** Relays a status message's text to the server log without showing it, as `setStatus` relays it. */
+  /**
+   * Relays a message's text to the server log as a `status=` line: a popup's, a notice's, a lasting state's, and the
+   * texts that show nothing, such as "Ready (API 1)". A repeat within a second is relayed once.
+   */
   relayStatus(logText: string): void;
   /** Rebuilds the preset dropdown from the presets and the applied filter. */
   syncHeaderPresets(): void;
@@ -242,7 +241,6 @@ export function createAppStore(options: AppStoreOptions): AppStore {
 
   const store: AppStore = {
     identity: options.identity,
-    status: signal(""),
     current: signal<PlayingItem | null>(null),
     playAttemptId: signal(0),
     history: signal<PlayingItem[]>([]),
@@ -268,11 +266,6 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     heldBack: computed(() => compatibilityBlocked.value || noLibrary.value),
     refreshProgress: signal<RefreshProgress | null>(null),
     loading: createLoadingHolds(),
-
-    setStatus(message, logText = message) {
-      store.status.value = message;
-      store.relayStatus(logText);
-    },
 
     relayStatus(logText) {
       const at = now();

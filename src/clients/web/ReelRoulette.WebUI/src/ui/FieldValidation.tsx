@@ -4,7 +4,7 @@ import type { FieldProblem, FieldReveal } from "../validation/fieldValidation";
 
 // The field validation pattern: a field that holds a value that is not valid shows a red icon, whose tooltip says what
 // the field expects, and the actions that use it are disabled or held until it is corrected. An empty required field
-// is never flagged and only disables. Field problems never use a dialog or the status line.
+// is never flagged and only disables. Field problems never use a dialog or a popup.
 
 /** What a validated control takes: its invalid state and description while flagged, and focus for the tooltip. */
 export interface ValidatedControlProps {

@@ -4,6 +4,7 @@ import { unauthorizedLogText } from "../api/serverRequest";
 import { createDialogs, type Dialogs } from "../dialogs/dialogs";
 import { createFilterDialog, type FilterDialog } from "../filter/filterDialog";
 import { createLibrary, type Library } from "../library/library";
+import { createNotifications, type Notifications } from "../notifications/notifications";
 import { createPanelHost, type PanelHost } from "../panel/panelHost";
 import { createAutoPause, DEFAULT_AUTO_PAUSE_MODE, type AutoPauseMode } from "../playback/autoPause";
 import { createPlayer, type Player } from "../playback/player";
@@ -43,6 +44,8 @@ export interface AppServices {
   unsaved: ReadonlySignal<UnsavedTabs>;
   /** The lasting state the player's indicator shows, or null. */
   indicator: ReadonlySignal<LastingState | null>;
+  /** The one-off messages' popups and the list behind the player's bell. */
+  notifications: Notifications;
 }
 
 export function createAppServices(config: RuntimeConfig): AppServices {
@@ -67,20 +70,46 @@ export function createAppServices(config: RuntimeConfig): AppServices {
       void api.relayLog(level, message);
     }
   });
-  const dialogs = createDialogs({ relayStatus: (logText) => store.relayStatus(logText) });
+  const fullscreen = createStageFullscreen();
+  const notifications = createNotifications({
+    relay: (logText) => store.relayStatus(logText),
+    device,
+    inFullscreen: fullscreen.active
+  });
+  const dialogs = createDialogs({
+    relayStatus: (logText) => store.relayStatus(logText),
+    record: (message) => notifications.record(message)
+  });
   const connection = createServerConnection({
     sseUrl: config.sseUrl,
     pairToken: config.pairToken,
     store,
     api,
-    dialogs
+    dialogs,
+    notifications
   });
   const panel = createPanelHost({ device });
-  const player = createPlayer({ apiBaseUrl: config.apiBaseUrl, store, api, connection, dialogs });
+  // The panel opening closes the list behind the bell, leaving focus where the panel put it.
+  panel.isOpen.subscribe((open) => {
+    if (open) {
+      notifications.closeList();
+    }
+  });
+  const player = createPlayer({ apiBaseUrl: config.apiBaseUrl, store, api, connection, dialogs, notifications });
   // After the player, so the player handles an item-state event before the library does.
-  const library = createLibrary({ config, store, api, connection, player, dialogs, panel, device });
-  const filterDialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs });
-  const tagEditor = createTagEditor({ store, api, connection, library, filter: filterDialog, device, localStorage, dialogs });
+  const library = createLibrary({ config, store, api, connection, player, dialogs, notifications, panel, device });
+  const filterDialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs, notifications });
+  const tagEditor = createTagEditor({
+    store,
+    api,
+    connection,
+    library,
+    filter: filterDialog,
+    device,
+    localStorage,
+    dialogs,
+    notifications
+  });
   // Responsive until the Settings tab can change it.
   createAutoPause({ mode: signal<AutoPauseMode>(DEFAULT_AUTO_PAUSE_MODE), panel, overPage: tagEditor.autoTagOpen, player });
   panel.connectTabs({
@@ -126,7 +155,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     dialogs,
     connection,
     player,
-    fullscreen: createStageFullscreen(),
+    fullscreen,
     panel,
     library,
     filterDialog,
@@ -135,6 +164,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
       filter: filterDialog.view.value?.unsaved ?? false,
       tags: tagEditor.view.value?.savePending ?? false
     })),
-    indicator: createPlayerIndicator(store)
+    indicator: createPlayerIndicator(store),
+    notifications
   };
 }

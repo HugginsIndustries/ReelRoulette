@@ -86,6 +86,8 @@ These need a person, real devices, or the Windows VM.
 - [ ] On a phone and a desktop browser, in both themes, the WebUI's Filter and Tags tabs look as the mockup shows them, Auto Tag covers the whole page, in fullscreen too, its count columns line up under their headers, and tapping a tag category's header toggles it.
 - [ ] On a phone and a desktop browser, with Auto-Pause on Responsive, playback keeps going on every tab beside the player, and the overlay and Auto Tag pause it and resume it on close.
 - [ ] In both themes on a phone and a desktop browser, the scrub bar and checkboxes are orange, the player's time is white, and the scrub bar moves smoothly on a video and fills smoothly on a photo with Autoplay on.
+- [ ] With the server stopped, unavailable, or mismatched, and during a refresh, the player's indicator settles on one state.
+- [ ] On a phone and an iPad, popups, the bell, and its list show and work in the browser, in fullscreen, and on a phone on its side.
 
 ## Release Flow
 

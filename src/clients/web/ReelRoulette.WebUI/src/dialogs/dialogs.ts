@@ -16,7 +16,7 @@ export type OpenDialog =
 
 /**
  * The page's confirmations and notices, shown in the in-app dialog. Anything the user needs to notice or act on
- * shows here, never in a browser dialog and never on the status line.
+ * shows here, never in a browser dialog and never only in a popup; the list behind the player's bell keeps each one.
  */
 export interface Dialogs {
   /** The confirmations and notices showing, oldest first, so each new one stacks above the last. */
@@ -35,8 +35,10 @@ export interface Dialogs {
 }
 
 export interface DialogsOptions {
-  /** Relays a status message's text to `last.log`, as the status line does. */
+  /** Relays a notice's text to `last.log`. */
   relayStatus: (logText: string) => void;
+  /** Keeps a notice that opens in the list behind the player's bell. A notice already open isn't kept again. */
+  record?: (message: string) => void;
 }
 
 export function createDialogs(options: DialogsOptions): Dialogs {
@@ -68,6 +70,7 @@ export function createDialogs(options: DialogsOptions): Dialogs {
       if (closing) {
         return closing;
       }
+      options.record?.(message);
       const id = ++lastId;
       const closed = new Promise<void>((resolve) =>
         show({ id, kind: "notice", message }, () => {

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { unauthorizedLogText } from "../api/serverRequest";
+import type { NotifyRequest } from "../notifications/notifications";
 import { createPlayer, type PlayerElements } from "../playback/player";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type PlayingItem } from "../state/appStore";
@@ -104,6 +105,20 @@ function setup() {
     device: createDeviceStore(null),
     relay: (_level, message) => relayed.push(message)
   });
+  /** The texts relayed without a message, such as "Playing". */
+  const statuses: string[] = [];
+  const relayStatus = store.relayStatus;
+  store.relayStatus = (logText) => {
+    statuses.push(logText);
+    relayStatus(logText);
+  };
+  /** The one-off messages, which pop up and which the list keeps. */
+  const notified: NotifyRequest[] = [];
+  const notifications = {
+    notify(request: NotifyRequest) {
+      notified.push(request);
+    }
+  };
   // As the page does: a 401 on any request shows the pairing prompt and relays one line naming its route.
   const api = createAppApi("http://server", {
     onUnauthorized: (route) => {
@@ -131,7 +146,7 @@ function setup() {
     }
   };
   const frames = fakeFrames();
-  const player = createPlayer({ apiBaseUrl: "http://server/", store, api, connection, dialogs, frames });
+  const player = createPlayer({ apiBaseUrl: "http://server/", store, api, connection, dialogs, notifications, frames });
   const elements = {
     video: fakeVideo(),
     photo: { src: "", style: { display: "none" } },
@@ -146,6 +161,8 @@ function setup() {
     frames,
     notices,
     relayed,
+    statuses,
+    notified,
     replies,
     requests: (path: string) => requests.filter((request) => request.path === path),
     answerRandom: (...items: unknown[]) => randomAnswers.push(...items),
@@ -199,20 +216,21 @@ describe("createPlayer", () => {
     expect(video.paused).toBe(true);
     expect(page.player.muted.value).toBe(false);
 
-    page.store.setStatus("Before");
     video.duration = 120;
     page.player.videoPlaying();
     page.player.videoFailed();
     page.player.videoMetadataLoaded();
     page.player.videoEnded();
-    expect(page.store.status.value).toBe("Before");
+    expect(page.statuses).toEqual([]);
     expect(seekSlider.max).toBe("100");
 
     page.player.photoFailed();
     expect(page.notices).toEqual(["Photo file not found."]);
-    expect(page.store.status.value).toBe("Before");
+    expect(page.statuses).toEqual([]);
+    // Playing is the normal state, which shows nothing and only relays.
     page.player.photoLoaded();
-    expect(page.store.status.value).toBe("Playing");
+    expect(page.statuses).toEqual(["Playing"]);
+    expect(page.notified).toEqual([]);
   });
 
   it("only traces events from an attempt once another item is playing", () => {
@@ -221,7 +239,7 @@ describe("createPlayer", () => {
     page.store.pushHistory({ ...SECOND_VIDEO });
 
     page.player.videoPlaying();
-    expect(page.store.status.value).toBe("");
+    expect(page.statuses).toEqual([]);
     expect(page.relayed).toContain("playback=video-onplaying-stale attempt=1 hasCurrent=true expectedPlayAttemptId=1");
   });
 
@@ -254,7 +272,8 @@ describe("createPlayer", () => {
       randomizationMode: "SmartShuffle"
     });
     expect(page.notices).toEqual(["No eligible media for current filters."]);
-    expect(page.store.status.value).toBe("");
+    expect(page.statuses).toEqual([]);
+    expect(page.notified).toEqual([]);
     expect(page.store.current.value).toBeNull();
 
     page.store.compatibilityBlocked.value = true;
@@ -263,7 +282,7 @@ describe("createPlayer", () => {
     expect(page.requests("/api/random")).toHaveLength(1);
   });
 
-  it("shows each pick that ends without playing in the notice, leaving the status line as it was", async () => {
+  it("shows each pick that ends without playing in the notice alone", async () => {
     const page = setup();
     const answers: Array<[() => Response, string]> = [
       [() => json({}, 503), "Random selection failed (503)."],
@@ -271,11 +290,11 @@ describe("createPlayer", () => {
     ];
     for (const [answer, notice] of answers) {
       page.replies.set("/api/random", answer);
-      page.store.setStatus("Before");
       await page.player.pickRandom();
       expect(page.notices.at(-1)).toBe(notice);
-      expect(page.store.status.value).toBe("Before");
     }
+    expect(page.statuses).toEqual([]);
+    expect(page.notified).toEqual([]);
     expect(page.store.current.value).toBeNull();
   });
 
@@ -288,7 +307,8 @@ describe("createPlayer", () => {
       });
       await page.player.pickRandom();
       expect(page.notices).toEqual(["Random selection failed: Couldn't reach the server."]);
-      expect(page.store.status.value).toBe("");
+      expect(page.statuses).toEqual([]);
+      expect(page.notified).toEqual([]);
     }
   );
 
@@ -298,7 +318,7 @@ describe("createPlayer", () => {
     await page.player.pickRandom();
     expect(page.store.pairingRequired.value).toBe(true);
     expect(page.notices).toEqual([]);
-    expect(page.store.status.value).toBe("");
+    expect(page.notified).toEqual([]);
     expect(page.relayed.filter((relayed) => relayed.includes("Unauthorized"))).toEqual([
       "status=Unauthorized. Pair first. (POST /api/random) hasCurrent=false attempt=0"
     ]);
@@ -315,7 +335,8 @@ describe("createPlayer", () => {
     await pick;
     expect(page.notices).toEqual(["No response from the server. Try again."]);
     expect(page.store.loading.shown.value).toBe(false);
-    expect(page.store.status.value).toBe("");
+    expect(page.statuses).toEqual([]);
+    expect(page.notified).toEqual([]);
   });
 
   it("with Autoplay, moves a photo on after the photo duration, and with Loop shows it again", async () => {
@@ -589,7 +610,8 @@ describe("createPlayer", () => {
     expect(page.elements.video.paused).toBe(false);
     expect(page.frames.pending()).toBe(0);
     expect(page.notices).toEqual(["Video file not found."]);
-    expect(page.store.status.value).toBe("");
+    expect(page.statuses).toEqual([]);
+    expect(page.notified).toEqual([]);
   });
 
   it("holds and resumes a photo's timer with Play/Pause, keeping the time left, and moves it with the bar", async () => {
@@ -737,11 +759,11 @@ describe("createPlayer", () => {
 
     await page.player.toggleFavorite();
     expect(page.requests("/api/favorite")[0]!.body).toEqual({ path: "item-video", isFavorite: true, clientId: "client-1" });
-    expect([page.player.favorite.value, page.store.status.value]).toEqual([true, "Added to favorites"]);
+    expect(page.player.favorite.value).toBe(true);
 
     await page.player.toggleBlacklist();
     expect(page.requests("/api/blacklist")[0]!.body).toEqual({ path: "item-video", isBlacklisted: true, clientId: "client-1" });
-    expect([page.player.favorite.value, page.player.blacklisted.value, page.store.status.value]).toEqual([false, true, "Blacklisted"]);
+    expect([page.player.favorite.value, page.player.blacklisted.value]).toEqual([false, true]);
 
     page.play(VIDEO);
     expect(page.player.blacklisted.value).toBe(true);
@@ -749,8 +771,31 @@ describe("createPlayer", () => {
     page.replies.set("/api/favorite", () => json({}, 500));
     await page.player.toggleFavorite();
     expect(page.notices).toEqual(["Favorite update failed (500)."]);
-    expect(page.store.status.value).toBe("Blacklisted");
     expect(page.player.blacklisted.value).toBe(true);
+    // Each change it made pops up as Your actions, with the file name, and replaces the one before.
+    expect(page.notified).toEqual([
+      { kind: "actions", text: "Added to favorites", detail: "clip.mp4", key: "flag" },
+      { kind: "actions", text: "Blacklisted", detail: "clip.mp4", key: "flag" }
+    ]);
+  });
+
+  it("says a favorite or blacklist was removed, naming the item the request acted on", async () => {
+    const page = setup();
+    page.play({ ...VIDEO, isFavorite: true });
+    await page.player.toggleFavorite();
+
+    page.play({ ...SECOND_VIDEO, isBlacklisted: true });
+    let answer: (response: Response) => void = () => {};
+    page.replies.set("/api/blacklist", () => new Promise<Response>((resolve) => (answer = resolve)) as unknown as Response);
+    const removing = page.player.toggleBlacklist();
+    // Another item plays before the server answers.
+    page.play(PHOTO);
+    answer(json({}));
+    await removing;
+    expect(page.notified).toEqual([
+      { kind: "actions", text: "Removed from favorites", detail: "clip.mp4", key: "flag" },
+      { kind: "actions", text: "Removed from blacklist", detail: "other.mp4", key: "flag" }
+    ]);
   });
 
   it("shows a favorite or blacklist that couldn't reach the server in the notice, leaving the buttons as they were", async () => {
@@ -771,13 +816,11 @@ describe("createPlayer", () => {
     expect([page.player.favorite.value, page.player.blacklisted.value]).toEqual([false, false]);
   });
 
-  it("applies item-state events to the playing item and its cache, and reports them without the file name in the log", () => {
+  it("applies item-state events to the playing item and its cache, and pops up another device's change", () => {
     const page = setup();
     page.play(VIDEO);
     page.emit("itemStateChanged", { itemId: "item-video", path: "/media/clip.mp4", isFavorite: true, isBlacklisted: false });
     expect(page.player.favorite.value).toBe(true);
-    expect(page.store.status.value).toBe("Synced: Added to favorites: clip.mp4");
-    expect(page.relayed).toContain("status=Synced: Added to favorites hasCurrent=true attempt=1");
 
     page.play(SECOND_VIDEO);
     page.emit("itemStateChanged", { itemId: "item-video", path: "/media/clip.mp4", isFavorite: false, isBlacklisted: true });
@@ -785,8 +828,48 @@ describe("createPlayer", () => {
     page.player.previous();
     expect(page.player.blacklisted.value).toBe(true);
 
+    // An event without an item changes nothing and says nothing.
     page.emit("itemStateChanged", { path: "/media/clip.mp4", isFavorite: true });
-    expect(page.store.status.value).toBe("Synced: Blacklisted: clip.mp4");
+    // The file name shows on the second line, and the log leaves it out.
+    expect(page.notified).toEqual([
+      { kind: "devices", text: "Added to favorites on another device", detail: "clip.mp4", key: "sync:item-video", logText: "Added to favorites on another device" },
+      { kind: "devices", text: "Blacklisted on another device", detail: "clip.mp4", key: "sync:item-video", logText: "Blacklisted on another device" }
+    ]);
+  });
+
+  it("tells an item leaving the blacklist from one leaving the favorites, by its state before the change", () => {
+    const page = setup();
+    const change = (before: { previousIsFavorite?: boolean; previousIsBlacklisted?: boolean }) =>
+      page.emit("itemStateChanged", { itemId: "item-video", path: "C:\\media\\clip.mp4", isFavorite: false, isBlacklisted: false, ...before });
+    change({ previousIsFavorite: false, previousIsBlacklisted: true });
+    change({ previousIsFavorite: true, previousIsBlacklisted: false });
+    // A desktop event that doesn't say reads as leaving the favorites, as before.
+    change({});
+    expect(page.notified.map((request) => [request.text, request.detail])).toEqual([
+      ["Removed from blacklist on another device", "clip.mp4"],
+      ["Removed from favorites on another device", "clip.mp4"],
+      ["Removed from favorites on another device", "clip.mp4"]
+    ]);
+  });
+
+  it("pops up nothing for this device's own change, which it already said, and another client's or one without a client id", () => {
+    const page = setup();
+    page.play(VIDEO);
+    const event = { itemId: "item-video", path: "/media/clip.mp4", isFavorite: true, isBlacklisted: false };
+
+    page.emit("itemStateChanged", { ...event, clientId: "client-1" });
+    // Its own change still updates the buttons and the cache.
+    expect(page.player.favorite.value).toBe(true);
+    expect(page.notified).toEqual([]);
+
+    page.emit("itemStateChanged", { ...event, clientId: "client-2" });
+    page.emit("itemStateChanged", { ...event, clientId: null });
+    page.emit("itemStateChanged", event);
+    expect(page.notified.map((request) => request.text)).toEqual([
+      "Added to favorites on another device",
+      "Added to favorites on another device",
+      "Added to favorites on another device"
+    ]);
   });
 
   it("shows the time and moves the slider as the video plays, and seeks only once the duration is known", () => {
@@ -809,13 +892,11 @@ describe("createPlayer", () => {
 });
 
 describe("Loading… on the player's indicator", () => {
-  /** Records each change of whether Loading… shows, and every status line message, from here on. */
+  /** Records each change of whether Loading… shows from here on. */
   function watchLoading(page: ReturnType<typeof setup>) {
     const shown: boolean[] = [];
-    const statuses: string[] = [];
     page.store.loading.shown.subscribe((value) => shown.push(value));
-    page.store.status.subscribe((value) => statuses.push(value));
-    return { shown, statuses };
+    return { shown };
   }
 
   /** Answers the next random pick only when the test says so. */
@@ -825,7 +906,7 @@ describe("Loading… on the player's indicator", () => {
     return (item: unknown) => answer(json(item));
   }
 
-  it("shows only after half a second, counted once across a pick and its media load, and never on the status line", async () => {
+  it("shows only after half a second, counted once across a pick and its media load, and never as a message", async () => {
     vi.useFakeTimers();
     const page = setup();
     const watched = watchLoading(page);
@@ -846,8 +927,8 @@ describe("Loading… on the player's indicator", () => {
     expect(page.store.loading.shown.value).toBe(false);
     // One loading period: it showed once and ended once.
     expect(watched.shown).toEqual([false, true, false]);
-    expect(watched.statuses).not.toContain("Loading...");
-    expect(page.store.status.value).toBe("Playing");
+    expect(page.statuses).toEqual(["Playing"]);
+    expect(page.notified).toEqual([]);
   });
 
   it("shows nothing for a load quicker than half a second", async () => {

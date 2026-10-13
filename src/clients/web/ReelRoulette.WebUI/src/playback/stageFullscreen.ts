@@ -1,4 +1,4 @@
-import { signal, type ReadonlySignal } from "@preact/signals";
+import { computed, signal, type ReadonlySignal } from "@preact/signals";
 
 /** The fullscreen stage element, with the prefixed request Safari on macOS used before it had the standard one. */
 export interface FullscreenStageElement {
@@ -11,6 +11,8 @@ export interface FullscreenDocument {
   webkitFullscreenElement?: unknown;
   exitFullscreen?: () => Promise<void>;
   webkitExitFullscreen?: () => Promise<void>;
+  addEventListener?: (type: string, listener: () => void) => void;
+  removeEventListener?: (type: string, listener: () => void) => void;
 }
 
 export interface FullscreenDevice {
@@ -27,6 +29,8 @@ export interface FullscreenDevice {
 export interface StageFullscreen {
   /** The stage fills the page in place of fullscreen. */
   readonly pseudo: ReadonlySignal<boolean>;
+  /** The stage is in fullscreen, the browser's or pseudo-fullscreen, following the browser's `fullscreenchange`. */
+  readonly active: ReadonlySignal<boolean>;
   attach(stage: FullscreenStageElement): void;
   detach(): void;
   toggle(): void;
@@ -45,7 +49,15 @@ export function createStageFullscreen(options: StageFullscreenOptions = {}): Sta
   const pageDocument = (): FullscreenDocument => options.document ?? (document as FullscreenDocument);
   const device = options.device ?? (() => navigator);
   const pseudo = signal(false);
+  /** The browser shows the stage in fullscreen. */
+  const native = signal(false);
+  const active = computed(() => pseudo.value || native.value);
   let stage: FullscreenStageElement | null = null;
+  const fullscreenEvents = ["fullscreenchange", "webkitfullscreenchange"];
+
+  function followFullscreen(): void {
+    native.value = stage !== null && fullscreenElement() === stage;
+  }
 
   /** Safari on iPhone and iPad, which has no fullscreen for elements other than video. */
   function isIosTouchWebKit(): boolean {
@@ -92,11 +104,18 @@ export function createStageFullscreen(options: StageFullscreenOptions = {}): Sta
 
   return {
     pseudo,
+    active,
     attach(element) {
       stage = element;
+      const doc = pageDocument();
+      fullscreenEvents.forEach((type) => doc.addEventListener?.(type, followFullscreen));
+      followFullscreen();
     },
     detach() {
+      const doc = pageDocument();
+      fullscreenEvents.forEach((type) => doc.removeEventListener?.(type, followFullscreen));
       stage = null;
+      native.value = false;
     },
     toggle() {
       if (isActive()) {

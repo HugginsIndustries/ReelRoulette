@@ -176,15 +176,16 @@ function getStageMessage(
   return msg || null;
 }
 
-function buildRefreshCompleteLine(snapshot: RefreshStatusSnapshot): string {
+/** A finished refresh's summary, one segment per stage, such as "Source: added 3". */
+function refreshSummarySegments(snapshot: RefreshStatusSnapshot): string[] {
   const stages = snapshot.stages;
-  const sourceSummary = buildSourceRefreshSummary(getStageMessage(stages, "sourceRefresh"));
-  const fingerprintSummary = buildFingerprintScanSummary(getStageMessage(stages, "fingerprintScan"));
-  const durationSummary = buildDurationScanSummary(getStageMessage(stages, "durationScan"));
-  const loudnessSummary = buildLoudnessScanSummary(getStageMessage(stages, "loudnessScan"));
-  const thumbnailSummary = buildThumbnailSummary(getStageMessage(stages, "thumbnailGeneration"));
-
-  return `Core refresh complete | Source: ${sourceSummary} | Fingerprint: ${fingerprintSummary} | Duration: ${durationSummary} | Loudness: ${loudnessSummary} | Thumbnails: ${thumbnailSummary}`;
+  return [
+    `Source: ${buildSourceRefreshSummary(getStageMessage(stages, "sourceRefresh"))}`,
+    `Fingerprint: ${buildFingerprintScanSummary(getStageMessage(stages, "fingerprintScan"))}`,
+    `Duration: ${buildDurationScanSummary(getStageMessage(stages, "durationScan"))}`,
+    `Loudness: ${buildLoudnessScanSummary(getStageMessage(stages, "loudnessScan"))}`,
+    `Thumbnails: ${buildThumbnailSummary(getStageMessage(stages, "thumbnailGeneration"))}`
+  ];
 }
 
 function normalizeSnapshot(input: RefreshSnapshotInput): RefreshStatusSnapshot {
@@ -302,21 +303,27 @@ export function refreshProgress(snapshotInput: RefreshSnapshotInput): RefreshPro
 }
 
 /**
- * How a refresh that isn't running ended, for the status line: its failure, its completion summary, or idle. A running
- * refresh shows on the player's indicator instead, from `refreshProgress`.
+ * How a refresh that isn't running ended: it failed, with the server's error, or finished, with its summary's segments,
+ * or neither, as after a cancelled run. A running refresh shows on the player's indicator instead, from
+ * `refreshProgress`.
  */
-export function buildRefreshStatusMessage(snapshotInput: RefreshSnapshotInput): string {
+export type RefreshOutcome =
+  | { result: "failed"; error: string }
+  | { result: "finished"; segments: string[] }
+  | { result: "idle" };
+
+export function refreshOutcome(snapshotInput: RefreshSnapshotInput): RefreshOutcome {
   const snapshot = normalizeSnapshot(snapshotInput);
 
   if (snapshot.lastError) {
-    return `Core refresh failed: ${snapshot.lastError}`;
+    return { result: "failed", error: snapshot.lastError };
   }
 
   if (snapshot.completedUtc) {
-    return buildRefreshCompleteLine(snapshot);
+    return { result: "finished", segments: refreshSummarySegments(snapshot) };
   }
 
-  return "Core refresh idle.";
+  return { result: "idle" };
 }
 
 /**

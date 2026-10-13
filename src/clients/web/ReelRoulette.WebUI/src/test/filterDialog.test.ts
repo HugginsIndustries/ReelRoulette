@@ -3,6 +3,7 @@ import type { ConfirmRequest } from "../dialogs/dialogs";
 import { createFilterDialog } from "../filter/filterDialog";
 import { DURATION_PROBLEM, FLAG_MODES_PROBLEM } from "../filter/filterDialogModel";
 import { createDefaultFilterState } from "../filter/filterStateModel";
+import type { NotifyRequest } from "../notifications/notifications";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type ApiPreset } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
@@ -70,7 +71,15 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
     return json({}, 404);
   }) as typeof fetch;
 
-  const statuses: string[] = [];
+  /** The one-off messages' texts, in order, and the requests in full. */
+  const messages: string[] = [];
+  const notified: NotifyRequest[] = [];
+  const notifications = {
+    notify(request: NotifyRequest) {
+      messages.push(request.text);
+      notified.push(request);
+    }
+  };
   /** The keys the device store wrote, in order. */
   const deviceWrites: string[] = [];
   const store = createAppStore({
@@ -81,11 +90,6 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
   });
   store.presets.value = presets.slice();
   store.syncHeaderPresets();
-  const setStatus = store.setStatus;
-  store.setStatus = (message, logText) => {
-    statuses.push(message);
-    setStatus(message, logText);
-  };
   const api = createAppApi("http://server", {
     onUnauthorized: () => {
       store.pairingRequired.value = true;
@@ -134,9 +138,9 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
       steps.push("closeIfOverlay");
     })
   };
-  const dialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs: { confirm, notice } });
+  const dialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs: { confirm, notice }, notifications });
   const view = () => dialog.view.value!;
-  return { dialog, view, store, server, statuses, notices, steps, library, remembered, confirm, panel, deviceWrites, serverReady };
+  return { dialog, view, store, server, messages, notified, notices, steps, library, remembered, confirm, panel, deviceWrites, serverReady };
 }
 
 /** An action that is neither disabled nor held. */
@@ -172,7 +176,7 @@ describe("opening", () => {
   });
 
   it("shows but loads nothing while the server is incompatible, and says why when its data cannot load", async () => {
-    const { dialog, store, server, statuses, notices } = setup();
+    const { dialog, store, server, messages, notices } = setup();
     store.compatibilityBlocked.value = true;
     await dialog.open();
     expect(server.requests).toHaveLength(0);
@@ -187,14 +191,14 @@ describe("opening", () => {
     server.sourcesStatus = 500;
     await dialog.open();
     expect(notices).toEqual(["Filter load failed: HTTP 500"]);
-    expect(statuses).toEqual([]);
+    expect(messages).toEqual([]);
     expect(dialog.isOpen.value).toBe(true);
     expect(dialog.view.value).toBeNull();
     expect(dialog.tab.value).toBeNull();
   });
 
   it("loads, refreshes, and applies nothing while the server runs without a library, with no notice", async () => {
-    const { dialog, view, store, server, statuses, notices, steps, library, panel } = setup();
+    const { dialog, view, store, server, messages, notices, steps, library, panel } = setup();
     store.libraryState.value = "damaged";
     await dialog.open();
     expect(server.requests).toHaveLength(0);
@@ -221,7 +225,7 @@ describe("opening", () => {
     expect(panel.closeIfOverlay).not.toHaveBeenCalled();
     expect(store.appliedFilter.value.onlyNeverPlayed).toBe(false);
     expect(notices).toEqual([]);
-    expect(statuses).toEqual([]);
+    expect(messages).toEqual([]);
   });
 
   it("loads once the server is ready while it shows, keeping its changes, and not while it is hidden", async () => {
@@ -252,27 +256,31 @@ describe("opening", () => {
     expect(notices).toEqual([]);
   });
 
-  it("Refresh before anything has loaded loads as showing the tab does, and says so", async () => {
-    const { dialog, view, server, statuses, notices } = setup();
+  it("Refresh before anything has loaded loads as showing the tab does, and says so, as Refresh after it does", async () => {
+    const { dialog, view, server, messages, notified, notices } = setup();
     server.sourcesStatus = 500;
     await dialog.open();
     expect(dialog.view.value).toBeNull();
 
     await dialog.refresh();
     expect(notices.at(-1)).toBe("Filter refresh failed: HTTP 500");
-    expect(statuses).toEqual([]);
+    expect(messages).toEqual([]);
     expect(dialog.view.value).toBeNull();
 
     server.sourcesStatus = 200;
     await dialog.refresh();
-    expect(statuses.at(-1)).toBe("Filter data refreshed.");
+    expect(messages.at(-1)).toBe("Filter data refreshed.");
     expect(dialog.tab.value).toBe("general");
     expect(view().sources.map((source) => source.id)).toEqual(["source-1", "source-2"]);
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites"]);
+
+    await dialog.refresh();
+    const refreshed = { kind: "actions", text: "Filter data refreshed.", key: "filter" };
+    expect(notified).toEqual([refreshed, refreshed]);
   });
 
   it("reads a failed tag model as HTTP and its status, on loading and on Refresh", async () => {
-    const { dialog, server, statuses, notices } = setup();
+    const { dialog, server, messages, notices } = setup();
     server.modelStatus = 503;
     await dialog.open();
     expect(notices).toEqual(["Filter load failed: HTTP 503"]);
@@ -282,7 +290,7 @@ describe("opening", () => {
     server.modelStatus = 503;
     await dialog.refresh();
     expect(notices).toEqual(["Filter load failed: HTTP 503", "Filter refresh failed: HTTP 503"]);
-    expect(statuses).toEqual([]);
+    expect(messages).toEqual([]);
   });
 
   it("names the content type of a tag model that isn't JSON, such as a proxy's page", async () => {
@@ -297,7 +305,7 @@ describe("opening", () => {
     ["tag model", "modelStatus"],
     ["sources", "sourcesStatus"]
   ] as const)("shows only the pairing prompt when the %s answers 401, on loading and on Refresh", async (_name, field) => {
-    const { dialog, store, server, statuses, notices } = setup();
+    const { dialog, store, server, messages, notices } = setup();
     server[field] = 401;
     await dialog.open();
     expect(store.pairingRequired.value).toBe(true);
@@ -310,7 +318,7 @@ describe("opening", () => {
     server[field] = 401;
     await dialog.refresh();
     expect(notices).toEqual([]);
-    expect(statuses).toEqual(["Filter data refreshed."]);
+    expect(messages).toEqual(["Filter data refreshed."]);
   });
 
   it("keeps its changes and its section while it hides, and shows them again as it loads again", async () => {
@@ -481,7 +489,7 @@ describe("General tab", () => {
   });
 
   it("holds Apply on a duration that is not valid, with or without other changes, and moves to it without a status", async () => {
-    const { dialog, view, statuses, library, server, store, panel } = setup();
+    const { dialog, view, messages, library, server, store, panel } = setup();
     await dialog.open();
     dialog.typeDuration("min", "abc");
     expect(view().pending).toBe(false);
@@ -507,7 +515,7 @@ describe("General tab", () => {
     ]);
     expect(library.commitQuery).not.toHaveBeenCalled();
     expect(panel.closeIfOverlay).not.toHaveBeenCalled();
-    expect(statuses).toEqual([]);
+    expect(messages).toEqual([]);
 
     dialog.typeDuration("min", "1:30");
     expect(view().actions.apply).toEqual(FREE);
@@ -517,7 +525,7 @@ describe("General tab", () => {
   });
 
   it("flags Favorites only with Blacklisted only, and no other pairing, and holds every action that uses it", async () => {
-    const { dialog, view, statuses, library } = setup([FAVORITES, RECENT]);
+    const { dialog, view, messages, library } = setup([FAVORITES, RECENT]);
     await dialog.open();
     dialog.choosePreset("Recent");
     dialog.typeNewPresetName("Mine");
@@ -541,7 +549,7 @@ describe("General tab", () => {
     expect(view().presets[1]!.filterState.favoritesMode).toBe("off");
     expect(view().presetsChanged).toBe(false);
     expect(library.commitQuery).not.toHaveBeenCalled();
-    expect(statuses).toEqual([]);
+    expect(messages).toEqual([]);
 
     dialog.changeGeneral({ favoritesOn: false });
     expect(view().actions).toEqual({ apply: FREE, addPreset: FREE, updatePreset: FREE });
@@ -586,7 +594,7 @@ describe("Tags tab", () => {
 
 describe("Presets tab", () => {
   it("adds, moves, renames, and deletes presets in the working copy, and keeps a typed name meanwhile", async () => {
-    const { dialog, view, statuses, confirm } = setup([FAVORITES, RECENT]);
+    const { dialog, view, messages, confirm } = setup([FAVORITES, RECENT]);
     await dialog.open();
 
     dialog.typeNewPresetName("Draft name");
@@ -617,11 +625,11 @@ describe("Presets tab", () => {
     expect(confirm).toHaveBeenLastCalledWith({ message: 'Delete preset "Ours"?', confirmLabel: "Delete", danger: true });
     expect(view().presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites"]);
     expect(view().presetsChanged).toBe(true);
-    expect(statuses).toEqual([]);
+    expect(messages).toEqual([]);
   });
 
   it("disables Add Preset while the new name is empty, without a flag or a move, even while a General field has a problem", async () => {
-    const { dialog, view, statuses } = setup([FAVORITES]);
+    const { dialog, view, messages } = setup([FAVORITES]);
     await dialog.open();
     expect(view().problems.newPresetName).toBe(EMPTY_FIELD);
     expect(view().flagged.newPresetName).toBe(false);
@@ -651,11 +659,11 @@ describe("Presets tab", () => {
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Mine"]);
     expect(view().newPresetName).toBe("");
     expect(view().flagged.newPresetName).toBe(false);
-    expect(statuses).toEqual([]);
+    expect(messages).toEqual([]);
   });
 
   it("flags a new name another preset has, ignoring case, and disables Add Preset without a move, even while a General field has a problem", async () => {
-    const { dialog, view, statuses } = setup([FAVORITES, RECENT]);
+    const { dialog, view, messages } = setup([FAVORITES, RECENT]);
     await dialog.open();
     dialog.showTab("presets");
 
@@ -674,11 +682,11 @@ describe("Presets tab", () => {
     expect(dialog.tab.value).toBe("presets");
     expect(dialog.reveal.request.value).toBeNull();
     expect(view().presetsChanged).toBe(false);
-    expect(statuses).toEqual([]);
+    expect(messages).toEqual([]);
   });
 
   it("holds Add Preset and Update Preset on a duration that is not valid", async () => {
-    const { dialog, view, statuses } = setup([FAVORITES, RECENT]);
+    const { dialog, view, messages } = setup([FAVORITES, RECENT]);
     await dialog.open();
     dialog.choosePreset("Recent");
     dialog.typeNewPresetName("Mine");
@@ -695,7 +703,7 @@ describe("Presets tab", () => {
     expect(dialog.reveal.request.value).toEqual({ field: "maxDuration", count: 2 });
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
     expect(view().presetsChanged).toBe(false);
-    expect(statuses).toEqual([]);
+    expect(messages).toEqual([]);
 
     dialog.typeDuration("max", "2:00");
     dialog.updatePreset();
@@ -717,17 +725,25 @@ describe("Presets tab", () => {
   });
 
   it("updates the chosen preset with the working filter", async () => {
-    const { dialog, view, statuses, notices } = setup([FAVORITES, RECENT]);
+    const { dialog, view, messages, notified, notices } = setup([FAVORITES, RECENT]);
     await dialog.open();
     dialog.updatePreset();
     expect(notices).toEqual(["Select a preset to update."]);
-    expect(statuses).toEqual([]);
+    expect(messages).toEqual([]);
 
     dialog.choosePreset("Recent");
     dialog.changeGeneral({ favoritesOn: true });
     expect(view().heading).toBe("Preset: Recent*");
     dialog.updatePreset();
-    expect(statuses.at(-1)).toBe('Updated preset "Recent" locally — Apply to save.');
+    // The log leaves the preset's name out.
+    expect(notified).toEqual([
+      {
+        kind: "actions",
+        text: 'Updated preset "Recent" locally — Apply to save.',
+        key: "filter",
+        logText: "Updated preset locally — Apply to save."
+      }
+    ]);
     expect(view().presets[1]!.filterState).toMatchObject({ favoritesMode: "only", onlyNeverPlayed: true });
     expect(view().heading).toBe("Preset: Recent");
   });
@@ -763,7 +779,7 @@ describe("Edit Preset", () => {
   });
 
   it("flags another preset's name, ignoring case, finds an empty name required without a flag, and saves neither", async () => {
-    const { dialog, view, statuses } = setup([FAVORITES, RECENT]);
+    const { dialog, view, messages } = setup([FAVORITES, RECENT]);
     await dialog.open();
     dialog.editPreset(1);
 
@@ -781,7 +797,7 @@ describe("Edit Preset", () => {
 
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
     expect(view().presetsChanged).toBe(false);
-    expect(statuses).toEqual([]);
+    expect(messages).toEqual([]);
 
     dialog.typePresetName("RECENT");
     expect(view().presetEditProblem).toBeNull();
@@ -850,7 +866,7 @@ describe("Edit Preset", () => {
 
 describe("applying", () => {
   it("saves changed presets, applies the filter, reloads presets, closes the panel as the overlay, and then starts the library over", async () => {
-    const { dialog, store, server, steps, statuses, panel } = setup([FAVORITES]);
+    const { dialog, store, server, steps, notified, panel } = setup([FAVORITES]);
     await dialog.open();
     dialog.changeGeneral({ favoritesOn: true, onlyNeverPlayed: true });
     dialog.typeNewPresetName("Unplayed favorites");
@@ -867,7 +883,7 @@ describe("applying", () => {
     expect(store.activePresetName.value).toBe("Unplayed favorites");
     expect(store.presetMenu.value.selectedValue).toBe("saved-2");
     expect(panel.closeIfOverlay).toHaveBeenCalledTimes(1);
-    expect(statuses.at(-1)).toBe("Filters applied.");
+    expect(notified.at(-1)).toEqual({ kind: "actions", text: "Filters applied.", key: "filter" });
   });
 
   it("writes the remembered filter once for an Apply that changes the filter and its preset", async () => {
@@ -897,7 +913,7 @@ describe("applying", () => {
   });
 
   it("keeps the dialog open and applies nothing when the presets cannot be saved", async () => {
-    const { dialog, view, store, server, statuses, notices, library, panel } = setup([FAVORITES]);
+    const { dialog, view, store, server, messages, notices, library, panel } = setup([FAVORITES]);
     server.saveStatus = 500;
     await dialog.open();
     dialog.changeGeneral({ onlyNeverPlayed: true });
@@ -907,7 +923,7 @@ describe("applying", () => {
     await dialog.apply();
 
     expect(notices).toEqual(["Saving presets failed (500)."]);
-    expect(statuses).toEqual([]);
+    expect(messages).toEqual([]);
     expect(dialog.isOpen.value).toBe(true);
     expect(panel.closeIfOverlay).not.toHaveBeenCalled();
     expect(view().presetsChanged).toBe(true);
@@ -916,7 +932,7 @@ describe("applying", () => {
   });
 
   it("says a preset save that couldn't reach the server failed, and applies nothing", async () => {
-    const { dialog, view, store, server, statuses, notices, library } = setup([FAVORITES]);
+    const { dialog, view, store, server, messages, notices, library } = setup([FAVORITES]);
     await dialog.open();
     dialog.typeNewPresetName("Unplayed");
     dialog.addPreset();
@@ -925,7 +941,7 @@ describe("applying", () => {
     await dialog.apply();
 
     expect(notices).toEqual(["Saving presets failed: Couldn't reach the server."]);
-    expect(statuses).toEqual([]);
+    expect(messages).toEqual([]);
     expect(view().presetsChanged).toBe(true);
     expect(store.appliedFilter.value).toEqual(createDefaultFilterState());
     expect(library.commitQuery).not.toHaveBeenCalled();

@@ -15,6 +15,7 @@ import {
   json,
   mountPage,
   openNotices,
+  pageReady,
   resetPage,
   setViewport,
   settle,
@@ -192,8 +193,9 @@ function isLit(name: string): boolean {
   return button(name).classList.contains("active");
 }
 
-function statusLine(): string {
-  return document.getElementById("status")?.textContent ?? "";
+/** The lines the page relayed for `text`, a message or a state with no message, whatever was playing. */
+function relayedLines(server: FakeServer, text: string): string[] {
+  return server.logLines().filter((line) => line.startsWith(`status=${text} hasCurrent=`));
 }
 
 /** The player's indicator: its live region, which always stays in the page. */
@@ -297,7 +299,8 @@ describe("random pick", () => {
     expect(server.requests("POST", "/api/record-playback").map((call) => call.body)).toEqual([
       { path: "item-video", clientId: page.clientId(), sessionId: page.sessionId() }
     ]);
-    await waitFor(() => expect(statusLine()).toBe("Playing"));
+    // Playing is the normal state, which shows nothing and only relays.
+    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Playing", VIDEO_ITEM, 1)));
   });
 
   it("relays the pick's steps to the server log without file names or media URLs", async () => {
@@ -345,11 +348,10 @@ describe("random pick", () => {
 
     fireEvent.load(photo());
     await flush();
-    expect(statusLine()).toBe("Playing");
+    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Playing", PHOTO_ITEM, 1)));
     fireEvent.error(photo());
     await flush();
     expect(openNotices()).toEqual(["Photo file not found."]);
-    expect(statusLine()).toBe("Playing");
     await waitFor(() =>
       expect(server.logLines()).toEqual(
         expect.arrayContaining([
@@ -401,10 +403,9 @@ describe("random pick", () => {
     );
   });
 
-  it("shows no eligible media, a refused pick, and a pick that cannot reach the server in the notice, not on the status line", async () => {
+  it("shows no eligible media, a refused pick, and a pick that cannot reach the server in the notice alone", async () => {
     const server = serverPicking({ mediaUrl: null });
     await mount(server);
-    const statusBefore = statusLine();
     const failures: Array<[() => Response, string]> = [
       [() => json({ mediaUrl: null }), "No eligible media for current filters."],
       [() => status(500), "Random selection failed (500)."],
@@ -423,7 +424,6 @@ describe("random pick", () => {
       server.on("POST", "/api/random", answer);
       await click(emptyState());
       expect(openNotices()).toEqual([notice]);
-      expect(statusLine()).toBe(statusBefore);
       expect(indicatorState()).toBeNull();
       await waitFor(() => expect(server.logLines()).toContain(statusLogLine(notice, null, 0)));
       await closeNotices();
@@ -438,19 +438,16 @@ describe("random pick", () => {
     server.on("POST", "/api/random", () => new Promise<Response>(() => {}));
     await mount(server);
 
-    const statusBefore = statusLine();
     await click(emptyState());
     await click(button("Next"));
     await click(button("Play/Pause"));
     expect(randomPicks(server)).toBe(1);
     await vi.advanceTimersByTimeAsync(500);
     expect(indicatorState()).toBe("loading");
-    expect(statusLine()).toBe(statusBefore);
 
     await vi.advanceTimersByTimeAsync(9_500);
     expect(openNotices()).toEqual(["No response from the server. Try again."]);
     expect(indicatorState()).toBeNull();
-    expect(statusLine()).toBe(statusBefore);
     expect(server.logLines()).toEqual(
       expect.arrayContaining([
         "playback=random-pick-timeout attempt=0 hasCurrent=false timeoutMs=10000",
@@ -536,13 +533,11 @@ describe("favorite and blacklist", () => {
     await click(button("Favorite"));
     expect(server.requests("POST", "/api/favorite")[0]!.body).toEqual({ path: "item-video", isFavorite: true, clientId });
     expect(isLit("Favorite")).toBe(true);
-    expect(statusLine()).toBe("Added to favorites");
 
     await click(button("Blacklist"));
     expect(server.requests("POST", "/api/blacklist")[0]!.body).toEqual({ path: "item-video", isBlacklisted: true, clientId });
     expect(isLit("Blacklist")).toBe(true);
     expect(isLit("Favorite")).toBe(false);
-    expect(statusLine()).toBe("Blacklisted");
 
     await click(button("Favorite"));
     expect(server.requests("POST", "/api/favorite")[1]!.body).toEqual({ path: "item-video", isFavorite: true, clientId });
@@ -552,12 +547,21 @@ describe("favorite and blacklist", () => {
     await click(button("Favorite"));
     expect(server.requests("POST", "/api/favorite")[2]!.body).toEqual({ path: "item-video", isFavorite: false, clientId });
     expect(isLit("Favorite")).toBe(false);
-    expect(statusLine()).toBe("Removed from favorites");
 
     await click(button("Blacklist"));
     await click(button("Blacklist"));
     expect(isLit("Blacklist")).toBe(false);
-    expect(statusLine()).toBe("Removed from blacklist");
+    // Each pops up as Your actions and relays its text, without the file name.
+    await waitFor(() =>
+      expect(server.logLines()).toEqual(
+        expect.arrayContaining(
+          ["Added to favorites", "Blacklisted", "Removed from favorites", "Removed from blacklist"].map((text) =>
+            statusLogLine(text, VIDEO_ITEM, 1)
+          )
+        )
+      )
+    );
+    expect(server.logLines().some((line) => line.includes("holiday"))).toBe(false);
   });
 
   it("show an update the server refuses in the notice and leave the buttons as they were", async () => {
@@ -576,7 +580,7 @@ describe("favorite and blacklist", () => {
     expect(openNotices()).toEqual(["Blacklist update failed (403)."]);
     expect(isLit("Blacklist")).toBe(false);
     await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Blacklist update failed (403).", VIDEO_ITEM, 1)));
-    expect(statusLine()).toBe("Playing");
+    expect([...relayedLines(server, "Added to favorites"), ...relayedLines(server, "Blacklisted")]).toEqual([]);
   });
 
   it("show an update that couldn't reach the server in the notice, without an unhandled rejection", async () => {
@@ -618,7 +622,7 @@ describe("favorite and blacklist", () => {
     await settle();
     expect(openNotices()).toEqual([]);
     expect([isLit("Favorite"), isLit("Blacklist")]).toEqual([false, false]);
-    expect(statusLine()).toBe("Playing");
+    expect([...relayedLines(server, "Added to favorites"), ...relayedLines(server, "Blacklisted")]).toEqual([]);
     await waitFor(() =>
       expect(server.logLines()).toEqual(
         expect.arrayContaining([
@@ -629,14 +633,13 @@ describe("favorite and blacklist", () => {
     );
   });
 
-  it("follow item-state events for the playing item, and an item played again shows its latest state", async () => {
+  it("follow item-state events for the playing item, an item played again shows its latest state, and another device's change pops up", async () => {
     const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO);
     const page = await mountAndPlay(server);
 
     page.stream().emit("itemStateChanged", 2, { itemId: "item-video", path: VIDEO_ITEM.id, isFavorite: true, isBlacklisted: false });
     await flush();
     expect(isLit("Favorite")).toBe(true);
-    expect(statusLine()).toBe("Synced: Added to favorites: holiday clip.mp4");
 
     await click(button("Next"));
     expect(isLit("Favorite")).toBe(false);
@@ -644,17 +647,32 @@ describe("favorite and blacklist", () => {
     page.stream().emit("itemStateChanged", 3, { itemId: "item-video", path: VIDEO_ITEM.id, isFavorite: false, isBlacklisted: true });
     await flush();
     expect(isLit("Blacklist")).toBe(false);
-    expect(statusLine()).toBe("Synced: Blacklisted: holiday clip.mp4");
 
     await click(button("Previous"));
     expect(isLit("Blacklist")).toBe(true);
     expect(isLit("Favorite")).toBe(false);
 
-    page.stream().emit("itemStateChanged", 4, { itemId: "item-video", path: VIDEO_ITEM.id, isFavorite: false, isBlacklisted: false });
+    page.stream().emit("itemStateChanged", 4, {
+      itemId: "item-video",
+      path: VIDEO_ITEM.id,
+      isFavorite: false,
+      isBlacklisted: false,
+      previousIsFavorite: false,
+      previousIsBlacklisted: true
+    });
     await flush();
     expect(isLit("Blacklist")).toBe(false);
-    expect(statusLine()).toBe("Synced: Removed from favorites: holiday clip.mp4");
-    await waitFor(() => expect(server.logLines()).toContain("status=Synced: Blacklisted hasCurrent=true attempt=2"));
+    // Each relays its text, leaving the file name out.
+    await waitFor(() =>
+      expect(server.logLines()).toEqual(
+        expect.arrayContaining([
+          statusLogLine("Added to favorites on another device", VIDEO_ITEM, 1),
+          statusLogLine("Blacklisted on another device", SECOND_VIDEO, 2),
+          statusLogLine("Removed from blacklist on another device", VIDEO_ITEM, 3)
+        ])
+      )
+    );
+    expect(server.logLines().some((line) => line.includes("holiday"))).toBe(false);
   });
 });
 
@@ -758,7 +776,7 @@ describe("loop and autoplay", () => {
     fireEvent.playing(video());
     await flush();
     expect(randomPicks(server)).toBe(2);
-    expect(statusLine()).toBe("Playing");
+    expect(openNotices()).toEqual([]);
     expect(server.logLines().filter((line) => line.startsWith("playback=video-"))).toEqual([
       "playback=video-onplaying attempt=1 hasCurrent=true"
     ]);
@@ -1279,7 +1297,7 @@ describe("fullscreen", () => {
 
   it("Escape closes an open panel before it leaves the page-filling fullscreen", async () => {
     const page = mountPage({ server: serverPicking(VIDEO_ITEM) });
-    await screen.findByText("Ready (API 1)");
+    await pageReady(page.server);
     await click(button("Fullscreen"));
     await openPanel("Library");
     expect(isShowing("Library")).toBe(true);
@@ -1331,7 +1349,7 @@ describe("other screens", () => {
     );
     server.on("POST", "/api/play/item-video", () => json(VIDEO_ITEM));
     const page = mountPage({ server });
-    await screen.findByText("Ready (API 1)");
+    await pageReady(server);
     await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(1));
 
     await openPanel("Library");
@@ -1468,7 +1486,7 @@ describe("the player's indicator", () => {
     expect(indicatorIcon().classList.contains("spins")).toBe(true);
     expect(indicatorText().textContent).toBe("Reconnecting…");
     // The icon's ligature is its only other text, which screen readers skip.
-    expect(within(stage()).getByRole("status").textContent).toBe("syncReconnecting…");
+    expect(within(mediaArea()).getByRole("status").textContent).toBe("syncReconnecting…");
 
     store.reconnecting.value = false;
     await flush();

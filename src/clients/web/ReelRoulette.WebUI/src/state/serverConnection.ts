@@ -1,14 +1,16 @@
 import { batch } from "@preact/signals";
 import {
-  buildRefreshStatusMessage,
   coerceRefreshSnapshot,
   newRefreshCompletionRunId,
+  refreshOutcome,
   refreshProgress,
-  settledKeptSources
+  settledKeptSources,
+  type RefreshSnapshotInput
 } from "../events/refreshStatusProjection";
 import { errorText, sendRequest, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import { createSseClient, type EventSourceLike, type SseClient } from "../events/sseClient";
+import type { Notifications } from "../notifications/notifications";
 import type { RefreshKeptSource } from "../types/serverContracts";
 import type { AppApi } from "./appApi";
 import { PRESET_MENU_BLOCKED, PRESET_MENU_LOAD_FAILED, PRESET_MENU_NO_LIBRARY, type AppStore } from "./appStore";
@@ -52,18 +54,19 @@ export interface ServerConnectionEvents {
 
 export interface ServerConnection {
   /**
-   * Checks the server version, opens the event stream, and pairs with the config's token. The version is checked again
-   * each time the event stream opens, or fails while the server doesn't ask for pairing, and every few seconds while the
-   * stream is open and the last check didn't reach the server. The presets load once a check finds the server ready.
+   * Checks the server version, opens the event stream, and pairs with the config's token, which pops nothing up. The
+   * version is checked again each time the event stream opens, or fails while the server doesn't ask for pairing, and
+   * every few seconds while the stream is open and the last check didn't reach the server. The presets load once a
+   * check finds the server ready.
    */
   start(): void;
   /** Closes the event stream and removes the reconnect listeners. */
   stop(): void;
   loadPresets(): Promise<void>;
   /**
-   * Pairs with a token, then checks the version, which loads the presets when it finds the server newly ready, and
-   * reconnects the event stream. A pairing that fails, one that couldn't reach the server among them, or that the
-   * server's compatibility check blocks, shows in a notice.
+   * Pairs with the header's token, saying so in a popup, then checks the version, which loads the presets when it finds
+   * the server newly ready, and reconnects the event stream. A pairing that fails, one that couldn't reach the server
+   * among them, or that the server's compatibility check blocks, shows in a notice.
    */
   pair(token: string): Promise<void>;
   on<K extends keyof ServerConnectionEvents>(event: K, listener: ServerConnectionEvents[K]): void;
@@ -76,6 +79,8 @@ export interface ServerConnectionOptions {
   api: AppApi;
   /** The in-app dialogs, for a pairing that fails or that the server's compatibility check blocks. */
   dialogs: Pick<Dialogs, "notice">;
+  /** The one-off messages: Paired., Reconnected., and how a library refresh ended. */
+  notifications: Pick<Notifications, "notify">;
   /** Defaults to the global `fetch`, looked up on each request. */
   fetch?: typeof fetch;
   /** Defaults to the browser's `EventSource`. */
@@ -85,7 +90,7 @@ export interface ServerConnectionOptions {
 }
 
 export function createServerConnection(options: ServerConnectionOptions): ServerConnection {
-  const { store, api, dialogs } = options;
+  const { store, api, dialogs, notifications } = options;
   const send: typeof fetch = options.fetch ?? ((input, init) => fetch(input, init));
   const pageWindow = options.window ?? (typeof window === "undefined" ? undefined : window);
   const listeners: { [K in keyof ServerConnectionEvents]: ServerConnectionEvents[K][] } = {
@@ -129,10 +134,39 @@ export function createServerConnection(options: ServerConnectionOptions): Server
    * the server fails the compatibility check, whose stream is stopped.
    */
   function updateReconnecting(): void {
+    const wasReconnecting = store.reconnecting.peek();
     store.reconnecting.value =
       !store.compatibilityBlocked.peek() &&
       (lastCheck === "unreachable" ||
         (streamFailed && lastCheck !== "none" && lastCheck !== "unauthorized" && store.libraryState.peek() === "ready"));
+    // Reconnecting… showed, and has ended. `stop()` ends it without reconnecting, so it says nothing.
+    if (wasReconnecting && !store.reconnecting.peek()) {
+      notifications.notify({ kind: "connection", text: "Reconnected.", key: "connection" });
+    }
+  }
+
+  /**
+   * How a refresh that isn't running ended: finished, with its summary, or failed, a warning that stays until closed.
+   * A cancelled run says nothing, and only relays.
+   */
+  function showRefreshOutcome(snapshot: RefreshSnapshotInput): void {
+    const outcome = refreshOutcome(snapshot);
+    if (outcome.result === "finished") {
+      const summary = outcome.segments.join(" · ");
+      notifications.notify({
+        kind: "refresh",
+        text: "Library refresh finished",
+        detail: summary,
+        key: "refresh",
+        logText: `Library refresh finished: ${summary}`
+      });
+    } else if (outcome.result === "failed") {
+      // The server's refresh error text can name a file or folder, so it goes only in the second line, which the log
+      // leaves out.
+      notifications.notify({ kind: "refresh", text: "Library refresh failed", detail: outcome.error, key: "refresh", warning: true });
+    } else {
+      store.relayStatus("Core refresh idle.");
+    }
   }
 
   function cancelRecheck(): void {
@@ -202,7 +236,8 @@ export function createServerConnection(options: ServerConnectionOptions): Server
         return;
       }
       store.showPresetMenuMessage(PRESET_MENU_LOAD_FAILED);
-      store.setStatus(`Error loading presets: ${errorText(error)}`);
+      // The preset dropdown shows it in place, so it only relays.
+      store.relayStatus(`Error loading presets: ${errorText(error)}`);
     }
   }
 
@@ -266,7 +301,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     }
     if (!serverReady) {
       serverReady = true;
-      store.setStatus(`Ready (API ${version.apiVersion || "unknown"})`);
+      store.relayStatus(`Ready (API ${version.apiVersion || "unknown"})`);
       emit("serverReady");
       void loadPresets();
     }
@@ -308,7 +343,9 @@ export function createServerConnection(options: ServerConnectionOptions): Server
         streamFailed = false;
         streamOpen = true;
         updateReconnecting();
-        store.setStatus("SSE connected");
+        // The normal state shows nothing; Reconnected. pops up when Reconnecting… ends, here when only the stream had
+        // failed, or once a check reaches the server.
+        store.relayStatus("SSE connected");
         // The server may have come back, restarted, or found its library since the last check, so it checks again.
         void checkVersion();
       },
@@ -340,13 +377,11 @@ export function createServerConnection(options: ServerConnectionOptions): Server
           const raw = payload?.snapshot || payload?.Snapshot;
           if (!raw) return;
           const snapshot = coerceRefreshSnapshot(raw);
-          // A running refresh shows on the player's indicator; the status line takes how it ended.
+          // A running refresh shows on the player's indicator; how it ended pops up.
           const progress = refreshProgress(snapshot);
           store.refreshProgress.value = progress;
           if (!progress) {
-            const message = buildRefreshStatusMessage(snapshot);
-            // The server's refresh error text can name a file or folder, so the log leaves it out.
-            store.setStatus(message, message.startsWith("Core refresh failed:") ? "Core refresh failed" : message);
+            showRefreshOutcome(snapshot);
           }
           // A finished refresh can add items and rewrite thumbnails, so the loaded window reloads once per run.
           const completedRunId = newRefreshCompletionRunId(snapshot, lastAppliedRefreshRunId);
@@ -380,7 +415,11 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     eventStream.connect();
   }
 
-  async function pair(token: string): Promise<void> {
+  /**
+   * The header's Pair pops up "Paired.". Pairing on start with the config's token, which the server gives only a
+   * device it already accepts, isn't the user's action, so it only relays it.
+   */
+  async function pair(token: string, fromPairButton: boolean): Promise<void> {
     if (store.compatibilityBlocked.peek()) {
       void dialogs.notice("Pairing blocked by server compatibility check.");
       return;
@@ -413,7 +452,11 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     streamFailed = false;
     updateReconnecting();
     store.pairingRequired.value = false;
-    store.setStatus("Paired.");
+    if (fromPairButton) {
+      notifications.notify({ kind: "actions", text: "Paired.", key: "pair" });
+    } else {
+      store.relayStatus("Paired.");
+    }
     await checkVersion();
     if (lastCheck !== "reached") {
       return;
@@ -444,9 +487,9 @@ export function createServerConnection(options: ServerConnectionOptions): Server
       addReconnectListeners();
       void checkVersion();
       connectEvents();
-      store.setStatus("Ready");
+      store.relayStatus("Ready");
       if (options.pairToken) {
-        void pair(options.pairToken);
+        void pair(options.pairToken, false);
       }
     },
     stop() {
@@ -457,7 +500,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
       store.reconnecting.value = false;
     },
     loadPresets,
-    pair,
+    pair: (token) => pair(token, true),
     on(event, listener) {
       listeners[event].push(listener);
     }

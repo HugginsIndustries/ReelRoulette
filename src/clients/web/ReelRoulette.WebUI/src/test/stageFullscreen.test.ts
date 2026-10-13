@@ -10,20 +10,40 @@ const DESKTOP: FullscreenDevice = { userAgent: "Mozilla/5.0 (X11; Linux x86_64) 
 const IPHONE: FullscreenDevice = { userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604.1", platform: "iPhone", maxTouchPoints: 5 };
 const IPAD_AS_MAC: FullscreenDevice = { userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15", platform: "MacIntel", maxTouchPoints: 5 };
 
+/** A document that tells its listeners when the element in fullscreen changes, as a browser does. */
+function fakeDocument(): FullscreenDocument & { change(type: string): void; listeners(): number } {
+  const listeners = new Map<string, Set<() => void>>();
+  return {
+    addEventListener(type, listener) {
+      listeners.set(type, (listeners.get(type) ?? new Set()).add(listener));
+    },
+    removeEventListener(type, listener) {
+      listeners.get(type)?.delete(listener);
+    },
+    change(type) {
+      listeners.get(type)?.forEach((listener) => listener());
+    },
+    listeners: () => [...listeners.values()].reduce((count, set) => count + set.size, 0)
+  };
+}
+
 function setup(options: { device?: FullscreenDevice; refuse?: boolean; api?: "standard" | "webkit" | "none" } = {}) {
-  const doc: FullscreenDocument = {};
+  const doc = fakeDocument();
   const stage: FullscreenStageElement = {};
   const api = options.api ?? "standard";
+  const changed = api === "webkit" ? "webkitfullscreenchange" : "fullscreenchange";
   const request = vi.fn(function (this: unknown) {
     if (options.refuse) {
       return Promise.reject(new TypeError("denied"));
     }
     doc[api === "webkit" ? "webkitFullscreenElement" : "fullscreenElement"] = this;
+    doc.change(changed);
     return Promise.resolve();
   });
   const exit = vi.fn(() => {
     doc.fullscreenElement = null;
     doc.webkitFullscreenElement = null;
+    doc.change(changed);
     return Promise.resolve();
   });
   if (api === "standard") {
@@ -35,7 +55,7 @@ function setup(options: { device?: FullscreenDevice; refuse?: boolean; api?: "st
   }
   const fullscreen = createStageFullscreen({ document: doc, device: () => options.device ?? DESKTOP });
   fullscreen.attach(stage);
-  return { fullscreen, stage, request, exit };
+  return { fullscreen, stage, request, exit, doc };
 }
 
 describe("createStageFullscreen", () => {
@@ -96,5 +116,51 @@ describe("createStageFullscreen", () => {
     real.fullscreen.toggle();
     real.fullscreen.exitPseudo();
     expect(real.exit).not.toHaveBeenCalled();
+  });
+
+  it("tells whether the stage is in the browser's fullscreen, following its fullscreen change events", () => {
+    for (const api of ["standard", "webkit"] as const) {
+      const { fullscreen, doc } = setup({ api });
+      expect(fullscreen.active.value).toBe(false);
+      fullscreen.toggle();
+      expect(fullscreen.active.value).toBe(true);
+      expect(fullscreen.pseudo.value).toBe(false);
+
+      // Leaving by the browser's own means, such as its Escape, which the page learns only from the event.
+      doc.fullscreenElement = null;
+      doc.webkitFullscreenElement = null;
+      doc.change(api === "webkit" ? "webkitfullscreenchange" : "fullscreenchange");
+      expect(fullscreen.active.value).toBe(false);
+    }
+  });
+
+  it("counts only the stage in fullscreen, and pseudo-fullscreen too", () => {
+    const { fullscreen, doc } = setup();
+    doc.fullscreenElement = {};
+    doc.change("fullscreenchange");
+    expect(fullscreen.active.value).toBe(false);
+
+    const pseudo = setup({ device: IPHONE });
+    pseudo.fullscreen.toggle();
+    expect(pseudo.fullscreen.active.value).toBe(true);
+    pseudo.fullscreen.exitPseudo();
+    expect(pseudo.fullscreen.active.value).toBe(false);
+  });
+
+  it("reads the fullscreen it is attached in, and stops following once detached", () => {
+    const doc = fakeDocument();
+    const stage: FullscreenStageElement = {};
+    doc.fullscreenElement = stage;
+    const fullscreen = createStageFullscreen({ document: doc, device: () => DESKTOP });
+    expect(fullscreen.active.value).toBe(false);
+    fullscreen.attach(stage);
+    expect(fullscreen.active.value).toBe(true);
+    expect(doc.listeners()).toBe(2);
+
+    fullscreen.detach();
+    expect(fullscreen.active.value).toBe(false);
+    expect(doc.listeners()).toBe(0);
+    doc.change("fullscreenchange");
+    expect(fullscreen.active.value).toBe(false);
   });
 });

@@ -15,6 +15,7 @@ import {
   mountPage,
   normalizedMarkup,
   openNotices,
+  pageReady,
   pickPreset,
   presetSelect,
   resetPage,
@@ -151,9 +152,10 @@ async function mountLibrary(
   const library = serveLibrary(server, items);
   setup(server, library);
   const page = mountPage({ server });
-  await screen.findByText("Ready (API 1)");
+  await pageReady(server);
+  // The first page has loaded; a preset remembered from before may already have applied again and loaded once more.
   if (!library.holding) {
-    await waitFor(() => expect(library.queries()).toHaveLength(1));
+    await waitFor(() => expect(library.queries().length).toBeGreaterThan(0));
   }
   await flush();
   return { page, server, library };
@@ -256,8 +258,9 @@ async function scrollGridTo(top: number): Promise<void> {
   await flush();
 }
 
-function statusLine(): string {
-  return document.getElementById("status")?.textContent ?? "";
+/** Waits until the page has relayed `text`, a message or an error shown in place, while nothing has played. */
+async function expectRelayed(server: FakeServer, text: string): Promise<void> {
+  await waitFor(() => expect(server.logLines()).toContain(statusLogLine(text, null, 0)));
 }
 
 /** The state the player's indicator shows, by its id, or null while it shows none. */
@@ -418,11 +421,11 @@ describe("first page", () => {
     expect(controlsShown()).toBe(true);
   });
 
-  it("shows a first page that fails as an alert and in the status line, and opening again loads it", async () => {
-    const { library } = await mountLibrary(libraryItems(2), (_, lib) => {
+  it("shows a first page that fails as an alert, relaying its status, and opening again loads it", async () => {
+    const { server, library } = await mountLibrary(libraryItems(2), (_, lib) => {
       lib.failures.push(500);
     });
-    await waitFor(() => expect(statusLine()).toBe("Library load failed: HTTP 500"));
+    await expectRelayed(server, "Library load failed: HTTP 500");
 
     await openLibrary();
     await waitFor(() => expect(library.queries()).toHaveLength(2));
@@ -431,7 +434,7 @@ describe("first page", () => {
   });
 
   it("shows the load error as an alert, keeping the controls", async () => {
-    const { library } = await mountLibrary(libraryItems(2));
+    const { server, library } = await mountLibrary(libraryItems(2));
     await openLibrary();
 
     library.failures.push(503);
@@ -439,7 +442,8 @@ describe("first page", () => {
     await flush();
 
     expect(within(overlay()).getByRole("alert").textContent).toBe("Library load failed: HTTP 503");
-    expect(statusLine()).toBe("Library load failed: HTTP 503");
+    // It shows in place, so it only relays.
+    await expectRelayed(server, "Library load failed: HTTP 503");
     expect(controlsShown()).toBe(true);
     expect(summary().hidden).toBe(true);
     expect(tileNames()).toEqual([]);
@@ -449,8 +453,8 @@ describe("first page", () => {
     [408, "The server didn't answer in time, so the library couldn't load. It may be waiting on a slow or disconnected drive or share."],
     [504, "The server didn't answer in time, so the library couldn't load. It may be waiting on a slow or disconnected drive or share."],
     [500, "Library load failed: HTTP 500"]
-  ])("shows a load answered with %i as its own message in the body, and its status on the status line", async (failure, message) => {
-    const { library } = await mountLibrary(libraryItems(2));
+  ])("shows a load answered with %i as its own message in the body, and relays its status", async (failure, message) => {
+    const { server, library } = await mountLibrary(libraryItems(2));
     await openLibrary();
 
     library.failures.push(failure);
@@ -458,13 +462,12 @@ describe("first page", () => {
     await flush();
 
     expect(within(overlay()).getByRole("alert").textContent).toBe(message);
-    expect(statusLine()).toBe(`Library load failed: HTTP ${failure}`);
+    await expectRelayed(server, `Library load failed: HTTP ${failure}`);
   });
 
   it("shows no failure for a load answered with 401, only the pairing prompt, and logs it", async () => {
     const { server, library } = await mountLibrary(libraryItems(2));
     await openLibrary();
-    const status = statusLine();
 
     library.failures.push(401);
     fireEvent.change(sortSelect(), { target: { value: "PlayCount" } });
@@ -473,7 +476,6 @@ describe("first page", () => {
     await waitFor(() => expect((document.getElementById("pair-section") as HTMLElement).style.display).toBe("flex"));
     expect(within(overlay()).queryByRole("alert")).toBeNull();
     expect(overlay().textContent).not.toContain("Library load failed");
-    expect(statusLine()).toBe(status);
     // One line, the request's, which names its route.
     await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("POST /api/library/query")));
     await settle();
@@ -520,8 +522,8 @@ describe("first page", () => {
     await settle();
 
     expect(selectedPresetLabel()).toBe("Loading...");
-    // Neither 401 shows on the status line, which keeps what it showed: the server answered, so it isn't offline.
-    expect(statusLine()).toBe("Ready");
+    // Neither 401 shows anything but the pairing prompt: the server answered, so it isn't offline.
+    expect(server.logLines().some((line) => line.startsWith("status=Reconnecting…"))).toBe(false);
     expect((document.getElementById("pair-section") as HTMLElement).style.display).toBe("flex");
     // The presets load once the server is ready, which it isn't until the device pairs.
     expect(server.requests("GET", "/api/presets")).toHaveLength(0);
@@ -539,7 +541,7 @@ describe("first page", () => {
 
     const message = "Library load failed: The server sent an unexpected response (text/html).";
     expect(within(overlay()).getByRole("alert").textContent).toBe(message);
-    expect(statusLine()).toBe(message);
+    await expectRelayed(server, message);
   });
 
   it("says when the library is empty", async () => {
@@ -686,8 +688,8 @@ describe("fill on scroll", () => {
     expect(library.queries()).toHaveLength(2);
   });
 
-  it("a further page that fails loads again only after the scroll position changes", async () => {
-    const { library } = await mountLibrary(libraryItems(650));
+  it("a further page that fails pops up, and loads again only after the scroll position changes", async () => {
+    const { server, library } = await mountLibrary(libraryItems(650));
     await openLibrary();
     await waitFor(() => expect(library.queries()).toHaveLength(2));
     await flush();
@@ -695,7 +697,7 @@ describe("fill on scroll", () => {
     library.failures.push(500);
     await scrollGridTo(1_000_000);
     expect(library.queries()).toHaveLength(3);
-    await waitFor(() => expect(statusLine()).toBe("Library browse failed. Showing the tiles already loaded."));
+    await expectRelayed(server, "Library browse failed. Showing the tiles already loaded.");
 
     await scrollGridTo(1_000_000);
     expect(library.queries()).toHaveLength(3);
@@ -952,13 +954,11 @@ describe("playing a tile", () => {
         "Playback failed: The server sent an unexpected response (text/html)."
       ]
     ];
-    const statusBefore = statusLine();
     for (const [reply, message] of cases) {
       replies.push(reply);
       await click(tile("item-1")!);
       expect(openNotices()).toEqual([message]);
-      // The status line keeps what it showed, and the player's indicator shows nothing.
-      expect(statusLine()).toBe(statusBefore);
+      // The player's indicator shows nothing.
       expect(indicatorState()).toBeNull();
       expect(isOpen()).toBe(true);
       await closeNotices();
@@ -984,13 +984,11 @@ describe("playing a tile", () => {
       fake.on("POST", "/api/play/item-1", () => status(401));
     });
     await openLibrary();
-    const statusBefore = statusLine();
 
     await click(tile("item-1")!);
 
     expect((document.getElementById("pair-section") as HTMLElement).style.display).toBe("flex");
     expect(screen.queryByText("Unauthorized. Pair first.")).toBeNull();
-    expect(statusLine()).toBe(statusBefore);
     expect(openNotices()).toEqual([]);
     await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("POST /api/play/{itemId}")));
     await settle();
@@ -1012,15 +1010,13 @@ describe("playing a tile", () => {
     });
     await openLibrary();
 
-    const statusBefore = statusLine();
     await click(tile("item-1")!);
     await click(tile("item-1")!);
     await click(tile("item-2")!);
     expect(server.requests("POST", "/api/play/item-1")).toHaveLength(1);
     expect(server.requests("POST", "/api/play/item-2")).toHaveLength(0);
-    // The play waits, so after half a second the player's indicator says Loading…, and the status line nothing new.
+    // The play waits, so after half a second the player's indicator says Loading….
     await waitFor(() => expect(indicatorState()).toBe("loading"));
-    expect(statusLine()).toBe(statusBefore);
 
     answer();
     await flush();
@@ -1040,12 +1036,10 @@ describe("playing a tile", () => {
         });
       });
       await openLibrary();
-      const statusBefore = statusLine();
 
       await click(tile("item-1")!);
 
       expect(openNotices()).toEqual(["Playback failed: Couldn't reach the server."]);
-      expect(statusLine()).toBe(statusBefore);
       expect(isOpen()).toBe(true);
       await waitFor(() =>
         expect(server.logLines()).toEqual(
@@ -1535,6 +1529,13 @@ describe("kept sources", () => {
     await waitFor(() => expect(server.logLines()).toContain(LOG_LINE));
     expect(server.logLines().some((line) => line.includes("movies") || line.includes("Movies"))).toBe(false);
     await closeNotices();
+    // The list behind the bell keeps it.
+    fireEvent.click(screen.getByRole("button", { name: "Notifications" }));
+    await flush();
+    const recent = document.querySelectorAll('#notify-list [data-part="recent"] .notify-text');
+    expect(Array.from(recent, (text) => text.textContent)).toEqual([MOVIES_NOTICE]);
+    fireEvent.click(screen.getByRole("button", { name: "Notifications" }));
+    await flush();
 
     page.stream().emit("refreshStatusChanged", 4, refreshStatus("run-2", true, [{ sourceId: "source-1", itemCount: 120 }]));
     await flush();

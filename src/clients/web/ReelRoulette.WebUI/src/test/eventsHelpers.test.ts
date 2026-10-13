@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildEventsUrl, parseEventEnvelope } from "../events/eventEnvelope";
 import {
-  buildRefreshStatusMessage,
   coerceRefreshSnapshot,
   newRefreshCompletionRunId,
   settledKeptSources,
+  refreshOutcome,
   refreshProgress
 } from "../events/refreshStatusProjection";
 
@@ -37,19 +37,21 @@ describe("event helpers", () => {
     expect(envelope.payload.value).toBe(5);
   });
 
-  it("builds a failed refresh's status message", () => {
-    const failed = buildRefreshStatusMessage({
+  it("tells a failed refresh, with its error, from a run that ended without finishing", () => {
+    const failed = refreshOutcome({
       isRunning: false,
       trigger: "manual",
       lastError: "boom",
+      completedUtc: "2026-03-29T12:00:00Z",
       stages: []
     });
 
-    expect(failed).toContain("failed");
+    expect(failed).toEqual({ result: "failed", error: "boom" });
+    expect(refreshOutcome({ isRunning: false, trigger: "manual", stages: [] })).toEqual({ result: "idle" });
   });
 
-  it("builds desktop-parity refresh complete summary from stage messages", () => {
-    const line = buildRefreshStatusMessage({
+  it("builds desktop-parity refresh complete summary segments from stage messages", () => {
+    const outcome = refreshOutcome({
       isRunning: false,
       trigger: "manual",
       completedUtc: "2026-03-29T12:00:00Z",
@@ -77,12 +79,16 @@ describe("event helpers", () => {
       ]
     });
 
-    expect(line).toContain("Core refresh complete | Source:");
-    expect(line).toContain("no changes");
-    expect(line).toContain("Fingerprint: hashed 5, ready 10");
-    expect(line).toContain("Duration: files 100, all cached");
-    expect(line).toContain("Loudness: files 50, all cached");
-    expect(line).toContain("Thumbnails: generated 3, reused 2");
+    expect(outcome).toEqual({
+      result: "finished",
+      segments: [
+        "Source: no changes",
+        "Fingerprint: hashed 5, ready 10",
+        "Duration: files 100, all cached",
+        "Loudness: files 50, all cached",
+        "Thumbnails: generated 3, reused 2"
+      ]
+    });
   });
 
   it("reports each finished refresh run once", () => {

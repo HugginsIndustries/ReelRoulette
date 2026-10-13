@@ -415,7 +415,7 @@ describe("libraryQuerySession", () => {
 
   it("keeps a failed load's message and the status its error carries, and clears both once a load succeeds", async () => {
     const failures: unknown[] = [Object.assign(new Error("HTTP 408"), { status: 408 }), new Error("Couldn't reach the server.")];
-    const statusMessages: Array<string | null> = [];
+    const statusMessages: Array<[string | null, string | undefined]> = [];
     const session = createLibraryQuerySession(async () => {
       const failure = failures.shift();
       if (failure) {
@@ -423,7 +423,7 @@ describe("libraryQuerySession", () => {
       }
       return page([item("a")], 1, 1);
     });
-    session.setListener((event) => statusMessages.push(event.statusMessage));
+    session.setListener((event) => statusMessages.push([event.statusMessage, event.failure]));
 
     await session.resetQuery(createDefaultFilterState(), controls());
     expect(session.snapshot()).toMatchObject({ phase: "error", errorMessage: "HTTP 408", errorStatus: 408 });
@@ -431,12 +431,16 @@ describe("libraryQuerySession", () => {
     expect(session.snapshot()).toMatchObject({ phase: "error", errorMessage: "Couldn't reach the server.", errorStatus: null });
     await session.resetQuery(createDefaultFilterState(), controls());
     expect(session.snapshot()).toMatchObject({ phase: "ready", errorMessage: null, errorStatus: null });
-    expect(statusMessages.filter(Boolean)).toEqual(["Library load failed: HTTP 408", "Library load failed: Couldn't reach the server."]);
+    expect(statusMessages.filter(([message]) => message)).toEqual([
+      ["Library load failed: HTTP 408", "load"],
+      ["Library load failed: Couldn't reach the server.", "load"]
+    ]);
   });
 
-  it("retries a failed further page after the scroll position changes", async () => {
+  it("retries a failed further page after the scroll position changes, having said the browse failed", async () => {
     let failAppend = true;
     const calls: number[] = [];
+    const failures: Array<[string | null, string | undefined]> = [];
     const session = createLibraryQuerySession(async (request) => {
       calls.push(request.offset);
       if (request.offset > 0 && failAppend) {
@@ -448,6 +452,11 @@ describe("libraryQuerySession", () => {
         450
       );
     });
+    session.setListener((event) => {
+      if (event.statusMessage) {
+        failures.push([event.statusMessage, event.failure]);
+      }
+    });
     await session.ensureLoaded(createDefaultFilterState(), controls());
     session.setOverlayVisible(true);
     session.noteScroll(10);
@@ -455,6 +464,8 @@ describe("libraryQuerySession", () => {
     await session.considerFill(100, 0, LAST_PAGE_HEIGHT);
     const failedAppends = calls.filter((offset) => offset > 0).length;
     expect(failedAppends).toBe(1);
+    // The tiles already loaded stay, so it isn't the first page's failure, which the body shows.
+    expect(failures).toEqual([["Library browse failed. Showing the tiles already loaded.", "browse"]]);
     await session.considerFill(100, 0, LAST_PAGE_HEIGHT);
     expect(calls.filter((offset) => offset > 0)).toHaveLength(failedAppends);
 

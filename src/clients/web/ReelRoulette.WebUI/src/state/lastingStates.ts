@@ -40,22 +40,45 @@ export interface LastingState {
   spins: boolean;
   /** It shows only while the player's controls show, as a refresh, which can run for hours, does. */
   followsControls: boolean;
+  /** A second line the list behind the bell shows under it in Now, or null. */
+  detail: string | null;
 }
+
+/** Reconnecting…'s second line in the list's Now. */
+export const RECONNECTING_DETAIL = "The connection to the server was lost. ReelRoulette keeps trying.";
 
 /** Every active lasting state, in the precedence order. */
 export function activeLastingStates(store: AppStore): LastingState[] {
   const active: LastingState[] = [];
   if (store.reconnecting.value) {
-    active.push({ id: "reconnecting", icon: "sync", title: "Reconnecting…", progress: null, warning: false, spins: true, followsControls: false });
+    active.push({ id: "reconnecting", icon: "sync", title: "Reconnecting…", progress: null, warning: false, spins: true, followsControls: false, detail: RECONNECTING_DETAIL });
   }
   if (store.compatibilityBlocked.value) {
-    active.push({ id: "incompatible", icon: "sync_problem", title: "Server not compatible", progress: null, warning: true, spins: false, followsControls: false });
+    active.push({
+      id: "incompatible",
+      icon: "sync_problem",
+      title: "Server not compatible",
+      progress: null,
+      warning: true,
+      spins: false,
+      followsControls: false,
+      detail: store.compatibilityMessage.value
+    });
   }
   if (store.noLibrary.value) {
-    active.push({ id: "nolibrary", icon: "warning", title: "Running without a library", progress: null, warning: true, spins: false, followsControls: false });
+    active.push({
+      id: "nolibrary",
+      icon: "warning",
+      title: "Running without a library",
+      progress: null,
+      warning: true,
+      spins: false,
+      followsControls: false,
+      detail: store.libraryMessage.value
+    });
   }
   if (store.loading.shown.value) {
-    active.push({ id: "loading", icon: "progress_activity", title: "Loading…", progress: null, warning: false, spins: true, followsControls: false });
+    active.push({ id: "loading", icon: "progress_activity", title: "Loading…", progress: null, warning: false, spins: true, followsControls: false, detail: null });
   }
   const refresh = store.refreshProgress.value;
   if (refresh) {
@@ -66,7 +89,8 @@ export function activeLastingStates(store: AppStore): LastingState[] {
       progress: `(${refresh.percent}%)`,
       warning: false,
       spins: true,
-      followsControls: true
+      followsControls: true,
+      detail: null
     });
   }
   return active;

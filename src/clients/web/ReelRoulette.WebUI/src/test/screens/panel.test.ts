@@ -66,7 +66,7 @@ function panelServer(): FakeServer {
   return server;
 }
 
-/** Mounts the page and waits for its version check, which shows on the status line only when it finds the server ready. */
+/** Mounts the page and waits for its version check, whichever way it answers. */
 async function mount(server = panelServer()): Promise<MountedPage> {
   const page = mountPage({ server });
   await waitFor(() => expect(server.requests("GET", "/api/version").length).toBeGreaterThan(0));
@@ -135,8 +135,9 @@ function coversPage(): boolean {
   return getComputedStyle(panel()).position === "fixed";
 }
 
-function statusLine(): string {
-  return document.getElementById("status")?.textContent ?? "";
+/** Whether the page has relayed `text`, a message or a state with no message, whatever was playing. */
+function relayed(server: FakeServer, text: string): boolean {
+  return server.logLines().some((line) => line.startsWith(`status=${text} hasCurrent=`));
 }
 
 function topDialog(): HTMLDialogElement | null {
@@ -160,7 +161,7 @@ beforeEach(() => {
 });
 
 describe("main page", () => {
-  it("shows the header with the logo and the file name, the player, and the status line, and no settings icon", async () => {
+  it("shows the header with the logo and the file name, and the player, with no status line and no settings icon", async () => {
     await mount();
     await click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
     await waitFor(() => expect(videoSrc()).toContain("/api/media/item-1"));
@@ -169,7 +170,7 @@ describe("main page", () => {
     expect(within(header).getAllByAltText("ReelRoulette")).toHaveLength(3);
     expect(document.getElementById("now-playing-name")!.textContent).toBe("clip 1.mp4");
     expect(document.getElementById("media-container")).not.toBeNull();
-    expect(document.getElementById("status")).not.toBeNull();
+    expect(document.getElementById("status")).toBeNull();
     expect(screen.queryByRole("button", { name: /settings/i, hidden: true })).toBeNull();
     expect(screen.queryByRole("tab", { name: /settings|stats/i, hidden: true })).toBeNull();
   });
@@ -546,7 +547,7 @@ describe("Filter tab's Apply and Cancel", () => {
 
     await click(applyButton());
 
-    expect(statusLine()).toBe("Filters applied.");
+    await waitFor(() => expect(relayed(page.server, "Filters applied.")).toBe(true));
     expect(page.server.requests("POST", "/api/library/query")).toHaveLength(queries + 1);
     expect(page.server.requests("POST", "/api/library/query").at(-1)!.body.filterState.onlyNeverPlayed).toBe(true);
     expect(isOpen()).toBe(true);
@@ -568,9 +569,9 @@ describe("Filter tab's Apply and Cancel", () => {
 
   it("Apply and Cancel each close the overlay", async () => {
     setViewport({ width: 600, height: 800 });
-    await openFilter();
+    const page = await openFilter();
     await click(applyButton());
-    expect(statusLine()).toBe("Filters applied.");
+    await waitFor(() => expect(relayed(page.server, "Filters applied.")).toBe(true));
     expect(isOpen()).toBe(false);
 
     await click(panelButton());
@@ -588,14 +589,13 @@ describe("Filter tab's Apply and Cancel", () => {
     await click(panelButton());
     await click(tab("Filter"));
     await waitFor(() => expect(openNotices()).toEqual(["Filter load failed: HTTP 503"]));
-    expect(statusLine()).not.toBe("Filter load failed: HTTP 503");
     await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Filter load failed: HTTP 503", null, 0)));
     await closeNotices();
 
     sources = 200;
     await click(within(panel()).getByRole("button", { name: "Refresh" }));
 
-    expect(statusLine()).toBe("Filter data refreshed.");
+    await waitFor(() => expect(relayed(server, "Filter data refreshed.")).toBe(true));
     expect(neverPlayed().checked).toBe(false);
   });
 });
@@ -606,14 +606,15 @@ describe("Tags tab", () => {
     return panel().querySelector<HTMLButtonElement>(".tag-chip [title='Add tag']");
   }
 
-  async function openTagsWithChange(): Promise<void> {
-    await mount();
+  async function openTagsWithChange(): Promise<MountedPage> {
+    const page = await mount();
     await click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
     await waitFor(() => expect(videoSrc()).toContain("/api/media/item-1"));
     await click(panelButton());
     await click(tab("Tags"));
     await waitFor(() => expect(addAlice()).not.toBeNull());
     await click(addAlice()!);
+    return page;
   }
 
   it("keeps its changes when it is left for another tab or the panel closes, without asking", async () => {
@@ -635,24 +636,24 @@ describe("Tags tab", () => {
   });
 
   it("Save leaves the panel open beside the player", async () => {
-    await openTagsWithChange();
+    const page = await openTagsWithChange();
     expect(stage().dataset.panelMode).toBe("side");
 
     await click(document.getElementById("tag-editor-apply-btn")!);
 
-    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
+    await waitFor(() => expect(relayed(page.server, "Tag editor changes applied")).toBe(true));
     expect(isOpen()).toBe(true);
     expect(shownPages()).toEqual(["Tags"]);
   });
 
   it("Save leaves the panel open as the overlay", async () => {
     setViewport({ width: 600, height: 800 });
-    await openTagsWithChange();
+    const page = await openTagsWithChange();
     expect(stage().dataset.panelMode).toBe("overlay");
 
     await click(document.getElementById("tag-editor-apply-btn")!);
 
-    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
+    await waitFor(() => expect(relayed(page.server, "Tag editor changes applied")).toBe(true));
     expect(isOpen()).toBe(true);
     expect(shownPages()).toEqual(["Tags"]);
   });
@@ -769,7 +770,6 @@ describe("compatibility failure", () => {
     const server = panelServer();
     server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, capabilities: [] }));
     await mount(server);
-    expect(statusLine()).not.toMatch(/^Server missing required capabilities: /);
 
     await click(panelButton());
     expect(isOpen()).toBe(true);

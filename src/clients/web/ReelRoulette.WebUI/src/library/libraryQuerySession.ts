@@ -55,6 +55,11 @@ export interface LibraryQuerySessionSnapshot {
 export interface LibraryQuerySessionEvent {
   scroll: "top" | "keep";
   statusMessage: string | null;
+  /**
+   * Which load `statusMessage` reports failed: the first page, which the body shows in place of the tiles, or a later
+   * one, which leaves the tiles already loaded.
+   */
+  failure?: "load" | "browse";
   /** The HTTP status of the failed request `statusMessage` reports, when it carried one, such as 401. */
   failureStatus?: number | null;
 }
@@ -444,7 +449,7 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
         exhausted = false;
         if (gen === generation) {
           inFlight = null;
-          notify({ scroll: "keep", statusMessage: `Library load failed: ${message}`, failureStatus: errorStatus });
+          notify({ scroll: "keep", statusMessage: `Library load failed: ${message}`, failure: "load", failureStatus: errorStatus });
         }
         return;
       }
@@ -456,6 +461,7 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
         notify({
           scroll: "keep",
           statusMessage: "Library browse failed. Showing the tiles already loaded.",
+          failure: "browse",
           failureStatus: errorHttpStatus(error)
         });
       }

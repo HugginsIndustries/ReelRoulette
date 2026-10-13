@@ -2,7 +2,9 @@ import { signal, type ReadonlySignal } from "@preact/signals";
 import { errorText, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import { applyItemStateToCurrent } from "../library/currentItemState";
+import type { ItemStateChangedPayload } from "../library/libraryProjectionSync";
 import { playbackTraceLine } from "../logging/relayLogLines";
+import type { Notifications } from "../notifications/notifications";
 import type { AppApi } from "../state/appApi";
 import type { AppStore, PlayingItem } from "../state/appStore";
 import { playRefusalNotice } from "../state/lastingStates";
@@ -143,6 +145,8 @@ export interface PlayerOptions {
    * can't be found.
    */
   dialogs: Pick<Dialogs, "notice">;
+  /** The one-off messages: a favorite or blacklist change made here, or on another device. */
+  notifications: Pick<Notifications, "notify">;
   /** Defaults to the browser's animation frames, looked up on each request. */
   frames?: FrameScheduler;
 }
@@ -173,7 +177,7 @@ function absolutizeMediaUrl(apiBaseUrl: string, mediaUrl: string): string {
 }
 
 export function createPlayer(options: PlayerOptions): Player {
-  const { store, api, connection, dialogs } = options;
+  const { store, api, connection, dialogs, notifications } = options;
   const apiBaseUrl = String(options.apiBaseUrl || "").replace(/\/+$/, "");
   const frames: FrameScheduler = options.frames ?? {
     request: (callback) => requestAnimationFrame(callback),
@@ -497,6 +501,8 @@ export function createPlayer(options: PlayerOptions): Player {
     const item = store.current.peek();
     if (!item?.itemId) return;
     const nextValue = !item[flag];
+    // The item the request acts on, named as the now-playing line names it, though another may play by the answer.
+    const fileName = basenameFromPath(item.displayName || item.id || "");
     const failed = `${isFavorite ? "Favorite" : "Blacklist"} update failed`;
     let response: Response;
     try {
@@ -525,28 +531,43 @@ export function createPlayer(options: PlayerOptions): Player {
     }
     store.itemStates.remember(current.itemId, { isFavorite: current.isFavorite, isBlacklisted: current.isBlacklisted });
     showToggles();
-    if (isFavorite) {
-      store.setStatus(nextValue ? "Added to favorites" : "Removed from favorites");
-    } else {
-      store.setStatus(nextValue ? "Blacklisted" : "Removed from blacklist");
-    }
+    const text = isFavorite
+      ? nextValue
+        ? "Added to favorites"
+        : "Removed from favorites"
+      : nextValue
+        ? "Blacklisted"
+        : "Removed from blacklist";
+    notifications.notify({ kind: "actions", text, detail: fileName, key: "flag" });
   }
 
-  connection.on("itemStateChanged", (payload) => {
+  connection.on("itemStateChanged", (payload: ItemStateChangedPayload | null | undefined) => {
     const itemId = payload?.itemId;
-    if (!itemId) return;
+    if (!payload || !itemId) return;
     store.itemStates.remember(itemId, { isFavorite: !!payload.isFavorite, isBlacklisted: !!payload.isBlacklisted });
     if (applyItemStateToCurrent(store.current.peek(), payload)) {
       showToggles();
     }
-    const fileName = basenameFromPath(payload.path || "");
-    if (payload.isBlacklisted) {
-      store.setStatus(`Synced: Blacklisted: ${fileName}`, "Synced: Blacklisted");
-    } else if (payload.isFavorite) {
-      store.setStatus(`Synced: Added to favorites: ${fileName}`, "Synced: Added to favorites");
-    } else {
-      store.setStatus(`Synced: Removed from favorites: ${fileName}`, "Synced: Removed from favorites");
+    // This device's own change already said so, as Your actions. An event without a client id, such as one from the
+    // desktop, counts as another device's.
+    if (payload.clientId && payload.clientId === store.identity.clientId) {
+      return;
     }
+    const text = payload.isBlacklisted
+      ? "Blacklisted on another device"
+      : payload.isFavorite
+        ? "Added to favorites on another device"
+        : payload.previousIsBlacklisted
+          ? "Removed from blacklist on another device"
+          : "Removed from favorites on another device";
+    // The log leaves the file name out.
+    notifications.notify({
+      kind: "devices",
+      text,
+      detail: basenameFromPath(payload.path || ""),
+      key: `sync:${itemId}`,
+      logText: text
+    });
   });
 
   store.on("photoDurationChanged", () => {
@@ -694,7 +715,7 @@ export function createPlayer(options: PlayerOptions): Player {
       }
       trace("info", "video-onplaying");
       mediaSettled();
-      store.setStatus("Playing");
+      store.relayStatus("Playing");
     },
 
     videoFailed() {
@@ -741,7 +762,7 @@ export function createPlayer(options: PlayerOptions): Player {
       }
       trace("info", "photo-onload");
       mediaSettled();
-      store.setStatus("Playing");
+      store.relayStatus("Playing");
     },
 
     photoFailed() {

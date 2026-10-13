@@ -5,6 +5,7 @@ import type { Dialogs } from "../dialogs/dialogs";
 import type { FilterSource } from "../filter/filterDialogModel";
 import { filterSummaryParts } from "../filter/filterSummaryModel";
 import { playbackTraceLine } from "../logging/relayLogLines";
+import type { Notifications } from "../notifications/notifications";
 import type { PanelHost } from "../panel/panelHost";
 import type { Player } from "../playback/player";
 import type { AppApi } from "../state/appApi";
@@ -144,6 +145,8 @@ export interface LibraryOptions {
   player: Pick<Player, "playCurrent">;
   /** The in-app dialogs, for a play that fails and a refresh that kept a source's items. */
   dialogs: Pick<Dialogs, "notice">;
+  /** The one-off messages, for a later page that fails to load. */
+  notifications: Pick<Notifications, "notify">;
   /** Choosing a tile closes the panel as the overlay; beside the player it stays open. */
   panel: Pick<PanelHost, "closeIfOverlay" | "showTab">;
   /** Remembers whether the controls are collapsed, and the sort and direction. */
@@ -155,7 +158,7 @@ export interface LibraryOptions {
 }
 
 export function createLibrary(options: LibraryOptions): Library {
-  const { store, api, connection, player, panel, device, dialogs } = options;
+  const { store, api, connection, player, panel, device, dialogs, notifications } = options;
   const apiBaseUrl = String(options.config.apiBaseUrl || "").replace(/\/+$/, "");
   const sseUrl = options.config.sseUrl;
   const createGrid: CreateLibraryGrid =
@@ -199,8 +202,15 @@ export function createLibrary(options: LibraryOptions): Library {
       return;
     }
     // A 401 shows only the pairing prompt, which the request has asked for, and sent its line.
-    if (event.failureStatus !== 401) {
-      store.setStatus(event.statusMessage);
+    if (event.failureStatus === 401) {
+      return;
+    }
+    // A failed first page shows in place in the body, so it only relays; a later page's failure keeps the tiles
+    // already loaded, and pops up.
+    if (event.failure === "browse") {
+      notifications.notify({ kind: "connection", text: event.statusMessage, icon: "sync_problem", key: "browse" });
+    } else {
+      store.relayStatus(event.statusMessage);
     }
   });
 
@@ -470,7 +480,7 @@ export function createLibrary(options: LibraryOptions): Library {
     void session.ensureLoaded(store.appliedFilter.peek(), controls.peek());
     void loadSourcesForSummary();
   });
-  // The player updates the playing item and the status line first.
+  // The player updates the playing item and its buttons first.
   connection.on("itemStateChanged", (payload) => {
     if (!payload?.itemId) return;
     void session.applyFavorite(payload);

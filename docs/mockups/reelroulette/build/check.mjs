@@ -1966,6 +1966,42 @@ for (const width of [1280, 390]) {
     $("notify-list").hidden && !$("panel").hidden && $("stage").classList.contains("covers-player") === width < 800);
   closePanel();
   check(`layout@${width}: closing it lets them make room again`, !$("stage").classList.contains("covers-player"));
+  // A swipe to either side on a touch screen closes a popup, and a short one leaves it.
+  const swipe = (toast, dx) => {
+    toast.dispatchEvent(new window.PointerEvent("pointerdown", { pointerType: "touch", clientX: 100, bubbles: true }));
+    window.dispatchEvent(new window.PointerEvent("pointermove", { pointerType: "touch", clientX: 100 + dx }));
+    window.dispatchEvent(new window.PointerEvent("pointerup", { pointerType: "touch", clientX: 100 + dx }));
+  };
+  test("actions");
+  const swiped = messages.toasts().at(-1);
+  swipe(swiped, 30);
+  await tick();
+  const keptAfterShortSwipe = messages.toasts().includes(swiped);
+  swipe(swiped, -80);
+  await tick();
+  check(`layout@${width}: a swipe past 64 px to either side closes a popup, and a short one leaves it`, keptAfterShortSwipe && !messages.toasts().includes(swiped));
+  // At the top, popups start below the bar of corner buttons, and on a player narrower than 600 px below the indicator;
+  // at the bottom, they rise above the player's controls while those show.
+  check(`layout@${width}: popups at the top start at 64 px, or 104 px on a narrow player, and at the bottom rise to 112 px above the controls`,
+    ruleStyle('.toasts[data-pos^="top"]', "top") === "64px" && ruleStyle('.player-col.is-narrow .toasts[data-pos^="top"]', "top") === "104px" &&
+    ruleStyle('.stage:not(.covers-player) .media-container.controls-visible ~ .toasts[data-pos^="bottom"]', "bottom") === "112px");
+  // The list closes on its Close and on the bell, giving focus back to the bell, and on a press outside it, leaving
+  // focus alone.
+  $("notify-btn").click();
+  $("notify-list").querySelector('[data-act="close"]').click();
+  const focusAfterClose = document.activeElement === $("notify-btn");
+  $("notify-btn").click();
+  $("notify-btn").click();
+  const focusAfterBell = document.activeElement === $("notify-btn");
+  $("notify-btn").click();
+  document.body.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true }));
+  check(`layout@${width}: the list closes on Close and the bell, giving focus back to the bell, and on a press outside it, leaving focus alone`,
+    focusAfterClose && focusAfterBell && $("notify-list").hidden && document.activeElement !== $("notify-btn"));
+  // The list keeps the last 50 messages.
+  for (let i = 0; i < 55; i++) messages.notify({ kind: "actions", text: `Message ${i}`, key: `kept-${i}` });
+  check(`layout@${width}: the list keeps the last 50 messages, newest first (${messages.entries().length})`,
+    messages.entries().length === 50 && newest() === "Message 54" && messages.entries().at(-1).text === "Message 5");
+  messages.dismissAll();
   $("mock-startup").click();
   check(`layout@${width}: a runtime config failure shows today's error page`, !$("startup-error").hidden && $("startup-error").textContent.includes("Runtime Configuration Error"));
   $("startup-error-back").click();

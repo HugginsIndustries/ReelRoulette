@@ -14,6 +14,7 @@ import {
   mountPage,
   normalizedMarkup,
   openNotices,
+  pageReady,
   pickPreset,
   pointerDown,
   pointerMove,
@@ -141,7 +142,7 @@ async function mountFilter(
   const presets = servePresets(server, presetList);
   setup(server);
   const page = mountPage({ server });
-  await screen.findByText("Ready (API 1)");
+  await pageReady(server);
   await settle();
   return { page, server, presets };
 }
@@ -447,17 +448,14 @@ async function addPreset(name: string): Promise<void> {
   await click(dialogButton("Add Preset"));
 }
 
-function statusLine(): string {
-  return document.getElementById("status")?.textContent ?? "";
+/** Whether the page has relayed `text`, a message or a state with no message, whatever was playing. */
+function relayed(server: FakeServer, text: string): boolean {
+  return server.logLines().some((line) => line.startsWith(`status=${text} hasCurrent=`));
 }
 
-/**
- * Expects the in-app notice to show `message`, alone, and not the status line, with the `last.log` line the status
- * line relayed for it, then closes it.
- */
+/** Expects the in-app notice to show `message`, alone, with the `last.log` line a message gets, then closes it. */
 async function expectNotice(server: FakeServer, message: string): Promise<void> {
   await waitFor(() => expect(openNotices()).toEqual([message]));
-  expect(statusLine()).not.toBe(message);
   await waitFor(() => expect(server.logLines()).toContain(statusLogLine(message, null, 0)));
   await closeNotices();
   expect(openNotices()).toEqual([]);
@@ -485,7 +483,8 @@ async function applyAndWait(server: FakeServer): Promise<any> {
   await apply();
   await waitFor(() => expect(libraryQueries(server).length).toBe(before + 1));
   expect(isOpen()).toBe(true);
-  expect(statusLine()).toBe("Filters applied.");
+  // A second Apply within a second relays nothing more, as the relay holds back a repeat.
+  await waitFor(() => expect(relayed(server, "Filters applied.")).toBe(true));
   return libraryQueries(server)[before].filterState;
 }
 
@@ -679,7 +678,7 @@ describe("opening and closing", () => {
 
     tagModelStatus = 200;
     await click(dialogButton("Refresh"));
-    expect(statusLine()).toBe("Filter data refreshed.");
+    await waitFor(() => expect(relayed(server, "Filter data refreshed.")).toBe(true));
     expect(selectedTab()).toBe("General");
     expect(box("Movies (C:\\media\\movies)").checked).toBe(true);
   });
@@ -707,7 +706,7 @@ describe("opening and closing", () => {
     await click(dialogButton("Refresh"));
     expect(server.requests(method, path)).toHaveLength(2);
     expect(openNotices()).toEqual([]);
-    expect(statusLine()).not.toMatch(/^Filter (load|refresh) failed/);
+    expect(server.logLines().some((line) => /^status=Filter (load|refresh) failed/.test(line))).toBe(false);
     expect(dialog().querySelector("input")).toBeNull();
     await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine(`${method} ${path}`)));
   });
@@ -880,11 +879,10 @@ describe("General tab", () => {
     expect(tooltipShown(max)).toBe(true);
   });
 
-  it("holds Apply while a duration is not valid, with or without other changes, and moves to it without a status or log line", async () => {
+  it("holds Apply while a duration is not valid, with or without other changes, and moves to it without a message or log line", async () => {
     const { server } = await mountFilter();
     await openDialog();
     const queries = libraryQueries(server).length;
-    const statusBefore = statusLine();
     const logsBefore = server.logLines().length;
     const min = byId<HTMLInputElement>("filter-min-dur-text");
     const max = byId<HTMLInputElement>("filter-max-dur-text");
@@ -911,7 +909,6 @@ describe("General tab", () => {
     expect(selectedTab()).toBe("General");
     expect(document.activeElement).toBe(max);
     expect(libraryQueries(server)).toHaveLength(queries);
-    expect(statusLine()).toBe(statusBefore);
     expect(server.logLines().slice(logsBefore)).toEqual([]);
 
     await type(max, "");
@@ -1107,7 +1104,7 @@ describe("Favorites only with Blacklisted only", () => {
     fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Mine" } });
     await showTab("General");
     const queries = libraryQueries(server).length;
-    const statusBefore = statusLine();
+    const logsBefore = server.logLines().length;
 
     expect(flagRow("Favorites")).toMatchObject({ checked: true, choice: "only" });
     expect(flagSelect("Blacklisted").hasAttribute("aria-invalid")).toBe(false);
@@ -1141,7 +1138,8 @@ describe("Favorites only with Blacklisted only", () => {
     expect(presetRows()).toEqual(["Favorites"]);
     expect(presets.saves()).toHaveLength(0);
     expect(libraryQueries(server)).toHaveLength(queries);
-    expect(statusLine()).toBe(statusBefore);
+    // A field problem shows in its field, and isn't relayed.
+    expect(server.logLines().slice(logsBefore)).toEqual([]);
 
     await chooseFlag("Favorites", "excluded");
     expect(flagSelect("Favorites").hasAttribute("aria-invalid")).toBe(false);
@@ -1384,7 +1382,7 @@ describe("Presets tab", () => {
     await openDialog();
     await click(box("Only never played"));
     await showTab("Presets");
-    const statusBefore = statusLine();
+    const logsBefore = server.logLines().length;
     const name = byId<HTMLInputElement>("filter-new-preset-name");
     const addButton = () => dialogButton("Add Preset");
     const disabledWithoutIcon = () => {
@@ -1416,7 +1414,7 @@ describe("Presets tab", () => {
     expect(presetRows()).toEqual(["Favorites", "Beach days"]);
     expect(name.value).toBe("FAVORITES");
     expect(selectedTab()).toBe("Presets");
-    expect(statusLine()).toBe(statusBefore);
+    expect(server.logLines().slice(logsBefore)).toEqual([]);
 
     const max = byId<HTMLInputElement>("filter-max-dur-text");
     fireEvent.input(name, { target: { value: "  Unplayed  " } });
@@ -1465,7 +1463,6 @@ describe("Presets tab", () => {
     await click(box("Blacklisted"));
     expect(heading()).toBe("Preset: Favorites*");
     await click(dialogButton("Update Preset"));
-    expect(statusLine()).toBe('Updated preset "Favorites" locally — Apply to save.');
     await waitFor(() =>
       expect(server.logLines()).toContain("status=Updated preset locally — Apply to save. hasCurrent=false attempt=0")
     );
@@ -1722,7 +1719,7 @@ describe("Presets tab", () => {
     expect(presetRows()).toEqual(["Favorites", "Beach days"]);
 
     await chooseInDialog("Beach days");
-    const statusBefore = statusLine();
+    const logsBefore = server.logLines().length;
     edit = await editPreset("Beach days");
     const name = byId<HTMLInputElement>("filter-preset-edit-name");
     const save = byId<HTMLButtonElement>("filter-preset-edit-save-btn");
@@ -1740,8 +1737,7 @@ describe("Presets tab", () => {
     await settle();
     expect(appDialogs()).toEqual([edit]);
     expect(presetRows()).toEqual(["Favorites", "Beach days"]);
-    expect(statusLine()).toBe(statusBefore);
-    expect(statusLine()).not.toBe("That name is already in use.");
+    expect(server.logLines().slice(logsBefore)).toEqual([]);
 
     fireEvent.input(name, { target: { value: "   " } });
     await settle();
@@ -1759,7 +1755,7 @@ describe("Presets tab", () => {
     expect(presetRows()).toEqual(["Favorites", "Sunny days"]);
     expect(heading()).toBe("Preset: Sunny days");
     expect(presetSelectInDialog().value).toBe("Sunny days");
-    expect(statusLine()).toBe(statusBefore);
+    expect(server.logLines().slice(logsBefore)).toEqual([]);
 
     await applyAndWait(server);
     expect(presets.saves()[0].map((preset: any) => preset.name)).toEqual(["Favorites", "Sunny days"]);
@@ -1807,7 +1803,7 @@ describe("Presets tab", () => {
     presets.saveFailure = null;
     await apply();
     await waitFor(() => expect(libraryQueries(server)).toHaveLength(queries + 1));
-    expect(statusLine()).toBe("Filters applied.");
+    await waitFor(() => expect(relayed(server, "Filters applied.")).toBe(true));
     expect(panel().hidden).toBe(true);
     expect(presets.list.map((preset) => preset.name)).toEqual(["Favorites", "Unplayed"]);
   });
@@ -1852,7 +1848,7 @@ describe("preset dropdown, refresh, and clear all", () => {
     expect(presetSelectInDialog().value).toBe("");
     await apply();
     expect(isOpen()).toBe(true);
-    await waitFor(() => expect(statusLine()).toBe("Filters applied."));
+    await waitFor(() => expect(relayed(server, "Filters applied.")).toBe(true));
     expect(selectedPresetLabel()).toBe("None");
 
     await closePanel();
@@ -1903,7 +1899,7 @@ describe("preset dropdown, refresh, and clear all", () => {
     presets.list = [...presets.list, RECENT_PRESET];
     await click(dialogButton("Refresh"));
 
-    expect(statusLine()).toBe("Filter data refreshed.");
+    await waitFor(() => expect(relayed(server, "Filter data refreshed.")).toBe(true));
     expect(box("Phone (E:\\phone)").checked).toBe(true);
     expect(box("Only never played").checked).toBe(true);
     expect(applyButton().textContent).toBe("Apply*");
@@ -1928,7 +1924,7 @@ describe("preset dropdown, refresh, and clear all", () => {
 
     presets.list = [...presets.list, RECENT_PRESET];
     await click(dialogButton("Refresh"));
-    expect(statusLine()).toBe("Filter data refreshed.");
+    await waitFor(() => expect(relayed(server, "Filter data refreshed.")).toBe(true));
     expect(presetRows()).toEqual(["Beach days", "Favorites"]);
     expect(label(applyButton())).toBe("Apply*");
 

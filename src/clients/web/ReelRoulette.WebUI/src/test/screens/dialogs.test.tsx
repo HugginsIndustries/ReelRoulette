@@ -10,7 +10,7 @@ import { App } from "../../ui/App";
 import { AppContext, useApp } from "../../ui/appContext";
 import { DialogHost, NameDialog } from "../../ui/Dialog";
 import { EMPTY_FIELD, isFlagged, type FieldProblem } from "../../validation/fieldValidation";
-import { API_BASE_URL, FakeEventSource, FakeServer, SSE_URL, resetPage, settle, stubFullscreenApi } from "./pageHarness";
+import { API_BASE_URL, FakeEventSource, FakeServer, SSE_URL, pageReady, resetPage, settle, stubFullscreenApi } from "./pageHarness";
 
 /** The dialogs in the order the page opened them, so the last one is on top. */
 let opened: HTMLDialogElement[] = [];
@@ -372,10 +372,9 @@ describe("the dialog in the page", () => {
     expect(stage().classList.contains("fullscreen-pseudo")).toBe(false);
   });
 
-  it("a notice shows its message and is relayed to last.log with the line a status message gets", async () => {
+  it("a notice shows its message, pops nothing up, and is relayed to last.log with the line a popup gets", async () => {
     const { services, server } = mountWithServices();
-    await screen.findByText("Ready (API 1)");
-    const statusBefore = services.store.status.peek();
+    await pageReady(server);
 
     void services.dialogs.notice("Saving presets failed (500).");
     void services.dialogs.notice('Preset "Beach days" could not be saved.', "Preset could not be saved.");
@@ -393,6 +392,6 @@ describe("the dialog in the page", () => {
       )
     );
     expect(server.logLines().some((line) => line.includes("Beach days"))).toBe(false);
-    expect(services.store.status.peek()).toBe(statusBefore);
+    expect(services.notifications.popups.value).toEqual([]);
   });
 });

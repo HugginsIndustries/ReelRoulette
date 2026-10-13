@@ -1,12 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ConfirmRequest } from "../dialogs/dialogs";
 import { createDefaultFilterState } from "../filter/filterStateModel";
+import type { NotifyRequest } from "../notifications/notifications";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type ApiPreset, type PlayingItem } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
 import { createTagEditor } from "../tags/tagEditor";
 import type { TagEditorModel } from "../tags/tagEditorModel";
 import { EMPTY_FIELD } from "../validation/fieldValidation";
+
+/** A landed save's message, Auto Tag's Apply's too. */
+const APPLIED: NotifyRequest = { kind: "actions", text: "Tag editor changes applied", key: "tags" };
 
 const MODEL: TagEditorModel = {
   categories: [
@@ -100,18 +104,19 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     return failure ? json({}, failure) : json({ applied: [] });
   }) as typeof fetch;
 
-  const statuses: string[] = [];
+  /** The one-off messages, which pop up and which the list keeps. */
+  const notified: NotifyRequest[] = [];
+  const notifications = {
+    notify(request: NotifyRequest) {
+      notified.push(request);
+    }
+  };
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
     storage: { getItem: () => null, setItem: () => {} },
     device: createDeviceStore(null),
     relay: () => {}
   });
-  const setStatus = store.setStatus;
-  store.setStatus = (message, logText) => {
-    statuses.push(message);
-    setStatus(message, logText);
-  };
   const api = createAppApi("http://server", {
     onUnauthorized: () => {
       store.pairingRequired.value = true;
@@ -171,6 +176,7 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     device: createDeviceStore(remembered),
     localStorage,
     dialogs: { confirm, notice },
+    notifications,
     newId: () => "new-category"
   });
   const view = () => editor.view.value!;
@@ -191,7 +197,7 @@ function setup(options: { scanFullLibrary?: string } = {}) {
   };
   /** The item ids each tag model request asked for. */
   const modelRequests = () => server.posts.filter((post) => post.path === "/api/tag-editor/model").map((post) => post.body.itemIds);
-  return { editor, view, titles, store, server, statuses, notices, steps, listeners, tiles, storedFilter, session, remembered, localStorage, confirm, models, modelRequests };
+  return { editor, view, titles, store, server, notified, notices, steps, listeners, tiles, storedFilter, session, remembered, localStorage, confirm, models, modelRequests };
 }
 
 /** Lets fetch replies finish. */
@@ -275,7 +281,7 @@ describe("opening and closing", () => {
     context.server.modelStatus = 500;
     await openOn(context);
     expect(context.notices).toEqual(["Tag editor unavailable: HTTP 500"]);
-    expect(context.statuses).toEqual([]);
+    expect(context.notified).toEqual([]);
     expect(context.editor.isOpen.value).toBe(true);
     expect(context.view().categories).toBeNull();
     expect(context.view().noModel).toBe(false);
@@ -302,7 +308,7 @@ describe("opening and closing", () => {
       "Tag refresh failed: HTTP 503",
       "Tag refresh failed: The server sent an unexpected response (text/html)."
     ]);
-    expect(context.statuses).toEqual([]);
+    expect(context.notified).toEqual([]);
   });
 
   it("shows only the pairing prompt when the tags answer 401", async () => {
@@ -313,7 +319,7 @@ describe("opening and closing", () => {
     await settle();
     expect(context.store.pairingRequired.value).toBe(true);
     expect(context.notices).toEqual([]);
-    expect(context.statuses).toEqual([]);
+    expect(context.notified).toEqual([]);
     expect(context.view().categories).toBeNull();
   });
 
@@ -670,7 +676,7 @@ describe("Edit Tags", () => {
     editor.typeEditName("  ");
     expect(context.view()).toMatchObject({ editNameProblem: EMPTY_FIELD, editNameFlagged: false });
     editor.saveEdit();
-    expect(context.statuses).toEqual([]);
+    expect(context.notified).toEqual([]);
     expect(context.view().editing).toBe(true);
     expect(context.view().pending.renameTags.size).toBe(0);
 
@@ -852,7 +858,7 @@ describe("Edit Tags dialogs", () => {
 describe("saving", () => {
   it("updates the loaded tiles, stays open showing the changes as saved, sends the steps in order, says it applied, then loads the tags again", async () => {
     const context = setup();
-    const { editor, steps, server, statuses } = context;
+    const { editor, steps, server, notified } = context;
     await openOn(context);
     editor.editTag("Bob");
     await editor.deleteEditedTag();
@@ -878,7 +884,7 @@ describe("saving", () => {
       "/api/tag-editor/model"
     ]);
     expect(server.posts[2]!.body).toEqual({ itemIds: ["item-1"], addTags: [], removeTags: ["Beach"] });
-    expect(statuses).toEqual(["Tag editor changes applied"]);
+    expect(notified).toEqual([APPLIED]);
     expect(context.session.reloadLoaded).not.toHaveBeenCalled();
   });
 
@@ -959,7 +965,7 @@ describe("saving", () => {
     const posts = context.server.posts.length;
     context.editor.save();
     expect(context.notices).toEqual(["No tag changes to save."]);
-    expect(context.statuses).toEqual([]);
+    expect(context.notified).toEqual([]);
     expect(context.editor.isOpen.value).toBe(true);
     expect(context.view().savePending).toBe(false);
     expect(context.titles()).toEqual(["Places", "People"]);
@@ -976,7 +982,7 @@ describe("saving", () => {
     expect(context.tiles[0]!.tags).toEqual([]);
     await settle();
     expect(context.notices).toEqual(["Tag apply failed (500)"]);
-    expect(context.statuses).toEqual([]);
+    expect(context.notified).toEqual([]);
     expect(context.tiles[0]!.tags).toEqual(["Beach"]);
   });
 
@@ -1000,7 +1006,7 @@ describe("saving", () => {
       "Tag delete failed (409)",
       "Tag delete failed: Couldn't reach the server."
     ]);
-    expect(context.statuses).toEqual([]);
+    expect(context.notified).toEqual([]);
   });
 
   it("says a landed save applied even when the library's reload after it fails", async () => {
@@ -1013,7 +1019,7 @@ describe("saving", () => {
     editor.save();
     await settle();
     expect(session.reloadLoaded).toHaveBeenCalledTimes(1);
-    expect(context.statuses).toEqual(["Tag editor changes applied"]);
+    expect(context.notified).toEqual([APPLIED]);
     expect(context.notices).toEqual([]);
   });
 
@@ -1123,12 +1129,12 @@ describe("Auto Tag", () => {
 
     expect(server.posts).toHaveLength(posted);
     expect(context.notices).toEqual([]);
-    expect(context.statuses).toEqual([]);
+    expect(context.notified).toEqual([]);
   });
 
   it("scans with Scan full library, stores the box, and applies the selected files with its own Apply, not Save", async () => {
     const context = setup();
-    const { editor, server, localStorage, statuses } = context;
+    const { editor, server, localStorage, notified } = context;
     context.server.scan = SCAN;
     await openOn(context);
     editor.openAutoTag();
@@ -1155,7 +1161,7 @@ describe("Auto Tag", () => {
       // The item playing may have taken the tag, so the editor loads the tags again.
       { path: "/api/tag-editor/model", body: { itemIds: ["item-1"] } }
     ]);
-    expect(statuses).toEqual(["Tag editor changes applied"]);
+    expect(notified).toEqual([APPLIED]);
   });
 
   it("starts with Scan full library as this browser last stored it, and scans with it", async () => {
@@ -1179,7 +1185,7 @@ describe("Auto Tag", () => {
     expect(context.view().autoTag.rows[0]!.files[0]!.needsChange).toBe(false);
     await settle();
     expect(context.notices).toEqual(["Auto-tag apply failed (500)"]);
-    expect(context.statuses).toEqual([]);
+    expect(context.notified).toEqual([]);
     expect(context.view().autoTag.rows[0]!.files[0]).toMatchObject({ needsChange: true, selected: true });
     expect(context.view().autoTagApplyPending).toBe(true);
 
@@ -1329,7 +1335,7 @@ describe("Auto Tag", () => {
     expect(context.view().autoTagApplyPending).toBe(false);
     expect(context.store.pairingRequired.value).toBe(status === 401);
     expect(context.notices).toEqual([]);
-    expect(context.statuses).toEqual([]);
+    expect(context.notified).toEqual([]);
 
     // A selection change keeps the error, and Cancel clears it.
     editor.setViewAll(true);

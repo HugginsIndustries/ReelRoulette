@@ -92,6 +92,22 @@ describe("lasting states", () => {
     expect(activeLastingStates(store).at(-1)!.progress).toBe("(40%)");
   });
 
+  it("gives the server's states a second line for the list's Now: the reconnect's, and the server's own messages", () => {
+    const { store } = setup();
+    store.reconnecting.value = true;
+    store.compatibilityBlocked.value = true;
+    store.compatibilityMessage.value = "Unsupported server API version: 2.";
+    store.libraryState.value = "newer";
+    store.libraryMessage.value = "The library was saved by a newer version.";
+    store.refreshProgress.value = { stage: "Scanning durations", percent: 40 };
+    expect(activeLastingStates(store).map((state) => state.detail)).toEqual([
+      "The connection to the server was lost. ReelRoulette keeps trying.",
+      "Unsupported server API version: 2.",
+      "The library was saved by a newer version.",
+      null
+    ]);
+  });
+
   it("shows nothing while the server asks for pairing", () => {
     const { store, indicator } = setup();
     store.reconnecting.value = true;

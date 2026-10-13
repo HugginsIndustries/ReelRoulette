@@ -9,6 +9,7 @@ import {
   mountPage,
   normalizedMarkup,
   openNotices,
+  pageReady,
   pickPreset,
   pointerDown,
   pointerMove,
@@ -208,6 +209,9 @@ interface TagPage {
   tags: FakeTags;
 }
 
+/** The server the page `mountTags` mounted last talks to. */
+let mountedServer: FakeServer | null = null;
+
 /** Mounts the page against the tag catalog above and, unless `play` is false, plays the video it tags. */
 async function mountTags(
   options: { play?: boolean; setup?: (server: FakeServer, tags: FakeTags) => void } = {}
@@ -217,8 +221,9 @@ async function mountTags(
   server.on("POST", "/api/random", () => json(VIDEO_ITEM));
   server.on("GET", "/api/sources", () => json([]));
   options.setup?.(server, tags);
+  mountedServer = server;
   const page = mountPage({ server });
-  await screen.findByText("Ready (API 1)");
+  await pageReady(server);
   await settle();
   if (options.play !== false) {
     await click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
@@ -514,17 +519,25 @@ async function newCategory(): Promise<void> {
   await press(within(editor()).getByRole("button", { name: "Add category" }));
 }
 
-function statusLine(): string {
-  return byId("status")?.textContent ?? "";
+/** The lines the mounted page relayed starting with `text`, a message or a state with no message, whatever was playing. */
+function relayedLines(text: string): string[] {
+  return mountedServer!.logLines().filter((line) => line.startsWith(`status=${text}`));
 }
 
 /**
- * Expects the in-app notice to show `message`, alone, and not the status line, with the `last.log` line the status
- * line relayed for it while the video `mountTags` plays is current, then closes it.
+ * Waits until a save that landed has said so, which pops up and relays its text. The relay holds back a repeat within
+ * a second, so a second save soon after relays nothing more.
+ */
+async function expectSaved(): Promise<void> {
+  await waitFor(() => expect(relayedLines("Tag editor changes applied hasCurrent=")).not.toEqual([]));
+}
+
+/**
+ * Expects the in-app notice to show `message`, alone, with the `last.log` line a message gets while the video
+ * `mountTags` plays is current, then closes it.
  */
 async function expectNotice(server: FakeServer, message: string): Promise<void> {
   await waitFor(() => expect(openNotices()).toEqual([message]));
-  expect(statusLine()).not.toBe(message);
   await waitFor(() => expect(server.logLines()).toContain(statusLogLine(message, { id: VIDEO_ITEM.id }, 1)));
   await closeNotices();
   expect(openNotices()).toEqual([]);
@@ -769,7 +782,7 @@ describe("opening and closing", () => {
     await click(headerButton("Refresh"));
     expect(tags.modelRequests()).toHaveLength(2);
     expect(openNotices()).toEqual([]);
-    expect(statusLine()).not.toMatch(/^Tag (editor unavailable|refresh failed)/);
+    expect([...relayedLines("Tag editor unavailable"), ...relayedLines("Tag refresh failed")]).toEqual([]);
     expect(body().textContent).toBe("");
     await waitFor(() =>
       expect(server.logLines()).toContain(unauthorizedLogLine("POST /api/tag-editor/model", { id: VIDEO_ITEM.id }, 1))
@@ -1017,7 +1030,7 @@ describe("Edit Tags", () => {
     expect(tags.saves()).toEqual([
       { path: "/api/tag-editor/apply-item-tags", body: { itemIds: ["item-video"], addTags: ["Calm"], removeTags: ["Bob"] } }
     ]);
-    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
+    await expectSaved();
   });
 
   it("start collapsed, and the header's name or padding expands and collapses one, with no arrows, while its drag handle and Edit keep their own actions", async () => {
@@ -1135,7 +1148,7 @@ describe("Edit Tags", () => {
     expect(savePending()).toBe(true);
 
     await save();
-    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
+    await expectSaved();
     for (const title of categoryTitles()) {
       expect(dot(title).hidden, title).toBe(true);
     }
@@ -1350,7 +1363,7 @@ describe("Edit Tags", () => {
   it("Edit Category opens on the name, flags a name another category has, and renames", async () => {
     const { tags } = await mountTags();
     await openEditor();
-    const statusBefore = statusLine();
+    const logsBefore = mountedServer!.logLines().length;
 
     await editCategory("Places");
     const field = nameField("Edit Category");
@@ -1364,7 +1377,8 @@ describe("Edit Tags", () => {
     expect(disabledWithoutIcon(dialogSave)).toBe(true);
     await pressEnter(field);
     expect(appDialogs()).toEqual([nameDialog("Edit Category")]);
-    expect(statusLine()).toBe(statusBefore);
+    // A field problem shows in its field, and isn't relayed.
+    expect(mountedServer!.logLines().slice(logsBefore)).toEqual([]);
 
     await typeInto(field, "  ");
     expect(fieldProblem(field)).toBeNull();
@@ -1383,7 +1397,7 @@ describe("Edit Tags", () => {
     await press(dialogButton(nameDialog("Edit Category"), "Save"));
     expect(appDialogs()).toEqual([]);
     expect(categoryTitles()).toEqual(["Scenery", "Feelings", "People", "Uncategorized"]);
-    expect(statusLine()).toBe(statusBefore);
+    expect(mountedServer!.logLines().slice(logsBefore)).toEqual([]);
 
     await save();
     expect(tags.saves()).toEqual([
@@ -1630,13 +1644,12 @@ describe("Edit Tags", () => {
     expect(savePending()).toBe(false);
 
     await click(chipButton("Beach", "Edit tag"));
-    const statusBefore = statusLine();
+    const logsBefore = mountedServer!.logLines().length;
     await typeInto(modalName(), "   ");
     expect(fieldProblem(modalName())).toBeNull();
     expect(disabledWithoutIcon(modalButton("Save"))).toBe(true);
     await pressEnter(modalName());
-    expect(statusLine()).toBe(statusBefore);
-    expect(statusLine()).not.toBe("Tag name is required.");
+    expect(mountedServer!.logLines().slice(logsBefore)).toEqual([]);
     expect(modalOpen()).toBe(true);
 
     await typeInto(modalName(), " Shore ");
@@ -1800,7 +1813,7 @@ describe("saving", () => {
     tags.holding = true;
     await save();
     expect(isOpen()).toBe(true);
-    expect(statusLine()).not.toBe("Tag editor changes applied");
+    expect(relayedLines("Tag editor changes applied")).toEqual([]);
     expect(categoryTitles()).toEqual(["Scenery", "People", "Uncategorized"]);
     expect(chipNames("People")).toEqual(["Alice", "Sunset"]);
     expect(chipState("Shore").has).toBe("all");
@@ -1808,7 +1821,7 @@ describe("saving", () => {
     expect(savePending()).toBe(false);
     expect(tags.modelRequests()).toHaveLength(1);
     await tags.release();
-    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
+    await expectSaved();
 
     expect(tags.saves()).toEqual([
       { path: "/api/tag-editor/upsert-category", body: { id: "cat-places", name: "Scenery", sortOrder: 0 } },
@@ -1912,7 +1925,7 @@ describe("saving", () => {
     await openEditor();
     await click(chipButton("Calm", "Add tag"));
     await save();
-    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
+    await expectSaved();
     const echo = { itemIds: ["item-video"], resolvedItemIds: ["item-video"], addedTags: ["Calm"], removedTags: [] };
     page.stream().emit("itemTagsChanged", 2, echo);
     await settle();
@@ -1923,7 +1936,7 @@ describe("saving", () => {
     await openEditor();
     await click(chipButton("Alice", "Add tag"));
     await save();
-    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
+    await expectSaved();
     expect(libraryQueries(server)).toHaveLength(before + 1);
     expect(libraryQueries(server)[before]).toMatchObject({ filterState: { selectedTags: ["Beach"] }, offset: 0 });
     page.stream().emit("itemTagsChanged", 3, { ...echo, addedTags: ["Alice"] });
@@ -1946,7 +1959,7 @@ describe("saving", () => {
     await click(modalButton("Save"));
 
     await save();
-    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
+    await expectSaved();
     expect(libraryQueries(server)).toHaveLength(before + 1);
     expect(libraryQueries(server)[before].filterState.selectedTags).toEqual(["Shore"]);
     expect(selectedPresetLabel()).toBe("Beach days");
@@ -1974,7 +1987,7 @@ describe("saving", () => {
     await typeInto(modalName(), "Shore");
     await click(modalButton("Save"));
     await save();
-    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
+    await expectSaved();
 
     await click(panelTab("Filter"));
     await click(byId("filter-apply-btn"));
@@ -2001,7 +2014,7 @@ describe("saving", () => {
     await deleteTag("Beach");
 
     await save();
-    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
+    await expectSaved();
     expect(libraryQueries(server)).toHaveLength(before + 1);
     expect(libraryQueries(server)[before].filterState.selectedTags).toEqual([]);
     expect(selectedPresetLabel()).toBe("Beach days");
@@ -2295,7 +2308,7 @@ describe("Auto Tag", () => {
     expect(fileCheck("beach", "beach a.mp4")).toMatchObject({ checked: true, disabled: true });
     expect(rowCells(row("beach"))).toEqual(["beach", "3", "0"]);
     await tags.release();
-    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
+    await expectSaved();
     expect(tags.saves()).toEqual([
       {
         path: "/api/autotag/apply",
@@ -2365,7 +2378,7 @@ describe("Auto Tag", () => {
     expect(progressShown()).toBe(false);
     expect(scanButton().disabled).toBe(false);
     expect(openNotices()).toEqual([]);
-    expect(statusLine()).not.toMatch(/Scan/);
+    expect(relayedLines("Scan")).toEqual([]);
 
     tags.scanStatus = 200;
     await scan();
@@ -2396,7 +2409,7 @@ describe("Auto Tag", () => {
     expect(results().querySelector(".autotag-empty")?.textContent).toBe("Scan to find files whose names contain a tag's name.");
   });
 
-  it("a scan answered 401 shows only the pairing prompt, nothing in place or on the status line, and logs it", async () => {
+  it("a scan answered 401 shows only the pairing prompt, nothing in place or as a message, and logs it", async () => {
     const { server } = await mountTags({ setup: (_server, tags) => (tags.scanStatus = 401) });
     await openEditor();
     await openAutoTag();
@@ -2405,7 +2418,7 @@ describe("Auto Tag", () => {
     expect(autoTagStatus()).toBe("");
     expect(results().querySelector(".autotag-empty")?.textContent).toBe("Scan to find files whose names contain a tag's name.");
     expect(openNotices()).toEqual([]);
-    expect(statusLine()).not.toMatch(/scan|Unauthorized/i);
+    expect(relayedLines("Scan")).toEqual([]);
     await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("POST /api/autotag/scan", { id: VIDEO_ITEM.id }, 1)));
   });
 });
@@ -2423,7 +2436,7 @@ describe("storage", () => {
     await click(autoTagButton("Apply"));
     await click(autoTagButton("Close"));
     await save();
-    await waitFor(() => expect(statusLine()).toBe("Tag editor changes applied"));
+    await expectSaved();
 
     // The panel and the Library tab remember their state on this device, which their own tests cover.
     expect(storageKeys(localStorage).filter((key) => !key.startsWith("rr_device."))).toEqual(["rr_autoTagScanFullLibrary", "rr_clientId"]);

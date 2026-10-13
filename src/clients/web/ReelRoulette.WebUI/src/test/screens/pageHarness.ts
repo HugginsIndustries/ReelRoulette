@@ -189,6 +189,7 @@ export function stubFullscreenApi(options: { refuse?: boolean } = {}): FakeFulls
         return Promise.reject(new TypeError("Fullscreen request denied"));
       }
       fullscreenElement = this;
+      document.dispatchEvent(new Event("fullscreenchange"));
       return Promise.resolve();
     }
   });
@@ -197,6 +198,7 @@ export function stubFullscreenApi(options: { refuse?: boolean } = {}): FakeFulls
     value() {
       exits += 1;
       fullscreenElement = null;
+      document.dispatchEvent(new Event("fullscreenchange"));
       return Promise.resolve();
     }
   });
@@ -477,6 +479,18 @@ export function mountPage(options: MountOptions = {}): MountedPage {
       root.remove();
     }
   };
+}
+
+/**
+ * Waits until the page has found the server ready, which its relayed "Ready (API …)" line shows, since no status line
+ * says so.
+ */
+export async function pageReady(server: FakeServer): Promise<void> {
+  await waitFor(() => {
+    if (!server.logLines().some((line) => line.startsWith("status=Ready (API"))) {
+      throw new Error("The page hasn't found the server ready.");
+    }
+  });
 }
 
 /** Lets pending fetch replies and the renders they cause finish. */

@@ -33,6 +33,11 @@ exports[`page structure > keeps the starting markup 1`] = `
           "Tap to play, or open the panel to choose a preset or filter."
         <div aria-live="polite" class="player-indicator-region" id="player-indicator" role="status">
         <div class="overlay-controls" id="overlay-controls">
+          <button aria-controls="notify-list" aria-expanded="false" aria-label="Notifications" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn notify-btn" id="notify-btn" title="Notifications" type="button">
+            <span class="material-symbol-icon">
+              "notifications"
+            <span class="notify-badge" hidden="">
+              "0"
           <button aria-controls="panel" aria-expanded="false" aria-label="Open panel" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" id="panel-btn" title="Open panel">
             <span class="material-symbol-icon">
               "right_panel_open"
@@ -69,6 +74,7 @@ exports[`page structure > keeps the starting markup 1`] = `
             <input aria-label="Seek" disabled="" id="seek-slider" max="100" min="0" step="any" type="range" value="0">
             <span id="time-display">
               "0:00 / 0:00"
+      <div aria-live="polite" class="toasts" data-pos="bottom-center" id="toasts" role="status">
     <div aria-controls="panel" aria-label="Resize panel" aria-orientation="vertical" aria-valuemax="612" aria-valuemin="360" aria-valuenow="420" aria-valuetext="420 pixels" class="panel-handle" hidden="" id="panel-handle" role="separator" tabindex="0">
       <span class="handle-grip">
     <aside aria-label="Panel" class="panel" hidden="" id="panel">
@@ -188,8 +194,25 @@ exports[`page structure > keeps the starting markup 1`] = `
               <button aria-label="Save" class="icon-btn" id="tag-editor-apply-btn" title="Save" type="button">
                 <span class="material-symbol-icon">
                   "save"
-  <div class="status status-bottom" id="status">
-    "Ready (API 1)"
-  <div class="status diagnostics-mobile" id="mobile-diagnostics" style="display: none">
+    <section aria-labelledby="notify-title" class="notify-list" hidden="" id="notify-list" role="dialog">
+      <div class="notify-head">
+        <h2 id="notify-title" tabindex="-1">
+          "Notifications"
+        <button class="btn" data-act="clear" disabled="" type="button">
+          "Clear"
+        <button aria-label="Close" class="icon-btn" data-act="close" title="Close" type="button">
+          <span class="material-symbol-icon">
+            "close"
+      <div class="notify-scroll themed-scrollbar">
+        <div data-part="now" hidden="">
+          <h3 class="notify-group-title">
+            "Now"
+          <ul class="notify-entries">
+        <div data-part="recent">
+          <h3 class="notify-group-title" hidden="">
+            "Recent"
+          <ul class="notify-entries">
+          <p class="notify-empty">
+            "No notifications yet."
 "
 `;

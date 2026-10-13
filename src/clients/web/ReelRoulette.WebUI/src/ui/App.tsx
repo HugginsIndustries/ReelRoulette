@@ -5,7 +5,6 @@ import { AppContext } from "./appContext";
 import { Header } from "./Header";
 import { ScreenBoundary } from "./ScreenBoundary";
 import { Stage } from "./Stage";
-import { MobileDiagnostics, StatusLine } from "./StatusLine";
 
 /** The page. The server connection starts right after the first render, once the player has its elements. */
 export function App({ services }: { services: AppServices }) {
@@ -14,8 +13,7 @@ export function App({ services }: { services: AppServices }) {
     return () => services.connection.stop();
   }, []);
 
-  // On a phone on its side the page shows only the player: the stylesheet hides the header and the status line by
-  // the body's class.
+  // On a phone on its side the page shows only the player: the stylesheet hides the header by the body's class.
   useLayoutEffect(() => {
     const stop = effect(() => {
       document.body.classList.toggle("short-screen", services.panel.shortScreen.value);
@@ -33,12 +31,6 @@ export function App({ services }: { services: AppServices }) {
         <Header />
       </ScreenBoundary>
       <Stage />
-      <ScreenBoundary screen="status" relay={relay}>
-        <StatusLine />
-      </ScreenBoundary>
-      <ScreenBoundary screen="diagnostics" relay={relay}>
-        <MobileDiagnostics />
-      </ScreenBoundary>
     </AppContext.Provider>
   );
 }

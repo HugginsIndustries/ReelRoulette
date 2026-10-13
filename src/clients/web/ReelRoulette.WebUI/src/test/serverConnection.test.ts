@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildRefreshStatusMessage } from "../events/refreshStatusProjection";
+import type { NotifyRequest } from "../notifications/notifications";
 import { createAppApi } from "../state/appApi";
 import { createAppStore } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
@@ -82,6 +82,7 @@ function setup(routes: Record<string, Route> = {}, pairToken?: string) {
       store.pairingRequired.value = true;
     }
   });
+  /** The texts relayed without a message, as the normal states and the errors shown in place are. */
   const statuses: string[] = [];
   const relayed: string[] = [];
   const store = createAppStore({
@@ -90,10 +91,17 @@ function setup(routes: Record<string, Route> = {}, pairToken?: string) {
     device: createDeviceStore(null),
     relay: (_level, message) => relayed.push(message)
   });
-  const setStatus = store.setStatus;
-  store.setStatus = (message, logText) => {
-    statuses.push(message);
-    setStatus(message, logText);
+  const relayStatus = store.relayStatus;
+  store.relayStatus = (logText) => {
+    statuses.push(logText);
+    relayStatus(logText);
+  };
+  /** The one-off messages, which pop up and which the list keeps. */
+  const notified: NotifyRequest[] = [];
+  const notifications = {
+    notify(request: NotifyRequest) {
+      notified.push(request);
+    }
   };
   const notices: string[] = [];
   const dialogs = {
@@ -107,6 +115,7 @@ function setup(routes: Record<string, Route> = {}, pairToken?: string) {
     store,
     api,
     dialogs,
+    notifications,
     fetch: fetchImpl,
     createEventSource: (url) => {
       const source = new FakeSource(url);
@@ -116,7 +125,7 @@ function setup(routes: Record<string, Route> = {}, pairToken?: string) {
     window: pageWindow as unknown as Window
   });
   const count = (request: string) => requests.filter((made) => made === request).length;
-  return { store, connection, requests, sources, statuses, notices, relayed, pageWindow, count };
+  return { store, connection, requests, sources, statuses, notified, notices, relayed, pageWindow, count };
 }
 
 afterEach(() => {
@@ -223,8 +232,8 @@ describe("createServerConnection", () => {
     expect(resync).toHaveBeenCalledWith({ reason: "gap" });
   });
 
-  it("blocks an incompatible server: stops the stream, and preset loads and pairing say so, off the status line", async () => {
-    const { store, connection, sources, statuses, notices, requests, relayed } = setup({
+  it("blocks an incompatible server: stops the stream, and preset loads and pairing say so, with no popup", async () => {
+    const { store, connection, sources, statuses, notified, notices, requests, relayed } = setup({
       "GET /api/version": () => json({ ...COMPATIBLE_VERSION, apiVersion: "7" })
     });
     connection.start();
@@ -234,7 +243,8 @@ describe("createServerConnection", () => {
     expect(sources[0]!.closed).toBe(true);
     expect(store.compatibilityMessage.value).toBe("Unsupported server API version: 7.");
     // The player's indicator and the Library tab show it, and the log keeps it.
-    expect(statuses).toEqual(["Ready"]);
+    expect(statuses).toEqual(["Ready", "Unsupported server API version: 7."]);
+    expect(notified).toEqual([]);
     expect(relayed.some((line) => line.includes("Unsupported server API version: 7."))).toBe(true);
     expect(requests).not.toContain("GET /api/presets");
     expect(store.presetMenu.value.entries).toEqual([{ label: "Server compatibility check failed", value: "" }]);
@@ -245,6 +255,7 @@ describe("createServerConnection", () => {
     await connection.pair("token");
     expect(notices).toEqual(["Pairing blocked by server compatibility check."]);
     expect(statuses).toHaveLength(statusCount);
+    expect(notified).toEqual([]);
     expect(requests).not.toContain("POST /api/pair");
   });
 
@@ -274,7 +285,7 @@ describe("createServerConnection", () => {
   });
 
   it("says the server can't be reached from a lost event stream until it opens again, or stops", async () => {
-    const { store, connection, sources, pageWindow, statuses } = setup();
+    const { store, connection, sources, pageWindow, statuses, notified } = setup();
     connection.start();
     await settle();
     expect(store.reconnecting.value).toBe(false);
@@ -293,14 +304,16 @@ describe("createServerConnection", () => {
     expect(store.reconnecting.value).toBe(true);
     connection.stop();
     expect(store.reconnecting.value).toBe(false);
-    // The player's indicator says so; the status line keeps only the stream opening.
+    // The player's indicator says so. Each stream open only relays, and Reconnected. pops up once, when Reconnecting…
+    // ended: not on the first open, nor on stop.
     expect(statuses).not.toContain("SSE reconnecting...");
-    expect(statuses).toContain("SSE connected");
+    expect(statuses.filter((text) => text === "SSE connected")).toHaveLength(1);
+    expect(notified).toEqual([{ kind: "connection", text: "Reconnected.", key: "connection" }]);
   });
 
   it("keeps saying the server can't be reached once the stream opens, until a version check reaches it", async () => {
     let serverDown = false;
-    const { store, connection, sources, statuses } = setup({
+    const { store, connection, sources, statuses, notified } = setup({
       "GET /api/version": () => {
         if (serverDown) {
           throw new TypeError("Failed to fetch");
@@ -322,11 +335,14 @@ describe("createServerConnection", () => {
     await settle();
     expect(store.reconnecting.value).toBe(true);
 
+    // The stream opened while Reconnecting… still showed, so Reconnected. waits for the check that ends it.
+    expect(notified).toEqual([]);
     serverDown = false;
     sources[0]!.onopen?.(new Event("open"));
     expect(store.reconnecting.value).toBe(true);
     await settle();
     expect(store.reconnecting.value).toBe(false);
+    expect(notified).toEqual([{ kind: "connection", text: "Reconnected.", key: "connection" }]);
     expect(statuses).not.toContain("Ready (API offline)");
   });
 
@@ -696,8 +712,8 @@ describe("createServerConnection", () => {
     expect(statuses.filter((status) => status === "Ready (API 1)")).toHaveLength(2);
   });
 
-  it("pairs with the config token on start, then checks the version and reconnects, without the server ready again", async () => {
-    const { store, connection, requests, sources, statuses, count } = setup(
+  it("pairs with the config token on start, only relaying Paired., then checks the version and reconnects, without the server ready again", async () => {
+    const { store, connection, requests, sources, notified, statuses, count } = setup(
       { "POST /api/pair": () => json({ paired: true }) },
       "config-token"
     );
@@ -709,6 +725,8 @@ describe("createServerConnection", () => {
 
     expect(requests.filter((request) => request === "POST /api/pair")).toHaveLength(1);
     expect(store.pairingRequired.value).toBe(false);
+    // The server gives the config's token only to a device it already accepts, so the user did nothing to pair.
+    expect(notified).toEqual([]);
     expect(statuses).toContain("Paired.");
     expect(count("GET /api/version")).toBe(2);
     expect(ready).toHaveBeenCalledTimes(1);
@@ -716,9 +734,9 @@ describe("createServerConnection", () => {
     expect(sources).toHaveLength(2);
   });
 
-  it("sends serverReady and loads presets once when pairing makes the server ready, and not on pairing again", async () => {
+  it("sends serverReady and loads presets once when pairing makes the server ready, and not on pairing again, and Pair pops up Paired.", async () => {
     let paired = false;
-    const { connection, statuses, count } = setup({
+    const { connection, statuses, notified, count } = setup({
       "GET /api/version": () => (paired ? json(COMPATIBLE_VERSION) : json({}, 401)),
       "POST /api/pair": () => {
         paired = true;
@@ -733,6 +751,7 @@ describe("createServerConnection", () => {
 
     await connection.pair("token");
     expect(ready).toHaveBeenCalledTimes(1);
+    expect(notified).toEqual([{ kind: "actions", text: "Paired.", key: "pair" }]);
     await settle();
     expect(count("GET /api/presets")).toBe(1);
 
@@ -801,7 +820,7 @@ describe("createServerConnection", () => {
   });
 
   it("sends nothing for an empty token, and reports a failed pairing in a notice without reconnecting", async () => {
-    const { connection, requests, sources, statuses, notices } = setup({ "POST /api/pair": () => json({}, 403) });
+    const { connection, requests, sources, statuses, notified, notices } = setup({ "POST /api/pair": () => json({}, 403) });
     connection.start();
     await settle();
     const statusCount = statuses.length;
@@ -812,6 +831,7 @@ describe("createServerConnection", () => {
     await connection.pair("wrong");
     expect(notices).toEqual(["Pairing failed."]);
     expect(statuses).toHaveLength(statusCount);
+    expect(notified).toEqual([]);
     expect(requests.filter((request) => request === "POST /api/pair")).toHaveLength(1);
     expect(sources).toHaveLength(1);
   });
@@ -863,22 +883,23 @@ describe("createServerConnection", () => {
     expect(sources).toHaveLength(5);
   });
 
-  it("shows only the pairing prompt when presets need pairing, and an error entry for any other failure", async () => {
+  it("shows only the pairing prompt when presets need pairing, and an error entry for any other failure, which only relays", async () => {
     let presetsStatus = 401;
-    const { store, connection } = setup({ "GET /api/presets": () => json({}, presetsStatus) });
+    const { store, connection, statuses, notified } = setup({ "GET /api/presets": () => json({}, presetsStatus) });
     await connection.loadPresets();
     expect(store.pairingRequired.value).toBe(true);
     expect(store.presetMenu.value.entries).toEqual([{ label: "Loading...", value: "" }]);
-    expect(store.status.value).toBe("");
+    expect(statuses).toEqual([]);
 
     presetsStatus = 500;
     await connection.loadPresets();
     expect(store.presetMenu.value.entries).toEqual([{ label: "Error loading presets", value: "" }]);
-    expect(store.status.value).toBe("Error loading presets: HTTP 500");
+    expect(statuses).toEqual(["Error loading presets: HTTP 500"]);
+    expect(notified).toEqual([]);
   });
 
-  it("shows a running refresh's progress off the status line, and its end, failure, or idle on it", async () => {
-    const { store, connection, sources, statuses } = setup();
+  it("shows a running refresh's progress on the indicator, pops up its end or failure, and only relays idle", async () => {
+    const { store, connection, sources, statuses, notified } = setup();
     connection.start();
     await settle();
     const stream = sources[0]!;
@@ -893,14 +914,27 @@ describe("createServerConnection", () => {
     stream.emit("refreshStatusChanged", 1, { snapshot: running });
     expect(store.refreshProgress.value).toEqual({ stage: "Refreshing sources", percent: 40 });
     expect(statuses).toEqual([]);
+    expect(notified).toEqual([]);
 
     const finished = { ...running, isRunning: false, completedUtc: "2026-10-07T00:00:00Z" };
     stream.emit("refreshStatusChanged", 2, { snapshot: finished });
     expect(store.refreshProgress.value).toBeNull();
     stream.emit("refreshStatusChanged", 3, { snapshot: { ...finished, runId: "run-2", lastError: "Disk full" } });
     stream.emit("refreshStatusChanged", 4, { snapshot: { isRunning: false, stages: [] } });
-    expect(statuses).toEqual([buildRefreshStatusMessage(finished), "Core refresh failed: Disk full", "Core refresh idle."]);
-    expect(statuses[0]).toMatch(/^Core refresh complete \| /);
+    const summary = "Source: added 12, removed 3 · Fingerprint: no data · Duration: no data · Loudness: no data · Thumbnails: no data";
+    expect(notified).toEqual([
+      {
+        kind: "refresh",
+        text: "Library refresh finished",
+        detail: summary,
+        key: "refresh",
+        logText: `Library refresh finished: ${summary}`
+      },
+      // The server's error can name a file or folder, so it goes only in the second line, which the log leaves out.
+      { kind: "refresh", text: "Library refresh failed", detail: "Disk full", key: "refresh", warning: true }
+    ]);
+    // A cancelled run shows nothing.
+    expect(statuses).toEqual(["Core refresh idle."]);
 
     // A run that ended while events were missed doesn't stay showing.
     stream.emit("refreshStatusChanged", 5, { snapshot: { ...running, runId: "run-3" } });

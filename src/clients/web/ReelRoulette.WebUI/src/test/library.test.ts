@@ -4,6 +4,7 @@ import { createDefaultFilterState } from "../filter/filterStateModel";
 import { createLibrary } from "../library/library";
 import { LIBRARY_LOAD_TIMEOUT_MESSAGE } from "../library/libraryOverlayModel";
 import type { LibraryGridController, LibraryGridCoverage } from "../library/libraryGridController";
+import type { NotifyRequest } from "../notifications/notifications";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type PlayingItem } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
@@ -111,6 +112,20 @@ function setup() {
     relay: (_level, message) => relayed.push(message),
     now: () => clock.ms
   });
+  /** The texts relayed without a message, as an error shown in place is. */
+  const statuses: string[] = [];
+  const relayStatus = store.relayStatus;
+  store.relayStatus = (logText) => {
+    statuses.push(logText);
+    relayStatus(logText);
+  };
+  /** The one-off messages, which pop up and which the list keeps. */
+  const notified: NotifyRequest[] = [];
+  const notifications = {
+    notify(request: NotifyRequest) {
+      notified.push(request);
+    }
+  };
   // As the page does: a 401 on any request shows the pairing prompt and relays one line naming its route.
   const api = createAppApi("http://server", {
     onUnauthorized: (route) => {
@@ -157,6 +172,7 @@ function setup() {
     connection,
     player,
     dialogs,
+    notifications,
     panel,
     device: createDeviceStore(null),
     createGrid(_host, onCoverage) {
@@ -176,6 +192,8 @@ function setup() {
     player,
     playCalls,
     relayed,
+    statuses,
+    notified,
     clock,
     notices,
     noticeLogs,
@@ -269,7 +287,9 @@ describe("library window", () => {
       kind: "message",
       message: { text: "Library load failed: HTTP 500", error: true, live: false }
     });
-    expect(t.store.status.peek()).toBe("Library load failed: HTTP 500");
+    // The body shows it, so it only relays.
+    expect(t.statuses).toEqual(["Library load failed: HTTP 500"]);
+    expect(t.notified).toEqual([]);
 
     t.fakeLibrary.items = [];
     await t.library.commitQuery();
@@ -280,7 +300,7 @@ describe("library window", () => {
     expect(t.grids).toHaveLength(0);
   });
 
-  it.each([408, 504])("says a load answered with %i timed out in the body, and keeps its status on the status line", async (failure) => {
+  it.each([408, 504])("says a load answered with %i timed out in the body, and relays its status", async (failure) => {
     const t = setup();
     t.fakeLibrary.failures.push(failure);
     t.emit("serverReady");
@@ -291,7 +311,8 @@ describe("library window", () => {
       kind: "message",
       message: { text: LIBRARY_LOAD_TIMEOUT_MESSAGE, error: true, live: false }
     });
-    expect(t.store.status.peek()).toBe(`Library load failed: HTTP ${failure}`);
+    expect(t.statuses).toEqual([`Library load failed: HTTP ${failure}`]);
+    expect(t.notified).toEqual([]);
   });
 
   it("shows no failure for a load or a browse answered with 401, only logs it, and asks for pairing", async () => {
@@ -302,7 +323,7 @@ describe("library window", () => {
     await settle();
 
     expect(t.library.body.peek()).toEqual({ kind: "message", message: { text: "", error: false, live: false } });
-    expect(t.store.status.peek()).toBe("");
+    expect(t.notified).toEqual([]);
     expect(t.store.pairingRequired.peek()).toBe(true);
     // One line, the request's, which names its route.
     const line = "status=Unauthorized. Pair first. (POST /api/library/query) hasCurrent=false attempt=0";
@@ -319,9 +340,27 @@ describe("library window", () => {
     t.emit("refreshCompleted");
     await settle();
     expect(t.library.body.peek()).toEqual({ kind: "grid" });
-    expect(t.store.status.peek()).toBe("");
+    expect(t.notified).toEqual([]);
     expect(t.store.pairingRequired.peek()).toBe(true);
     expect(t.relayed.filter((relayed) => relayed.startsWith("status="))).toEqual([line]);
+  });
+
+  it("pops up a reload that fails while the tiles stay, with its own icon, and doesn't show it in the body", async () => {
+    const t = setup();
+    t.emit("serverReady");
+    await settle();
+    t.showTab();
+    t.mountGrid();
+
+    t.fakeLibrary.failures.push(500);
+    t.emit("refreshCompleted");
+    await settle();
+    expect(t.library.body.peek()).toEqual({ kind: "grid" });
+    // It relays its text when it pops up; the fake here relays nothing.
+    expect(t.statuses).toEqual([]);
+    expect(t.notified).toEqual([
+      { kind: "connection", text: "Library browse failed. Showing the tiles already loaded.", icon: "sync_problem", key: "browse" }
+    ]);
   });
 
   it("says a load answered with a page that isn't JSON failed, naming its content type", async () => {
@@ -348,7 +387,7 @@ describe("library window", () => {
     await t.library.commitQuery();
     expect(t.library.body.peek()).toEqual({ kind: "grid" });
     expect(t.library.summary.peek()).toBe("Showing 3 of 3 items");
-    expect(t.store.status.peek()).toBe("Library load failed: HTTP 503");
+    expect(t.statuses).toEqual(["Library load failed: HTTP 503"]);
 
     t.showTab();
     expect(t.library.body.peek()).toMatchObject({ kind: "message", message: { text: "Loading library…" } });
@@ -591,13 +630,11 @@ describe("play", () => {
     expect(t.player.playCurrent).toHaveBeenCalledTimes(1);
   });
 
-  it("holds Loading… while the play waits, handing it to the media before letting go, and never shows it on the status line", async () => {
+  it("holds Loading… while the play waits, handing it to the media before letting go, and never shows it as a message", async () => {
     vi.useFakeTimers();
     const t = setup();
     const shown: boolean[] = [];
-    const statuses: string[] = [];
     t.store.loading.shown.subscribe((value) => shown.push(value));
-    t.store.status.subscribe((value) => statuses.push(value));
     // As the player does: every play attempt holds its media until it plays.
     t.player.playCurrent.mockImplementation(() => t.store.loading.hold("media"));
     let answer: () => void = () => {};
@@ -614,7 +651,8 @@ describe("play", () => {
     t.store.loading.release("media");
     expect(t.store.loading.shown.value).toBe(false);
     expect(shown).toEqual([false, true, false]);
-    expect(statuses).not.toContain("Loading...");
+    expect(t.statuses).toEqual([]);
+    expect(t.notified).toEqual([]);
   });
 
   it("lets go of Loading… when a play ends without playing", async () => {
@@ -630,7 +668,7 @@ describe("play", () => {
     expect(t.player.playCurrent).not.toHaveBeenCalled();
   });
 
-  it("shows a refused, unreachable, or empty play in the notice, leaving the status line as it was and the panel open", async () => {
+  it("shows a refused, unreachable, or empty play in the notice alone, leaving the panel open", async () => {
     const t = setup();
     t.showTab();
 
@@ -647,7 +685,6 @@ describe("play", () => {
       expect(t.notices.at(-1)).toBe(notice);
       // The server's text can name a file, so every refusal relays one line.
       expect(t.noticeLogs.at(-1)).toBe("Playback failed");
-      expect(t.store.status.peek()).toBe("");
     }
     expect(t.relayed).toContain("playback=library-play-failed attempt=0 hasCurrent=false statusCode=404 code=play_item_not_found");
 
@@ -661,7 +698,8 @@ describe("play", () => {
 
     await t.library.play("  ");
     expect(t.notices.at(-1)).toBe("Playback unavailable: no library item was selected.");
-    expect(t.store.status.peek()).toBe("");
+    expect(t.statuses).toEqual([]);
+    expect(t.notified).toEqual([]);
 
     expect(t.panel.closeIfOverlay).not.toHaveBeenCalled();
     expect(t.library.isOpen()).toBe(true);
@@ -678,7 +716,8 @@ describe("play", () => {
       await t.library.play("item-1");
       expect(t.notices).toEqual(["Playback failed: Couldn't reach the server."]);
       expect(t.relayed).toContain("playback=library-play-error attempt=0 hasCurrent=false message=Couldn't reach the server.");
-      expect(t.store.status.peek()).toBe("");
+      expect(t.statuses).toEqual([]);
+      expect(t.notified).toEqual([]);
     }
   );
 
@@ -689,7 +728,7 @@ describe("play", () => {
 
     expect(t.store.pairingRequired.peek()).toBe(true);
     expect(t.notices).toEqual([]);
-    expect(t.store.status.peek()).toBe("");
+    expect(t.notified).toEqual([]);
     expect(t.relayed.filter((relayed) => relayed.includes("Unauthorized"))).toEqual([
       "status=Unauthorized. Pair first. (POST /api/play/{itemId}) hasCurrent=false attempt=0"
     ]);

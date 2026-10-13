@@ -11,6 +11,7 @@ import {
   IPHONE_USER_AGENT,
   json,
   mountPage,
+  pageReady,
   resetPage,
   setViewport,
   settle,
@@ -78,10 +79,6 @@ function shows(element: Element): boolean {
   return currentStyle(element).display !== "none";
 }
 
-function statusLineShows(): boolean {
-  return shows(document.getElementById("status")!);
-}
-
 function tab(name: "Library" | "Filter" | "Tags"): HTMLButtonElement {
   // A tab's name says so while it holds unsaved changes.
   return within(panel().querySelector(".panel-tablist") as HTMLElement).getByRole("tab", { name: new RegExp(`^${name}(, unsaved changes)?$`), hidden: true }) as HTMLButtonElement;
@@ -128,7 +125,6 @@ describe("a phone on its side", () => {
 
     expect(document.body.classList.contains("short-screen")).toBe(true);
     expect(shows(header())).toBe(false);
-    expect(statusLineShows()).toBe(false);
     expect(padding(app())).toEqual(["0px", "0px", "0px", "0px"]);
     expect(currentStyle(document.getElementById("media-container")!).borderRadius).toBe("0px");
 
@@ -151,7 +147,6 @@ describe("a phone on its side", () => {
 
       expect(document.body.classList.contains("short-screen")).toBe(false);
       expect(shows(header())).toBe(true);
-      expect(statusLineShows()).toBe(true);
     }
   });
 
@@ -162,10 +157,9 @@ describe("a phone on its side", () => {
     await mount();
 
     expect(shows(header())).toBe(true);
-    expect(statusLineShows()).toBe(true);
   });
 
-  it("hides the header and status line as the phone turns on its side, and shows them as it turns back, keeping an open panel", async () => {
+  it("hides the header as the phone turns on its side, and shows it as it turns back, keeping an open panel", async () => {
     stubCoarsePointer();
     setViewport(UPRIGHT);
     await mount();
@@ -176,14 +170,12 @@ describe("a phone on its side", () => {
     setViewport(ON_ITS_SIDE);
     await settle();
     expect(shows(header())).toBe(false);
-    expect(statusLineShows()).toBe(false);
     expect(panel().hidden).toBe(false);
     expect(tab("Filter").getAttribute("aria-selected")).toBe("true");
 
     setViewport(UPRIGHT);
     await settle();
     expect(shows(header())).toBe(true);
-    expect(statusLineShows()).toBe(true);
     expect(panel().hidden).toBe(false);
   });
 
@@ -283,7 +275,6 @@ describe("a phone on its side", () => {
 
     const pairButton = await screen.findByRole("button", { name: "Pair" });
     await waitFor(() => expect(shows(header())).toBe(true));
-    expect(statusLineShows()).toBe(false);
     // The server refuses the event stream until the device pairs, so it fails, but the prompt is what to act on.
     page.stream().fail();
     await settle();
@@ -302,25 +293,11 @@ describe("a phone on its side", () => {
     server.on("GET", "/api/presets", () => json([]));
     fireEvent.input(screen.getByLabelText("Pairing token"), { target: { value: "token-1" } });
     fireEvent.click(pairButton);
-    await screen.findByText("Ready (API 1)");
+    await pageReady(server);
     await waitFor(() => expect(shows(header())).toBe(false));
     page.stream().fail();
     await settle();
     expect(indicatorBox()?.dataset.state).toBe("reconnecting");
-  });
-
-  it("hides the diagnostics line with the status line", async () => {
-    resetPage(IPHONE_USER_AGENT);
-    useStylesheet();
-    stubCoarsePointer();
-    setViewport(UPRIGHT);
-    await mount();
-    const diagnostics = document.getElementById("mobile-diagnostics")!;
-    expect(shows(diagnostics)).toBe(true);
-
-    setViewport(ON_ITS_SIDE);
-    await settle();
-    expect(shows(diagnostics)).toBe(false);
   });
 });
 
@@ -334,7 +311,7 @@ describe("safe-area insets", () => {
     expect(html).toMatch(/<meta name="viewport" content="[^"]*viewport-fit=cover/);
   });
 
-  it("keep the header, the player, the status line, and the panel as the overlay clear of them as an installed app on a phone", async () => {
+  it("keep the header, the player, and the panel as the overlay clear of them as an installed app on a phone", async () => {
     stubSafeAreaInsets({ top: 59, bottom: 34 });
     stubCoarsePointer();
     setViewport(UPRIGHT);
@@ -408,8 +385,7 @@ describe("player's indicator", () => {
     await settle();
     expect(indicatorBox()?.dataset.state).toBe("reconnecting");
     expect(shows(indicatorBox()!)).toBe(true);
-    expect(within(stage()).getByRole("status").querySelector(".player-indicator-text")?.textContent).toBe("Reconnecting…");
-    expect(statusLineShows()).toBe(false);
+    expect(within(document.getElementById("media-container")!).getByRole("status").querySelector(".player-indicator-text")?.textContent).toBe("Reconnecting…");
 
     window.dispatchEvent(new Event("focus"));
     page.stream().open();
@@ -419,7 +395,7 @@ describe("player's indicator", () => {
     expect(indicator().getAttribute("role")).toBe("status");
   });
 
-  it("shows on the player at every width, and not on the status line", async () => {
+  it("shows on the player at every width, and doesn't pop up", async () => {
     stubCoarsePointer();
     setViewport(UPRIGHT);
     const page = await mount();
@@ -427,8 +403,7 @@ describe("player's indicator", () => {
     await settle();
 
     expect(indicatorBox()?.dataset.state).toBe("reconnecting");
-    expect(statusLineShows()).toBe(true);
-    expect(document.getElementById("status")!.textContent).not.toMatch(/reconnecting/i);
+    expect(document.getElementById("toasts")!.textContent).not.toMatch(/reconnecting/i);
 
     setViewport(ON_ITS_SIDE);
     await settle();

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { createMediaGestures } from "../playback/mediaGestures";
 import { useApp } from "./appContext";
+import { NotifyButton } from "./Notifications";
 
 /** The video's boolean attributes, present and empty as in the page's HTML. */
 const VIDEO_FLAGS: Record<string, string> = {
@@ -36,7 +37,7 @@ function stopPropagation(event: Event): void {
  * before anything plays and on a photo too, so the controls never move.
  */
 export function Player() {
-  const { store, player, fullscreen } = useApp();
+  const { store, player, fullscreen, notifications } = useApp();
   const container = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const photo = useRef<HTMLImageElement>(null);
@@ -95,8 +96,10 @@ export function Player() {
   const muted = player.muted.value;
   const play = player.playButton.value;
   const seekBar = player.seekBar.value;
+  // The controls stay shown while the list behind the bell is open.
+  const showsControls = controlsVisible || notifications.listOpen.value;
   return (
-    <div id="media-container" class={controlsVisible ? "media-container controls-visible" : "media-container"} ref={container} onClick={onAreaClick}>
+    <div id="media-container" class={showsControls ? "media-container controls-visible" : "media-container"} ref={container} onClick={onAreaClick}>
       <video
         id="video"
         {...VIDEO_FLAGS}
@@ -115,6 +118,7 @@ export function Player() {
       <div id="empty-state" class="empty-state" ref={emptyState}>Tap to play, or open the panel to choose a preset or filter.</div>
       <PlayerIndicator />
       <div id="overlay-controls" class="overlay-controls" onTouchStart={stopPropagation} onTouchMove={stopPropagation} onTouchEnd={stopPropagation} onClick={stopPropagation}>
+        <NotifyButton />
         <PanelButton />
         <button id="favorite-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, player.favorite.value)} aria-label="Favorite" title="Favorite" onClick={press(player.toggleFavorite)}><span class="material-symbol-icon">favorite</span></button>
         <button id="blacklist-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, player.blacklisted.value)} aria-label="Blacklist" title="Blacklist" onClick={press(player.toggleBlacklist)}><span class="material-symbol-icon">thumb_down</span></button>

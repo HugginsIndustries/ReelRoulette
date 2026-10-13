@@ -97,6 +97,7 @@ function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
     api,
     connection,
     dialogs: { notice: () => Promise.resolve() },
+    notifications: { notify() {} },
     // No animation frames outside a browser; the bar's own tests run them.
     frames: { request: () => 0, cancel: () => {} }
   });

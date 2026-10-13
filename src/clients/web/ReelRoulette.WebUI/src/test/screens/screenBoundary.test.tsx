@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { statusLogLine } from "../../logging/relayLogLines";
 import { ScreenBoundary } from "../../ui/ScreenBoundary";
-import { FakeServer, json, mountPage, pickPreset, resetPage, status } from "./pageHarness";
+import { FakeServer, json, mountPage, pageReady, pickPreset, resetPage, status } from "./pageHarness";
 
 const failing = vi.hoisted(() => ({ player: false, header: false, library: false, filter: false, tags: false, panel: false }));
 
@@ -150,6 +151,11 @@ function showPanelTab(tab: PanelTabName): void {
   fireEvent.click(within(tabRow).getByRole("tab", { name: tab }));
 }
 
+/** Waits until the page has relayed the event stream's opening, which shows nothing. */
+async function streamOpened(server: FakeServer): Promise<void> {
+  await waitFor(() => expect(server.logLines().some((line) => line.startsWith("status=SSE connected "))).toBe(true));
+}
+
 beforeEach(() => {
   resetPage();
 });
@@ -183,7 +189,7 @@ describe("ScreenBoundary", () => {
     expect(relay).toHaveBeenCalledWith("error", "ui-error screen=header error=RangeError");
   });
 
-  it("keeps the player, status line, and connection working when the header fails after an item plays", async () => {
+  it("keeps the player and connection working when the header fails after an item plays", async () => {
     failing.header = true;
     const server = new FakeServer();
     server.on("POST", "/api/random", () =>
@@ -199,7 +205,7 @@ describe("ScreenBoundary", () => {
       })
     );
     const page = mountPage({ server });
-    await screen.findByText("Ready (API 1)");
+    await pageReady(server);
     expect(photoDuration()).toBeTruthy();
 
     fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
@@ -210,18 +216,18 @@ describe("ScreenBoundary", () => {
     expect((page.root.querySelector("video") as HTMLVideoElement).src).toContain("/api/media/item-video");
 
     page.stream().open();
-    await screen.findByText("SSE connected");
+    await streamOpened(server);
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() => expect(server.requests("POST", "/api/random")).toHaveLength(2));
   });
 
-  it("keeps the header, status line, overlays, and connection working when the player fails to render", async () => {
+  it("keeps the header, overlays, and connection working when the player fails to render", async () => {
     failing.player = true;
     const server = new FakeServer();
     server.on("GET", "/api/presets", () => json([{ id: "preset-1", name: "Favorites", filterState: { favoritesOnly: true } }]));
     const page = mountPage({ server });
 
-    await screen.findByText("Ready (API 1)");
+    await pageReady(server);
     await waitFor(() => expect(server.logLines()).toContain("ui-error screen=player error=RangeError"));
     expect(server.logLines().filter((line) => line.startsWith("ui-error"))).toEqual(["ui-error screen=player error=RangeError"]);
     expect(server.logLines().some((line) => line.includes("holiday"))).toBe(false);
@@ -231,10 +237,10 @@ describe("ScreenBoundary", () => {
     await pickPreset("preset-1");
     await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(2));
     page.stream().open();
-    await screen.findByText("SSE connected");
+    await streamOpened(server);
   });
 
-  it("keeps the player, header, status line, and connection working when the panel fails to render", async () => {
+  it("keeps the player, header, and connection working when the panel fails to render", async () => {
     failing.panel = true;
     const server = new FakeServer();
     server.on("POST", "/api/random", () =>
@@ -250,7 +256,7 @@ describe("ScreenBoundary", () => {
       })
     );
     const page = mountPage({ server });
-    await screen.findByText("Ready (API 1)");
+    await pageReady(server);
 
     await waitFor(() => expect(server.logLines()).toContain("ui-error screen=panel error=RangeError"));
     expect(server.logLines().filter((line) => line.startsWith("ui-error"))).toEqual(["ui-error screen=panel error=RangeError"]);
@@ -263,10 +269,10 @@ describe("ScreenBoundary", () => {
     await waitFor(() => expect((page.root.querySelector("video") as HTMLVideoElement).src).toContain("/api/media/item-video"));
     expect(photoDuration()).toBeTruthy();
     page.stream().open();
-    await screen.findByText("SSE connected");
+    await streamOpened(server);
   });
 
-  it("keeps the player, header, status line, panel, filter dialog, and connection working when the library overlay fails", async () => {
+  it("keeps the player, header, panel, filter dialog, and connection working when the library overlay fails", async () => {
     failing.library = true;
     const server = new FakeServer();
     server.on("POST", "/api/library/query", () => status(500));
@@ -285,7 +291,8 @@ describe("ScreenBoundary", () => {
     server.on("GET", "/api/sources", () => json([]));
     server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
     const page = mountPage({ server });
-    await screen.findByText("Library load failed: HTTP 500");
+    // The library's body shows the failure, which only relays, and the library overlay has failed.
+    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Library load failed: HTTP 500", null, 0)));
 
     showPanelTab("Library");
     await waitFor(() => expect(server.logLines()).toContain("ui-error screen=library error=TypeError"));
@@ -305,10 +312,10 @@ describe("ScreenBoundary", () => {
     await waitFor(() => expect(isShowing("Filter")).toBe(true));
     expect(page.root.querySelector("#panel-page-filter #filter-dialog")).not.toBeNull();
     page.stream().open();
-    await screen.findByText("SSE connected");
+    await streamOpened(server);
   });
 
-  it("keeps the player, header, status line, panel, library overlay, tag editor, and connection working when the filter dialog fails", async () => {
+  it("keeps the player, header, panel, library overlay, tag editor, and connection working when the filter dialog fails", async () => {
     failing.filter = true;
     const server = new FakeServer();
     server.on("POST", "/api/random", () =>
@@ -326,7 +333,7 @@ describe("ScreenBoundary", () => {
     server.on("GET", "/api/sources", () => json([]));
     server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
     const page = mountPage({ server });
-    await screen.findByText("Ready (API 1)");
+    await pageReady(server);
     expect(page.root.querySelector("#fullscreen-stage #filter-dialog")).not.toBeNull();
 
     showPanelTab("Filter");
@@ -346,10 +353,10 @@ describe("ScreenBoundary", () => {
     await waitFor(() => expect(isShowing("Tags")).toBe(true));
     expect(page.root.querySelector("#panel-page-tags #tag-editor")).not.toBeNull();
     page.stream().open();
-    await screen.findByText("SSE connected");
+    await streamOpened(server);
   });
 
-  it("keeps the player, header, status line, panel, library overlay, filter dialog, and connection working when the tag editor fails", async () => {
+  it("keeps the player, header, panel, library overlay, filter dialog, and connection working when the tag editor fails", async () => {
     failing.tags = true;
     const server = new FakeServer();
     server.on("POST", "/api/random", () =>
@@ -369,7 +376,7 @@ describe("ScreenBoundary", () => {
       json({ categories: [{ id: "cat-places", name: "Places", sortOrder: 0 }], tags: [{ name: "Beach", categoryId: "cat-places" }], items: [] })
     );
     const page = mountPage({ server });
-    await screen.findByText("Ready (API 1)");
+    await pageReady(server);
     expect(page.root.querySelector("#fullscreen-stage #tag-editor")).not.toBeNull();
 
     showPanelTab("Tags");
@@ -389,6 +396,6 @@ describe("ScreenBoundary", () => {
     await waitFor(() => expect(isShowing("Filter")).toBe(true));
     expect(page.root.querySelector("#panel-page-filter #filter-dialog")).not.toBeNull();
     page.stream().open();
-    await screen.findByText("SSE connected");
+    await streamOpened(server);
   });
 });

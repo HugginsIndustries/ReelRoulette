@@ -423,8 +423,8 @@ body {
   display: flex;
   flex-direction: column;
 }
-/* The page, clear of the safe-area insets, so the header, the player, the panel beside it, and the status line stay
-   off the notch, the status bar, and the home indicator. */
+/* The page, clear of the safe-area insets, so the header, the player, and the panel beside it stay off the notch, the
+   status bar, and the home indicator. */
 #app {
   flex: 1;
   min-height: 0;
@@ -513,7 +513,6 @@ body {
   html.theme-light .brand img.brand-on-dark { display: none; }
   html.theme-light .brand img.brand-on-light { display: block; }
 }
-.status { font-size: 0.9rem; color: var(--muted-fg); }
 .pair-section {
   display: flex;
   flex: 0 1 auto;
@@ -684,6 +683,10 @@ body {
   z-index: 20;
   filter: drop-shadow(var(--control-drop-shadow));
 }
+/* The bell sits at the top left, so it can be reached in fullscreen and on a phone on its side, and it hides with the
+   other controls. */
+#notify-btn.overlay-corner-btn { left: 12px; }
+#notify-btn .notify-badge { box-shadow: 0 0 0 2px #000; }
 #panel-btn.overlay-corner-btn { right: 116px; }
 #favorite-btn.overlay-corner-btn { right: 64px; }
 #blacklist-btn.overlay-corner-btn { right: 12px; }
@@ -748,13 +751,114 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .player-indicator .material-symbol-icon.spins { animation-duration: 3s; }
 }
-.status-bottom {
-  margin-top: 10px;
-  min-height: 1.2em;
+/* Notifications: the player's bell, the list of recent messages under it, and the popups beside the player. The bell is
+   orange while its list is open. */
+.notify-btn[aria-expanded="true"] { color: var(--huggins-orange); }
+.notify-badge {
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--huggins-orange);
+  color: #1a1a1a;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--page-bg);
+  pointer-events: none;
 }
-.diagnostics-mobile {
-  display: none;
+/* The list sits inside the fullscreen stage, so it shows in fullscreen and pseudo-fullscreen, and the page places it
+   under the bell. */
+.notify-list {
+  position: fixed;
+  z-index: 1500;
+  width: min(380px, calc(100vw - 16px));
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-raised);
+  color: var(--page-fg);
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
 }
+.notify-list[hidden] { display: none; }
+.notify-head { display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 14px; border-bottom: 1px solid var(--surface-border); flex: 0 0 auto; }
+.notify-head h2 { margin: 0; font-size: 1.05rem; flex: 1 1 auto; }
+/* The heading takes focus as the list opens, as the mockup does, without a ring. */
+.notify-head h2:focus { outline: none; }
+.notify-head .btn { min-height: 36px; padding: 4px 10px; font-size: 0.9rem; }
+.notify-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.notify-group-title { margin: 0; padding: 8px 14px 2px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-fg); }
+.notify-entries { list-style: none; margin: 0; padding: 0; }
+.notify-entry { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 2px 10px; padding: 8px 14px; border-bottom: 1px solid var(--surface-border); font-size: 0.92rem; }
+.notify-entry:last-child { border-bottom: 0; }
+.notify-entry > .material-symbol-icon { font-size: 22px; color: var(--huggins-orange); grid-row: span 2; align-self: start; }
+.notify-entry.is-error > .material-symbol-icon, .notify-entry.is-warning > .material-symbol-icon { color: var(--error); }
+.notify-entry.is-unread { background: color-mix(in srgb, var(--huggins-orange) 10%, transparent); }
+.notify-text { min-width: 0; overflow-wrap: anywhere; }
+.notify-time { font-size: 0.78rem; color: var(--muted-fg); white-space: nowrap; align-self: start; padding-top: 2px; }
+.notify-detail { grid-column: 2 / 4; font-size: 0.84rem; color: var(--muted-fg); overflow-wrap: anywhere; }
+.notify-empty { margin: 0; padding: 18px 14px; color: var(--muted-fg); font-size: 0.92rem; }
+/* Popups stack from their edge, newest nearest it, at most three, in the player column beside the player, which clips
+   what it holds. They show over the overlay panel, take no focus, and only their own boxes take the pointer, so the
+   player and the panel stay usable around them. */
+.toasts {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  transition: bottom 0.2s ease;
+}
+.toasts[data-pos^="bottom"] { bottom: 12px; }
+.toasts[data-pos^="top"] { top: 64px; flex-direction: column-reverse; }
+.toasts[data-pos$="left"] { align-items: flex-start; }
+.toasts[data-pos$="right"] { align-items: flex-end; }
+.toast {
+  pointer-events: auto;
+  width: min(400px, 100%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 4px 4px 12px;
+  background: var(--surface-raised);
+  color: var(--page-fg);
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  font-size: 0.92rem;
+  touch-action: pan-y;
+  animation: toast-in 0.16s ease-out;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.toasts[data-pos^="top"] .toast { animation-name: toast-in-top; }
+.toast > .material-symbol-icon { font-size: 22px; color: var(--huggins-orange); flex: 0 0 auto; }
+.toast.is-warning { border-color: var(--error); }
+.toast.is-warning > .material-symbol-icon { color: var(--error); }
+.toast-text { flex: 1 1 auto; min-width: 0; padding: 6px 0; }
+.toast-detail { font-size: 0.84rem; color: var(--muted-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast .icon-btn { width: 36px; min-width: 36px; height: 36px; flex: 0 0 auto; }
+.toast .icon-btn .material-symbol-icon { font-size: 20px; }
+.toast.is-leaving { opacity: 0; transform: scale(0.96); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(10px); } }
+@keyframes toast-in-top { from { opacity: 0; transform: translateY(-10px); } }
+@media (prefers-reduced-motion: reduce) {
+  .toast, .toasts { animation: none; transition: none; }
+}
+/* Popups at the bottom move up above the player's controls while those show, and down again when they hide, except
+   while the overlay panel covers the player. On a player under 600 px wide, popups at the top start below the
+   indicator. */
+.fullscreen-stage:not(.covers-player) .media-container.controls-visible ~ .toasts[data-pos^="bottom"] { bottom: 112px; }
+.player-col.is-narrow .toasts[data-pos^="top"] { top: 104px; }
 /* The Filter and Tags tabs, as the mockup lays them out: a head with the heading and icon buttons, a bordered body
    that scrolls, and a footer. */
 .filter-dialog,
@@ -1352,11 +1456,15 @@ html.theme-light .library-overlay-result-row {
   border-bottom-color: rgba(0, 0, 0, 0.08);
 }
 
+/* The player column holds the popups beside the player, so it is their containing block. Nothing on it may make a
+   stacking context, such as a z-index, containment, or a container, which would keep the popups under the overlay
+   panel. Its overflow clips only a popup's shadow, or one being swiped, at its edge. */
 .player-col {
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
   display: flex;
+  position: relative;
   overflow: hidden;
 }
 @media (max-width: 600px) {
@@ -1393,12 +1501,6 @@ html.theme-light .library-overlay-result-row {
     max-width: 100%;
   }
   .now-playing { margin-left: 0; }
-  .diagnostics-mobile {
-    display: block;
-    font-size: 0.75rem;
-    color: var(--muted-fg);
-    margin-top: 2px;
-  }
 }
 
 /* The side panel: beside the player at its width, or the full-screen overlay as the stage's panel mode says. */
@@ -1551,9 +1653,9 @@ html.theme-light .panel {
   }
 }
 
-/* A phone on its side (a touch screen below 500 px of viewport height): the header and status line hide and the player
-   fills the screen, as in fullscreen without the browser's fullscreen mode. The header shows while the server asks for
-   pairing, so its prompt can be reached. */
+/* A phone on its side (a touch screen below 500 px of viewport height): the header hides and the player fills the
+   screen, as in fullscreen without the browser's fullscreen mode. The header shows while the server asks for pairing,
+   so its prompt can be reached. */
 body.short-screen #app {
   padding: 0 var(--safe-area-right) 0 var(--safe-area-left);
 }
@@ -1563,10 +1665,6 @@ body.short-screen .top-bar:not(.is-pairing) {
 body.short-screen .top-bar.is-pairing {
   padding: 6px 0;
   margin: 0;
-}
-/* Important over the diagnostics line's own display. */
-body.short-screen .status {
-  display: none !important;
 }
 body.short-screen .media-container {
   border-radius: 0;
@@ -1587,6 +1685,10 @@ body.short-screen .fullscreen-stage:not(.fullscreen-pseudo):not(:fullscreen) .pl
 /* Below the corner buttons, which keep clear of the status bar. */
 body.short-screen .fullscreen-stage:not(.fullscreen-pseudo):not(:fullscreen) .player-col.is-narrow .player-indicator {
   top: calc(max(12px, var(--safe-area-top)) + 52px);
+}
+/* Popups at the bottom rise above the controls, which keep clear of the home indicator. */
+body.short-screen .fullscreen-stage:not(.covers-player):not(.fullscreen-pseudo):not(:fullscreen) .media-container.controls-visible ~ .toasts[data-pos^="bottom"] {
+  bottom: calc(112px + var(--safe-area-bottom));
 }
 /* The panel, as the overlay, and the dialogs fit a short screen: the tab row, the tabs' headings, and their text
    buttons, fields, and selects are lower, as the mockup's are. Icon buttons keep their size. */

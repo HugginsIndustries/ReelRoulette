@@ -2,10 +2,9 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { screen } from "@testing-library/preact";
 import type { Window as HappyDomWindow } from "happy-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mountPage, resetPage, settle } from "./pageHarness";
+import { mountPage, pageReady, resetPage, settle } from "./pageHarness";
 
 /** The app's stylesheet, which decides which of the header's logo images shows. */
 const STYLESHEET = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../styles.css"), "utf8");
@@ -40,7 +39,7 @@ async function mountStyledPage(theme: "dark" | "light", width: number): Promise<
   style.textContent = STYLESHEET;
   document.head.appendChild(style);
   const page = mountPage();
-  await screen.findByText("Ready (API 1)");
+  await pageReady(page.server);
   await settle();
   return page.root.querySelector("header")!;
 }

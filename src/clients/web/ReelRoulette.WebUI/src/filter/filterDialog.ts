@@ -2,6 +2,7 @@ import { batch, signal, type ReadonlySignal } from "@preact/signals";
 import { errorText, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { Library } from "../library/library";
+import type { Notifications } from "../notifications/notifications";
 import type { PanelHost } from "../panel/panelHost";
 import { moveEntry } from "../reorder/reorder";
 import type { AppApi } from "../state/appApi";
@@ -202,10 +203,12 @@ export interface FilterDialogOptions {
   device: DeviceStore;
   /** The in-app dialogs, for the confirmations and the notices of what failed. */
   dialogs: Pick<Dialogs, "confirm" | "notice">;
+  /** The one-off messages: Apply, Refresh, and Update preset say what they did. */
+  notifications: Pick<Notifications, "notify">;
 }
 
 export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
-  const { store, api, connection, library, panel, device, dialogs } = options;
+  const { store, api, connection, library, panel, device, dialogs, notifications } = options;
 
   const isOpen = signal(false);
   const tab = signal<FilterDialogTab | null>(null);
@@ -257,7 +260,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
 
   /**
    * Says whether the action can't proceed. A disabled action does nothing; a held one moves to the first field that
-   * holds it, showing its section. Nothing goes to the status line: the field's icon and tooltip say what it expects.
+   * holds it, showing its section. Nothing pops up or is relayed: the field's icon and tooltip say what it expects.
    */
   function blocked(action: FilterAction): boolean {
     const block = view.peek()?.actions[action];
@@ -428,7 +431,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       }
       if (!view.peek()) {
         if (await start("Filter refresh failed")) {
-          store.setStatus("Filter data refreshed.");
+          notifications.notify({ kind: "actions", text: "Filter data refreshed.", key: "filter" });
         }
         return;
       }
@@ -438,7 +441,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         if (current) {
           takeRemote(current, remote);
         }
-        store.setStatus("Filter data refreshed.");
+        notifications.notify({ kind: "actions", text: "Filter data refreshed.", key: "filter" });
       } catch (error) {
         showLoadFailure("Filter refresh failed", error);
       }
@@ -484,7 +487,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       update({ working, original: cloneFilterState(working), presetName: store.activePresetName.peek() });
       await connection.loadPresets();
       void panel.closeIfOverlay();
-      store.setStatus("Filters applied.");
+      notifications.notify({ kind: "actions", text: "Filters applied.", key: "filter" });
       await library.commitQuery();
     },
 
@@ -625,7 +628,13 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       const working = readGeneral(current);
       const presets = current.presets.slice();
       presets[index] = { ...presets[index]!, filterState: cloneFilterState(working) };
-      store.setStatus(`Updated preset "${name}" locally — Apply to save.`, "Updated preset locally — Apply to save.");
+      // The log leaves the preset's name out.
+      notifications.notify({
+        kind: "actions",
+        text: `Updated preset "${name}" locally — Apply to save.`,
+        key: "filter",
+        logText: "Updated preset locally — Apply to save."
+      });
       update({ working, presets, presetsChanged: true });
     },
 
