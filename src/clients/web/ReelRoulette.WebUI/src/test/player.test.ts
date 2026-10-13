@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { unauthorizedLogText } from "../api/serverRequest";
 import { createPlayer, type PlayerElements } from "../playback/player";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type PlayingItem } from "../state/appStore";
@@ -29,7 +30,7 @@ const PHOTO: PlayingItem = {
 };
 
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status });
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
 /** A stand-in for the `<video>` element. Its `play` notes what was set when it was called. */
@@ -86,10 +87,14 @@ function setup() {
     const path = new URL(String(input)).pathname;
     const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
     requests.push({ path, body });
+    const reply = replies.get(path);
+    if (reply) {
+      return reply();
+    }
     if (path === "/api/random") {
       return json(randomAnswers.length > 0 ? randomAnswers.shift() : { mediaUrl: null });
     }
-    return replies.get(path)?.() ?? json({});
+    return json({});
   }) as typeof fetch;
   const relayed: string[] = [];
   const store = createAppStore({
@@ -98,7 +103,14 @@ function setup() {
     device: createDeviceStore(null),
     relay: (_level, message) => relayed.push(message)
   });
-  const api = createAppApi("http://server", { onUnauthorized: () => {}, fetch: fetchImpl });
+  // As the page does: a 401 on any request shows the pairing prompt and relays one line naming its route.
+  const api = createAppApi("http://server", {
+    onUnauthorized: (route) => {
+      store.pairingRequired.value = true;
+      store.relayStatus(unauthorizedLogText(route));
+    },
+    fetch: fetchImpl
+  });
   const realRelay = api.relayLog;
   api.relayLog = async (level, message) => {
     relayed.push(message);
@@ -118,7 +130,7 @@ function setup() {
     }
   };
   const frames = fakeFrames();
-  const player = createPlayer({ apiBaseUrl: "http://server/", store, api, connection, dialogs, fetch: fetchImpl, frames });
+  const player = createPlayer({ apiBaseUrl: "http://server/", store, api, connection, dialogs, frames });
   const elements = {
     video: fakeVideo(),
     photo: { src: "", style: { display: "none" } },
@@ -196,7 +208,8 @@ describe("createPlayer", () => {
     expect(seekSlider.max).toBe("100");
 
     page.player.photoFailed();
-    expect(page.store.status.value).toBe("Photo file not found.");
+    expect(page.notices).toEqual(["Photo file not found."]);
+    expect(page.store.status.value).toBe("Before");
     page.player.photoLoaded();
     expect(page.store.status.value).toBe("Playing");
   });
@@ -239,14 +252,67 @@ describe("createPlayer", () => {
       includePhotos: true,
       randomizationMode: "SmartShuffle"
     });
-    expect(page.store.status.value).toBe("No eligible media for current filters.");
+    expect(page.notices).toEqual(["No eligible media for current filters."]);
+    expect(page.store.status.value).toBe("");
     expect(page.store.current.value).toBeNull();
 
     page.store.compatibilityBlocked.value = true;
     await page.player.pickRandom();
-    expect(page.notices).toEqual(["Cannot play: server compatibility check failed."]);
-    expect(page.store.status.value).toBe("No eligible media for current filters.");
+    expect(page.notices).toEqual(["No eligible media for current filters.", "Cannot play: server compatibility check failed."]);
     expect(page.requests("/api/random")).toHaveLength(1);
+  });
+
+  it("shows each pick that ends without playing in the notice, and drops the status line's Loading...", async () => {
+    const page = setup();
+    const answers: Array<[() => Response, string]> = [
+      [() => json({}, 503), "Random selection failed (503)."],
+      [() => new Response("<html></html>", { headers: { "Content-Type": "text/html" } }), "Random selection failed: The server sent an unexpected response (text/html)."]
+    ];
+    for (const [answer, notice] of answers) {
+      page.replies.set("/api/random", answer);
+      page.store.setStatus("Before");
+      await page.player.pickRandom();
+      expect(page.notices.at(-1)).toBe(notice);
+      expect(page.store.status.value).toBe("");
+    }
+    expect(page.store.current.value).toBeNull();
+  });
+
+  it.each(["Failed to fetch", "Load failed", "NetworkError when attempting to fetch resource."])(
+    "reads a pick that couldn't reach the server, which the browser calls %j, the same in every browser",
+    async (wording) => {
+      const page = setup();
+      page.replies.set("/api/random", () => {
+        throw new TypeError(wording);
+      });
+      await page.player.pickRandom();
+      expect(page.notices).toEqual(["Random selection failed: Couldn't reach the server."]);
+      expect(page.store.status.value).toBe("");
+    }
+  );
+
+  it("shows only the pairing prompt for a pick the server answers with 401, and still relays its line", async () => {
+    const page = setup();
+    page.replies.set("/api/random", () => json({}, 401));
+    await page.player.pickRandom();
+    expect(page.store.pairingRequired.value).toBe(true);
+    expect(page.notices).toEqual([]);
+    expect(page.store.status.value).toBe("");
+    expect(page.relayed.filter((relayed) => relayed.includes("Unauthorized"))).toEqual([
+      "status=Unauthorized. Pair first. (POST /api/random) hasCurrent=false attempt=0"
+    ]);
+  });
+
+  it("shows a pick the server doesn't answer in time in the notice", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.replies.set("/api/random", () => new Promise<Response>(() => {}) as unknown as Response);
+    const pick = page.player.pickRandom();
+    expect(page.store.status.value).toBe("Loading...");
+    await vi.advanceTimersByTimeAsync(10_000);
+    await pick;
+    expect(page.notices).toEqual(["No response from the server. Try again."]);
+    expect(page.store.status.value).toBe("");
   });
 
   it("with Autoplay, moves a photo on after the photo duration, and with Loop shows it again", async () => {
@@ -510,15 +576,18 @@ describe("createPlayer", () => {
     expect(page.frames.pending()).toBe(0);
   });
 
-  it("stops moving the bar once a video fails to load", () => {
+  it("stops moving the bar once a video fails to load, and shows it can't be found in the notice", () => {
     const page = setup();
     page.play(VIDEO);
+    page.store.setStatus("Loading...");
     expect(page.frames.pending()).toBe(1);
 
     // A source that fails fires no pause, so the video still reads as playing.
     page.player.videoFailed();
     expect(page.elements.video.paused).toBe(false);
     expect(page.frames.pending()).toBe(0);
+    expect(page.notices).toEqual(["Video file not found."]);
+    expect(page.store.status.value).toBe("");
   });
 
   it("holds and resumes a photo's timer with Play/Pause, keeping the time left, and moves it with the bar", async () => {
@@ -556,7 +625,7 @@ describe("createPlayer", () => {
     // The pick at the end of history finds nothing, so the photo stays.
     await vi.advanceTimersByTimeAsync(15_000);
     expect(page.requests("/api/random")).toHaveLength(1);
-    expect(page.store.status.value).toBe("No eligible media for current filters.");
+    expect(page.notices).toEqual(["No eligible media for current filters."]);
     expect(shown()).toEqual(ended);
     expect(page.elements.seekSlider.value).toBe("0");
     expect(page.frames.pending()).toBe(0);
@@ -677,8 +746,27 @@ describe("createPlayer", () => {
 
     page.replies.set("/api/favorite", () => json({}, 500));
     await page.player.toggleFavorite();
-    expect(page.store.status.value).toBe("Favorite update failed (500).");
+    expect(page.notices).toEqual(["Favorite update failed (500)."]);
+    expect(page.store.status.value).toBe("Blacklisted");
     expect(page.player.blacklisted.value).toBe(true);
+  });
+
+  it("shows a favorite or blacklist that couldn't reach the server in the notice, leaving the buttons as they were", async () => {
+    const page = setup();
+    page.play(VIDEO);
+    const unreachable = () => {
+      throw new TypeError("Load failed");
+    };
+    page.replies.set("/api/favorite", unreachable);
+    page.replies.set("/api/blacklist", unreachable);
+
+    await expect(page.player.toggleFavorite()).resolves.toBeUndefined();
+    await expect(page.player.toggleBlacklist()).resolves.toBeUndefined();
+    expect(page.notices).toEqual([
+      "Favorite update failed: Couldn't reach the server.",
+      "Blacklist update failed: Couldn't reach the server."
+    ]);
+    expect([page.player.favorite.value, page.player.blacklisted.value]).toEqual([false, false]);
   });
 
   it("applies item-state events to the playing item and its cache, and reports them without the file name in the log", () => {

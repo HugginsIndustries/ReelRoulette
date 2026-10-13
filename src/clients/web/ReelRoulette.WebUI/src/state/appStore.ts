@@ -139,6 +139,11 @@ export interface AppStore {
   setStatus(message: string, logText?: string): void;
   /** Relays a status message's text to the server log without showing it, as `setStatus` relays it. */
   relayStatus(logText: string): void;
+  /**
+   * Empties the status line while it still shows `message`, without relaying anything, such as "Loading..." once a
+   * pick ends without playing and its failure shows in the notice instead.
+   */
+  clearStatus(message: string): void;
   /** Rebuilds the preset dropdown from the presets and the applied filter. */
   syncHeaderPresets(): void;
   /**
@@ -244,6 +249,12 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     setStatus(message, logText = message) {
       store.status.value = message;
       store.relayStatus(logText);
+    },
+
+    clearStatus(message) {
+      if (store.status.peek() === message) {
+        store.status.value = "";
+      }
     },
 
     relayStatus(logText) {

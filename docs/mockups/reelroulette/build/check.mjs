@@ -380,16 +380,18 @@ for (const width of [1280, 390]) {
     ruleStyle(".player-indicator", "max-width") === "calc(100% - 336px)" && ruleStyle(".player-indicator-text", "text-overflow") === "ellipsis" &&
     $("player-indicator").querySelector(".player-indicator-text")?.textContent === "Reconnecting…");
   press("r");
-  check(`layout@${width}: a random pick then fails with a notice (${notice()})`, notice() === "Random selection failed: Failed to fetch");
+  check(`layout@${width}: a random pick then fails with a notice (${notice()})`, notice() === "Random selection failed: Couldn't reach the server.");
   dismissNotices();
   $("favorite-btn").click();
-  check(`layout@${width}: and so does Favorite (${notice()})`, notice() === "Favorite update failed (503)." && !$("favorite-btn").classList.contains("active"));
+  check(`layout@${width}: and so does Favorite (${notice()})`, notice() === "Favorite update failed: Couldn't reach the server." && !$("favorite-btn").classList.contains("active"));
+  $("favorite-btn").click();
+  check(`layout@${width}: and a second press doesn't open the same notice again (${openDialogs().length})`, openDialogs().length === 1);
   dismissNotices();
   $("notify-btn").click();
   const nowText = () => $("notify-list").querySelector('[data-part="now"]').textContent;
   check(`layout@${width}: the bell's list shows it under Now with its full text, and keeps the notices (${nowText().slice(0, 40)})`,
     !$("notify-list").hidden && $("notify-btn").getAttribute("aria-expanded") === "true" && nowText().includes("The connection to the server was lost.") &&
-    $("notify-list").textContent.includes("Favorite update failed (503).") && messages.entries()[0].kind === "error");
+    $("notify-list").textContent.includes("Favorite update failed: Couldn't reach the server.") && messages.entries()[0].kind === "error");
   press("Escape");
   check(`layout@${width}: Escape closes the list and gives focus back to the bell`, $("notify-list").hidden && document.activeElement === $("notify-btn"));
   situation("connected");
@@ -418,6 +420,27 @@ for (const width of [1280, 390]) {
   dismissNotices();
   situation("empty");
   check(`layout@${width}: an empty library says No media in library.`, gridText() === "No media in library.");
+  const libraryLoad = (value) => document.querySelector(`input[name="mock-library-load"][value="${value}"]`).click();
+  const gridAlert = () => !!$("lib-grid").querySelector('.lib-empty.is-error[role="alert"]');
+  libraryLoad("failed");
+  check(`layout@${width}: a failed library load shows Library load failed: and its error in the grid (${gridText()})`, gridText() === "Library load failed: HTTP 500" && gridAlert());
+  libraryLoad("timeout");
+  check(`layout@${width}: and a load the server or a proxy times out says the server didn't answer in time (${gridText()})`,
+    gridText() === "The server didn't answer in time, so the library couldn't load. It may be waiting on a slow or disconnected drive or share." && gridAlert());
+  libraryLoad("loads");
+  check(`layout@${width}: and a load that works shows the grid again`, gridText() === "No media in library.");
+  $("mock-kept-one").click();
+  check(`layout@${width}: a refresh that keeps a source's items names its folder and count in a notice (${notice()})`,
+    notice() === "Library refresh found no media files in Phone backup (/media/phone), so it kept the library's 1,204 items from there. If the folder is on a drive or share, check that it's connected.");
+  dismissNotices();
+  $("mock-kept-both").click();
+  check(`layout@${width}: and a later refresh names only the folder it hasn't named yet (${notice()})`,
+    openDialogs().length === 1 && notice().startsWith("Library refresh found no media files in Videos (/media/videos), so it kept the library's 2,316 items from there."));
+  dismissNotices();
+  $("mock-kept-both").click();
+  check(`layout@${width}: and once every folder is named, none shows again`, openDialogs().length === 0);
+  check(`layout@${width}: several folders at once share one notice (${window.mockup.keptSourcesMessage(["videos", "phone"])})`,
+    window.mockup.keptSourcesMessage(["videos", "phone"]) === "Library refresh found no media files in Videos (/media/videos) and Phone backup (/media/phone), so it kept the library's 3,520 items from them. If the folders are on a drive or share, check that it's connected.");
   check(`layout@${width}: and search, sort, and its direction work again once the check passes`, ["lib-search", "lib-sort", "lib-dir"].every((id) => !$(id).disabled));
   openTab("filter");
   document.querySelector('[data-sub="tags"]').click();
@@ -682,7 +705,7 @@ for (const width of [1280, 390]) {
   input($("lib-search"), "");
   openTab("filter");
   $("filter-apply").click();
-  check(`layout@${width}: Apply while reconnecting says it couldn't save the presets (${notice()})`, notice() === "Saving presets failed: Failed to fetch");
+  check(`layout@${width}: Apply while reconnecting says it couldn't save the presets (${notice()})`, notice() === "Saving presets failed: Couldn't reach the server.");
   dismissNotices();
   $("filter-cancel").click();
   situation("connected");
@@ -952,6 +975,11 @@ for (const width of [1280, 390]) {
   $("autotag-scan").click();
   await tick();
   check(`layout@${width}: a scan that finds nothing shows its own placeholder (${autoTagText()})`, autoTagText() === "No file names contain any tag's name.");
+  situation("reconnecting");
+  $("autotag-scan").click();
+  await tick();
+  check(`layout@${width}: a scan that fails says so in Auto Tag's status, not as one that found nothing (${$("autotag-status").textContent}; ${autoTagText()})`,
+    $("autotag-status").textContent === "Scan failed: Couldn't reach the server." && autoTagText() === "Scan to find files whose names contain a tag's name." && $("autotag-apply").disabled && openDialogs().length === 0);
   situation("connected");
   $("autotag-close").click();
 
@@ -1650,6 +1678,42 @@ for (const width of [1280, 390]) {
   // Pairing prompt and read-only volume.
   $("mock-pairing").click();
   check(`layout@${width}: the pairing prompt shows in the header, labeled`, !$("pair").hidden && document.body.classList.contains("pairing") && $("pair").querySelector("label").textContent === "Pairing token" && $("pair-token").placeholder === "Enter token");
+  // While the server asks for pairing, every request answers 401, which shows only the prompt: nothing in place, no
+  // notice. happy-dom keeps an element's computed style after a class changes, so a fresh copy is measured.
+  const hiddenByStyle = (el) => {
+    const copy = el.cloneNode(true);
+    copy.removeAttribute("id");
+    el.after(copy);
+    const hidden = window.getComputedStyle(copy).display === "none";
+    copy.remove();
+    return hidden;
+  };
+  const presetLabel = () => $("lib-preset").selectedOptions[0]?.textContent;
+  openTab("library");
+  check(`layout@${width}: while the server asks for pairing, the grid shows nothing and the presets stay on Loading... (${gridText()}; ${presetLabel()})`,
+    tiles().length === 0 && gridText() === "" && presetLabel() === "Loading..." && $("lib-preset").disabled);
+  while (window.mockup.history().index < window.mockup.history().ids.length - 1) $("next-btn").click();
+  const unpairedHistory = window.mockup.history().ids.join();
+  const unpairedFavorite = items.find((item) => item.name === np())?.favorite;
+  $("next-btn").click();
+  await tick();
+  $("favorite-btn").click();
+  check(`layout@${width}: and a random pick or a favorite shows no notice and changes nothing`,
+    openDialogs().length === 0 && window.mockup.history().ids.join() === unpairedHistory && items.find((item) => item.name === np())?.favorite === unpairedFavorite);
+  openTab("tags");
+  openTab("filter");
+  check(`layout@${width}: and the Tags tab shows no tags and the Filter tab's sections nothing`,
+    $("tags-body").textContent === "" && hiddenByStyle(document.querySelector('#filter-body > [data-subpanel="general"]')));
+  $("filter-refresh").click();
+  $("filter-apply").click();
+  check(`layout@${width}: and the Filter tab's Refresh and Apply show no notice`, openDialogs().length === 0);
+  $("open-autotag").click();
+  $("autotag-scan").click();
+  await tick();
+  check(`layout@${width}: and an Auto Tag scan leaves its status empty and its results as before any scan (${$("autotag-status").textContent})`,
+    $("autotag-status").textContent === "" && $("autotag-results").querySelector(".autotag-empty")?.textContent === "Scan to find files whose names contain a tag's name." && openDialogs().length === 0);
+  $("autotag-close").click();
+  openTab("library");
   input($("pair-token"), "x");
   input($("pair-token"), "");
   check(`layout@${width}: an emptied pairing token is not flagged and disables Pair`, !$("pair-token").hasAttribute("aria-invalid") && $("pair-btn").disabled);
@@ -1657,9 +1721,17 @@ for (const width of [1280, 390]) {
   $("pair").dispatchEvent(new window.Event("submit", { cancelable: true }));
   check(`layout@${width}: a wrong token says Pairing failed. and keeps the prompt`, notice() === "Pairing failed." && !$("pair").hidden);
   dismissNotices();
+  situation("reconnecting");
+  input($("pair-token"), "abc123");
+  $("pair").dispatchEvent(new window.Event("submit", { cancelable: true }));
+  check(`layout@${width}: pairing while the server is stopped says it couldn't reach the server (${notice()})`, notice() === "Pairing failed: Couldn't reach the server." && !$("pair").hidden);
+  dismissNotices();
+  situation("connected");
   input($("pair-token"), "abc123");
   $("pair").dispatchEvent(new window.Event("submit", { cancelable: true }));
   check(`layout@${width}: Pair hides the prompt`, $("pair").hidden && said("Paired.") && !document.body.classList.contains("pairing"));
+  check(`layout@${width}: and once paired the grid, the presets, and the tags load (${tiles().length} tiles; ${presetLabel()})`,
+    tiles().length > 0 && presetLabel() !== "Loading..." && $("tags-body").textContent !== "" && !hiddenByStyle(document.querySelector('#filter-body > [data-subpanel="general"]')));
   $("mock-ios-volume").click();
   check(`layout@${width}: with the gain stage running, a read-only volume, as on iOS, keeps its slider`, !$("volume-wrap").hidden && standIn.gains.length === 1);
   // Library controls collapse, and the preset and randomization dropdowns share a row.

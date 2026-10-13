@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { buildEventsUrl, parseEventEnvelope } from "../events/eventEnvelope";
-import { buildRefreshStatusMessage, newRefreshCompletionRunId } from "../events/refreshStatusProjection";
+import {
+  buildRefreshStatusMessage,
+  coerceRefreshSnapshot,
+  newRefreshCompletionRunId,
+  settledKeptSources
+} from "../events/refreshStatusProjection";
 
 describe("event helpers", () => {
   it("builds SSE URL with last revision query", () => {
@@ -107,5 +112,26 @@ describe("event helpers", () => {
     expect(newRefreshCompletionRunId(finished, "run-1")).toBeNull();
     expect(newRefreshCompletionRunId(failed, "run-1")).toBe("run-2");
     expect(newRefreshCompletionRunId(canceled, "run-2")).toBeNull();
+  });
+
+  it("keeps the sources a refresh kept, from camelCase or PascalCase, and none when the snapshot lists none", () => {
+    expect(coerceRefreshSnapshot({ isRunning: false, keptSources: [{ sourceId: "src-a", itemCount: 2 }] }).keptSources).toEqual([
+      { sourceId: "src-a", itemCount: 2 }
+    ]);
+    expect(coerceRefreshSnapshot({ IsRunning: false, KeptSources: [{ SourceId: "src-b", ItemCount: 1200 }] }).keptSources).toEqual([
+      { sourceId: "src-b", itemCount: 1200 }
+    ]);
+    expect(coerceRefreshSnapshot({ isRunning: true }).keptSources).toEqual([]);
+  });
+
+  it("gives the kept sources once the source stage has finished or the run has stopped", () => {
+    const keptSources = [{ sourceId: "src-a", itemCount: 2 }];
+    const sourceStage = (isComplete: boolean) => ({ stage: "sourceRefresh", percent: isComplete ? 100 : 40, message: "", isComplete });
+
+    expect(settledKeptSources({ isRunning: true, currentStage: "sourceRefresh", stages: [sourceStage(false)], keptSources })).toEqual([]);
+    expect(settledKeptSources({ isRunning: true, currentStage: "durationScan", stages: [sourceStage(true)], keptSources })).toEqual(keptSources);
+    // A run that failed or was cancelled in its source stage kept them all the same.
+    expect(settledKeptSources({ isRunning: false, stages: [sourceStage(false)], keptSources })).toEqual(keptSources);
+    expect(settledKeptSources({ isRunning: false, stages: [] })).toEqual([]);
   });
 });

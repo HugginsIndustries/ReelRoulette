@@ -1,10 +1,13 @@
 import {
   buildRefreshStatusMessage,
   coerceRefreshSnapshot,
-  newRefreshCompletionRunId
+  newRefreshCompletionRunId,
+  settledKeptSources
 } from "../events/refreshStatusProjection";
+import { errorText, sendRequest, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import { createSseClient, type EventSourceLike, type SseClient } from "../events/sseClient";
+import type { RefreshKeptSource } from "../types/serverContracts";
 import type { AppApi } from "./appApi";
 import { PRESET_MENU_BLOCKED, PRESET_MENU_LOAD_FAILED, type AppStore } from "./appStore";
 import { serverCompatibilityError } from "./serverCompatibility";
@@ -23,6 +26,11 @@ export interface ServerConnectionEvents {
   tagCatalogChanged: (payload: any) => void;
   /** A refresh run finished. Sent once per run. */
   refreshCompleted: () => void;
+  /**
+   * A refresh kept the library's items from these sources, because their folder listed no media files, by source id.
+   * Sent once the run's source stage has finished, or the run has stopped, and again only when a run's list changes.
+   */
+  refreshKeptSources: (keptSources: RefreshKeptSource[]) => void;
   /** The server could not replay missed events. Presets have started reloading. */
   resyncRequired: (payload: any) => void;
 }
@@ -35,7 +43,7 @@ export interface ServerConnection {
   loadPresets(): Promise<void>;
   /**
    * Pairs with a token, then checks the version, reloads presets, and reconnects the event stream. A pairing that fails,
-   * or that the server's compatibility check blocks, shows in a notice.
+   * one that couldn't reach the server among them, or that the server's compatibility check blocks, shows in a notice.
    */
   pair(token: string): Promise<void>;
   on<K extends keyof ServerConnectionEvents>(event: K, listener: ServerConnectionEvents[K]): void;
@@ -67,10 +75,13 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     itemTagsChanged: [],
     tagCatalogChanged: [],
     refreshCompleted: [],
+    refreshKeptSources: [],
     resyncRequired: []
   };
   let eventStream: SseClient | null = null;
   let lastAppliedRefreshRunId: string | null = null;
+  /** The run and source ids last sent as kept, since every later status of a run repeats them. */
+  let lastKeptSourcesKey: string | null = null;
   /** The server has passed the version check. */
   let serverReady = false;
   let versionCheckInFlight = false;
@@ -107,8 +118,13 @@ export function createServerConnection(options: ServerConnectionOptions): Server
       }
       store.presetsLoaded();
     } catch (error) {
+      // A 401 shows only the pairing prompt, which the request has asked for, and sent its line: the preset dropdown
+      // keeps what it shows.
+      if (error instanceof UnauthorizedError) {
+        return;
+      }
       store.showPresetMenuMessage(PRESET_MENU_LOAD_FAILED);
-      store.setStatus(`Error loading presets: ${(error as Error)?.message || error}`);
+      store.setStatus(`Error loading presets: ${errorText(error)}`);
     }
   }
 
@@ -128,8 +144,11 @@ export function createServerConnection(options: ServerConnectionOptions): Server
       serverReady = true;
       emit("serverReady");
       return true;
-    } catch {
-      store.setStatus("Ready (API offline)");
+    } catch (error) {
+      // A 401 shows only the pairing prompt, which the request has asked for: the server answered, so it isn't offline.
+      if (!(error instanceof UnauthorizedError)) {
+        store.setStatus("Ready (API offline)");
+      }
       return false;
     } finally {
       versionCheckInFlight = false;
@@ -185,6 +204,12 @@ export function createServerConnection(options: ServerConnectionOptions): Server
             lastAppliedRefreshRunId = completedRunId;
             emit("refreshCompleted");
           }
+          const keptSources = settledKeptSources(snapshot);
+          const keptKey = JSON.stringify([snapshot.runId ?? null, keptSources.map((kept) => kept.sourceId)]);
+          if (keptSources.length > 0 && keptKey !== lastKeptSourcesKey) {
+            lastKeptSourcesKey = keptKey;
+            emit("refreshKeptSources", keptSources);
+          }
         },
         resyncRequired(payload) {
           void loadPresets();
@@ -214,12 +239,19 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     if (!trimmed) {
       return;
     }
-    const response = await send(api.url("/api/pair"), {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: trimmed })
-    });
+    // Not through `api.request`, since a 401 here is a wrong token, which says so rather than asking for pairing.
+    let response: Response;
+    try {
+      response = await sendRequest(send, api.url("/api/pair"), {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: trimmed })
+      });
+    } catch (error) {
+      void dialogs.notice(`Pairing failed: ${errorText(error)}`);
+      return;
+    }
     if (!response.ok) {
       void dialogs.notice("Pairing failed.");
       return;

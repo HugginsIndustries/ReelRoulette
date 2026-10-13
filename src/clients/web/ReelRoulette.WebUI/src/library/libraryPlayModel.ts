@@ -1,10 +1,7 @@
 import type { PlayItemResult } from "../api/coreApi";
 
+/** What a play the server refused says. A 401 never reaches here: the play shows the pairing prompt instead. */
 export function mapPlayItemErrorToStatus(result: Extract<PlayItemResult, { ok: false }>): string {
-  if (result.statusCode === 401) {
-    return "Unauthorized. Pair first.";
-  }
-
   switch (result.statusCode) {
     case 404:
       return "Media not found. The file may have moved or been deleted.";

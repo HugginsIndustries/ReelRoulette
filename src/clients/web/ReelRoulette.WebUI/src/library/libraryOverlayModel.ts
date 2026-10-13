@@ -9,8 +9,15 @@ export interface LibraryProjectionSummary {
 /** What the grid says when the library has media but none matches the search or the applied filter. */
 export const LIBRARY_NO_MATCH_MESSAGE = "Nothing matches the search or filters.";
 
-export const LIBRARY_OVERLAY_FETCH_ERROR =
-  "Could not load library. Core runtime is unavailable or still recovering.";
+/**
+ * What the body says for a load answered with 408 or 504, a timeout from the server or a proxy in between, as when the
+ * server waits on a slow or disconnected drive or share.
+ */
+export const LIBRARY_LOAD_TIMEOUT_MESSAGE =
+  "The server didn't answer in time, so the library couldn't load. It may be waiting on a slow or disconnected drive or share.";
+
+/** The statuses that mean a load timed out on its way: the server's own 408 or a proxy's 504. */
+const TIMEOUT_STATUSES: readonly number[] = [408, 504];
 
 export function parseLibraryProjectionSummary(raw: unknown): LibraryProjectionSummary {
   const proj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
@@ -55,15 +62,27 @@ export interface LibraryOverlayMessage {
   live: boolean;
 }
 
+/**
+ * A failed load reads "Library load failed: {error}", or the timeout message when the server answered 408 or 504, and
+ * says nothing when it answered 401, whose pairing prompt is the only thing to show. `errorStatus` is the failed load's
+ * HTTP status, or null when it has none.
+ */
 export function libraryOverlayMessage(
   phase: LibraryOverlayMessagePhase,
-  errorMessage: string | null
+  errorMessage: string | null,
+  errorStatus: number | null = null
 ): LibraryOverlayMessage {
   if (phase === "loading") {
     return { text: "Loading library…", error: false, live: true };
   }
   if (phase === "error") {
-    return { text: errorMessage || "Could not load library.", error: true, live: false };
+    if (errorStatus === 401) {
+      return { text: "", error: false, live: false };
+    }
+    if (errorStatus !== null && TIMEOUT_STATUSES.includes(errorStatus)) {
+      return { text: LIBRARY_LOAD_TIMEOUT_MESSAGE, error: true, live: false };
+    }
+    return { text: `Library load failed: ${errorMessage || "Could not load library."}`, error: true, live: false };
   }
   return { text: "No media in library.", error: false, live: false };
 }

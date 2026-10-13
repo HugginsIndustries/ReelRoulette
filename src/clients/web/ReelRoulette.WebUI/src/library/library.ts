@@ -1,5 +1,8 @@
 import { computed, signal, type ReadonlySignal } from "@preact/signals";
 import { requestPlayItem } from "../api/coreApi";
+import { errorText, UnauthorizedError } from "../api/serverRequest";
+import type { Dialogs } from "../dialogs/dialogs";
+import type { FilterSource } from "../filter/filterDialogModel";
 import { filterSummaryParts } from "../filter/filterSummaryModel";
 import { playbackTraceLine } from "../logging/relayLogLines";
 import type { PanelHost } from "../panel/panelHost";
@@ -9,6 +12,8 @@ import type { AppStore } from "../state/appStore";
 import type { DeviceStore } from "../state/deviceStore";
 import type { ServerConnection } from "../state/serverConnection";
 import type { RuntimeConfig } from "../types/runtimeConfig";
+import type { RefreshKeptSource } from "../types/serverContracts";
+import { KEPT_SOURCES_LOG_TEXT, keptSourcesMessage, type KeptSourceFolder } from "./keptSources";
 import {
   LIBRARY_SORT_MODES,
   createDefaultBrowseControls,
@@ -22,7 +27,7 @@ import {
   type LibraryGridController,
   type LibraryGridCoverage
 } from "./libraryGridController";
-import { LIBRARY_OVERLAY_FETCH_ERROR, libraryOverlayMessage, type LibraryOverlayMessage } from "./libraryOverlayModel";
+import { libraryOverlayMessage, type LibraryOverlayMessage } from "./libraryOverlayModel";
 import { mapPlayItemErrorToStatus } from "./libraryPlayModel";
 import { parseLibraryQueryPage } from "./libraryProjectionModel";
 import {
@@ -63,6 +68,9 @@ function isRememberedSort(value: unknown): value is RememberedSort {
   return (LIBRARY_SORT_MODES as readonly unknown[]).includes(record.mode) && typeof record.descending === "boolean";
 }
 
+/** The source list as loaded, null when its load failed, or "unauthorized" when the server answered 401. */
+type SourcesLoad = FilterSource[] | null | "unauthorized";
+
 export type CreateLibraryGrid = (
   host: HTMLElement,
   onCoverage: (coverage: LibraryGridCoverage) => void
@@ -71,7 +79,9 @@ export type CreateLibraryGrid = (
 /**
  * The Library tab's browse window, controls, Filters line, and tile play. The first page loads once the server is
  * ready, and the window keeps its tiles and scroll position while the tab is hidden. The panel shows and hides the
- * tab. The tab remembers on this device whether its controls are collapsed, and its sort and direction.
+ * tab. The tab remembers on this device whether its controls are collapsed, and its sort and direction. A refresh
+ * that keeps a source's items because its folder listed no media files shows a notice naming the folder, once per
+ * folder for the page's life.
  */
 export interface Library {
   /** The loaded window, which the tag editor reads and updates. */
@@ -117,7 +127,10 @@ export interface Library {
   toggleControls(): void;
   /** Shows the Filter tab, as the Filters line does. */
   openFilterTab(): Promise<void>;
-  /** Plays a tile's item through the server, closes the panel as the overlay, and hands the item to the player. */
+  /**
+   * Plays a tile's item through the server, closes the panel as the overlay, and hands the item to the player. A play
+   * that fails shows in the notice; one the server answers with 401 shows the pairing prompt.
+   */
   play(itemId: string): Promise<void>;
 }
 
@@ -127,27 +140,22 @@ export interface LibraryOptions {
   api: AppApi;
   connection: ServerConnection;
   player: Pick<Player, "playCurrent">;
+  /** The in-app dialogs, for a play that fails and a refresh that kept a source's items. */
+  dialogs: Pick<Dialogs, "notice">;
   /** Choosing a tile closes the panel as the overlay; beside the player it stays open. */
   panel: Pick<PanelHost, "closeIfOverlay" | "showTab">;
   /** Remembers whether the controls are collapsed, and the sort and direction. */
   device: DeviceStore;
-  /** Defaults to the global `fetch`, looked up on each request. */
-  fetch?: typeof fetch;
   /** Defaults to the grid controller. */
   createGrid?: CreateLibraryGrid;
   /** Defaults to `requestAnimationFrame`. */
   requestFrame?: (callback: () => void) => void;
 }
 
-function errorText(error: unknown): string {
-  return (error as { message?: string } | null)?.message || String(error);
-}
-
 export function createLibrary(options: LibraryOptions): Library {
-  const { store, api, connection, player, panel, device } = options;
+  const { store, api, connection, player, panel, device, dialogs } = options;
   const apiBaseUrl = String(options.config.apiBaseUrl || "").replace(/\/+$/, "");
   const sseUrl = options.config.sseUrl;
-  const send: typeof fetch = options.fetch ?? ((input, init) => fetch(input, init));
   const createGrid: CreateLibraryGrid =
     options.createGrid ?? ((host, onCoverage) => createLibraryGridController(host, apiBaseUrl, { onCoverage }));
   const requestFrame = options.requestFrame ?? ((callback: () => void) => void requestAnimationFrame(() => callback()));
@@ -173,30 +181,40 @@ export function createLibrary(options: LibraryOptions): Library {
   let playInFlight = false;
   /** The server passed the compatibility check, so the library can load. */
   let serverReady = false;
-  let sourcesInFlight = false;
+  /** The source list's load under way, which a second caller waits for rather than sending another. */
+  let sourcesLoad: Promise<SourcesLoad> | null = null;
+  /** The folders a kept-source notice has named, which no later notice names again. */
+  const namedKeptFolders = new Set<string>();
+  /** Kept source ids the source list didn't have even when loaded again, so later events don't load it again. */
+  const unlistedKeptIds = new Set<string>();
+  /** Kept-source events, handled one at a time, so a folder is named once though its events arrive together. */
+  let keptSourcesQueue: Promise<void> = Promise.resolve();
 
   const session = createLibraryQuerySession((request, signal) => postQuery(request, signal));
   session.setListener((event) => {
     renderWindow(event.scroll);
-    if (event.statusMessage) {
+    if (!event.statusMessage) {
+      return;
+    }
+    // A 401 shows only the pairing prompt, which the request has asked for, and sent its line.
+    if (event.failureStatus !== 401) {
       store.setStatus(event.statusMessage);
     }
   });
 
   async function postQuery(request: LibraryQueryRequest, abort: AbortSignal) {
-    const raw = await api.getJson("/api/library/query", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const raw = await api.postJson(
+      "/api/library/query",
+      {
         filterState: request.filterState,
         search: request.search,
         sortMode: request.sortMode,
         sortDescending: request.sortDescending,
         offset: request.offset,
         limit: request.limit
-      }),
-      signal: abort
-    });
+      },
+      { signal: abort }
+    );
     return parseLibraryQueryPage(raw);
   }
 
@@ -249,7 +267,7 @@ export function createLibrary(options: LibraryOptions): Library {
     if (!ready) {
       summary.value = null;
       const phase = snap.phase === "error" ? "error" : snap.phase === "empty" ? "empty" : "loading";
-      body.value = { kind: "message", message: libraryOverlayMessage(phase, snap.errorMessage || LIBRARY_OVERLAY_FETCH_ERROR) };
+      body.value = { kind: "message", message: libraryOverlayMessage(phase, snap.errorMessage, snap.errorStatus) };
       return;
     }
 
@@ -284,22 +302,79 @@ export function createLibrary(options: LibraryOptions): Library {
     device.write(SORT_KEY, { mode: current.sortMode, descending: current.sortDescending } satisfies RememberedSort);
   }
 
+  /**
+   * Loads the source list into `store.sources`, which the Filters line counts and the kept-source notice names, and
+   * returns it, or null when it fails, or "unauthorized" when the server answered 401, whose pairing prompt is the only
+   * signal, so the caller logs no failure of its own. A load under way is shared rather than sent again.
+   */
+  function loadSources(): Promise<SourcesLoad> {
+    sourcesLoad ??= (async () => {
+      try {
+        const sources = await api.getJson("/api/sources");
+        const list: FilterSource[] = Array.isArray(sources) ? sources : [];
+        store.sources.value = list;
+        return list;
+      } catch (error) {
+        return error instanceof UnauthorizedError ? "unauthorized" : null;
+      } finally {
+        sourcesLoad = null;
+      }
+    })();
+    return sourcesLoad;
+  }
+
   /** Loads the sources for the Filters line, which counts them, when the applied filter chooses some. */
   async function loadSourcesForSummary(): Promise<void> {
-    if (store.sources.peek() !== null || sourcesInFlight || store.appliedFilter.peek().includedSourceIds.length === 0) {
+    if (store.sources.peek() !== null || sourcesLoad || store.appliedFilter.peek().includedSourceIds.length === 0) {
       return;
     }
-    sourcesInFlight = true;
-    try {
-      const sources = await api.getJson("/api/sources");
-      if (store.sources.peek() === null) {
-        store.sources.value = Array.isArray(sources) ? sources : [];
-      }
-    } catch {
+    if ((await loadSources()) === null) {
       // The Filters line counts the chosen sources without their total until a later load succeeds.
       void api.relayLog("warn", "library=filter-summary-sources-failed");
-    } finally {
-      sourcesInFlight = false;
+    }
+  }
+
+  /**
+   * Names the folders of the sources a refresh kept, from the source list, loading it when it hasn't loaded or lacks
+   * one of them. A folder named before, or a source the list doesn't have even then, is left out.
+   */
+  async function noticeKeptSources(keptSources: readonly RefreshKeptSource[]): Promise<void> {
+    const pending = keptSources.filter((kept) => !unlistedKeptIds.has(kept.sourceId));
+    if (pending.length === 0) {
+      return;
+    }
+    const listed = (list: readonly FilterSource[] | null) =>
+      pending.every((kept) => list?.some((source) => source.id === kept.sourceId));
+    let sources = store.sources.peek();
+    let loadedNow = false;
+    if (!listed(sources)) {
+      const loaded = await loadSources();
+      if (Array.isArray(loaded)) {
+        sources = loaded;
+        loadedNow = true;
+      } else if (loaded === null) {
+        void api.relayLog("warn", "library=kept-sources-list-failed");
+      }
+    }
+    const folders: KeptSourceFolder[] = [];
+    for (const kept of pending) {
+      const source = sources?.find((candidate) => candidate.id === kept.sourceId);
+      if (!source) {
+        // Source Access Policy can leave a source out of this session's list.
+        if (loadedNow) {
+          unlistedKeptIds.add(kept.sourceId);
+        }
+        continue;
+      }
+      const folder = source.rootPath || source.id;
+      if (namedKeptFolders.has(folder)) {
+        continue;
+      }
+      namedKeptFolders.add(folder);
+      folders.push({ source, itemCount: kept.itemCount });
+    }
+    if (folders.length > 0) {
+      void dialogs.notice(keptSourcesMessage(folders), KEPT_SOURCES_LOG_TEXT);
     }
   }
 
@@ -311,12 +386,12 @@ export function createLibrary(options: LibraryOptions): Library {
   async function play(itemId: string): Promise<void> {
     const trimmedItemId = String(itemId || "").trim();
     if (!trimmedItemId) {
-      store.setStatus("Playback unavailable: no library item was selected.");
+      void dialogs.notice("Playback unavailable: no library item was selected.");
       return;
     }
 
     if (store.compatibilityBlocked.peek()) {
-      store.setStatus("Cannot play: server compatibility check failed.");
+      void dialogs.notice("Cannot play: server compatibility check failed.");
       return;
     }
 
@@ -327,45 +402,50 @@ export function createLibrary(options: LibraryOptions): Library {
     playInFlight = true;
     store.setStatus("Loading...");
     trace("info", "library-play-start");
+    let played = false;
 
     try {
       const result = await requestPlayItem(
         { apiBaseUrl, sseUrl },
         trimmedItemId,
         { clientId: store.identity.clientId, sessionId: store.identity.sessionId },
-        send
+        api.request
       );
-
-      if (result.statusCode === 401) {
-        store.pairingRequired.value = true;
-        store.setStatus("Unauthorized. Pair first.");
-        return;
-      }
 
       if (!result.ok) {
         trace("warn", "library-play-failed", {
           statusCode: result.statusCode,
           code: result.code || "none"
         });
-        store.setStatus(mapPlayItemErrorToStatus(result), "Playback failed");
+        // The server's error text can name a file, so the log keeps one line for every refusal.
+        void dialogs.notice(mapPlayItemErrorToStatus(result), "Playback failed");
         return;
       }
 
       const data = result.response;
       if (!data?.mediaUrl) {
-        store.setStatus("Playback failed.");
+        void dialogs.notice("Playback failed.");
         return;
       }
 
       store.pushHistory(data);
       void panel.closeIfOverlay();
       trace("info", "library-play-success");
+      played = true;
       player.playCurrent({ recordPlayback: false });
     } catch (error) {
+      if (error instanceof UnauthorizedError) {
+        // The request asked for pairing, whose prompt is the only signal, and sent its line.
+        return;
+      }
       trace("warn", "library-play-error", { message: errorText(error) });
-      store.setStatus(`Playback failed: ${errorText(error)}`);
+      void dialogs.notice(`Playback failed: ${errorText(error)}`);
     } finally {
       playInFlight = false;
+      // A play that ends without playing shows its failure in the notice, so the status line drops its "Loading...".
+      if (!played) {
+        store.clearStatus("Loading...");
+      }
     }
   }
 
@@ -394,6 +474,9 @@ export function createLibrary(options: LibraryOptions): Library {
   });
   connection.on("resyncRequired", () => {
     void session.resync();
+  });
+  connection.on("refreshKeptSources", (keptSources) => {
+    keptSourcesQueue = keptSourcesQueue.then(() => noticeKeptSources(keptSources));
   });
   // The tab says why while the server fails the compatibility check, and shows the library again once it passes.
   store.compatibilityBlocked.subscribe(() => {

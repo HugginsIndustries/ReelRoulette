@@ -1,4 +1,5 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
+import { errorText, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { FilterDialog } from "../filter/filterDialog";
 import { cloneFilterState } from "../filter/filterStateModel";
@@ -11,6 +12,7 @@ import {
   runTagEditorSave,
   type TagSaveHandle,
   type TagSaveStep,
+  type TagSaveStepResult,
   type TaggedItem
 } from "../library/tagSave";
 import type { AppApi } from "../state/appApi";
@@ -258,14 +260,10 @@ export interface TagEditorOptions {
   device: DeviceStore;
   /** Browser `localStorage`, for Scan full library. */
   localStorage: StorageLike;
-  /** The in-app dialogs, for the confirmations. */
-  dialogs: Pick<Dialogs, "confirm">;
+  /** The in-app dialogs, for the confirmations and the notices of what failed. */
+  dialogs: Pick<Dialogs, "confirm" | "notice">;
   /** Ids for new categories. */
   newId?: () => string;
-}
-
-function errorText(error: unknown): string {
-  return (error as { message?: string } | null)?.message || String(error);
 }
 
 function isIdList(value: unknown): value is string[] {
@@ -302,8 +300,6 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
   };
 
   const saves = createTagSaveSession();
-  /** The message of the last refused save step on this page (recorded in WebUI Notifications). */
-  let lastSaveError = "";
   /** Saves and Auto Tag applies sent and not yet landed. The editor follows the playing item and loads the tags only once they land. */
   let savesInFlight = 0;
   /** Counts tag model loads, and saves, so only the latest load's reply is taken. */
@@ -444,23 +440,26 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       return;
     }
     const load = ++loads;
-    const response = await api.post("/api/tag-editor/model", { itemIds: state.itemIds.slice() });
-    if (!response.ok) {
-      throw new Error(`tag-model:${response.status}`);
-    }
-    const model = ((await response.json()) as TagEditorModel | null) || { categories: [], tags: [], items: [] };
+    const loaded = (await api.postJson("/api/tag-editor/model", { itemIds: state.itemIds.slice() })) as TagEditorModel | null;
+    const model = loaded || { categories: [], tags: [], items: [] };
     if (load === loads) {
       update({ model, order: state.order.length > 0 ? state.order : initialCategoryOrder(model) });
     }
   }
 
-  /** Loads the tags again, unless a save is on its way, which loads them once it lands, so a reply can't undo it. */
+  /**
+   * Loads the tags again, unless a save is on its way, which loads them once it lands, so a reply can't undo it. A
+   * failure shows in the in-app notice with `failure` before the reason, except a 401, whose pairing prompt is the
+   * thing to act on.
+   */
   function reload(failure: string): void {
     if (savesInFlight > 0) {
       return;
     }
     loadModel().catch((error) => {
-      store.setStatus(`${failure}: ${errorText(error)}`);
+      if (!(error instanceof UnauthorizedError)) {
+        void dialogs.notice(`${failure}: ${errorText(error)}`);
+      }
     });
   }
 
@@ -568,18 +567,17 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     }
   }
 
-  async function postStep(handle: TagSaveHandle, step: TagSaveStep): Promise<boolean> {
+  async function postStep(handle: TagSaveHandle, step: TagSaveStep): Promise<TagSaveStepResult> {
     const request = tagSaveRequest(step);
     const response = await api.post(request.path, request.body);
     if (!response.ok) {
-      lastSaveError = `${request.label} failed (${response.status})`;
-      return false;
+      return { ok: false, status: response.status };
     }
     if (step.kind === "apply-auto-tag") {
       saves.noteAutoTagResult(handle, autoTagAppliedFromResponse(await response.json().catch(() => null)));
     }
     retargetTag(step);
-    return true;
+    return { ok: true };
   }
 
   function projectLoadedTagItems(): void {
@@ -595,31 +593,36 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     return rolledBack;
   }
 
-  /** Sends the save's steps, and says whether the server took them all. */
+  /**
+   * Sends the save's steps, and says whether the server took them all. A failed save shows its own error in the
+   * in-app notice. A landed save says so, even when the library's reload after it fails, which the library reports.
+   */
   async function saveInBackground(handle: TagSaveHandle, steps: TagSaveStep[]): Promise<boolean> {
-    let result;
-    try {
-      result = await runTagEditorSave(steps, { post: (step) => postStep(handle, step) });
-    } catch (error) {
-      const rolledBack = failSave(handle, []);
-      store.setStatus(rolledBack ? (error as Error | null)?.message || `Tag apply failed: ${error}` : SAVE_SUCCEEDED);
-      return false;
-    }
+    const result = await runTagEditorSave(steps, {
+      post: (step) => postStep(handle, step),
+      label: (step) => tagSaveRequest(step).label
+    });
     if (!result.ok) {
       // A step the server confirmed through its event before refusing a later one is not rolled back.
-      const rolledBack = failSave(handle, result.accepted);
-      store.setStatus(rolledBack ? lastSaveError || "Tag apply failed" : SAVE_SUCCEEDED);
+      if (failSave(handle, result.accepted)) {
+        // A 401 has no error to show: the pairing prompt shows instead.
+        if (result.error) {
+          void dialogs.notice(result.error);
+        }
+      } else {
+        store.setStatus(SAVE_SUCCEEDED);
+      }
       return false;
     }
-    try {
-      projectLoadedTagItems();
-      if (saves.succeed(handle, reloadOnLand()).reload) {
+    projectLoadedTagItems();
+    if (saves.succeed(handle, reloadOnLand()).reload) {
+      try {
         await library.session.reloadLoaded();
+      } catch {
+        // The library reports its own failed load; the save has landed either way.
       }
-      store.setStatus(SAVE_SUCCEEDED);
-    } catch (error) {
-      store.setStatus((error as Error | null)?.message || SAVE_SUCCEEDED);
     }
+    store.setStatus(SAVE_SUCCEEDED);
     return true;
   }
 
@@ -775,7 +778,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
         // The changes cancel out, so they are dropped, and their dots go.
         update(cleared());
         followAndLoad();
-        store.setStatus("No tag changes to save.");
+        void dialogs.notice("No tag changes to save.");
         return;
       }
       const loaded = loadedTagItems();
@@ -1057,20 +1060,20 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
         return;
       }
       update({ autoTag: { ...state.autoTag, scanning: true, status: AUTO_TAG_SCANNING } });
-      let rows: AutoTagRow[] = [];
+      let rows: AutoTagRow[];
       try {
-        const response = await api.post("/api/autotag/scan", createAutoTagScanRequest(state.autoTag.scanFull));
-        if (!response.ok) {
-          throw new Error(String(response.status));
-        }
-        rows = autoTagRowsFromScan(await response.json());
-      } catch {
-        // A failed scan reads as one that found nothing (recorded in WebUI Notifications).
-        rows = [];
+        rows = autoTagRowsFromScan(await api.postJson("/api/autotag/scan", createAutoTagScanRequest(state.autoTag.scanFull)));
+      } catch (error) {
+        // A failed scan shows its error in place, with the results as before any scan and nothing to apply. A 401 shows
+        // nothing there, since the pairing prompt, which the request has asked for, is the only thing to show.
+        scans += 1;
+        const status = error instanceof UnauthorizedError ? "" : `Scan failed: ${errorText(error)}`;
+        update({ autoTag: { ...state.autoTag, rows: [], hasRun: false, scanning: false, status } });
+        return;
       }
       scans += 1;
-      updateRows(rows, { hasRun: true });
-      update({ autoTag: { ...state.autoTag, scanning: false } });
+      // The scan's summary replaces "Scanning…", even when every match already has its tag and no row shows.
+      update({ autoTag: { ...state.autoTag, rows, hasRun: true, scanning: false, status: autoTagSummary(rows, state.autoTag.viewAll) } });
     },
 
     toggleRowExpanded(rowId) {

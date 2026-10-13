@@ -1,4 +1,4 @@
-import type { RefreshStatusSnapshot } from "../types/serverContracts";
+import type { RefreshKeptSource, RefreshStatusSnapshot } from "../types/serverContracts";
 
 /** Loose snapshot from SSE JSON (may omit optional fields). */
 export type RefreshSnapshotInput = Partial<RefreshStatusSnapshot> & {
@@ -8,6 +8,10 @@ export type RefreshSnapshotInput = Partial<RefreshStatusSnapshot> & {
     percent?: number;
     message?: string;
     isComplete?: boolean;
+  }>;
+  keptSources?: Array<{
+    sourceId?: string;
+    itemCount?: number;
   }>;
 };
 
@@ -199,6 +203,9 @@ function normalizeSnapshot(input: RefreshSnapshotInput): RefreshStatusSnapshot {
           message: String(s.message ?? ""),
           isComplete: !!s.isComplete
         }))
+      : [],
+    keptSources: Array.isArray(input.keptSources)
+      ? input.keptSources.map((kept) => ({ sourceId: String(kept.sourceId ?? ""), itemCount: Number(kept.itemCount ?? 0) }))
       : []
   };
 }
@@ -224,6 +231,16 @@ export function coerceRefreshSnapshot(raw: unknown): RefreshSnapshotInput {
         };
       })
     : [];
+  const keptIn = (r.keptSources ?? r.KeptSources) as unknown;
+  const keptSources: RefreshSnapshotInput["keptSources"] = Array.isArray(keptIn)
+    ? keptIn.map((k) => {
+        const x = k && typeof k === "object" ? (k as Record<string, unknown>) : {};
+        return {
+          sourceId: String(x.sourceId ?? x.SourceId ?? ""),
+          itemCount: Number(x.itemCount ?? x.ItemCount ?? 0)
+        };
+      })
+    : [];
   return {
     isRunning: !!(r.isRunning ?? r.IsRunning),
     runId: (r.runId ?? r.RunId) as string | null | undefined,
@@ -232,8 +249,23 @@ export function coerceRefreshSnapshot(raw: unknown): RefreshSnapshotInput {
     completedUtc: (r.completedUtc ?? r.CompletedUtc) as string | null | undefined,
     currentStage: (r.currentStage ?? r.CurrentStage) as string | null | undefined,
     lastError: (r.lastError ?? r.LastError) as string | null | undefined,
-    stages
+    stages,
+    keptSources
   };
+}
+
+/**
+ * The sources a run kept because their folder listed no media files while the library held items from them, once the
+ * run's source stage has finished or the run has stopped, so they come together. Empty before then. The server adds
+ * each as it reaches it and repeats them on every later status of the run.
+ */
+export function settledKeptSources(snapshotInput: RefreshSnapshotInput): RefreshKeptSource[] {
+  const snapshot = normalizeSnapshot(snapshotInput);
+  const sourceStage = snapshot.stages.find((s) => s.stage.toLowerCase() === "sourcerefresh");
+  if (snapshot.isRunning && !sourceStage?.isComplete) {
+    return [];
+  }
+  return (snapshot.keptSources ?? []).filter((kept) => kept.sourceId.trim() !== "");
 }
 
 export function buildRefreshStatusMessage(snapshotInput: RefreshSnapshotInput): string {

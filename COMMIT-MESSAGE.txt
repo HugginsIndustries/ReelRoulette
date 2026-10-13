@@ -19,9 +19,13 @@ Instructions:
 
 Commit Message:
 
-M12f8: Tell clients the library state, who made a favorite change, and which sources a refresh kept
+M12f8: Show the WebUI's errors in the in-app notice, and say what failed
 
-- `/api/version` reports `libraryState` and `libraryMessage`, as `/control/status` does, so the WebUI can learn why the server runs without a library from a route it still answers.
-- Favorite and blacklist requests take the client's id, which the WebUI now sends, and `itemStateChanged` carries it back, so a device can tell its own change from another device's. The desktop sends none, and its events name none.
-- The refresh status and `refreshStatusChanged` list the sources a run kept because their folder listed no media files, by source id with the number of items kept and never the folder, so clients can say so; each run starts the list empty.
-- WebUI Notifications is planned as four slices, server contracts, messages to the notice, the player indicator, and popups and the bell, each taking its own messages off the status line until the last removes it. The Messages to the notice slice also fixes a favorite or blacklist failing silently on a network error and a 401 on the tag model missing the pairing prompt, and the messages that show nothing still relay to `last.log`.
+- Errors the WebUI showed on its status line now open the in-app notice with the same wording and `last.log` line: failed or empty random picks and library plays, missing videos and photos, refused favorites and blacklists, and what the Filter and Tags tabs fail to load or save. Acknowledgments stay on the status line until the popups replace it, and it no longer sticks on "Loading..." after a failure.
+- A notice whose message is already open doesn't open again, so a missing photo under Autoplay doesn't stack them.
+- Requests go through one helper: a server that can't be reached reads "Couldn't reach the server." in every browser, a body that isn't JSON "The server sent an unexpected response ({type}).", and a JSON read that fails with a status, such as the library's or the tag model's, "HTTP {status}"; a favorite or blacklist that can't be sent now says so.
+- A 401 on any request, the version check, saves, favorites, and Auto Tag's Apply included, shows only the pairing prompt, handled once in the shared request helper, with no failure in a notice, in place, on the status line, or in a log line of its own, and sends one `last.log` line naming the request's route without ids, which the server refuses from a device that isn't paired, so Server Instrumentation now plans logging the requests it rejects; pairing that can't reach the server says "Pairing failed: Couldn't reach the server.".
+- A failed Auto Tag scan shows its error in place instead of reporting no matches, a scan's summary always replaces "Scanning…", a failed tag save names its own failed step, and a landed save says so even when the library's reload fails.
+- The Library tab's grid shows "Library load failed: {error}", or, for a 408 or 504, that the server didn't answer in time.
+- When a refresh keeps a source's items because its folder listed no media files, a notice names the folders once the source stage finishes, once per folder per page load.
+- The mockup shows the library's failed load and timeout messages, the kept-source notice, a failed Auto Tag scan, and the network wording, with the approved wording, and its requests show only the pairing prompt while the server asks for pairing.

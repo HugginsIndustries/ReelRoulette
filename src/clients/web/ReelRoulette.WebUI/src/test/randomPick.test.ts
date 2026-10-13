@@ -127,7 +127,7 @@ describe("randomPick", () => {
       async () => {
         throw new TypeError("Failed to fetch");
       },
-      async () => new Response("not json", { status: 200 }),
+      async () => new Response("<html>Bad gateway</html>", { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }),
       async () => jsonResponse(randomItem("a"))
     ];
     const picker = createRandomPicker(() => answers.shift()!());
@@ -136,7 +136,7 @@ describe("randomPick", () => {
     await expect(picker.pick({})).resolves.toEqual({ kind: "failed", statusCode: 503 });
     await expect(picker.pick({})).resolves.toEqual({ kind: "none" });
     await expect(picker.pick({})).resolves.toEqual({ kind: "error", message: "Failed to fetch" });
-    await expect(picker.pick({})).resolves.toMatchObject({ kind: "error" });
+    await expect(picker.pick({})).resolves.toEqual({ kind: "error", message: "The server sent an unexpected response (text/html)." });
     await expect(picker.pick({})).resolves.toEqual({ kind: "picked", item: randomItem("a") });
   });
 });

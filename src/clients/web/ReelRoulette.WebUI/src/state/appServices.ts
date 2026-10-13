@@ -1,5 +1,6 @@
 import { computed, signal, type ReadonlySignal } from "@preact/signals";
 import { getClientId, getClientType, getDeviceName, getSessionId } from "../api/coreApi";
+import { unauthorizedLogText } from "../api/serverRequest";
 import { createDialogs, type Dialogs } from "../dialogs/dialogs";
 import { createFilterDialog, type FilterDialog } from "../filter/filterDialog";
 import { createLibrary, type Library } from "../library/library";
@@ -44,8 +45,10 @@ export interface AppServices {
 export function createAppServices(config: RuntimeConfig): AppServices {
   const device = createDeviceStore(localStorage);
   const api = createAppApi(config.apiBaseUrl, {
-    onUnauthorized() {
+    onUnauthorized(route) {
       store.pairingRequired.value = true;
+      // The one `last.log` line for a 401, whichever request it answered.
+      store.relayStatus(unauthorizedLogText(route));
     }
   });
   const store = createAppStore({
@@ -72,7 +75,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
   const panel = createPanelHost({ device });
   const player = createPlayer({ apiBaseUrl: config.apiBaseUrl, store, api, connection, dialogs });
   // After the player, so the player handles an item-state event before the library does.
-  const library = createLibrary({ config, store, api, connection, player, panel, device });
+  const library = createLibrary({ config, store, api, connection, player, dialogs, panel, device });
   const filterDialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs });
   const tagEditor = createTagEditor({ store, api, connection, library, filter: filterDialog, device, localStorage, dialogs });
   // Responsive until the Settings tab can change it.

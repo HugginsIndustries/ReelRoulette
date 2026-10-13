@@ -48,4 +48,23 @@ describe("dialogs", () => {
     dialogs.answer(1, true);
     await expect(notice).resolves.toBeUndefined();
   });
+
+  it("doesn't open a notice whose message is already open, still relays it, and settles both when it closes", async () => {
+    const { dialogs, relayed } = setup();
+    const settled: string[] = [];
+    void dialogs.notice("Photo file not found.").then(() => settled.push("first"));
+    void dialogs.notice("No eligible media for current filters.");
+    void dialogs.notice("Photo file not found.").then(() => settled.push("second"));
+    expect(dialogs.open.value.map((dialog) => dialog.message)).toEqual(["Photo file not found.", "No eligible media for current filters."]);
+    expect(relayed).toEqual(["Photo file not found.", "No eligible media for current filters.", "Photo file not found."]);
+
+    dialogs.answer(1, true);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toEqual(["first", "second"]);
+
+    // Once it has closed, the same message opens again.
+    void dialogs.notice("Photo file not found.");
+    expect(dialogs.open.value.map((dialog) => dialog.message)).toEqual(["No eligible media for current filters.", "Photo file not found."]);
+  });
 });

@@ -9,11 +9,13 @@ import {
   json,
   mountPage,
   normalizedMarkup,
+  openNotices,
   pickPreset,
   presetSelect,
   resetPage,
   settle,
-  status
+  status,
+  unauthorizedLogLine
 } from "./pageHarness";
 
 const FAVORITES_PRESET = {
@@ -402,7 +404,7 @@ describe("pairing", () => {
     const pairButton = await screen.findByRole("button", { name: "Pair" });
     const prompt = pairButton.closest(".pair-section") as HTMLElement;
     await waitFor(() => expect(prompt.style.display).toBe("flex"));
-    await screen.findByText("Ready (API offline)");
+    await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("GET /api/version")));
 
     server.on("GET", "/api/version", () => json(COMPATIBLE_VERSION));
     server.on("GET", "/api/presets", () => json([FAVORITES_PRESET]));
@@ -422,7 +424,9 @@ describe("pairing", () => {
     server.on("GET", "/api/version", () => status(401));
     server.on("POST", "/api/pair", () => status(403));
     mountPage({ server });
-    await screen.findByText("Ready (API offline)");
+    await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("GET /api/version")));
+    // The server answered, so the status line doesn't say it is offline: the pairing prompt is the only signal.
+    expect(document.getElementById("status")!.textContent).toBe("Ready");
     const pairButton = screen.getByRole("button", { name: "Pair" }) as HTMLButtonElement;
     const token = screen.getByLabelText("Pairing token");
 
@@ -437,9 +441,27 @@ describe("pairing", () => {
     fireEvent.click(pairButton);
     const notice = await screen.findByText("Pairing failed.");
     expect(notice.closest("dialog.app-dialog")).not.toBeNull();
-    expect(document.getElementById("status")!.textContent).toBe("Ready (API offline)");
+    expect(document.getElementById("status")!.textContent).toBe("Ready");
     await waitFor(() => expect(server.logLines()).toContain("status=Pairing failed. hasCurrent=false attempt=0"));
     expect((pairButton.closest(".pair-section") as HTMLElement).style.display).toBe("flex");
+  });
+
+  it("says a pairing that couldn't reach the server failed, in a notice, with its log line", async () => {
+    const server = new FakeServer();
+    server.on("GET", "/api/version", () => status(401));
+    server.on("POST", "/api/pair", () => {
+      throw new TypeError("Load failed");
+    });
+    mountPage({ server });
+    await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("GET /api/version")));
+
+    fireEvent.input(screen.getByLabelText("Pairing token"), { target: { value: "token" } });
+    fireEvent.click(screen.getByRole("button", { name: "Pair" }));
+    await waitFor(() => expect(openNotices()).toEqual(["Pairing failed: Couldn't reach the server."]));
+    await waitFor(() =>
+      expect(server.logLines()).toContain("status=Pairing failed: Couldn't reach the server. hasCurrent=false attempt=0")
+    );
+    expect((screen.getByRole("button", { name: "Pair" }).closest(".pair-section") as HTMLElement).style.display).toBe("flex");
   });
 
   it("pairs on startup with the token from the runtime config", async () => {
@@ -452,7 +474,7 @@ describe("pairing", () => {
     expect(server.requests("POST", "/api/pair")[0]!.body).toEqual({ token: "config-token" });
   });
 
-  it("shows the pairing prompt when a random pick is unauthorized", async () => {
+  it("shows only the pairing prompt when a random pick is unauthorized, and still relays its line", async () => {
     const server = new FakeServer();
     server.on("POST", "/api/random", () => status(401));
     mountPage({ server });
@@ -461,8 +483,13 @@ describe("pairing", () => {
     expect(prompt.style.display).toBe("none");
 
     await startRandomPick();
-    await screen.findByText("Unauthorized. Pair first.");
     await waitFor(() => expect(prompt.style.display).toBe("flex"));
+    await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("POST /api/random")));
+    await settle();
+    expect(server.logLines()).not.toContain("status=Unauthorized. Pair first. hasCurrent=false attempt=0");
+    expect(screen.queryByText("Unauthorized. Pair first.")).toBeNull();
+    expect(document.getElementById("status")!.textContent).toBe("");
+    expect(openNotices()).toEqual([]);
   });
 });
 

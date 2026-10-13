@@ -1,4 +1,5 @@
 import type { RuntimeConfig } from "../types/runtimeConfig";
+import { readJson, sendRequest } from "./serverRequest";
 import type { components } from "../types/openapi.generated";
 
 type RandomResponse = components["schemas"]["RandomResponse"];
@@ -107,6 +108,10 @@ function tryReadJsonErrorBody(body: string): { error?: string; code?: string } {
   }
 }
 
+/**
+ * Plays an item through `POST /api/play/{itemId}`. A request that couldn't reach the server throws a
+ * `ServerUnreachableError`, and a success whose body isn't JSON an `UnexpectedResponseError`.
+ */
 export async function requestPlayItem(
   config: RuntimeConfig,
   itemId: string,
@@ -124,7 +129,7 @@ export async function requestPlayItem(
   }
 
   const encodedItemId = encodeURIComponent(trimmedItemId);
-  const response = await fetchImpl(buildApiUrl(config, `/api/play/${encodedItemId}`), {
+  const response = await sendRequest(fetchImpl, buildApiUrl(config, `/api/play/${encodedItemId}`), {
     method: "POST",
     credentials: "include",
     headers: {
@@ -137,7 +142,7 @@ export async function requestPlayItem(
   });
 
   if (response.ok) {
-    const playResponse = (await response.json()) as RandomResponse;
+    const playResponse = await readJson<RandomResponse>(response);
     return {
       ok: true,
       statusCode: response.status,

@@ -1,17 +1,21 @@
 // @vitest-environment happy-dom
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { statusLogLine } from "../../logging/relayLogLines";
 import {
   API_BASE_URL,
   FakeServer,
   IPHONE_USER_AGENT,
+  closeNotices,
   json,
   mountPage,
+  openNotices,
   resetPage,
   setViewport,
   settle,
   status,
   currentStyle,
+  unauthorizedLogLine,
   stubFullscreenApi,
   stubLayoutSize,
   useStylesheet,
@@ -303,43 +307,84 @@ describe("random pick", () => {
     expect(statusLine()).toBe("Playing");
     fireEvent.error(photo());
     await flush();
-    expect(statusLine()).toBe("Photo file not found.");
+    expect(openNotices()).toEqual(["Photo file not found."]);
+    expect(statusLine()).toBe("Playing");
     await waitFor(() =>
       expect(server.logLines()).toEqual(
         expect.arrayContaining([
           "playback=start attempt=1 hasCurrent=true mediaType=photo",
           "playback=photo-onload attempt=1 hasCurrent=true",
-          "playback=photo-onerror attempt=1 hasCurrent=true"
+          "playback=photo-onerror attempt=1 hasCurrent=true",
+          statusLogLine("Photo file not found.", PHOTO_ITEM, 1)
         ])
       )
     );
+    await closeNotices();
+    expect(openNotices()).toEqual([]);
   });
 
-  it("reports a video that cannot be found", async () => {
+  it("reports a video that cannot be found in the notice", async () => {
     const server = serverPicking(VIDEO_ITEM);
     await mountAndPlay(server);
 
     fireEvent.error(video());
     await flush();
-    expect(statusLine()).toBe("Video file not found.");
-    await waitFor(() => expect(server.logLines()).toContain("playback=video-onerror attempt=1 hasCurrent=true"));
+    expect(openNotices()).toEqual(["Video file not found."]);
+    await waitFor(() =>
+      expect(server.logLines()).toEqual(
+        expect.arrayContaining(["playback=video-onerror attempt=1 hasCurrent=true", statusLogLine("Video file not found.", VIDEO_ITEM, 1)])
+      )
+    );
   });
 
-  it("reports no eligible media, a refused pick, and a pick that cannot reach the server", async () => {
+  it("opens a missing photo's notice once under Autoplay, though its timer moves on and fails again, and relays each failure", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const server = serverPicking(PHOTO_ITEM);
+    await mount(server);
+    await click(button("Autoplay"));
+    await click(emptyState());
+
+    fireEvent.error(photo());
+    await flush();
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(randomPicks(server)).toBe(2);
+    fireEvent.error(photo());
+    await flush();
+
+    expect(openNotices()).toEqual(["Photo file not found."]);
+    await vi.waitFor(() =>
+      expect(server.logLines()).toEqual(
+        expect.arrayContaining([statusLogLine("Photo file not found.", PHOTO_ITEM, 1), statusLogLine("Photo file not found.", PHOTO_ITEM, 2)])
+      )
+    );
+  });
+
+  it("shows no eligible media, a refused pick, and a pick that cannot reach the server in the notice, not on the status line", async () => {
     const server = serverPicking({ mediaUrl: null });
     await mount(server);
-    await click(emptyState());
-    expect(statusLine()).toBe("No eligible media for current filters.");
-
-    server.on("POST", "/api/random", () => status(500));
-    await click(emptyState());
-    expect(statusLine()).toBe("Random selection failed (500).");
-
-    server.on("POST", "/api/random", () => {
-      throw new TypeError("Failed to fetch");
-    });
-    await click(emptyState());
-    expect(statusLine()).toBe("Random selection failed: Failed to fetch");
+    const failures: Array<[() => Response, string]> = [
+      [() => json({ mediaUrl: null }), "No eligible media for current filters."],
+      [() => status(500), "Random selection failed (500)."],
+      [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "Random selection failed: Couldn't reach the server."
+      ],
+      [
+        () => new Response("<html>Bad gateway</html>", { status: 200, headers: { "Content-Type": "text/html" } }),
+        "Random selection failed: The server sent an unexpected response (text/html)."
+      ]
+    ];
+    for (const [answer, notice] of failures) {
+      server.on("POST", "/api/random", answer);
+      await click(emptyState());
+      expect(openNotices()).toEqual([notice]);
+      // The status line drops the pick's "Loading..." without showing the failure.
+      expect(statusLine()).toBe("");
+      await waitFor(() => expect(server.logLines()).toContain(statusLogLine(notice, null, 0)));
+      await closeNotices();
+    }
     expect(emptyState().style.display).not.toBe("none");
     expect(playRecords(server)).toBe(0);
   });
@@ -357,8 +402,14 @@ describe("random pick", () => {
     expect(randomPicks(server)).toBe(1);
 
     await vi.advanceTimersByTimeAsync(10_000);
-    expect(statusLine()).toBe("No response from the server. Try again.");
-    expect(server.logLines()).toContain("playback=random-pick-timeout attempt=0 hasCurrent=false timeoutMs=10000");
+    expect(openNotices()).toEqual(["No response from the server. Try again."]);
+    expect(statusLine()).toBe("");
+    expect(server.logLines()).toEqual(
+      expect.arrayContaining([
+        "playback=random-pick-timeout attempt=0 hasCurrent=false timeoutMs=10000",
+        statusLogLine("No response from the server. Try again.", null, 0)
+      ])
+    );
 
     answerRandom(server, VIDEO_ITEM);
     await click(button("Next"));
@@ -462,19 +513,73 @@ describe("favorite and blacklist", () => {
     expect(statusLine()).toBe("Removed from blacklist");
   });
 
-  it("report an update the server refuses and leave the buttons as they were", async () => {
+  it("show an update the server refuses in the notice and leave the buttons as they were", async () => {
     const server = serverPicking(VIDEO_ITEM);
     server.on("POST", "/api/favorite", () => status(500));
     server.on("POST", "/api/blacklist", () => status(403));
     await mountAndPlay(server);
 
     await click(button("Favorite"));
-    expect(statusLine()).toBe("Favorite update failed (500).");
+    expect(openNotices()).toEqual(["Favorite update failed (500)."]);
     expect(isLit("Favorite")).toBe(false);
+    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Favorite update failed (500).", VIDEO_ITEM, 1)));
+    await closeNotices();
 
     await click(button("Blacklist"));
-    expect(statusLine()).toBe("Blacklist update failed (403).");
+    expect(openNotices()).toEqual(["Blacklist update failed (403)."]);
     expect(isLit("Blacklist")).toBe(false);
+    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Blacklist update failed (403).", VIDEO_ITEM, 1)));
+    expect(statusLine()).toBe("Playing");
+  });
+
+  it("show an update that couldn't reach the server in the notice, without an unhandled rejection", async () => {
+    const server = serverPicking(VIDEO_ITEM);
+    const unreachable = () => {
+      throw new TypeError("NetworkError when attempting to fetch resource.");
+    };
+    server.on("POST", "/api/favorite", unreachable);
+    server.on("POST", "/api/blacklist", unreachable);
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      await mountAndPlay(server);
+
+      await click(button("Favorite"));
+      expect(openNotices()).toEqual(["Favorite update failed: Couldn't reach the server."]);
+      await closeNotices();
+      await click(button("Blacklist"));
+      expect(openNotices()).toEqual(["Blacklist update failed: Couldn't reach the server."]);
+      expect([isLit("Favorite"), isLit("Blacklist")]).toEqual([false, false]);
+      await settle();
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
+  });
+
+  it("show only the pairing prompt for an update the server answers with 401, and log it", async () => {
+    const server = serverPicking(VIDEO_ITEM);
+    server.on("POST", "/api/favorite", () => status(401));
+    server.on("POST", "/api/blacklist", () => status(401));
+    await mountAndPlay(server);
+    const prompt = screen.getByRole("button", { name: "Pair", hidden: true }).closest(".pair-section") as HTMLElement;
+    expect(prompt.style.display).toBe("none");
+
+    await click(button("Favorite"));
+    await waitFor(() => expect(prompt.style.display).toBe("flex"));
+    await click(button("Blacklist"));
+    await settle();
+    expect(openNotices()).toEqual([]);
+    expect([isLit("Favorite"), isLit("Blacklist")]).toEqual([false, false]);
+    expect(statusLine()).toBe("Playing");
+    await waitFor(() =>
+      expect(server.logLines()).toEqual(
+        expect.arrayContaining([
+          unauthorizedLogLine("POST /api/favorite", { id: VIDEO_ITEM.id }, 1),
+          unauthorizedLogLine("POST /api/blacklist", { id: VIDEO_ITEM.id }, 1)
+        ])
+      )
+    );
   });
 
   it("follow item-state events for the playing item, and an item played again shows its latest state", async () => {

@@ -2,6 +2,7 @@ import type { components } from "./openapi.generated";
 
 export type RefreshStageProgress = components["schemas"]["RefreshStageProgress"];
 export type RefreshStatusSnapshot = components["schemas"]["RefreshStatusSnapshot"];
+export type RefreshKeptSource = components["schemas"]["RefreshKeptSource"];
 export type RefreshStatusChangedPayload = components["schemas"]["RefreshStatusChangedPayload"];
 export type ResyncRequiredPayload = components["schemas"]["ResyncRequiredPayload"];
 

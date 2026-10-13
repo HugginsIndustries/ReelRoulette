@@ -1224,6 +1224,8 @@ body.short-screen .stage:not(.covers-player):not(.fullscreen-pseudo):not(:fullsc
 .player-col.is-narrow .toasts[data-pos^="top"] { top: 104px; }
 .pair-label { white-space: nowrap; }
 body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
+/* While the server asks for pairing, the Filter tab's load answers 401, so its sections show nothing, as in the app. */
+body.pairing #filter-body > [data-subpanel] { display: none; }
 
 .drag-handle:disabled { opacity: 0.3; cursor: not-allowed; color: var(--muted-fg); }
 
@@ -1806,6 +1808,13 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
         <label><input type="radio" name="mock-situation" value="empty"> An empty library</label>
       </fieldset>
       <fieldset>
+        <legend>Library load</legend>
+        <label><input type="radio" name="mock-library-load" value="loads" checked> Loads</label>
+        <label><input type="radio" name="mock-library-load" value="failed"> Fails, here with HTTP 500</label>
+        <label><input type="radio" name="mock-library-load" value="timeout"> Times out: the server answers 408, as one stalled on its storage does, or a proxy 504</label>
+        <p class="mock-small mock-keep">What the Library tab's grid says in place of the tiles.</p>
+      </fieldset>
+      <fieldset>
         <legend>Situation</legend>
         <label><input type="checkbox" id="mock-pairing"> The server asks for pairing (a token of "wrong" fails)</label>
         <label><input type="checkbox" id="mock-server-machine"> This browser is on the server machine: Show in File Manager, and admin actions without the control token</label>
@@ -1842,8 +1851,11 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
         <legend>Events</legend>
         <div class="mock-sheet-actions">
           <button type="button" id="mock-sync">A favorite from another device</button>
+          <button type="button" id="mock-kept-one">A refresh keeps Phone backup's items</button>
+          <button type="button" id="mock-kept-both">A refresh keeps both sources' items</button>
           <button type="button" id="mock-startup">The runtime config fails</button>
         </div>
+        <p class="mock-small mock-keep">A refresh that finds no media files in a source's folder keeps its items, and a notice names each folder once per page load; reload the page to see it again.</p>
       </fieldset>
       <div class="mock-sheet-actions">
         <button type="button" id="mock-reset">Forget the panel's state</button>
@@ -2331,6 +2343,11 @@ function nameDialog({ title, label, value, check, onSave, deleteMessage, onDelet
 
 /** A notice: something the user must see, with one OK. */
 function noticeDialog({ title, message }) {
+  // A notice whose text is already open doesn't open again, so a failure that repeats, such as a missing photo under
+  // Autoplay or a press that fails the same way, doesn't stack notices.
+  if ([...document.querySelectorAll("dialog.app-dialog .dialog-message")].some((text) => text.textContent === message)) {
+    return Promise.resolve();
+  }
   return new Promise((resolve) => {
     const body = document.createElement("div");
     body.className = "dialog-body";
@@ -2824,6 +2841,8 @@ const state = {
   ambient: store.get("ambient", true),
   // Mockup option: the server's situation.
   situation: null,
+  // How the Library tab's load goes: it loads, fails, or times out.
+  libraryLoad: "loads",
   mode: "side",
   autoTag: false
 };
@@ -2900,6 +2919,9 @@ function loudnessGain(item) {
 }
 const NO_LIBRARY_REASON = "The catalog was saved by a newer version of ReelRoulette and was left unchanged.";
 const NO_LIBRARY_MESSAGE = `Running without a library. ${NO_LIBRARY_REASON}`;
+// A load the server or a proxy answers with 408 or 504, as a server stalled on its storage does, says so in place of
+// "Library load failed: HTTP 408". Any other failed load shows "Library load failed:" and its error.
+const LIBRARY_TIMEOUT_MESSAGE = "The server didn't answer in time, so the library couldn't load. It may be waiting on a slow or disconnected drive or share.";
 
 // Many tags across many categories, to see long lists and try reordering them.
 const UNCATEGORIZED = "uncategorized";
@@ -3227,8 +3249,10 @@ function pickRandom(tries = 0) {
       setLoading("pick", false);
       noticeDialog({ message });
     };
-    if (state.situation === "reconnecting") return void fail("Random selection failed: Failed to fetch");
+    if (state.situation === "reconnecting") return void fail("Random selection failed: Couldn't reach the server.");
     if (state.situation === "noanswer") return void fail("No response from the server. Try again.");
+    // A server that asks for pairing answers 401, which shows only the pairing prompt.
+    if (state.pairing) return void setLoading("pick", false);
     if (state.situation === "nolibrary") return void fail("Random selection failed (503).");
     const pool = state.situation === "empty" ? [] : ITEMS.filter((item) => !item.removed && passesApplied(item));
     if (!pool.length) return void fail("No eligible media for current filters.");
@@ -3279,6 +3303,7 @@ function goPrevious() {
 // A tile chosen from the library: a missing file says so and nothing else changes, as a library play does today.
 function chooseItem(item) {
   if (state.situation === "incompatible") return void noticeDialog({ message: "Cannot play: server compatibility check failed." });
+  if (state.pairing) return;
   if (item.missing) return void noticeDialog({ message: "Media not found. The file may have moved or been deleted." });
   pushHistory(item);
   start(item);
@@ -3957,8 +3982,9 @@ function toggleFlag(flag) {
   const item = playback.item;
   if (!item) return;
   if (state.situation === "reconnecting") {
-    return void noticeDialog({ message: `${flag === "favorite" ? "Favorite" : "Blacklist"} update failed (503).` });
+    return void noticeDialog({ message: `${flag === "favorite" ? "Favorite" : "Blacklist"} update failed: Couldn't reach the server.` });
   }
+  if (state.pairing) return;
   item[flag] = !item[flag];
   if (item[flag]) item[flag === "favorite" ? "blacklisted" : "favorite"] = false;
   const messages = flag === "favorite" ? ["Added to favorites", "Removed from favorites"] : ["Blacklisted", "Removed from blacklist"];
@@ -4178,10 +4204,13 @@ function saveLibState() {
   store.set("libPresetModified", lib.presetModified);
 }
 // What the grid says in place of tiles: today's messages, and the server's own when it fails the compatibility check
-// or runs without a library.
+// or runs without a library. While the server asks for pairing, its load answers 401 and the grid shows nothing.
 function libraryMessage() {
+  if (state.pairing) return { text: "" };
   if (state.situation === "incompatible") return { text: "Unsupported server API version: 2.", error: true };
   if (state.situation === "nolibrary") return { text: NO_LIBRARY_MESSAGE, error: true };
+  if (state.libraryLoad === "timeout") return { text: LIBRARY_TIMEOUT_MESSAGE, error: true };
+  if (state.libraryLoad === "failed") return { text: "Library load failed: HTTP 500", error: true };
   if (state.situation === "empty") return { text: "No media in library." };
   if (libLoading) return { text: "Loading library…" };
   return null;
@@ -4409,6 +4438,8 @@ function renderLibPresets() {
   select.textContent = "";
   const add = (value, label) => select.append(Object.assign(document.createElement("option"), { value, textContent: label }));
   select.disabled = true;
+  // While the server asks for pairing, the presets' load answers 401, and the dropdown stays as it was.
+  if (state.pairing) return add("", "Loading...");
   if (state.situation === "incompatible") return add("", "Server compatibility check failed");
   if (state.situation === "nolibrary") return add("", "Error loading presets");
   if (presetsLoading) return add("", "Loading...");
@@ -4588,7 +4619,8 @@ function restoreFilterState() {
 }
 
 $("filter-apply").addEventListener("click", () => {
-  if (state.situation === "reconnecting") return void noticeDialog({ message: "Saving presets failed: Failed to fetch" });
+  if (state.situation === "reconnecting") return void noticeDialog({ message: "Saving presets failed: Couldn't reach the server." });
+  if (state.pairing) return;
   if (presetPicked) {
     lib.preset = $("filter-preset-select").value;
     lib.presetModified = false;
@@ -4669,7 +4701,8 @@ $("filter-clear").addEventListener("click", () => {
 });
 // Refresh reloads sources and tags and keeps unsaved preset changes.
 $("filter-refresh").addEventListener("click", () => {
-  if (state.situation === "reconnecting") return void noticeDialog({ message: "Filter refresh failed: Failed to fetch" });
+  if (state.situation === "reconnecting") return void noticeDialog({ message: "Filter refresh failed: Couldn't reach the server." });
+  if (state.pairing) return;
   renderFilterTags();
   acknowledge("Filter data refreshed.", "filter");
 });
@@ -4948,7 +4981,8 @@ function renderTags() {
     line.title = tagTarget ? tagTarget.name : "";
   }
   line.append(target);
-  const shown = state.situation === "empty" ? TAGS.filter((category) => category.id === UNCATEGORIZED).map((category) => ({ ...category, chips: [] })) : TAGS;
+  // While the server asks for pairing, the tags' load answers 401, so the tab shows none.
+  const shown = state.pairing ? [] : state.situation === "empty" ? TAGS.filter((category) => category.id === UNCATEGORIZED).map((category) => ({ ...category, chips: [] })) : TAGS;
   shown.forEach((category) => {
     const fixed = category.id === UNCATEGORIZED;
     let controls = null;
@@ -5029,7 +5063,8 @@ makeSortable({
   }
 });
 $("tags-save").addEventListener("click", () => {
-  if (state.situation === "reconnecting") return void noticeDialog({ message: "Tag apply failed" });
+  if (state.situation === "reconnecting") return void noticeDialog({ message: "Tag apply failed: Couldn't reach the server." });
+  if (state.pairing) return;
   const items = tagItems();
   const several = !!tagSelection && hasItemEdits();
   TAGS.forEach((category) => category.chips.forEach((chip) => {
@@ -5181,7 +5216,8 @@ function openEditCategory(category) {
 // ---- Auto Tag ----
 // Scan Files runs for about 5 seconds with today's indeterminate bar, then lists each tag whose name a file name
 // holds (ignoring the extension), with nothing checked, as today; Select all checks everything. Rows expand to their files; Apply applies the checked changes.
-const autoTag = { scanning: false, rows: null };
+// `error` is why the last scan failed, which Auto Tag's status shows in place of a result.
+const autoTag = { scanning: false, rows: null, error: null };
 function autoTagScan() {
   if (state.situation === "empty") return [];
   const pool = $("autotag-full").checked ? ITEMS.filter((item) => !item.removed) : visibleItems().items;
@@ -5210,6 +5246,11 @@ function renderAutoTag() {
   }
   // Placeholders: one before any scan, and another when a scan finds nothing.
   const placeholder = (text) => host.append(Object.assign(document.createElement("p"), { className: "autotag-empty", textContent: text }));
+  // A scan that fails says so beside Scan Files, not as a scan that found nothing, and leaves nothing to apply.
+  if (autoTag.error) {
+    $("autotag-status").textContent = `Scan failed: ${autoTag.error}`;
+    return void placeholder("Scan to find files whose names contain a tag's name.");
+  }
   if (!autoTag.rows) {
     $("autotag-status").textContent = "";
     return void placeholder("Scan to find files whose names contain a tag's name.");
@@ -5307,6 +5348,7 @@ $("autotag-close").addEventListener("click", closeAutoTag);
 $("autotag-cancel").addEventListener("click", () => {
   if (autoTag.scanning) return;
   autoTag.rows = null;
+  autoTag.error = null;
   renderAutoTag();
   closeAutoTag();
 });
@@ -5314,10 +5356,12 @@ $("autotag-all").addEventListener("change", renderAutoTag);
 $("autotag-scan").addEventListener("click", () => {
   autoTag.scanning = true;
   autoTag.rows = null;
+  autoTag.error = null;
   renderAutoTag();
   setTimeout(() => {
     autoTag.scanning = false;
-    autoTag.rows = autoTagScan();
+    if (state.situation === "reconnecting") autoTag.error = "Couldn't reach the server.";
+    else if (!state.pairing) autoTag.rows = autoTagScan();
     renderAutoTag();
   }, mockHooks.instant ? 0 : 5000);
 });
@@ -5397,6 +5441,12 @@ function applySituation(situation) {
 document.querySelectorAll('input[name="mock-situation"]').forEach((radio) => {
   radio.addEventListener("change", () => applySituation(radio.value));
 });
+document.querySelectorAll('input[name="mock-library-load"]').forEach((radio) => {
+  radio.addEventListener("change", () => {
+    state.libraryLoad = radio.value;
+    layoutGrid(true);
+  });
+});
 
 // Events from the server, as the event stream brings them.
 $("mock-sync").addEventListener("click", () => {
@@ -5408,6 +5458,33 @@ $("mock-sync").addEventListener("click", () => {
   renderPlayback();
   layoutGrid(true);
 });
+
+// A refresh that finds no media files in a source's folder while the library holds items from it, as when the drive
+// or share it is on isn't mounted, keeps those items. Once the refresh has gone through the sources, the notice names
+// each folder it kept that this page hasn't named yet, with its source's name when that differs, and how many items
+// it kept. Each folder is named once per page load, since an automatic refresh every 15 minutes would keep it again.
+const KEPT_SOURCES = {
+  videos: { name: "Videos", folder: "/media/videos", items: 2316 },
+  phone: { name: "Phone backup", folder: "/media/phone", items: 1204 }
+};
+const keptNoticed = new Set();
+function keptSourcesMessage(sources) {
+  const places = sources.map((source) => `${source.name} (${source.folder})`);
+  const where = places.length === 1 ? places[0] : `${places.slice(0, -1).join(", ")} and ${places.at(-1)}`;
+  const total = sources.reduce((sum, source) => sum + source.items, 0);
+  const items = `${total.toLocaleString()} ${total === 1 ? "item" : "items"}`;
+  return sources.length === 1
+    ? `Library refresh found no media files in ${where}, so it kept the library's ${items} from there. If the folder is on a drive or share, check that it's connected.`
+    : `Library refresh found no media files in ${where}, so it kept the library's ${items} from them. If the folders are on a drive or share, check that it's connected.`;
+}
+function refreshKeptSources(ids) {
+  const fresh = ids.filter((id) => !keptNoticed.has(id));
+  if (!fresh.length) return;
+  fresh.forEach((id) => keptNoticed.add(id));
+  noticeDialog({ message: keptSourcesMessage(fresh.map((id) => KEPT_SOURCES[id])) });
+}
+$("mock-kept-one").addEventListener("click", () => refreshKeptSources(["phone"]));
+$("mock-kept-both").addEventListener("click", () => refreshKeptSources(["videos", "phone"]));
 
 // A library refresh: its stage and progress on the player's indicator while the controls show, and its result in a
 // popup. The summary is today's, without "Core refresh complete".
@@ -6221,6 +6298,7 @@ $("pair").addEventListener("submit", (event) => {
   event.preventDefault();
   if (pairField.holds) return;
   if (state.situation === "incompatible") return void noticeDialog({ message: "Pairing blocked by server compatibility check." });
+  if (state.situation === "reconnecting") return void noticeDialog({ message: "Pairing failed: Couldn't reach the server." });
   if (pairField.input.value.trim().toLowerCase() === "wrong") return void noticeDialog({ message: "Pairing failed." });
   state.pairing = false;
   store.set("pairing", false);
@@ -6236,6 +6314,10 @@ function applyMockOptions() {
   $("pair").hidden = !state.pairing;
   // On a phone on its side, the header shows while the server asks for pairing, so its prompt can be reached.
   document.body.classList.toggle("pairing", state.pairing);
+  // What loads from the server shows nothing while it asks for pairing, and loads once paired.
+  renderLibPresets();
+  renderTags();
+  layoutGrid(true);
   renderVolume();
   renderStats();
   placeAllTips();
@@ -6279,6 +6361,8 @@ window.mockup = {
   choose: (id) => chooseItem(ITEMS[id]),
   // The seek row's time format, for the check's hour-long times, which no item runs.
   formatPosition: fmtPosition,
+  // The kept-source notice's wording, for the check's sources in any order.
+  keptSourcesMessage: (ids) => keptSourcesMessage(ids.map((id) => KEPT_SOURCES[id])),
   history: () => ({ ids: history.map((item) => item.id), index: historyIndex }),
   ambientSamples: () => ambientSamples,
   situation: applySituation,

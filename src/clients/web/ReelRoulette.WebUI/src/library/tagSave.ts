@@ -1,3 +1,4 @@
+import { errorText, UnauthorizedError } from "../api/serverRequest";
 import { mergeLibraryItemTags } from "./libraryQuerySession";
 
 export type TagSaveCategory = {
@@ -53,7 +54,23 @@ export type TagSaveRun = {
   ok: boolean;
   accepted: TagSaveStep[];
   failed: TagSaveStep | null;
+  /**
+   * Why the failed step failed, naming it: "{step} failed ({status})" when the server refused it, or
+   * "{step} failed: {error}" when its request failed. Null when every step was taken, and when the server answered
+   * 401, whose pairing prompt is the only thing to show.
+   */
+  error: string | null;
 };
+
+/** One step's answer: taken, or refused with the server's status. */
+export type TagSaveStepResult = { ok: true } | { ok: false; status: number };
+
+export interface TagSaveClient {
+  /** Sends one step. A request that fails throws. */
+  post(step: TagSaveStep): Promise<TagSaveStepResult>;
+  /** Names the step in its failure, such as "Tag apply". */
+  label(step: TagSaveStep): string;
+}
 
 const UNCATEGORIZED = "uncategorized";
 
@@ -158,24 +175,23 @@ export function planTagEditorSave(input: TagSavePlanInput): TagSaveStep[] {
   return steps;
 }
 
-export async function runTagEditorSave(
-  steps: readonly TagSaveStep[],
-  client: { post(step: TagSaveStep): Promise<boolean> }
-): Promise<TagSaveRun> {
+/** Sends the steps in order, stopping at the first one that fails, with the error of that step only. */
+export async function runTagEditorSave(steps: readonly TagSaveStep[], client: TagSaveClient): Promise<TagSaveRun> {
   const accepted: TagSaveStep[] = [];
   for (const step of steps) {
-    let ok = false;
+    let result: TagSaveStepResult;
     try {
-      ok = await client.post(step);
-    } catch {
-      return { ok: false, accepted, failed: step };
+      result = await client.post(step);
+    } catch (error) {
+      const message = error instanceof UnauthorizedError ? null : `${client.label(step)} failed: ${errorText(error)}`;
+      return { ok: false, accepted, failed: step, error: message };
     }
-    if (!ok) {
-      return { ok: false, accepted, failed: step };
+    if (!result.ok) {
+      return { ok: false, accepted, failed: step, error: `${client.label(step)} failed (${result.status})` };
     }
     accepted.push(step);
   }
-  return { ok: true, accepted, failed: null };
+  return { ok: true, accepted, failed: null, error: null };
 }
 
 function itemMatches(item: TaggedItem, itemId: string): boolean {

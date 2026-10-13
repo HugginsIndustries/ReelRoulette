@@ -81,7 +81,7 @@ function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
   const requests: string[] = [];
   const fetchImpl = (async (input: RequestInfo | URL) => {
     requests.push(new URL(String(input)).pathname);
-    return new Response(JSON.stringify({ mediaUrl: null }));
+    return new Response(JSON.stringify({ mediaUrl: null }), { headers: { "Content-Type": "application/json" } });
   }) as typeof fetch;
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
@@ -97,7 +97,6 @@ function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
     api,
     connection,
     dialogs: { notice: () => Promise.resolve() },
-    fetch: fetchImpl,
     // No animation frames outside a browser; the bar's own tests run them.
     frames: { request: () => 0, cancel: () => {} }
   });

@@ -43,6 +43,8 @@ export interface LibraryQuerySessionSnapshot {
   hasResult: boolean;
   phase: LibraryWindowPhase;
   errorMessage: string | null;
+  /** The failed load's HTTP status, when the error carried one, such as 408 from a server stalled on its storage. */
+  errorStatus: number | null;
   summaryText: string | null;
   searchQuery: string;
   overlayVisible: boolean;
@@ -53,6 +55,8 @@ export interface LibraryQuerySessionSnapshot {
 export interface LibraryQuerySessionEvent {
   scroll: "top" | "keep";
   statusMessage: string | null;
+  /** The HTTP status of the failed request `statusMessage` reports, when it carried one, such as 401. */
+  failureStatus?: number | null;
 }
 
 export interface ItemTagsChangedPayload {
@@ -277,12 +281,19 @@ export function mergeLibraryItemTags(
   return next;
 }
 
+/** The HTTP status a failed query's error carries, as `api.getJson`'s errors do, or null. */
+function errorHttpStatus(error: unknown): number | null {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === "number" ? status : null;
+}
+
 export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySession {
   let items: LibraryProjectionItem[] = [];
   let totalCount = 0;
   let searchBaselineCount = 0;
   let hasResult = false;
   let errorMessage: string | null = null;
+  let errorStatus: number | null = null;
   let overlayVisible = false;
   let scrollTop = 0;
   let generation = 0;
@@ -303,6 +314,7 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       hasResult,
       phase,
       errorMessage,
+      errorStatus,
       summaryText: phase === "ready" ? formatBrowseResultSummary(totalCount, searchBaselineCount) : null,
       searchQuery: controls.searchQuery,
       overlayVisible,
@@ -406,6 +418,7 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       searchBaselineCount = pageBaseline;
       hasResult = true;
       errorMessage = null;
+      errorStatus = null;
       appendFailed = false;
       exhausted = items.length >= pageTotal || lastReturned < lastLimit;
       const scroll = kind === "reset" ? "top" : "keep";
@@ -427,10 +440,11 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
         searchBaselineCount = 0;
         hasResult = false;
         errorMessage = message;
+        errorStatus = errorHttpStatus(error);
         exhausted = false;
         if (gen === generation) {
           inFlight = null;
-          notify({ scroll: "keep", statusMessage: `Library load failed: ${message}` });
+          notify({ scroll: "keep", statusMessage: `Library load failed: ${message}`, failureStatus: errorStatus });
         }
         return;
       }
@@ -441,7 +455,8 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
         inFlight = null;
         notify({
           scroll: "keep",
-          statusMessage: "Library browse failed. Showing the tiles already loaded."
+          statusMessage: "Library browse failed. Showing the tiles already loaded.",
+          failureStatus: errorHttpStatus(error)
         });
       }
     }

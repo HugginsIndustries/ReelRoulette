@@ -38,7 +38,7 @@ class FakeSource {
 }
 
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status });
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
 function setup(routes: Record<string, () => Response> = {}, pairToken?: string) {
@@ -149,6 +149,39 @@ describe("createServerConnection", () => {
       ["itemTagsChanged", { resolvedItemIds: ["c"] }],
       ["tagCatalogChanged", { reason: "deleteTag", categories: [], tags: [] }],
       ["refreshCompleted", null]
+    ]);
+  });
+
+  it("passes on the sources a refresh kept once its source stage has finished, and again only when a run's list changes", async () => {
+    const { connection, sources } = setup();
+    const kept: unknown[] = [];
+    connection.on("refreshKeptSources", (keptSources) => kept.push(keptSources));
+    connection.start();
+    await settle();
+
+    const stream = sources[0]!;
+    const status = (runId: string, isRunning: boolean, sourceDone: boolean, keptSources: unknown[]) => ({
+      snapshot: {
+        isRunning,
+        runId,
+        currentStage: sourceDone ? "durationScan" : "sourceRefresh",
+        stages: [{ stage: "sourceRefresh", percent: sourceDone ? 100 : 50, message: "", isComplete: sourceDone }],
+        keptSources
+      }
+    });
+    const first = { sourceId: "src-a", itemCount: 2 };
+    const second = { SourceId: "src-b", ItemCount: 5 };
+    stream.emit("refreshStatusChanged", 1, status("run-1", true, false, [first]));
+    stream.emit("refreshStatusChanged", 2, status("run-1", true, false, [first, second]));
+    expect(kept).toEqual([]);
+
+    stream.emit("refreshStatusChanged", 3, status("run-1", true, true, [first, second]));
+    stream.emit("refreshStatusChanged", 4, status("run-1", false, true, [first, second]));
+    stream.emit("refreshStatusChanged", 5, status("run-2", true, true, []));
+    stream.emit("refreshStatusChanged", 6, status("run-2", false, true, [first]));
+    expect(kept).toEqual([
+      [{ sourceId: "src-a", itemCount: 2 }, { sourceId: "src-b", itemCount: 5 }],
+      [{ sourceId: "src-a", itemCount: 2 }]
     ]);
   });
 
@@ -335,6 +368,30 @@ describe("createServerConnection", () => {
     expect(sources).toHaveLength(1);
   });
 
+  it("says a wrong token's 401 failed, and a pairing that couldn't reach the server why, whatever the browser calls it", async () => {
+    let pairReply = () => json({ error: "Invalid token" }, 401);
+    const { connection, notices } = setup({ "POST /api/pair": () => pairReply() });
+    connection.start();
+    await settle();
+    notices.length = 0;
+
+    await connection.pair("wrong");
+    expect(notices).toEqual(["Pairing failed."]);
+
+    for (const message of ["Failed to fetch", "Load failed", "NetworkError when attempting to fetch resource."]) {
+      pairReply = () => {
+        throw new TypeError(message);
+      };
+      await connection.pair("token");
+    }
+    expect(notices).toEqual([
+      "Pairing failed.",
+      "Pairing failed: Couldn't reach the server.",
+      "Pairing failed: Couldn't reach the server.",
+      "Pairing failed: Couldn't reach the server."
+    ]);
+  });
+
   it("reconnects on focus, page show, coming online, and becoming visible, and stops listening once stopped", async () => {
     const { connection, sources, pageWindow } = setup();
     connection.start();
@@ -358,11 +415,17 @@ describe("createServerConnection", () => {
     expect(sources).toHaveLength(5);
   });
 
-  it("shows the pairing prompt and an error entry when presets need pairing", async () => {
-    const { store, connection } = setup({ "GET /api/presets": () => json({}, 401) });
+  it("shows only the pairing prompt when presets need pairing, and an error entry for any other failure", async () => {
+    let presetsStatus = 401;
+    const { store, connection } = setup({ "GET /api/presets": () => json({}, presetsStatus) });
     await connection.loadPresets();
     expect(store.pairingRequired.value).toBe(true);
+    expect(store.presetMenu.value.entries).toEqual([{ label: "Loading...", value: "" }]);
+    expect(store.status.value).toBe("");
+
+    presetsStatus = 500;
+    await connection.loadPresets();
     expect(store.presetMenu.value.entries).toEqual([{ label: "Error loading presets", value: "" }]);
-    expect(store.status.value).toBe("Error loading presets: Unauthorized");
+    expect(store.status.value).toBe("Error loading presets: HTTP 500");
   });
 });

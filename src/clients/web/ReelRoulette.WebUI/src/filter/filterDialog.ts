@@ -1,4 +1,5 @@
 import { batch, signal, type ReadonlySignal } from "@preact/signals";
+import { errorText, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { Library } from "../library/library";
 import type { PanelHost } from "../panel/panelHost";
@@ -198,12 +199,8 @@ export interface FilterDialogOptions {
   panel: Pick<PanelHost, "closeIfOverlay">;
   /** This device's memory, for the tag categories expanded. */
   device: DeviceStore;
-  /** The in-app dialogs, for the confirmations. */
-  dialogs: Pick<Dialogs, "confirm">;
-}
-
-function errorText(error: unknown): string {
-  return (error as { message?: string } | null)?.message || String(error);
+  /** The in-app dialogs, for the confirmations and the notices of what failed. */
+  dialogs: Pick<Dialogs, "confirm" | "notice">;
 }
 
 export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
@@ -292,11 +289,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
 
   async function loadRemote(): Promise<{ sources: FilterSource[]; tagModel: FilterTagModel | null; presets: PresetRow[] }> {
     const sources = await api.getJson("/api/sources");
-    const response = await api.post("/api/tag-editor/model", { itemIds: [] });
-    if (!response.ok) {
-      throw new Error(`tag-editor model ${response.status}`);
-    }
-    const tagModel = (await response.json()) as FilterTagModel | null;
+    const tagModel = (await api.postJson("/api/tag-editor/model", { itemIds: [] })) as FilterTagModel | null;
     await connection.loadPresets();
     const sourceList: FilterSource[] = Array.isArray(sources) ? sources : [];
     // The Library tab's Filters line counts the sources the Filter tab shows.
@@ -335,8 +328,8 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
   /**
    * Loads the sources, tags, and presets. The first time, it starts the working copy from the applied filter, on
    * General; after that it keeps the working copy and only takes what loaded, as Refresh does. Says whether it loaded;
-   * a failure goes to the status line with `failure` before the reason. Nothing loads while the server fails the
-   * compatibility check.
+   * a failure shows in the in-app notice with `failure` before the reason, except a 401, whose pairing prompt is the
+   * thing to act on. Nothing loads while the server fails the compatibility check.
    */
   async function start(failure: string): Promise<boolean> {
     if (store.compatibilityBlocked.peek()) {
@@ -346,7 +339,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     try {
       remote = await loadRemote();
     } catch (error) {
-      store.setStatus(`${failure}: ${errorText(error)}`);
+      showLoadFailure(failure, error);
       return false;
     }
     const current = view.peek();
@@ -370,6 +363,13 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       tab.value = "general";
     }
     return true;
+  }
+
+  /** Shows a failed load in the in-app notice, except a 401, which shows only the pairing prompt. */
+  function showLoadFailure(failure: string, error: unknown): void {
+    if (!(error instanceof UnauthorizedError)) {
+      void dialogs.notice(`${failure}: ${errorText(error)}`);
+    }
   }
 
   /** Puts back the applied filter and the saved presets, with the sources and tags already loaded. */
@@ -428,7 +428,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         }
         store.setStatus("Filter data refreshed.");
       } catch (error) {
-        store.setStatus(`Filter refresh failed: ${errorText(error)}`);
+        showLoadFailure("Filter refresh failed", error);
       }
     },
 
@@ -442,7 +442,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         try {
           const response = await api.post("/api/presets", presetsToPostBody(view.peek()!.presets));
           if (!response.ok) {
-            store.setStatus(`Saving presets failed (${response.status}).`);
+            void dialogs.notice(`Saving presets failed (${response.status}).`);
             return;
           }
           update({ presetsChanged: false });
@@ -450,7 +450,10 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
           store.presets.value = Array.isArray(presets) ? presets : [];
           update({ presets: presetRowsFromApi(store.presets.peek()) });
         } catch (saveError) {
-          store.setStatus(`Saving presets failed: ${errorText(saveError)}`);
+          // A 401 shows only the pairing prompt, which the request has asked for.
+          if (!(saveError instanceof UnauthorizedError)) {
+            void dialogs.notice(`Saving presets failed: ${errorText(saveError)}`);
+          }
           return;
         }
       }
@@ -599,12 +602,12 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       }
       const name = current.presetName;
       if (!name) {
-        store.setStatus("Select a preset to update.");
+        void dialogs.notice("Select a preset to update.");
         return;
       }
       const index = current.presets.findIndex((row) => namesEqualIgnoringCase(row.name, name));
       if (index < 0) {
-        store.setStatus("Preset not found.");
+        void dialogs.notice("Preset not found.");
         return;
       }
       const working = readGeneral(current);

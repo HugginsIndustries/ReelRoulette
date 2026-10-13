@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { HttpStatusError, ServerUnreachableError, UnauthorizedError } from "../api/serverRequest";
 import { createAppApi } from "../state/appApi";
 
 function recordingFetch(reply: () => Response | Promise<Response>) {
@@ -34,7 +35,7 @@ describe("createAppApi", () => {
   it("reads JSON, asks for pairing on 401, and throws on any failure", async () => {
     const onUnauthorized = vi.fn();
     let status = 200;
-    const { calls, fetchImpl } = recordingFetch(() => new Response(JSON.stringify({ ok: true }), { status }));
+    const { calls, fetchImpl } = recordingFetch(() => new Response(JSON.stringify({ ok: true }), { status, headers: { "Content-Type": "application/json" } }));
     const api = createAppApi("http://localhost:51301", { onUnauthorized, fetch: fetchImpl });
 
     await expect(api.getJson("/api/presets")).resolves.toEqual({ ok: true });
@@ -42,11 +43,59 @@ describe("createAppApi", () => {
 
     status = 401;
     await expect(api.getJson("/api/presets")).rejects.toThrow("Unauthorized");
-    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    await expect(api.getJson("/api/presets")).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(onUnauthorized).toHaveBeenCalledTimes(2);
 
     status = 503;
     await expect(api.getJson("/api/presets")).rejects.toThrow("HTTP 503");
+    await expect(api.getJson("/api/presets")).rejects.toMatchObject({ status: 503 });
+    await expect(api.getJson("/api/presets")).rejects.toBeInstanceOf(HttpStatusError);
+    expect(onUnauthorized).toHaveBeenCalledTimes(2);
+  });
+
+  it("posts JSON and reads the JSON answer, failing as a read does", async () => {
+    const onUnauthorized = vi.fn();
+    let reply = () => new Response(JSON.stringify({ tags: [] }), { headers: { "Content-Type": "application/json" } });
+    const { calls, fetchImpl } = recordingFetch(() => reply());
+    const api = createAppApi("http://localhost:51301", { onUnauthorized, fetch: fetchImpl });
+
+    await expect(api.postJson("/api/tag-editor/model", { itemIds: ["item-1"] })).resolves.toEqual({ tags: [] });
+    expect(calls[0]!.url).toBe("http://localhost:51301/api/tag-editor/model");
+    expect(calls[0]!.init).toMatchObject({ method: "POST", credentials: "include", body: JSON.stringify({ itemIds: ["item-1"] }) });
+
+    reply = () => new Response("{}", { status: 401 });
+    await expect(api.postJson("/api/tag-editor/model", {})).rejects.toBeInstanceOf(UnauthorizedError);
     expect(onUnauthorized).toHaveBeenCalledTimes(1);
+
+    reply = () => new Response("{}", { status: 500 });
+    await expect(api.postJson("/api/tag-editor/model", {})).rejects.toThrow("HTTP 500");
+
+    reply = () => new Response("<html>proxy</html>", { headers: { "Content-Type": "text/html" } });
+    await expect(api.postJson("/api/tag-editor/model", {})).rejects.toThrow("The server sent an unexpected response (text/html).");
+    await expect(api.getJson("/api/presets")).rejects.toThrow("The server sent an unexpected response (text/html).");
+  });
+
+  it("asks for pairing on a 401 to a post or any request, naming its route, and throws an UnauthorizedError", async () => {
+    const onUnauthorized = vi.fn();
+    const { fetchImpl } = recordingFetch(() => new Response("{}", { status: 401 }));
+    const api = createAppApi("http://localhost:51301", { onUnauthorized, fetch: fetchImpl });
+
+    await expect(api.post("/api/favorite", {})).rejects.toBeInstanceOf(UnauthorizedError);
+    await expect(api.request(api.url("/api/random"), { method: "POST" })).rejects.toBeInstanceOf(UnauthorizedError);
+    await expect(api.getJson("/api/sources")).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(onUnauthorized.mock.calls).toEqual([["POST /api/favorite"], ["POST /api/random"], ["GET /api/sources"]]);
+  });
+
+  it("says the server couldn't be reached, whatever the browser calls it", async () => {
+    const unreachable = createAppApi("http://localhost:51301", {
+      onUnauthorized: () => {},
+      fetch: (async () => {
+        throw new TypeError("Load failed");
+      }) as typeof fetch
+    });
+    await expect(unreachable.post("/api/favorite", {})).rejects.toBeInstanceOf(ServerUnreachableError);
+    await expect(unreachable.getJson("/api/presets")).rejects.toThrow("Couldn't reach the server.");
+    await expect(unreachable.postJson("/api/tag-editor/model", {})).rejects.toThrow("Couldn't reach the server.");
   });
 
   it("relays a log line as the WebUI, and ignores a failure to send it", async () => {

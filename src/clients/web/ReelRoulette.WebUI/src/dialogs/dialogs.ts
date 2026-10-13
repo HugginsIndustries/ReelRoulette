@@ -25,7 +25,9 @@ export interface Dialogs {
   confirm(request: ConfirmRequest): Promise<boolean>;
   /**
    * Shows a message the user must see, with one OK, and relays it to `last.log` as a status message is relayed.
-   * `logText` replaces `message` in the log when `message` names a file or preset. Settles when it closes.
+   * `logText` replaces `message` in the log when `message` names a file or preset. Settles when it closes. A notice
+   * whose message is already open doesn't open again, so a failure that repeats, such as a missing photo under
+   * Autoplay, doesn't stack notices; it is still relayed, and settles when the one showing closes.
    */
   notice(message: string, logText?: string): Promise<void>;
   /** Closes one: true for its confirming button or OK, false for Cancel, Escape, or a click outside. */
@@ -40,6 +42,8 @@ export interface DialogsOptions {
 export function createDialogs(options: DialogsOptions): Dialogs {
   const open = signal<readonly OpenDialog[]>([]);
   const settles = new Map<number, (confirmed: boolean) => void>();
+  /** Each open notice's promise, which a notice with the same message returns in place of opening again. */
+  const noticesClosing = new Map<number, Promise<void>>();
   let lastId = 0;
 
   function show(dialog: OpenDialog, settle: (confirmed: boolean) => void): void {
@@ -59,7 +63,20 @@ export function createDialogs(options: DialogsOptions): Dialogs {
 
     notice(message, logText = message) {
       options.relayStatus(logText);
-      return new Promise((resolve) => show({ id: ++lastId, kind: "notice", message }, () => resolve()));
+      const showing = open.peek().find((dialog) => dialog.kind === "notice" && dialog.message === message);
+      const closing = showing && noticesClosing.get(showing.id);
+      if (closing) {
+        return closing;
+      }
+      const id = ++lastId;
+      const closed = new Promise<void>((resolve) =>
+        show({ id, kind: "notice", message }, () => {
+          noticesClosing.delete(id);
+          resolve();
+        })
+      );
+      noticesClosing.set(id, closed);
+      return closed;
     },
 
     answer(id, confirmed) {

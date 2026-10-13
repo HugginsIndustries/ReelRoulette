@@ -1,12 +1,15 @@
 // @vitest-environment happy-dom
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it } from "vitest";
+import { statusLogLine } from "../../logging/relayLogLines";
 import {
+  closeNotices,
   COMPATIBLE_VERSION,
   FakeServer,
   IPHONE_USER_AGENT,
   json,
   mountPage,
+  openNotices,
   resetPage,
   setViewport,
   settle,
@@ -583,7 +586,10 @@ describe("Filter tab's Apply and Cancel", () => {
     await mount(server);
     await click(panelButton());
     await click(tab("Filter"));
-    expect(statusLine()).toBe("Filter load failed: HTTP 503");
+    await waitFor(() => expect(openNotices()).toEqual(["Filter load failed: HTTP 503"]));
+    expect(statusLine()).not.toBe("Filter load failed: HTTP 503");
+    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Filter load failed: HTTP 503", null, 0)));
+    await closeNotices();
 
     sources = 200;
     await click(within(panel()).getByRole("button", { name: "Refresh" }));

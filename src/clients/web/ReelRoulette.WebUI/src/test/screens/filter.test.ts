@@ -4,13 +4,16 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it } from "vitest";
+import { statusLogLine } from "../../logging/relayLogLines";
 import {
+  closeNotices,
   COMPATIBLE_VERSION,
   DEFAULT_VIEWPORT,
   FakeServer,
   json,
   mountPage,
   normalizedMarkup,
+  openNotices,
   pickPreset,
   pointerDown,
   pointerMove,
@@ -24,6 +27,7 @@ import {
   status,
   stubRowLayout,
   stubScroller,
+  unauthorizedLogLine,
   useStylesheet,
   type MountedPage
 } from "./pageHarness";
@@ -447,6 +451,23 @@ function statusLine(): string {
   return document.getElementById("status")?.textContent ?? "";
 }
 
+/**
+ * Expects the in-app notice to show `message`, alone, and not the status line, with the `last.log` line the status
+ * line relayed for it, then closes it.
+ */
+async function expectNotice(server: FakeServer, message: string): Promise<void> {
+  await waitFor(() => expect(openNotices()).toEqual([message]));
+  expect(statusLine()).not.toBe(message);
+  await waitFor(() => expect(server.logLines()).toContain(statusLogLine(message, null, 0)));
+  await closeNotices();
+  expect(openNotices()).toEqual([]);
+}
+
+/** The header's pairing prompt, found while it is hidden too. */
+function pairingPrompt(): HTMLElement {
+  return screen.getByRole("button", { name: "Pair", hidden: true }).closest(".pair-section") as HTMLElement;
+}
+
 function libraryQueries(server: FakeServer): any[] {
   return server.requests("POST", "/api/library/query").map((call) => call.body);
 }
@@ -615,13 +636,13 @@ describe("opening and closing", () => {
   it("says why when its sources or tags cannot load, and loads them when it shows again or on Refresh", async () => {
     let tagModelStatus = 200;
     let sourcesStatus = 500;
-    await mountFilter([], (server) => {
+    const { server } = await mountFilter([], (server) => {
       server.on("GET", "/api/sources", () => (sourcesStatus === 200 ? json(SOURCES) : status(sourcesStatus)));
       server.on("POST", "/api/tag-editor/model", () => (tagModelStatus === 200 ? json(TAG_MODEL) : status(tagModelStatus)));
     });
 
     await chooseFilterTab();
-    expect(statusLine()).toBe("Filter load failed: HTTP 500");
+    await expectNotice(server, "Filter load failed: HTTP 500");
     expect(isOpen()).toBe(true);
     expect(dialog().querySelector("input")).toBeNull();
 
@@ -629,11 +650,11 @@ describe("opening and closing", () => {
     tagModelStatus = 503;
     await click(panelTab("Library"));
     await chooseFilterTab();
-    expect(statusLine()).toBe("Filter load failed: tag-editor model 503");
+    await expectNotice(server, "Filter load failed: HTTP 503");
     expect(dialog().querySelector("input")).toBeNull();
 
     await click(dialogButton("Refresh"));
-    expect(statusLine()).toBe("Filter refresh failed: tag-editor model 503");
+    await expectNotice(server, "Filter refresh failed: HTTP 503");
     expect(dialog().querySelector("input")).toBeNull();
 
     tagModelStatus = 200;
@@ -641,6 +662,34 @@ describe("opening and closing", () => {
     expect(statusLine()).toBe("Filter data refreshed.");
     expect(selectedTab()).toBe("General");
     expect(box("Movies (C:\\media\\movies)").checked).toBe(true);
+  });
+
+  it("names the content type of a tag model that isn't JSON, such as a proxy's page", async () => {
+    const { server } = await mountFilter([], (server) => {
+      server.on("POST", "/api/tag-editor/model", () => new Response("<html>Bad gateway</html>", { status: 200, headers: { "Content-Type": "text/html" } }));
+    });
+    await chooseFilterTab();
+    await expectNotice(server, "Filter load failed: The server sent an unexpected response (text/html).");
+    expect(dialog().querySelector("input")).toBeNull();
+  });
+
+  it.each([
+    ["tag model", "POST", "/api/tag-editor/model"],
+    ["sources", "GET", "/api/sources"]
+  ] as const)("shows only the pairing prompt when its %s answers 401, and logs it", async (_name, method, path) => {
+    const { server } = await mountFilter([], (server) => {
+      server.on(method, path, () => status(401));
+    });
+    expect(pairingPrompt().style.display).toBe("none");
+
+    await chooseFilterTab();
+    await waitFor(() => expect(pairingPrompt().style.display).toBe("flex"));
+    await click(dialogButton("Refresh"));
+    expect(server.requests(method, path)).toHaveLength(2);
+    expect(openNotices()).toEqual([]);
+    expect(statusLine()).not.toMatch(/^Filter (load|refresh) failed/);
+    expect(dialog().querySelector("input")).toBeNull();
+    await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine(`${method} ${path}`)));
   });
 
   it("keeps its markup on each tab", async () => {
@@ -1390,7 +1439,7 @@ describe("Presets tab", () => {
     await showTab("Presets");
 
     await click(dialogButton("Update Preset"));
-    expect(statusLine()).toBe("Select a preset to update.");
+    await expectNotice(server, "Select a preset to update.");
 
     await chooseInDialog("Favorites");
     await click(box("Blacklisted"));
@@ -1729,7 +1778,7 @@ describe("Presets tab", () => {
     const queries = libraryQueries(server).length;
 
     await apply();
-    expect(statusLine()).toBe("Saving presets failed (500).");
+    await expectNotice(server, "Saving presets failed (500).");
     expect(isOpen()).toBe(true);
     expect(libraryQueries(server)).toHaveLength(queries);
     expect(presetRows()).toEqual(["Favorites", "Unplayed"]);
@@ -1741,6 +1790,29 @@ describe("Presets tab", () => {
     expect(statusLine()).toBe("Filters applied.");
     expect(panel().hidden).toBe(true);
     expect(presets.list.map((preset) => preset.name)).toEqual(["Favorites", "Unplayed"]);
+  });
+});
+
+describe("presets save answered with 401", () => {
+  it("shows only the pairing prompt, applies nothing, and logs it", async () => {
+    setViewport({ width: 600, height: 800 });
+    const { server, presets } = await mountFilter([FAVORITES_PRESET]);
+    presets.saveFailure = 401;
+    await openDialog();
+    await click(box("Only never played"));
+    await showTab("Presets");
+    await addPreset("Unplayed");
+    const queries = libraryQueries(server).length;
+    expect(pairingPrompt().style.display).toBe("none");
+
+    await apply();
+    await waitFor(() => expect(pairingPrompt().style.display).toBe("flex"));
+    await settle();
+    expect(openNotices()).toEqual([]);
+    expect(isOpen()).toBe(true);
+    expect(libraryQueries(server)).toHaveLength(queries);
+    expect(presetRows()).toEqual(["Favorites", "Unplayed"]);
+    await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("POST /api/presets")));
   });
 });
 
@@ -1799,7 +1871,7 @@ describe("preset dropdown, refresh, and clear all", () => {
     let sources = SOURCES;
     let tagModel = TAG_MODEL;
     let sourcesStatus = 200;
-    const { presets } = await mountFilter([FAVORITES_PRESET], (server) => {
+    const { server, presets } = await mountFilter([FAVORITES_PRESET], (server) => {
       server.on("GET", "/api/sources", () => (sourcesStatus === 200 ? json(sources) : status(sourcesStatus)));
       server.on("POST", "/api/tag-editor/model", () => json(tagModel));
     });
@@ -1823,7 +1895,7 @@ describe("preset dropdown, refresh, and clear all", () => {
 
     sourcesStatus = 500;
     await click(dialogButton("Refresh"));
-    expect(statusLine()).toBe("Filter refresh failed: HTTP 500");
+    await expectNotice(server, "Filter refresh failed: HTTP 500");
     expect(isOpen()).toBe(true);
   });
 

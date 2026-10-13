@@ -1,4 +1,5 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
+import { errorText, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import { applyItemStateToCurrent } from "../library/currentItemState";
 import { playbackTraceLine } from "../logging/relayLogLines";
@@ -136,10 +137,11 @@ export interface PlayerOptions {
   store: AppStore;
   api: AppApi;
   connection: ServerConnection;
-  /** The in-app dialogs, for a play the server's compatibility check stops. */
+  /**
+   * The in-app dialogs, for a pick or play that fails, a favorite or blacklist the server doesn't take, and media that
+   * can't be found.
+   */
   dialogs: Pick<Dialogs, "notice">;
-  /** Defaults to the global `fetch`, looked up on each request. */
-  fetch?: typeof fetch;
   /** Defaults to the browser's animation frames, looked up on each request. */
   frames?: FrameScheduler;
 }
@@ -172,13 +174,12 @@ function absolutizeMediaUrl(apiBaseUrl: string, mediaUrl: string): string {
 export function createPlayer(options: PlayerOptions): Player {
   const { store, api, connection, dialogs } = options;
   const apiBaseUrl = String(options.apiBaseUrl || "").replace(/\/+$/, "");
-  const send: typeof fetch = options.fetch ?? ((input, init) => fetch(input, init));
   const frames: FrameScheduler = options.frames ?? {
     request: (callback) => requestAnimationFrame(callback),
     cancel: (id) => cancelAnimationFrame(id)
   };
   const randomPicker = createRandomPicker((body, signal) =>
-    send(api.url("/api/random"), {
+    api.request(api.url("/api/random"), {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -408,25 +409,29 @@ export function createPlayer(options: PlayerOptions): Player {
     store.setStatus("Loading...");
     // A press while a pick is waiting sends nothing; the status above shows it is still loading.
     const outcome = await randomPicker.pick(body);
+    if (outcome.kind === "busy") {
+      return;
+    }
+    if (outcome.kind !== "picked") {
+      // The failure shows in the notice, or the pairing prompt shows, so the status line drops its "Loading...".
+      store.clearStatus("Loading...");
+    }
     switch (outcome.kind) {
-      case "busy":
-        return;
       case "timedOut":
         trace("warn", "random-pick-timeout", { timeoutMs: outcome.timeoutMs });
-        store.setStatus("No response from the server. Try again.");
+        void dialogs.notice("No response from the server. Try again.");
         return;
       case "unauthorized":
-        store.pairingRequired.value = true;
-        store.setStatus("Unauthorized. Pair first.");
+        // The request asked for pairing, whose prompt is the only signal, and sent its line.
         return;
       case "failed":
-        store.setStatus(`Random selection failed (${outcome.statusCode}).`);
+        void dialogs.notice(`Random selection failed (${outcome.statusCode}).`);
         return;
       case "error":
-        store.setStatus(`Random selection failed: ${outcome.message}`);
+        void dialogs.notice(`Random selection failed: ${outcome.message}`);
         return;
       case "none":
-        store.setStatus("No eligible media for current filters.");
+        void dialogs.notice("No eligible media for current filters.");
         return;
     }
 
@@ -464,14 +469,24 @@ export function createPlayer(options: PlayerOptions): Player {
     const item = store.current.peek();
     if (!item?.itemId) return;
     const nextValue = !item[flag];
-    // The client id comes back on the change's event, so this device can tell its own change from another's.
-    const response = await api.post(isFavorite ? "/api/favorite" : "/api/blacklist", {
-      path: item.itemId,
-      [flag]: nextValue,
-      clientId: store.identity.clientId
-    });
+    const failed = `${isFavorite ? "Favorite" : "Blacklist"} update failed`;
+    let response: Response;
+    try {
+      // The client id comes back on the change's event, so this device can tell its own change from another's.
+      response = await api.post(isFavorite ? "/api/favorite" : "/api/blacklist", {
+        path: item.itemId,
+        [flag]: nextValue,
+        clientId: store.identity.clientId
+      });
+    } catch (error) {
+      // A 401 shows only the pairing prompt, which the request has asked for.
+      if (!(error instanceof UnauthorizedError)) {
+        void dialogs.notice(`${failed}: ${errorText(error)}`);
+      }
+      return;
+    }
     if (!response.ok) {
-      store.setStatus(`${isFavorite ? "Favorite" : "Blacklist"} update failed (${response.status}).`);
+      void dialogs.notice(`${failed} (${response.status}).`);
       return;
     }
     // Applied to the item playing when the server answers.
@@ -659,7 +674,8 @@ export function createPlayer(options: PlayerOptions): Player {
       trace("warn", "video-onerror");
       // A source that fails fires no pause, so the video still reads as playing; its bar has nothing more to show.
       stopMovingBar();
-      store.setStatus("Video file not found.");
+      store.clearStatus("Loading...");
+      void dialogs.notice("Video file not found.");
     },
 
     videoMetadataLoaded() {
@@ -702,7 +718,9 @@ export function createPlayer(options: PlayerOptions): Player {
         return;
       }
       trace("warn", "photo-onerror");
-      store.setStatus("Photo file not found.");
+      store.clearStatus("Loading...");
+      // Under Autoplay or Loop the photo's timer runs on and can fail again; the notice already open doesn't stack.
+      void dialogs.notice("Photo file not found.");
     }
   };
 }

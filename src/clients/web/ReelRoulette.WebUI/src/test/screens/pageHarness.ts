@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { fireEvent, waitFor } from "@testing-library/preact";
 import type { Window as HappyDomWindow } from "happy-dom";
 import { vi } from "vitest";
+import { unauthorizedLogText } from "../../api/serverRequest";
+import { statusLogLine, type RelayLogCurrentItem } from "../../logging/relayLogLines";
 import { renderApp } from "../../shell";
 import type { RuntimeConfig } from "../../types/runtimeConfig";
 
@@ -49,6 +51,14 @@ export function json(body: unknown, status = 200): Response {
 
 export function status(code: number): Response {
   return new Response(code === 204 ? null : "{}", { status: code });
+}
+
+/**
+ * The one `last.log` line the page relays for a 401, naming the request's route, such as "POST /api/favorite", while
+ * `current` is the item of play attempt `attemptId`.
+ */
+export function unauthorizedLogLine(route: string, current: RelayLogCurrentItem | null = null, attemptId = 0): string {
+  return statusLogLine(unauthorizedLogText(route), current, attemptId);
 }
 
 /** Answers the page's requests by method and path. Unknown routes answer 404. */
@@ -474,6 +484,27 @@ export async function settle(rounds = 5): Promise<void> {
   for (let i = 0; i < rounds; i++) {
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
+}
+
+/** The in-app notices open now, oldest first: the dialogs whose only button is OK. */
+function noticeDialogs(): HTMLDialogElement[] {
+  return [...document.querySelectorAll<HTMLDialogElement>("dialog.app-dialog")].filter((dialog) => {
+    const buttons = [...dialog.querySelectorAll(".dialog-actions button")];
+    return buttons.length === 1 && buttons[0]!.textContent === "OK";
+  });
+}
+
+/** The messages of the in-app notices open now, oldest first. */
+export function openNotices(): string[] {
+  return noticeDialogs().map((dialog) => dialog.querySelector(".dialog-message")?.textContent ?? "");
+}
+
+/** Closes every open notice with its OK, newest first, and lets the page settle. */
+export async function closeNotices(): Promise<void> {
+  for (const dialog of noticeDialogs().reverse()) {
+    fireEvent.click(dialog.querySelector(".dialog-actions button")!);
+  }
+  await settle();
 }
 
 /** The Library tab's preset dropdown, found while its tab is hidden too. */

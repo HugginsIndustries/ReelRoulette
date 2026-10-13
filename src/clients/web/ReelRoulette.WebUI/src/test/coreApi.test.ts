@@ -18,7 +18,7 @@ describe("requestPlayItem", () => {
       isBlacklisted: false
     };
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(payload), { status: 200 })
+      new Response(JSON.stringify(payload), { status: 200, headers: { "Content-Type": "application/json" } })
     ) as unknown as typeof fetch;
 
     const result = await requestPlayItem(
@@ -77,6 +77,27 @@ describe("requestPlayItem", () => {
       expect(result.code).toBe("play_source_disabled");
     }
   });
+
+  it("reads a success that isn't JSON as an unexpected response, naming its content type", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("<html>Bad gateway</html>", { status: 200, headers: { "Content-Type": "text/html" } })
+    ) as unknown as typeof fetch;
+
+    await expect(
+      requestPlayItem(CONFIG, "item-1", { clientId: "web-1", sessionId: "session-1" }, fetchMock)
+    ).rejects.toThrow("The server sent an unexpected response (text/html).");
+  });
+
+  it.each(["Failed to fetch", "Load failed", "NetworkError when attempting to fetch resource."])(
+    "reads a play that couldn't reach the server, which the browser calls %j, the same in every browser",
+    async (wording) => {
+      const fetchMock = vi.fn().mockRejectedValue(new TypeError(wording)) as unknown as typeof fetch;
+
+      await expect(
+        requestPlayItem(CONFIG, "item-1", { clientId: "web-1", sessionId: "session-1" }, fetchMock)
+      ).rejects.toThrow("Couldn't reach the server.");
+    }
+  );
 
   it("fails locally when item id is blank", async () => {
     const fetchMock = vi.fn() as unknown as typeof fetch;

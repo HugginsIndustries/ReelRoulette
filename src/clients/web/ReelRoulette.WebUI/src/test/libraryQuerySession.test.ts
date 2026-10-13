@@ -413,6 +413,27 @@ describe("libraryQuerySession", () => {
     expect(calls.filter((offset) => offset === 0).length).toBeGreaterThan(1);
   });
 
+  it("keeps a failed load's message and the status its error carries, and clears both once a load succeeds", async () => {
+    const failures: unknown[] = [Object.assign(new Error("HTTP 408"), { status: 408 }), new Error("Couldn't reach the server.")];
+    const statusMessages: Array<string | null> = [];
+    const session = createLibraryQuerySession(async () => {
+      const failure = failures.shift();
+      if (failure) {
+        throw failure;
+      }
+      return page([item("a")], 1, 1);
+    });
+    session.setListener((event) => statusMessages.push(event.statusMessage));
+
+    await session.resetQuery(createDefaultFilterState(), controls());
+    expect(session.snapshot()).toMatchObject({ phase: "error", errorMessage: "HTTP 408", errorStatus: 408 });
+    await session.resetQuery(createDefaultFilterState(), controls());
+    expect(session.snapshot()).toMatchObject({ phase: "error", errorMessage: "Couldn't reach the server.", errorStatus: null });
+    await session.resetQuery(createDefaultFilterState(), controls());
+    expect(session.snapshot()).toMatchObject({ phase: "ready", errorMessage: null, errorStatus: null });
+    expect(statusMessages.filter(Boolean)).toEqual(["Library load failed: HTTP 408", "Library load failed: Couldn't reach the server."]);
+  });
+
   it("retries a failed further page after the scroll position changes", async () => {
     let failAppend = true;
     const calls: number[] = [];

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { UnauthorizedError } from "../api/serverRequest";
 import {
   applyTagSaveLocally,
   createTagSaveSession,
@@ -44,10 +45,12 @@ describe("planTagEditorSave", () => {
     const result = await runTagEditorSave(steps, {
       post: async (step) => {
         posted.push(step);
-        return true;
-      }
+        return { ok: true };
+      },
+      label: () => "Tag apply"
     });
     expect(result.ok).toBe(true);
+    expect(result.error).toBeNull();
     expect(posted).toEqual(steps);
     expect(posted.some((step) => step.kind === "upsert-category")).toBe(false);
   });
@@ -175,18 +178,49 @@ describe("tag save apply", () => {
         if (step.kind === "apply-item-tags") {
           throw new Error("network down");
         }
-        return true;
-      }
+        return { ok: true };
+      },
+      label: (step) => (step.kind === "apply-item-tags" ? "Tag apply" : "Tag rename")
     });
     expect(result.ok).toBe(false);
     expect(result.accepted).toEqual([steps[0]]);
     expect(result.failed).toEqual(steps[1]);
+    expect(result.error).toBe("Tag apply failed: network down");
 
     const items = [item("a", ["Day"])];
     const snapshot = snapshotTags(items);
     applyTagSaveLocally(items, steps);
     rollbackTagSave(items, snapshot, result.accepted);
     expect(items[0]?.tags).toEqual(["Evening"]);
+  });
+
+  it("has no error to show for a step the server answered with 401, whose pairing prompt shows instead", async () => {
+    const steps: TagSaveStep[] = [{ kind: "apply-item-tags", itemIds: ["a"], addTags: ["Night"], removeTags: [] }];
+    const result = await runTagEditorSave(steps, {
+      post: async () => {
+        throw new UnauthorizedError();
+      },
+      label: () => "Tag apply"
+    });
+    expect(result).toEqual({ ok: false, accepted: [], failed: steps[0], error: null });
+  });
+
+  it("reports the refused step's status, and sends no step after it", async () => {
+    const steps: TagSaveStep[] = [
+      { kind: "upsert-tag", name: "Night", categoryId: "uncategorized" },
+      { kind: "delete-tag", name: "Day" },
+      { kind: "apply-item-tags", itemIds: ["a"], addTags: ["Night"], removeTags: [] }
+    ];
+    const posted: TagSaveStep["kind"][] = [];
+    const result = await runTagEditorSave(steps, {
+      post: async (step) => {
+        posted.push(step.kind);
+        return step.kind === "delete-tag" ? { ok: false, status: 409 } : { ok: true };
+      },
+      label: (step) => (step.kind === "delete-tag" ? "Tag delete" : "Other")
+    });
+    expect(result).toEqual({ ok: false, accepted: [steps[0]], failed: steps[1], error: "Tag delete failed (409)" });
+    expect(posted).toEqual(["upsert-tag", "delete-tag"]);
   });
 
   it("still applies an echo from another client", () => {

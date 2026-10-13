@@ -4,14 +4,17 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { statusLogLine } from "../../logging/relayLogLines";
 import {
   API_BASE_URL,
   COMPATIBLE_VERSION,
   FakeServer,
+  closeNotices,
   currentStyle,
   json,
   mountPage,
   normalizedMarkup,
+  openNotices,
   pickPreset,
   presetSelect,
   resetPage,
@@ -20,6 +23,7 @@ import {
   settle,
   status,
   stubLayoutSize,
+  unauthorizedLogLine,
   useStylesheet,
   type MountedPage
 } from "./pageHarness";
@@ -394,11 +398,78 @@ describe("first page", () => {
     fireEvent.change(sortSelect(), { target: { value: "PlayCount" } });
     await flush();
 
-    expect(within(overlay()).getByRole("alert").textContent).toBe("HTTP 503");
+    expect(within(overlay()).getByRole("alert").textContent).toBe("Library load failed: HTTP 503");
     expect(statusLine()).toBe("Library load failed: HTTP 503");
     expect(controlsShown()).toBe(true);
     expect(summary().hidden).toBe(true);
     expect(tileNames()).toEqual([]);
+  });
+
+  it.each([
+    [408, "The server didn't answer in time, so the library couldn't load. It may be waiting on a slow or disconnected drive or share."],
+    [504, "The server didn't answer in time, so the library couldn't load. It may be waiting on a slow or disconnected drive or share."],
+    [500, "Library load failed: HTTP 500"]
+  ])("shows a load answered with %i as its own message in the body, and its status on the status line", async (failure, message) => {
+    const { library } = await mountLibrary(libraryItems(2));
+    await openLibrary();
+
+    library.failures.push(failure);
+    fireEvent.change(sortSelect(), { target: { value: "PlayCount" } });
+    await flush();
+
+    expect(within(overlay()).getByRole("alert").textContent).toBe(message);
+    expect(statusLine()).toBe(`Library load failed: HTTP ${failure}`);
+  });
+
+  it("shows no failure for a load answered with 401, only the pairing prompt, and logs it", async () => {
+    const { server, library } = await mountLibrary(libraryItems(2));
+    await openLibrary();
+    const status = statusLine();
+
+    library.failures.push(401);
+    fireEvent.change(sortSelect(), { target: { value: "PlayCount" } });
+    await flush();
+
+    await waitFor(() => expect((document.getElementById("pair-section") as HTMLElement).style.display).toBe("flex"));
+    expect(within(overlay()).queryByRole("alert")).toBeNull();
+    expect(overlay().textContent).not.toContain("Library load failed");
+    expect(statusLine()).toBe(status);
+    // One line, the request's, which names its route.
+    await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("POST /api/library/query")));
+    await settle();
+    expect(server.logLines()).not.toContain(statusLogLine("Library load failed: Unauthorized", null, 0));
+    expect(openNotices()).toEqual([]);
+  });
+
+  it("keeps the preset dropdown on Loading... while the presets need pairing, with only the pairing prompt", async () => {
+    const server = new FakeServer();
+    server.on("GET", "/api/version", () => status(401));
+    server.on("GET", "/api/presets", () => status(401));
+    mountPage({ server });
+    await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("GET /api/version")));
+    await settle();
+
+    expect(selectedPresetLabel()).toBe("Loading...");
+    // Neither 401 shows on the status line, which keeps what it showed: the server answered, so it isn't offline.
+    expect(statusLine()).toBe("Ready");
+    expect((document.getElementById("pair-section") as HTMLElement).style.display).toBe("flex");
+    await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("GET /api/presets")));
+    await settle();
+    expect(server.logLines()).not.toContain(statusLogLine("Error loading presets: Unauthorized", null, 0));
+    expect(server.logLines()).not.toContain(statusLogLine("Ready (API offline)", null, 0));
+  });
+
+  it("shows a load answered with a page that isn't JSON as an unexpected response, naming its content type", async () => {
+    const { server } = await mountLibrary(libraryItems(2));
+    await openLibrary();
+
+    server.on("POST", "/api/library/query", () => new Response("<html>Bad gateway</html>", { status: 200, headers: { "Content-Type": "text/html" } }));
+    fireEvent.change(sortSelect(), { target: { value: "PlayCount" } });
+    await flush();
+
+    const message = "Library load failed: The server sent an unexpected response (text/html).";
+    expect(within(overlay()).getByRole("alert").textContent).toBe(message);
+    expect(statusLine()).toBe(message);
   });
 
   it("says when the library is empty", async () => {
@@ -791,7 +862,7 @@ describe("playing a tile", () => {
     expect(server.requests("POST", "/api/record-playback")).toHaveLength(0);
   });
 
-  it("a tile the server cannot play leaves the overlay open and says why", async () => {
+  it("a tile the server cannot play leaves the overlay open and says why in the notice", async () => {
     useOverlayWidth();
     const replies: Response[] = [];
     const { server } = await mountLibrary(libraryItems(3), (fake) => {
@@ -803,34 +874,55 @@ describe("playing a tile", () => {
       [json({ error: "Not found", code: "play_item_not_found" }, 404), "Media not found. The file may have moved or been deleted."],
       [json({ error: "Unavailable", code: "play_item_unavailable" }, 409), "This item is unavailable."],
       [json({ error: "Unsupported" }, 415), "This file type is not supported."],
-      [json({ error: "Disk C:\\media is offline" }, 500), "Disk C:\\media is offline"]
+      [json({ error: "Disk C:\\media is offline" }, 500), "Disk C:\\media is offline"],
+      [json({}, 500), "Playback failed."],
+      [json({ itemId: "item-1" }), "Playback failed."],
+      [
+        new Response("<html>Bad gateway</html>", { status: 200, headers: { "Content-Type": "text/html" } }),
+        "Playback failed: The server sent an unexpected response (text/html)."
+      ]
     ];
     for (const [reply, message] of cases) {
       replies.push(reply);
       await click(tile("item-1")!);
-      expect(statusLine()).toBe(message);
+      expect(openNotices()).toEqual([message]);
+      // The status line drops the play's "Loading..." without showing the failure.
+      expect(statusLine()).toBe("");
       expect(isOpen()).toBe(true);
+      await closeNotices();
     }
 
     await waitFor(() =>
       expect(server.logLines()).toContain("playback=library-play-failed attempt=0 hasCurrent=false statusCode=404 code=play_item_not_found")
     );
     expect(server.logLines()).toContain("playback=library-play-failed attempt=0 hasCurrent=false statusCode=415 code=none");
-    expect(server.logLines()).toContain("status=Playback failed hasCurrent=false attempt=0");
+    expect(server.logLines()).toEqual(
+      expect.arrayContaining([
+        statusLogLine("Playback failed", null, 0),
+        statusLogLine("Playback failed.", null, 0),
+        statusLogLine("Playback failed: The server sent an unexpected response (text/html).", null, 0)
+      ])
+    );
     expect(server.logLines().some((line) => line.includes("media"))).toBe(false);
     expect(video().getAttribute("src")).toBeNull();
   });
 
-  it("an unauthorized play shows the pairing prompt", async () => {
-    await mountLibrary(libraryItems(3), (fake) => {
+  it("an unauthorized play shows only the pairing prompt, and still relays its line", async () => {
+    const { server } = await mountLibrary(libraryItems(3), (fake) => {
       fake.on("POST", "/api/play/item-1", () => status(401));
     });
     await openLibrary();
 
     await click(tile("item-1")!);
 
-    expect(statusLine()).toBe("Unauthorized. Pair first.");
     expect((document.getElementById("pair-section") as HTMLElement).style.display).toBe("flex");
+    expect(screen.queryByText("Unauthorized. Pair first.")).toBeNull();
+    expect(statusLine()).toBe("");
+    expect(openNotices()).toEqual([]);
+    await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("POST /api/play/{itemId}")));
+    await settle();
+    expect(server.logLines()).not.toContain(statusLogLine("Unauthorized. Pair first.", null, 0));
+    expect(server.logLines().some((line) => line.includes("item-1"))).toBe(false);
   });
 
   it("a second activation while a play is loading is ignored", async () => {
@@ -860,21 +952,32 @@ describe("playing a tile", () => {
     expect(isOpen()).toBe(false);
   });
 
-  it("a play that cannot reach the server says so and leaves the overlay open", async () => {
-    useOverlayWidth();
-    const { server } = await mountLibrary(libraryItems(3), (fake) => {
-      fake.on("POST", "/api/play/item-1", () => {
-        throw new TypeError("Failed to fetch");
+  it.each(["Failed to fetch", "Load failed", "NetworkError when attempting to fetch resource."])(
+    "a play that cannot reach the server, which the browser calls %j, says so in the notice and leaves the overlay open",
+    async (wording) => {
+      useOverlayWidth();
+      const { server } = await mountLibrary(libraryItems(3), (fake) => {
+        fake.on("POST", "/api/play/item-1", () => {
+          throw new TypeError(wording);
+        });
       });
-    });
-    await openLibrary();
+      await openLibrary();
 
-    await click(tile("item-1")!);
+      await click(tile("item-1")!);
 
-    expect(statusLine()).toBe("Playback failed: Failed to fetch");
-    expect(isOpen()).toBe(true);
-    await waitFor(() => expect(server.logLines()).toContain("playback=library-play-error attempt=0 hasCurrent=false message=Failed to fetch"));
-  });
+      expect(openNotices()).toEqual(["Playback failed: Couldn't reach the server."]);
+      expect(statusLine()).toBe("");
+      expect(isOpen()).toBe(true);
+      await waitFor(() =>
+        expect(server.logLines()).toEqual(
+          expect.arrayContaining([
+            "playback=library-play-error attempt=0 hasCurrent=false message=Couldn't reach the server.",
+            statusLogLine("Playback failed: Couldn't reach the server.", null, 0)
+          ])
+        )
+      );
+    }
+  );
 });
 
 describe("tiles", () => {
@@ -1316,5 +1419,103 @@ describe("memory", () => {
     expect(library.queries()[0].filterState.includedSourceIds).toEqual(["source-gone"]);
     await openLibrary();
     await waitFor(() => expect(filtersLine().textContent).toBe("Filters: 0 of 3 sources"));
+  });
+});
+
+describe("kept sources", () => {
+  const MOVIES_NOTICE =
+    "Library refresh found no media files in Movies (C:\\media\\movies), so it kept the library's 120 items from there. If the folder is on a drive or share, check that it's connected.";
+  const LOG_LINE = statusLogLine("Library refresh kept the items of sources whose folder listed no media files", null, 0);
+
+  /** A refresh status that lists the sources the run kept, while its source stage runs or once it has finished. */
+  function refreshStatus(runId: string, sourceStageDone: boolean, keptSources: Array<{ sourceId: string; itemCount: number }>) {
+    return {
+      snapshot: {
+        isRunning: true,
+        runId,
+        trigger: "manual",
+        currentStage: sourceStageDone ? "fingerprintScan" : "sourceRefresh",
+        stages: [{ stage: "sourceRefresh", percent: sourceStageDone ? 100 : 40, message: "", isComplete: sourceStageDone }],
+        keptSources
+      }
+    };
+  }
+
+  it("waits for the source stage, loads the source list to name the folder, and names it once for the page's life", async () => {
+    const { page, server } = await mountLibrary(libraryItems(3), (fake) => fake.on("GET", "/api/sources", () => json(SOURCES)));
+    expect(server.requests("GET", "/api/sources")).toHaveLength(0);
+
+    page.stream().emit("refreshStatusChanged", 2, refreshStatus("run-1", false, [{ sourceId: "source-1", itemCount: 120 }]));
+    await flush();
+    expect(openNotices()).toEqual([]);
+    expect(server.requests("GET", "/api/sources")).toHaveLength(0);
+
+    page.stream().emit("refreshStatusChanged", 3, refreshStatus("run-1", true, [{ sourceId: "source-1", itemCount: 120 }]));
+    await waitFor(() => expect(openNotices()).toEqual([MOVIES_NOTICE]));
+    expect(server.requests("GET", "/api/sources")).toHaveLength(1);
+    await waitFor(() => expect(server.logLines()).toContain(LOG_LINE));
+    expect(server.logLines().some((line) => line.includes("movies") || line.includes("Movies"))).toBe(false);
+    await closeNotices();
+
+    page.stream().emit("refreshStatusChanged", 4, refreshStatus("run-2", true, [{ sourceId: "source-1", itemCount: 120 }]));
+    await flush();
+    expect(openNotices()).toEqual([]);
+  });
+
+  it("names several folders in one notice from the source list already loaded", async () => {
+    localStorage.setItem(
+      REMEMBERED_FILTER_KEY,
+      JSON.stringify({
+        filter: { selectedTags: [], excludedTags: [], includedSourceIds: ["source-1"] },
+        preset: null,
+        holdNone: false,
+        unchanged: false
+      })
+    );
+    const { page, server } = await mountLibrary(libraryItems(3), (fake) => fake.on("GET", "/api/sources", () => json(SOURCES)));
+    await waitFor(() => expect(server.requests("GET", "/api/sources")).toHaveLength(1));
+
+    page.stream().emit(
+      "refreshStatusChanged",
+      2,
+      refreshStatus("run-1", true, [
+        { sourceId: "source-1", itemCount: 120 },
+        { sourceId: "source-2", itemCount: 1000 }
+      ])
+    );
+    await waitFor(() =>
+      expect(openNotices()).toEqual([
+        `Library refresh found no media files in Movies (C:\\media\\movies) and Photos (C:\\media\\photos), so it kept the library's ${(1120).toLocaleString()} items from them. If the folders are on a drive or share, check that it's connected.`
+      ])
+    );
+    expect(server.requests("GET", "/api/sources")).toHaveLength(1);
+  });
+
+  it("loads the source list again when it lacks a kept source, and leaves out a source it still lacks", async () => {
+    localStorage.setItem(
+      REMEMBERED_FILTER_KEY,
+      JSON.stringify({
+        filter: { selectedTags: [], excludedTags: [], includedSourceIds: ["source-2"] },
+        preset: null,
+        holdNone: false,
+        unchanged: false
+      })
+    );
+    // The Filters line loads the list before Movies is added.
+    let listed = [SOURCES[1]!];
+    const { page, server } = await mountLibrary(libraryItems(3), (fake) => fake.on("GET", "/api/sources", () => json(listed)));
+    await waitFor(() => expect(server.requests("GET", "/api/sources")).toHaveLength(1));
+    listed = SOURCES;
+
+    page.stream().emit(
+      "refreshStatusChanged",
+      2,
+      refreshStatus("run-1", true, [
+        { sourceId: "source-1", itemCount: 120 },
+        { sourceId: "source-hidden", itemCount: 4 }
+      ])
+    );
+    await waitFor(() => expect(openNotices()).toEqual([MOVIES_NOTICE]));
+    expect(server.requests("GET", "/api/sources")).toHaveLength(2);
   });
 });

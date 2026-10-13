@@ -35,16 +35,6 @@ describe("libraryPlayModel", () => {
     ).toBe("This file type is not supported.");
   });
 
-  it("maps 401 to pairing message", () => {
-    expect(
-      mapPlayItemErrorToStatus({
-        ok: false,
-        statusCode: 401,
-        error: "Unauthorized"
-      })
-    ).toBe("Unauthorized. Pair first.");
-  });
-
   it("falls back to server error text", () => {
     expect(
       mapPlayItemErrorToStatus({

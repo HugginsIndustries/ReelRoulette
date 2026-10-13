@@ -136,8 +136,8 @@ export function autoTagSummary(rows: readonly AutoTagRow[], viewAll: boolean): s
 }
 
 /**
- * The status after the results change. It is left as it was while no row shows, so a scan whose matches all have
- * their tag keeps "Scanning…" (recorded in WebUI Notifications).
+ * The status after the results change, such as a selection. It is left as it was before any scan, so a failed scan's
+ * error stays, and while no row shows, since nothing shown changed. A scan sets its own summary.
  */
 export function autoTagStatusAfterChange(rows: readonly AutoTagRow[], viewAll: boolean, hasRun: boolean, previous: string): string {
   if (!hasRun) {

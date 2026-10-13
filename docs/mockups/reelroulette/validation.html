@@ -1310,6 +1310,11 @@ function nameDialog({ title, label, value, check, onSave, deleteMessage, onDelet
 
 /** A notice: something the user must see, with one OK. */
 function noticeDialog({ title, message }) {
+  // A notice whose text is already open doesn't open again, so a failure that repeats, such as a missing photo under
+  // Autoplay or a press that fails the same way, doesn't stack notices.
+  if ([...document.querySelectorAll("dialog.app-dialog .dialog-message")].some((text) => text.textContent === message)) {
+    return Promise.resolve();
+  }
   return new Promise((resolve) => {
     const body = document.createElement("div");
     body.className = "dialog-body";

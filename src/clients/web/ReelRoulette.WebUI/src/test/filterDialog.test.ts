@@ -13,13 +13,17 @@ const EVERYTHING: ApiPreset = { id: "preset-everything", name: "Everything", fil
 const RECENT: ApiPreset = { id: "preset-recent", name: "Recent", filterState: { onlyNeverPlayed: true } };
 
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status });
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
 function setup(presets: ApiPreset[] = [FAVORITES]) {
   const server = {
     presets: presets.slice(),
     sourcesStatus: 200,
+    /** The tag model's status, and its content type, for a proxy's page in place of JSON. */
+    modelStatus: 200,
+    modelType: "application/json",
+    /** The preset save's status, or 0 for one that can't reach the server. */
     saveStatus: 200,
     /** While set, the sources request waits for it, so a test can act while the dialog loads. */
     held: null as Promise<void> | null,
@@ -46,9 +50,14 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
       return json([{ id: "source-1", displayName: "Movies" }, { id: "source-2", displayName: "Photos" }], server.sourcesStatus);
     }
     if (path === "/api/tag-editor/model") {
-      return json({ categories: [{ id: "places", name: "Places", sortOrder: 0 }], tags: [{ name: "Beach", categoryId: "places" }] });
+      const model = { categories: [{ id: "places", name: "Places", sortOrder: 0 }], tags: [{ name: "Beach", categoryId: "places" }] };
+      const body = server.modelType === "application/json" ? JSON.stringify(model) : "<html>Bad gateway</html>";
+      return new Response(body, { status: server.modelStatus, headers: { "Content-Type": server.modelType } });
     }
     if (path === "/api/presets" && method === "POST") {
+      if (server.saveStatus === 0) {
+        throw new TypeError("NetworkError when attempting to fetch resource.");
+      }
       if (server.saveStatus !== 200) {
         return json({}, server.saveStatus);
       }
@@ -77,7 +86,12 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
     statuses.push(message);
     setStatus(message, logText);
   };
-  const api = createAppApi("http://server", { onUnauthorized: () => {}, fetch: fetchImpl });
+  const api = createAppApi("http://server", {
+    onUnauthorized: () => {
+      store.pairingRequired.value = true;
+    },
+    fetch: fetchImpl
+  });
   const steps: string[] = [];
   const connection = {
     async loadPresets() {
@@ -98,15 +112,20 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
     setItem: (key: string, value: string) => void remembered.set(key, value)
   });
   const confirm = vi.fn(async (_request: ConfirmRequest) => true);
+  /** The messages shown in the in-app notice, in order. */
+  const notices: string[] = [];
+  const notice = async (message: string) => {
+    notices.push(message);
+  };
   /** The panel, which Apply and Cancel close as the overlay. */
   const panel = {
     closeIfOverlay: vi.fn(async () => {
       steps.push("closeIfOverlay");
     })
   };
-  const dialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs: { confirm } });
+  const dialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs: { confirm, notice } });
   const view = () => dialog.view.value!;
-  return { dialog, view, store, server, statuses, steps, library, remembered, confirm, panel, deviceWrites };
+  return { dialog, view, store, server, statuses, notices, steps, library, remembered, confirm, panel, deviceWrites };
 }
 
 /** An action that is neither disabled nor held. */
@@ -142,7 +161,7 @@ describe("opening", () => {
   });
 
   it("shows but loads nothing while the server is incompatible, and says why when its data cannot load", async () => {
-    const { dialog, store, server, statuses } = setup();
+    const { dialog, store, server, statuses, notices } = setup();
     store.compatibilityBlocked.value = true;
     await dialog.open();
     expect(server.requests).toHaveLength(0);
@@ -156,20 +175,22 @@ describe("opening", () => {
     store.compatibilityBlocked.value = false;
     server.sourcesStatus = 500;
     await dialog.open();
-    expect(statuses).toEqual(["Filter load failed: HTTP 500"]);
+    expect(notices).toEqual(["Filter load failed: HTTP 500"]);
+    expect(statuses).toEqual([]);
     expect(dialog.isOpen.value).toBe(true);
     expect(dialog.view.value).toBeNull();
     expect(dialog.tab.value).toBeNull();
   });
 
   it("Refresh before anything has loaded loads as showing the tab does, and says so", async () => {
-    const { dialog, view, server, statuses } = setup();
+    const { dialog, view, server, statuses, notices } = setup();
     server.sourcesStatus = 500;
     await dialog.open();
     expect(dialog.view.value).toBeNull();
 
     await dialog.refresh();
-    expect(statuses.at(-1)).toBe("Filter refresh failed: HTTP 500");
+    expect(notices.at(-1)).toBe("Filter refresh failed: HTTP 500");
+    expect(statuses).toEqual([]);
     expect(dialog.view.value).toBeNull();
 
     server.sourcesStatus = 200;
@@ -178,6 +199,48 @@ describe("opening", () => {
     expect(dialog.tab.value).toBe("general");
     expect(view().sources.map((source) => source.id)).toEqual(["source-1", "source-2"]);
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites"]);
+  });
+
+  it("reads a failed tag model as HTTP and its status, on loading and on Refresh", async () => {
+    const { dialog, server, statuses, notices } = setup();
+    server.modelStatus = 503;
+    await dialog.open();
+    expect(notices).toEqual(["Filter load failed: HTTP 503"]);
+
+    server.modelStatus = 200;
+    await dialog.open();
+    server.modelStatus = 503;
+    await dialog.refresh();
+    expect(notices).toEqual(["Filter load failed: HTTP 503", "Filter refresh failed: HTTP 503"]);
+    expect(statuses).toEqual([]);
+  });
+
+  it("names the content type of a tag model that isn't JSON, such as a proxy's page", async () => {
+    const { dialog, server, notices } = setup();
+    server.modelType = "text/html";
+    await dialog.open();
+    expect(notices).toEqual(["Filter load failed: The server sent an unexpected response (text/html)."]);
+    expect(dialog.view.value).toBeNull();
+  });
+
+  it.each([
+    ["tag model", "modelStatus"],
+    ["sources", "sourcesStatus"]
+  ] as const)("shows only the pairing prompt when the %s answers 401, on loading and on Refresh", async (_name, field) => {
+    const { dialog, store, server, statuses, notices } = setup();
+    server[field] = 401;
+    await dialog.open();
+    expect(store.pairingRequired.value).toBe(true);
+    expect(notices).toEqual([]);
+    expect(dialog.view.value).toBeNull();
+
+    await dialog.refresh();
+    server[field] = 200;
+    await dialog.refresh();
+    server[field] = 401;
+    await dialog.refresh();
+    expect(notices).toEqual([]);
+    expect(statuses).toEqual(["Filter data refreshed."]);
   });
 
   it("keeps its changes and its section while it hides, and shows them again as it loads again", async () => {
@@ -584,10 +647,11 @@ describe("Presets tab", () => {
   });
 
   it("updates the chosen preset with the working filter", async () => {
-    const { dialog, view, statuses } = setup([FAVORITES, RECENT]);
+    const { dialog, view, statuses, notices } = setup([FAVORITES, RECENT]);
     await dialog.open();
     dialog.updatePreset();
-    expect(statuses.at(-1)).toBe("Select a preset to update.");
+    expect(notices).toEqual(["Select a preset to update."]);
+    expect(statuses).toEqual([]);
 
     dialog.choosePreset("Recent");
     dialog.changeGeneral({ favoritesOn: true });
@@ -763,7 +827,7 @@ describe("applying", () => {
   });
 
   it("keeps the dialog open and applies nothing when the presets cannot be saved", async () => {
-    const { dialog, view, store, server, statuses, library, panel } = setup([FAVORITES]);
+    const { dialog, view, store, server, statuses, notices, library, panel } = setup([FAVORITES]);
     server.saveStatus = 500;
     await dialog.open();
     dialog.changeGeneral({ onlyNeverPlayed: true });
@@ -772,9 +836,26 @@ describe("applying", () => {
 
     await dialog.apply();
 
-    expect(statuses.at(-1)).toBe("Saving presets failed (500).");
+    expect(notices).toEqual(["Saving presets failed (500)."]);
+    expect(statuses).toEqual([]);
     expect(dialog.isOpen.value).toBe(true);
     expect(panel.closeIfOverlay).not.toHaveBeenCalled();
+    expect(view().presetsChanged).toBe(true);
+    expect(store.appliedFilter.value).toEqual(createDefaultFilterState());
+    expect(library.commitQuery).not.toHaveBeenCalled();
+  });
+
+  it("says a preset save that couldn't reach the server failed, and applies nothing", async () => {
+    const { dialog, view, store, server, statuses, notices, library } = setup([FAVORITES]);
+    await dialog.open();
+    dialog.typeNewPresetName("Unplayed");
+    dialog.addPreset();
+    server.saveStatus = 0;
+
+    await dialog.apply();
+
+    expect(notices).toEqual(["Saving presets failed: Couldn't reach the server."]);
+    expect(statuses).toEqual([]);
     expect(view().presetsChanged).toBe(true);
     expect(store.appliedFilter.value).toEqual(createDefaultFilterState());
     expect(library.commitQuery).not.toHaveBeenCalled();

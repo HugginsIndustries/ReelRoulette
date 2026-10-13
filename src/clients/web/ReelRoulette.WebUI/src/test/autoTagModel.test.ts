@@ -125,13 +125,13 @@ describe("results and status", () => {
     expect(autoTagSummary([], false)).toBe(AUTO_TAG_NO_MATCHES);
   });
 
-  it("updates the status except before a scan and while no row shows", () => {
+  it("updates the status except before a scan, keeping a failed scan's error, and while no row shows", () => {
+    const summary = "Scan complete: 1 matching tags, 1 matches, 0/0 selected changes.";
     expect(autoTagStatusAfterChange(rows(), false, false, "")).toBe("");
-    expect(autoTagStatusAfterChange([], false, true, "Scanning…")).toBe(AUTO_TAG_NO_MATCHES);
-    expect(autoTagStatusAfterChange([byName(rows(), "Alps")], false, true, "Scanning…")).toBe("Scanning…");
-    expect(autoTagStatusAfterChange([byName(rows(), "Alps")], true, true, "Scanning…")).toBe(
-      "Scan complete: 1 matching tags, 1 matches, 0/0 selected changes."
-    );
+    expect(autoTagStatusAfterChange([], false, false, "Scan failed: HTTP 500")).toBe("Scan failed: HTTP 500");
+    expect(autoTagStatusAfterChange([], false, true, summary)).toBe(AUTO_TAG_NO_MATCHES);
+    expect(autoTagStatusAfterChange([byName(rows(), "Alps")], false, true, summary)).toBe(summary);
+    expect(autoTagStatusAfterChange([byName(rows(), "Alps")], true, true, "")).toBe(summary);
   });
 });
 

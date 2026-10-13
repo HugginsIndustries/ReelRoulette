@@ -1,11 +1,14 @@
 // @vitest-environment happy-dom
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it } from "vitest";
+import { statusLogLine } from "../../logging/relayLogLines";
 import {
+  closeNotices,
   FakeServer,
   json,
   mountPage,
   normalizedMarkup,
+  openNotices,
   pickPreset,
   pointerDown,
   pointerMove,
@@ -15,6 +18,7 @@ import {
   scrollOnFocus,
   selectedPresetLabel,
   settle,
+  unauthorizedLogLine,
   status,
   stubRowLayout,
   stubScroller,
@@ -514,6 +518,28 @@ function statusLine(): string {
   return byId("status")?.textContent ?? "";
 }
 
+/**
+ * Expects the in-app notice to show `message`, alone, and not the status line, with the `last.log` line the status
+ * line relayed for it while the video `mountTags` plays is current, then closes it.
+ */
+async function expectNotice(server: FakeServer, message: string): Promise<void> {
+  await waitFor(() => expect(openNotices()).toEqual([message]));
+  expect(statusLine()).not.toBe(message);
+  await waitFor(() => expect(server.logLines()).toContain(statusLogLine(message, { id: VIDEO_ITEM.id }, 1)));
+  await closeNotices();
+  expect(openNotices()).toEqual([]);
+}
+
+/** The header's pairing prompt, found while it is hidden too. */
+function pairingPrompt(): HTMLElement {
+  return screen.getByRole("button", { name: "Pair", hidden: true }).closest(".pair-section") as HTMLElement;
+}
+
+/** A success whose body is a proxy's page in place of JSON. */
+function htmlPage(): Response {
+  return new Response("<html>Bad gateway</html>", { status: 200, headers: { "Content-Type": "text/html" } });
+}
+
 /** Auto Tag, over the whole page, or null while it is closed. */
 function findAutoTag(): HTMLDialogElement | null {
   return document.getElementById("autotag") as HTMLDialogElement | null;
@@ -714,9 +740,9 @@ describe("opening and closing", () => {
   });
 
   it("stays open and says why when the tags cannot load", async () => {
-    const { tags } = await mountTags({ setup: (_server, fake) => (fake.modelStatus = 500) });
+    const { server, tags } = await mountTags({ setup: (_server, fake) => (fake.modelStatus = 500) });
     await openEditor();
-    expect(statusLine()).toBe("Tag editor unavailable: tag-model:500");
+    await expectNotice(server, "Tag editor unavailable: HTTP 500");
     expect(body().textContent).toBe("");
 
     tags.modelStatus = 200;
@@ -724,8 +750,30 @@ describe("opening and closing", () => {
     expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
     tags.modelStatus = 503;
     await click(headerButton("Refresh"));
-    expect(statusLine()).toBe("Tag refresh failed: tag-model:503");
+    await expectNotice(server, "Tag refresh failed: HTTP 503");
     expect(isOpen()).toBe(true);
+  });
+
+  it("names the content type of tags that aren't JSON, such as a proxy's page", async () => {
+    const { server } = await mountTags({ setup: (fake) => fake.on("POST", "/api/tag-editor/model", () => htmlPage()) });
+    await openEditor();
+    await expectNotice(server, "Tag editor unavailable: The server sent an unexpected response (text/html).");
+    expect(body().textContent).toBe("");
+  });
+
+  it("shows only the pairing prompt when the tags answer 401, and logs it", async () => {
+    const { server, tags } = await mountTags({ setup: (_server, fake) => (fake.modelStatus = 401) });
+    expect(pairingPrompt().style.display).toBe("none");
+    await openEditor();
+    await waitFor(() => expect(pairingPrompt().style.display).toBe("flex"));
+    await click(headerButton("Refresh"));
+    expect(tags.modelRequests()).toHaveLength(2);
+    expect(openNotices()).toEqual([]);
+    expect(statusLine()).not.toMatch(/^Tag (editor unavailable|refresh failed)/);
+    expect(body().textContent).toBe("");
+    await waitFor(() =>
+      expect(server.logLines()).toContain(unauthorizedLogLine("POST /api/tag-editor/model", { id: VIDEO_ITEM.id }, 1))
+    );
   });
 
   it("keeps its markup, and Auto Tag's and the Edit Tag dialog's", async () => {
@@ -1142,7 +1190,7 @@ describe("Edit Tags", () => {
   });
 
   it("says there is nothing to save when categories moved back, and stays open", async () => {
-    const { tags } = await mountTags();
+    const { server, tags } = await mountTags();
     await openEditor();
     await pressKey(handle("Mood"), "ArrowDown");
     await pressKey(handle("Mood"), "ArrowUp");
@@ -1150,7 +1198,7 @@ describe("Edit Tags", () => {
     expect(savePending()).toBe(true);
 
     await save();
-    expect(statusLine()).toBe("No tag changes to save.");
+    await expectNotice(server, "No tag changes to save.");
     expect(isOpen()).toBe(true);
     expect(tags.saves()).toEqual([]);
   });
@@ -1774,7 +1822,7 @@ describe("saving", () => {
   });
 
   it("stops at a step the server refuses, says which, and loads the tags again", async () => {
-    const { tags } = await mountTags({ setup: (_server, fake) => fake.failures.set("/api/tag-editor/rename-tag", 500) });
+    const { server, tags } = await mountTags({ setup: (_server, fake) => fake.failures.set("/api/tag-editor/rename-tag", 500) });
     await openEditor();
     await click(chipButton("Beach", "Edit tag"));
     await typeInto(modalName(), "Shore");
@@ -1783,7 +1831,7 @@ describe("saving", () => {
     await click(chipButton("Alice", "Add tag"));
 
     await save();
-    await waitFor(() => expect(statusLine()).toBe("Tag rename failed (500)"));
+    await expectNotice(server, "Tag rename failed (500)");
     expect(isOpen()).toBe(true);
     expect(tags.saves().map((call) => call.path)).toEqual(["/api/tag-editor/rename-tag"]);
     // The tags load again, so the tab shows the server's tags in place of the changes it showed as saved.
@@ -1792,10 +1840,8 @@ describe("saving", () => {
     expect(chipState("Alice").has).toBe("none");
   });
 
-  // Kept as it was before the tag editor moved to Preact, and recorded in WebUI Notifications: a save that
-  // cannot reach the server shows the message of the last refused save on this page.
-  it("a save that cannot reach the server says it failed, with the last refused save's message once there is one", async () => {
-    const { tags } = await mountTags({ setup: (_server, fake) => fake.failures.set("/api/tag-editor/delete-tag", 0) });
+  it("a failed save shows its own error, whether the server couldn't be reached or refused it", async () => {
+    const { server, tags } = await mountTags({ setup: (_server, fake) => fake.failures.set("/api/tag-editor/delete-tag", 0) });
     const deleteAndSave = async (name: string) => {
       await openEditor();
       await deleteTag(name);
@@ -1804,13 +1850,55 @@ describe("saving", () => {
     };
 
     await deleteAndSave("Bob");
-    expect(statusLine()).toBe("Tag apply failed");
+    await expectNotice(server, "Tag delete failed: Couldn't reach the server.");
     tags.failures.set("/api/tag-editor/delete-tag", 500);
     await deleteAndSave("Bob");
-    expect(statusLine()).toBe("Tag delete failed (500)");
+    await expectNotice(server, "Tag delete failed (500)");
     tags.failures.set("/api/tag-editor/delete-tag", 0);
     await deleteAndSave("Alice");
-    expect(statusLine()).toBe("Tag delete failed (500)");
+    await expectNotice(server, "Tag delete failed: Couldn't reach the server.");
+  });
+
+  it("a tag apply that can't reach the server says so", async () => {
+    const { server } = await mountTags({ setup: (_server, fake) => fake.failures.set("/api/tag-editor/apply-item-tags", 0) });
+    await openEditor();
+    await click(chipButton("Alice", "Add tag"));
+    await save();
+    await expectNotice(server, "Tag apply failed: Couldn't reach the server.");
+    expect(chipState("Alice").has).toBe("none");
+  });
+
+  it("a tag save the server answers with 401 shows only the pairing prompt, puts the tags back, and logs it", async () => {
+    const { server } = await mountTags({ setup: (_server, fake) => fake.failures.set("/api/tag-editor/apply-item-tags", 401) });
+    await openEditor();
+    expect(pairingPrompt().style.display).toBe("none");
+    await click(chipButton("Alice", "Add tag"));
+    await save();
+    await waitFor(() => expect(pairingPrompt().style.display).toBe("flex"));
+    await settle();
+    expect(openNotices()).toEqual([]);
+    expect(chipState("Alice").has).toBe("none");
+    await waitFor(() =>
+      expect(server.logLines()).toContain(unauthorizedLogLine("POST /api/tag-editor/apply-item-tags", { id: VIDEO_ITEM.id }, 1))
+    );
+  });
+
+  it("an Auto Tag Apply the server answers with 401 shows only the pairing prompt, puts its rows back, and logs it", async () => {
+    const { server } = await mountTags({ setup: (_server, fake) => fake.failures.set("/api/autotag/apply", 401) });
+    await openEditor();
+    await openAutoTag();
+    await scan();
+    await click(autoTagButton("Select all"));
+    const selected = autoTagStatus();
+    expect(pairingPrompt().style.display).toBe("none");
+
+    await click(autoTagButton("Apply"));
+    await waitFor(() => expect(pairingPrompt().style.display).toBe("flex"));
+    await settle();
+    expect(openNotices()).toEqual([]);
+    expect(autoTagStatus()).toBe(selected);
+    expect(autoTagButton("Apply").disabled).toBe(false);
+    await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("POST /api/autotag/apply", { id: VIDEO_ITEM.id }, 1)));
   });
 
   it("reloads the library once under a tag filter, and not for its own event", async () => {
@@ -2247,15 +2335,13 @@ describe("Auto Tag", () => {
     expect(results().querySelector(".autotag-empty")?.textContent).toBe("Scan to find files whose names contain a tag's name.");
   });
 
-  // Kept as it was before the tag editor moved to Preact, and recorded in WebUI Notifications: the status
-  // keeps "Scanning…" when every match already has its tag.
-  it("shows no rows when every match already has its tag, and leaves the status on Scanning…", async () => {
+  it("shows no rows when every match already has its tag, with the scan's summary in place of Scanning…", async () => {
     await mountTags({ setup: (_server, tags) => (tags.scan = { rows: [SCAN.rows[2]] }) });
     await openEditor();
     await openAutoTag();
     await scan();
     expect(results().querySelector(".filter-hint")?.textContent).toBe("No rows to show.");
-    expect(autoTagStatus()).toBe("Scanning…");
+    expect(autoTagStatus()).toBe("Scan complete: 1 matching tags, 1 matches, 0/0 selected changes.");
     expect(progressShown()).toBe(false);
 
     await click(autoTagBox("View all matches"));
@@ -2263,17 +2349,64 @@ describe("Auto Tag", () => {
     expect(autoTagStatus()).toBe("Scan complete: 1 matching tags, 1 matches, 0/0 selected changes.");
   });
 
-  // Kept as it was before the tag editor moved to Preact, and recorded in WebUI Notifications: a failed scan
-  // reads as a scan that found nothing.
-  it("a failed scan shows that no tags matched", async () => {
-    await mountTags({ setup: (_server, tags) => (tags.scanStatus = 500) });
+  it("a failed scan shows its error beside Scan Files, with the results as before any scan, until the next scan", async () => {
+    const { tags } = await mountTags();
     await openEditor();
     await openAutoTag();
     await scan();
-    expect(autoTagStatus()).toBe("Scan complete: no matching tags found.");
-    expect(results().querySelector(".autotag-empty")?.textContent).toBe("No file names contain any tag's name.");
+    await click(rowCheck("beach"));
+    expect(autoTagButton("Apply").disabled).toBe(false);
+
+    tags.scanStatus = 500;
+    await scan();
+    expect(autoTagStatus()).toBe("Scan failed: HTTP 500");
+    expect(results().querySelector(".autotag-empty")?.textContent).toBe("Scan to find files whose names contain a tag's name.");
+    expect(autoTagButton("Apply").disabled).toBe(true);
     expect(progressShown()).toBe(false);
     expect(scanButton().disabled).toBe(false);
+    expect(openNotices()).toEqual([]);
+    expect(statusLine()).not.toMatch(/Scan/);
+
+    tags.scanStatus = 200;
+    await scan();
+    expect(autoTagStatus()).toMatch(/^Scan complete: 3 matching tags/);
+    expect(rowNames().length).toBeGreaterThan(0);
+  });
+
+  it("a scan that can't reach the server says so, and Cancel clears it", async () => {
+    await mountTags({ setup: (fake) => fake.on("POST", "/api/autotag/scan", () => Promise.reject(new TypeError("NetworkError when attempting to fetch resource."))) });
+    await openEditor();
+    await openAutoTag();
+    await scan();
+    expect(autoTagStatus()).toBe("Scan failed: Couldn't reach the server.");
+    expect(results().querySelector(".autotag-empty")?.textContent).toBe("Scan to find files whose names contain a tag's name.");
+    expect(openNotices()).toEqual([]);
+
+    await press(autoTagButton("Cancel"));
+    await openAutoTag();
+    expect(autoTagStatus()).toBe("");
+  });
+
+  it("a scan answered with a page that isn't JSON names its content type", async () => {
+    await mountTags({ setup: (fake) => fake.on("POST", "/api/autotag/scan", () => htmlPage()) });
+    await openEditor();
+    await openAutoTag();
+    await scan();
+    expect(autoTagStatus()).toBe("Scan failed: The server sent an unexpected response (text/html).");
+    expect(results().querySelector(".autotag-empty")?.textContent).toBe("Scan to find files whose names contain a tag's name.");
+  });
+
+  it("a scan answered 401 shows only the pairing prompt, nothing in place or on the status line, and logs it", async () => {
+    const { server } = await mountTags({ setup: (_server, tags) => (tags.scanStatus = 401) });
+    await openEditor();
+    await openAutoTag();
+    await scan();
+    await waitFor(() => expect(pairingPrompt().style.display).toBe("flex"));
+    expect(autoTagStatus()).toBe("");
+    expect(results().querySelector(".autotag-empty")?.textContent).toBe("Scan to find files whose names contain a tag's name.");
+    expect(openNotices()).toEqual([]);
+    expect(statusLine()).not.toMatch(/scan|Unauthorized/i);
+    await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine("POST /api/autotag/scan", { id: VIDEO_ITEM.id }, 1)));
   });
 });
 

@@ -30,7 +30,7 @@ const BEACH_PRESET: ApiPreset = {
 };
 
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status });
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
 function memoryStorage() {
@@ -49,13 +49,21 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     model: structuredClone(MODEL),
     modelStatus: 200,
     scan: { rows: [] as unknown[] } as unknown,
+    /** The scan's status, or 0 for a scan that can't reach the server. */
     scanStatus: 200,
+    /** The content type the tag model and the scan answer with, for a proxy's page in place of JSON. */
+    replyType: "application/json",
     /** Paths that answer with a status, or throw as an unreachable server does when the status is 0. */
     failures: new Map<string, number>(),
     /** Paths whose replies wait, each until the test calls the function it puts in the list. */
     held: new Map<string, Array<() => void>>(),
     posts: [] as Array<{ path: string; body: any }>
   };
+  /** A success, as JSON or as the page `replyType` names. */
+  const reply200 = (body: unknown) =>
+    server.replyType === "application/json"
+      ? json(body)
+      : new Response("<html>Bad gateway</html>", { status: 200, headers: { "Content-Type": server.replyType } });
   /** While set, tag model replies wait until the test answers them, oldest first. */
   const heldModels: Array<() => void> = [];
   let holdModels = false;
@@ -73,10 +81,13 @@ function setup(options: { scanFullLibrary?: string } = {}) {
       if (holdModels) {
         await new Promise<void>((resolve) => heldModels.push(resolve));
       }
-      return server.modelStatus === 200 ? json(reply) : json({}, server.modelStatus);
+      return server.modelStatus === 200 ? reply200(reply) : json({}, server.modelStatus);
     }
     if (path === "/api/autotag/scan") {
-      return server.scanStatus === 200 ? json(server.scan) : json({}, server.scanStatus);
+      if (server.scanStatus === 0) {
+        throw new TypeError("Load failed");
+      }
+      return server.scanStatus === 200 ? reply200(server.scan) : json({}, server.scanStatus);
     }
     const waiting = server.held.get(path);
     if (waiting) {
@@ -101,7 +112,12 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     statuses.push(message);
     setStatus(message, logText);
   };
-  const api = createAppApi("http://server", { onUnauthorized: () => {}, fetch: fetchImpl });
+  const api = createAppApi("http://server", {
+    onUnauthorized: () => {
+      store.pairingRequired.value = true;
+    },
+    fetch: fetchImpl
+  });
 
   const listeners: Record<string, (payload: any) => void> = {};
   const connection = {
@@ -141,6 +157,11 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     localStorage.setItem("rr_autoTagScanFullLibrary", options.scanFullLibrary);
   }
   const confirm = vi.fn(async (_request: ConfirmRequest) => true);
+  /** The messages shown in the in-app notice, in order. */
+  const notices: string[] = [];
+  const notice = async (message: string) => {
+    notices.push(message);
+  };
   const editor = createTagEditor({
     store,
     api,
@@ -149,7 +170,7 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     filter: { reviseTags: vi.fn() },
     device: createDeviceStore(remembered),
     localStorage,
-    dialogs: { confirm },
+    dialogs: { confirm, notice },
     newId: () => "new-category"
   });
   const view = () => editor.view.value!;
@@ -170,7 +191,7 @@ function setup(options: { scanFullLibrary?: string } = {}) {
   };
   /** The item ids each tag model request asked for. */
   const modelRequests = () => server.posts.filter((post) => post.path === "/api/tag-editor/model").map((post) => post.body.itemIds);
-  return { editor, view, titles, store, server, statuses, steps, listeners, tiles, storedFilter, session, remembered, localStorage, confirm, models, modelRequests };
+  return { editor, view, titles, store, server, statuses, notices, steps, listeners, tiles, storedFilter, session, remembered, localStorage, confirm, models, modelRequests };
 }
 
 /** Lets fetch replies finish. */
@@ -222,7 +243,8 @@ describe("opening and closing", () => {
     const context = setup();
     context.server.modelStatus = 500;
     await openOn(context);
-    expect(context.statuses).toEqual(["Tag editor unavailable: tag-model:500"]);
+    expect(context.notices).toEqual(["Tag editor unavailable: HTTP 500"]);
+    expect(context.statuses).toEqual([]);
     expect(context.editor.isOpen.value).toBe(true);
     expect(context.view().categories).toBeNull();
     expect(context.view().noModel).toBe(false);
@@ -233,6 +255,35 @@ describe("opening and closing", () => {
     context.editor.typeNewCategoryName("Food");
     context.editor.saveNewCategory();
     expect(context.view().noModel).toBe(true);
+  });
+
+  it("says a failed Refresh failed, and names the content type of tags that aren't JSON", async () => {
+    const context = setup();
+    await openOn(context);
+    context.server.modelStatus = 503;
+    await context.editor.refresh();
+    await settle();
+    context.server.modelStatus = 200;
+    context.server.replyType = "text/html";
+    await context.editor.refresh();
+    await settle();
+    expect(context.notices).toEqual([
+      "Tag refresh failed: HTTP 503",
+      "Tag refresh failed: The server sent an unexpected response (text/html)."
+    ]);
+    expect(context.statuses).toEqual([]);
+  });
+
+  it("shows only the pairing prompt when the tags answer 401", async () => {
+    const context = setup();
+    context.server.modelStatus = 401;
+    await openOn(context);
+    await context.editor.refresh();
+    await settle();
+    expect(context.store.pairingRequired.value).toBe(true);
+    expect(context.notices).toEqual([]);
+    expect(context.statuses).toEqual([]);
+    expect(context.view().categories).toBeNull();
   });
 
   it("loads, saves, and scans nothing while the server fails the compatibility check", async () => {
@@ -876,7 +927,8 @@ describe("saving", () => {
     expect(context.view().savePending).toBe(true);
     const posts = context.server.posts.length;
     context.editor.save();
-    expect(context.statuses).toEqual(["No tag changes to save."]);
+    expect(context.notices).toEqual(["No tag changes to save."]);
+    expect(context.statuses).toEqual([]);
     expect(context.editor.isOpen.value).toBe(true);
     expect(context.view().savePending).toBe(false);
     expect(context.titles()).toEqual(["Places", "People"]);
@@ -892,12 +944,12 @@ describe("saving", () => {
     context.editor.save();
     expect(context.tiles[0]!.tags).toEqual([]);
     await settle();
-    expect(context.statuses).toEqual(["Tag apply failed (500)"]);
+    expect(context.notices).toEqual(["Tag apply failed (500)"]);
+    expect(context.statuses).toEqual([]);
     expect(context.tiles[0]!.tags).toEqual(["Beach"]);
   });
 
-  // Kept as it was before the tag editor moved to Preact, and recorded in WebUI Notifications.
-  it("reports a save that cannot reach the server with the last refused step's message", async () => {
+  it("shows each failed save's own error, whether the server refused it or couldn't be reached", async () => {
     const context = setup();
     const save = async (name: string) => {
       await openOn(context);
@@ -912,7 +964,26 @@ describe("saving", () => {
     await save("Bob");
     context.server.failures.set("/api/tag-editor/delete-tag", 0);
     await save("Beach");
-    expect(context.statuses).toEqual(["Tag apply failed", "Tag delete failed (409)", "Tag delete failed (409)"]);
+    expect(context.notices).toEqual([
+      "Tag delete failed: Couldn't reach the server.",
+      "Tag delete failed (409)",
+      "Tag delete failed: Couldn't reach the server."
+    ]);
+    expect(context.statuses).toEqual([]);
+  });
+
+  it("says a landed save applied even when the library's reload after it fails", async () => {
+    const context = setup();
+    const { editor, store, session } = context;
+    store.appliedFilter.value = { ...createDefaultFilterState(), selectedTags: ["Beach"] };
+    await openOn(context);
+    session.reloadLoaded.mockRejectedValueOnce(new Error("Library load failed: HTTP 500"));
+    editor.toggleTag("Bob", "add");
+    editor.save();
+    await settle();
+    expect(session.reloadLoaded).toHaveBeenCalledTimes(1);
+    expect(context.statuses).toEqual(["Tag editor changes applied"]);
+    expect(context.notices).toEqual([]);
   });
 
   it("renames a saved tag in the applied filter, presets with tag lists, and the library's filter, then reloads once", async () => {
@@ -1041,7 +1112,8 @@ describe("Auto Tag", () => {
     editor.applyAutoTag();
     expect(context.view().autoTag.rows[0]!.files[0]!.needsChange).toBe(false);
     await settle();
-    expect(context.statuses).toEqual(["Auto-tag apply failed (500)"]);
+    expect(context.notices).toEqual(["Auto-tag apply failed (500)"]);
+    expect(context.statuses).toEqual([]);
     expect(context.view().autoTag.rows[0]!.files[0]).toMatchObject({ needsChange: true, selected: true });
     expect(context.view().autoTagApplyPending).toBe(true);
 
@@ -1056,7 +1128,7 @@ describe("Auto Tag", () => {
     await editor.scan();
     replies.forEach((reply) => reply());
     await settle();
-    expect(context.statuses.at(-1)).toBe("Auto-tag apply failed (500)");
+    expect(context.notices).toEqual(["Auto-tag apply failed (500)", "Auto-tag apply failed (500)"]);
     expect(context.view().autoTag.rows[0]).toMatchObject({ tagName: "Sun", wouldChangeCount: 0 });
     expect(context.view().autoTag.rows[0]!.files[0]).toMatchObject({ needsChange: false, selected: false });
     expect(context.view().autoTagApplyPending).toBe(false);
@@ -1167,19 +1239,67 @@ describe("Auto Tag", () => {
     expect(context.view().results).toEqual({ kind: "placeholder", text: "Scan to find files whose names contain a tag's name." });
   });
 
-  // Both kept as they were before the tag editor moved to Preact, and recorded in WebUI Notifications.
-  it("reads a failed scan as one with no matches, and keeps Scanning… when no row shows", async () => {
+  it.each([
+    ["the server refuses it", 500, "application/json", "Scan failed: HTTP 500"],
+    ["it can't reach the server", 0, "application/json", "Scan failed: Couldn't reach the server."],
+    // A 401 shows nothing in place, since the pairing prompt is the only thing to show.
+    ["the server answers 401", 401, "application/json", ""],
+    ["the reply isn't JSON", 200, "text/html", "Scan failed: The server sent an unexpected response (text/html)."]
+  ])("shows a failed scan's error in place, with nothing to apply, when %s", async (_name, status, type, error) => {
     const context = setup();
-    context.server.scanStatus = 500;
+    const { editor, server } = context;
+    server.scan = SCAN;
+    await openOn(context);
+    editor.openAutoTag();
+    await editor.scan();
+    editor.checkRow(0, true);
+    expect(context.view().autoTagApplyPending).toBe(true);
+
+    server.scanStatus = status;
+    server.replyType = type;
+    await editor.scan();
+    expect(context.view().autoTag).toMatchObject({ scanning: false, hasRun: false, rows: [], status: error });
+    expect(context.view().results).toEqual({ kind: "placeholder", text: "Scan to find files whose names contain a tag's name." });
+    expect(context.view().autoTagApplyPending).toBe(false);
+    expect(context.store.pairingRequired.value).toBe(status === 401);
+    expect(context.notices).toEqual([]);
+    expect(context.statuses).toEqual([]);
+
+    // A selection change keeps the error, and Cancel clears it.
+    editor.setViewAll(true);
+    editor.selectAll();
+    expect(context.view().autoTag.status).toBe(error);
+    editor.cancelAutoTag();
+    expect(context.view().autoTag.status).toBe("");
+  });
+
+  it("clears a failed scan's error with the next scan", async () => {
+    const context = setup();
+    const { editor, server } = context;
+    server.scanStatus = 500;
+    await openOn(context);
+    await editor.scan();
+    expect(context.view().autoTag.status).toBe("Scan failed: HTTP 500");
+
+    server.scanStatus = 200;
+    server.scan = SCAN;
+    const scan = editor.scan();
+    expect(context.view().autoTag.status).toBe("Scanning…");
+    await scan;
+    expect(context.view().autoTag.status).toMatch(/^Scan complete: 1 matching tags/);
+    expect(context.view().autoTag.hasRun).toBe(true);
+  });
+
+  it("shows the scan's summary in place of Scanning… when every match already has its tag", async () => {
+    const context = setup();
+    context.server.scan = { rows: [{ ...SCAN.rows[0], wouldChangeCount: 0, files: [{ ...SCAN.rows[0]!.files[0], needsChange: false }] }] };
     await openOn(context);
     await context.editor.scan();
-    expect(context.view().autoTag.status).toBe("Scan complete: no matching tags found.");
-    expect(context.view().results).toEqual({ kind: "placeholder", text: "No file names contain any tag's name." });
-
-    context.server.scanStatus = 200;
-    context.server.scan = { rows: [{ ...SCAN.rows[0], wouldChangeCount: 0, files: [{ ...SCAN.rows[0]!.files[0], needsChange: false }] }] };
-    await context.editor.scan();
-    expect(context.view().autoTag.status).toBe("Scanning…");
+    expect(context.view().autoTag.status).toBe("Scan complete: 1 matching tags, 1 matches, 0/0 selected changes.");
     expect(context.view().results).toEqual({ kind: "hint", text: "No rows to show." });
+
+    // A selection change while no row shows keeps the summary.
+    context.editor.selectAll();
+    expect(context.view().autoTag.status).toBe("Scan complete: 1 matching tags, 1 matches, 0/0 selected changes.");
   });
 });

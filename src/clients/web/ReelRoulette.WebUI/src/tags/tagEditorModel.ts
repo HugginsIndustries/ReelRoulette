@@ -548,7 +548,7 @@ export function planAutoTagApply(assignments: readonly AutoTagSaveAssignment[]):
 export interface TagSaveRequest {
   path: string;
   body: unknown;
-  /** Names the step in the status line when the server refuses it. */
+  /** Names the step in a failed save's message, such as "Tag apply failed (500)". */
   label: string;
 }
 
