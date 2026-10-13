@@ -172,6 +172,7 @@ public sealed class RefreshPipelineServiceTests
         var sourceStage = final.Stages.Single(s => s.Stage == "sourceRefresh");
         Assert.Contains("1 removed", sourceStage.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(ReadSourceRefreshLogLines(scope.RootPath));
+        Assert.Empty(final.KeptSources);
     }
 
     [Fact]
@@ -244,6 +245,25 @@ public sealed class RefreshPipelineServiceTests
         Assert.Contains("[server] [warn]", warning);
         Assert.Contains($"root={emptyDir} ", warning);
         Assert.Contains("2 items", warning);
+
+        // The status and its event list the kept source by id with its item count, and never its folder, since the
+        // event goes to every client.
+        var keptSource = Assert.Single(final.KeptSources);
+        Assert.Equal(("src-empty", 2), (keptSource.SourceId, keptSource.ItemCount));
+        var published = state.GetReplayAfter(0).Events
+            .Select(envelope => envelope.Payload)
+            .OfType<RefreshStatusChangedPayload>()
+            .Last();
+        Assert.Equal(("src-empty", 2), (Assert.Single(published.Snapshot.KeptSources).SourceId, published.Snapshot.KeptSources[0].ItemCount));
+        Assert.DoesNotContain(emptyDir, JsonSerializer.Serialize(published.Snapshot));
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(published.Snapshot), "RefreshStatusSnapshot");
+
+        // The next run starts its own list, so a folder that lists files again is no longer kept.
+        await File.WriteAllTextAsync(Path.Combine(emptyDir, "one.mp4"), "one");
+        Assert.True(service.TryStartManual().Accepted);
+        var next = await WaitForCompletionAsync(service, TimeSpan.FromSeconds(30));
+        Assert.NotEqual(final.RunId, next.RunId);
+        Assert.Empty(next.KeptSources);
     }
 
     [Fact]

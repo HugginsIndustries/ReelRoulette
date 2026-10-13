@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -162,6 +163,40 @@ public sealed class LibraryUnavailableServerTests : IDisposable
         {
             Assert.Null(LibraryRouteGate.Refusal(RequestPath(operation), catalog));
         }
+    }
+
+    [Fact]
+    public void VersionRoute_WithALibrary_ReportsItReady()
+    {
+        var dataDirectory = Path.Combine(_root, "ready");
+        CatalogSeed.Write(dataDirectory);
+
+        var version = ReadVersion(LibraryCatalogHost.Open(dataDirectory));
+
+        Assert.Equal("ready", version.LibraryState);
+        Assert.Null(version.LibraryMessage);
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(version), "VersionResponse");
+    }
+
+    [Theory]
+    [InlineData("newer", LibraryCatalogStore.NewerMessage)]
+    [InlineData("damaged", LibraryCatalogStore.RefusedMessage)]
+    [InlineData("missing", LibraryCatalogStore.MissingMessage)]
+    [InlineData("unreadable", LibraryCatalogStore.UnreadableMessage)]
+    public void VersionRoute_WithoutALibrary_ReportsTheStateAndItsMessage(string state, string message)
+    {
+        var version = ReadVersion(OpenWithoutLibrary(state));
+
+        Assert.Equal(state, version.LibraryState);
+        Assert.Equal(message, version.LibraryMessage);
+        Assert.NotEmpty(version.Capabilities);
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(version), "VersionResponse");
+    }
+
+    private static VersionResponse ReadVersion(LibraryCatalogHost catalog)
+    {
+        var result = ServerHostComposition.GetVersion(new ServerStateService(), new OperatorTestingService(), catalog);
+        return Assert.IsType<Ok<VersionResponse>>(result).Value!;
     }
 
     private LibraryCatalogHost OpenWithoutLibrary(string state)

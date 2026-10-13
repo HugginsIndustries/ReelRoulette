@@ -464,7 +464,12 @@ export function createPlayer(options: PlayerOptions): Player {
     const item = store.current.peek();
     if (!item?.itemId) return;
     const nextValue = !item[flag];
-    const response = await api.post(isFavorite ? "/api/favorite" : "/api/blacklist", { path: item.itemId, [flag]: nextValue });
+    // The client id comes back on the change's event, so this device can tell its own change from another's.
+    const response = await api.post(isFavorite ? "/api/favorite" : "/api/blacklist", {
+      path: item.itemId,
+      [flag]: nextValue,
+      clientId: store.identity.clientId
+    });
     if (!response.ok) {
       store.setStatus(`${isFavorite ? "Favorite" : "Blacklist"} update failed (${response.status}).`);
       return;

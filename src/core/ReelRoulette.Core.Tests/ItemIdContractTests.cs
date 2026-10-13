@@ -99,20 +99,24 @@ public sealed class ItemIdContractTests : IDisposable
     }
 
     [Fact]
-    public void FavoriteAndBlacklist_PublishThePreviousFavoriteAndBlacklist()
+    public void FavoriteAndBlacklist_PublishThePreviousFavoriteAndBlacklist_AndTheClientThatMadeTheChange()
     {
         var path = Path.Combine(_tempDir, "clip.mp4");
         CatalogSeed.Write(_tempDir, items: [new SeedItem("item-1", path) { IsBlacklisted = true }]);
         var operations = CreateOperations(CatalogOpen.Host(_tempDir));
         var state = new ServerStateService();
 
+        ServerHostComposition.SetFavorite(new FavoriteRequest { Path = "item-1", IsFavorite = true, ClientId = " client-a " }, state, operations);
+        ServerHostComposition.SetBlacklist(new BlacklistRequest { Path = "item-1", IsBlacklisted = true, ClientId = "client-b" }, state, operations);
+        // A client that names none, such as the desktop, gets an event that names none.
         ServerHostComposition.SetFavorite(new FavoriteRequest { Path = "item-1", IsFavorite = true }, state, operations);
-        ServerHostComposition.SetBlacklist(new BlacklistRequest { Path = "item-1", IsBlacklisted = true }, state, operations);
+        ServerHostComposition.SetBlacklist(new BlacklistRequest { Path = "item-1", IsBlacklisted = true, ClientId = " " }, state, operations);
 
         var events = state.GetReplayAfter(0).Events
             .Select(envelope => Assert.IsType<ItemStateChangedPayload>(envelope.Payload))
             .ToList();
-        Assert.Equal(2, events.Count);
+        Assert.Equal(4, events.Count);
+        Assert.Equal(["client-a", "client-b", null, null], events.Select(change => change.ClientId));
         var favorite = events[0];
         Assert.Equal(("item-1", path), (favorite.ItemId, favorite.Path));
         Assert.Equal((true, false), (favorite.IsFavorite, favorite.IsBlacklisted));
@@ -121,6 +125,7 @@ public sealed class ItemIdContractTests : IDisposable
         Assert.Equal((false, true), (blacklist.IsFavorite, blacklist.IsBlacklisted));
         Assert.Equal((true, false), (blacklist.PreviousIsFavorite, blacklist.PreviousIsBlacklisted));
         OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(favorite), "ItemStateChangedPayload");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(events[2]), "ItemStateChangedPayload");
     }
 
     [Fact]

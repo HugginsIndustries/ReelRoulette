@@ -1001,6 +1001,13 @@ export interface components {
             minimumCompatibleApiVersion: string;
             supportedApiVersions: string[];
             capabilities: string[];
+            /**
+             * @description Whether the server has a library, as `ControlStatusResponse.libraryState` reports it. This route answers without a library, so a client learns the state here while library routes and the event stream answer 503.
+             * @enum {string}
+             */
+            libraryState?: "ready" | "newer" | "damaged" | "missing" | "unreadable";
+            /** @description Why there is no library and what to do about it, or null when `libraryState` is `ready`. */
+            libraryMessage?: string | null;
         };
         CapabilitiesResponse: {
             capabilities: string[];
@@ -1380,10 +1387,14 @@ export interface components {
         FavoriteRequest: {
             path: string;
             isFavorite: boolean;
+            /** @description The client making the change, which `itemStateChanged` names. */
+            clientId?: string | null;
         };
         BlacklistRequest: {
             path: string;
             isBlacklisted: boolean;
+            /** @description The client making the change, which `itemStateChanged` names. */
+            clientId?: string | null;
         };
         RecordPlaybackRequest: {
             clientId?: string | null;
@@ -1434,6 +1445,8 @@ export interface components {
             previousIsFavorite: boolean;
             /** @description Blacklist before this change. */
             previousIsBlacklisted: boolean;
+            /** @description The client that made the change, from its favorite or blacklist request, or null when the request named none. */
+            clientId?: string | null;
         };
         PlaybackRecordedPayload: {
             /** @description Catalog item id of the file that was played. */
@@ -1758,6 +1771,17 @@ export interface components {
             currentStage?: string | null;
             lastError?: string | null;
             stages: components["schemas"]["RefreshStageProgress"][];
+            /** @description The sources this run kept because their folder listed no media files while the library held items from them, such as a drive or share that isn't mounted. Empty when the run kept none, and cleared when the next run starts. */
+            keptSources?: components["schemas"]["RefreshKeptSource"][];
+        };
+        RefreshKeptSource: {
+            /** @description The source's id, as `GET /api/sources` lists it. The folder is left out, since the status goes to every client. */
+            sourceId: string;
+            /**
+             * Format: int32
+             * @description How many of the library's items from the source were kept.
+             */
+            itemCount: number;
         };
         ItemTagsChangedPayload: {
             /** @description The files as the change named them. A tag apply lists the item ids or full paths the request sent, and auto-tag apply lists full paths. */

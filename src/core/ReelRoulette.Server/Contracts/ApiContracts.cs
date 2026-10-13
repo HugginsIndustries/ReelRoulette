@@ -10,6 +10,10 @@ public sealed class VersionResponse
     public string MinimumCompatibleApiVersion { get; set; } = "0";
     public List<string> SupportedApiVersions { get; set; } = ["1", "0"];
     public List<string> Capabilities { get; set; } = [];
+    /// <summary>Whether the server has a library, as <c>/control/status</c> reports it.</summary>
+    public string LibraryState { get; set; } = "ready";
+    /// <summary>Why there is no library and what to do about it, or null while it is ready.</summary>
+    public string? LibraryMessage { get; set; }
 }
 
 public sealed class PresetResponse
@@ -106,12 +110,14 @@ public sealed class FavoriteRequest
 {
     public string Path { get; set; } = string.Empty;
     public bool IsFavorite { get; set; }
+    public string? ClientId { get; set; }
 }
 
 public sealed class BlacklistRequest
 {
     public string Path { get; set; } = string.Empty;
     public bool IsBlacklisted { get; set; }
+    public string? ClientId { get; set; }
 }
 
 public sealed class RecordPlaybackRequest
@@ -418,6 +424,16 @@ public sealed class RefreshStatusSnapshot
     public string? CurrentStage { get; set; }
     public string? LastError { get; set; }
     public List<RefreshStageProgress> Stages { get; set; } = [];
+    /// <summary>The sources this run kept because their folder listed no media files while the library held items from them.</summary>
+    public List<RefreshKeptSource> KeptSources { get; set; } = [];
+}
+
+/// <summary>A source whose items a refresh kept because its folder listed no media files, such as a share that isn't mounted.</summary>
+public sealed class RefreshKeptSource
+{
+    public string SourceId { get; set; } = string.Empty;
+    /// <summary>How many of the library's items from the source were kept.</summary>
+    public int ItemCount { get; set; }
 }
 
 public sealed class ServerEventEnvelope
@@ -436,6 +452,8 @@ public sealed class ItemStateChangedPayload
     public bool IsBlacklisted { get; set; }
     public bool PreviousIsFavorite { get; set; }
     public bool PreviousIsBlacklisted { get; set; }
+    /// <summary>The client that made the change, when its request named one.</summary>
+    public string? ClientId { get; set; }
 }
 
 public sealed class PlaybackRecordedPayload

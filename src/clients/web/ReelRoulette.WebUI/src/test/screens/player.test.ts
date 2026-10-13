@@ -421,11 +421,13 @@ describe("transport", () => {
 });
 
 describe("favorite and blacklist", () => {
-  it("send the playing item's id, light their buttons, and clear each other", async () => {
+  it("send the playing item's id and the device's client id, light their buttons, and clear each other", async () => {
     const server = serverPicking(VIDEO_ITEM);
     server.on("POST", "/api/favorite", () => json({}));
     server.on("POST", "/api/blacklist", () => json({}));
-    await mount(server);
+    const page = await mount(server);
+    const clientId = page.clientId();
+    expect(clientId).not.toBe("");
 
     await click(button("Favorite"));
     await click(button("Blacklist"));
@@ -434,23 +436,23 @@ describe("favorite and blacklist", () => {
 
     await click(emptyState());
     await click(button("Favorite"));
-    expect(server.requests("POST", "/api/favorite")[0]!.body).toEqual({ path: "item-video", isFavorite: true });
+    expect(server.requests("POST", "/api/favorite")[0]!.body).toEqual({ path: "item-video", isFavorite: true, clientId });
     expect(isLit("Favorite")).toBe(true);
     expect(statusLine()).toBe("Added to favorites");
 
     await click(button("Blacklist"));
-    expect(server.requests("POST", "/api/blacklist")[0]!.body).toEqual({ path: "item-video", isBlacklisted: true });
+    expect(server.requests("POST", "/api/blacklist")[0]!.body).toEqual({ path: "item-video", isBlacklisted: true, clientId });
     expect(isLit("Blacklist")).toBe(true);
     expect(isLit("Favorite")).toBe(false);
     expect(statusLine()).toBe("Blacklisted");
 
     await click(button("Favorite"));
-    expect(server.requests("POST", "/api/favorite")[1]!.body).toEqual({ path: "item-video", isFavorite: true });
+    expect(server.requests("POST", "/api/favorite")[1]!.body).toEqual({ path: "item-video", isFavorite: true, clientId });
     expect(isLit("Favorite")).toBe(true);
     expect(isLit("Blacklist")).toBe(false);
 
     await click(button("Favorite"));
-    expect(server.requests("POST", "/api/favorite")[2]!.body).toEqual({ path: "item-video", isFavorite: false });
+    expect(server.requests("POST", "/api/favorite")[2]!.body).toEqual({ path: "item-video", isFavorite: false, clientId });
     expect(isLit("Favorite")).toBe(false);
     expect(statusLine()).toBe("Removed from favorites");
 

@@ -137,34 +137,194 @@ Last milestone completed: M12f7
 
 ### M12f8 - WebUI Notifications
 
-- **Status**: ⏳ Planned
+- **Status**: 🚧 In Progress
 - **Goal**: The WebUI's status line gives way to notifications: lasting states show on the player's indicator, one-off messages pop up briefly, and a bell lists recent messages, while what the user must notice or act on stays in the in-app dialog or the field it is about.
 - **Depends on**: WebUI Field Validation Pattern, whose pattern the field messages move to, and WebUI In-App Dialogs, whose notice the dialog messages move to, and Catalog Open and Backup Safety, whose library states and messages the list's Now shows.
 - **Design**: `docs/mockups/reelroulette/`.
 
-#### Scope
+#### Decisions
 
-- The main page has no status line.
-- The mobile diagnostics line stays below the player, where the status line was, until WebUI Settings Panel moves it to the Settings tab.
 - The WebUI's message rule:
   - A lasting state shows on the player's indicator.
   - A one-off message pops up briefly, and the list behind the bell keeps it.
   - Anything the user must notice or act on shows in the in-app notice, as WebUI In-App Dialogs sets out, and the list keeps it too.
   - A field problem shows in its field, with the pattern from WebUI Field Validation Pattern, and the list doesn't keep it.
   - An error already shown in place, such as in the Library tab's preset dropdown or the library's body, stays there and doesn't pop up.
+- The status line stays until the Popups and bell slice removes it, and each slice before that takes its own messages off it, so no message goes unshown between slices.
+- A message that moves to a dialog keeps its `last.log` line with the same text, as the notice in WebUI In-App Dialogs is relayed, and a popup or lasting state relays its text as a status line message is relayed today.
+- "A player under 600 px wide" is one rule, a player narrower than 600 px, for the indicator and the popups at the top alike.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Server contracts | ✅ Complete | `/api/version` reports the library state, favorite and blacklist carry the device's `clientId` into `itemStateChanged`, and the refresh status lists the sources a run kept. |
+| Messages to the notice | ⏳ Planned | What the user must act on moves from the status line to the in-app notice, a 401 shows only the pairing prompt, JSON reads check the content type, Auto Tag and tag saves report their own errors, and a library timeout and a kept source get their own messages. |
+| Player indicator | ⏳ Planned | One lasting state at a time shows on the player's indicator at every width, by the precedence rule, in place of the status line. |
+| Popups and bell | ⏳ Planned | One-off messages pop up by kind, the bell lists them with the lasting states and notices, and the status line is gone. |
+
+#### Server contracts slice
+
+**Scope**
+
+- `/api/version` adds `libraryState` and `libraryMessage`, as `/control/status` reports them, a contract change that only adds, so the WebUI learns the library state from a route the server answers without a library.
+- The favorite and blacklist requests send the device's `clientId`, as random picks and plays already do, and `itemStateChanged` carries it back as `clientId`, the client that made the change, both contract changes that only add.
+- The refresh status and its `refreshStatusChanged` event list the sources a run kept because their folder listed no media files while the library held items from them, each with its source id and item count, a contract change that only adds.
+- The contract changes only add fields, so the last desktop build keeps working.
+- The kept sources travel in a field rather than in a stage message's text, which the desktop parses.
+- The field carries source ids rather than folders, since the event goes to every client.
+- OpenAPI, the generated contracts, and `docs/api.md` describe the new fields.
+
+**Traps**
+
+- Only `/control/status` reports `libraryState` and `libraryMessage`, and it needs the control token from another machine.
+- Without a library, `ServerStateService` has no catalog (`ServerHostComposition.cs` registers it with none), so it can't report the library state; `/control/status` reads it from `LibraryCatalogHost`.
+- The `/api/version` handler is an inline lambda in `ServerHostComposition.cs` that no test calls. `/api/capabilities` answers with its own object, not `VersionResponse`.
+- The server sends `itemStateChanged` to every device, the one that made the change too, and the payload names no client (`PublishExternal` in `ServerStateService.cs`), so today a device's own favorite shows "Added to favorites" and then "Synced: Added to favorites: {file}". The favorite and blacklist requests send no `clientId`, and the server publishes the event before it answers the request, so the event can arrive before the response.
+- A refresh that keeps a source's items because its folder lists no media files writes only a `last.log` warning; no client hears of it.
+- `CloneStatus` in `RefreshPipelineService.cs` copies the refresh status field by field, for `GET /api/refresh/status` and the published event alike, so a field it doesn't copy never leaves the server.
+- The desktop parses the refresh stage messages for its status line (`BuildSourceRefreshSummary` in `MainWindow.axaml.cs`).
+- The desktop reads the version, item state, and refresh status without strict member handling, so added fields don't break it.
+- `AssertMatchesSchema` in the core tests requires a payload's top-level property names to equal its OpenAPI schema's exactly, so a C# type and `openapi.yaml` change together.
+- WebUI tests check the favorite and blacklist request bodies exactly (`src/test/player.test.ts` and `src/test/screens/player.test.ts`).
+
+**Acceptance**
+
+- `/api/version` reports `libraryState` and `libraryMessage`, with and without a library, in server tests of the version route, and OpenAPI and the generated contracts list them.
+- `itemStateChanged` carries the favorite or blacklist request's `clientId`, and none when the request sends none, in server tests of the favorite and blacklist routes, and OpenAPI and the generated contracts list both fields.
+- The WebUI's favorite and blacklist requests send its `clientId`, in WebUI tests of the request bodies.
+- The refresh status and `refreshStatusChanged` list each source a run kept because its folder listed no media files, by its source id with its item count and no folder, in server tests of a run with such a source, and OpenAPI and the generated contracts list the field.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- `/api/version` is `GetVersion` in `ServerHostComposition.cs`, an `internal static` handler in place of the inline lambda, and takes `libraryState` and `libraryMessage` from `LibraryCatalogHost`, as `/control/status` does. `/api/capabilities` is unchanged.
+- The favorite and blacklist routes pass the request's `clientId` through `PublishItemState` onto `itemStateChanged`, trimmed as random picks and plays trim theirs, so a blank one is null. The WebUI's `toggleFlag` in `src/playback/player.ts` sends `store.identity.clientId`; nothing in the WebUI reads the event's yet.
+- Where source refresh keeps a source whose folder lists no media files, `RecordKeptSource` in `RefreshPipelineService.cs` adds its id and kept item count to the run's status and publishes the status at once, and `CloneStatus` copies the list. Each run's status starts it empty.
+- In `openapi.yaml`, `VersionResponse` gains `libraryState`, with `ControlStatusResponse`'s enum, and a nullable `libraryMessage`, both optional as they are there; `FavoriteRequest`, `BlacklistRequest`, and `ItemStateChangedPayload` gain a nullable, optional `clientId`, as `PlaybackRecordedPayload` has; and `RefreshStatusSnapshot` gains an optional `keptSources` of the new `RefreshKeptSource`, with a required `sourceId` and `itemCount`. Being optional, `keptSources` leaves the WebUI's snapshot code to the Messages to the notice slice, which reads it. The generated contracts, `docs/api.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, and `CONTEXT.md` follow.
+- Server tests: the version route reports `ready` and no message with a library, and each of `newer`, `damaged`, `missing`, and `unreadable` with its message without one, each matching the `VersionResponse` schema (`LibraryUnavailableServerTests`, beside the library gate's tests, whose per-state seeding they share, rather than in `OpenApiRouteContractTests`); a favorite and a blacklist sent with a client id carry it, trimmed, and one sent with none or a blank one carries none (`ItemIdContractTests`); and the kept-source run's status and its last published event list `src-empty` with its 2 items and no folder, match the `RefreshStatusSnapshot` schema, and a second run, once the folder lists a file, lists none, while a run that only removes a missing file lists none (`RefreshPipelineServiceTests`).
+- WebUI tests: the favorite and blacklist request bodies carry the device's client id, in the player's and the page's tests, which checked the bodies exactly.
+- Each guarded part was broken in turn and its tests failed: `CloneStatus` dropping the list and the kept source never recorded (1 test each), the version route leaving out the library state (4 cases; with a library the default `ready` still passes), the client id left off the event or not trimmed (1 test each), the event's `clientId` missing from `openapi.yaml` (the schema check, 1 test), and the WebUI's body without it (2 tests).
+- `dotnet build ReelRoulette.sln` passed with no warnings. `dotnet test ReelRoulette.sln` passed: 483 core, 421 desktop, and 7 server app tests. `npm run verify` passed: the contracts are fresh, 55 test files and 1046 tests, the build, and the build output check.
+- Nothing looks different, so the mockup and `CHANGELOG.md` are unchanged; the changelog takes the milestone's user-visible change with the later slices.
+
+#### Messages to the notice slice
+
+**Scope**
+
+- These status line messages move to the in-app notice, and the list keeps them once the Popups and bell slice adds it:
+  - Playback: "No response from the server. Try again.", "Random selection failed ({status}).", "Random selection failed: {error}", "No eligible media for current filters.", "Video file not found.", and "Photo file not found.".
+  - Library play: "Cannot play: server compatibility check failed.", which Play already shows in the notice, "Playback unavailable: no library item was selected.", "Media not found. The file may have moved or been deleted.", "This item is unavailable.", "This file type is not supported.", the server's error text, "Playback failed.", and "Playback failed: {error}".
+  - Favorite and blacklist: "Favorite update failed ({status})." and "Blacklist update failed ({status}).".
+  - Filter: "Filter load failed: {error}", "Filter refresh failed: {error}", "Saving presets failed ({status}).", "Saving presets failed: {error}", "Select a preset to update.", and "Preset not found.".
+  - Tags: "Tag editor unavailable: {error}", "Tag refresh failed: {error}", "No tag changes to save.", and a failed tag save: "{step} failed ({status})" for Category update, Category delete, Tag create/update, Tag rename, Tag delete, Tag apply, and Auto-tag apply, "Tag apply failed", "Tag apply failed: {error}", or the error's text.
+- "Unauthorized. Pair first." shows nowhere. A random pick or library play that the server answers with 401 also shows the header's pairing prompt, which is the thing to act on, so the prompt is the only signal. It keeps its `last.log` line.
+- A 401 on the tag model, which the Tags and Filter tabs load, shows the header's pairing prompt in place of the notice, as a random pick's does.
+- A favorite or blacklist that fails on a network error shows "Favorite update failed: {error}" or "Blacklist update failed: {error}" in the in-app notice.
+- A failed Auto Tag scan shows its error.
+- Auto Tag's status leaves "Scanning…" when the scan finishes.
+- A tag save shows its own error.
+- A tag save that lands says so even when the library's reload after it fails, which the library reports itself.
+- The library's body shows a failed load as "Library load failed: {error}", the text that leaves the status line.
+- A library load answered with `408` or `504`, a timeout from the server or a proxy, shows its own message in the library's body in place of "Library load failed: HTTP {status}".
+- The WebUI's refresh snapshot keeps the kept sources from the Server contracts slice.
+- When a refresh keeps a source's items that way, the in-app notice says so with the folder, once per folder for the page's life.
+- The WebUI looks up each kept source's folder in the source list from `GET /api/sources`, which Source Access Policy limits to the sources each session may see, and loads that list when it hasn't yet.
+- The timeout message's and the kept-source notice's wording is approved in the mockup, which doesn't show either yet, and the mockup shows the library's body after a failed load.
+- The JSON responses that `getJson` in `src/state/appApi.ts`, the random pick in `src/playback/randomPick.ts`, `requestPlayItem` in `src/api/coreApi.ts`, the filter's tag model in `loadRemote` in `src/filter/filterDialog.ts`, and the tag editor's model and the Auto Tag scan in `loadModel` and `scan` in `src/tags/tagEditor.ts` read go through one helper that checks the content type and reports a clear error.
+
+**Traps**
+
+- On a phone on its side the stylesheet hides the status line (`body.short-screen .status` in `src/styles.css`), so until they move to the notice, the messages sorted as a dialog, such as "No eligible media for current filters." after Play, show nothing there.
+- The playing video's `playing` event sets the status to "Playing". On a connection where the video keeps buffering, that hides "Loading..." while a random pick waits and "No response from the server. Try again." after one times out.
+- `pickRandom` in `player.ts` and `play` in `library.ts` set the pairing prompt just before "Unauthorized. Pair first.". The 401 case in `mapPlayItemErrorToStatus` is never reached, since `play` handles 401 first.
+- The tag model requests in `loadModel` in `src/tags/tagEditor.ts` and `loadRemote` in `src/filter/filterDialog.ts` go through `api.post`, which doesn't show the pairing prompt on a 401, so one shows "Tag editor unavailable: tag-model:401" or "Filter load failed: tag-editor model 401".
+- `toggleFlag` in `src/playback/player.ts` doesn't catch a favorite or blacklist request that fails on a network error, and `press` in `src/ui/Player.tsx` drops its promise, so it shows nothing and leaves an unhandled rejection.
+- "Select a preset to update." can show: Update Preset isn't disabled while no preset is chosen.
+- Tests lock today's three wrong Auto Tag and tag save messages below as they are, marked as recorded in this milestone.
+- A failed Auto Tag scan shows "Scan complete: no matching tags found." in Auto Tag's status and "No file names contain any tag's name." in its results, as a scan that found nothing does: `scan` in `src/tags/tagEditor.ts` treats a failure as no rows.
+- Before the WebUI Preact Migration, `app.js` set "Auto-tag scan failed. Core runtime is unavailable or still recovering." and overwrote it at once.
+- A scan where every match already has its tag shows "No rows to show." and leaves Auto Tag's status on "Scanning…": `autoTagStatusAfterChange` in `src/tags/autoTagModel.ts` keeps the status while no row shows.
+- A tag save that cannot reach the server shows the message of the last step the server refused on the page, or "Tag apply failed" when none was: `lastSaveError` in `src/tags/tagEditor.ts` lasts for the page.
+- When the library's reload after a landed tag save throws, `saveInBackground` in `src/tags/tagEditor.ts` shows the reload's error in place of "Tag editor changes applied".
+- `getJson`, the random pick's `request` in `src/playback/randomPick.ts`, `requestPlayItem` in `src/api/coreApi.ts`, `loadRemote` in `src/filter/filterDialog.ts`, and `loadModel` and `scan` in `src/tags/tagEditor.ts` call `response.json()` without checking the content type, so an HTML error page from a proxy surfaces as a `SyntaxError`. Pairing reads no JSON, and refresh status arrives only over the event stream.
+- The library's body shows only a failed load's error, such as "HTTP 500" (`libraryOverlayMessage` in `src/library/libraryOverlayModel.ts`), and a load that fails while the Library tab is hidden reaches only the status line; the tab loads again when it opens.
+- Kestrel answers `408` when a request's headers or body don't arrive within its timeouts, and `getJson` turns it into "HTTP 408", so a server stalled on its storage showed "Library load failed: HTTP 408" (measured).
+- Auto-refresh runs every 15 minutes by default, so a notice on every run would show four times an hour.
+- The refresh status keeps a run's kept sources until the next run starts, so every later `refreshStatusChanged` in that run, and `GET /api/refresh/status`, repeat them.
+- `coerceRefreshSnapshot` and `normalizeSnapshot` in `src/events/refreshStatusProjection.ts` rebuild the snapshot field by field, so they drop a field they don't copy.
+- The WebUI loads the source list into `store.sources` only for the Filter tab (`loadRemote` in `src/filter/filterDialog.ts`) and the Filters line (`loadSourcesForSummary` in `src/library/library.ts`), so it may not be loaded when a refresh keeps a source.
+
+**Acceptance**
+
+- Each message sorted as a dialog shows in the in-app notice with the same wording, not on the status line, and its `last.log` line is unchanged, in tests that each screen's dialog messages show in the notice with their `last.log` lines.
+- A random pick or library play answered with 401 shows the header's pairing prompt, shows "Unauthorized. Pair first." nowhere, and relays its `last.log` line as before, in tests of a 401 on a random pick and a library play.
+- A 401 on the tag model shows the header's pairing prompt and no notice, in tests of a 401 on the Tags tab's and the Filter tab's tag model.
+- A favorite or blacklist that fails on a network error shows its failure in the in-app notice, in tests of a network error on each.
+- A failed Auto Tag scan shows its error instead of "Scan complete: no matching tags found." and the results' "No file names contain any tag's name.", in a test that replaces the one locking it today.
+- A scan where every match already has its tag clears "Scanning…", in a test that replaces the one locking it today.
+- A tag save that fails on a network error shows that error, not one from an earlier save, in a test that replaces the one locking it today.
+- A tag save that lands says so when the library's reload after it fails, in a test of that reload failing.
+- A response that isn't JSON, such as a proxy's HTML error page, shows a clear error, not a `SyntaxError`, in tests of such a response for `getJson`, the random pick, a library play, the filter's tag model, the tag editor's model, and an Auto Tag scan.
+- A library load answered with `408` or `504` shows the timeout message in the library's body, and any other failed load "Library load failed: {error}", in WebUI tests of the library load's failures.
+- A kept source shows the in-app notice with its folder from the source list once per folder for the page's life, in WebUI tests of the kept-source notice with the source list loaded and not yet loaded.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+#### Player indicator slice
+
+**Scope**
+
 - The player's indicator, today's "Reconnecting…" indicator extended to every width:
   - It shows one lasting state at a time, the first active one in this order, which is the precedence rule, so it never alternates: Reconnecting…, Server not compatible, Running without a library, Loading…, and a library refresh.
   - Reconnecting… shows while the event stream is lost or the server can't be reached, which today's "SSE reconnecting..." and "Ready (API offline)" report. The WebUI checks `/api/version` again each time the event stream opens or fails, and Reconnecting… ends only once the stream is open and that check succeeds.
-  - Server not compatible shows while the server fails the compatibility check. Its full message ("Unsupported server API version: {version}.", "Server requires client API version {version} or newer.", or "Server missing required capabilities: {list}.") shows in the list's Now and the Library tab, and Play's notice stays.
-  - Running without a library shows while `/api/version` reports a library state other than ready. The server's message for its library state (newer, damaged, missing, or unreadable) shows in the list's Now and the Library tab. While it shows, the event stream failing doesn't show Reconnecting…, since the server refuses the stream until it has a library. It ends when the stream opens and the version check reports the library ready.
+  - Server not compatible shows while the server fails the compatibility check. Its full message ("Unsupported server API version: {version}.", "Server requires client API version {version} or newer.", or "Server missing required capabilities: {list}.") shows in the Library tab, and from the Popups and bell slice in the list's Now, and Play's notice stays.
+  - Running without a library shows while `/api/version` reports a library state other than ready. The server's message for its library state (newer, damaged, missing, or unreadable) shows in the Library tab, and from the Popups and bell slice in the list's Now. While it shows, the event stream failing doesn't show Reconnecting…, since the server refuses the stream until it has a library. It ends when the stream opens and the version check reports the library ready.
   - Loading… shows while a random pick waits or the media loads, only after half a second, so a quick load shows nothing. The half second counts once, from the first wait until every wait ends, so a pick and its media load are one loading period.
   - A library refresh shows "Library refresh: {stage} ({percent}%)", and only while the player's controls show, since a refresh can run for hours.
   - It sits at the player's top center, and below the corner buttons on a player under 600 px wide.
   - At the top, it stays clear of the corner buttons on both sides, and a state too long for that ends in an ellipsis.
   - It hides while the server asks for pairing, whose prompt is the thing to act on.
   - It is a polite live region, and the percentage is hidden from screen readers, so each step of a refresh isn't announced.
-- `/api/version` adds `libraryState` and `libraryMessage`, as `/control/status` reports them, a contract change that only adds, so the WebUI learns the library state from a route the server answers without a library.
-- The favorite and blacklist requests send the device's `clientId`, as random picks and plays already do, and `itemStateChanged` carries it back as `clientId`, the client that made the change, both contract changes that only add. The WebUI shows no Other devices popup for an event with its own `clientId`, so its own change pops up only as Your actions. An event without one, such as one from the desktop, counts as another device's.
+- These status line messages move to the indicator: "Ready (API offline)" and "SSE reconnecting..." as Reconnecting…, the version and capability mismatches as Server not compatible, the server's library message as Running without a library, "Loading..." as Loading…, and "Core refresh: {stage} ({percent}%)" as "Library refresh: {stage} ({percent}%)".
+- The precedence rule is documented.
+- The Release Specific check in `docs/checklists/testing-checklist.md` that pauses the server expects the indicator's Loading… and the in-app notice's "No response from the server. Try again." in place of the status line's messages.
+
+**Traps**
+
+- With the server stopped, the WebUI shows "library load failed: HTTP 503" only briefly before "SSE reconnecting..." (measured before promotion).
+- The desktop alternates between "core runtime unavailable" and "core runtime is required to browse the library" with the server stopped (measured before promotion).
+- The v0.14.1 release notes still list the WebUI status line flipping between messages as a known issue.
+- `getJson` in `src/state/appApi.ts` throws `HTTP {status}` and drops the response body, so the server's library message in a 503 never reaches the status line.
+- Without a library, the server refuses the event stream with 503, as it does every route but version, capabilities, pair, the web runtime, backup, and refresh settings, and client logs (`LibraryRouteGate.cs`), so today the WebUI reads it as a lost connection and shows "SSE reconnecting...".
+- The WebUI checks `/api/version` at start, after pairing, and, until a check passes, each time the event stream opens (`loadVersion` and `onOpen` in `src/state/serverConnection.ts`), so a server that couldn't be reached at page load fires `serverReady` once it answers, and the presets load again. That part of checking again is done; once a check has passed, the stream opening or failing doesn't check again.
+- "Ready (API offline)" shows for any version check that fails, a 401 while the server asks for pairing and a response that isn't JSON among them.
+- Today's indicator shows only on a phone on its side (`ReconnectingIndicator` in `src/ui/Player.tsx`), as a bare text node with no box of its own to end in an ellipsis.
+- Whether the player's controls show is local state in `Player` (`controlsVisible` in `src/ui/Player.tsx`), changed only by a click or tap on the player, so nothing outside it can follow it.
+- The mockup moves its indicator below the corner buttons by a container query on the media area at 600 px and under, and its top popups by a class set below 600 px, so at exactly 600 px they overlap.
+
+**Acceptance**
+
+- With the server stopped, unavailable, or mismatched, or running without a library, while loading, and during a refresh, the indicator shows the first lasting state in the precedence order and does not alternate, in WebUI tests of the precedence rule for each lasting state alone and together.
+- With the server running without a library or failing the compatibility check, the Library tab shows the server's message, in WebUI tests of the per-event messages.
+- Without a library, the refused event stream shows Running without a library, not Reconnecting…, and the state ends when the library opens, in WebUI tests of the stream failing and opening with each library state.
+- A server that couldn't be reached at page load and comes back ends Reconnecting… once the version check succeeds, and the page then loads, in WebUI tests of the version check on the stream opening.
+- Loading… shows only after half a second, counted once across a pick and its media load, a refresh's progress only while the controls show, and the indicator nothing while the server asks for pairing, in WebUI tests of the indicator.
+- The indicator sits at the player's top center, clear of the corner buttons with a long state ending in an ellipsis, and below them on a player under 600 px wide, in WebUI tests of the indicator's placement.
+- The indicator is a polite live region with its percentage hidden from screen readers, in WebUI tests.
+- A lasting state relays its text to `last.log` as a status line message is relayed today, and none of the indicator's messages shows on the status line, in WebUI tests of the relay.
+- The precedence rule is documented, checked by reading it.
+- The testing checklist's paused-server check expects the indicator's Loading… and the in-app notice, checked by reading it.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check with the server stopped.
+
+#### Popups and bell slice
+
+**Scope**
+
+- The main page has no status line.
+- The mobile diagnostics line stays below the player, where the status line was, until WebUI Settings Panel moves it to the Settings tab.
+- The WebUI shows no Other devices popup for an event with its own `clientId`, so its own change pops up only as Your actions. An event without one, such as one from the desktop, counts as another device's.
 - Popups:
   - A popup is a themed card with an icon for its kind, the message, an optional second line such as the file name, and Dismiss.
   - A message that the kind's icon would misread has its own: "Library browse failed. Showing the tiles already loaded." shows a sync problem icon, not the Connection kind's cloud with a check.
@@ -183,10 +343,10 @@ Last milestone completed: M12f7
   - The bell sits at the player's top left, with its other controls, so it can be reached in fullscreen and on a phone on its side. It shows and hides with them.
   - The player's controls stay shown while the list is open.
   - The bell opens the list under it, lined up with its left edge, or with its right edge when the bell is in the right half of the screen, as the admin bar's is. The list sits inside the fullscreen stage, so it shows in fullscreen and iOS pseudo-fullscreen.
-  - The list's Now shows each active lasting state with its full text.
-  - Its Recent shows, newest first, every one-off message, whether it popped up or not, and every in-app notice, each with its time ("Just now", "{n} min ago", then the time of day).
+  - The list's Now shows each active lasting state with its full text, the server's compatibility and library messages among them.
+  - Its Recent shows, newest first, every one-off message, whether it popped up or not, and every in-app notice, the kept-source notice among them, each with its time ("Just now", "{n} min ago", then the time of day).
   - It keeps the last 50 messages for the page's life, and a page refresh clears it.
-  - The bell's badge counts the messages that didn't pop up since the list was last open, and the list marks them.
+  - The bell's badge counts the one-off messages that didn't pop up since the list was last open, and the list marks them. A notice, which the user saw in its dialog, joins the list unmarked, as the mockup does.
   - The list has Clear.
   - It closes on its Close, on the bell, on a press outside it, when the panel opens, or on Escape, which closes it before anything else. After Close, the bell, or Escape, focus returns to the bell; after a press outside or the panel opening, it stays where that put it.
 - The popup settings, kept per device, which WebUI Settings Panel's Notifications section sets. Until then they keep their defaults:
@@ -195,105 +355,59 @@ Last milestone completed: M12f7
   - Position: Bottom center, the default, Bottom left, Bottom right, Top center, Top left, or Top right.
   - Show in fullscreen, on by default. Off, entering fullscreen closes the popups showing, and in fullscreen messages go only to the list, which the bell counts.
   - Show for: 3, 5, the default, or 10 seconds.
-- Every status line message, from `src/state/serverConnection.ts`, `src/state/serverCompatibility.ts`, `src/events/refreshStatusProjection.ts`, `src/playback/player.ts`, `src/library/library.ts`, `src/library/libraryPlayModel.ts`, `src/library/libraryQuerySession.ts`, `src/filter/filterDialog.ts`, and `src/tags/tagEditor.ts`, sorted by the rule:
-  - No message, since the normal state needs none: "Ready", "Ready (API {version})", "Playing", and "Core refresh idle.".
-  - The indicator: "Ready (API offline)" and "SSE reconnecting..." as Reconnecting…, the version and capability mismatches as Server not compatible, the server's library message as Running without a library, "Loading..." as Loading…, and "Core refresh: {stage} ({percent}%)" as "Library refresh: {stage} ({percent}%)".
+- The rest of the status line's messages, from `src/state/serverConnection.ts`, `src/events/refreshStatusProjection.ts`, `src/playback/player.ts`, `src/library/library.ts`, `src/library/libraryQuerySession.ts`, `src/filter/filterDialog.ts`, and `src/tags/tagEditor.ts`, sorted by the rule:
+  - No message, since the normal state needs none: "Ready", "Ready (API {version})", "Playing", and "Core refresh idle.". Each still relays its text to `last.log`, so it keeps its page-load and version-check lines.
   - Popups, by kind:
     - Connection: "SSE connected" becomes "Reconnected.", shown only after Reconnecting… showed; and "Library browse failed. Showing the tiles already loaded.".
     - Library refresh: the "Core refresh complete | …" summary becomes "Library refresh finished", with the summary's segments after it, joined by " · ", on its second line; and "Core refresh failed: {error}" becomes the warning "Library refresh failed", with the error on its second line.
     - Other devices: "Synced: Added to favorites: {file}", "Synced: Removed from favorites: {file}", and "Synced: Blacklisted: {file}" become "Added to favorites on another device", "Removed from favorites on another device", and "Blacklisted on another device", with the file name on the second line. An item leaving the blacklist, which today also reads "Synced: Removed from favorites: {file}", becomes "Removed from blacklist on another device", told apart by the event's `previousIsBlacklisted`.
     - Your actions, the acknowledgments of the user's own actions, with today's wording: "Added to favorites", "Removed from favorites", "Blacklisted", and "Removed from blacklist", with the file name on the second line, "Filters applied.", "Filter data refreshed.", "Updated preset "{name}" locally — Apply to save.", "Paired.", and "Tag editor changes applied". They are not the rule's confirmations, which are prompts that ask before an action.
-  - In place, with no popup: "Error loading presets: {error}", which the Library tab's preset dropdown shows as "Error loading presets", and "Library load failed: {error}", which the library shows in its body.
-  - A dialog, moves to the in-app notice, and the list keeps it:
-    - Playback: "No response from the server. Try again.", "Random selection failed ({status}).", "Random selection failed: {error}", "No eligible media for current filters.", "Video file not found.", and "Photo file not found.".
-    - Library play: "Cannot play: server compatibility check failed.", which Play already shows in the notice, "Playback unavailable: no library item was selected.", "Media not found. The file may have moved or been deleted.", "This item is unavailable.", "This file type is not supported.", the server's error text, "Playback failed.", and "Playback failed: {error}".
-    - Favorite and blacklist: "Favorite update failed ({status})." and "Blacklist update failed ({status}).".
-    - Filter: "Filter load failed: {error}", "Filter refresh failed: {error}", "Saving presets failed ({status}).", "Saving presets failed: {error}", "Select a preset to update.", and "Preset not found.".
-    - Tags: "Tag editor unavailable: {error}", "Tag refresh failed: {error}", "No tag changes to save.", and a failed tag save: "{step} failed ({status})" for Category update, Category delete, Tag create/update, Tag rename, Tag delete, Tag apply, and Auto-tag apply, "Tag apply failed", "Tag apply failed: {error}", or the error's text.
-    - Moved by earlier milestones, which this milestone checks show nowhere else: "Pairing failed." and "Pairing blocked by server compatibility check." in WebUI Responsive Layout and Panels.
-  - Field validation, stays in the field pattern:
-    - Moved by earlier milestones, which this milestone checks show nowhere else: "Minimum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.", "Maximum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.", "Enter a preset name.", "A preset with that name already exists.", and "Tag name is required." in WebUI Field Validation Pattern, "That name is already in use." in WebUI In-App Dialogs, and "Pair token required." in WebUI Responsive Layout and Panels, where Pair is disabled while the token is empty.
-  - Nothing: "Unauthorized. Pair first.". A random pick or library play that the server answers with 401 also shows the header's pairing prompt, which is the thing to act on, so the prompt is the only signal. It keeps its `last.log` line.
-- Messages that other milestones add follow the rule from the start, and this milestone checks those already shipped against it. The skips Browser-Playable Filter adds are Skipped files popups, with the file name on the second line.
-- A message that moves to a dialog keeps its `last.log` line with the same text, as the notice in WebUI In-App Dialogs is relayed, and a popup or lasting state relays its text as a status line message is relayed today.
+  - In place, with no popup: "Error loading presets: {error}", which the Library tab's preset dropdown shows as "Error loading presets".
+  - A dialog, moved by earlier milestones, which this milestone checks show nowhere else: "Pairing failed." and "Pairing blocked by server compatibility check." in WebUI Responsive Layout and Panels.
+  - Field validation, moved by earlier milestones, which this milestone checks show nowhere else: "Minimum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.", "Maximum duration is invalid. Use MM:SS, HH:MM:SS, or seconds.", "Enter a preset name.", "A preset with that name already exists.", and "Tag name is required." in WebUI Field Validation Pattern, "That name is already in use." in WebUI In-App Dialogs, and "Pair token required." in WebUI Responsive Layout and Panels, where Pair is disabled while the token is empty.
 - A field message is no longer relayed.
-- A failed Auto Tag scan shows its error.
-- Auto Tag's status leaves "Scanning…" when the scan finishes.
-- A tag save shows its own error.
-- A library load answered with `408` or `504`, a timeout from the server or a proxy, shows its own message in the library's body in place of "Library load failed: HTTP {status}".
-- The refresh status and its `refreshStatusChanged` event list the sources a run kept because their folder listed no media files while the library held items from them, each with its source id and item count, a contract change that only adds. The kept sources travel in a field rather than in a stage message's text, which the desktop parses.
-- The field carries source ids rather than folders, since the event goes to every client, and the WebUI looks up each folder in the source list from `GET /api/sources`, which Source Access Policy limits to the sources each session may see.
-- When a refresh keeps a source's items that way, the in-app notice says so with the folder, once per folder for the page's life, and the list keeps it.
-- The timeout message's and the kept-source notice's wording is approved in the mockup, which doesn't show either yet.
-- The JSON responses that `getJson` in `src/state/appApi.ts`, the random pick in `src/playback/randomPick.ts`, `requestPlayItem` in `src/api/coreApi.ts`, the filter's tag model in `loadRemote` in `src/filter/filterDialog.ts`, and the tag editor's model and the Auto Tag scan in `loadModel` and `scan` in `src/tags/tagEditor.ts` read go through one helper that checks the content type and reports a clear error.
-- When it completes, the Release Specific check in `docs/checklists/testing-checklist.md` that pauses the server expects the indicator's Loading… and the in-app notice's "No response from the server. Try again." in place of the status line's messages.
+- Messages that other milestones add follow the rule from the start, and this milestone checks those already shipped against it. The skips Browser-Playable Filter adds are Skipped files popups, with the file name on the second line.
+- The per-event messages are documented.
 
-#### Traps
+**Traps**
 
-- With the server stopped, the WebUI shows "library load failed: HTTP 503" only briefly before "SSE reconnecting..." (measured before promotion).
-- The desktop alternates between "core runtime unavailable" and "core runtime is required to browse the library" with the server stopped (measured before promotion).
-- The v0.14.1 release notes still list the WebUI status line flipping between messages as a known issue.
-- `getJson` in `src/state/appApi.ts` throws `HTTP {status}` and drops the response body, so the server's library message in a 503 never reaches the status line.
-- Without a library, the server refuses the event stream with 503, as it does every route but version, capabilities, pair, the web runtime, backup, and refresh settings, and client logs (`LibraryRouteGate.cs`), so today the WebUI reads it as a lost connection and shows "SSE reconnecting...". Only `/control/status` reports `libraryState` and `libraryMessage`, and it needs the control token from another machine.
-- The WebUI checks `/api/version` at start, after pairing, and, until a check passes, each time the event stream opens (`loadVersion` and `onOpen` in `src/state/serverConnection.ts`), so a server that couldn't be reached at page load fires `serverReady` once it answers, and the presets load again. That part of checking again is done; once a check has passed, the stream opening or failing doesn't check again.
-- On a phone on its side the stylesheet hides the status line (`body.short-screen .status` in `src/styles.css`), so until they move to the notice, the messages sorted as a dialog, such as "No eligible media for current filters." after Play, show nothing there.
-- The playing video's `playing` event sets the status to "Playing". On a connection where the video keeps buffering, that hides "Loading..." while a random pick waits and "No response from the server. Try again." after one times out.
-- `pickRandom` in `player.ts` and `play` in `library.ts` set the pairing prompt just before "Unauthorized. Pair first.". The 401 case in `mapPlayItemErrorToStatus` is never reached, since `play` handles 401 first.
-- Tests lock today's three wrong Auto Tag and tag save messages below as they are, marked as recorded in this milestone.
-- A failed Auto Tag scan shows "Scan complete: no matching tags found." in Auto Tag's status and "No file names contain any tag's name." in its results, as a scan that found nothing does: `scan` in `src/tags/tagEditor.ts` treats a failure as no rows.
-- Before the WebUI Preact Migration, `app.js` set "Auto-tag scan failed. Core runtime is unavailable or still recovering." and overwrote it at once.
-- A scan where every match already has its tag shows "No rows to show." and leaves Auto Tag's status on "Scanning…": `autoTagStatusAfterChange` in `src/tags/autoTagModel.ts` keeps the status while no row shows.
-- A tag save that cannot reach the server shows the message of the last step the server refused on the page, or "Tag apply failed" when none was: `lastSaveError` in `src/tags/tagEditor.ts` lasts for the page.
-- `getJson`, the random pick's `request` in `src/playback/randomPick.ts`, `requestPlayItem` in `src/api/coreApi.ts`, `loadRemote` in `src/filter/filterDialog.ts`, and `loadModel` and `scan` in `src/tags/tagEditor.ts` call `response.json()` without checking the content type, so an HTML error page from a proxy surfaces as a `SyntaxError`. Pairing reads no JSON, and refresh status arrives only over the event stream.
 - `itemStateChanged` in `src/playback/player.ts` reads any event that leaves an item neither favorite nor blacklisted as "Synced: Removed from favorites: {file}", an item leaving the blacklist too.
-- The server sends `itemStateChanged` to every device, the one that made the change too, and the payload names no client (`PublishExternal` in `ServerStateService.cs`), so today a device's own favorite shows "Added to favorites" and then "Synced: Added to favorites: {file}". The favorite and blacklist requests send no `clientId`, and the server publishes the event before it answers the request, so the event can arrive before the response.
+- The server sends `itemStateChanged` to every device, the one that made the change too, with the request's `clientId`, which nothing in the WebUI reads yet, so today a device's own favorite shows "Added to favorites" and then "Synced: Added to favorites: {file}".
+- The server publishes `itemStateChanged` before it answers the favorite or blacklist request, so the event can arrive before the response.
+- The favorite and blacklist acknowledgments carry no file name today.
 - The status line component also holds the mobile diagnostics line (`MobileDiagnostics` in `src/ui/StatusLine.tsx`), which WebUI Settings Panel moves to the Settings tab.
 - A z-index, containment, or `container` on the element that holds the popups beside the player makes a stacking context that keeps them under the overlay panel; the mockup's first version did this (measured).
 - The player clips what it holds (`overflow: hidden` on `.media-container` in `src/styles.css`), so the popups sit beside it, not inside it.
+- The player column (`.player-col` in `src/styles.css`) sets no `position`, so popups placed in it take the stage as their containing block.
 - The WebUI's player controls stop a click from reaching the player (`onClick` on `#overlay-controls` in `src/ui/Player.tsx`), so a bell among them, pressed with nothing playing, starts no random pick.
 - In the mockup, a press on the bell with nothing playing starts no random pick (measured).
-- Kestrel answers `408` when a request's headers or body don't arrive within its timeouts, and `getJson` turns it into "HTTP 408", so a server stalled on its storage showed "Library load failed: HTTP 408" (measured).
-- A refresh that keeps a source's items because its folder lists no media files writes only a `last.log` warning; no client hears of it.
-- The desktop parses the refresh stage messages for its status line (`BuildSourceRefreshSummary` in `MainWindow.axaml.cs`).
-- Auto-refresh runs every 15 minutes by default, so a notice on every run would show four times an hour.
-- The WebUI loads the source list into `store.sources` only for the Filter tab (`loadRemote` in `src/filter/filterDialog.ts`) and the Filters line (`loadSourcesForSummary` in `src/library/library.ts`), so it may not be loaded when a refresh keeps a source.
+- The fullscreen module tells only whether pseudo-fullscreen is on (`pseudo` in `src/playback/stageFullscreen.ts`), and nothing follows the browser's `fullscreenchange`.
+- The stage takes Escape on the document as it bubbles (`Stage.tsx`), closing the panel or leaving pseudo-fullscreen, so the list has to take it first.
+- The field messages listed as moved by earlier milestones no longer exist in that wording: the field pattern's tooltips say what a field expects, such as "Use MM:SS, HH:MM:SS, or seconds.".
+- The screen tests that mount the page wait for status line text, such as "Ready (API 1)", before they start.
 
-#### Acceptance
+**Acceptance**
 
-- With the server stopped, unavailable, or mismatched, or running without a library, while loading, and during a refresh, the indicator shows the first lasting state in the precedence order and does not alternate, in WebUI tests of the precedence rule for each lasting state alone and together.
-- With the server running without a library or failing the compatibility check, the list's Now and the Library tab show the server's message, in WebUI tests of the per-event messages.
-- `/api/version` reports `libraryState` and `libraryMessage`, with and without a library, in server tests of the version route, and OpenAPI and the generated contracts list them.
-- Without a library, the refused event stream shows Running without a library, not Reconnecting…, and the state ends when the library opens, in WebUI tests of the stream failing and opening with each library state.
-- A server that couldn't be reached at page load and comes back ends Reconnecting… once the version check succeeds, and the page then loads, in WebUI tests of the version check on the stream opening.
+- With the server running without a library or failing the compatibility check, the list's Now shows the server's message, in WebUI tests of the per-event messages.
 - An item leaving the blacklist on another device pops up "Removed from blacklist on another device", in WebUI tests of the item state event's messages.
-- A device's own favorite or blacklist change pops up only as Your actions, while one from another client, or an event without a `clientId`, pops up as Other devices, in WebUI tests of the item state event's `clientId`; the event carries the request's `clientId`, in server tests of the favorite and blacklist routes, and OpenAPI and the generated contracts list both fields.
-- Loading… shows only after half a second, counted once across a pick and its media load, a refresh's progress only while the controls show, and the indicator nothing while the server asks for pairing, in WebUI tests of the indicator.
-- The indicator sits at the player's top center, clear of the corner buttons with a long state ending in an ellipsis, and below them on a player under 600 px wide, where popups at the top start below it, in WebUI tests of the indicator's and popups' placement.
-- The indicator is a polite live region with its percentage hidden from screen readers, and popups take no focus, with only their own boxes taking the pointer, in WebUI tests.
+- A device's own favorite or blacklist change pops up only as Your actions, while one from another client, or an event without a `clientId`, pops up as Other devices, in WebUI tests of the item state event's `clientId`.
+- On a player under 600 px wide, popups at the top start below the indicator, in WebUI tests of the popups' placement.
+- Popups take no focus, with only their own boxes taking the pointer, in WebUI tests.
 - A refresh's progress and its result read the same during and after each refresh, in WebUI tests of the refresh progress and result messages.
-- The precedence rule and the per-event messages are documented, checked by reading them.
+- The per-event messages are documented, checked by reading them.
 - The main page has no status line, and the mobile diagnostics line stays below the player, in WebUI tests.
 - Each one-off message pops up as its kind, with its kind's icon or its own, and as the settings allow, and the list keeps it whether it popped up or not, checked against the sorted list for every message the WebUI sends, including those other milestones added.
 - At most three popups show, the cap closes the oldest that isn't a warning, and while three warnings show a new popup goes to the list only, one with the same key replaces the one showing, a warning stays until closed, pointing at one with a mouse or pen, focusing it, or both pauses its time without taking more off, Dismiss and a swipe close it, popups at the bottom rise above the controls unless the overlay panel covers the player, and none pops up while the list is open, where one showing with a new message's key closes, in WebUI tests of popups.
 - The bell's badge counts the messages that didn't pop up, the list shows Now and Recent, Clear empties it, the list closes on Close, the bell, Escape, a press outside, or the panel opening, with focus back on the bell after Close, the bell, or Escape, and the controls stay shown while it is open, in WebUI tests of the bell and the list.
 - Recent shows each message's time as "Just now", "{n} min ago", then the time of day, and the list keeps the last 50 messages until a page refresh clears it, in WebUI tests of the list.
+- The list keeps every in-app notice, the kept-source notice among them, in WebUI tests of the list.
 - The list sits inside the fullscreen stage and the popups above the overlay panel, with no stacking context between them, in WebUI tests.
 - Popups follow each popup setting, kept per device, and start on for every kind, at the bottom center, in fullscreen too, for 5 seconds, in WebUI tests of each setting's effect and its default.
 - With Show in fullscreen off, entering fullscreen closes the popups showing, and in fullscreen messages go only to the list, which the bell counts, in WebUI tests.
-- Each message sorted as a dialog shows in the in-app notice with the same wording, not as a popup, the list keeps it, and its `last.log` line is unchanged, in tests that each screen's dialog messages show in the notice with their `last.log` lines.
-- A popup or lasting state relays its text to `last.log` as a status line message is relayed today, and a field message is no longer relayed, in WebUI tests of the relay.
-- None of the dialog and field messages moved by earlier milestones pops up or shows on the indicator, checked against the sorted list for every message the WebUI sends.
-- A random pick or library play answered with 401 shows the header's pairing prompt, shows "Unauthorized. Pair first." nowhere, and relays its `last.log` line as before, in tests of a 401 on a random pick and a library play.
-- A failed Auto Tag scan shows its error instead of "Scan complete: no matching tags found." and the results' "No file names contain any tag's name.", in a test that replaces the one locking it today.
-- A scan where every match already has its tag clears "Scanning…", in a test that replaces the one locking it today.
-- A tag save that fails on a network error shows that error, not one from an earlier save, in a test that replaces the one locking it today.
-- A response that isn't JSON, such as a proxy's HTML error page, shows a clear error, not a `SyntaxError`, in tests of such a response for `getJson`, the random pick, a library play, the filter's tag model, the tag editor's model, and an Auto Tag scan.
-- The testing checklist's paused-server check expects the indicator's Loading… and the in-app notice, checked by reading it.
-- A library load answered with `408` or `504` shows the timeout message in the library's body, in WebUI tests of the library load's failures.
-- The refresh status and `refreshStatusChanged` list each source a run kept because its folder listed no media files, by its source id with its item count and no folder, in server tests of a run with such a source, and OpenAPI and the generated contracts list the field.
-- A kept source shows the in-app notice with its folder from the source list once per folder for the page's life, and the list keeps it, in WebUI tests of the kept-source notice with the source list loaded and not yet loaded.
+- A popup relays its text to `last.log` as a status line message is relayed today, the messages that show nothing still relay theirs, and a field message is no longer relayed, in WebUI tests of the relay.
+- None of the dialog and field messages moved by earlier milestones or by the Messages to the notice slice pops up or shows on the indicator, checked against the sorted list for every message the WebUI sends.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `dotnet test ReelRoulette.sln` and `npm run verify` pass, and one quick spot check with the server stopped.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass, and one quick spot check.
 
 #### Release checks
 
@@ -307,6 +421,7 @@ Last milestone completed: M12f7
 - The Notifications section in the Settings tab, its sample popup, and the list's Notification settings link, which is WebUI Settings Panel.
 - The admin view's bell and popups, which is WebUI Admin Section.
 - A message for a video the server couldn't read, which is Browser-Playable Filter.
+- Listing a source whose folder is missing, whose items refresh keeps without a warning; only a folder that lists no media files is a kept source.
 
 ### M12g - WebUI Settings Panel
 

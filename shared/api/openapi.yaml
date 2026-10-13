@@ -1685,6 +1685,22 @@ components:
           type: array
           items:
             type: string
+        libraryState:
+          type: string
+          enum:
+            - ready
+            - newer
+            - damaged
+            - missing
+            - unreadable
+          description: >
+            Whether the server has a library, as `ControlStatusResponse.libraryState` reports it. This route
+            answers without a library, so a client learns the state here while library routes and the event
+            stream answer 503.
+        libraryMessage:
+          type: string
+          nullable: true
+          description: Why there is no library and what to do about it, or null when `libraryState` is `ready`.
 
     CapabilitiesResponse:
       type: object
@@ -2473,6 +2489,10 @@ components:
           type: string
         isFavorite:
           type: boolean
+        clientId:
+          type: string
+          nullable: true
+          description: The client making the change, which `itemStateChanged` names.
 
     BlacklistRequest:
       type: object
@@ -2484,6 +2504,10 @@ components:
           type: string
         isBlacklisted:
           type: boolean
+        clientId:
+          type: string
+          nullable: true
+          description: The client making the change, which `itemStateChanged` names.
 
     RecordPlaybackRequest:
       type: object
@@ -2595,6 +2619,10 @@ components:
         previousIsBlacklisted:
           type: boolean
           description: Blacklist before this change.
+        clientId:
+          type: string
+          nullable: true
+          description: The client that made the change, from its favorite or blacklist request, or null when the request named none.
 
     PlaybackRecordedPayload:
       type: object
@@ -3300,6 +3328,26 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RefreshStageProgress"
+        keptSources:
+          type: array
+          description: >
+            The sources this run kept because their folder listed no media files while the library held items
+            from them, such as a drive or share that isn't mounted. Empty when the run kept none, and cleared
+            when the next run starts.
+          items:
+            $ref: "#/components/schemas/RefreshKeptSource"
+
+    RefreshKeptSource:
+      type: object
+      required: [sourceId, itemCount]
+      properties:
+        sourceId:
+          type: string
+          description: The source's id, as `GET /api/sources` lists it. The folder is left out, since the status goes to every client.
+        itemCount:
+          type: integer
+          format: int32
+          description: How many of the library's items from the source were kept.
 
     ItemTagsChangedPayload:
       type: object

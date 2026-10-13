@@ -185,25 +185,7 @@ public static class ServerHostComposition
             return HandleControlPairRequest(context, request?.Token, options, settings, sessions, logs);
         });
 
-        app.MapGet("/api/version", (ServerStateService state, OperatorTestingService testingService) =>
-        {
-            var version = state.GetVersion();
-            var testing = testingService.GetSnapshot();
-            if (testing.TestingModeEnabled && testing.ForceApiVersionMismatch)
-            {
-                version.ApiVersion = "99";
-                version.SupportedApiVersions = ["99"];
-            }
-
-            if (testing.TestingModeEnabled && testing.ForceCapabilityMismatch)
-            {
-                version.Capabilities = version.Capabilities
-                    .Where(capability => !string.Equals(capability, "identity.sessionId", StringComparison.Ordinal))
-                    .ToList();
-            }
-
-            return Results.Ok(version);
-        });
+        app.MapGet("/api/version", GetVersion);
 
         app.MapGet("/api/capabilities", (ServerStateService state, OperatorTestingService testingService) =>
         {
@@ -721,6 +703,32 @@ public static class ServerHostComposition
         return Results.Ok(playResponse);
     }
 
+    /// <summary>
+    /// The version and capabilities, and whether the server has a library. The library state comes from the catalog host,
+    /// since without a library the state service has no catalog.
+    /// </summary>
+    internal static IResult GetVersion(ServerStateService state, OperatorTestingService testingService, LibraryCatalogHost catalog)
+    {
+        var version = state.GetVersion();
+        version.LibraryState = catalog.StateName;
+        version.LibraryMessage = catalog.UnavailableMessage;
+        var testing = testingService.GetSnapshot();
+        if (testing.TestingModeEnabled && testing.ForceApiVersionMismatch)
+        {
+            version.ApiVersion = "99";
+            version.SupportedApiVersions = ["99"];
+        }
+
+        if (testing.TestingModeEnabled && testing.ForceCapabilityMismatch)
+        {
+            version.Capabilities = version.Capabilities
+                .Where(capability => !string.Equals(capability, "identity.sessionId", StringComparison.Ordinal))
+                .ToList();
+        }
+
+        return Results.Ok(version);
+    }
+
     internal static IResult SetFavorite(FavoriteRequest request, ServerStateService state, LibraryOperationsService operations)
     {
         if (string.IsNullOrWhiteSpace(request.Path))
@@ -729,7 +737,7 @@ public static class ServerHostComposition
         }
 
         var persisted = operations.SetFavorite(request.Path, request.IsFavorite, out var previous);
-        return PublishItemState(state, persisted, previous);
+        return PublishItemState(state, persisted, previous, request.ClientId);
     }
 
     internal static IResult SetBlacklist(BlacklistRequest request, ServerStateService state, LibraryOperationsService operations)
@@ -740,10 +748,14 @@ public static class ServerHostComposition
         }
 
         var persisted = operations.SetBlacklist(request.Path, request.IsBlacklisted, out var previous);
-        return PublishItemState(state, persisted, previous);
+        return PublishItemState(state, persisted, previous, request.ClientId);
     }
 
-    private static IResult PublishItemState(ServerStateService state, LibraryStateResponse? persisted, LibraryStateResponse? previous)
+    /// <summary>
+    /// Publishes the change to every client, the one that made it too, naming that client so it can tell its own change
+    /// from another device's.
+    /// </summary>
+    private static IResult PublishItemState(ServerStateService state, LibraryStateResponse? persisted, LibraryStateResponse? previous, string? clientId)
     {
         if (persisted == null || previous == null)
         {
@@ -757,7 +769,8 @@ public static class ServerHostComposition
             IsFavorite = persisted.IsFavorite,
             IsBlacklisted = persisted.IsBlacklisted,
             PreviousIsFavorite = previous.IsFavorite,
-            PreviousIsBlacklisted = previous.IsBlacklisted
+            PreviousIsBlacklisted = previous.IsBlacklisted,
+            ClientId = NormalizeOptionalIdentity(clientId)
         });
         persisted.Revision = envelope.Revision;
         return Results.Ok(persisted);

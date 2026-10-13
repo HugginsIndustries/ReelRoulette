@@ -439,6 +439,7 @@ public sealed class RefreshPipelineService : BackgroundService
                 _serverLog.Append(
                     "warn",
                     $"Source refresh root={rootPath} lists no media files but the library has {existingForSource.Count} items from it; none were removed. Check that its drive or share is mounted.");
+                RecordKeptSource(sourceId, existingForSource.Count);
             }
 
             var missingItems = rootListsNoMedia
@@ -2010,6 +2011,19 @@ public sealed class RefreshPipelineService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Lists a source whose items this run kept because its folder listed no media files, by its id, since the status
+    /// goes to every client and clients look up the folder in the source list they may see.
+    /// </summary>
+    private void RecordKeptSource(string sourceId, int itemCount)
+    {
+        lock (_runLock)
+        {
+            _status.KeptSources.Add(new RefreshKeptSource { SourceId = sourceId, ItemCount = itemCount });
+            PublishStatusLocked();
+        }
+    }
+
     private void CompleteStage(string stage, string message)
     {
         lock (_runLock)
@@ -2054,6 +2068,11 @@ public sealed class RefreshPipelineService : BackgroundService
                 Percent = s.Percent,
                 Message = s.Message,
                 IsComplete = s.IsComplete
+            }).ToList(),
+            KeptSources = source.KeptSources.Select(s => new RefreshKeptSource
+            {
+                SourceId = s.SourceId,
+                ItemCount = s.ItemCount
             }).ToList()
         };
     }

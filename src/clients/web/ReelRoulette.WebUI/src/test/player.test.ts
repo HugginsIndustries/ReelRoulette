@@ -660,16 +660,16 @@ describe("createPlayer", () => {
     expect(page.elements.video.plays.at(-1)).toBe("display=block muted=true src=http://server/api/media/item-other?token=t");
   });
 
-  it("favorites and blacklists the playing item, each clearing the other, and remembers it for history", async () => {
+  it("favorites and blacklists the playing item with the device's client id, each clearing the other, and remembers it for history", async () => {
     const page = setup();
     page.play(VIDEO);
 
     await page.player.toggleFavorite();
-    expect(page.requests("/api/favorite")[0]!.body).toEqual({ path: "item-video", isFavorite: true });
+    expect(page.requests("/api/favorite")[0]!.body).toEqual({ path: "item-video", isFavorite: true, clientId: "client-1" });
     expect([page.player.favorite.value, page.store.status.value]).toEqual([true, "Added to favorites"]);
 
     await page.player.toggleBlacklist();
-    expect(page.requests("/api/blacklist")[0]!.body).toEqual({ path: "item-video", isBlacklisted: true });
+    expect(page.requests("/api/blacklist")[0]!.body).toEqual({ path: "item-video", isBlacklisted: true, clientId: "client-1" });
     expect([page.player.favorite.value, page.player.blacklisted.value, page.store.status.value]).toEqual([false, true, "Blacklisted"]);
 
     page.play(VIDEO);
