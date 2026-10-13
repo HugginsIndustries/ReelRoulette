@@ -55,6 +55,29 @@ function fakeVideo() {
   return video;
 }
 
+/** Animation frames that run only when a test runs them. */
+function fakeFrames() {
+  const pending = new Map<number, () => void>();
+  let nextId = 1;
+  return {
+    request(callback: () => void) {
+      pending.set(nextId, callback);
+      return nextId++;
+    },
+    cancel(id: number) {
+      pending.delete(id);
+    },
+    /** How many frames are waiting. */
+    pending: () => pending.size,
+    /** Runs the frames waiting, as the browser does before it repaints. */
+    run() {
+      const due = [...pending.values()];
+      pending.clear();
+      due.forEach((callback) => callback());
+    }
+  };
+}
+
 function setup() {
   const requests: Array<{ path: string; body: any }> = [];
   const replies = new Map<string, () => Response>();
@@ -94,12 +117,12 @@ function setup() {
       return Promise.resolve();
     }
   };
-  const player = createPlayer({ apiBaseUrl: "http://server/", store, api, connection, dialogs, fetch: fetchImpl });
+  const frames = fakeFrames();
+  const player = createPlayer({ apiBaseUrl: "http://server/", store, api, connection, dialogs, fetch: fetchImpl, frames });
   const elements = {
     video: fakeVideo(),
     photo: { src: "", style: { display: "none" } },
     emptyState: { style: { display: "" } },
-    seekRow: { style: { display: "none" } },
     seekSlider: { value: "0", max: "100" }
   };
   player.attach(elements satisfies PlayerElements);
@@ -107,6 +130,7 @@ function setup() {
     store,
     player,
     elements,
+    frames,
     notices,
     relayed,
     replies,
@@ -130,11 +154,12 @@ describe("createPlayer", () => {
     page.player.toggleMute();
     page.play(VIDEO);
 
-    const { video, photo, emptyState, seekRow } = page.elements;
+    const { video, photo, emptyState } = page.elements;
     expect(video.plays).toEqual(["display=block muted=true src=http://server/api/media/item-video?token=t"]);
-    expect([video.style.display, seekRow.style.display, photo.style.display, emptyState.style.display]).toEqual(["block", "flex", "none", "none"]);
-    expect(page.player.showsPause.value).toBe(true);
-    expect(page.player.muteButton.value).toEqual({ disabled: false, active: true });
+    expect([video.style.display, photo.style.display, emptyState.style.display]).toEqual(["block", "none", "none"]);
+    expect(page.player.playButton.value).toEqual({ disabled: false, showsPause: true });
+    expect(page.player.seekBar.value).toEqual({ disabled: false, label: "Seek" });
+    expect(page.player.muted.value).toBe(true);
     await vi.waitFor(() =>
       expect(page.requests("/api/record-playback").map((request) => request.body)).toEqual([
         { path: "item-video", clientId: "client-1", sessionId: "session-1" }
@@ -151,20 +176,15 @@ describe("createPlayer", () => {
     expect(page.requests("/api/record-playback")).toHaveLength(0);
   });
 
-  it("shows a photo, disables Mute, and ignores the video's events until a video plays again", () => {
+  it("shows a photo, keeps Mute as it was, and ignores the video's events until a video plays again", () => {
     const page = setup();
     page.play(VIDEO);
     page.play(PHOTO);
 
-    const { video, photo, seekRow, seekSlider } = page.elements;
-    expect([photo.src, photo.style.display, video.style.display, seekRow.style.display]).toEqual([
-      "http://server/api/media/item-photo?token=t",
-      "block",
-      "none",
-      "none"
-    ]);
+    const { video, photo, seekSlider } = page.elements;
+    expect([photo.src, photo.style.display, video.style.display]).toEqual(["http://server/api/media/item-photo?token=t", "block", "none"]);
     expect(video.paused).toBe(true);
-    expect(page.player.muteButton.value).toEqual({ disabled: true, active: false });
+    expect(page.player.muted.value).toBe(false);
 
     page.store.setStatus("Before");
     video.duration = 120;
@@ -292,84 +312,352 @@ describe("createPlayer", () => {
     expect(page.requests("/api/random")).toHaveLength(1);
   });
 
-  it("pauses a playing video for the tag editor and resumes it, and leaves a paused one paused", () => {
+  it("pauses a playing video for Auto-Pause and resumes it, and leaves a paused one paused", () => {
     const page = setup();
     page.play(VIDEO);
     const { video } = page.elements;
 
-    page.player.pauseForTagEditor();
+    page.player.autoPause();
     expect(video.paused).toBe(true);
-    page.player.resumeAfterTagEditor();
+    expect(page.player.playButton.value.showsPause).toBe(false);
+    page.player.autoResume();
     expect(video.paused).toBe(false);
+    expect(page.relayed).toEqual(
+      expect.arrayContaining(["playback=auto-pause attempt=1 hasCurrent=true mediaType=video", "playback=auto-resume attempt=1 hasCurrent=true mediaType=video"])
+    );
 
     page.player.playOrPause();
     expect(video.paused).toBe(true);
-    expect(page.player.showsPause.value).toBe(false);
-    page.player.pauseForTagEditor();
-    page.player.resumeAfterTagEditor();
+    expect(page.player.playButton.value.showsPause).toBe(false);
+    page.player.autoPause();
+    page.player.autoResume();
     expect(video.paused).toBe(true);
   });
 
-  it("holds a photo's timer for the tag editor and starts the photo again after it", async () => {
+  it("holds a photo's timer for Auto-Pause and resumes it with the time it had left, without loading or recording it again", async () => {
     vi.useFakeTimers();
     const page = setup();
     page.player.toggleAutoplay();
     page.play(PHOTO);
+    await vi.advanceTimersByTimeAsync(10_000);
 
-    page.player.pauseForTagEditor();
+    page.player.autoPause();
+    expect(page.player.playButton.value.showsPause).toBe(false);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(page.requests("/api/random")).toHaveLength(0);
-    page.player.resumeAfterTagEditor();
-    expect(page.store.playAttemptId.value).toBe(2);
-    await vi.advanceTimersByTimeAsync(15_000);
-    expect(page.requests("/api/random")).toHaveLength(1);
+    expect(page.player.timeText.value).toBe("0:10 / 0:15");
 
-    page.player.toggleAutoplay();
-    page.play(PHOTO);
-    page.player.pauseForTagEditor();
-    page.player.resumeAfterTagEditor();
-    expect(page.store.playAttemptId.value).toBe(3);
+    page.player.autoResume();
+    expect(page.store.playAttemptId.value).toBe(1);
+    expect(page.player.playButton.value.showsPause).toBe(true);
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(page.requests("/api/random")).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(page.requests("/api/random")).toHaveLength(1);
+    expect(page.requests("/api/record-playback")).toHaveLength(1);
   });
 
-  it("leaves a video as the user left it with Play/Pause while the tag editor was open", () => {
+  it("holds a looping photo's timer for Auto-Pause and resumes it with the time it had left", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.player.toggleLoop();
+    page.play(PHOTO);
+    await vi.advanceTimersByTimeAsync(12_000);
+
+    page.player.autoPause();
+    await vi.advanceTimersByTimeAsync(60_000);
+    page.player.autoResume();
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(page.store.playAttemptId.value).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(page.store.playAttemptId.value).toBe(2);
+  });
+
+  it("leaves playback as the user left it with Play/Pause while Auto-Pause held it", async () => {
+    vi.useFakeTimers();
     const page = setup();
     page.play(VIDEO);
     const { video } = page.elements;
 
-    page.player.pauseForTagEditor();
+    page.player.autoPause();
     page.player.playOrPause();
     page.player.playOrPause();
-    page.player.resumeAfterTagEditor();
+    page.player.autoResume();
     expect(video.paused).toBe(true);
+
+    page.player.toggleAutoplay();
+    page.play(PHOTO);
+    page.player.autoPause();
+    page.player.playOrPause();
+    expect(page.player.playButton.value.showsPause).toBe(true);
+    page.player.playOrPause();
+    page.player.autoResume();
+    expect(page.player.playButton.value.showsPause).toBe(false);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(page.requests("/api/random")).toHaveLength(0);
   });
 
-  it("neither resumes nor plays again an item that started while the tag editor was open", async () => {
+  it("neither resumes nor plays again an item that started while Auto-Pause held playback", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.play(VIDEO);
+    const { video } = page.elements;
+    page.player.autoPause();
+
+    page.play(SECOND_VIDEO);
+    // It doesn't play, as when the browser blocks its autoplay.
+    video.pause();
+    page.player.autoResume();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(video.paused).toBe(true);
+    expect(video.plays).toHaveLength(2);
+    expect(page.store.playAttemptId.value).toBe(2);
+    expect(page.requests("/api/record-playback").map((request) => request.body.path)).toEqual(["item-video", "item-other"]);
+  });
+
+  it("disables the scrub bar before anything plays, with the time at 0:00 / 0:00", () => {
+    const page = setup();
+    expect(page.player.seekBar.value).toEqual({ disabled: true, label: "Seek" });
+    expect(page.player.playButton.value).toEqual({ disabled: false, showsPause: false });
+    expect(page.player.timeText.value).toBe("0:00 / 0:00");
+  });
+
+  it("shows a photo's timer on the scrub bar with Autoplay on and Loop off, filling as it runs", async () => {
     vi.useFakeTimers();
     const page = setup();
     page.player.toggleAutoplay();
     page.play(PHOTO);
-    page.player.pauseForTagEditor();
+    const { seekSlider } = page.elements;
 
-    page.play({ ...PHOTO, id: "/media/dune.jpg", itemId: "item-dune", displayName: "dune.jpg", mediaUrl: "/api/media/item-dune?token=t" });
-    page.player.resumeAfterTagEditor();
-    await vi.advanceTimersByTimeAsync(0);
-
-    expect(page.store.playAttemptId.value).toBe(2);
-    expect(page.requests("/api/record-playback").map((request) => request.body.path)).toEqual(["item-photo", "item-dune"]);
+    expect(page.player.seekBar.value).toEqual({ disabled: false, label: "Photo timer" });
+    expect(page.player.playButton.value).toEqual({ disabled: false, showsPause: true });
+    expect([seekSlider.max, seekSlider.value, page.player.timeText.value]).toEqual(["15", "0", "0:00 / 0:15"]);
+    await vi.advanceTimersByTimeAsync(5_250);
+    page.frames.run();
+    expect([seekSlider.value, page.player.timeText.value]).toEqual(["5.25", "0:05 / 0:15"]);
   });
 
-  it("Mute disables itself when pressed before anything plays, and mutes the first video", () => {
+  it("moves the bar every animation frame from a photo's timer while it runs, and stops once it is held", async () => {
+    vi.useFakeTimers();
     const page = setup();
-    expect(page.player.muteButton.value).toEqual({ disabled: false, active: false });
+    page.player.toggleAutoplay();
+    page.play(PHOTO);
+    const { seekSlider } = page.elements;
+
+    for (const at of ["0.016", "0.032", "0.048"]) {
+      await vi.advanceTimersByTimeAsync(16);
+      page.frames.run();
+      expect([seekSlider.value, page.player.timeText.value]).toEqual([at, "0:00 / 0:15"]);
+    }
+    expect(page.frames.pending()).toBe(1);
+
+    page.player.playOrPause();
+    expect(page.frames.pending()).toBe(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(seekSlider.value).toBe("0.048");
+    page.player.playOrPause();
+    expect(page.frames.pending()).toBe(1);
+    page.player.autoPause();
+    expect(page.frames.pending()).toBe(0);
+    page.player.autoResume();
+    expect(page.frames.pending()).toBe(1);
+  });
+
+  it("shows a video's elapsed time in the shape of its length", () => {
+    const page = setup();
+    page.play(VIDEO);
+    const { video } = page.elements;
+    video.duration = 6517;
+    page.player.videoMetadataLoaded();
+    expect(page.player.timeText.value).toBe("0:00:00 / 1:48:37");
+
+    video.currentTime = 746.4;
+    page.player.videoTimeUpdated();
+    expect(page.player.timeText.value).toBe("0:12:26 / 1:48:37");
+  });
+
+  it("moves the bar every animation frame from the video's time while it plays, and stops once it pauses", () => {
+    const page = setup();
+    page.play(VIDEO);
+    const { video, seekSlider } = page.elements;
+    video.duration = 120;
+    page.player.videoMetadataLoaded();
+
+    video.currentTime = 10.4;
+    page.frames.run();
+    expect([seekSlider.value, page.player.timeText.value]).toEqual(["10.4", "0:10 / 2:00"]);
+    video.currentTime = 10.9;
+    page.frames.run();
+    expect([seekSlider.value, page.player.timeText.value]).toEqual(["10.9", "0:10 / 2:00"]);
+    expect(page.frames.pending()).toBe(1);
+
+    page.player.playOrPause();
+    expect(page.frames.pending()).toBe(0);
+    video.currentTime = 50;
+    page.frames.run();
+    expect(seekSlider.value).toBe("10.9");
+    page.player.playOrPause();
+    expect(page.frames.pending()).toBe(1);
+    page.player.autoPause();
+    expect(page.frames.pending()).toBe(0);
+    page.player.autoResume();
+    expect(page.frames.pending()).toBe(1);
+
+    page.play(PHOTO);
+    expect(page.frames.pending()).toBe(0);
+    page.player.detach();
+    expect(page.frames.pending()).toBe(0);
+  });
+
+  it("stops moving the bar once a video fails to load", () => {
+    const page = setup();
+    page.play(VIDEO);
+    expect(page.frames.pending()).toBe(1);
+
+    // A source that fails fires no pause, so the video still reads as playing.
+    page.player.videoFailed();
+    expect(page.elements.video.paused).toBe(false);
+    expect(page.frames.pending()).toBe(0);
+  });
+
+  it("holds and resumes a photo's timer with Play/Pause, keeping the time left, and moves it with the bar", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.player.toggleAutoplay();
+    page.play(PHOTO);
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    page.player.playOrPause();
+    expect(page.player.playButton.value.showsPause).toBe(false);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(page.player.timeText.value).toBe("0:05 / 0:15");
+    expect(page.requests("/api/random")).toHaveLength(0);
+
+    page.player.seek("12");
+    expect([page.elements.seekSlider.value, page.player.timeText.value]).toEqual(["12", "0:12 / 0:15"]);
+    page.player.playOrPause();
+    expect(page.player.playButton.value.showsPause).toBe(true);
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(page.requests("/api/random")).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(page.requests("/api/random")).toHaveLength(1);
+    expect(page.store.playAttemptId.value).toBe(1);
+  });
+
+  it("disables Play and the bar once a photo's timer has ended, with the time at 0:00 / 0:00, until the next item plays", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.player.toggleAutoplay();
+    page.play(PHOTO);
+    const shown = () => ({ play: page.player.playButton.value, bar: page.player.seekBar.value, time: page.player.timeText.value });
+    const ended = { play: { disabled: true, showsPause: false }, bar: { disabled: true, label: "Photo timer" }, time: "0:00 / 0:00" };
+
+    // The pick at the end of history finds nothing, so the photo stays.
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(page.requests("/api/random")).toHaveLength(1);
+    expect(page.store.status.value).toBe("No eligible media for current filters.");
+    expect(shown()).toEqual(ended);
+    expect(page.elements.seekSlider.value).toBe("0");
+    expect(page.frames.pending()).toBe(0);
+
+    page.player.playOrPause();
+    page.player.seek("5");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(shown()).toEqual(ended);
+    expect(page.elements.seekSlider.value).toBe("0");
+    expect(page.requests("/api/random")).toHaveLength(1);
+    expect(page.store.playAttemptId.value).toBe(1);
+
+    page.answerRandom(VIDEO);
+    page.player.next();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.store.playAttemptId.value).toBe(2);
+    expect(shown()).toEqual({ play: { disabled: false, showsPause: true }, bar: { disabled: false, label: "Seek" }, time: "0:00 / 0:00" });
+  });
+
+  it("disables Play and the bar on a photo with Autoplay off or Loop on, and Autoplay starts and clears its timer", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.play(PHOTO);
+    const disabled = { play: { disabled: true, showsPause: false }, bar: { disabled: true, label: "Photo timer" }, time: "0:00 / 0:00" };
+    const shown = () => ({ play: page.player.playButton.value, bar: page.player.seekBar.value, time: page.player.timeText.value });
+    expect(shown()).toEqual(disabled);
+    page.player.playOrPause();
+    page.player.seek("5");
+    expect(shown()).toEqual(disabled);
+    expect(page.store.playAttemptId.value).toBe(1);
+
+    page.player.toggleAutoplay();
+    expect(page.store.playAttemptId.value).toBe(2);
+    expect(shown()).toEqual({ play: { disabled: false, showsPause: true }, bar: { disabled: false, label: "Photo timer" }, time: "0:00 / 0:15" });
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    page.player.toggleLoop();
+    expect(shown()).toEqual(disabled);
+    expect(page.elements.seekSlider.value).toBe("0");
+    page.player.toggleLoop();
+    expect(page.player.timeText.value).toBe("0:00 / 0:15");
+
+    page.player.toggleAutoplay();
+    expect(shown()).toEqual(disabled);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(page.requests("/api/random")).toHaveLength(0);
+    expect(page.store.playAttemptId.value).toBe(4);
+  });
+
+  it("empties the bar for each new item, and shows a video's time from 0:00 until its length is known", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.player.toggleAutoplay();
+    page.play(PHOTO);
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    page.play(VIDEO);
+    expect([page.elements.seekSlider.value, page.player.timeText.value]).toEqual(["0", "0:00 / 0:00"]);
+    expect(page.player.seekBar.value).toEqual({ disabled: false, label: "Seek" });
+  });
+
+  it("disables the scrub bar and leaves it empty on a video whose length is Infinity, as the browser reports an unknown length", () => {
+    const page = setup();
+    page.play(VIDEO);
+    const { video, seekSlider } = page.elements;
+    video.duration = Number.POSITIVE_INFINITY;
+    page.player.videoMetadataLoaded();
+    video.currentTime = 5;
+    page.frames.run();
+
+    expect(page.player.seekBar.value).toEqual({ disabled: true, label: "Seek" });
+    expect([seekSlider.value, seekSlider.max, page.player.timeText.value]).toEqual(["0", "100", "0:05 / 0:00"]);
+
+    page.play(SECOND_VIDEO);
+    video.duration = 120;
+    page.player.videoMetadataLoaded();
+    expect(page.player.seekBar.value).toEqual({ disabled: false, label: "Seek" });
+    expect(seekSlider.max).toBe("120");
+  });
+
+  it("Mute shows whether sound is muted before anything plays and on a photo, and applies to the next video", () => {
+    const page = setup();
+    expect(page.player.muted.value).toBe(false);
     page.player.toggleMute();
-    expect(page.player.muteButton.value).toEqual({ disabled: true, active: false });
+    expect(page.player.muted.value).toBe(true);
     page.player.toggleMute();
+    page.player.toggleMute();
+    expect(page.player.muted.value).toBe(true);
 
     page.play(VIDEO);
     expect(page.elements.video.muted).toBe(true);
     page.player.toggleMute();
     expect(page.elements.video.muted).toBe(false);
-    expect(page.player.muteButton.value).toEqual({ disabled: false, active: false });
+    expect(page.player.muted.value).toBe(false);
+
+    page.play(PHOTO);
+    expect(page.player.muted.value).toBe(false);
+    page.player.toggleMute();
+    expect(page.player.muted.value).toBe(true);
+    page.play(SECOND_VIDEO);
+    expect(page.elements.video.plays.at(-1)).toBe("display=block muted=true src=http://server/api/media/item-other?token=t");
   });
 
   it("favorites and blacklists the playing item, each clearing the other, and remembers it for history", async () => {
@@ -420,11 +708,11 @@ describe("createPlayer", () => {
     expect(video.currentTime).toBe(0);
     video.duration = 125.4;
     page.player.videoMetadataLoaded();
-    expect([seekSlider.max, page.player.timeText.value]).toEqual(["125", "0:00 / 2:05"]);
+    expect([seekSlider.max, page.player.timeText.value]).toEqual(["125.4", "0:00 / 2:05"]);
 
     video.currentTime = 61.9;
     page.player.videoTimeUpdated();
-    expect([seekSlider.value, page.player.timeText.value]).toEqual(["61", "1:01 / 2:05"]);
+    expect([seekSlider.value, page.player.timeText.value]).toEqual(["61.9", "1:01 / 2:05"]);
     page.player.seek("90");
     expect(video.currentTime).toBe(90);
   });

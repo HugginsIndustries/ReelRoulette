@@ -11,8 +11,10 @@ import {
   setViewport,
   settle,
   status,
+  currentStyle,
   stubFullscreenApi,
   stubLayoutSize,
+  useStylesheet,
   type MountedPage
 } from "./pageHarness";
 
@@ -111,12 +113,17 @@ function seekSlider(): HTMLInputElement {
   return screen.getByRole("slider", { name: "Seek", hidden: true }) as HTMLInputElement;
 }
 
+/** The scrub bar while a photo shows, when it is the photo's timer. */
+function photoTimerBar(): HTMLInputElement {
+  return screen.getByRole("slider", { name: "Photo timer", hidden: true }) as HTMLInputElement;
+}
+
 function seekRow(): HTMLElement {
-  return seekSlider().parentElement as HTMLElement;
+  return document.getElementById("seek-row") as HTMLElement;
 }
 
 function timeDisplay(): string {
-  return seekSlider().nextElementSibling?.textContent ?? "";
+  return document.getElementById("time-display")?.textContent ?? "";
 }
 
 function mediaArea(): HTMLElement {
@@ -221,7 +228,9 @@ describe("random pick", () => {
     expect(emptyState().style.display).not.toBe("none");
     expect(video().style.display).toBe("none");
     expect(photo().style.display).toBe("none");
-    expect(seekRow().style.display).toBe("none");
+    expect(seekRow().style.display).toBe("");
+    expect(seekSlider().disabled).toBe(true);
+    expect(timeDisplay()).toBe("0:00 / 0:00");
 
     await click(emptyState());
 
@@ -237,7 +246,7 @@ describe("random pick", () => {
     expect(pick.filterState.favoritesOnly).toBe(false);
     expect(video().src).toBe(VIDEO_URL);
     expect(video().style.display).toBe("block");
-    expect(seekRow().style.display).toBe("flex");
+    expect(seekSlider().disabled).toBe(false);
     expect(emptyState().style.display).toBe("none");
     expect(photo().style.display).toBe("none");
     expect(video().paused).toBe(false);
@@ -287,7 +296,6 @@ describe("random pick", () => {
     expect(photo().src).toBe(PHOTO_URL);
     expect(photo().style.display).toBe("block");
     expect(video().style.display).toBe("none");
-    expect(seekRow().style.display).toBe("none");
     expect(emptyState().style.display).toBe("none");
 
     fireEvent.load(photo());
@@ -375,16 +383,6 @@ describe("transport", () => {
     await click(button("Play/Pause"));
     expect(video().paused).toBe(false);
     expect(iconOf("Play/Pause")).toBe("pause");
-    expect(randomPicks(server)).toBe(1);
-  });
-
-  it("leaves Play/Pause alone while a photo shows", async () => {
-    const server = serverPicking(PHOTO_ITEM);
-    await mountAndPlay(server);
-
-    await click(button("Play/Pause"));
-    expect(iconOf("Play/Pause")).toBe("play_arrow");
-    expect(video().paused).toBe(true);
     expect(randomPicks(server)).toBe(1);
   });
 
@@ -614,7 +612,7 @@ describe("loop and autoplay", () => {
 });
 
 describe("mute", () => {
-  it("is enabled at start, mutes this and later videos, and is disabled while a photo shows", async () => {
+  it("is enabled at start and on a photo, shows whether sound is muted, and mutes this and later videos, a press on a photo applying to the next", async () => {
     const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO, PHOTO_ITEM);
     await mount(server);
     expect(button("Mute").disabled).toBe(false);
@@ -633,31 +631,34 @@ describe("mute", () => {
     expect(iconOf("Mute")).toBe("volume_off");
 
     await click(button("Next"));
-    expect(button("Mute").disabled).toBe(true);
+    expect(photo().style.display).toBe("block");
+    expect(button("Mute").disabled).toBe(false);
+    expect(iconOf("Mute")).toBe("volume_off");
+    expect(isLit("Mute")).toBe(true);
+    await click(button("Mute"));
     expect(iconOf("Mute")).toBe("volume_up");
     expect(isLit("Mute")).toBe(false);
-    await click(button("Mute"));
 
     await click(button("Previous"));
-    expect(button("Mute").disabled).toBe(false);
-    expect(video().muted).toBe(true);
-    expect(iconOf("Mute")).toBe("volume_off");
-    await click(button("Mute"));
+    expect(video().src).toBe(SECOND_VIDEO_URL);
     expect(video().muted).toBe(false);
     expect(iconOf("Mute")).toBe("volume_up");
+    await click(button("Mute"));
+    expect(video().muted).toBe(true);
+    expect(iconOf("Mute")).toBe("volume_off");
   });
 
-  it("pressed before anything plays, disables itself and mutes the first video", async () => {
+  it("pressed before anything plays, shows sound muted and mutes the first video", async () => {
     const server = serverPicking(VIDEO_ITEM);
     await mount(server);
 
     await click(button("Mute"));
-    expect(button("Mute").disabled).toBe(true);
-    expect(iconOf("Mute")).toBe("volume_up");
+    expect(button("Mute").disabled).toBe(false);
+    expect(iconOf("Mute")).toBe("volume_off");
+    expect(isLit("Mute")).toBe(true);
 
     await click(emptyState());
     expect(video().muted).toBe(true);
-    expect(button("Mute").disabled).toBe(false);
     expect(iconOf("Mute")).toBe("volume_off");
     expect(isLit("Mute")).toBe(true);
   });
@@ -667,11 +668,13 @@ describe("seek", () => {
   it("shows the time, moves the slider as the video plays, and seeks from the slider", async () => {
     const server = serverPicking(VIDEO_ITEM);
     await mount(server);
+    expect(seekSlider().getAttribute("step")).toBe("any");
     fireEvent.input(seekSlider(), { target: { value: "50" } });
     expect(video().currentTime).toBe(0);
     expect(timeDisplay()).toBe("0:00 / 0:00");
 
     await click(emptyState());
+    expect(timeDisplay()).toBe("0:00 / 0:00");
     Object.defineProperty(video(), "duration", { configurable: true, value: 125 });
     fireEvent.loadedMetadata(video());
     await flush();
@@ -682,10 +685,310 @@ describe("seek", () => {
     fireEvent.timeUpdate(video());
     await flush();
     expect(timeDisplay()).toBe("1:01 / 2:05");
-    expect(seekSlider().value).toBe("61");
+    expect(seekSlider().value).toBe("61.7");
 
     fireEvent.input(seekSlider(), { target: { value: "90" } });
     expect(video().currentTime).toBe(90);
+  });
+});
+
+/** Fakes the timers, the clock the photo timer reads, and the animation frames that move the bar. */
+function useFakeClock(): void {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "performance", "requestAnimationFrame", "cancelAnimationFrame"] });
+}
+
+/** A phone's width, where the panel opens as the full-screen overlay. */
+const PHONE_VIEWPORT = { width: 600, height: 800 };
+const DESKTOP_VIEWPORT = { width: 1024, height: 768 };
+
+async function resize(viewport: { width: number; height: number }): Promise<void> {
+  setViewport(viewport);
+  await flush();
+}
+
+describe("smooth scrub bar", () => {
+  it("moves every animation frame while a video plays, between its time updates, and stops on pause", async () => {
+    useFakeClock();
+    const server = serverPicking(VIDEO_ITEM);
+    await mountAndPlay(server);
+    Object.defineProperty(video(), "duration", { configurable: true, value: 125 });
+    fireEvent.loadedMetadata(video());
+    await flush();
+
+    video().currentTime = 10.4;
+    await vi.advanceTimersByTimeAsync(16);
+    expect([seekSlider().value, timeDisplay()]).toEqual(["10.4", "0:10 / 2:05"]);
+    video().currentTime = 10.9;
+    await vi.advanceTimersByTimeAsync(16);
+    expect([seekSlider().value, timeDisplay()]).toEqual(["10.9", "0:10 / 2:05"]);
+
+    await click(button("Play/Pause"));
+    video().currentTime = 50;
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(seekSlider().value).toBe("10.9");
+    await click(button("Play/Pause"));
+    await vi.advanceTimersByTimeAsync(16);
+    expect(seekSlider().value).toBe("50");
+  });
+
+  it("moves every animation frame while a photo's timer runs, and stops while it is held", async () => {
+    useFakeClock();
+    const server = serverPicking(PHOTO_ITEM);
+    await mount(server);
+    await click(button("Autoplay"));
+    await click(emptyState());
+
+    const readings: number[] = [];
+    for (let frame = 0; frame < 5; frame++) {
+      await vi.advanceTimersByTimeAsync(16);
+      readings.push(Number(photoTimerBar().value));
+    }
+    expect(readings.every((value, index) => index === 0 || value > readings[index - 1]!)).toBe(true);
+    expect(readings[4]).toBeLessThan(0.1);
+
+    await click(button("Play/Pause"));
+    const held = photoTimerBar().value;
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(photoTimerBar().value).toBe(held);
+  });
+});
+
+describe("Auto-Pause", () => {
+  it("keeps playback going on every tab beside the player", async () => {
+    const server = serverPicking(VIDEO_ITEM);
+    await mountAndPlay(server);
+
+    for (const tab of ["Library", "Filter", "Tags"] as const) {
+      await openPanel(tab);
+      await waitFor(() => expect(isShowing(tab)).toBe(true));
+      expect([tab, video().paused]).toEqual([tab, false]);
+    }
+    await closePanel();
+    expect(video().paused).toBe(false);
+    expect(video().src).toBe(VIDEO_URL);
+  });
+
+  it("pauses as the full-screen overlay on a phone, on every tab, and resumes on close", async () => {
+    setViewport(PHONE_VIEWPORT);
+    const server = serverPicking(VIDEO_ITEM);
+    await mountAndPlay(server);
+
+    for (const tab of ["Library", "Filter", "Tags"] as const) {
+      await openPanel(tab);
+      await waitFor(() => expect(isShowing(tab)).toBe(true));
+      expect([tab, video().paused]).toEqual([tab, true]);
+      expect(iconOf("Play/Pause")).toBe("play_arrow");
+      await closePanel();
+      expect([tab, video().paused]).toEqual([tab, false]);
+    }
+    await waitFor(() =>
+      expect(server.logLines()).toEqual(
+        expect.arrayContaining([
+          "playback=auto-pause attempt=1 hasCurrent=true mediaType=video",
+          "playback=auto-resume attempt=1 hasCurrent=true mediaType=video"
+        ])
+      )
+    );
+  });
+
+  it("pauses an open panel as it comes to cover the player, and resumes as it moves beside it", async () => {
+    const server = serverPicking(VIDEO_ITEM);
+    await mountAndPlay(server);
+    await openPanel("Tags");
+
+    await resize(PHONE_VIEWPORT);
+    expect(isShowing("Tags")).toBe(true);
+    expect(video().paused).toBe(true);
+    await resize(DESKTOP_VIEWPORT);
+    expect(video().paused).toBe(false);
+  });
+
+  it("pauses for Auto Tag beside the player, and resumes as it closes", async () => {
+    const server = serverPicking(VIDEO_ITEM);
+    await mountAndPlay(server);
+    await openPanel("Tags");
+    expect(video().paused).toBe(false);
+
+    await click(button("Auto Tag"));
+    expect(document.getElementById("autotag")).not.toBeNull();
+    expect(video().paused).toBe(true);
+    await click(document.getElementById("autotag-close") as HTMLElement);
+    expect(document.getElementById("autotag")).toBeNull();
+    expect(video().paused).toBe(false);
+  });
+
+  it("leaves a video the user paused paused, and playback as the user left it while the overlay was open", async () => {
+    setViewport(PHONE_VIEWPORT);
+    const server = serverPicking(VIDEO_ITEM);
+    await mountAndPlay(server);
+
+    await click(button("Play/Pause"));
+    await openPanel("Library");
+    await closePanel();
+    expect(video().paused).toBe(true);
+
+    await click(button("Play/Pause"));
+    await openPanel("Library");
+    await click(button("Play/Pause"));
+    expect(video().paused).toBe(false);
+    await closePanel();
+    expect(video().paused).toBe(false);
+
+    await openPanel("Library");
+    await click(button("Play/Pause"));
+    await click(button("Play/Pause"));
+    await closePanel();
+    expect(video().paused).toBe(true);
+  });
+
+  it("holds a photo's timer as the overlay opens, and resumes it with the time it had left, without loading or recording it again", async () => {
+    useFakeClock();
+    setViewport(PHONE_VIEWPORT);
+    const server = serverPicking(PHOTO_ITEM, VIDEO_ITEM);
+    await mount(server);
+    await click(button("Autoplay"));
+    await click(emptyState());
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    await openPanel("Library");
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(randomPicks(server)).toBe(1);
+    expect(timeDisplay()).toBe("0:10 / 0:15");
+
+    await closePanel();
+    expect(iconOf("Play/Pause")).toBe("pause");
+    expect(photo().src).toBe(PHOTO_URL);
+    expect(playRecords(server)).toBe(1);
+    expect(server.logLines().filter((line) => line.startsWith("playback=start"))).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(randomPicks(server)).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(randomPicks(server)).toBe(2);
+    expect(video().src).toBe(VIDEO_URL);
+  });
+});
+
+describe("scrub bar on a photo", () => {
+  it("stays in its place, and with Autoplay on and Loop off fills as the photo's timer runs", async () => {
+    useFakeClock();
+    const server = serverPicking(VIDEO_ITEM, PHOTO_ITEM);
+    await mount(server);
+    await click(button("Autoplay"));
+    await click(emptyState());
+    const row = seekRow();
+    await click(button("Next"));
+    expect(photo().style.display).toBe("block");
+
+    expect(seekRow()).toBe(row);
+    expect(row.style.display).toBe("");
+    expect(photoTimerBar().parentElement).toBe(row);
+    expect(photoTimerBar().disabled).toBe(false);
+    expect([photoTimerBar().max, photoTimerBar().value, timeDisplay()]).toEqual(["15", "0", "0:00 / 0:15"]);
+    expect(iconOf("Play/Pause")).toBe("pause");
+
+    // The last animation frame before now, at most 16 ms ago, moved the bar.
+    await vi.advanceTimersByTimeAsync(5_250);
+    expect(Number(photoTimerBar().value)).toBeGreaterThan(5.23);
+    expect(Number(photoTimerBar().value)).toBeLessThanOrEqual(5.25);
+    expect(timeDisplay()).toBe("0:05 / 0:15");
+  });
+
+  it("Play/Pause holds and resumes the photo's timer with the time it had left, and dragging the bar moves it", async () => {
+    useFakeClock();
+    const server = serverPicking(PHOTO_ITEM, VIDEO_ITEM);
+    await mount(server);
+    await click(button("Autoplay"));
+    await click(emptyState());
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    await click(button("Play/Pause"));
+    expect(iconOf("Play/Pause")).toBe("play_arrow");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(timeDisplay()).toBe("0:05 / 0:15");
+    expect(randomPicks(server)).toBe(1);
+
+    fireEvent.input(photoTimerBar(), { target: { value: "12" } });
+    await flush();
+    expect(timeDisplay()).toBe("0:12 / 0:15");
+    await click(button("Play/Pause"));
+    expect(iconOf("Play/Pause")).toBe("pause");
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(randomPicks(server)).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(randomPicks(server)).toBe(2);
+    expect(playRecords(server)).toBe(2);
+  });
+
+  it("with Autoplay off or Loop on, disables Play and the bar with the time at 0:00 / 0:00; Autoplay starts the full time, and off clears it", async () => {
+    useFakeClock();
+    const server = serverPicking(PHOTO_ITEM, VIDEO_ITEM);
+    await mountAndPlay(server);
+    const disabled = () => [button("Play/Pause").disabled, photoTimerBar().disabled, timeDisplay()];
+
+    expect(disabled()).toEqual([true, true, "0:00 / 0:00"]);
+    await click(button("Play/Pause"));
+    expect(randomPicks(server)).toBe(1);
+
+    await click(button("Autoplay"));
+    expect(disabled()).toEqual([false, false, "0:00 / 0:15"]);
+    await vi.advanceTimersByTimeAsync(5_100);
+    expect(timeDisplay()).toBe("0:05 / 0:15");
+
+    await click(button("Loop"));
+    expect(disabled()).toEqual([true, true, "0:00 / 0:00"]);
+    expect(photoTimerBar().value).toBe("0");
+    await click(button("Loop"));
+    expect(disabled()).toEqual([false, false, "0:00 / 0:15"]);
+
+    await click(button("Autoplay"));
+    expect(disabled()).toEqual([true, true, "0:00 / 0:00"]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(randomPicks(server)).toBe(1);
+  });
+});
+
+describe("colors", () => {
+  it("keep the player's time light in both themes, and checkboxes, radio buttons, and sliders orange", async () => {
+    useStylesheet();
+    const server = serverPicking(VIDEO_ITEM);
+    await mountAndPlay(server);
+    await openPanel("Filter");
+    const filter = await waitFor(() => {
+      const found = document.getElementById("panel-page-filter")!;
+      expect(found.querySelector('input[type="checkbox"]')).not.toBeNull();
+      expect(found.querySelector('input[type="radio"]')).not.toBeNull();
+      return found;
+    });
+    const controls = [seekSlider(), filter.querySelector('input[type="checkbox"]')!, filter.querySelector('input[type="radio"]')!];
+    const root = document.documentElement;
+
+    try {
+      for (const theme of ["theme-dark", "theme-light"]) {
+        root.classList.remove("theme-dark", "theme-light");
+        root.classList.add(theme);
+        expect([theme, currentStyle(document.getElementById("time-display")!).color]).toEqual([theme, "#ffffff"]);
+        expect(controls.map((control) => currentStyle(control).accentColor)).toEqual(["#ef7f22", "#ef7f22", "#ef7f22"]);
+      }
+    } finally {
+      root.classList.remove("theme-dark", "theme-light");
+    }
+  });
+});
+
+describe("seek row", () => {
+  it("sets the scrub bar and the time the row's 12 px gap apart, with the time's digits all one width", async () => {
+    useStylesheet();
+    const server = serverPicking(VIDEO_ITEM);
+    await mountAndPlay(server);
+    const row = currentStyle(seekRow());
+    const bar = currentStyle(seekSlider());
+    const time = currentStyle(document.getElementById("time-display")!);
+
+    expect([row.display, row.gap]).toEqual(["flex", "12px"]);
+    // A range input's own margin, 2 px in browsers, would widen the gap.
+    expect([bar.marginLeft, bar.marginRight]).toEqual(["0px", "0px"]);
+    // The time takes its own width, with no minimum or alignment adding space beside it.
+    expect([time.minWidth, time.textAlign, time.fontVariantNumeric]).toEqual(["", "", "tabular-nums"]);
   });
 });
 
@@ -849,58 +1152,6 @@ describe("fullscreen", () => {
 });
 
 describe("other screens", () => {
-  it("the Tags tab pauses a playing video and resumes it on close, and a paused video stays paused", async () => {
-    const server = serverPicking(VIDEO_ITEM);
-    await mountAndPlay(server);
-
-    await openPanel("Tags");
-    expect(isShowing("Tags")).toBe(true);
-    expect(video().paused).toBe(true);
-    await closePanel();
-    expect(isShowing("Tags")).toBe(false);
-    expect(video().paused).toBe(false);
-
-    await click(button("Play/Pause"));
-    await openPanel("Tags");
-    await closePanel();
-    expect(video().paused).toBe(true);
-  });
-
-  it("the Tags tab holds a photo's autoplay timer while open and starts it again on close", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    const server = serverPicking(PHOTO_ITEM, VIDEO_ITEM);
-    await mount(server);
-    await click(button("Autoplay"));
-    await click(emptyState());
-
-    await vi.advanceTimersByTimeAsync(10_000);
-    await openPanel("Tags");
-    await vi.advanceTimersByTimeAsync(30_000);
-    expect(randomPicks(server)).toBe(1);
-
-    await closePanel();
-    expect(playRecords(server)).toBe(2);
-    await vi.advanceTimersByTimeAsync(14_999);
-    expect(randomPicks(server)).toBe(1);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(randomPicks(server)).toBe(2);
-  });
-
-  it("playback keeps going while the Library and Filter tabs are open", async () => {
-    const server = serverPicking(VIDEO_ITEM);
-    await mountAndPlay(server);
-
-    await openPanel("Library");
-    expect(isShowing("Library")).toBe(true);
-    expect(video().paused).toBe(false);
-    await closePanel();
-
-    await openPanel("Filter");
-    await waitFor(() => expect(isShowing("Filter")).toBe(true));
-    expect(video().paused).toBe(false);
-    expect(video().src).toBe(VIDEO_URL);
-  });
-
   it("a library tile plays without a second play record, closes the overlay, and joins history", async () => {
     setViewport({ width: 600, height: 800 });
     stubLayoutSize();

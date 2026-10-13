@@ -68,8 +68,8 @@ exports[`page structure > keeps the starting markup 1`] = `
             <button aria-label="Fullscreen" class="overlay-btn icon-glyph-base icon-glyph-button" id="fullscreen-btn" title="Fullscreen">
               <span class="material-symbol-icon">
                 "fullscreen"
-          <div class="overlay-seek-row" id="seek-row" style="display: none">
-            <input aria-label="Seek" id="seek-slider" max="100" min="0" type="range" value="0">
+          <div class="overlay-seek-row" id="seek-row">
+            <input aria-label="Seek" disabled="" id="seek-slider" max="100" min="0" step="any" type="range" value="0">
             <span id="time-display">
               "0:00 / 0:00"
     <div aria-controls="panel" aria-label="Resize panel" aria-orientation="vertical" aria-valuemax="612" aria-valuemin="360" aria-valuenow="420" aria-valuetext="420 pixels" class="panel-handle" hidden="" id="panel-handle" role="separator" tabindex="0">

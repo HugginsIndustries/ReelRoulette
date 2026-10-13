@@ -13,7 +13,6 @@ import {
   type TagSaveStep,
   type TaggedItem
 } from "../library/tagSave";
-import type { Player } from "../playback/player";
 import type { AppApi } from "../state/appApi";
 import type { AppStore, StorageLike } from "../state/appStore";
 import type { DeviceStore } from "../state/deviceStore";
@@ -170,12 +169,11 @@ export interface TagEditor {
   readonly view: ReadonlySignal<TagEditorView | null>;
 
   /**
-   * The tab shows: pauses playback and loads the tags of the item it edits, which it doesn't while the server fails the
-   * compatibility check, nor while a save is on its way, which loads them once it lands. Its changes are as it was left
-   * with them.
+   * The tab shows: loads the tags of the item it edits, which it doesn't while the server fails the compatibility
+   * check, nor while a save is on its way, which loads them once it lands. Its changes are as it was left with them.
    */
   open(): void;
-  /** The tab hides: closes the editor's dialogs and resumes playback, keeping the changes. */
+  /** The tab hides: closes the editor's dialogs, keeping the changes. */
   close(): void;
   /**
    * Asks first when there are changes, then drops them, closes the editor's dialogs, follows the playing item, and
@@ -256,7 +254,6 @@ export interface TagEditorOptions {
   library: Pick<Library, "session">;
   /** The Filter tab, whose unsaved changes take a tag renamed or deleted. */
   filter: Pick<FilterDialog, "reviseTags">;
-  player: Pick<Player, "pauseForTagEditor" | "resumeAfterTagEditor">;
   /** This device's memory, for the categories expanded. */
   device: DeviceStore;
   /** Browser `localStorage`, for Scan full library. */
@@ -738,7 +735,6 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       follow();
       // A moved category keeps its place; otherwise the categories take the order of the tags about to load.
       update({ order: state.orderChanged ? state.order : [] });
-      options.player.pauseForTagEditor();
       isOpen.value = true;
       reload("Tag editor unavailable");
     },
@@ -749,7 +745,6 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       }
       update(dialogsClosed());
       isOpen.value = false;
-      options.player.resumeAfterTagEditor();
     },
 
     async refresh() {

@@ -206,9 +206,12 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
 #favorite-btn { right: 64px; }
 #blacklist-btn { right: 12px; }
 .overlay-seek-row { display: flex; align-items: center; gap: 12px; pointer-events: auto; }
-.overlay-seek-row input[type="range"] { flex: 1; min-width: 0; height: 24px; }
+/* The sliders drop a browser's own margin, 2 px, so the bar, the time, and the volume sit the row's gap apart. */
+.overlay-seek-row input[type="range"] { flex: 1; min-width: 0; height: 24px; margin: 0; }
 .overlay-seek-row input[type="range"]:disabled { cursor: default; }
-#time-display { font-size: 0.9rem; white-space: nowrap; color: var(--time-display-fg); min-width: 12ch; text-align: right; }
+/* Its digits are all one width, so the time doesn't jitter while it plays. It takes its own width, so that width may
+   change between items with different time formats. */
+#time-display { font-size: 0.9rem; white-space: nowrap; color: var(--time-display-fg); font-variant-numeric: tabular-nums; }
 
 /* The resize handle between the player and the panel. */
 .panel-handle {
@@ -468,8 +471,8 @@ a.icon-btn { text-decoration: none; }
 
 /* Volume, at the end of the seek row; hidden where the browser keeps volume read-only (iOS). */
 .volume { display: inline-flex; align-items: center; }
-.volume input[type="range"] { width: 84px; height: 24px; }
-@container (max-width: 480px) { .volume input[type="range"] { width: 60px; } }
+/* 84 px on every screen, a phone's too. */
+.volume input[type="range"] { flex: none; width: 84px; height: 24px; }
 .fake-video.is-error { background: #000; animation: none; }
 .fake-video.is-error .subject { display: none; }
 
@@ -819,7 +822,7 @@ body.short-screen.pairing .top-bar { display: flex; padding: 6px 0; margin: 0; }
             <button id="fullscreen-btn" class="overlay-btn" aria-label="Fullscreen" title="Fullscreen"><span class="material-symbol-icon">fullscreen</span></button>
           </div>
           <div class="overlay-seek-row">
-            <input type="range" id="seek" min="0" max="100" step="0.25" value="0" aria-label="Seek">
+            <input type="range" id="seek" min="0" max="100" step="any" value="0" aria-label="Seek">
             <span id="time-display"></span>
             <span class="volume" id="volume-wrap"><input type="range" id="volume" min="0" max="100" step="1" value="80" aria-label="Volume" title="Volume"></span>
           </div>
@@ -1487,10 +1490,25 @@ ITEMS.forEach((item) => {
 const presets = ["Favorites", "Short clips", "Photos only", "Long videos", "Beach days", "Family", "Not yet watched", "Night shots",
   "Trips abroad", "Drone footage", "Concerts", "Kids", "Cooking", "Timelapses", "Winter", "Summer"];
 
+// Whole `seconds` as h:mm:ss with hours, or m:ss, its first part padded to `digits`.
+function timeInShape(seconds, withHours, digits) {
+  const two = (value) => String(value).padStart(2, "0");
+  if (withHours) return `${String(Math.floor(seconds / 3600)).padStart(digits, "0")}:${two(Math.floor(seconds / 60) % 60)}:${two(seconds % 60)}`;
+  return `${String(Math.floor(seconds / 60)).padStart(digits, "0")}:${two(seconds % 60)}`;
+}
+// m:ss, or h:mm:ss from an hour: the header's and the Stats tab's durations, and the seek row's total.
 function fmt(seconds) {
-  // m:ss, as the WebUI shows times today.
-  const s = Math.max(0, Math.floor(seconds));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  const s = Math.max(0, Math.floor(seconds || 0));
+  return timeInShape(s, s >= 3600, 1);
+}
+// The seek row's time, "elapsed / total": the elapsed time takes the total's shape, with hours only when the total
+// has them and as many hour or minute digits, so its width never changes within an item: "09:47 / 23:12",
+// "0:12:26 / 1:48:37".
+function fmtPosition(elapsedSeconds, totalSeconds) {
+  const total = Math.max(0, Math.floor(totalSeconds || 0));
+  const withHours = total >= 3600;
+  const leadingDigits = String(Math.floor(withHours ? total / 3600 : total / 60)).length;
+  return `${timeInShape(Math.max(0, Math.floor(elapsedSeconds || 0)), withHours, leadingDigits)} / ${fmt(total)}`;
 }
 
 // ---- Playback, history, random picks, photo timer, and Auto-Pause ----
@@ -1565,27 +1583,93 @@ function setLoading(reason, on) {
 
 // "Advance after" in the Settings tab: today's photo duration, renamed, and the Timer mode's interval.
 const photoSeconds = () => state.advanceAfter;
-// The photo timer runs with Autoplay or Loop on, as today; the bar shows it only when it will advance to another item.
+// The photo timer runs with Autoplay or Loop on, as today; the bar shows it only when it will advance to another item,
+// until it ends, while the next item comes.
 const photoTimerRuns = () => !!playback.item && isPhoto(playback.item) && (playback.autoplay || playback.loop);
-const photoBarFills = () => !!playback.item && isPhoto(playback.item) && playback.autoplay && !playback.loop;
+const photoBarFills = () => !!playback.item && isPhoto(playback.item) && playback.autoplay && !playback.loop && playback.pausedBy !== "end";
 const cannotPlay = (item) => item.missing || item.removed || !isPlayable(item);
+
+// The clock: while something plays, a video or a photo whose timer runs, the time runs on from when it was last
+// brought up to now, and so does Timer mode's timer on a video; a paused video holds both.
+let clockAt = performance.now();
+const clockRuns = () => !!playback.item && playback.playing && (!isPhoto(playback.item) || photoTimerRuns());
+const timerModeRuns = () => playback.autoplay && state.autoplayMode === "timer" && !isPhoto(playback.item);
+function catchUp() {
+  const now = performance.now();
+  if (clockRuns()) {
+    const seconds = (now - clockAt) / 1000;
+    playback.time += seconds;
+    if (timerModeRuns()) playback.timer += seconds;
+  }
+  clockAt = now;
+}
+// Moves the time to `seconds`, as a new item or a seek does.
+function setTime(seconds) {
+  catchUp();
+  playback.time = seconds;
+}
+
+// Brings the time up to now and acts on the end of the item or of Timer mode's timer: every 250 ms, and every animation
+// frame while something plays, so the scrub bar moves smoothly. The time shown still changes once a second.
+function advance() {
+  const item = playback.item;
+  if (!item || !playback.playing) return;
+  catchUp();
+  // Timer mode: every item advances after the timer, even a video that hasn't finished; a paused video holds it.
+  if (timerModeRuns() && playback.timer >= state.advanceAfter) return void goNext();
+  if (isPhoto(item)) {
+    if (!photoTimerRuns()) return;
+    // A changed timer keeps the time already shown and changes only the length.
+    if (playback.time >= photoSeconds()) {
+      if (playback.loop) setTime(0);
+      else {
+        // The timer has ended: Play and the bar are disabled until the next item plays, even if its pick fails.
+        setPlaying(false, "end");
+        return void goNext();
+      }
+    }
+  } else if (playback.time >= item.duration) {
+    if (playback.loop) setTime(0);
+    else if (playback.autoplay) return void goNext();
+    else {
+      setTime(item.duration);
+      setPlaying(false, "end");
+    }
+  }
+  renderTime();
+}
+setInterval(advance, 250);
+let barFrame = 0;
+function moveBarWhilePlaying() {
+  if (clockRuns() && !barFrame) {
+    barFrame = requestAnimationFrame(() => {
+      barFrame = 0;
+      advance();
+      moveBarWhilePlaying();
+    });
+  } else if (!clockRuns() && barFrame) {
+    cancelAnimationFrame(barFrame);
+    barFrame = 0;
+  }
+}
 
 function renderTime() {
   const item = playback.item;
   const seek = $("seek");
   if (!item || isPhoto(item)) {
-    // While a photo's timer runs, the bar shows it and dragging moves it; otherwise the bar is disabled.
+    // While a photo's timer runs, the bar shows it and dragging moves it; otherwise the bar is disabled, and the time
+    // shows 0:00 / 0:00, as it does before anything plays, so the controls keep their look.
     seek.disabled = !photoBarFills();
     seek.max = String(item ? photoSeconds() : 1);
     seek.value = String(photoBarFills() ? playback.time : 0);
     seek.setAttribute("aria-label", item ? "Photo timer" : "Seek");
-    $("time-display").textContent = photoBarFills() ? `${fmt(playback.time)} / ${fmt(photoSeconds())}` : "";
+    $("time-display").textContent = photoBarFills() ? fmtPosition(playback.time, photoSeconds()) : "0:00 / 0:00";
   } else {
     seek.disabled = !!playback.failed;
     seek.max = String(item.duration);
     seek.value = String(playback.time);
     seek.setAttribute("aria-label", "Seek");
-    $("time-display").textContent = `${fmt(playback.time)} / ${fmt(item.duration)}`;
+    $("time-display").textContent = fmtPosition(playback.time, item.duration);
   }
 }
 
@@ -1594,6 +1678,7 @@ function chipText() {
   if (playback.failed) return ["warning", "Can't play"];
   if (isPhoto(playback.item)) {
     if (!photoTimerRuns()) return ["photo", "Photo, no timer"];
+    if (playback.pausedBy === "end") return ["photo", "Photo timer ended"];
     if (!playback.playing) return ["pause", playback.pausedBy === "auto" ? "Timer held by Auto-Pause" : "Timer paused"];
     return ["play_arrow", playback.loop ? "Photo looping" : "Photo timer"];
   }
@@ -1620,10 +1705,10 @@ function renderPlayback() {
   renderAmbient();
   $("favorite-btn").classList.toggle("active", !!item?.favorite);
   $("blacklist-btn").classList.toggle("active", !!item?.blacklisted);
-  $("volume").disabled = photo;
-  $("mute-btn").disabled = photo;
-  $("mute-btn").classList.toggle("active", playback.muted && !photo);
-  setIcon($("mute-btn").querySelector(".material-symbol-icon"), playback.muted && !photo ? "volume_off" : "volume_up");
+  // Mute and the volume slider stay enabled before anything plays and on a photo, where they apply to the next video,
+  // and Mute always shows whether sound is muted.
+  $("mute-btn").classList.toggle("active", playback.muted);
+  setIcon($("mute-btn").querySelector(".material-symbol-icon"), playback.muted ? "volume_off" : "volume_up");
   // The file name opens the Stats tab; its tooltip shows the full name and then "Show stats".
   $("np-name").parentElement.hidden = !item;
   $("np-name").textContent = item ? item.name : "";
@@ -1634,6 +1719,7 @@ function renderPlayback() {
   $("play-btn").disabled = photo && !photoBarFills();
   $("loop-btn").classList.toggle("active", playback.loop);
   $("autoplay-btn").classList.toggle("active", playback.autoplay);
+  moveBarWhilePlaying();
   const [icon, text] = chipText();
   $("play-chip").textContent = "";
   $("play-chip").append(iconSpan(icon), text);
@@ -1643,6 +1729,8 @@ function renderPlayback() {
 }
 
 function setPlaying(playing, by) {
+  // As it starts or stops, the time runs up to now as it was before.
+  if (playing !== playback.playing) catchUp();
   playback.frameStep = null;
   playback.playing = playing;
   playback.autoPaused = !playing && by === "auto";
@@ -1659,7 +1747,7 @@ function skipNotice(item) {
 let mediaLoads = 0;
 function start(item) {
   playback.item = item;
-  playback.time = 0;
+  setTime(0);
   playback.timer = 0;
   playback.failed = isPlayable(item) ? null : "format";
   if (playback.failed) {
@@ -1769,35 +1857,6 @@ function syncAutoPause() {
   pauseWanted = want;
 }
 
-setInterval(() => {
-  const item = playback.item;
-  if (!item || !playback.playing) return;
-  // Timer mode: every item advances after the timer, even a video that hasn't finished; a paused video holds it.
-  if (playback.autoplay && state.autoplayMode === "timer" && !isPhoto(item)) {
-    playback.timer += 0.25;
-    if (playback.timer >= state.advanceAfter) return void goNext();
-  }
-  if (isPhoto(item)) {
-    if (!photoTimerRuns()) return;
-    playback.time += 0.25;
-    // A changed timer keeps the time already shown and changes only the length.
-    if (playback.time >= photoSeconds()) {
-      if (playback.loop) playback.time = 0;
-      else return void goNext();
-    }
-  } else {
-    playback.time += 0.25;
-    if (playback.time >= item.duration) {
-      if (playback.loop) playback.time = 0;
-      else if (playback.autoplay) return void goNext();
-      else {
-        playback.time = item.duration;
-        setPlaying(false, "end");
-      }
-    }
-  }
-  renderTime();
-}, 250);
 
 // ---- Ambient mode ----
 // At the sampling rate, a tiny copy of the frame becomes the target that the shown canvas blends toward over the
@@ -2171,7 +2230,8 @@ document.addEventListener("keydown", (event) => {
 // element's own volume read-only, gets an in-app volume too, and WebUI Loudness Normalization later adds its stage to
 // a path in use everywhere. The mockup's stand-in sound, a soft looping chord played with videos, goes through it,
 // started on the first tap or key, as Web Audio needs. Without Enhanced audio, the sound plays directly. The slider,
-// the scroll wheel, and a two-finger drag work wherever the volume can change.
+// the scroll wheel, and a two-finger drag work wherever the volume can change, on a photo too, setting the next
+// video's level.
 const elementVolumeReadOnly = (() => {
   try {
     const probe = document.createElement("audio");
@@ -2363,7 +2423,6 @@ function showControlsForVolume() {
   if (state.hideControls === "timeout") controlsActivity();
   else setControlsShown(true);
 }
-const volumeChangesHere = () => !(playback.item && isPhoto(playback.item)) && volumeAdjustable();
 function stepVolume(notches) {
   showControlsForVolume();
   if (notches) setVolume(state.volume + notches * state.volumeStep);
@@ -2376,7 +2435,7 @@ let wheelRest = 0;
 let wheelIdle = 0;
 media.addEventListener("wheel", (event) => {
   event.preventDefault();
-  if (!volumeChangesHere()) return;
+  if (!volumeAdjustable()) return;
   let notches;
   if (event.deltaMode !== 0 || Math.abs(event.deltaY) >= 50) {
     notches = -Math.sign(event.deltaY);
@@ -2402,7 +2461,7 @@ media.addEventListener("touchstart", (event) => {
 media.addEventListener("touchmove", (event) => {
   if (!twoFinger || event.touches.length !== 2) return;
   event.preventDefault();
-  if (!volumeChangesHere()) return;
+  if (!volumeAdjustable()) return;
   const y = middleY(event.touches);
   twoFinger.rest += twoFinger.y - y;
   twoFinger.y = y;
@@ -2415,7 +2474,8 @@ media.addEventListener("touchend", (event) => {
 }, { passive: true });
 media.addEventListener("gesturestart", (event) => event.preventDefault());
 $("overlay-controls").addEventListener("click", (event) => event.stopPropagation());
-// Play starts a random pick while nothing plays, and does nothing on a photo, as today.
+// Play starts a random pick while nothing plays. On a photo it holds and resumes the timer while the bar shows it, and
+// is disabled otherwise.
 $("play-btn").addEventListener("click", () => {
   if (!playback.item) return void pickRandom();
   if (isPhoto(playback.item) ? photoBarFills() : !playback.failed) setPlaying(!playback.playing, "user");
@@ -2423,27 +2483,29 @@ $("play-btn").addEventListener("click", () => {
 $("next-btn").addEventListener("click", () => goNext());
 $("prev-btn").addEventListener("click", () => goPrevious());
 $("seek").addEventListener("input", (event) => {
-  playback.time = Number(event.target.value);
+  setTime(Number(event.target.value));
   renderTime();
 });
 // Loop, Autoplay, and Mute keep their state across a page refresh (WebUI Settings Panel).
+// Each brings the time up to now first, since it can start or stop a photo's timer.
 $("loop-btn").addEventListener("click", () => {
+  catchUp();
   playback.loop = !playback.loop;
   store.set("loop", playback.loop);
   renderPlayback();
 });
 $("autoplay-btn").addEventListener("click", () => {
+  catchUp();
   playback.autoplay = !playback.autoplay;
   store.set("autoplay", playback.autoplay);
   // On a photo, turning Autoplay on starts its full time from now, and turning it off clears the timer.
   if (playback.item && isPhoto(playback.item)) {
-    playback.time = 0;
+    setTime(0);
     setPlaying(true, "user");
   }
   renderPlayback();
 });
 function toggleMute() {
-  if (playback.item && isPhoto(playback.item)) return;
   playback.muted = !playback.muted;
   store.set("muted", playback.muted);
   renderPlayback();
@@ -4673,6 +4735,7 @@ document.addEventListener("keydown", (event) => {
   if (key === "k" || key === " ") return handled(), $("play-btn").click();
   if ((key === "j" || key === "l") && video) {
     handled();
+    catchUp();
     playback.time = Math.max(0, Math.min(item.duration, playback.time + (key === "l" ? 1 : -1) * state.seekStep));
     return renderTime();
   }
@@ -4689,6 +4752,7 @@ document.addEventListener("keydown", (event) => {
   // timings (requestVideoFrameCallback) where it provides them.
   if ((key === "," || key === ".") && video && !playback.playing) {
     handled();
+    catchUp();
     playback.time = Math.max(0, Math.min(item.duration, playback.time + (key === "." ? 1 : -1) / 30));
     playback.frameStep = key === "." ? "forward" : "back";
     return renderPlayback();
@@ -4771,6 +4835,8 @@ window.mockup = {
   tags: TAGS,
   queue: mockHooks.queue,
   choose: (id) => chooseItem(ITEMS[id]),
+  // The seek row's time format, for the check's hour-long times, which no item runs.
+  formatPosition: fmtPosition,
   history: () => ({ ids: history.map((item) => item.id), index: historyIndex }),
   ambientSamples: () => ambientSamples,
   situation: applySituation,

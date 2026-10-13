@@ -5,7 +5,8 @@ import { playbackTraceLine } from "../logging/relayLogLines";
 import type { AppApi } from "../state/appApi";
 import type { AppStore, PlayingItem } from "../state/appStore";
 import type { ServerConnection } from "../state/serverConnection";
-import { basenameFromPath, formatPlaybackTime } from "./nowPlaying";
+import { basenameFromPath, formatPlaybackPosition } from "./nowPlaying";
+import { createPhotoTimer } from "./photoTimer";
 import { createRandomPicker, randomPickRequest } from "./randomPick";
 
 /** An element the player shows and hides by setting its `display`. */
@@ -42,15 +43,27 @@ export interface PlayerElements {
   video: VideoElement;
   photo: PhotoElement;
   emptyState: ShownElement;
-  seekRow: ShownElement;
   /** Not rendered from state, so a re-render never moves it while it is dragged. */
   seekSlider: SeekSliderElement;
 }
 
-export interface MuteButtonView {
+export interface PlayButtonView {
+  /** On a photo whose timer the scrub bar doesn't show, or once its timer has ended. */
   disabled: boolean;
-  /** Shown as lit with the muted icon. */
-  active: boolean;
+  /** Shows the pause icon. */
+  showsPause: boolean;
+}
+
+export interface SeekBarView {
+  disabled: boolean;
+  /** Its accessible name: "Photo timer" on a photo, otherwise "Seek". */
+  label: string;
+}
+
+/** Runs a callback before the browser's next repaint, as `requestAnimationFrame` does. */
+export interface FrameScheduler {
+  request(callback: () => void): number;
+  cancel(id: number): void;
 }
 
 export interface PlayOptions {
@@ -58,14 +71,24 @@ export interface PlayOptions {
   recordPlayback?: boolean;
 }
 
-/** Plays the current item and history, and runs the player's controls. */
+/**
+ * Plays the current item and history, and runs the player's controls. On a photo with Autoplay on and Loop off, the
+ * scrub bar shows the photo's timer, which Play/Pause holds and resumes and the bar moves, until it ends.
+ */
 export interface Player {
-  /** The play button shows the pause icon. */
-  readonly showsPause: ReadonlySignal<boolean>;
-  readonly muteButton: ReadonlySignal<MuteButtonView>;
+  readonly playButton: ReadonlySignal<PlayButtonView>;
+  readonly seekBar: ReadonlySignal<SeekBarView>;
+  /**
+   * Sound is muted, which the mute button shows lit with the muted icon. Mute works before anything plays and on a
+   * photo too, applying to the next video.
+   */
+  readonly muted: ReadonlySignal<boolean>;
   readonly favorite: ReadonlySignal<boolean>;
   readonly blacklisted: ReadonlySignal<boolean>;
-  /** The seek row's time, as `m:ss / m:ss`. */
+  /**
+   * The seek row's time, as elapsed and total, the elapsed time in the total's shape (`formatPlaybackPosition`): a
+   * video's, or a photo's timer while the bar shows it, and otherwise 0:00 / 0:00.
+   */
   readonly timeText: ReadonlySignal<string>;
 
   attach(elements: PlayerElements): void;
@@ -73,7 +96,10 @@ export interface Player {
   detach(): void;
   playCurrent(options?: PlayOptions): void;
   pickRandom(): Promise<void>;
-  /** The play button: picks when nothing is playing, otherwise plays or pauses the video. */
+  /**
+   * The play button: picks when nothing is playing, otherwise plays or pauses the video, or holds and resumes a
+   * photo's timer while the bar shows it.
+   */
   playOrPause(): void;
   /** Steps forward in history, or picks at its end. */
   next(): void;
@@ -83,15 +109,16 @@ export interface Player {
   toggleAutoplay(): void;
   toggleFavorite(): Promise<void>;
   toggleBlacklist(): Promise<void>;
-  /** Takes the seek slider's value, in seconds. */
+  /** Takes the seek slider's value, in seconds: a video's position, or a photo's timer's while the bar shows it. */
   seek(value: string): void;
-  /** Pauses the video, or holds a photo's autoplay timer, while the tag editor is open. */
-  pauseForTagEditor(): void;
+  /** Auto-Pause: pauses the video, or holds a photo's timer, keeping the time it has left. */
+  autoPause(): void;
   /**
-   * Resumes what `pauseForTagEditor` paused. A video the user had paused, or played or paused since, stays as it is,
-   * and nothing resumes once another item, or the same one again, has started.
+   * Resumes what `autoPause` paused: plays the video, or runs the photo's timer on with the time it had left, without
+   * loading the photo again or recording its play again. Playback the user had paused, or played or paused since,
+   * stays as it is, and nothing resumes once another item, or the same one again, has started.
    */
-  resumeAfterTagEditor(): void;
+  autoResume(): void;
 
   // The video and photo elements' events.
   videoPlayStateChanged(): void;
@@ -113,6 +140,8 @@ export interface PlayerOptions {
   dialogs: Pick<Dialogs, "notice">;
   /** Defaults to the global `fetch`, looked up on each request. */
   fetch?: typeof fetch;
+  /** Defaults to the browser's animation frames, looked up on each request. */
+  frames?: FrameScheduler;
 }
 
 /** The attempt whose media events the player handles. Events from the element not in use are ignored. */
@@ -125,6 +154,8 @@ interface ArmedAttempt {
 
 const MIN_PHOTO_SECONDS = 1;
 const MAX_PHOTO_SECONDS = 300;
+/** The time shown while no video's or photo timer's time is known, so the controls keep their look. */
+const NO_TIME = "0:00 / 0:00";
 
 function absolutizeMediaUrl(apiBaseUrl: string, mediaUrl: string): string {
   if (!mediaUrl) {
@@ -142,6 +173,10 @@ export function createPlayer(options: PlayerOptions): Player {
   const { store, api, connection, dialogs } = options;
   const apiBaseUrl = String(options.apiBaseUrl || "").replace(/\/+$/, "");
   const send: typeof fetch = options.fetch ?? ((input, init) => fetch(input, init));
+  const frames: FrameScheduler = options.frames ?? {
+    request: (callback) => requestAnimationFrame(callback),
+    cancel: (id) => cancelAnimationFrame(id)
+  };
   const randomPicker = createRandomPicker((body, signal) =>
     send(api.url("/api/random"), {
       method: "POST",
@@ -152,21 +187,22 @@ export function createPlayer(options: PlayerOptions): Player {
     })
   );
 
-  const showsPause = signal(false);
-  // Mute starts enabled: it is only disabled once something without a video plays.
-  const muteButton = signal<MuteButtonView>({ disabled: false, active: false });
+  const playButton = signal<PlayButtonView>({ disabled: false, showsPause: false });
+  const seekBar = signal<SeekBarView>({ disabled: true, label: "Seek" });
+  const muted = signal(false);
   const favorite = signal(false);
   const blacklisted = signal(false);
-  const timeText = signal("0:00 / 0:00");
+  const timeText = signal(NO_TIME);
+  const photoTimer = createPhotoTimer({ onEnd: photoTimerEnded });
 
   let elements: PlayerElements | null = null;
+  /** The animation frame that moves the bar next, while something plays. */
+  let frameId: number | null = null;
   let armed: ArmedAttempt | null = null;
-  let photoTimerId: ReturnType<typeof setTimeout> | null = null;
-  let videoMuted = false;
-  let tagEditorPausedVideo = false;
-  let tagEditorHeldPhotoTimer = false;
-  /** The play attempt the tag editor paused; once another has started, there is nothing to resume. */
-  let tagEditorPausedAttempt = 0;
+  let autoPausedVideo = false;
+  let autoHeldPhoto = false;
+  /** The play attempt Auto-Pause paused; once another has started, there is nothing to resume. */
+  let autoPausedAttempt = 0;
 
   function trace(level: string, message: string, context: Record<string, unknown> = {}): void {
     void api.relayLog(level, playbackTraceLine(message, store.current.peek(), store.playAttemptId.peek(), context));
@@ -188,6 +224,32 @@ export function createPlayer(options: PlayerOptions): Player {
     return elements !== null && elements.video.style.display !== "none";
   }
 
+  /**
+   * The browser reports a video's length as `Infinity` when it can't know it, as for a WebM without one in its header.
+   * The bar is then disabled and empty, as on a photo without a timer.
+   */
+  function videoLengthUnknown(): boolean {
+    return videoShown() && elements!.video.duration === Number.POSITIVE_INFINITY;
+  }
+
+  function photoShown(): boolean {
+    return elements !== null && elements.photo.style.display !== "none";
+  }
+
+  /**
+   * On a photo with Autoplay on and Loop off, the scrub bar shows its timer, and Play and the bar move it, until the
+   * timer ends.
+   */
+  function photoBarShown(): boolean {
+    return photoShown() && store.autoplay.peek() && !store.loop.peek() && photoTimer.active;
+  }
+
+  /** The user played or paused, which Auto-Pause then leaves as it is. */
+  function handBackToUser(): void {
+    autoPausedVideo = false;
+    autoHeldPhoto = false;
+  }
+
   function showToggles(): void {
     const current = store.current.peek();
     favorite.value = current?.isFavorite === true;
@@ -195,24 +257,74 @@ export function createPlayer(options: PlayerOptions): Player {
     showPlayState();
   }
 
+  /** Shows Play/Pause and the scrub bar for what plays: a video, a photo, or nothing yet. */
   function showPlayState(): void {
-    showsPause.value = !!store.current.peek() && videoShown() && !elements!.video.paused;
-  }
-
-  function showMute(): void {
-    if (elements && videoShown() && !!elements.video.src) {
-      elements.video.muted = videoMuted;
-      muteButton.value = { disabled: false, active: videoMuted };
+    if (photoShown()) {
+      const barShown = photoBarShown();
+      playButton.value = { disabled: !barShown, showsPause: barShown && photoTimer.running };
+      seekBar.value = { disabled: !barShown, label: "Photo timer" };
+      showPhotoTime();
     } else {
-      muteButton.value = { disabled: true, active: false };
+      playButton.value = { disabled: false, showsPause: !!store.current.peek() && videoShown() && !elements!.video.paused };
+      seekBar.value = { disabled: !videoShown() || videoLengthUnknown(), label: "Seek" };
+    }
+    moveBarWhilePlaying();
+  }
+
+  /**
+   * Moves the bar every animation frame while a video plays, or a photo's timer runs while the bar shows it, so it
+   * moves smoothly, and stops once it pauses. The time it shows still changes once a second.
+   */
+  function moveBarWhilePlaying(): void {
+    const moves = photoShown() ? photoBarShown() && photoTimer.running : videoShown() && !elements!.video.paused;
+    if (moves && frameId === null) {
+      frameId = frames.request(moveBar);
+    } else if (!moves) {
+      stopMovingBar();
     }
   }
 
-  function clearPhotoTimer(): void {
-    if (photoTimerId) {
-      clearTimeout(photoTimerId);
-      photoTimerId = null;
+  function moveBar(): void {
+    frameId = null;
+    if (photoShown()) {
+      showPhotoTime();
+    } else {
+      showTime();
     }
+    moveBarWhilePlaying();
+  }
+
+  function stopMovingBar(): void {
+    if (frameId !== null) {
+      frames.cancel(frameId);
+      frameId = null;
+    }
+  }
+
+  /** While the bar shows a photo's timer, it fills as the timer runs; otherwise it is empty and the time 0:00 / 0:00. */
+  function showPhotoTime(): void {
+    if (!elements || !photoShown()) return;
+    const { seekSlider } = elements;
+    if (!photoBarShown()) {
+      seekSlider.value = "0";
+      timeText.value = NO_TIME;
+      return;
+    }
+    const seconds = photoTimer.length / 1000;
+    const elapsed = photoTimer.elapsed() / 1000;
+    seekSlider.max = String(seconds);
+    seekSlider.value = String(elapsed);
+    timeText.value = formatPlaybackPosition(elapsed, seconds);
+  }
+
+  /** Loop shows the photo again; otherwise the next item plays. */
+  function photoTimerEnded(): void {
+    showPlayState();
+    if (store.loop.peek()) {
+      playCurrent();
+      return;
+    }
+    next();
   }
 
   /** An attempt is stale once another item or attempt has started; its events are only traced. */
@@ -228,14 +340,14 @@ export function createPlayer(options: PlayerOptions): Player {
   function showTime(): void {
     if (!elements || !elements.video.duration) return;
     const { video, seekSlider } = elements;
-    timeText.value = `${formatPlaybackTime(video.currentTime)} / ${formatPlaybackTime(video.duration)}`;
-    seekSlider.value = String(Math.floor(video.currentTime));
+    timeText.value = formatPlaybackPosition(video.currentTime, video.duration);
+    seekSlider.value = videoLengthUnknown() ? "0" : String(video.currentTime);
   }
 
   function playCurrent(playOptions: PlayOptions = {}): void {
     const item = store.current.peek();
     if (!item || !elements) return;
-    const { video, photo, emptyState, seekRow } = elements;
+    const { video, photo, emptyState, seekSlider } = elements;
     store.playAttemptId.value += 1;
     const attemptId = store.playAttemptId.peek();
     trace("info", "start", { mediaType: item.mediaType });
@@ -244,15 +356,16 @@ export function createPlayer(options: PlayerOptions): Player {
     }
 
     store.itemStates.applyTo(item);
-    clearPhotoTimer();
+    photoTimer.clear();
     armed = null;
     video.pause();
     video.src = "";
     photo.src = "";
     video.style.display = "none";
     photo.style.display = "none";
-    seekRow.style.display = "none";
     emptyState.style.display = "none";
+    // The bar starts empty, so it never shows the last item's time.
+    seekSlider.value = "0";
     const mediaUrl = absolutizeMediaUrl(apiBaseUrl, item.mediaUrl);
 
     if (item.mediaType === "photo") {
@@ -261,26 +374,20 @@ export function createPlayer(options: PlayerOptions): Player {
       photo.style.display = "block";
       if (store.loop.peek() || store.autoplay.peek()) {
         const seconds = Math.max(MIN_PHOTO_SECONDS, Math.min(MAX_PHOTO_SECONDS, store.photoDurationSeconds.peek()));
-        photoTimerId = setTimeout(() => {
-          if (store.loop.peek()) {
-            playCurrent();
-            return;
-          }
-          next();
-        }, seconds * 1000);
+        photoTimer.start(seconds * 1000);
       }
     } else {
+      // Until its metadata gives its length.
+      timeText.value = NO_TIME;
       video.src = mediaUrl;
       video.style.display = "block";
-      seekRow.style.display = "flex";
       video.loop = store.loop.peek();
       armed = { mediaType: "video", id: item.id, attemptId };
-      video.muted = videoMuted;
+      video.muted = muted.peek();
       void video.play().catch(() => {});
     }
 
     showToggles();
-    showMute();
   }
 
   async function pickRandom(): Promise<void> {
@@ -347,7 +454,7 @@ export function createPlayer(options: PlayerOptions): Player {
     if (store.loop.peek() || store.autoplay.peek()) {
       playCurrent();
     } else {
-      clearPhotoTimer();
+      photoTimer.clear();
     }
   }
 
@@ -402,8 +509,9 @@ export function createPlayer(options: PlayerOptions): Player {
   });
 
   return {
-    showsPause,
-    muteButton,
+    playButton,
+    seekBar,
+    muted,
     favorite,
     blacklisted,
     timeText,
@@ -413,7 +521,8 @@ export function createPlayer(options: PlayerOptions): Player {
     },
 
     detach() {
-      clearPhotoTimer();
+      photoTimer.clear();
+      stopMovingBar();
       armed = null;
       elements = null;
     },
@@ -426,9 +535,20 @@ export function createPlayer(options: PlayerOptions): Player {
         void pickRandom();
         return;
       }
+      if (photoShown()) {
+        if (!photoBarShown()) return;
+        // The user's own play or pause stands once Auto-Pause stops wanting playback paused.
+        handBackToUser();
+        if (photoTimer.running) {
+          photoTimer.hold();
+        } else {
+          photoTimer.resume();
+        }
+        showPlayState();
+        return;
+      }
       if (elements && videoShown()) {
-        // The user's own play or pause stands once the tag editor closes.
-        tagEditorPausedVideo = false;
+        handBackToUser();
         if (elements.video.paused) {
           void elements.video.play().catch(() => {});
         } else {
@@ -442,9 +562,10 @@ export function createPlayer(options: PlayerOptions): Player {
     previous,
 
     toggleMute() {
-      if (muteButton.peek().disabled) return;
-      videoMuted = !videoMuted;
-      showMute();
+      muted.value = !muted.peek();
+      if (elements) {
+        elements.video.muted = muted.peek();
+      }
     },
 
     toggleLoop() {
@@ -466,39 +587,47 @@ export function createPlayer(options: PlayerOptions): Player {
     toggleBlacklist: () => toggleFlag("isBlacklisted"),
 
     seek(value) {
+      if (photoShown()) {
+        if (photoBarShown()) {
+          photoTimer.seek(Number(value) * 1000);
+          showPhotoTime();
+        }
+        return;
+      }
       if (!elements?.video.duration) return;
       elements.video.currentTime = Number(value);
     },
 
-    pauseForTagEditor() {
-      tagEditorPausedVideo = false;
-      tagEditorHeldPhotoTimer = false;
-      tagEditorPausedAttempt = store.playAttemptId.peek();
-      if (store.current.peek()?.mediaType === "photo") {
-        tagEditorHeldPhotoTimer = !!photoTimerId;
-        clearPhotoTimer();
-        return;
-      }
-
-      if (elements && videoShown()) {
-        tagEditorPausedVideo = !elements.video.paused;
+    autoPause() {
+      handBackToUser();
+      autoPausedAttempt = store.playAttemptId.peek();
+      if (photoShown()) {
+        autoHeldPhoto = photoTimer.running;
+        photoTimer.hold();
+      } else if (elements && videoShown()) {
+        autoPausedVideo = !elements.video.paused;
         elements.video.pause();
+      }
+      showPlayState();
+      if (autoPausedVideo || autoHeldPhoto) {
+        trace("info", "auto-pause", { mediaType: autoHeldPhoto ? "photo" : "video" });
       }
     },
 
-    resumeAfterTagEditor() {
-      const current = store.current.peek();
+    autoResume() {
+      const resumeVideo = autoPausedVideo;
+      const resumePhoto = autoHeldPhoto;
+      handBackToUser();
       // An item played since, or the same one played again, already plays as it should.
-      if (!current || store.playAttemptId.peek() !== tagEditorPausedAttempt) return;
-      if (current.mediaType === "photo") {
-        if (tagEditorHeldPhotoTimer && (store.autoplay.peek() || store.loop.peek())) {
-          playCurrent();
-        }
-        return;
-      }
-
-      if (tagEditorPausedVideo && elements && videoShown()) {
+      if (!store.current.peek() || store.playAttemptId.peek() !== autoPausedAttempt) return;
+      if (resumePhoto && photoShown() && photoTimer.active) {
+        trace("info", "auto-resume", { mediaType: "photo" });
+        photoTimer.resume();
+        showPlayState();
+      } else if (resumeVideo && elements && videoShown()) {
+        trace("info", "auto-resume", { mediaType: "video" });
         void elements.video.play().catch(() => {});
+        showPlayState();
       }
     },
 
@@ -523,13 +652,19 @@ export function createPlayer(options: PlayerOptions): Player {
         return;
       }
       trace("warn", "video-onerror");
+      // A source that fails fires no pause, so the video still reads as playing; its bar has nothing more to show.
+      stopMovingBar();
       store.setStatus("Video file not found.");
     },
 
     videoMetadataLoaded() {
       if (!armedFor("video") || !elements) return;
-      elements.seekSlider.max = String(Math.floor(elements.video.duration) || 100);
+      if (!videoLengthUnknown()) {
+        elements.seekSlider.max = String(elements.video.duration || 100);
+      }
       showTime();
+      // Its length decides whether the bar is enabled.
+      showPlayState();
     },
 
     videoTimeUpdated() {

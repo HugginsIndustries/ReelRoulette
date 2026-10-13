@@ -134,10 +134,6 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     })
   };
 
-  const player = {
-    pauseForTagEditor: vi.fn(() => steps.push(`pause open=${editor.isOpen.peek()}`)),
-    resumeAfterTagEditor: vi.fn(() => steps.push(`resume open=${editor.isOpen.peek()}`))
-  };
   /** The editor's memory on this device. */
   const remembered = memoryStorage();
   const localStorage = memoryStorage();
@@ -151,7 +147,6 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     connection,
     library: { session } as never,
     filter: { reviseTags: vi.fn() },
-    player,
     device: createDeviceStore(remembered),
     localStorage,
     dialogs: { confirm },
@@ -175,7 +170,7 @@ function setup(options: { scanFullLibrary?: string } = {}) {
   };
   /** The item ids each tag model request asked for. */
   const modelRequests = () => server.posts.filter((post) => post.path === "/api/tag-editor/model").map((post) => post.body.itemIds);
-  return { editor, view, titles, store, server, statuses, steps, listeners, tiles, storedFilter, session, player, remembered, localStorage, confirm, models, modelRequests };
+  return { editor, view, titles, store, server, statuses, steps, listeners, tiles, storedFilter, session, remembered, localStorage, confirm, models, modelRequests };
 }
 
 /** Lets fetch replies finish. */
@@ -206,22 +201,21 @@ async function openOn(context: ReturnType<typeof setup>, item: PlayingItem | nul
 }
 
 describe("opening and closing", () => {
-  it("pauses before it shows and loads the playing item's tags, and resumes after it hides", async () => {
+  it("loads the playing item's tags as it shows, and hides on close", async () => {
     const context = setup();
     const { editor, steps, server } = context;
     expect(editor.view.value).toBeNull();
 
     await openOn(context);
-    expect(steps.slice(0, 2)).toEqual(["pause open=false", "post /api/tag-editor/model"]);
+    expect(steps[0]).toBe("post /api/tag-editor/model");
     expect(editor.isOpen.value).toBe(true);
     expect(server.posts[0]!.body).toEqual({ itemIds: ["item-1"] });
     expect(context.titles()).toEqual(["Places", "People"]);
 
     editor.close();
     expect(editor.isOpen.value).toBe(false);
-    expect(steps.at(-1)).toBe("resume open=false");
     editor.close();
-    expect(context.player.resumeAfterTagEditor).toHaveBeenCalledTimes(1);
+    expect(editor.isOpen.value).toBe(false);
   });
 
   it("says why when the tags cannot load, and stays open", async () => {
@@ -788,7 +782,6 @@ describe("saving", () => {
     editor.save();
     expect(editor.isOpen.value).toBe(true);
     expect(steps).toEqual(["writeTags ", "post /api/tag-editor/delete-tag"]);
-    expect(context.player.resumeAfterTagEditor).not.toHaveBeenCalled();
     // Before the server answers, the editor shows the changes as saved, with nothing left to save.
     expect(context.view().savePending).toBe(false);
     expect(context.titles()).toEqual(["Places", "People"]);

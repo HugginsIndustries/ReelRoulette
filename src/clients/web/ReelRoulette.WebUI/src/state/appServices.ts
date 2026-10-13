@@ -1,9 +1,10 @@
-import { computed, type ReadonlySignal } from "@preact/signals";
+import { computed, signal, type ReadonlySignal } from "@preact/signals";
 import { getClientId, getClientType, getDeviceName, getSessionId } from "../api/coreApi";
 import { createDialogs, type Dialogs } from "../dialogs/dialogs";
 import { createFilterDialog, type FilterDialog } from "../filter/filterDialog";
 import { createLibrary, type Library } from "../library/library";
 import { createPanelHost, type PanelHost } from "../panel/panelHost";
+import { createAutoPause, DEFAULT_AUTO_PAUSE_MODE, type AutoPauseMode } from "../playback/autoPause";
 import { createPlayer, type Player } from "../playback/player";
 import { createStageFullscreen, type StageFullscreen } from "../playback/stageFullscreen";
 import { createTagEditor, type TagEditor } from "../tags/tagEditor";
@@ -21,7 +22,8 @@ export interface UnsavedTabs {
 
 /**
  * One page's runtime config, shared state, server requests, in-app dialogs, server connection, player, fullscreen,
- * side panel, and the panel's library, filter, and tag editor tabs.
+ * side panel, and the panel's library, filter, and tag editor tabs, with Auto-Pause pausing the player as the panel
+ * and Auto Tag cover it.
  */
 export interface AppServices {
   config: RuntimeConfig;
@@ -72,7 +74,9 @@ export function createAppServices(config: RuntimeConfig): AppServices {
   // After the player, so the player handles an item-state event before the library does.
   const library = createLibrary({ config, store, api, connection, player, panel, device });
   const filterDialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs });
-  const tagEditor = createTagEditor({ store, api, connection, library, filter: filterDialog, player, device, localStorage, dialogs });
+  const tagEditor = createTagEditor({ store, api, connection, library, filter: filterDialog, device, localStorage, dialogs });
+  // Responsive until the Settings tab can change it.
+  createAutoPause({ mode: signal<AutoPauseMode>(DEFAULT_AUTO_PAUSE_MODE), panel, overPage: tagEditor.autoTagOpen, player });
   panel.connectTabs({
     library: {
       enter: () => library.open(),

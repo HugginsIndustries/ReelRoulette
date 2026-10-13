@@ -61,7 +61,8 @@ html.theme-light {
   --input-bg: #ffffff;
   --input-fg: #1a1d21;
   --muted-fg: #5c6570;
-  --time-display-fg: #1a1d21;
+  /* Light like the player's other controls, since the player stays dark. */
+  --time-display-fg: #ffffff;
   --control-drop-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
   --transport-cluster-shadow: 0 3px 12px rgba(0, 0, 0, 0.22);
   --error: #c4291f;
@@ -77,6 +78,9 @@ html.theme-light {
   --surface-border: #c5cad3;
   --icon: #333333;
 }
+
+/* Checkboxes, radio buttons, sliders, and progress bars use the app's orange accent instead of the browser's blue. */
+input, progress, meter { accent-color: var(--huggins-orange); }
 
 .themed-scrollbar {
   scrollbar-width: auto;
@@ -692,8 +696,13 @@ body {
   flex: 1;
   min-width: 0;
   height: 24px;
+  /* A browser's own margin on a range input, 2 px, would widen the row's gap. */
+  margin: 0;
 }
-#time-display { font-size: 0.9rem; white-space: nowrap; color: var(--time-display-fg); }
+.overlay-seek-row input[type="range"]:disabled { cursor: default; }
+/* Its digits are all one width, so the time doesn't jitter while it plays. It takes its own width, the row's gap from
+   the bar, so that width may change between items with different time formats. */
+#time-display { font-size: 0.9rem; white-space: nowrap; color: var(--time-display-fg); font-variant-numeric: tabular-nums; }
 /* On the player on a phone on its side, where the status line that says so is hidden, while the connection is lost
    and reconnecting. */
 .conn-indicator {

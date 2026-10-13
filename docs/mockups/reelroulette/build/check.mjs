@@ -255,6 +255,15 @@ for (const width of [1280, 390]) {
   // Nothing plays until a tap or Play.
   check(`layout@${width}: nothing plays at first, and the player shows the start hint`,
     !$("empty-state").hidden && $("empty-state").textContent === "Tap to play, or open the panel to choose a preset or filter." && $("panel").hidden && $("np-name").parentElement.hidden && chip().includes("Nothing playing"));
+  check(`layout@${width}: before anything plays, the scrub bar is disabled and the time shows 0:00 / 0:00 (${$("time-display").textContent})`,
+    $("seek").disabled && $("time-display").textContent === "0:00 / 0:00");
+  const muteLit = () => $("mute-btn").classList.contains("active");
+  const muteIcon = () => $("mute-btn").querySelector(".material-symbol-icon").dataset.icon;
+  const mutedAtFirst = muteLit();
+  $("mute-btn").click();
+  check(`layout@${width}: before anything plays, Mute is enabled and shows whether sound is muted (${muteIcon()})`,
+    !$("mute-btn").disabled && muteLit() === !mutedAtFirst && muteIcon() === (mutedAtFirst ? "volume_up" : "volume_off"));
+  $("mute-btn").click();
   check(`layout@${width}: there is no status line, and while connected nothing shows on the player and nothing pops up`,
     !$("status") && !document.querySelector(".status") && $("player-indicator").hidden && messages.toasts().length === 0 && messages.entries().length === 0);
   // Popups sit beside the player, which clips what it holds, and above the overlay panel, so nothing between them may
@@ -953,13 +962,34 @@ for (const width of [1280, 390]) {
   if ($("autoplay-btn").classList.contains("active")) $("autoplay-btn").click();
   window.mockup.choose(2);
   const seek = $("seek");
-  check(`layout@${width}: with Autoplay off, a photo's Play and scrub bar are disabled and the time is blank`,
-    $("play-btn").disabled && seek.disabled && $("time-display").textContent === "" && $("mute-btn").disabled);
+  check(`layout@${width}: with Autoplay off, a photo's Play and scrub bar are disabled and the time shows 0:00 / 0:00 (${$("time-display").textContent})`,
+    $("play-btn").disabled && seek.disabled && $("time-display").textContent === "0:00 / 0:00");
+  // Mute and the volume slider stay enabled on a photo, and what they set there applies to the next video.
+  const mutedOnPhoto = !muteLit();
+  const volumeBeforePhoto = $("volume").value;
+  const volumeOnPhoto = volumeBeforePhoto === "30" ? "40" : "30";
+  $("mute-btn").click();
+  input($("volume"), volumeOnPhoto);
+  check(`layout@${width}: on a photo, Mute and the volume slider stay enabled, and Mute shows whether sound is muted (${muteIcon()})`,
+    !$("mute-btn").disabled && !$("volume").disabled && muteLit() === mutedOnPhoto && muteIcon() === (mutedOnPhoto ? "volume_off" : "volume_up"));
   $("autoplay-btn").click();
   check(`layout@${width}: turning Autoplay on starts the photo's full time from then (${$("time-display").textContent})`,
     !seek.disabled && !$("play-btn").disabled && Number(seek.value) === 0 && $("time-display").textContent === "0:00 / 0:05" && playIcon() === "pause");
   await sleep(600);
   check(`layout@${width}: the bar fills as the timer runs (${seek.value})`, Number(seek.value) > 0);
+  // Read six times 30 ms apart, the bar has moved more often than the 250 ms interval would move it.
+  const barReadings = async () => {
+    const readings = [];
+    for (let i = 0; i < 6; i++) {
+      await sleep(30);
+      readings.push(Number($("seek").value));
+    }
+    return readings;
+  };
+  const movesEachFrame = (readings) => new Set(readings).size >= 4 && readings.every((value, i) => i === 0 || value >= readings[i - 1]);
+  const photoReadings = await barReadings();
+  check(`layout@${width}: the bar takes any value and moves every animation frame while the photo's timer runs (${photoReadings.map((value) => value.toFixed(2)).join(", ")})`,
+    seek.getAttribute("step") === "any" && movesEachFrame(photoReadings));
   $("play-btn").click();
   const heldAt = Number(seek.value);
   await sleep(500);
@@ -974,16 +1004,30 @@ for (const width of [1280, 390]) {
   input(seek, 2);
   check(`layout@${width}: dragging the scrub bar moves the timer's position (${$("time-display").textContent})`, $("time-display").textContent === "0:02 / 0:05");
   $("loop-btn").click();
-  check(`layout@${width}: with Loop on, Play and the scrub bar are disabled`, $("play-btn").disabled && seek.disabled);
+  check(`layout@${width}: with Loop on, Play and the scrub bar are disabled, and the time shows 0:00 / 0:00 (${$("time-display").textContent})`,
+    $("play-btn").disabled && seek.disabled && $("time-display").textContent === "0:00 / 0:00");
   $("loop-btn").click();
   $("autoplay-btn").click();
   check(`layout@${width}: turning Autoplay off clears the timer, and Autoplay is remembered`,
-    Number(seek.value) === 0 && $("time-display").textContent === "" && $("play-btn").disabled && window.localStorage.getItem("rr-mockup.autoplay") === "false");
+    Number(seek.value) === 0 && $("time-display").textContent === "0:00 / 0:00" && $("play-btn").disabled && window.localStorage.getItem("rr-mockup.autoplay") === "false");
   $("autoplay-btn").click();
   check(`layout@${width}: turning it on again starts the full time, not where the timer was (${$("time-display").textContent})`, $("time-display").textContent === "0:00 / 0:05");
+  // Once the timer ends, Play and the bar are disabled, with the time at 0:00 / 0:00, while the next pick fails here.
+  situation("noanswer");
+  input(seek, 4.95);
+  await sleep(200);
+  check(`layout@${width}: once a photo's timer ends, Play and the bar are disabled and the time shows 0:00 / 0:00 until the next item plays (${chip()}, ${$("time-display").textContent}, ${notice()})`,
+    $("play-btn").disabled && seek.disabled && Number(seek.value) === 0 && $("time-display").textContent === "0:00 / 0:00" && chip().includes("Photo timer ended") &&
+    notice() === "No response from the server. Try again.");
+  dismissNotices();
+  situation("connected");
   $("autoplay-btn").click();
   // Space plays or pauses a video as K does, and leaves a focused button to its own action.
   window.mockup.choose(3);
+  check(`layout@${width}: the next video plays with the mute and volume set on the photo (${muteIcon()}, ${$("volume").value})`,
+    muteLit() === mutedOnPhoto && $("volume").value === volumeOnPhoto);
+  $("mute-btn").click();
+  input($("volume"), volumeBeforePhoto);
   press(" ");
   check(`layout@${width}: Space pauses a video (${chip()})`, chip().includes("Paused"));
   press(" ");
@@ -1216,10 +1260,6 @@ for (const width of [1280, 390]) {
   const afterLightSwipe = volumeNow();
   wheel(-30);
   check(`layout@${width}: a trackpad's small deltas add up to a step every 100 px (${afterLightSwipe}, then ${volumeNow()})`, afterLightSwipe === 50 && volumeNow() === 55);
-  window.mockup.choose(2);
-  const photoPrevented = wheel(-100);
-  check(`layout@${width}: on a photo the wheel does nothing, and still doesn't scroll the page`, volumeNow() === 55 && photoPrevented);
-  window.mockup.choose(3);
   const touches = (type, ys) => {
     const event = Object.assign(new window.Event(type, { bubbles: true, cancelable: true }), {
       touches: ys.map((y) => ({ clientX: 120, clientY: y })),
@@ -1228,6 +1268,16 @@ for (const width of [1280, 390]) {
     $("media").dispatchEvent(event);
     return event.defaultPrevented;
   };
+  window.mockup.choose(2);
+  const photoPrevented = wheel(-100);
+  touches("touchstart", [300, 340]);
+  const photoDragPrevented = touches("touchmove", [270, 310]);
+  touches("touchend", []);
+  check(`layout@${width}: on a photo the wheel and a two-finger drag set the volume too, a step each, and still don't scroll the page (${volumeNow()})`,
+    volumeNow() === 65 && photoPrevented && photoDragPrevented);
+  window.mockup.choose(3);
+  check(`layout@${width}: and the next video plays at the level set on the photo (${volumeNow()})`, volumeNow() === 65);
+  input($("volume"), "55");
   touches("touchstart", [300, 340]);
   const dragPrevented = touches("touchmove", [240, 280]);
   touches("touchend", []);
@@ -1319,6 +1369,24 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: the time display stays light in the light theme (${window.getComputedStyle($("time-display")).color})`, window.getComputedStyle($("time-display")).color === "#ffffff");
   document.querySelector('input[name="set-theme"][value="dark"]').click();
   check(`layout@${width}: and in the dark theme`, window.getComputedStyle($("time-display")).color === "#ffffff");
+  // The scrub bar, the time, and the volume slider sit the row's 12 px gap apart: neither slider keeps a browser's
+  // margin, 2 px, the volume's wrapper adds none, and the time takes its own width, with its digits all one width.
+  const styleOf = (el) => window.getComputedStyle(el);
+  const unset = (value) => value === "" || value === "0px";
+  const seekRow = document.querySelector(".overlay-seek-row");
+  const timeStyle = styleOf($("time-display"));
+  const wrapStyle = styleOf($("volume-wrap"));
+  const sliderMargins = [$("seek"), $("volume")].map((el) => `${styleOf(el).marginLeft} ${styleOf(el).marginRight}`);
+  check(`layout@${width}: the scrub bar, the time, and the volume slider sit the row's 12 px gap apart (gap ${styleOf(seekRow).gap}, slider margins ${sliderMargins.join(", ")}, time ${timeStyle.minWidth || "no minimum"} ${timeStyle.textAlign || "start"} ${timeStyle.fontVariantNumeric})`,
+    [...seekRow.children].map((el) => el.id).join() === "seek,time-display,volume-wrap" && styleOf(seekRow).gap === "12px" &&
+    sliderMargins.every((margins) => margins === "0px 0px") && [wrapStyle.marginLeft, wrapStyle.marginRight, wrapStyle.paddingLeft, wrapStyle.paddingRight].every(unset) &&
+    timeStyle.minWidth === "" && timeStyle.textAlign === "" && timeStyle.fontVariantNumeric === "tabular-nums");
+  // No rule, a phone's container query among them, gives the volume slider another width.
+  const innerRules = (rules) => [...rules].flatMap((rule) => [rule, ...(rule.cssRules ? innerRules(rule.cssRules) : [])]);
+  const volumeWidths = innerRules([...document.styleSheets].flatMap((sheet) => [...sheet.cssRules]))
+    .filter((rule) => rule.selectorText?.includes(".volume") && rule.style?.width).map((rule) => rule.style.width);
+  check(`layout@${width}: the volume slider keeps its 84 px on every screen (${volumeWidths.join(", ")})`,
+    styleOf($("volume")).width === "84px" && volumeWidths.join() === "84px");
   setSlider("rate", 0.25);
   button(more, "Reset to defaults").click();
   check(`layout@${width}: Reset to defaults restores each setting`,
@@ -1361,9 +1429,32 @@ for (const width of [1280, 390]) {
   press("[");
   check(`layout@${width}: [ lowers the volume by the step (${volumeBefore} to ${$("volume").value}), with no message`,
     Number($("volume").value) === volumeBefore - 5 && messages.entries().length === messagesBeforeVolume);
+  // The elapsed time takes the total's shape, so its width never changes within an item.
+  const shapes = [[0, 0, "0:00 / 0:00"], [36, 97, "0:36 / 1:37"], [587, 1392, "09:47 / 23:12"], [746, 6517, "0:12:26 / 1:48:37"], [3723, 36000, "01:02:03 / 10:00:00"]];
+  const shaped = shapes.map(([elapsed, total]) => window.mockup.formatPosition?.(elapsed, total));
+  check(`layout@${width}: the elapsed time takes the total's shape, with hours only when the total has them (${shaped.join(", ")})`,
+    shaped.every((text, i) => text === shapes[i][2]));
+  const longVideo = items.findIndex((item) => item.type === "video" && playable(item) && item.duration >= 600);
+  window.mockup.choose(longVideo);
+  const [startShown, lengthShown] = $("time-display").textContent.split(" / ");
+  check(`layout@${width}: a video of ten minutes or more starts at 00:00, as wide as its length (${$("time-display").textContent})`,
+    longVideo >= 0 && startShown === "00:00" && startShown.length === lengthShown.length);
+  // From an hour, every duration shows hours: the seek row's, the header's, and the Stats tab's. No item runs an hour,
+  // so one does for a moment.
+  const lengthBefore = items[longVideo].duration;
+  items[longVideo].duration = 6517;
+  window.mockup.choose(longVideo);
+  const statsDuration = [...$("stats-body").querySelectorAll("dt")].find((el) => el.textContent === "Duration")?.nextElementSibling.textContent;
+  check(`layout@${width}: an hour-long video shows hours in the seek row, the header, and the Stats tab (${$("time-display").textContent}, ${$("np-duration").textContent}, ${statsDuration})`,
+    $("time-display").textContent === "0:00:00 / 1:48:37" && $("np-duration").textContent === "1:48:37" && statsDuration === "1:48:37");
+  items[longVideo].duration = lengthBefore;
   // Frame stepping on comma and period, only while a video is paused.
   window.mockup.choose(3);
+  const videoReadings = await barReadings();
+  check(`layout@${width}: the bar moves every animation frame while a video plays (${videoReadings.map((value) => value.toFixed(2)).join(", ")})`, movesEachFrame(videoReadings));
   $("play-btn").click();
+  const pausedReadings = await barReadings();
+  check(`layout@${width}: and stops while it is paused (${pausedReadings.map((value) => value.toFixed(2)).join(", ")})`, new Set(pausedReadings).size === 1);
   const frameBefore = Number($("seek").value);
   press(".");
   check(`layout@${width}: . steps one frame while paused (${chip()})`, chip().includes("stepped a frame forward") && Math.abs(Number($("seek").value) - frameBefore - 1 / 30) < 0.02);

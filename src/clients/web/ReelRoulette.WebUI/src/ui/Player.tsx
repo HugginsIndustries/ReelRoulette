@@ -32,7 +32,8 @@ function stopPropagation(event: Event): void {
 /**
  * The media area: the video and photo, the empty state, and the controls over them. The player sets the media
  * elements' sources and which of them shows itself, so their `style` and the seek slider's value are rendered
- * once and never changed here, and the video element is never replaced or moved.
+ * once and never changed here, and the video element is never replaced or moved. The seek row stays in its place
+ * before anything plays and on a photo too, so the controls never move.
  */
 export function Player() {
   const { store, player, fullscreen } = useApp();
@@ -40,7 +41,6 @@ export function Player() {
   const video = useRef<HTMLVideoElement>(null);
   const photo = useRef<HTMLImageElement>(null);
   const emptyState = useRef<HTMLDivElement>(null);
-  const seekRow = useRef<HTMLDivElement>(null);
   const seekSlider = useRef<HTMLInputElement>(null);
   const [controlsVisible, setControlsVisible] = useState(true);
   const gestures = useMemo(
@@ -59,7 +59,6 @@ export function Player() {
       video: video.current!,
       photo: photo.current!,
       emptyState: emptyState.current!,
-      seekRow: seekRow.current!,
       seekSlider: seekSlider.current!
     });
 
@@ -93,7 +92,9 @@ export function Player() {
     setControlsVisible((visible) => !visible);
   }
 
-  const mute = player.muteButton.value;
+  const muted = player.muted.value;
+  const play = player.playButton.value;
+  const seekBar = player.seekBar.value;
   return (
     <div id="media-container" class={controlsVisible ? "media-container controls-visible" : "media-container"} ref={container} onClick={onAreaClick}>
       <video
@@ -119,15 +120,15 @@ export function Player() {
         <button id="blacklist-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, player.blacklisted.value)} aria-label="Blacklist" title="Blacklist" onClick={press(player.toggleBlacklist)}><span class="material-symbol-icon">thumb_down</span></button>
         <div class="overlay-controls-row overlay-controls-transport">
           <button id="prev-btn" class={OVERLAY_BUTTON} aria-label="Previous" title="Previous" onClick={press(player.previous)}><span class="material-symbol-icon">skip_previous</span></button>
-          <button id="play-btn" class={`${OVERLAY_BUTTON} overlay-btn-play`} aria-label="Play/Pause" title="Play/Pause" onClick={press(player.playOrPause)}><span class="material-symbol-icon">{player.showsPause.value ? "pause" : "play_arrow"}</span></button>
+          <button id="play-btn" class={`${OVERLAY_BUTTON} overlay-btn-play`} aria-label="Play/Pause" title="Play/Pause" disabled={play.disabled} onClick={press(player.playOrPause)}><span class="material-symbol-icon">{play.showsPause ? "pause" : "play_arrow"}</span></button>
           <button id="next-btn" class={OVERLAY_BUTTON} aria-label="Next" title="Next" onClick={press(player.next)}><span class="material-symbol-icon">skip_next</span></button>
-          <button id="mute-btn" class={lit(OVERLAY_TOGGLE, mute.active)} aria-label="Mute" title="Mute" disabled={mute.disabled} onClick={press(player.toggleMute)}><span class="material-symbol-icon">{mute.active ? "volume_off" : "volume_up"}</span></button>
+          <button id="mute-btn" class={lit(OVERLAY_TOGGLE, muted)} aria-label="Mute" title="Mute" onClick={press(player.toggleMute)}><span class="material-symbol-icon">{muted ? "volume_off" : "volume_up"}</span></button>
           <button id="loop-btn" class={lit(OVERLAY_TOGGLE, store.loop.value)} aria-label="Loop" title="Loop" onClick={press(player.toggleLoop)}><span class="material-symbol-icon">repeat_one</span></button>
           <button id="autoplay-btn" class={lit(OVERLAY_TOGGLE, store.autoplay.value)} aria-label="Autoplay" title="Autoplay" onClick={press(player.toggleAutoplay)}><span class="material-symbol-icon">autoplay</span></button>
           <button id="fullscreen-btn" class={OVERLAY_BUTTON} aria-label="Fullscreen" title="Fullscreen" onClick={press(fullscreen.toggle)}><span class="material-symbol-icon">fullscreen</span></button>
         </div>
-        <div id="seek-row" class="overlay-seek-row" style="display:none" ref={seekRow}>
-          <input type="range" id="seek-slider" min="0" max="100" defaultValue="0" aria-label="Seek" ref={seekSlider} onInput={(event) => player.seek(event.currentTarget.value)} />
+        <div id="seek-row" class="overlay-seek-row">
+          <input type="range" id="seek-slider" min="0" max="100" step="any" defaultValue="0" aria-label={seekBar.label} disabled={seekBar.disabled} ref={seekSlider} onInput={(event) => player.seek(event.currentTarget.value)} />
           <span id="time-display">{player.timeText}</span>
         </div>
       </div>

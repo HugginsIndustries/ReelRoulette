@@ -541,12 +541,13 @@ describe("page structure", () => {
     const page = mountPage({ server });
     const video = page.root.querySelector("video");
     const seek = screen.getByRole("slider", { name: "Seek", hidden: true }) as HTMLInputElement;
-    seek.value = "40";
 
     await screen.findByText("Ready (API 1)");
-    await pickPreset("preset-favorites");
     await startRandomPick();
     await screen.findByTitle("holiday clip.mp4");
+    // Each start empties the bar; after that only the player moves it.
+    seek.value = "40";
+    await pickPreset("preset-favorites");
     page.stream().open();
     await screen.findByText("SSE connected");
 

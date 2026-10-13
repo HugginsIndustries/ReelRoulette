@@ -133,68 +133,7 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 ## Active Milestones
 
-Last milestone completed: M12f6
-
-### M12f7 - WebUI Auto-Pause and Photo Scrub Bar
-
-- **Status**: ⏳ Planned
-- **Goal**: Opening the panel pauses playback only as the Auto-Pause mode says, a photo's timer shows on the scrub bar and pauses and resumes with the time it had left, and the player's controls use the app's colors.
-- **Depends on**: WebUI Responsive Layout and Panels and WebUI Tags and Filter Tabs, whose Auto Tag overlay and Tags tab it pauses for in place of the tag editor's own pause.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Scope
-
-- Auto-Pause replaces the tag editor's pause and resume.
-- Opening the panel on any tab, or as its full-screen overlay, pauses playback according to an Auto-Pause mode:
-  - **Never**: never pauses.
-  - **Always**: pauses whenever the panel opens, at any width.
-  - **Responsive**, the default: pauses only while the panel covers the player, as the full-screen overlay does on phones.
-- Under Responsive, an open panel that crosses a breakpoint pauses when it comes to cover the player and resumes, if Auto-Pause paused it, when it moves beside the player.
-- Auto Tag, which opens over the whole page, always covers the player, so it pauses under Always and Responsive, and so does the admin view.
-- Closing resumes playback only if Auto-Pause paused it; playback the user paused stays paused.
-- Playing or pausing while the panel is open hands playback back to the user, so closing leaves it as it is.
-- Pausing a photo holds its autoplay timer, and the photo then resumes with the time it had left, not its full duration.
-- Resuming a photo neither loads it again nor records its play again, as closing the Tags tab on the same photo does today.
-- The mode is fixed at Responsive.
-- On a photo, the player's scrub bar stays in its place, so the controls keep their place between photos and videos.
-- While a photo's timer runs, with Autoplay on and Loop off, the bar fills as the timer runs, showing when the next item plays, with the time shown as elapsed and photo duration.
-- With Autoplay on and Loop off, Play/Pause pauses and resumes the photo's timer, keeping the time left, and dragging the scrub bar moves the timer's position.
-- With Autoplay off or Loop on, Play and the scrub bar are disabled on a photo, and the time is blank. Loop on restarts the same photo, so the bar does not fill then.
-- Turning Autoplay on starts the photo's full time from that moment, and turning it off clears the timer.
-- Auto-Pause still resumes a photo with the time it had left.
-- Checkboxes, radio buttons, sliders (the scrub bar and, from WebUI Volume and Enhanced Audio, the volume slider among them), and other native controls use the app's orange accent instead of the browser's default blue, in both themes, set once for the whole WebUI with `accent-color`.
-- The overlay's time display stays light in both themes, like the overlay's other controls, since the player stays dark.
-
-#### Traps
-
-- The tag editor's resume restarts a held photo: `resumeAfterTagEditor` in `src/playback/player.ts` calls `playCurrent`, which reloads the photo and starts its full duration.
-- `playCurrent` records a play unless the server already did, so the tag editor's resume records a held photo's play a second time, and the screen test of the Tags tab holding a photo's autoplay timer expects that second record (`src/test/screens/player.test.ts`).
-- `playCurrent` hides the seek row for a photo.
-- Play does nothing on a photo (`playOrPause` in `src/playback/player.ts` acts only on a video).
-- Nothing sets `accent-color` (`src/styles.css`).
-- `--time-display-fg` is `#1a1d21` in the light theme (`src/styles.css`), while the overlay's buttons use `--icon-foreground`, white in both themes, so the time turns dark on the dark player.
-
-#### Acceptance
-
-- With Auto-Pause on Responsive, opening the panel beside the player leaves playback going, opening it as a full-screen overlay pauses it, and an open panel that crosses a breakpoint pauses or resumes as it comes to cover the player or moves beside it, in component tests of Auto-Pause at phone and desktop widths and across a breakpoint.
-- With Auto-Pause on Always, opening the panel pauses playback at every width; on Never, opening it never pauses. Shown by component tests of Auto-Pause in each mode at phone and desktop widths.
-- Under Always and Responsive, opening Auto Tag pauses playback, in component tests of Auto-Pause with Auto Tag.
-- Closing the panel or Auto Tag resumes playback only if Auto-Pause paused it, playback the user paused stays paused, and playing or pausing while the panel is open leaves playback as it is on close, in component tests of Auto-Pause with playback the user paused or resumed.
-- Auto-Pause holds a photo's autoplay timer while it pauses, and the photo then resumes with the time it had left, without loading it again or recording its play again, in a component test of a photo resuming with the time it had left.
-- The tag editor has no pause of its own, and Auto-Pause is Responsive until the Settings tab can change it.
-- On a photo, the scrub bar shows in the place it has on a video. With Autoplay on and Loop off it fills as the photo's timer runs, Play/Pause pauses and resumes the timer with the time left kept, and dragging the bar moves the timer. With Autoplay off or Loop on, Play and the bar are disabled on a photo. Turning Autoplay on starts the photo's full time, and turning it off clears the timer. Shown by component tests of the scrub bar on a photo with Autoplay on and off.
-- The overlay's time display is light in both themes, and checkboxes, radio buttons, and sliders use the orange accent in both themes.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and one quick spot check.
-
-#### Release checks
-
-- Manual: On a phone and a desktop browser, with Auto-Pause on Responsive, playback keeps going on every tab beside the player, and the overlay and Auto Tag pause it and resume it on close.
-
-#### Not included
-
-- Pausing for the admin view, which is WebUI Admin Section.
-- The Auto-Pause setting, which is WebUI Settings Panel.
+Last milestone completed: M12f7
 
 ### M12f8 - WebUI Notifications
 
@@ -1281,14 +1220,16 @@ Last milestone completed: M12f6
 **Scope**
 
 - A volume slider at the end of the seek row. With Enhanced audio on, it sets the gain stage, on every device, which is also how iOS, where Safari makes a media element's volume read-only, gets one.
+  - It stays enabled on a photo, as Mute does, and the level set there is the next video's, as the mockup shows.
+  - It is 84 px wide on every screen, keeping its width on a phone, where the mockup used to narrow it to 60 px, and sits the seek row's 12 px gap from the time.
 - The Settings tab offers the desktop's volume steps: 1, 2, or 5 percent, used by the scroll wheel, a two-finger drag, and the [ and ] keys that WebUI Keyboard Shortcuts binds.
 - Changing the volume, by the slider or otherwise, sends no notification.
 - The scroll wheel over the player changes the volume by the volume step, one step per notch.
   - A trackpad's small deltas add up into notches, so a light swipe doesn't jump the volume.
   - The mockup counts a line- or page-unit event, or one of at least 50 px, as a whole notch, and otherwise a notch per 100 px.
   - Scrolling counts as activity and shows the controls, so the volume slider is visible while it changes.
-  - It does nothing on a photo, and over the player the page never scrolls.
-- On a touch screen, dragging up or down with two fingers on the player changes the volume the same way, a step per 30 px in the mockup, and shows the controls.
+  - On a photo it sets the next video's level, as the slider does, and over the player the page never scrolls.
+- On a touch screen, dragging up or down with two fingers on the player changes the volume the same way, on a photo too, a step per 30 px in the mockup, and shows the controls.
   - The player claims its touches (`touch-action: none`) and turns away Safari's own pinch gesture, so the browser doesn't zoom there.
 - On iOS, the gain stage gives the app its own volume relative to the system volume.
 - The gain stage starts on the first tap, since Web Audio needs one. On iOS the volume slider shows once it runs, so the slider, the scroll wheel, and a two-finger drag all work there.
@@ -1313,7 +1254,8 @@ Last milestone completed: M12f6
 **Acceptance**
 
 - The volume slider sits at the end of the seek row and sets the volume, and the Settings tab offers the desktop's volume steps, in WebUI tests.
-- The scroll wheel over the player changes the volume by the volume step, one step per notch with a trackpad's small deltas added up, without scrolling the page; on a touch screen a two-finger drag does too, without zooming. Each shows the controls, and none changes anything on a photo. Shown by wheel tests for notches and added-up trackpad deltas, and two-finger drag tests.
+- On a photo the volume slider stays enabled, and the next video plays at the level set there, in a WebUI test that a volume set on a photo applies to the next video.
+- The scroll wheel over the player changes the volume by the volume step, one step per notch with a trackpad's small deltas added up, without scrolling the page; on a touch screen a two-finger drag does too, without zooming. Each shows the controls, and on a photo each sets the next video's level. Shown by wheel tests for notches, added-up trackpad deltas, and a photo, and two-finger drag tests, a photo's among them.
 - Changing the volume sends no notification, in WebUI tests.
 - With Enhanced audio on, every device plays through the gain stage, which starts on the first tap. On iOS the volume slider shows once it runs, and the slider, scroll wheel, and two-finger drag set the gain. Shown by a test that the gain stage starts on the first tap and the slider then shows.
 - The gain glides to each new level and fades in on play and out on pause, so nothing crackles or pops, in tests that the gain only glides and that play and pause fade it in and out.
@@ -1407,7 +1349,8 @@ Last milestone completed: M12f6
 - This milestone widens Advance after to the desktop's 1–3600 seconds, so a Keep Playing interval longer than five minutes still fits.
 - The mode and the timer sit together in the Settings tab, and the player's autoplay button still turns autoplay on and off.
 - Changing the timer while a photo shows keeps the time already shown and changes only the length.
-- A looping photo flickers at the end of each loop, because it is restarted by reloading its image, unlike a video, which seeks back. Keep the photo on screen and restart only its timer, both at the end of each loop and when Loop or Autoplay is turned on while a photo shows.
+- A looping photo flickers at the end of each loop, because it is restarted by reloading its image, unlike a video, which seeks back. Keep the photo on screen and restart only its timer, both at the end of each loop and when Autoplay is turned on while a photo shows.
+- Turning Loop on or off while a photo shows keeps the photo on screen and keeps its time, as the mockup does: its timer runs on from where it was while Autoplay or Loop stays on; with both off, its timer stops.
 - A looping photo then records one play, as a looping video does, and the Player screen tests that count a play per loop change with it.
 - The autoplay mode survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
 
@@ -1423,6 +1366,7 @@ Last milestone completed: M12f6
 - In Normal mode, photos advance after the timer and videos play to the end. In Timer mode, every item advances after the timer, including an unfinished video, and a paused video holds it. Shown by autoplay tests for both modes with loop on and off and with a paused video.
 - With loop on in Timer mode, a video shorter than the timer repeats until the timer advances. With loop on in Normal mode, the current item repeats and does not advance. Shown by the same autoplay tests.
 - A looping photo does not flicker: it stays on screen with its image loaded at the end of each loop, and only its timer restarts, in a test that a looping photo keeps its image shown through each loop.
+- Turning Loop on or off while a photo shows keeps the photo on screen and keeps its time, in tests that turning Loop on and then off on a photo keeps its image shown and runs its timer on from where it was while Autoplay or Loop stays on, and stops it with both off.
 - Changing the timer while a photo shows keeps the time already shown and changes only the length, in a test that changing the timer keeps the time shown.
 - The Settings tab shows the autoplay mode beside Advance after, which accepts 1 to 3600 seconds and starts from the value stored before this milestone, in a test for Advance after's new range.
 - After a page refresh, the autoplay mode is as it was, in a test for a page refresh keeping the mode.
