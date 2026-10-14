@@ -138,7 +138,7 @@ Last milestone completed: M12g
 ### M12h - WebUI Stats Panel
 
 - **Status**: ⏳ Planned
-- **Goal**: The WebUI shows library and playback statistics and details of the current file in a Stats tab, as the desktop stats panel does.
+- **Goal**: The WebUI shows library and playback statistics and details of the current file in a Stats tab, as the desktop stats panel does, with each video's peak measured by the server's loudness scan.
 - **Depends on**: WebUI Responsive Layout and Panels.
 - **Design**: `docs/mockups/reelroulette/`.
 
@@ -147,6 +147,7 @@ Last milestone completed: M12g
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Contract | ⏳ Planned | `integratedLoudness` and `peakDb` named in the OpenAPI item schema, so the generated WebUI types carry them. |
+| Loudness scan | ⏳ Planned | A measured peak for each video with audio, no stored value where one is missing, and a loudness analysis version whose upgrade rescans the videos with audio without starving playback. |
 | Stats tab | ⏳ Planned | The side panel's Stats tab with the current file's and the library's stats, opened from the header's file name, with coalesced refreshes. |
 
 #### Contract slice
@@ -154,7 +155,8 @@ Last milestone completed: M12g
 **Scope**
 
 - Name `integratedLoudness` and `peakDb` in the OpenAPI item schema, so the generated WebUI types carry them. A contract change that only adds.
-- WebUI Loudness Normalization reads `integratedLoudness` too.
+- `peakDb` is described as the peak the loudness scan measures, absent when it hasn't measured one.
+- WebUI Loudness Normalization reads both.
 
 **Traps**
 
@@ -164,6 +166,51 @@ Last milestone completed: M12g
 
 - `integratedLoudness` and `peakDb` are in the OpenAPI item schema, and `npm run verify:contracts` passes, in contract tests for the two fields.
 - `npm run verify` passes.
+
+#### Loudness scan slice
+
+**Scope**
+
+- Before the scan changes, the slice's plan runs two measurements and records them:
+  - ffmpeg on generated test tones under `artifacts/scratch/`: whether the `ebur128` summary has a peak line without the `peak` option, and how long `peak=true` and `peak=sample` take against no peak.
+  - About 20 of the user's videos across the loudness range, copied into `artifacts/scratch/` and deleted afterwards: the time to read each over the NAS, ffmpeg's time with each peak option, the stored loudness against a new measurement, and each video's peak.
+- From them the plan chooses true or sample peak, and estimates how long the rescan takes over the NAS.
+- The scan runs `ebur128` with the chosen peak option and stores the peak in `peak_db`.
+- A missing loudness or peak is stored as no value: the parser's −5.0 peak fallback goes, and `FileLoudnessInfo` stops using 0.0 to mean none.
+- Catalog upgrades become a chain, so no schema change can quarantine an older catalog:
+  - Each schema version has its own upgrade step from the one before, and an older catalog runs every step in order, when it opens and when it is imported.
+  - The file checks treat a catalog at any version from the oldest shipped one, 2, up to the one before current as older and upgradable, rather than damaged.
+- The catalog gains a loudness analysis version, stored with each video, a schema change with its upgrade step.
+- The upgrade step clears every stored peak, since the scan never measured one, and marks every existing video as scanned under the previous loudness analysis version.
+- Each scan result records the loudness analysis version it was scanned under, even when its loudness and peak haven't changed.
+- The refresh's check for which videos need a loudness scan also picks a video with audio scanned under an older loudness analysis version, so the next refresh rescans the videos with audio, not every video.
+- The rescan can't starve playback: the plan measures a video playing from the NAS while the loudness stage runs, and limits the stage, such as to fewer ffmpeg processes at once, so playback doesn't stall.
+
+**Traps**
+
+- The scan runs `ebur128=framelog=verbose` without the `peak` option, and `ParseLoudnessFromFfmpegOutput` stores `peakDb ?? -5.0` when it finds no peak line (`RefreshPipelineService.cs`).
+- ffmpeg's `ebur128` summary has no peak line unless the `peak` option is set (inferred).
+- Of the developer catalog's 10,528 videos with audio, 10,510 have a `peak_db` of exactly −5.0, and the other 18 have −4.9 or −5.1 (measured).
+- `TryPersistLoudness` stores a loudness or peak only when it differs from the stored one by more than 0.1, and keeps the stored peak when a result with audio carries a 0.0 peak, which stands for none.
+- `NeedsLoudness` picks a video whose audio is unknown, one with audio and no loudness, and one without audio that has a loudness.
+- Rescan loudness on the next refresh rescans every video, 17,482 on the developer's catalog (measured).
+- The catalog's schema version is `PRAGMA user_version`, 3 today (`LibraryCatalogStore.SchemaVersion`).
+- `MigrateToCurrentSchema` runs one fixed step, from schema version 2 to 3, when an older catalog opens and when one is imported.
+- The file checks (`HasRequiredCatalogSchema` and `InspectCatalogFile` in `LibraryCatalogStore.cs`) accept only `SchemaVersion` and `MigratableSchemaVersion` (2), so an older catalog at any other version is quarantined and refused as damaged when it opens.
+- The developer's 10,528 videos with audio total 1,773 GB and 1,243 hours (measured).
+- The 237 of them that run 60 minutes or more total 641 GB, and the scan measures each over 10 minutes from 20% in, so the rescan reads about 1.1 TB (inferred).
+- The loudness stage runs up to four ffmpeg processes at once (`_ffmpegSemaphore`), each with a five-minute timeout, and unlike the fingerprint scan's, its parallelism is not a refresh setting.
+
+**Acceptance**
+
+- The measurements, the peak option chosen from them, and the rescan's estimated time are recorded and shown to the user before the scan changes.
+- A summary with a peak line stores its peak, and one without stores no peak, as does a result without audio, in server tests of the loudness parser and the stored values.
+- A catalog at each version from the oldest shipped one to the one before current opens upgraded and imports upgraded, so a schema version bump without its upgrade step fails, in catalog upgrade tests for each version.
+- Upgrading a catalog clears every stored peak and marks every existing video as scanned under the previous loudness analysis version, in catalog upgrade tests.
+- A scan result records the current loudness analysis version, also when its loudness and peak haven't changed, in server tests of the stored values.
+- After the upgrade, the refresh's loudness stage picks every video with audio and no video without audio, in server tests of which videos need a loudness scan.
+- The loudness stage runs no more ffmpeg processes at once than the plan chose, in server tests of the stage's limit.
+- `dotnet test ReelRoulette.sln` passes.
 
 #### Stats tab slice
 
@@ -176,17 +223,17 @@ Last milestone completed: M12g
 - With nothing playing, the current file section says "Nothing is playing yet."
 - The library stats follow, as a grid of cards, each a value over its label.
 - Library stats: total videos, photos, and media, favorites, blacklisted, total plays, unique media played, never played, videos with and without audio, and baseline loudness.
-- Current file: file name and full path, plays, last played (the time before this play, or Never), favorite, blacklisted, duration, has audio, loudness, adjustment, peak, and tags.
-- Adjustment shows what loudness normalization applies to the current file, as the desktop shows it: the difference between the baseline and the file's loudness, limited by the maximum reduction and boost and signed, such as "+5.0 dB" or "-6.0 dB".
-- Adjustment reads "Off" while loudness normalization or Enhanced audio is off, and "N/A" for a file without loudness data, whose Loudness reads "Unknown".
-- Neither normalization nor Enhanced audio exists when this milestone ships, so Adjustment reads Off until WebUI Loudness Normalization fills it in.
+- Current file: file name and full path, plays, last played (the time before this play, or Never), favorite, blacklisted, duration, has audio, loudness, true peak, and tags.
+- Loudness reads "Unknown" for a file without loudness data.
+- True peak shows the scan's peak, such as "−1.2 dBTP", or "Not measured" when it has none. If the Loudness scan slice chooses sample peak, the row is Peak, in dBFS.
+- The mockup's Peak row becomes True peak, with "Not measured" for a file without a peak.
+- The mockup keeps its Adjustment row, which WebUI Loudness Normalization brings, since the mockup shows the whole release.
 - Refresh after events and actions is coalesced as the desktop does it: a short wait gathers a burst, one request is in flight at a time, and requests during it get one more.
 
 **Traps**
 
 - The WebUI never calls `GET /api/library/stats`, and its now-playing line shows only the file name and duration (measured).
 - The header file name's tooltip shows the full name only today.
-- The desktop's current-file loudness display in `MainWindow.axaml.cs` is how the desktop shows Adjustment.
 
 **Acceptance**
 
@@ -194,15 +241,21 @@ Last milestone completed: M12g
 - Clicking the current file name in the header opens the panel on the Stats tab, in a component test.
 - The library stats match the library stats response, in component tests.
 - The current file section updates on play, favorite, blacklist, tag, and playback events, in component tests.
-- The current file's Adjustment reads "Off", or "N/A" with Loudness "Unknown" for a file without loudness data, until WebUI Loudness Normalization applies an adjustment, in component tests of Adjustment reading Off and of a file without loudness data.
+- True peak shows the stored peak, or "Not measured" without one, and Loudness reads "Unknown" for a file without loudness data, in component tests of each.
 - A burst of events causes one stats request, plus at most one more for events during it, in coalescing tests.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check.
 
+#### Release checks
+
+- Manual: While the loudness rescan runs, a video from the NAS plays without stalling.
+- Manual: After the loudness rescan, the Stats tab shows a peak for a video with audio.
+
 #### Not included
 
 - Show in File Manager and Copy Path beside the current file's full path, which is Show in File Manager from the WebUI.
-- Filling in Adjustment, which is WebUI Loudness Normalization.
+- The Adjustment row, which is WebUI Loudness Normalization.
+- Measuring a video of 60 minutes or more in full, instead of over 10 minutes from 20% in.
 - Playback history charts, which is Playback History and Analytics.
 
 ### M12i1 - WebUI Volume and Enhanced Audio
@@ -325,59 +378,181 @@ Last milestone completed: M12g
 ### M12i2 - WebUI Loudness Normalization
 
 - **Status**: ⏳ Planned
-- **Goal**: The WebUI evens out loudness between videos, as the desktop's volume normalization does, and it works properly in every browser the WebUI supports.
-- **Depends on**: WebUI Volume and Enhanced Audio, whose gain stage it adds a stage to, and WebUI Settings Panel, whose tab holds its settings.
+- **Goal**: The WebUI evens out loudness between videos toward a target the user picks, without clipping, and its Night mode evens out loudness within a video, in every browser the WebUI supports.
+- **Depends on**: WebUI Volume and Enhanced Audio, whose gain stage its chain feeds, and WebUI Settings Panel, whose tab holds its settings, and WebUI Stats Panel, whose scan measures the peaks its boost limit reads and whose Stats tab shows its Adjustment row.
 - **Design**: `docs/mockups/reelroulette/`.
 
-#### Scope
+#### Decisions
 
-- If the audio spike in WebUI Volume and Enhanced Audio doesn't find the gain stage reliable, including on iOS, this milestone moves to v0.16.0, before Desktop Client Removal, and the desktop's gains for the fixture's cases are captured first, while its code is still in the repository.
-- Normalization adds its gain on the gain stage from WebUI Volume and Enhanced Audio, which routes every device's audio. On iOS that stage gives the app its own volume, as that milestone sets out, and its audio spike checks the path on iOS.
-- The WebUI reads each item's integrated loudness from the `integratedLoudness` field that WebUI Stats Panel names in OpenAPI, and the automatic baseline from the baseline loudness the server's library stats report.
-- The rule is implemented in C# and the WebUI, so both read one shared fixture, `shared/fixtures/loudness-normalization-gain.json`, of loudness, baseline, limits, user volume, and the resulting gain.
-- The desktop's formula moves from `MainWindow.axaml.cs` into `LoudnessNormalizationService`, beside its baseline method, so its tests can read the fixture: a small desktop change for the shared-fixture rule.
-- Settings in the Settings tab's Audio section, per device, with the desktop's ranges and defaults:
-  - A **Loudness normalization** checkbox under Enhanced audio, off by default and disabled while Enhanced audio is off, since audio then plays directly.
-  - An expandable "Loudness normalization settings" section, like Ambient mode's, with Maximum reduction (15 dB, from 1 to 30), Maximum boost (5 dB, from 0 to 10), and Baseline, Automatic, showing the library's baseline, or a Manual target (−23 LUFS, from −50 to −10).
+- The WebUI doesn't follow the desktop's normalization, and the frozen desktop keeps its own unchanged: the desktop sets LibVLC's volume as if it were linear, which is likely cubic, so its corrections were about tripled (inferred), and its formula on a linear gain stage leaves 58% of audible videos at its 5 dB boost limit (measured).
+- The gain is worked out only in the WebUI, from the server's loudness and peak and the device's settings, so its rule is locked to a WebUI-only fixture of loudness, peak, settings, and the resulting gain.
+- The audio chain runs from the video through the normalization gain, Night mode's compressor, and the limiter, to the volume stage and its fades from WebUI Volume and Enhanced Audio.
+- The limiter is in the chain whenever normalization or Night mode is on. Allow limiting only decides whether a boost may go past a video's headroom for the limiter to catch.
+- The defaults (normalization on, Standard, a 15 dB boost limit, and Allow limiting on, with Night mode off) and Night mode's fixed values are provisional until the Listening check slice settles them, with the full library.
+- If the audio spike in WebUI Volume and Enhanced Audio doesn't find the gain stage reliable, including on iOS, this milestone moves to v0.16.0.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ⏳ Planned | The new Audio settings, Night mode's included, and the Adjustment row's "(limited by peak)" in the mockup, reviewed by the user on devices. |
+| Automatic baseline | ⏳ Planned | The library statistic Automatic uses, chosen by the user from measured figures, in a new library stats field if it isn't the server's current baseline. |
+| Normalization | ⏳ Planned | The gain rule, its fixed values, the limiter, the loudness normalization settings, and the Stats tab's Adjustment row. |
+| Night mode | ⏳ Planned | A compressor that evens out loudness within a video, and its setting under Enhanced audio. |
+| Listening check | ⏳ Planned | The defaults and Night mode's fixed values, settled by the user's listening check with the full library. |
+
+#### Mockup slice
+
+**Scope**
+
+- The mockup's Audio section gets the settings the Normalization and Night mode slices set out, in place of the desktop's Maximum reduction, Maximum boost, and Baseline.
+- The Stats tab's Adjustment row shows "(limited by peak)" when the headroom limits a boost.
+- The mockup's stand-in sound follows the new gain rule while normalization is on.
+- Night mode's hint is drafted in the mockup and approved there by the user.
+- The user reviews the mockup on their devices before the other slices start.
+
+**Traps**
+
+- The mockup's loudness settings are the desktop's, Maximum reduction, Maximum boost, and Baseline with Automatic or a Manual target, and its stand-in sound follows the desktop's formula (`LOUDNESS_DEFAULTS` and `loudnessAdjustment` in `docs/mockups/reelroulette/build/layout.src.html`).
+- The mockup's pages are built from their sources by `build_pages.py`.
+
+**Acceptance**
+
+- The mockup shows the new Audio settings, Night mode, and the Adjustment row's "(limited by peak)", and `python3 docs/mockups/reelroulette/build/build_pages.py` and `node docs/mockups/reelroulette/build/check.mjs` pass.
+- The user has reviewed the mockup on their devices before the Automatic baseline slice starts.
+
+#### Automatic baseline slice
+
+**Scope**
+
+- The slice's plan measures candidate statistics on a copy of the catalog, such as the server's current baseline, the 75th percentile of audible videos, and their median, and shows the figures to the user, who chooses the one Automatic uses.
+- If the choice isn't the server's current baseline, a new field in the library stats carries it, a contract change that only adds, in OpenAPI and the generated WebUI types. `baselineLoudnessLufs` keeps its value for the desktop.
+- The Stats tab's Baseline loudness shows the chosen statistic.
+
+**Traps**
+
+- The server's baseline is the 75th percentile of the loudness of videos with audio, near-silent ones included (`ReadBaselineLoudness` in `LibraryCatalogSession.cs`).
+- On the developer's catalog the server's baseline is −28.7 LUFS, the 75th percentile of the 8,892 videos louder than −60 LUFS is −27.1, and their median is −38.3 (measured).
+- The frozen desktop's Automatic baseline reads `baselineLoudnessLufs`.
+
+**Acceptance**
+
+- The measured figures and the user's choice are recorded before the Normalization slice starts.
+- If the slice adds a field, its value is the chosen statistic, in server tests of the library stats, and it is in OpenAPI, and `npm run verify:contracts` passes.
+- The Stats tab's Baseline loudness shows the chosen statistic, in a component test.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Normalization slice
+
+**Scope**
+
+- The gain rule, from the video's integrated loudness and peak and the device's settings:
+  - The adjustment needed is the target minus the video's loudness.
+  - A cut is applied in full, since turning a video down can't clip or raise its noise.
+  - A boost is held to the smallest of the adjustment needed, the boost limit, and the video's headroom: the ceiling minus its peak, plus the limiter allowance when Allow limiting is on.
+  - A video at the silence floor or quieter isn't boosted.
+  - A video without loudness data plays without an adjustment, and one without a peak is only cut, never boosted.
+- The fixed values: a silence floor of −60 LUFS, a ceiling of −1 dBFS with true peak or −2 dBFS if WebUI Stats Panel's scan measures sample peak, and a limiter allowance of 6 dB.
+- The limiter is a `DynamicsCompressorNode` with a threshold of −1 dB, a ratio of 20, no knee, and its fastest attack.
+- The plan measures the limiter's own makeup gain and compensates for it, with a lower threshold or a gain after the limiter, so the limiter holds peaks at −1 dB.
+- The normalization gain is set while each video starts from silence, and glides to its new value when a setting changes, so the change reaches the playing video at once without a click.
+- The plan defines the gain under Automatic before the library's baseline arrives.
+- Settings, per device, in the Settings tab's Audio section:
+  - A **Loudness normalization** checkbox under Enhanced audio, on by default, and disabled while Enhanced audio is off, since audio then plays directly. Its hint is "Evens out loudness between videos.", which reads "Needs Enhanced audio." while it is disabled.
+  - An expandable "Loudness normalization settings" section, like Ambient mode's.
+  - **Target loudness**: Automatic, Quieter (−23 LUFS), Standard (−18 LUFS), Louder (−14 LUFS), or Manual, with Standard the default. Automatic's line is "The library's baseline, {n} LUFS.", from the statistic the Automatic baseline slice chose.
+  - Manual's target field shows only while Manual is chosen, as Hide after shows only under Timeout. It takes −50 to −10 LUFS, starts at −18, and uses the full keyboard, since its values are negative.
+  - **Boost quiet videos by up to**, from 0 to 24 dB, 15 by default.
+  - **Allow limiting**, on by default, with the hint "Lets quiet videos with loud moments get louder by limiting those moments."
+  - A Reset to defaults button, as Ambient mode settings has.
   - The fields are setting's fields of the field validation pattern, which WebUI Settings Panel adds (`createSettingField` and `SettingTextField`): a value that is not valid is flagged and not kept, the one in use stays, and a valid one is saved on Enter or when the field is left. Reset to defaults shows the saved values again in the fields.
-  - Each setting survives a page refresh.
-- The option's hint is "Evens out loudness between videos.", which reads "Needs Enhanced audio." while it is disabled.
-- Automatic's line is "The library's baseline, {n} LUFS."
-- The target field shows only while Manual is chosen, as Hide after shows only under Timeout. It takes negative LUFS, so it uses the full keyboard, as the mockup's does.
-- A Reset to defaults button, as Ambient mode settings has.
-- The mockup's stand-in sound follows each video's loudness while normalization is on.
-- The Stats tab's Adjustment, which WebUI Stats Panel shows as Off until this milestone, shows what normalization applies to the current file, as WebUI Stats Panel sets out: the baseline difference limited by the maximum reduction and boost, signed, "Off" while normalization or Enhanced audio is off, and "N/A" for a file without loudness data. It follows the settings as they change.
+  - Each setting survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
+- The Stats tab's Adjustment row shows the adjustment applied to the current file, signed, such as "+6.0 dB" or "−4.5 dB", with "(limited by peak)" when the headroom limits a boost. It reads "Off" while normalization or Enhanced audio is off, and "N/A" for a file without loudness data, and it follows the settings as they change.
 - Enhanced audio's description becomes "Processes audio in the app, for in-app volume on iPhone and iPad and loudness normalization."
 
-#### Traps
+**Traps**
 
-- The desktop's `CalculateNormalizedVolume` in `MainWindow.axaml.cs` takes the baseline, from `LoudnessNormalizationService.GetBaselineLoudness` (the server's library baseline in automatic mode, or the manual target), minus the item's integrated loudness (the item's `IntegratedLoudness`, read into `MeanVolumeDb`).
-- It limits that to the maximum boost above and the maximum reduction below, turns it into a linear gain (10^(dB/20)), multiplies the user's volume by it, and clamps the result to LibVLC's 0–200%.
-- On the desktop, an item without loudness data plays at the user's volume, and normalization is off by default.
-- The server's library stats already report the baseline loudness.
-- The shared fixture can lock the WebUI to the desktop's formula only while the desktop is in the repository.
+- On the developer's catalog, 1,636 of the 10,528 videos with audio are at −60 LUFS or quieter, and the other 8,892 have a median of −38.3 LUFS (measured).
+- Videos under 30 seconds have a median of −49.1 LUFS, and videos of 10 to 60 minutes −26.7 (measured).
+- Before any limit from peaks, a −18 LUFS target with a 15 dB boost limit brings 46% of those 8,892 videos within 3 dB of the target and leaves 60% short of it, and a −23 LUFS target leaves 50% short (measured).
+- Web Audio clips a signal above full scale at the output (inferred).
+- `DynamicsCompressorNode` is not a brick-wall limiter, since it has no look-ahead, and browsers may implement it differently (inferred).
+- `DynamicsCompressorNode` applies its own makeup gain, worked out from its curve: about +0.6 dB at a −1 dB threshold and a ratio of 20, so the limiter holds peaks near −0.4 dBFS rather than −1 (inferred).
+- WebUI Stats Panel's scan measures a video of 60 minutes or more over 10 minutes from 20% in, so its peak can miss the loudest moment.
+- Sample peak can read lower than the true peak between samples (inferred).
 - The server's cross-origin headers on media responses, from WebUI Volume and Enhanced Audio, keep media from another origin in development from playing silent through the gain stage.
 - iOS's numeric and decimal keypads have no minus key (inferred).
 
-#### Acceptance
+**Acceptance**
 
-- With normalization on, each video plays at the gain the desktop's formula gives for its loudness against the baseline, within the maximum reduction and boost, and both clients pass `loudness-normalization-gain.json`, with the fixture's cases run by the desktop's and the WebUI's tests.
-- An item without loudness data plays at the user's volume, in WebUI tests.
-- The settings are in the Settings tab's Audio section with the desktop's ranges and defaults, the option is disabled while Enhanced audio is off, a value outside a field's range is flagged with the field validation pattern, and each setting survives a page refresh, in WebUI tests for each setting, the field validation pattern on its fields, and each setting surviving a page refresh.
+- The gain rule passes every case in its WebUI-only fixture: a cut in full, a boost held by the boost limit, by the headroom, and by the headroom plus the allowance, no boost at the silence floor, no adjustment without loudness data, and only a cut without a peak, in WebUI tests reading the fixture.
+- With normalization on, the chain runs from the normalization gain through the limiter to the volume stage, and each video plays at its gain, in WebUI audio tests.
+- A settings change glides the playing video's gain to its new value, in WebUI audio tests.
+- Under Automatic, the gain before the library's baseline arrives is as the plan defines, in a WebUI test.
+- The settings are in the Settings tab's Audio section with their choices, ranges, and defaults, the option is disabled while Enhanced audio is off, Manual's field shows only under Manual, a value outside a field's range is flagged with the field validation pattern, Reset to defaults restores the defaults, and each setting survives a page refresh, in WebUI tests for each setting.
+- The Stats tab's Adjustment shows the applied adjustment, signed, with "(limited by peak)" when the headroom limits a boost, "Off" while normalization or Enhanced audio is off, and "N/A" for a file without loudness data, and it follows the settings as they change, in WebUI tests of the Adjustment in each case.
 - Enhanced audio's description names loudness normalization, in WebUI tests.
-- The Stats tab's Adjustment shows the adjustment applied to the current file, signed and within the limits, "Off" while normalization or Enhanced audio is off, and "N/A" for a file without loudness data, and it follows the settings as they change, in WebUI tests of the Adjustment in each case.
-- With normalization on, the gain stage applies each video's normalization gain, in WebUI audio tests.
 - The setting is hidden in a browser where it cannot work, and that browser is named in this entry.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `dotnet test ReelRoulette.sln` and `npm run verify` pass, and a spot check on the user's own browsers and phone, without the VM: with loudness normalization on, a loud and a quiet video play at similar loudness, and any browser where it can't work is found and named in this entry.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check.
+
+#### Night mode slice
+
+**Scope**
+
+- Night mode evens out loudness within a video with a compressor (`DynamicsCompressorNode`), in the chain after the normalization gain and before the limiter.
+- It works whether normalization is on or off.
+- A **Night mode** checkbox under Enhanced audio, per device, off by default, and disabled while Enhanced audio is off. Its hint is the one approved in the mockup, and reads "Needs Enhanced audio." while it is disabled.
+- Its compressor's values are fixed, with no settings beyond on and off. They are provisional until the Listening check slice settles them, and until then development builds have temporary controls for them.
+- Turning it on or off glides, without a click.
+- It survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
+- Enhanced audio's description becomes "Processes audio in the app, for in-app volume on iPhone and iPad, loudness normalization, and Night mode."
+
+**Traps**
+
+- A compressor's makeup gain can lift peaks above full scale, which the limiter after it catches (inferred).
+- `DynamicsCompressorNode` behaves differently between browsers (inferred).
+- Changing the audio graph's connections while audio plays can click (inferred).
+
+**Acceptance**
+
+- With Night mode on, the chain runs from the normalization gain through the compressor and the limiter, with normalization on or off, and with it off the compressor is out of the chain, in WebUI audio tests.
+- Turning Night mode on or off glides without a jump in level, in WebUI audio tests.
+- The checkbox is under Enhanced audio, off by default, disabled while Enhanced audio is off, and survives a page refresh, in WebUI tests.
+- Enhanced audio's description names Night mode, in WebUI tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check.
+
+#### Listening check slice
+
+**Scope**
+
+- With a development build of the WebUI and the full library, the user listens on their own devices and settles the defaults: normalization on or off, the target, the boost limit, Allow limiting, and Night mode on or off.
+- The user settles Night mode's fixed values with its temporary controls, which this slice then removes.
+- The listening covers the user's own browsers on a desktop, a phone, and an iPad, where the limiter and Night mode's compressor may behave differently.
+- The settled values become the WebUI's defaults and Night mode's values, and go into the mockup and this entry.
+
+**Traps**
+
+- In the Vite dev server, media comes from the server's other origin, which WebUI Volume and Enhanced Audio's Server slice keeps from playing silent through Web Audio.
+
+**Acceptance**
+
+- The settled defaults and Night mode's values are in the WebUI and recorded in this entry, and Night mode's temporary controls are gone, in WebUI tests of the defaults and of Night mode's values.
+- The mockup shows the settled defaults, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
 
 #### Release checks
 
 - Manual: With loudness normalization on, a loud and a quiet video play at similar loudness in Chrome, Firefox, and Safari on a desktop and on Android and iOS.
+- Manual: A quiet video with loud moments, boosted with Allow limiting on, plays without distortion in Chrome, Firefox, and Safari on a desktop and on Android and iOS.
+- Manual: With Night mode on, quiet and loud moments within a video come closer without audible pumping, in Chrome, Firefox, and Safari on a desktop and on Android and iOS.
 
 #### Not included
 
-- Leaving the fixture as WebUI test data once the desktop is gone, which is Desktop Client Removal.
+- Removing the desktop's own normalization, which is Desktop Client Removal.
+- Peak measurement and the loudness rescan, which is WebUI Stats Panel.
+- Night mode settings beyond on and off.
 
 ### M12i3 - WebUI Autoplay Modes
 
@@ -1836,7 +2011,7 @@ Last milestone completed: M12g
 
 #### Traps
 
-- The desktop's other changes in this release, outside bug fixes, are small ones matching server changes: Favorite and Blacklist Filter Modes' filter dropdowns and filter summary line, Recovery Page and Operator Retirement's removal of the Enable Web UI switch, WebUI Loudness Normalization's move of its formula for the shared fixture, and WebUI Multi-Select and Bulk Actions' reload on the bulk event.
+- The desktop's other changes in this release, outside bug fixes, are small ones matching server changes: Favorite and Blacklist Filter Modes' filter dropdowns and filter summary line, Recovery Page and Operator Retirement's removal of the Enable Web UI switch, and WebUI Multi-Select and Bulk Actions' reload on the bulk event.
 - After Desktop Client Removal no desktop update is published, so installed desktops stay on their last version, since the Velopack desktop feed stops getting releases (inferred).
 - Later servers stop working with the desktop from Desktop Client Removal in v0.16.0, which removes routes and fields it reads, such as `/api/library/item`, `/api/library-states`, and the filter state's old fields; the accounts release then removes pairing.
 - The desktop's Open Web UI menu item exists, and `release.yml` still packages the desktop.
@@ -2050,7 +2225,7 @@ Last milestone completed: M12g
 
 #### Scope
 
-- A catalog schema change to schema version 4 for the extended metadata columns, with its own migration from schema version 3.
+- A catalog schema change for the extended metadata columns, to the next schema version, with its own upgrade step from the one before in the catalog's upgrade chain, which WebUI Stats Panel adds.
 - Metadata sync in core and server services:
   - import tags from supported formats during import and refresh,
   - export tags and metadata to files on demand, with an optional auto-export policy,
@@ -2072,7 +2247,7 @@ Last milestone completed: M12g
 - The merge policy gives the same result for the same inputs, in merge-policy tests.
 - Extended metadata is stored by the server and shown and edited in the WebUI.
 - Batch operations follow the conflict and error policy and report success and failure counts with reasons.
-- The catalog migrates from schema version 3 to schema version 4, in schema migration tests.
+- A catalog at the schema version before opens upgraded and imports upgraded through the new upgrade step, in the upgrade chain's catalog upgrade tests.
 
 ### P5 - Customizable Keyboard Shortcuts
 
@@ -3167,12 +3342,12 @@ Last milestone completed: M12g
 
 **Scope**
 
-- `event-revision.json`, `library-tile-effect.json`, `loudness-normalization-gain.json`, `preset-filter-equality.json`, and `sort-direction-labels.json` lose their C# readers and stay as WebUI test data.
+- `event-revision.json`, `library-tile-effect.json`, `preset-filter-equality.json`, and `sort-direction-labels.json` lose their C# readers and stay as WebUI test data.
 - `tag-name-order.json` and `filter-mode-resolution.json` stay, read by Core and the WebUI.
 
 **Acceptance**
 
-- The five former desktop fixtures are read by WebUI tests.
+- The four former desktop fixtures are read by WebUI tests.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
 #### Docs slice

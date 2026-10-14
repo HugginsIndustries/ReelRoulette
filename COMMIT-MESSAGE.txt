@@ -19,10 +19,12 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan the WebUI's main screens ahead of its admin section
+Docs: Plan a loudness normalization redesign with real peaks and Night mode
 
-- Move WebUI Stats Panel through WebUI Multi-Select and Bulk Actions ahead of WebUI Admin Section in Active Milestones, each keeping its relative order, and reassign the active IDs from M12h to M12u in the Planned Releases outline.
-- WebUI Multi-Select and Bulk Actions takes over the item removal route, with its delete-from-disk option, event, OpenAPI entry, server tests, and the WebUI's requery on the event, and no longer depends on an admin milestone. The admin milestone that had the route keeps the source routes and is renamed Admin Source Management.
-- WebUI Multi-Select and Bulk Actions builds the control-token prompt its Remove from library asks through, and WebUI Admin Section's gate reuses it, so both WebUI Admin Section and Admin Source Management now depend on it.
-- Admin Refresh, Backup, and Duplicate Review no longer says the WebUI never clears playback stats, since multi-select clears a selection's stats by ids first.
-- The script tests' Depends on case with a condition on starting uses fixture titles instead of a copy of Desktop App Shell's line, so they never have to follow MILESTONES.md.
+- WebUI Stats Panel gains a Loudness scan slice: it measures each video's peak with `ebur128`, stores no value where one is missing in place of the -5.0 and 0.0 fallbacks, and adds a loudness analysis version whose catalog upgrade clears the stored peaks so the next refresh rescans the videos with audio without starving playback. Its plan measures test tones and about 20 of the user's videos first, to choose true or sample peak and time the rescan.
+- The same slice makes catalog upgrades a chain, a step per schema version run in order and tested from every older shipped version, so a schema change can't quarantine an older catalog, and File Metadata Sync and Extended Metadata adds its own step to it.
+- The Stats tab shows True peak or "Not measured" and keeps Baseline loudness, and leaves the Adjustment row to WebUI Loudness Normalization.
+- WebUI Loudness Normalization no longer follows the desktop's formula: a target the user picks, cuts in full, boosts held by a boost limit and each video's peak headroom, no boost for near-silent tracks, and a limiter, locked to a WebUI-only fixture.
+- Its settings are Target loudness (Automatic, Quieter, Standard, Louder, or Manual), Boost quiet videos by up to, and Allow limiting, and Automatic's statistic is chosen from measured figures.
+- It gains a Night mode slice, a compressor between the normalization gain and the limiter, a Mockup slice first for the user's review on devices, and a closing Listening check slice that settles the provisional defaults with the full library.
+- The desktop stays as it is: Desktop Client Removal's fixture list and Desktop Retirement Notice's list of desktop changes drop the shared loudness fixture.
