@@ -23,6 +23,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
+          ffmpeg -version
 
       - name: Build solution
         run: dotnet build ReelRoulette.sln --configuration Release -p:TargetFramework=net10.0 -p:EnableWindowsTargeting=true -m:1
@@ -46,7 +47,29 @@ jobs:
 
       - name: Install ffmpeg
         shell: pwsh
-        run: choco install ffmpeg -y --no-progress
+        env:
+          # The Windows server release's build: these must match release.yml's
+          # "Bundle FFmpeg into publish output (Windows server)" step.
+          FFMPEG_RELEASE_TAG: autobuild-2026-09-30-13-08
+          FFMPEG_ASSET: ffmpeg-n9.0.2-17-g2a571b6068-win64-gpl-9.0
+          FFMPEG_SHA256: a0e45723c72141975f51d8666302e614711745f3102b704ca3f82c897a58d278
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $work = Join-Path $env:RUNNER_TEMP 'ffmpeg-download'
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+          $zip = Join-Path $work "$env:FFMPEG_ASSET.zip"
+          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/$env:FFMPEG_RELEASE_TAG/$env:FFMPEG_ASSET.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
+          if ($hash -ne $env:FFMPEG_SHA256) {
+            throw "FFmpeg download hash $hash does not match the pinned $env:FFMPEG_SHA256"
+          }
+          Expand-Archive -LiteralPath $zip -DestinationPath $work -Force
+          $bin = Join-Path $work "$env:FFMPEG_ASSET/bin"
+          # GITHUB_PATH applies from the next step on, so this step adds the folder to its own PATH too.
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value $bin
+          $env:PATH = "$bin;$env:PATH"
+          ffmpeg -version
 
       - name: Build solution
         run: dotnet build ReelRoulette.sln --configuration Release

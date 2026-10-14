@@ -19,12 +19,8 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan 5-star item ratings with half stars for v0.15.0
+Chore: Install CI's Windows ffmpeg from the release's pinned build
 
-- New Item Ratings milestone, M12i3, next in line: a half-star rating kept on the server in a new catalog schema step, set from the Stats tab's Current file section, with its own event so every open WebUI updates and pops up Your actions or Other devices, and a Rated card. It also freezes the shipped 2→3 upgrade step's index SQL, names the fields the server always sends in `LibraryProjectionItem`, and adds a mockup check that every icon is in the font subset.
-- New WebUI Player Rating (M12i7), Rating Filter and Sort (M12k2), Rating-Weighted Random Picks (M12k3), and WebUI Ratings on Tiles (M12l2) milestones. The player and tile ratings are designed in the mockup first, and the weighting's open points are settled before it is built.
-- WebUI Keyboard Shortcuts gains Shift+1 to Shift+5, Shift+0, and - and = for the rating, and its Trap about which keys the WebUI handles now names the header's file name.
-- WebUI Multi-Select and Bulk Actions gains bulk rating, and Admin Refresh, Backup, and Duplicate Review shows ratings in duplicate review, with Select Best preferring the highest-rated file.
-- File Metadata Sync and Extended Metadata syncs Item Ratings' rating with media files instead of adding its own, and Desktop Client Removal moves the WebUI-only fixture cases into the shared fixtures.
-- WebUI Keyboard Navigation and Focus now also depends on the new rating controls and on WebUI Loop Range.
-- Active milestones are renumbered to stay in order: WebUI Volume and Enhanced Audio, Loudness Normalization, and Player Controls become M12i4 to M12i6, WebUI Keyboard Shortcuts M12i8, Browser-Playable Filter M12k1, and WebUI Grid Scrollbar Seek M12l3, and the Planned Releases outline follows.
+- CI's Windows job downloads the pinned, hash-checked BtbN FFmpeg build that the Windows server release bundles and puts it on the PATH, in place of Chocolatey, whose feed answered 504 and left ffmpeg uninstalled while the step passed.
+- `ci.yml` and `release.yml` each note that their pinned release tag, asset, and SHA-256 must match.
+- Both CI jobs end their ffmpeg install with `ffmpeg -version`, so a failed install fails CI there instead of in the tests.

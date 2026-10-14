@@ -354,6 +354,8 @@ jobs:
         shell: pwsh
         env:
           # A BtbN month-end build, which BtbN keeps; daily builds are pruned after about two weeks.
+          # CI's Windows tests install the same build: the tag, asset, and SHA-256 must match
+          # ci.yml's "Install ffmpeg" step in build-test-windows.
           FFMPEG_RELEASE_TAG: autobuild-2026-09-30-13-08
           FFMPEG_ASSET: ffmpeg-n9.0.2-17-g2a571b6068-win64-gpl-9.0
           FFMPEG_SHA256: a0e45723c72141975f51d8666302e614711745f3102b704ca3f82c897a58d278
