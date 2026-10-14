@@ -137,16 +137,20 @@ Last milestone completed: M12g
 
 ### M12h - WebUI Stats Panel
 
-- **Status**: ⏳ Planned
+- **Status**: 🚧 In Progress
 - **Goal**: The WebUI shows library and playback statistics and details of the current file in a Stats tab, as the desktop stats panel does, with each video's peak measured by the server's loudness scan.
 - **Depends on**: WebUI Responsive Layout and Panels.
 - **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- The loudness scan measures true peak, not sample peak, and the Stats tab shows it in dBTP. On the developer's library true peak reads up to 0.8 dB above sample peak, headroom WebUI Loudness Normalization needs so a boost doesn't clip, and its extra CPU stays under the time a video takes to read over the NAS, so the rescan takes no longer.
 
 #### Slices
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Contract | ⏳ Planned | `integratedLoudness` and `peakDb` named in the OpenAPI item schema, so the generated WebUI types carry them. |
+| Contract | ✅ Complete | `integratedLoudness` and `peakDb` named in the OpenAPI item schema, so the generated WebUI types carry them. |
 | Loudness scan | ⏳ Planned | A measured peak for each video with audio, no stored value where one is missing, and a loudness analysis version whose upgrade rescans the videos with audio without starving playback. |
 | Stats tab | ⏳ Planned | The side panel's Stats tab with the current file's and the library's stats, opened from the header's file name, with coalesced refreshes. |
 
@@ -155,28 +159,37 @@ Last milestone completed: M12g
 **Scope**
 
 - Name `integratedLoudness` and `peakDb` in the OpenAPI item schema, so the generated WebUI types carry them. A contract change that only adds.
-- `peakDb` is described as the peak the loudness scan measures, absent when it hasn't measured one.
+- `peakDb` is described as the peak stored for the item, since until the Loudness scan slice the scan stores a −5.0 fallback for nearly every video.
 - WebUI Loudness Normalization reads both.
 
 **Traps**
 
-- Loudness and peak already come with each list and single-item read as `integratedLoudness` and `peakDb`, but the OpenAPI item schema does not name them (it allows extra properties), so they are untyped in the generated WebUI types (inferred).
+- Loudness and peak already come with each list and single-item read as `integratedLoudness` and `peakDb`, but the OpenAPI item schema (`LibraryProjectionItem`) does not name them and allows extra properties, so they are untyped in the generated WebUI types.
+- The server leaves either field out when it has no value rather than sending null (`LibraryCatalogSession.ToItem`).
+- `npm run verify:contracts` only checks that the generated types match the OpenAPI file, so it runs no contract tests.
+- `OpenApiSpec.AssertMatchesSchema` needs a response's fields and the schema's to be the same set, and the item response has about 20 fields the schema doesn't name, so the item can't be checked that way.
 
 **Acceptance**
 
-- `integratedLoudness` and `peakDb` are in the OpenAPI item schema, and `npm run verify:contracts` passes, in contract tests for the two fields.
+- `integratedLoudness` and `peakDb` are in the OpenAPI item schema, and list and single-item reads return both for an item that has them and leave both out for one that doesn't, in a server contract test for the two fields.
+- `npm run verify:contracts` passes.
 - `npm run verify` passes.
+
+**Evidence**
+
+- `shared/api/openapi.yaml` names `integratedLoudness` in `LibraryProjectionItem`, present when the loudness scan has measured it, and `peakDb`, the peak stored for the item, present when the catalog has one, and `npm run generate:contracts` regenerated `openapi.generated.ts`.
+- `ItemIdContractTests.LibraryItems_CarryLoudnessAndPeak_AsTheSchemaNamesThem` checks that the schema names both, that list and single-item reads return both for a measured item, and that both reads leave them out for an unmeasured one. With the two schema entries removed it failed ("Not found: integratedLoudness"), and it passes with them.
+- `dotnet build ReelRoulette.sln` passed with no warnings, and `dotnet test ReelRoulette.sln` passed: 484 Core, 421 desktop, and 7 ServerApp tests.
+- `npm run verify` passed, `npm run verify:contracts` included.
+- `docs/api.md` says list and single-item reads carry `integratedLoudness` when the scan has measured it and `peakDb`, the peak stored for the item, when the catalog has one, and leave a missing one out.
 
 #### Loudness scan slice
 
 **Scope**
 
-- Before the scan changes, the slice's plan runs two measurements and records them:
-  - ffmpeg on generated test tones under `artifacts/scratch/`: whether the `ebur128` summary has a peak line without the `peak` option, and how long `peak=true` and `peak=sample` take against no peak.
-  - About 20 of the user's videos across the loudness range, copied into `artifacts/scratch/` and deleted afterwards: the time to read each over the NAS, ffmpeg's time with each peak option, the stored loudness against a new measurement, and each video's peak.
-- From them the plan chooses true or sample peak, and estimates how long the rescan takes over the NAS.
-- The scan runs `ebur128` with the chosen peak option and stores the peak in `peak_db`.
-- A missing loudness or peak is stored as no value: the parser's −5.0 peak fallback goes, and `FileLoudnessInfo` stops using 0.0 to mean none.
+- The scan runs `ebur128=framelog=verbose:peak=true` and stores the true peak in `peak_db`.
+- A missing loudness or peak is stored as no value: the parser's −5.0 peak fallback goes, and `FileLoudnessInfo` stops using 0.0 to mean none. A summary peak of `-inf`, a digitally silent track's, stores no peak.
+- With the fallback gone, `peakDb`'s descriptions in `shared/api/openapi.yaml` and `docs/api.md` say it is the measured true peak, absent when the scan hasn't measured one, and the generated WebUI types follow.
 - Catalog upgrades become a chain, so no schema change can quarantine an older catalog:
   - Each schema version has its own upgrade step from the one before, and an older catalog runs every step in order, when it opens and when it is imported.
   - The file checks treat a catalog at any version from the oldest shipped one, 2, up to the one before current as older and upgradable, rather than damaged.
@@ -184,32 +197,46 @@ Last milestone completed: M12g
 - The upgrade step clears every stored peak, since the scan never measured one, and marks every existing video as scanned under the previous loudness analysis version.
 - Each scan result records the loudness analysis version it was scanned under, even when its loudness and peak haven't changed.
 - The refresh's check for which videos need a loudness scan also picks a video with audio scanned under an older loudness analysis version, so the next refresh rescans the videos with audio, not every video.
-- The rescan can't starve playback: the plan measures a video playing from the NAS while the loudness stage runs, and limits the stage, such as to fewer ffmpeg processes at once, so playback doesn't stall.
+- The rescan can't starve playback: the loudness stage runs one ffmpeg process at a time, in a loop bounded to that limit instead of a task per video, and the ffprobe it starts for every queued video goes.
 
 **Traps**
 
 - The scan runs `ebur128=framelog=verbose` without the `peak` option, and `ParseLoudnessFromFfmpegOutput` stores `peakDb ?? -5.0` when it finds no peak line (`RefreshPipelineService.cs`).
-- ffmpeg's `ebur128` summary has no peak line unless the `peak` option is set (inferred).
+- With ffmpeg n9.0.2, the version the release ships, the `ebur128` summary has no peak line without the `peak` option; `peak=sample` adds a "Sample peak:" block and `peak=true` a "True peak:" block, each with a line `Peak: {value} dBFS`, the unit printed as dBFS for both (measured).
+- A digitally silent track's summary reads `I: -70.0 LUFS` and `Peak: -inf dBFS` (measured).
+- `peak=sample` runs as fast as no peak, about 2,000 times real time, and `peak=true` takes about three times the CPU, such as 2.4 s against 0.8 s for a 23-minute video read from a local copy (measured).
+- On 20 of the developer's videos across the loudness range, the stored integrated loudness matched a new measurement with every peak option, and true peak read 0.0 to 0.8 dB above sample peak, never below it (measured).
+- Over the NAS, a video over 100 MB reads at 123–152 MB/s, and a clip under 5 MB takes 30–70 ms (measured).
+- While loudness scans read other NAS videos, an 8 MB cold read at a new offset, standing in for starting or seeking a video, took a median 0.13 s with no scan, 0.31 s with one, 0.62 s with two, 1.01 s with three, and about 1.4 s with four (measured).
+- Scan throughput over the NAS is about 130 MB/s with one scan and levels off at 150–176 MB/s from two, and a real-time read of a 17.6 Mbit/s video never fell behind by more than 0.25 s at any level (measured). These measured reads from the NAS only, not playback sent on to a client over the same Wi-Fi.
+- The rescan reads 1,190 GB, videos under 60 minutes in full and 10 minutes of each longer one, plus about 7,600 clips under a minute at about 0.1 s each, about 2.8 hours at one scan at a time (inferred from the measured catalog and read rates).
+- `AnalyzeLoudnessAsync` starts an ffprobe (`TryDetectAudioStreamAsync`) before it takes `_ffmpegSemaphore` and ignores its result, and the stage starts a task for every queued video at once, so every queued video's ffprobe starts together.
 - Of the developer catalog's 10,528 videos with audio, 10,510 have a `peak_db` of exactly −5.0, and the other 18 have −4.9 or −5.1 (measured).
-- `TryPersistLoudness` stores a loudness or peak only when it differs from the stored one by more than 0.1, and keeps the stored peak when a result with audio carries a 0.0 peak, which stands for none.
+- Of those videos, 964 have the −70.0 LUFS integrated loudness of a track below the gate, such as a silent one (measured).
+- `TryPersistLoudness` stores a loudness or peak only when it differs from the stored one by more than 0.1, and keeps the stored peak when a result with audio carries a 0.0 peak, which stands for none. A result that changes nothing writes nothing.
+- The WebUI and the desktop parse the loudness stage's progress and completion messages by their words ("files", "updated", "without audio", "errors", "all scanned", "forced full rescan", "unavailable"), so those stay as they are.
 - `NeedsLoudness` picks a video whose audio is unknown, one with audio and no loudness, and one without audio that has a loudness.
 - Rescan loudness on the next refresh rescans every video, 17,482 on the developer's catalog (measured).
 - The catalog's schema version is `PRAGMA user_version`, 3 today (`LibraryCatalogStore.SchemaVersion`).
 - `MigrateToCurrentSchema` runs one fixed step, from schema version 2 to 3, when an older catalog opens and when one is imported.
 - The file checks (`HasRequiredCatalogSchema` and `InspectCatalogFile` in `LibraryCatalogStore.cs`) accept only `SchemaVersion` and `MigratableSchemaVersion` (2), so an older catalog at any other version is quarantined and refused as damaged when it opens.
+- Schema version 2 shipped in v0.13.0 and is the oldest shipped; version 3 shipped in v0.14.1, and version 1 never shipped (measured).
+- `CatalogSeed` inserts items with positional values, and `WriteAtVersion` writes the current tables stamped with any version other than 2. `CatalogSeedTests` compares a migrated schema with a new one column by column in order, so a new column is the last one and has the same default in both.
+- Backup rotation counts and trims only current-version backups, so schema version 3 backups stay as they are after the upgrade, as schema version 2 ones did at the last bump.
 - The developer's 10,528 videos with audio total 1,773 GB and 1,243 hours (measured).
-- The 237 of them that run 60 minutes or more total 641 GB, and the scan measures each over 10 minutes from 20% in, so the rescan reads about 1.1 TB (inferred).
+- The 237 of them that run 60 minutes or more total 641 GB (measured), and the scan measures each over 10 minutes from 20% in.
 - The loudness stage runs up to four ffmpeg processes at once (`_ffmpegSemaphore`), each with a five-minute timeout, and unlike the fingerprint scan's, its parallelism is not a refresh setting.
+- `_ffmpegSemaphore` is static and created once per process, and no test can see how many scans run at once without a hook in place of the ffmpeg run.
 
 **Acceptance**
 
-- The measurements, the peak option chosen from them, and the rescan's estimated time are recorded and shown to the user before the scan changes.
-- A summary with a peak line stores its peak, and one without stores no peak, as does a result without audio, in server tests of the loudness parser and the stored values.
+- A summary with a finite peak stores it, and one with a `-inf` peak or no peak line stores no peak, as does a result without audio, in server tests of the loudness parser and the stored values.
 - A catalog at each version from the oldest shipped one to the one before current opens upgraded and imports upgraded, so a schema version bump without its upgrade step fails, in catalog upgrade tests for each version.
 - Upgrading a catalog clears every stored peak and marks every existing video as scanned under the previous loudness analysis version, in catalog upgrade tests.
 - A scan result records the current loudness analysis version, also when its loudness and peak haven't changed, in server tests of the stored values.
 - After the upgrade, the refresh's loudness stage picks every video with audio and no video without audio, in server tests of which videos need a loudness scan.
-- The loudness stage runs no more ffmpeg processes at once than the plan chose, in server tests of the stage's limit.
+- The loudness stage runs one ffmpeg process at a time, in server tests of the stage's limit.
+- `peakDb`'s descriptions in `shared/api/openapi.yaml` and `docs/api.md` say it is the measured true peak, absent when not measured, and `npm run verify:contracts` passes.
 - `dotnet test ReelRoulette.sln` passes.
 
 #### Stats tab slice
@@ -224,16 +251,29 @@ Last milestone completed: M12g
 - The library stats follow, as a grid of cards, each a value over its label.
 - Library stats: total videos, photos, and media, favorites, blacklisted, total plays, unique media played, never played, videos with and without audio, and baseline loudness.
 - Current file: file name and full path, plays, last played (the time before this play, or Never), favorite, blacklisted, duration, has audio, loudness, true peak, and tags.
-- Loudness reads "Unknown" for a file without loudness data.
-- True peak shows the scan's peak, such as "−1.2 dBTP", or "Not measured" when it has none. If the Loudness scan slice chooses sample peak, the row is Peak, in dBFS.
-- The mockup's Peak row becomes True peak, with "Not measured" for a file without a peak.
+- Has audio reads "Unknown" before the loudness scan has looked at the file.
+- Loudness reads "Unknown" for a file with audio, or whose audio isn't known yet, without loudness data.
+- True peak shows the scan's peak, such as "-1.2 dBTP". A file with audio, no peak, and a loudness at the −70.0 LUFS floor reads "Silent", since ffmpeg measures a silent track's peak as −∞; any other file with audio and no peak reads "Not measured".
+- A video without audio reads "N/A" for Loudness and True peak, as the desktop does.
+- Values use the ASCII hyphen for a minus sign, as the mockup's numbers do.
+- Last played reads "Just now", "{n} min ago", "{n} hours ago", or "{n} days ago", in the singular for 1, or "Never".
+- Tags show as chips in the tag catalog's category order, as the mockup orders them, from a tag catalog the Stats tab shares with the Tags tab and refreshes on `tagCatalogChanged`.
+- The mockup's Peak row becomes True peak, with "Silent", "Not measured", and "N/A" as above, and its Last played and tags follow the rules above.
 - The mockup keeps its Adjustment row, which WebUI Loudness Normalization brings, since the mockup shows the whole release.
+- One refresh reads `GET /api/library/stats` and `POST /api/library/item` for the playing item. The file name and path show at once from the playing item, and the rows fill in from the read.
 - Refresh after events and actions is coalesced as the desktop does it: a short wait gathers a burst, one request is in flight at a time, and requests during it get one more.
+- The tab loads only while it shows. Events while it is hidden mark it out of date, and showing it loads once.
+- A failed load keeps what the tab last showed. With nothing shown yet, the section says "Stats load failed: {reason}" in place and relays it, as the Library tab does its load failure.
+- The mockup changes land first and stop for the user's review on the phone and iPad before the app follows.
 
 **Traps**
 
 - The WebUI never calls `GET /api/library/stats`, and its now-playing line shows only the file name and duration (measured).
 - The header file name's tooltip shows the full name only today.
+- The playing item (`store.current`, a `RandomResponse`) has no play count, last played time, tags, audio, loudness, or peak, and the WebUI never calls `POST /api/library/item`.
+- The time before this play comes only with the `playbackRecorded` event, as `previousLastPlayedUtc`. `POST /api/play/{itemId}` sends that event before it answers, so for a library play the event can arrive before the playing item changes. The desktop holds such an event until its file starts (`LibraryPanelBrowse.cs`).
+- A favorite or blacklist change sets the playing item's flags in place without a new value for `store.current`, so a view of `store.current` doesn't render again for it.
+- The foundation snapshot (`foundation.test.ts.snap`) holds the whole starting page, including the tab row and the now-playing line.
 
 **Acceptance**
 
@@ -241,14 +281,16 @@ Last milestone completed: M12g
 - Clicking the current file name in the header opens the panel on the Stats tab, in a component test.
 - The library stats match the library stats response, in component tests.
 - The current file section updates on play, favorite, blacklist, tag, and playback events, in component tests.
-- True peak shows the stored peak, or "Not measured" without one, and Loudness reads "Unknown" for a file without loudness data, in component tests of each.
+- True peak shows the stored peak, "Silent", "Not measured", or "N/A", and Loudness reads "Unknown" or "N/A", each in its case above, in component tests of each.
+- Last played shows the time before this play, also when the play's event arrives before the playing item changes, in component tests.
+- Tags show in the tag catalog's category order, in a component test.
 - A burst of events causes one stats request, plus at most one more for events during it, in coalescing tests.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check.
 
 #### Release checks
 
-- Manual: While the loudness rescan runs, a video from the NAS plays without stalling.
+- Manual: While the loudness rescan runs, a video from the NAS plays on the iPad without stalling, and starts and seeks without a noticeable wait.
 - Manual: After the loudness rescan, the Stats tab shows a peak for a video with audio.
 
 #### Not included
@@ -452,7 +494,7 @@ Last milestone completed: M12g
   - A boost is held to the smallest of the adjustment needed, the boost limit, and the video's headroom: the ceiling minus its peak, plus the limiter allowance when Allow limiting is on.
   - A video at the silence floor or quieter isn't boosted.
   - A video without loudness data plays without an adjustment, and one without a peak is only cut, never boosted.
-- The fixed values: a silence floor of −60 LUFS, a ceiling of −1 dBFS with true peak or −2 dBFS if WebUI Stats Panel's scan measures sample peak, and a limiter allowance of 6 dB.
+- The fixed values: a silence floor of −60 LUFS, a ceiling of −1 dBTP, and a limiter allowance of 6 dB.
 - The limiter is a `DynamicsCompressorNode` with a threshold of −1 dB, a ratio of 20, no knee, and its fastest attack.
 - The plan measures the limiter's own makeup gain and compensates for it, with a lower threshold or a gain after the limiter, so the limiter holds peaks at −1 dB.
 - The normalization gain is set while each video starts from silence, and glides to its new value when a setting changes, so the change reaches the playing video at once without a click.
@@ -467,7 +509,7 @@ Last milestone completed: M12g
   - A Reset to defaults button, as Ambient mode settings has.
   - The fields are setting's fields of the field validation pattern, which WebUI Settings Panel adds (`createSettingField` and `SettingTextField`): a value that is not valid is flagged and not kept, the one in use stays, and a valid one is saved on Enter or when the field is left. Reset to defaults shows the saved values again in the fields.
   - Each setting survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
-- The Stats tab's Adjustment row shows the adjustment applied to the current file, signed, such as "+6.0 dB" or "−4.5 dB", with "(limited by peak)" when the headroom limits a boost. It reads "Off" while normalization or Enhanced audio is off, and "N/A" for a file without loudness data, and it follows the settings as they change.
+- The Stats tab's Adjustment row shows the adjustment applied to the current file, signed, such as "+6.0 dB" or "-4.5 dB", with "(limited by peak)" when the headroom limits a boost. It reads "Off" while normalization or Enhanced audio is off, and "N/A" for a file without loudness data, and it follows the settings as they change.
 - Enhanced audio's description becomes "Processes audio in the app, for in-app volume on iPhone and iPad and loudness normalization."
 
 **Traps**
@@ -479,7 +521,6 @@ Last milestone completed: M12g
 - `DynamicsCompressorNode` is not a brick-wall limiter, since it has no look-ahead, and browsers may implement it differently (inferred).
 - `DynamicsCompressorNode` applies its own makeup gain, worked out from its curve: about +0.6 dB at a −1 dB threshold and a ratio of 20, so the limiter holds peaks near −0.4 dBFS rather than −1 (inferred).
 - WebUI Stats Panel's scan measures a video of 60 minutes or more over 10 minutes from 20% in, so its peak can miss the loudest moment.
-- Sample peak can read lower than the true peak between samples (inferred).
 - The server's cross-origin headers on media responses, from WebUI Volume and Enhanced Audio, keep media from another origin in development from playing silent through the gain stage.
 - iOS's numeric and decimal keypads have no minus key (inferred).
 

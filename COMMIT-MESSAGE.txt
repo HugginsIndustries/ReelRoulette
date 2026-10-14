@@ -19,12 +19,8 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan a loudness normalization redesign with real peaks and Night mode
+M12h: Name loudness and peak in the OpenAPI item schema
 
-- WebUI Stats Panel gains a Loudness scan slice: it measures each video's peak with `ebur128`, stores no value where one is missing in place of the -5.0 and 0.0 fallbacks, and adds a loudness analysis version whose catalog upgrade clears the stored peaks so the next refresh rescans the videos with audio without starving playback. Its plan measures test tones and about 20 of the user's videos first, to choose true or sample peak and time the rescan.
-- The same slice makes catalog upgrades a chain, a step per schema version run in order and tested from every older shipped version, so a schema change can't quarantine an older catalog, and File Metadata Sync and Extended Metadata adds its own step to it.
-- The Stats tab shows True peak or "Not measured" and keeps Baseline loudness, and leaves the Adjustment row to WebUI Loudness Normalization.
-- WebUI Loudness Normalization no longer follows the desktop's formula: a target the user picks, cuts in full, boosts held by a boost limit and each video's peak headroom, no boost for near-silent tracks, and a limiter, locked to a WebUI-only fixture.
-- Its settings are Target loudness (Automatic, Quieter, Standard, Louder, or Manual), Boost quiet videos by up to, and Allow limiting, and Automatic's statistic is chosen from measured figures.
-- It gains a Night mode slice, a compressor between the normalization gain and the limiter, a Mockup slice first for the user's review on devices, and a closing Listening check slice that settles the provisional defaults with the full library.
-- The desktop stays as it is: Desktop Client Removal's fixture list and Desktop Retirement Notice's list of desktop changes drop the shared loudness fixture.
+- The item schema names `integratedLoudness`, present when the loudness scan has measured it, and `peakDb`, the peak stored for the item, so the generated WebUI types carry them; the Loudness scan slice describes `peakDb` as the measured true peak once its −5.0 fallback goes. A server contract test checks that the schema names both and that list and single-item reads return them, or leave them out when the catalog has no value.
+- WebUI Stats Panel records the loudness measurements: true peak against sample peak on test tones and 20 of the developer's videos, NAS read rates, and cold-read times standing in for playback starts while scans run. The scan measures true peak, runs one ffmpeg at a time, and its first rescan takes an estimated 2.8 hours.
+- The Stats tab's rules are settled: "Silent" for a silent track's true peak, "N/A" for a video without audio, relative last-played times, tags in category order from a catalog shared with the Tags tab, and loads only while the tab shows.

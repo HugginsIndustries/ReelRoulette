@@ -2386,6 +2386,14 @@ components:
           type: number
           format: double
           description: Duration in seconds, present when the catalog has it.
+        integratedLoudness:
+          type: number
+          format: double
+          description: Integrated loudness in LUFS, measured by the loudness scan, present when the scan has measured it.
+        peakDb:
+          type: number
+          format: double
+          description: The peak stored for the item, in dB, present when the catalog has one.
         hasThumbnail:
           type: boolean
           description: True when a generated thumbnail JPEG exists for this item id.

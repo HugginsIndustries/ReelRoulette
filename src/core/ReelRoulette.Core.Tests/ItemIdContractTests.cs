@@ -236,6 +236,45 @@ public sealed class ItemIdContractTests : IDisposable
         }
     }
 
+    [Fact]
+    public void LibraryItems_CarryLoudnessAndPeak_AsTheSchemaNamesThem()
+    {
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("measured", Path.Combine(_tempDir, "measured.mp4"))
+                {
+                    SourceId = "s1",
+                    HasAudio = true,
+                    IntegratedLoudness = -23.4,
+                    PeakDb = -1.2
+                },
+                new SeedItem("unmeasured", Path.Combine(_tempDir, "unmeasured.mp4")) { SourceId = "s1" }
+            ]);
+        var operations = CreateOperations(CatalogOpen.Host(_tempDir));
+
+        var properties = OpenApiSpec.ReadSchemaProperties("LibraryProjectionItem");
+        Assert.Contains("integratedLoudness", properties);
+        Assert.Contains("peakDb", properties);
+
+        var listed = operations.QueryLibrary(new LibraryQueryRequest()).Body!["items"]!.AsArray()
+            .ToDictionary(item => item!["id"]!.GetValue<string>(), item => item!);
+        foreach (var measured in new[] { listed["measured"], operations.ReadLibraryItem("measured")! })
+        {
+            Assert.Equal(-23.4, measured["integratedLoudness"]!.GetValue<double>());
+            Assert.Equal(-1.2, measured["peakDb"]!.GetValue<double>());
+        }
+
+        // The server leaves a missing value out rather than sending null, as the schema's "present when" says.
+        foreach (var unmeasured in new[] { listed["unmeasured"], operations.ReadLibraryItem("unmeasured")! })
+        {
+            Assert.False(unmeasured.AsObject().ContainsKey("integratedLoudness"));
+            Assert.False(unmeasured.AsObject().ContainsKey("peakDb"));
+        }
+    }
+
     public void Dispose()
     {
         LibraryCatalogBackup.WaitForPending();

@@ -1330,6 +1330,16 @@ export interface components {
              * @description Duration in seconds, present when the catalog has it.
              */
             durationSeconds?: number;
+            /**
+             * Format: double
+             * @description Integrated loudness in LUFS, measured by the loudness scan, present when the scan has measured it.
+             */
+            integratedLoudness?: number;
+            /**
+             * Format: double
+             * @description The peak stored for the item, in dB, present when the catalog has one.
+             */
+            peakDb?: number;
             /** @description True when a generated thumbnail JPEG exists for this item id. */
             hasThumbnail?: boolean;
             /** @description Opaque version of the thumbnail JPEG, present when it exists. It changes whenever the thumbnail is written again. Pass it as `v` to the thumbnail route. */
