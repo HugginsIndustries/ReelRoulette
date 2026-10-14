@@ -232,7 +232,7 @@ public sealed class LibraryCatalogVersionSafetyTests
     }
 
     [Theory]
-    [InlineData(LibraryCatalogStore.MigratableSchemaVersion)]
+    [InlineData(LibraryCatalogStore.OldestUpgradableSchemaVersion)]
     [InlineData(Current)]
     [InlineData(Newer)]
     [InlineData(0)]

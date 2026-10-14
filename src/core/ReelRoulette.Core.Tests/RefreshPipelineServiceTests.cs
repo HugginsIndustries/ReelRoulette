@@ -298,6 +298,203 @@ public sealed class RefreshPipelineServiceTests
     }
 
     [Fact]
+    public async Task LoudnessStage_StoresTheMeasuredPeak_AndNoPeakWhereNoneWasMeasured()
+    {
+        using var scope = new DataFolderScope();
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                ExistingVideo(scope, "measured") with { HasAudio = true, IntegratedLoudness = -20.0, PeakDb = -5.0, LoudnessAnalysisVersion = 1 },
+                ExistingVideo(scope, "silent") with { HasAudio = true, IntegratedLoudness = -70.0, PeakDb = -5.0, LoudnessAnalysisVersion = 1 },
+                ExistingVideo(scope, "no-audio")
+            ]);
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        service.AssumeFfmpegAvailable();
+        service.SetLoudnessAnalyzer((path, _, _) => Path.GetFileNameWithoutExtension(path) switch
+        {
+            "measured" => Measured(-20.0, -1.5),
+            "silent" => Measured(-70.0, null),
+            _ => Task.FromResult<RefreshPipelineService.FileLoudnessInfo?>(new RefreshPipelineService.FileLoudnessInfo { HasAudio = false })
+        });
+
+        await InvokeLoudnessStageAsync(service);
+
+        var measured = RefreshItem(scope.RootPath, "measured");
+        Assert.Equal((true, -20.0, -1.5), (measured.HasAudio, measured.IntegratedLoudness, measured.PeakDb));
+        var silent = RefreshItem(scope.RootPath, "silent");
+        Assert.Equal((true, -70.0, (double?)null), (silent.HasAudio, silent.IntegratedLoudness, silent.PeakDb));
+        var noAudio = RefreshItem(scope.RootPath, "no-audio");
+        Assert.Equal((false, (double?)null, (double?)null), (noAudio.HasAudio, noAudio.IntegratedLoudness, noAudio.PeakDb));
+        Assert.All(new[] { measured, silent, noAudio }, item => Assert.Equal(LibraryCatalogStore.LoudnessAnalysisVersion, item.LoudnessAnalysisVersion));
+        Assert.Equal(
+            "Loudness scan complete (3 files, 3 updated, 1 without audio)",
+            service.GetStatus().Stages.Single(stage => stage.Stage == "loudnessScan").Message);
+    }
+
+    [Fact]
+    public async Task LoudnessStage_RecordsTheAnalysisVersion_WhenTheResultChangesNothing()
+    {
+        using var scope = new DataFolderScope();
+        CatalogSeed.Write(
+            scope.RootPath,
+            items: [ExistingVideo(scope, "same") with { HasAudio = true, IntegratedLoudness = -20.0, PeakDb = -1.5, LoudnessAnalysisVersion = 1 }]);
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        service.AssumeFfmpegAvailable();
+        service.SetLoudnessAnalyzer((_, _, _) => Measured(-20.04, -1.46));
+
+        await InvokeLoudnessStageAsync(service);
+
+        var same = RefreshItem(scope.RootPath, "same");
+        Assert.Equal((-20.0, -1.5), (same.IntegratedLoudness, same.PeakDb));
+        Assert.Equal(LibraryCatalogStore.LoudnessAnalysisVersion, same.LoudnessAnalysisVersion);
+        Assert.Equal(
+            "Loudness scan complete (1 files, 0 updated)",
+            service.GetStatus().Stages.Single(stage => stage.Stage == "loudnessScan").Message);
+    }
+
+    [Fact]
+    public async Task LoudnessStage_KeepsTheStoredValues_WhenAScanFails_AndScansTheVideoAgainNextRefresh()
+    {
+        using var scope = new DataFolderScope();
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                ExistingVideo(scope, "older") with { HasAudio = true, IntegratedLoudness = -20.0, LoudnessAnalysisVersion = 1 },
+                ExistingVideo(scope, "current") with { HasAudio = true, IntegratedLoudness = -18.0, PeakDb = -1.0 }
+            ]);
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        service.AssumeFfmpegAvailable();
+        service.SetLoudnessAnalyzer((_, _, _) => Task.FromResult<RefreshPipelineService.FileLoudnessInfo?>(new RefreshPipelineService.FileLoudnessInfo
+        {
+            HasAudio = true,
+            IsError = true,
+            ErrorMessage = "Loudness analysis timed out while running ffmpeg."
+        }));
+
+        await InvokeLoudnessStageAsync(service, forceFullRescan: true);
+
+        var older = RefreshItem(scope.RootPath, "older");
+        Assert.Equal((-20.0, (double?)null, 1), (older.IntegratedLoudness, older.PeakDb, older.LoudnessAnalysisVersion));
+        var current = RefreshItem(scope.RootPath, "current");
+        Assert.Equal((-18.0, -1.0, LibraryCatalogStore.LoudnessAnalysisVersion), (current.IntegratedLoudness, current.PeakDb, current.LoudnessAnalysisVersion));
+        Assert.All(new[] { older, current }, item => Assert.Equal("Loudness analysis timed out while running ffmpeg.", item.LoudnessError));
+
+        var scanned = new List<string>();
+        service.SetLoudnessAnalyzer((path, _, _) =>
+        {
+            lock (scanned)
+            {
+                scanned.Add(Path.GetFileNameWithoutExtension(path));
+            }
+
+            return Measured(-19.0, -1.2);
+        });
+
+        await InvokeLoudnessStageAsync(service);
+
+        Assert.Equal(["current", "older"], scanned.Order());
+        Assert.All(
+            new[] { RefreshItem(scope.RootPath, "older"), RefreshItem(scope.RootPath, "current") },
+            item => Assert.Equal((-19.0, -1.2, (string?)null), (item.IntegratedLoudness, item.PeakDb, item.LoudnessError)));
+    }
+
+    [Fact]
+    public async Task LoudnessStage_ScansVideosWithAudioFromAnOlderAnalysis_AndNoVideoWithoutAudio()
+    {
+        using var scope = new DataFolderScope();
+        CatalogSeed.Write(
+            scope.RootPath,
+            items:
+            [
+                ExistingVideo(scope, "older-with-audio") with { HasAudio = true, IntegratedLoudness = -20.0, LoudnessAnalysisVersion = 1 },
+                ExistingVideo(scope, "older-without-audio") with { HasAudio = false, LoudnessAnalysisVersion = 1 },
+                ExistingVideo(scope, "current-with-audio") with { HasAudio = true, IntegratedLoudness = -18.0, PeakDb = -1.0 },
+                ExistingVideo(scope, "photo") with { MediaType = 1, LoudnessAnalysisVersion = 0 },
+                ExistingVideo(scope, "never-scanned") with { LoudnessAnalysisVersion = 0 }
+            ]);
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        service.AssumeFfmpegAvailable();
+        var scanned = new List<string>();
+        service.SetLoudnessAnalyzer((path, _, _) =>
+        {
+            lock (scanned)
+            {
+                scanned.Add(Path.GetFileNameWithoutExtension(path));
+            }
+
+            return Measured(-20.0, -1.0);
+        });
+
+        await InvokeLoudnessStageAsync(service);
+
+        Assert.Equal(["never-scanned", "older-with-audio"], scanned.Order());
+    }
+
+    [Fact]
+    public async Task LoudnessStage_ScansOneVideoAtATime()
+    {
+        using var scope = new DataFolderScope();
+        CatalogSeed.Write(scope.RootPath, items: Enumerable.Range(0, 6).Select(i => ExistingVideo(scope, $"video-{i}")).ToArray());
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        service.AssumeFfmpegAvailable();
+        var running = 0;
+        var mostAtOnce = 0;
+        var scans = 0;
+        service.SetLoudnessAnalyzer(async (_, _, _) =>
+        {
+            var now = Interlocked.Increment(ref running);
+            InterlockedMax(ref mostAtOnce, now);
+            Interlocked.Increment(ref scans);
+            await Task.Delay(30);
+            Interlocked.Decrement(ref running);
+            return await Measured(-20.0, -1.0);
+        });
+
+        await InvokeLoudnessStageAsync(service);
+
+        Assert.Equal(6, scans);
+        Assert.Equal(1, mostAtOnce);
+    }
+
+    [Fact]
+    public async Task LoudnessStage_StoresTheTruePeak_FfmpegMeasures()
+    {
+        using var scope = new DataFolderScope();
+        // A 12 kHz tone sampled at 48 kHz, a quarter turn out of step, peaks between its samples: its samples reach
+        // 0.9 × 0.707 (-3.9 dBFS), and the true peak is near 0.9 (-0.9 dBTP), which ffmpeg reads as about -0.3.
+        var tonePath = Path.Combine(scope.RootPath, "tone.wav");
+        using (var generate = Process.Start(new ProcessStartInfo
+        {
+            FileName = "ffmpeg",
+            ArgumentList =
+            {
+                "-hide_banner", "-loglevel", "error", "-f", "lavfi",
+                "-i", "aevalsrc=0.9*sin(2*PI*12000*t+PI/4):s=48000:d=3",
+                "-c:a", "pcm_f32le", tonePath
+            },
+            UseShellExecute = false,
+            RedirectStandardError = true
+        })!)
+        {
+            await generate.StandardError.ReadToEndAsync();
+            await generate.WaitForExitAsync();
+            Assert.Equal(0, generate.ExitCode);
+        }
+
+        CatalogSeed.Write(scope.RootPath, items: [new SeedItem("tone", tonePath)]);
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+
+        await InvokeLoudnessStageAsync(service);
+
+        var tone = RefreshItem(scope.RootPath, "tone");
+        Assert.True(tone.HasAudio);
+        Assert.NotNull(tone.IntegratedLoudness);
+        Assert.InRange(tone.PeakDb!.Value, -2.0, 0.5);
+    }
+
+    [Fact]
     public async Task ThumbnailStage_ShouldRegenerateWhenSourceRevisionChanges()
     {
         using var scope = new DataFolderScope();
@@ -688,7 +885,7 @@ public sealed class RefreshPipelineServiceTests
     }
 
     [Fact]
-    public async Task LoudnessFailure_ShouldMarkHasAudioTrue_AndSetLoudnessError()
+    public async Task LoudnessFailure_ShouldMarkHasAudioTrue_KeepStoredValues_AndSetLoudnessError()
     {
         using var scope = new DataFolderScope();
         var brokenMediaPath = Path.Combine(scope.RootPath, "broken-audio.mkv");
@@ -711,8 +908,8 @@ public sealed class RefreshPipelineServiceTests
 
         var item = Assert.Single(LoadCatalog(scope.RootPath).Items);
         Assert.True(item.HasAudio);
-        Assert.Null(item.IntegratedLoudness);
-        Assert.Null(item.PeakDb);
+        Assert.Equal(-20.0, item.IntegratedLoudness);
+        Assert.Equal(-2.0, item.PeakDb);
         Assert.False(string.IsNullOrWhiteSpace(item.LoudnessError));
     }
 
@@ -801,28 +998,44 @@ public sealed class RefreshPipelineServiceTests
                      To ignore this, add a trailing '?' to the map.
                      """;
 
-        var parsed = InvokeParseLoudness(output, exitCode: 1);
+        var parsed = RefreshPipelineService.ParseLoudnessFromFfmpegOutput(output, exitCode: 1);
         Assert.NotNull(parsed);
         Assert.False(parsed!.HasAudio);
-        Assert.Equal(0.0, parsed.MeanVolumeDb);
+        Assert.Null(parsed.IntegratedLoudness);
+        Assert.Null(parsed.PeakDb);
     }
 
     [Fact]
-    public void ParseLoudness_ShouldParseIntegratedAndPeak_FromEbur128SummaryLines()
+    public void ParseLoudness_ReadsTheLoudnessAndTruePeak_FromTheEbur128Summary()
     {
-        var output = """
-                     Input #0, mov, from 'sample.mp4':
-                       Stream #0:0: Video: h264
-                       Stream #0:1: Audio: aac
-                     [Parsed_ebur128_0 @ 000001]   I:         -16.2 LUFS
-                     [Parsed_ebur128_0 @ 000001]   Peak:       -1.5 dBFS
-                     """;
+        var parsed = RefreshPipelineService.ParseLoudnessFromFfmpegOutput(Ebur128Output("-25.6", "    Peak:      -14.8 dBFS"), exitCode: 0);
 
-        var parsed = InvokeParseLoudness(output, exitCode: 0);
         Assert.NotNull(parsed);
         Assert.True(parsed!.HasAudio);
-        Assert.Equal(-16.2, parsed.MeanVolumeDb, 1);
-        Assert.Equal(-1.5, parsed.PeakDb, 1);
+        Assert.Equal(-25.6, parsed.IntegratedLoudness);
+        Assert.Equal(-14.8, parsed.PeakDb);
+    }
+
+    [Fact]
+    public void ParseLoudness_HasNoPeak_ForASilentTrack()
+    {
+        var parsed = RefreshPipelineService.ParseLoudnessFromFfmpegOutput(Ebur128Output("-70.0", "    Peak:       -inf dBFS"), exitCode: 0);
+
+        Assert.NotNull(parsed);
+        Assert.True(parsed!.HasAudio);
+        Assert.Equal(-70.0, parsed.IntegratedLoudness);
+        Assert.Null(parsed.PeakDb);
+    }
+
+    [Fact]
+    public void ParseLoudness_HasNoPeak_WithoutAPeakLine()
+    {
+        var parsed = RefreshPipelineService.ParseLoudnessFromFfmpegOutput(Ebur128Output("-25.6", peakLine: null), exitCode: 0);
+
+        Assert.NotNull(parsed);
+        Assert.True(parsed!.HasAudio);
+        Assert.Equal(-25.6, parsed.IntegratedLoudness);
+        Assert.Null(parsed.PeakDb);
     }
 
     [Fact]
@@ -835,7 +1048,7 @@ public sealed class RefreshPipelineServiceTests
                      Error while filtering: Invalid data found when processing input
                      """;
 
-        var parsed = InvokeParseLoudness(output, exitCode: 1);
+        var parsed = RefreshPipelineService.ParseLoudnessFromFfmpegOutput(output, exitCode: 1);
         Assert.Null(parsed);
     }
 
@@ -1300,32 +1513,69 @@ public sealed class RefreshPipelineServiceTests
         return new RefreshPipelineService(state, logger, coreSettings, catalog ?? CatalogOpen.Host(appDataPathOverride), appDataPathOverride);
     }
 
-    private static ParsedLoudnessResult? InvokeParseLoudness(string output, int exitCode)
+    /// <summary>
+    /// What ffmpeg n9.0.2 writes to stderr for the loudness scan of a video with audio, with its metadata lines
+    /// left out: the <c>ebur128</c> summary with <paramref name="integrated"/> and, unless null,
+    /// <paramref name="peakLine"/> in a true peak block.
+    /// </summary>
+    private static string Ebur128Output(string integrated, string? peakLine)
     {
-        var method = typeof(RefreshPipelineService).GetMethod(
-            "ParseLoudnessFromFfmpegOutput",
-            BindingFlags.NonPublic | BindingFlags.Static);
-        Assert.NotNull(method);
+        var peakBlock = peakLine == null ? string.Empty : $"\n\n  True peak:\n{peakLine}";
+        return $"""
+            Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'sample.mp4':
+              Duration: 00:10:00.00, start: 0.000000, bitrate: 913 kb/s
+              Stream #0:0[0x1](und): Video: h264 (Constrained Baseline) (avc1 / 0x31637661), yuv420p(progressive), 640x360 [SAR 1:1 DAR 16:9], 748 kb/s, 25 fps, 25 tbr, 12800 tbn (default)
+              Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 160 kb/s (default)
+            Stream mapping:
+              Stream #0:1 -> #0:0 (aac (native) -> pcm_s16le (native))
+            Press [q] to stop, [?] for help
+            Output #0, null, to 'pipe:':
+              Stream #0:0(und): Audio: pcm_s16le, 48000 Hz, stereo, s16, 1536 kb/s (default)
+            [Parsed_ebur128_0 @ 0x55d0c0] Summary:
 
-        var result = method!.Invoke(null, [output, exitCode]);
-        if (result == null)
-        {
-            return null;
-        }
+              Integrated loudness:
+                I:         {integrated} LUFS
+                Threshold: -35.6 LUFS
 
-        var type = result.GetType();
-        var hasAudioProp = type.GetProperty("HasAudio");
-        var meanProp = type.GetProperty("MeanVolumeDb");
-        var peakProp = type.GetProperty("PeakDb");
-        Assert.NotNull(hasAudioProp);
-        Assert.NotNull(meanProp);
-        Assert.NotNull(peakProp);
-
-        return new ParsedLoudnessResult(
-            HasAudio: (bool)(hasAudioProp!.GetValue(result) ?? false),
-            MeanVolumeDb: (double)(meanProp!.GetValue(result) ?? 0.0),
-            PeakDb: (double)(peakProp!.GetValue(result) ?? 0.0));
+              Loudness range:
+                LRA:         0.2 LU
+                Threshold: -45.6 LUFS
+                LRA low:   -25.6 LUFS
+                LRA high:  -25.5 LUFS{peakBlock}
+            [out#0/null @ 0x55d0c0] video:0KiB audio:1875KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+            size=N/A time=00:10:00.00 bitrate=N/A speed= 463x elapsed=0:00:01.30
+            """;
     }
+
+    private static Task InvokeLoudnessStageAsync(RefreshPipelineService service, bool forceFullRescan = false)
+    {
+        var method = typeof(RefreshPipelineService).GetMethod("RunLoudnessStageAsync", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(method);
+        return (Task)method!.Invoke(service, [CancellationToken.None, forceFullRescan])!;
+    }
+
+    private static CatalogRefreshItem RefreshItem(string directory, string id)
+    {
+        var opened = CatalogOpen.Open(directory);
+        Assert.NotNull(opened.Session);
+        return opened.Session.ReadRefreshItems().Single(item => item.Id == id);
+    }
+
+    /// <summary>A seeded video whose file exists, so the loudness stage scans it.</summary>
+    private static SeedItem ExistingVideo(DataFolderScope scope, string id)
+    {
+        var path = Path.Combine(scope.RootPath, id + ".mp4");
+        File.WriteAllBytes(path, [0x01]);
+        return new SeedItem(id, path);
+    }
+
+    private static Task<RefreshPipelineService.FileLoudnessInfo?> Measured(double integrated, double? peak) =>
+        Task.FromResult<RefreshPipelineService.FileLoudnessInfo?>(new RefreshPipelineService.FileLoudnessInfo
+        {
+            HasAudio = true,
+            IntegratedLoudness = integrated,
+            PeakDb = peak
+        });
 
     private static DateTimeOffset GetNextAutoRunUtc(RefreshPipelineService service)
     {
@@ -1375,6 +1625,21 @@ public sealed class RefreshPipelineServiceTests
         return File.Exists(logPath)
             ? File.ReadAllLines(logPath).Where(line => line.Contains("Source refresh", StringComparison.Ordinal)).ToArray()
             : [];
+    }
+
+    private static void InterlockedMax(ref int target, int value)
+    {
+        var seen = Volatile.Read(ref target);
+        while (value > seen)
+        {
+            var previous = Interlocked.CompareExchange(ref target, value, seen);
+            if (previous == seen)
+            {
+                return;
+            }
+
+            seen = previous;
+        }
     }
 
     private static LibraryCatalogSnapshot LoadCatalog(string directory)
@@ -1432,5 +1697,4 @@ public sealed class RefreshPipelineServiceTests
         }
     }
 
-    private sealed record ParsedLoudnessResult(bool HasAudio, double MeanVolumeDb, double PeakDb);
 }

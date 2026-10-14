@@ -162,10 +162,20 @@ public sealed class LibraryCatalogPreset
 
 public static class LibraryCatalogStore
 {
-    public const int SchemaVersion = 3;
+    public const int SchemaVersion = 4;
 
-    /// <summary>The schema version before the stored name sort key. Open migrates it in place.</summary>
-    public const int MigratableSchemaVersion = 2;
+    /// <summary>
+    /// The oldest schema version a release shipped. Open and import upgrade a catalog at it, or at any later
+    /// version before the current one, one step per version.
+    /// </summary>
+    public const int OldestUpgradableSchemaVersion = 2;
+
+    /// <summary>
+    /// What the loudness scan measures, stored with each video it scans, so a video with audio scanned
+    /// under an older version is scanned again. Version 1 measured integrated loudness; version 2 adds the
+    /// true peak.
+    /// </summary>
+    public const int LoudnessAnalysisVersion = 2;
 
     public const string DatabaseFileName = "library.db";
     public const string IncomingFileName = "library.db.incoming";
@@ -233,6 +243,27 @@ public static class LibraryCatalogStore
 
     private static readonly string[] Schema3ItemColumns = [.. Schema2ItemColumns, "file_name_sort_key"];
 
+    private static readonly string[] Schema4ItemColumns = [.. Schema3ItemColumns, "loudness_analysis_version"];
+
+    /// <summary>The <c>items</c> columns each usable schema version must have, from the oldest shipped one to the current one.</summary>
+    private static readonly Dictionary<int, string[]> ItemColumnsBySchemaVersion = new()
+    {
+        [2] = Schema2ItemColumns,
+        [3] = Schema3ItemColumns,
+        [4] = Schema4ItemColumns
+    };
+
+    /// <summary>
+    /// The upgrade step from each schema version to the next. A step changes the catalog within the upgrade's
+    /// transaction, and the upgrade then stamps the next version. Steps are history: once a version ships,
+    /// its step never changes.
+    /// </summary>
+    private static readonly Dictionary<int, Action<SqliteConnection, SqliteTransaction>> UpgradeSteps = new()
+    {
+        [2] = UpgradeSchema2To3,
+        [3] = UpgradeSchema3To4
+    };
+
     /// <summary>
     /// Runs inside the migration transaction after every change and before it commits, with the path of
     /// the database being migrated. Tests use it to interrupt a migration.
@@ -284,7 +315,7 @@ public static class LibraryCatalogStore
     }
 
     /// <summary>
-    /// Opens a usable catalog, migrating an older schema in place first. The migration is one SQLite
+    /// Opens a usable catalog, upgrading an older schema in place first. The upgrade is one SQLite
     /// transaction, so an interrupted one leaves the older catalog as it was, and no replace file is
     /// ever written beside it. One that cannot run leaves the catalog unchanged and reports it unreadable.
     /// </summary>
@@ -317,58 +348,91 @@ public static class LibraryCatalogStore
     }
 
     /// <summary>
-    /// Moves a schema version 2 catalog to the current schema: adds the name sort key column and fills
-    /// every key, adds the sort indexes, and drops the item tag index that duplicates the primary key and
-    /// the file name fold index, which no query uses since search matches with <c>instr</c>.
+    /// Moves an older catalog to the current schema by running the upgrade step from its version, then each
+    /// later one in order, in one transaction. Each step is followed by the version it moves to.
     /// </summary>
     private static void MigrateToCurrentSchema(string databasePath)
     {
         using var connection = OpenWrite(databasePath);
         using (var transaction = connection.BeginTransaction())
         {
-            Execute(connection, transaction, "ALTER TABLE items ADD COLUMN file_name_sort_key BLOB NULL;");
-            var names = new List<(string Id, string FileName)>();
-            using (var read = connection.CreateCommand())
+            var version = ExecuteScalarInt(connection, "PRAGMA user_version;", transaction);
+            for (; version < SchemaVersion; version++)
             {
-                read.Transaction = transaction;
-                read.CommandText = "SELECT id, file_name FROM items;";
-                using var reader = read.ExecuteReader();
-                while (reader.Read())
+                if (!UpgradeSteps.TryGetValue(version, out var step))
                 {
-                    names.Add((reader.GetString(0), reader.GetString(1)));
+                    throw new InvalidOperationException($"No catalog upgrade step from schema version {version}.");
                 }
+
+                step(connection, transaction);
+                Execute(connection, transaction, $"PRAGMA user_version = {version + 1};");
             }
 
-            using (var update = connection.CreateCommand())
-            {
-                update.Transaction = transaction;
-                update.CommandText = "UPDATE items SET file_name_sort_key = $key WHERE id = $id;";
-                var key = update.Parameters.Add("$key", SqliteType.Blob);
-                var id = update.Parameters.Add("$id", SqliteType.Text);
-                foreach (var (itemId, fileName) in names)
-                {
-                    key.Value = LibraryCatalogNameSortKey.Compute(fileName);
-                    id.Value = itemId;
-                    update.ExecuteNonQuery();
-                }
-            }
-
-            Execute(connection, transaction, "DROP INDEX IF EXISTS idx_item_tags_item_id;");
-            Execute(connection, transaction, "DROP INDEX IF EXISTS idx_items_file_name_fold;");
-            Execute(connection, transaction, SortIndexesSql);
-            Execute(
-                connection,
-                transaction,
-                "INSERT OR REPLACE INTO catalog_meta (key, value) VALUES ($key, $value);",
-                ("$key", NameSortKeyVersionKey),
-                ("$value", LibraryCatalogNameSortKey.Version.ToString(CultureInfo.InvariantCulture)));
-            Execute(connection, transaction, $"PRAGMA user_version = {SchemaVersion};");
             BeforeMigrationCommit?.Invoke(databasePath);
             transaction.Commit();
         }
 
-        // Filling every key rewrites most item pages into the WAL.
+        // Filling every key, or clearing every peak, rewrites most item pages into the WAL.
         Execute(connection, "PRAGMA wal_checkpoint(TRUNCATE);");
+    }
+
+    /// <summary>
+    /// Schema version 2 to 3: adds the name sort key column and fills every key, adds the sort indexes, and
+    /// drops the item tag index that duplicates the primary key and the file name fold index, which no query
+    /// uses since search matches with <c>instr</c>.
+    /// </summary>
+    private static void UpgradeSchema2To3(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        Execute(connection, transaction, "ALTER TABLE items ADD COLUMN file_name_sort_key BLOB NULL;");
+        var names = new List<(string Id, string FileName)>();
+        using (var read = connection.CreateCommand())
+        {
+            read.Transaction = transaction;
+            read.CommandText = "SELECT id, file_name FROM items;";
+            using var reader = read.ExecuteReader();
+            while (reader.Read())
+            {
+                names.Add((reader.GetString(0), reader.GetString(1)));
+            }
+        }
+
+        using (var update = connection.CreateCommand())
+        {
+            update.Transaction = transaction;
+            update.CommandText = "UPDATE items SET file_name_sort_key = $key WHERE id = $id;";
+            var key = update.Parameters.Add("$key", SqliteType.Blob);
+            var id = update.Parameters.Add("$id", SqliteType.Text);
+            foreach (var (itemId, fileName) in names)
+            {
+                key.Value = LibraryCatalogNameSortKey.Compute(fileName);
+                id.Value = itemId;
+                update.ExecuteNonQuery();
+            }
+        }
+
+        Execute(connection, transaction, "DROP INDEX IF EXISTS idx_item_tags_item_id;");
+        Execute(connection, transaction, "DROP INDEX IF EXISTS idx_items_file_name_fold;");
+        Execute(connection, transaction, SortIndexesSql);
+        Execute(
+            connection,
+            transaction,
+            "INSERT OR REPLACE INTO catalog_meta (key, value) VALUES ($key, $value);",
+            ("$key", NameSortKeyVersionKey),
+            ("$value", LibraryCatalogNameSortKey.Version.ToString(CultureInfo.InvariantCulture)));
+    }
+
+    /// <summary>
+    /// Schema version 3 to 4: adds the loudness analysis version. Every stored peak is cleared, since the
+    /// scan before it measured none and stored a stand-in, and every video is marked as scanned under
+    /// loudness analysis version 1, so the next refresh scans the videos with audio again.
+    /// </summary>
+    private static void UpgradeSchema3To4(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        Execute(connection, transaction, "ALTER TABLE items ADD COLUMN loudness_analysis_version INTEGER NOT NULL DEFAULT 0;");
+        Execute(
+            connection,
+            transaction,
+            "UPDATE items SET peak_db = NULL, loudness_analysis_version = CASE WHEN media_type = 0 THEN 1 ELSE 0 END;");
     }
 
     /// <summary>
@@ -881,7 +945,8 @@ public static class LibraryCatalogStore
                 thumbnail_revision TEXT NULL,
                 thumbnail_width INTEGER NULL,
                 thumbnail_height INTEGER NULL,
-                file_name_sort_key BLOB NULL
+                file_name_sort_key BLOB NULL,
+                loudness_analysis_version INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE categories (
                 id TEXT PRIMARY KEY,
@@ -966,7 +1031,7 @@ public static class LibraryCatalogStore
         /// <summary>A newer build wrote this file.</summary>
         Newer,
 
-        /// <summary>A usable catalog at the older schema version that open and import migrate.</summary>
+        /// <summary>A usable catalog at an older schema version that open and import upgrade.</summary>
         Older
     }
 
@@ -985,7 +1050,7 @@ public static class LibraryCatalogStore
                 return CatalogFileInspection.Newer;
             }
 
-            if (version is not (SchemaVersion or MigratableSchemaVersion))
+            if (version is not int known || !ItemColumnsBySchemaVersion.ContainsKey(known))
             {
                 return CatalogFileInspection.NotADatabase;
             }
@@ -1160,18 +1225,12 @@ public static class LibraryCatalogStore
     }
 
     /// <summary>
-    /// The current schema, or the older one that open migrates. Any other version is not a catalog this
+    /// The current schema, or an older one that open upgrades. Any other version is not a catalog this
     /// build can use; a newer one is caught before this by the header check.
     /// </summary>
     private static bool HasRequiredCatalogSchema(SqliteConnection connection)
     {
-        var itemColumns = ExecuteScalarInt(connection, "PRAGMA user_version;") switch
-        {
-            SchemaVersion => Schema3ItemColumns,
-            MigratableSchemaVersion => Schema2ItemColumns,
-            _ => null
-        };
-        if (itemColumns == null)
+        if (!ItemColumnsBySchemaVersion.TryGetValue(ExecuteScalarInt(connection, "PRAGMA user_version;"), out var itemColumns))
         {
             return false;
         }
@@ -1406,9 +1465,10 @@ public static class LibraryCatalogStore
         command.ExecuteNonQuery();
     }
 
-    internal static int ExecuteScalarInt(SqliteConnection connection, string sql)
+    internal static int ExecuteScalarInt(SqliteConnection connection, string sql, SqliteTransaction? transaction = null)
     {
         using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = sql;
         var value = command.ExecuteScalar();
         return value is long number ? (int)number : Convert.ToInt32(value, CultureInfo.InvariantCulture);

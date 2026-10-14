@@ -18,10 +18,15 @@ public sealed class RefreshPipelineService : BackgroundService
     private static readonly TimeSpan ScanProgressInterval = TimeSpan.FromMilliseconds(500);
     private const int NameSortKeyBatchSize = 1000;
 
+    /// <summary>
+    /// How many videos the loudness stage scans at once. Each scan reads its whole video, or ten minutes of a
+    /// long one, and on a library over a network share a second scan at once barely adds throughput while it
+    /// makes a video starting or seeking there wait longer.
+    /// </summary>
+    internal const int LoudnessScanConcurrency = 1;
+
     private static SemaphoreSlim? _ffprobeSemaphore;
     private static readonly object FfprobeSemaphoreLock = new();
-    private static SemaphoreSlim? _ffmpegSemaphore;
-    private static readonly object FfmpegSemaphoreLock = new();
     private static readonly Regex IntegratedLufsRegex = new(
         @"(?:^|\s)I:\s*(?<value>-?\d+(?:\.\d+)?)\s*LUFS\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -55,6 +60,7 @@ public sealed class RefreshPipelineService : BackgroundService
     private Task? _ffmpegCheckHold;
     private Func<DateTimeOffset> _progressClock = () => DateTimeOffset.UtcNow;
     private bool _assumeFfmpegAvailable;
+    private Func<string, string, TimeSpan?, CancellationToken, Task<FileLoudnessInfo?>> _analyzeLoudness = AnalyzeLoudnessAsync;
 
     public RefreshPipelineService(
         ServerStateService state,
@@ -209,6 +215,16 @@ public sealed class RefreshPipelineService : BackgroundService
     internal void AssumeFfmpegAvailable()
     {
         _assumeFfmpegAvailable = true;
+    }
+
+    /// <summary>
+    /// Scans each video in the loudness stage with <paramref name="analyze"/>, given the file's path and its known
+    /// duration, in place of running ffmpeg.
+    /// </summary>
+    internal void SetLoudnessAnalyzer(Func<string, TimeSpan?, CancellationToken, Task<FileLoudnessInfo?>> analyze)
+    {
+        ArgumentNullException.ThrowIfNull(analyze);
+        _analyzeLoudness = (path, _, duration, token) => analyze(path, duration, token);
     }
 
     internal void HoldNextFingerprintWrite(Task hold)
@@ -1059,13 +1075,9 @@ public sealed class RefreshPipelineService : BackgroundService
 
         TryUpdateLoudnessProgress(progressThrottle, processed, total, noAudioCount, errorCount, forceFullRescan);
 
-        var scanTasks = filesToScan.Select(async item =>
+        var limit = new ParallelOptions { MaxDegreeOfParallelism = LoudnessScanConcurrency, CancellationToken = cancellationToken };
+        await Parallel.ForEachAsync(filesToScan, limit, async (item, token) =>
         {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
-
             if (!File.Exists(item.FullPath))
             {
                 int skippedProcessed;
@@ -1082,7 +1094,7 @@ public sealed class RefreshPipelineService : BackgroundService
             var durationForLoudness = item.DurationTicks is long ticks && ticks > 0
                 ? TimeSpan.FromSeconds(ticks / TimeSpan.TicksPerSecond)
                 : (TimeSpan?)null;
-            var loudness = await AnalyzeLoudnessAsync(item.FullPath, ffmpegPath, durationForLoudness, cancellationToken);
+            var loudness = await _analyzeLoudness(item.FullPath, ffmpegPath, durationForLoudness, token);
             if (loudness != null)
             {
                 if (TryPersistLoudness(item, loudness))
@@ -1114,7 +1126,6 @@ public sealed class RefreshPipelineService : BackgroundService
             TryUpdateLoudnessProgress(progressThrottle, currentProcessed, total, currentNoAudio, currentErrors, forceFullRescan);
         });
 
-        await Task.WhenAll(scanTasks);
         var noAudioText = Volatile.Read(ref noAudioCount) > 0 ? $", {Volatile.Read(ref noAudioCount)} without audio" : string.Empty;
         var errorText = Volatile.Read(ref errorCount) > 0 ? $", {Volatile.Read(ref errorCount)} errors" : string.Empty;
         CompleteStage("loudnessScan", $"Loudness scan complete ({total} files, {Volatile.Read(ref updated)} updated{noAudioText}{errorText}){forcedSuffix}");
@@ -1580,63 +1591,40 @@ public sealed class RefreshPipelineService : BackgroundService
 
         if (item.HasAudio.Value)
         {
-            return !item.IntegratedLoudness.HasValue;
+            // A failed scan keeps the values it couldn't replace, so its recorded error has the video scanned again.
+            return !item.IntegratedLoudness.HasValue ||
+                   item.LoudnessAnalysisVersion < LibraryCatalogStore.LoudnessAnalysisVersion ||
+                   !string.IsNullOrWhiteSpace(item.LoudnessError);
         }
 
         return item.IntegratedLoudness.HasValue;
     }
 
+    /// <summary>
+    /// Stores a scan result and the loudness analysis version it was scanned under, also when nothing else
+    /// changed. A failed scan keeps the stored loudness, peak, and analysis version and records its error.
+    /// Returns whether the stored audio, loudness, peak, or error changed, which the stage counts as updated.
+    /// </summary>
     private bool TryPersistLoudness(CatalogRefreshItem item, FileLoudnessInfo info)
     {
         var hasAudio = info.HasAudio;
-        var integrated = item.IntegratedLoudness;
-        var peak = item.PeakDb;
         var error = item.LoudnessError;
         var changed = item.HasAudio != hasAudio;
 
-        if (info.IsError)
+        // A failed scan measured nothing, so the stored values stay. Otherwise a file without audio keeps no
+        // loudness or peak, a measured value within 0.1 of the stored one keeps the stored one, and a value the
+        // scan didn't measure is stored as none.
+        var integrated = item.IntegratedLoudness;
+        var peak = item.PeakDb;
+        var analysisVersion = item.LoudnessAnalysisVersion;
+        if (!info.IsError)
         {
-            if (integrated.HasValue)
-            {
-                integrated = null;
-                changed = true;
-            }
-        }
-        else if (info.HasAudio && Math.Abs(info.MeanVolumeDb) > 0.0001)
-        {
-            if (!integrated.HasValue || Math.Abs(integrated.Value - info.MeanVolumeDb) > 0.1)
-            {
-                integrated = info.MeanVolumeDb;
-                changed = true;
-            }
-        }
-        else if (!info.HasAudio && integrated.HasValue)
-        {
-            integrated = null;
-            changed = true;
+            integrated = Measured(item.IntegratedLoudness, info.HasAudio ? info.IntegratedLoudness : null);
+            peak = Measured(item.PeakDb, info.HasAudio ? info.PeakDb : null);
+            analysisVersion = LibraryCatalogStore.LoudnessAnalysisVersion;
         }
 
-        if (info.IsError)
-        {
-            if (peak.HasValue)
-            {
-                peak = null;
-                changed = true;
-            }
-        }
-        else if (info.HasAudio && Math.Abs(info.PeakDb) > 0.0001)
-        {
-            if (!peak.HasValue || Math.Abs(peak.Value - info.PeakDb) > 0.1)
-            {
-                peak = info.PeakDb;
-                changed = true;
-            }
-        }
-        else if (!info.HasAudio && peak.HasValue)
-        {
-            peak = null;
-            changed = true;
-        }
+        changed |= integrated != item.IntegratedLoudness || peak != item.PeakDb;
 
         if (info.IsError)
         {
@@ -1653,17 +1641,22 @@ public sealed class RefreshPipelineService : BackgroundService
             changed = true;
         }
 
-        if (!changed)
+        if (!changed && analysisVersion == item.LoudnessAnalysisVersion)
         {
             return false;
         }
 
         lock (_catalogWriteLock)
         {
-            _catalog.Session.SetLoudness(item.Id, hasAudio, integrated, peak, error);
+            _catalog.Session.SetLoudness(item.Id, hasAudio, integrated, peak, error, analysisVersion);
         }
 
-        return true;
+        return changed;
+    }
+
+    private static double? Measured(double? stored, double? measured)
+    {
+        return stored.HasValue && measured.HasValue && Math.Abs(stored.Value - measured.Value) <= 0.1 ? stored : measured;
     }
 
     private static string? StoredThumbnailRevision(CatalogRefreshItem item)
@@ -2330,179 +2323,48 @@ public sealed class RefreshPipelineService : BackgroundService
         TimeSpan? knownDuration,
         CancellationToken cancellationToken)
     {
-        var hasAudioStream = await TryDetectAudioStreamAsync(filePath, cancellationToken);
-        if (hasAudioStream == false)
-        {
-            // Advisory only. Continue with ffmpeg ebur128 analysis to avoid false negatives
-            // on containers/codecs where ffprobe stream probing can be incomplete.
-        }
-
-        if (_ffmpegSemaphore == null)
-        {
-            lock (FfmpegSemaphoreLock)
-            {
-                _ffmpegSemaphore ??= new SemaphoreSlim(4, 4);
-            }
-        }
-
-        bool semaphoreAcquired = false;
-        try
-        {
-            await _ffmpegSemaphore!.WaitAsync(cancellationToken);
-            semaphoreAcquired = true;
-
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = ffmpegPath,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-
-            startInfo.ArgumentList.Add("-hide_banner");
-            startInfo.ArgumentList.Add("-nostats");
-            startInfo.ArgumentList.Add("-vn");
-            startInfo.ArgumentList.Add("-sn");
-            if (knownDuration.HasValue && knownDuration.Value >= TimeSpan.FromMinutes(60))
-            {
-                var seekSeconds = knownDuration.Value.TotalSeconds * 0.2;
-                startInfo.ArgumentList.Add("-ss");
-                startInfo.ArgumentList.Add(seekSeconds.ToString("0.###", CultureInfo.InvariantCulture));
-                startInfo.ArgumentList.Add("-t");
-                startInfo.ArgumentList.Add("600");
-            }
-
-            startInfo.ArgumentList.Add("-i");
-            startInfo.ArgumentList.Add(filePath);
-            startInfo.ArgumentList.Add("-filter:a");
-            startInfo.ArgumentList.Add("ebur128=framelog=verbose");
-            startInfo.ArgumentList.Add("-f");
-            startInfo.ArgumentList.Add("null");
-            startInfo.ArgumentList.Add("-");
-
-            using var process = new Process { StartInfo = startInfo };
-            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
-
-            int exitCode;
-            string output;
-            try
-            {
-                process.Start();
-                output = await process.StandardError.ReadToEndAsync(linkedCts.Token);
-                await process.WaitForExitAsync(linkedCts.Token);
-                exitCode = process.ExitCode;
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                await TryTerminateProcessAsync(process);
-                throw;
-            }
-            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
-            {
-                await TryTerminateProcessAsync(process);
-                return new FileLoudnessInfo
-                {
-                    HasAudio = true,
-                    IsError = true,
-                    ErrorMessage = "Loudness analysis timed out while running ffmpeg."
-                };
-            }
-            catch
-            {
-                await TryTerminateProcessAsync(process);
-                return new FileLoudnessInfo
-                {
-                    HasAudio = true,
-                    IsError = true,
-                    ErrorMessage = "Loudness analysis failed while running ffmpeg."
-                };
-            }
-
-            var parsed = ParseLoudnessFromFfmpegOutput(output, exitCode);
-            if (parsed != null)
-            {
-                return parsed;
-            }
-
-            return new FileLoudnessInfo
-            {
-                HasAudio = true,
-                IsError = true,
-                ErrorMessage = "Loudness analysis failed. Item kept as has-audio for safety."
-            };
-        }
-        finally
-        {
-            if (semaphoreAcquired)
-            {
-                _ffmpegSemaphore!.Release();
-            }
-        }
-    }
-
-    private static async Task<bool?> TryDetectAudioStreamAsync(string filePath, CancellationToken cancellationToken)
-    {
-        var ffprobePath = ResolveFfprobePath();
         var startInfo = new ProcessStartInfo
         {
-            FileName = ffprobePath,
+            FileName = ffmpegPath,
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true
         };
 
-        startInfo.ArgumentList.Add("-v");
-        startInfo.ArgumentList.Add("error");
-        startInfo.ArgumentList.Add("-show_streams");
-        startInfo.ArgumentList.Add("-of");
-        startInfo.ArgumentList.Add("json");
+        startInfo.ArgumentList.Add("-hide_banner");
+        startInfo.ArgumentList.Add("-nostats");
+        startInfo.ArgumentList.Add("-vn");
+        startInfo.ArgumentList.Add("-sn");
+        if (knownDuration.HasValue && knownDuration.Value >= TimeSpan.FromMinutes(60))
+        {
+            var seekSeconds = knownDuration.Value.TotalSeconds * 0.2;
+            startInfo.ArgumentList.Add("-ss");
+            startInfo.ArgumentList.Add(seekSeconds.ToString("0.###", CultureInfo.InvariantCulture));
+            startInfo.ArgumentList.Add("-t");
+            startInfo.ArgumentList.Add("600");
+        }
+
+        startInfo.ArgumentList.Add("-i");
         startInfo.ArgumentList.Add(filePath);
+        startInfo.ArgumentList.Add("-filter:a");
+        startInfo.ArgumentList.Add("ebur128=framelog=verbose:peak=true");
+        startInfo.ArgumentList.Add("-f");
+        startInfo.ArgumentList.Add("null");
+        startInfo.ArgumentList.Add("-");
 
         using var process = new Process { StartInfo = startInfo };
-        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+        int exitCode;
+        string output;
         try
         {
             process.Start();
-            var stdout = await process.StandardOutput.ReadToEndAsync(linkedCts.Token);
-            _ = await process.StandardError.ReadToEndAsync(linkedCts.Token);
+            output = await process.StandardError.ReadToEndAsync(linkedCts.Token);
             await process.WaitForExitAsync(linkedCts.Token);
-
-            if (process.ExitCode != 0)
-            {
-                return null;
-            }
-
-            if (string.IsNullOrWhiteSpace(stdout))
-            {
-                return null;
-            }
-
-            using var doc = JsonDocument.Parse(stdout);
-            if (!doc.RootElement.TryGetProperty("streams", out var streams) || streams.ValueKind != JsonValueKind.Array)
-            {
-                return null;
-            }
-
-            if (streams.GetArrayLength() == 0)
-            {
-                return false;
-            }
-
-            foreach (var stream in streams.EnumerateArray())
-            {
-                if (stream.TryGetProperty("codec_type", out var codecType) &&
-                    codecType.ValueKind == JsonValueKind.String &&
-                    string.Equals(codecType.GetString(), "audio", StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            exitCode = process.ExitCode;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -2512,20 +2374,47 @@ public sealed class RefreshPipelineService : BackgroundService
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
         {
             await TryTerminateProcessAsync(process);
-            return null;
+            return new FileLoudnessInfo
+            {
+                HasAudio = true,
+                IsError = true,
+                ErrorMessage = "Loudness analysis timed out while running ffmpeg."
+            };
         }
         catch
         {
-            // Unknown detection state; fall back to ffmpeg analysis path.
-            return null;
+            await TryTerminateProcessAsync(process);
+            return new FileLoudnessInfo
+            {
+                HasAudio = true,
+                IsError = true,
+                ErrorMessage = "Loudness analysis failed while running ffmpeg."
+            };
         }
+
+        var parsed = ParseLoudnessFromFfmpegOutput(output, exitCode);
+        if (parsed != null)
+        {
+            return parsed;
+        }
+
+        return new FileLoudnessInfo
+        {
+            HasAudio = true,
+            IsError = true,
+            ErrorMessage = "Loudness analysis failed. Item kept as has-audio for safety."
+        };
     }
 
-    private static FileLoudnessInfo? ParseLoudnessFromFfmpegOutput(string output, int exitCode = 0)
+    /// <summary>
+    /// Reads ffmpeg's <c>ebur128</c> summary: the integrated loudness from its <c>I:</c> line and the true
+    /// peak from its <c>Peak:</c> line. A silent track's peak reads <c>-inf</c>, which no number matches, so
+    /// it has none. Null when the file has audio but the summary has no loudness.
+    /// </summary>
+    internal static FileLoudnessInfo? ParseLoudnessFromFfmpegOutput(string output, int exitCode = 0)
     {
         double? integratedLoudness = null;
         double? peakDb = null;
-        bool hasAudio = false;
         var lines = output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
 
         var fileOpenedSuccessfully = output.Contains("Input #0", StringComparison.OrdinalIgnoreCase);
@@ -2556,12 +2445,7 @@ public sealed class RefreshPipelineService : BackgroundService
             (fileOpenedSuccessfully && hasVideoStream && !hasAudioStream) ||
             (fileOpenedSuccessfully && hasNoStreamOutputError && !hasFatalError))
         {
-            return new FileLoudnessInfo
-            {
-                MeanVolumeDb = 0.0,
-                PeakDb = 0.0,
-                HasAudio = false
-            };
+            return new FileLoudnessInfo { HasAudio = false };
         }
 
         foreach (var line in lines)
@@ -2571,7 +2455,6 @@ public sealed class RefreshPipelineService : BackgroundService
                 double.TryParse(integratedMatch.Groups["value"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var loudness))
             {
                 integratedLoudness = loudness;
-                hasAudio = true;
             }
 
             var peakMatch = PeakDbfsRegex.Match(line);
@@ -2582,80 +2465,17 @@ public sealed class RefreshPipelineService : BackgroundService
             }
         }
 
-        if (integratedLoudness.HasValue)
+        if (!integratedLoudness.HasValue)
         {
-            return new FileLoudnessInfo
-            {
-                HasAudio = true,
-                MeanVolumeDb = integratedLoudness.Value,
-                PeakDb = peakDb ?? -5.0
-            };
+            return null;
         }
 
-        double? meanVolumeDb = null;
-        foreach (var line in lines)
+        return new FileLoudnessInfo
         {
-            var meanIndex = line.IndexOf("mean_volume:", StringComparison.OrdinalIgnoreCase);
-            if (meanIndex >= 0)
-            {
-                var dbIndex = line.IndexOf("dB", meanIndex, StringComparison.OrdinalIgnoreCase);
-                if (dbIndex > meanIndex)
-                {
-                    var valueStr = line.Substring(meanIndex + "mean_volume:".Length, dbIndex - meanIndex - "mean_volume:".Length).Trim();
-                    if (double.TryParse(valueStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var meanValue))
-                    {
-                        meanVolumeDb = meanValue;
-                        hasAudio = true;
-                    }
-                }
-            }
-
-            var maxIndex = line.IndexOf("max_volume:", StringComparison.OrdinalIgnoreCase);
-            if (maxIndex >= 0)
-            {
-                var dbIndex = line.IndexOf("dB", maxIndex, StringComparison.OrdinalIgnoreCase);
-                if (dbIndex > maxIndex)
-                {
-                    var valueStr = line.Substring(maxIndex + "max_volume:".Length, dbIndex - maxIndex - "max_volume:".Length).Trim();
-                    if (double.TryParse(valueStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var maxValue))
-                    {
-                        peakDb = maxValue;
-                    }
-                }
-            }
-        }
-
-        if (meanVolumeDb.HasValue)
-        {
-            if (Math.Abs(meanVolumeDb.Value - (-91.0)) < 0.1 && (!peakDb.HasValue || Math.Abs(peakDb.Value - (-91.0)) < 0.1))
-            {
-                return new FileLoudnessInfo
-                {
-                    MeanVolumeDb = 0.0,
-                    PeakDb = 0.0,
-                    HasAudio = false
-                };
-            }
-
-            return new FileLoudnessInfo
-            {
-                HasAudio = hasAudio,
-                MeanVolumeDb = meanVolumeDb.Value,
-                PeakDb = peakDb ?? -5.0
-            };
-        }
-
-        if (fileOpenedSuccessfully && hasVideoStream && !hasAudioStream && !meanVolumeDb.HasValue && !peakDb.HasValue)
-        {
-            return new FileLoudnessInfo
-            {
-                MeanVolumeDb = 0.0,
-                PeakDb = 0.0,
-                HasAudio = false
-            };
-        }
-
-        return null;
+            HasAudio = true,
+            IntegratedLoudness = integratedLoudness,
+            PeakDb = peakDb
+        };
     }
 
     private static async Task TryTerminateProcessAsync(Process process)
@@ -2685,11 +2505,17 @@ public sealed class RefreshPipelineService : BackgroundService
         }
     }
 
-    private sealed class FileLoudnessInfo
+    /// <summary>What one loudness scan found.</summary>
+    internal sealed class FileLoudnessInfo
     {
         public bool HasAudio { get; init; }
-        public double MeanVolumeDb { get; init; }
-        public double PeakDb { get; init; }
+
+        /// <summary>Integrated loudness in LUFS, or null when the scan measured none.</summary>
+        public double? IntegratedLoudness { get; init; }
+
+        /// <summary>True peak in dBTP, or null when the scan measured none, as for a silent track.</summary>
+        public double? PeakDb { get; init; }
+
         public bool IsError { get; init; }
         public string? ErrorMessage { get; init; }
     }

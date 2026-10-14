@@ -5,11 +5,100 @@ using Xunit;
 namespace ReelRoulette.Core.Tests;
 
 /// <summary>
-/// A schema version 2 catalog is migrated in place when it is opened or imported. Every test that can
-/// migrate is in this class, so the interrupt hook never reaches a migration another test runs.
+/// A catalog at an older schema version is upgraded in place when it is opened or imported. Every test that
+/// can upgrade is in this class, so the interrupt hook never reaches an upgrade another test runs.
 /// </summary>
 public sealed class LibraryCatalogMigrationTests
 {
+    /// <summary>
+    /// Every schema version from the oldest shipped one to the one before current. A schema version bump adds
+    /// the version it replaces here, so it fails until the seed has that version's tables and the store has
+    /// its upgrade step.
+    /// </summary>
+    public static IEnumerable<object[]> OlderSchemaVersions() =>
+        Enumerable.Range(LibraryCatalogStore.OldestUpgradableSchemaVersion, LibraryCatalogStore.SchemaVersion - LibraryCatalogStore.OldestUpgradableSchemaVersion)
+            .Select(version => new object[] { version });
+
+    [Theory]
+    [MemberData(nameof(OlderSchemaVersions))]
+    public void Open_OlderCatalog_UpgradesToTheCurrentSchemaAndKeepsItsItems(int version)
+    {
+        using var dir = new TempDirectory();
+        CatalogSeed.WriteSchemaVersion(
+            dir.Path,
+            version,
+            sources: [new SeedSource("on", "/media", "On")],
+            items:
+            [
+                new SeedItem("a", "/media/Beta.mp4") { SourceId = "on", PlayCount = 2, Tags = ["Ann"] },
+                new SeedItem("b", "/media/alpha.jpg") { SourceId = "on", MediaType = 1 }
+            ],
+            tags: [new SeedTag("Ann")],
+            presets: [new SeedPreset("Night", """{"favoritesOnly":true}""")]);
+        var before = LibraryCatalogStore.Read(Path.Combine(dir.Path, "library.db"));
+
+        var opened = CatalogOpen.Open(dir.Path);
+
+        Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
+        Assert.Equal(version, opened.MigratedFromSchemaVersion);
+        Assert.Equal(DescribeNewCatalog(), CatalogSeedTests.DescribeSchema(opened.Session!.DatabasePath));
+        Assert.Equal(
+            before.Items.Select(item => (item.Id, item.FileName, item.MediaType, item.PlayCount, string.Join("|", item.Tags))),
+            opened.Snapshot()!.Items.Select(item => (item.Id, item.FileName, item.MediaType, item.PlayCount, string.Join("|", item.Tags))));
+        Assert.Equal("Night", Assert.Single(opened.Session.ReadPresets()).Name);
+    }
+
+    [Theory]
+    [MemberData(nameof(OlderSchemaVersions))]
+    public void PrepareIncoming_OlderExport_IsUpgradedBeforeItIsPublished(int version)
+    {
+        using var dir = new TempDirectory();
+        using var source = new TempDirectory();
+        CatalogSeed.Write(dir.Path, items: [new SeedItem("current", "/clips/current.mp4")]);
+        var export = CatalogSeed.WriteAtVersion(source.Path, version, items: [new SeedItem("import", "/clips/Import.mp4")], standalone: true);
+
+        LibraryCatalogStore.PrepareIncomingFromFile(dir.Path, export);
+
+        var incoming = Path.Combine(dir.Path, LibraryCatalogStore.IncomingFileName);
+        Assert.Equal(LibraryCatalogStore.CatalogFileInspection.Usable, LibraryCatalogStore.InspectCatalogFile(incoming));
+        Assert.Equal(DescribeNewCatalog(), CatalogSeedTests.DescribeSchema(incoming));
+        LibraryCatalogStore.PublishIncoming(dir.Path);
+        var opened = CatalogOpen.Open(dir.Path);
+        Assert.Null(opened.MigratedFromSchemaVersion);
+        Assert.Equal("import", Assert.Single(opened.Snapshot()!.Items).Id);
+    }
+
+    [Fact]
+    public void Open_Schema3Catalog_ClearsEveryPeak_AndMarksVideosAsScannedBeforeThePeak()
+    {
+        using var dir = new TempDirectory();
+        CatalogSeed.WriteSchemaVersion(
+            dir.Path,
+            3,
+            items:
+            [
+                new SeedItem("with-audio", "/media/with-audio.mp4") { HasAudio = true, IntegratedLoudness = -20.5, PeakDb = -5.0 },
+                new SeedItem("without-audio", "/media/without-audio.mp4") { HasAudio = false },
+                new SeedItem("not-scanned", "/media/not-scanned.mp4"),
+                new SeedItem("photo", "/media/photo.jpg") { MediaType = 1, PeakDb = -5.0 }
+            ]);
+
+        var opened = CatalogOpen.Open(dir.Path);
+
+        Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
+        var rows = ReadRows(
+            opened.Session!.DatabasePath,
+            "SELECT id, peak_db, integrated_loudness, loudness_analysis_version FROM items ORDER BY id;");
+        Assert.Equal(
+            [
+                "not-scanned peak=none loudness=none version=1",
+                "photo peak=none loudness=none version=0",
+                "with-audio peak=none loudness=-20.5 version=1",
+                "without-audio peak=none loudness=none version=1"
+            ],
+            rows.Select(row => $"{row[0]} peak={row[1] ?? "none"} loudness={row[2] ?? "none"} version={row[3]}"));
+    }
+
     [Fact]
     public void Open_Schema2Catalog_MigratesInPlaceWithEveryKeyFilled()
     {
@@ -20,7 +109,7 @@ public sealed class LibraryCatalogMigrationTests
         var opened = CatalogOpen.Open(dir.Path);
 
         Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
-        Assert.Equal(LibraryCatalogStore.MigratableSchemaVersion, opened.MigratedFromSchemaVersion);
+        Assert.Equal(LibraryCatalogStore.OldestUpgradableSchemaVersion, opened.MigratedFromSchemaVersion);
         var databasePath = opened.Session!.DatabasePath;
         Assert.Equal(LibraryCatalogStore.SchemaVersion, ReadUserVersion(databasePath));
         Assert.Equal(LibraryCatalogStore.CatalogFileInspection.Usable, LibraryCatalogStore.InspectCatalogFile(databasePath));
@@ -76,7 +165,7 @@ public sealed class LibraryCatalogMigrationTests
         Assert.NotNull(filesDuringMigration);
         Assert.DoesNotContain(filesDuringMigration!, name => name.StartsWith("library.db.", StringComparison.Ordinal));
         Assert.DoesNotContain(Directory.GetFiles(dir.Path).Select(Path.GetFileName), name => name!.StartsWith("library.db.", StringComparison.Ordinal));
-        Assert.Equal(LibraryCatalogStore.MigratableSchemaVersion, ReadUserVersion(databasePath));
+        Assert.Equal(LibraryCatalogStore.OldestUpgradableSchemaVersion, ReadUserVersion(databasePath));
         Assert.Equal(LibraryCatalogStore.CatalogFileInspection.Older, LibraryCatalogStore.InspectCatalogFile(databasePath));
         Assert.DoesNotContain("file_name_sort_key", ReadItemColumns(databasePath));
         Assert.Contains("idx_item_tags_item_id", ReadIndexNames(databasePath));
@@ -86,7 +175,7 @@ public sealed class LibraryCatalogMigrationTests
         var opened = CatalogOpen.Open(dir.Path);
 
         Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
-        Assert.Equal(LibraryCatalogStore.MigratableSchemaVersion, opened.MigratedFromSchemaVersion);
+        Assert.Equal(LibraryCatalogStore.OldestUpgradableSchemaVersion, opened.MigratedFromSchemaVersion);
         Assert.Equal(LibraryCatalogStore.SchemaVersion, ReadUserVersion(databasePath));
     }
 
@@ -95,7 +184,7 @@ public sealed class LibraryCatalogMigrationTests
     {
         using var dir = new TempDirectory();
         SeedSchema2(dir.Path);
-        CatalogSeed.WriteAtVersion(dir.Path, LibraryCatalogStore.MigratableSchemaVersion, "library.db.previous", items: [new SeedItem("previous", "/previous.mp4")], standalone: true);
+        CatalogSeed.WriteAtVersion(dir.Path, LibraryCatalogStore.OldestUpgradableSchemaVersion, "library.db.previous", items: [new SeedItem("previous", "/previous.mp4")], standalone: true);
 
         var opened = CatalogOpen.Open(dir.Path);
 
@@ -110,12 +199,12 @@ public sealed class LibraryCatalogMigrationTests
     {
         using var dir = new TempDirectory();
         File.WriteAllText(Path.Combine(dir.Path, "library.db"), "not a database");
-        CatalogSeed.WriteAtVersion(dir.Path, LibraryCatalogStore.MigratableSchemaVersion, "library.db.previous", items: [new SeedItem("previous", "/previous.mp4")], standalone: true);
+        CatalogSeed.WriteAtVersion(dir.Path, LibraryCatalogStore.OldestUpgradableSchemaVersion, "library.db.previous", items: [new SeedItem("previous", "/previous.mp4")], standalone: true);
 
         var opened = CatalogOpen.Open(dir.Path);
 
         Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
-        Assert.Equal(LibraryCatalogStore.MigratableSchemaVersion, opened.MigratedFromSchemaVersion);
+        Assert.Equal(LibraryCatalogStore.OldestUpgradableSchemaVersion, opened.MigratedFromSchemaVersion);
         Assert.False(File.Exists(Path.Combine(dir.Path, "library.db.previous")));
         Assert.Equal("not a database", File.ReadAllText(Path.Combine(dir.Path, "library.db.refused")));
         Assert.Equal("previous", Assert.Single(opened.Snapshot()!.Items).Id);
@@ -125,7 +214,7 @@ public sealed class LibraryCatalogMigrationTests
     public void Schema2File_IsAnOlderCatalogWithContent()
     {
         using var dir = new TempDirectory();
-        var databasePath = CatalogSeed.WriteAtVersion(dir.Path, LibraryCatalogStore.MigratableSchemaVersion, "library.db.backup.2026-10-01_10-00-00", items: [new SeedItem("a", "/a.mp4")], standalone: true);
+        var databasePath = CatalogSeed.WriteAtVersion(dir.Path, LibraryCatalogStore.OldestUpgradableSchemaVersion, "library.db.backup.2026-10-01_10-00-00", items: [new SeedItem("a", "/a.mp4")], standalone: true);
         var before = FolderSnapshot.Take(dir.Path);
 
         Assert.Equal(LibraryCatalogStore.CatalogFileInspection.Older, LibraryCatalogStore.InspectCatalogFile(databasePath));
@@ -139,7 +228,7 @@ public sealed class LibraryCatalogMigrationTests
         using var dir = new TempDirectory();
         using var source = new TempDirectory();
         CatalogSeed.Write(dir.Path, items: [new SeedItem("current", "/clips/current.mp4")]);
-        var export = CatalogSeed.WriteAtVersion(source.Path, LibraryCatalogStore.MigratableSchemaVersion, items: [new SeedItem("import", "/clips/Import.mp4")], standalone: true);
+        var export = CatalogSeed.WriteAtVersion(source.Path, LibraryCatalogStore.OldestUpgradableSchemaVersion, items: [new SeedItem("import", "/clips/Import.mp4")], standalone: true);
         var exportBytes = File.ReadAllBytes(export);
 
         LibraryCatalogStore.PrepareIncomingFromFile(dir.Path, export);
@@ -205,6 +294,27 @@ public sealed class LibraryCatalogMigrationTests
         }
 
         return keys;
+    }
+
+    private static List<object?[]> ReadRows(string databasePath, string sql)
+    {
+        using var connection = OpenReadOnly(databasePath);
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        using var reader = command.ExecuteReader();
+        var rows = new List<object?[]>();
+        while (reader.Read())
+        {
+            var row = new object?[reader.FieldCount];
+            for (var i = 0; i < reader.FieldCount; i++)
+            {
+                row[i] = reader.IsDBNull(i) ? null : Convert.ToString(reader.GetValue(i), System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            rows.Add(row);
+        }
+
+        return rows;
     }
 
     private static List<string> ReadStrings(string databasePath, string sql)

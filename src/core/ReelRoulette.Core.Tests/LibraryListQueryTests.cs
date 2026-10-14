@@ -937,13 +937,13 @@ public sealed class LibraryListQueryTests
         Add(session, "silent", "on", "silent.mp4", "silent.mp4", hasAudio: false);
         Add(session, "unknown", "on", "unknown.mp4", "unknown.mp4", hasAudio: true);
         Add(session, "disabled", "off", "disabled.mp4", "disabled.mp4", hasAudio: true);
-        Assert.True(session.SetLoudness("quiet", true, -30.0, null, null));
-        Assert.True(session.SetLoudness("mid", true, -24.0, null, null));
-        Assert.True(session.SetLoudness("loud", true, -20.0, null, null));
-        Assert.True(session.SetLoudness("keep", true, -14.0, -1.25, null));
-        Assert.True(session.SetLoudness("photo", true, -10.0, null, null));
-        Assert.True(session.SetLoudness("silent", false, -8.0, null, null));
-        Assert.True(session.SetLoudness("disabled", true, -16.0, null, null));
+        Assert.True(session.SetLoudness("quiet", true, -30.0, null, null, LibraryCatalogStore.LoudnessAnalysisVersion));
+        Assert.True(session.SetLoudness("mid", true, -24.0, null, null, LibraryCatalogStore.LoudnessAnalysisVersion));
+        Assert.True(session.SetLoudness("loud", true, -20.0, null, null, LibraryCatalogStore.LoudnessAnalysisVersion));
+        Assert.True(session.SetLoudness("keep", true, -14.0, -1.25, null, LibraryCatalogStore.LoudnessAnalysisVersion));
+        Assert.True(session.SetLoudness("photo", true, -10.0, null, null, LibraryCatalogStore.LoudnessAnalysisVersion));
+        Assert.True(session.SetLoudness("silent", false, -8.0, null, null, LibraryCatalogStore.LoudnessAnalysisVersion));
+        Assert.True(session.SetLoudness("disabled", true, -16.0, null, null, LibraryCatalogStore.LoudnessAnalysisVersion));
 
         var stats = session.ReadLibraryStats();
         Assert.Equal(-16.0, stats.Global.BaselineLoudnessLufs);

@@ -2094,7 +2094,7 @@ public sealed class LibraryOperationsServiceTests
     private static string[] SeedOtherBackups(string backupDir, DateTime olderUtc, DateTime recentUtc)
     {
         var newer = SeedBackup(backupDir, "library.db.backup.newer-version", LibraryCatalogStore.SchemaVersion + 1, olderUtc);
-        var schema2 = SeedBackup(backupDir, "library.db.backup.schema-2", LibraryCatalogStore.MigratableSchemaVersion, olderUtc);
+        var schema2 = SeedBackup(backupDir, "library.db.backup.schema-2", LibraryCatalogStore.OldestUpgradableSchemaVersion, olderUtc);
         var older = SeedBackup(backupDir, "library.db.backup.older-version", 1, olderUtc);
         var junk = Path.Combine(backupDir, "library.db.backup.not-a-database");
         File.WriteAllText(junk, "not a database");

@@ -42,13 +42,21 @@ internal sealed record SeedItem(string Id, string FullPath)
     public string? ThumbnailRevision { get; init; }
     public int? ThumbnailWidth { get; init; }
     public int? ThumbnailHeight { get; init; }
+
+    /// <summary>
+    /// The loudness analysis version the item's loudness was scanned under, the current one unless a test sets
+    /// another. Schema versions before 4 have no such column and leave it out.
+    /// </summary>
+    public int LoudnessAnalysisVersion { get; init; } = LibraryCatalogStore.LoudnessAnalysisVersion;
+
     public IReadOnlyList<string> Tags { get; init; } = [];
 }
 
 /// <summary>
-/// Writes a current-schema <c>library.db</c> with SQL so tests start from a known catalog, or a schema
-/// version 2 one for migration tests. A test checks that the current schema (tables, columns with types,
-/// indexes, and user version) matches a catalog the store creates.
+/// Writes a current-schema <c>library.db</c> with SQL so tests start from a known catalog, or one at an older
+/// shipped schema version for upgrade tests. A test checks that the current schema (tables, columns with types,
+/// indexes, and user version) matches a catalog the store creates. Each older version's tables are kept as that
+/// version shipped them.
 /// </summary>
 internal static class CatalogSeed
 {
@@ -66,7 +74,7 @@ internal static class CatalogSeed
         IEnumerable<SeedTag>? tags = null,
         IEnumerable<SeedPreset>? presets = null)
     {
-        WriteSchema(directory, LibraryCatalogStore.SchemaVersion, sources, items, categories, tags, presets);
+        WriteSchemaVersion(directory, LibraryCatalogStore.SchemaVersion, sources, items, categories, tags, presets);
     }
 
     /// <summary>As <see cref="Write"/>, at schema version 2: no name sort key and the old item tag index.</summary>
@@ -78,23 +86,30 @@ internal static class CatalogSeed
         IEnumerable<SeedTag>? tags = null,
         IEnumerable<SeedPreset>? presets = null)
     {
-        WriteSchema(directory, 2, sources, items, categories, tags, presets);
+        WriteSchemaVersion(directory, 2, sources, items, categories, tags, presets);
     }
 
-    private static void WriteSchema(
+    /// <summary>
+    /// As <see cref="Write"/>, at <paramref name="schemaVersion"/>, with that version's tables. It throws for a
+    /// version it has no tables for, so a schema version bump fails the upgrade tests until the version it
+    /// replaced gets its tables here.
+    /// </summary>
+    public static void WriteSchemaVersion(
         string directory,
         int schemaVersion,
-        IEnumerable<SeedSource>? sources,
-        IEnumerable<SeedItem>? items,
-        IEnumerable<SeedCategory>? categories,
-        IEnumerable<SeedTag>? tags,
-        IEnumerable<SeedPreset>? presets)
+        IEnumerable<SeedSource>? sources = null,
+        IEnumerable<SeedItem>? items = null,
+        IEnumerable<SeedCategory>? categories = null,
+        IEnumerable<SeedTag>? tags = null,
+        IEnumerable<SeedPreset>? presets = null)
     {
-        var current = schemaVersion == LibraryCatalogStore.SchemaVersion;
-        if (!current && schemaVersion != 2)
+        var schema = schemaVersion switch
         {
-            throw new ArgumentOutOfRangeException(nameof(schemaVersion));
-        }
+            2 => Schema2,
+            3 => Schema3,
+            4 => Schema4,
+            _ => throw new ArgumentOutOfRangeException(nameof(schemaVersion), schemaVersion, "The seed has no tables for this schema version.")
+        };
 
         Directory.CreateDirectory(directory);
         var databasePath = Path.Combine(directory, "library.db");
@@ -119,7 +134,7 @@ internal static class CatalogSeed
             connection.Open();
             Execute(connection, "PRAGMA journal_mode=WAL;");
             Execute(connection, "BEGIN;");
-            Execute(connection, current ? Schema : Schema2);
+            Execute(connection, schema);
 
             foreach (var (source, position) in (sources ?? []).Select((row, index) => (row, index)))
             {
@@ -159,16 +174,26 @@ internal static class CatalogSeed
             foreach (var (item, position) in (items ?? []).Select((row, index) => (row, index)))
             {
                 var fileName = item.FileName ?? Path.GetFileName(item.FullPath);
-                var fileKey = current ? ", $fileKey" : string.Empty;
+                var laterColumns = (schemaVersion >= 3 ? ", file_name_sort_key" : string.Empty) +
+                                   (schemaVersion >= 4 ? ", loudness_analysis_version" : string.Empty);
+                var laterValues = (schemaVersion >= 3 ? ", $fileKey" : string.Empty) +
+                                  (schemaVersion >= 4 ? ", $loudnessVersion" : string.Empty);
                 Execute(
                     connection,
                     $"""
-                    INSERT INTO items VALUES (
+                    INSERT INTO items (
+                        id, position, source_id, full_path, full_path_fold, relative_path, relative_path_fold,
+                        file_name, file_name_fold, duration_ticks, has_audio, integrated_loudness, peak_db,
+                        is_favorite, is_blacklisted, play_count, last_played_utc, media_type, fingerprint,
+                        fingerprint_algorithm, fingerprint_version, file_size_bytes, last_write_time_utc,
+                        fingerprint_last_utc, fingerprint_status, loudness_error,
+                        thumbnail_revision, thumbnail_width, thumbnail_height{laterColumns})
+                    VALUES (
                         $id, $position, $source, $full, $fullFold, $relative, $relativeFold,
                         $file, $fileFold, $duration, $audio, $loudness, $peak,
                         $favorite, $blacklisted, $plays, $played, $media, $fingerprint,
                         $algorithm, $fpVersion, $size, $write, $fpLast, $fpStatus, $loudnessError,
-                        $thumbRevision, $thumbWidth, $thumbHeight{fileKey});
+                        $thumbRevision, $thumbWidth, $thumbHeight{laterValues});
                     """,
                     ("$id", item.Id),
                     ("$position", position),
@@ -199,7 +224,8 @@ internal static class CatalogSeed
                     ("$thumbRevision", item.ThumbnailRevision),
                     ("$thumbWidth", item.ThumbnailWidth),
                     ("$thumbHeight", item.ThumbnailHeight),
-                    ("$fileKey", LibraryCatalogNameSortKey.Compute(fileName)));
+                    ("$fileKey", LibraryCatalogNameSortKey.Compute(fileName)),
+                    ("$loudnessVersion", item.LoudnessAnalysisVersion));
 
                 foreach (var (name, tagPosition) in item.Tags.Select((row, index) => (row, index)))
                 {
@@ -225,7 +251,7 @@ internal static class CatalogSeed
             }
 
             Execute(connection, "INSERT INTO catalog_meta VALUES ('revision', '0');");
-            if (current)
+            if (schemaVersion >= 3)
             {
                 Execute(
                     connection,
@@ -241,10 +267,11 @@ internal static class CatalogSeed
 
     /// <summary>
     /// Writes a catalog as <paramref name="fileName"/> in <paramref name="directory"/> and stamps it with
-    /// <paramref name="userVersion"/>. Version 2 has the schema version 2 tables; any other version has
-    /// the current ones, and above the current version it also gains one <c>items</c> column, as a later
-    /// schema would. The file is closed cleanly, so no sidecar files remain. A live catalog is in WAL
-    /// mode; <paramref name="standalone"/> writes it in rollback-journal mode, as backups and replace files are.
+    /// <paramref name="userVersion"/>. A version from the oldest shipped one to the current one has that
+    /// version's tables; any other version has the current ones, and above the current version it also gains
+    /// one <c>items</c> column, as a later schema would. The file is closed cleanly, so no sidecar files
+    /// remain. A live catalog is in WAL mode; <paramref name="standalone"/> writes it in rollback-journal mode,
+    /// as backups and replace files are.
     /// </summary>
     public static string WriteAtVersion(
         string directory,
@@ -257,9 +284,9 @@ internal static class CatalogSeed
         var staging = Path.Combine(Path.GetTempPath(), "rr-seed-" + Guid.NewGuid().ToString("N"));
         try
         {
-            if (userVersion == 2)
+            if (userVersion is >= LibraryCatalogStore.OldestUpgradableSchemaVersion and <= LibraryCatalogStore.SchemaVersion)
             {
-                WriteSchema2(staging, items: items);
+                WriteSchemaVersion(staging, userVersion, items: items);
             }
             else
             {
@@ -458,9 +485,15 @@ internal static class CatalogSeed
         "CREATE INDEX idx_items_file_name_fold ON items(file_name_fold);\n" +
         "CREATE INDEX idx_item_tags_item_id ON item_tags(item_id);\n";
 
-    private const string Schema =
-        "CREATE TABLE items (\n" + Schema2ItemColumns + ",\n    file_name_sort_key BLOB NULL\n);\n" +
-        SharedTables +
+    private const string Schema3ItemColumns = Schema2ItemColumns + ",\n    file_name_sort_key BLOB NULL";
+
+    private const string Schema4ItemColumns = Schema3ItemColumns + ",\n    loudness_analysis_version INTEGER NOT NULL DEFAULT 0";
+
+    private const string Schema3 = "CREATE TABLE items (\n" + Schema3ItemColumns + "\n);\n" + SharedTables + SortIndexes;
+
+    private const string Schema4 = "CREATE TABLE items (\n" + Schema4ItemColumns + "\n);\n" + SharedTables + SortIndexes;
+
+    private const string SortIndexes =
         """
         CREATE INDEX idx_items_name_sort ON items(file_name_sort_key);
         CREATE INDEX idx_items_last_played_asc ON items(COALESCE(last_played_utc, 0), file_name_sort_key);

@@ -556,7 +556,8 @@ public sealed class LibraryCatalogSession
                    fingerprint, fingerprint_algorithm, fingerprint_version,
                    file_size_bytes, last_write_time_utc, fingerprint_last_utc,
                    fingerprint_status, loudness_error,
-                   thumbnail_revision, thumbnail_width, thumbnail_height
+                   thumbnail_revision, thumbnail_width, thumbnail_height,
+                   loudness_analysis_version
             FROM items
             ORDER BY position;
             """;
@@ -587,7 +588,8 @@ public sealed class LibraryCatalogSession
                 LoudnessError = reader.IsDBNull(17) ? null : reader.GetString(17),
                 ThumbnailRevision = reader.IsDBNull(18) ? null : reader.GetString(18),
                 ThumbnailWidth = reader.IsDBNull(19) ? null : reader.GetInt32(19),
-                ThumbnailHeight = reader.IsDBNull(20) ? null : reader.GetInt32(20)
+                ThumbnailHeight = reader.IsDBNull(20) ? null : reader.GetInt32(20),
+                LoudnessAnalysisVersion = reader.GetInt32(21)
             });
         }
 
@@ -1308,7 +1310,13 @@ public sealed class LibraryCatalogSession
                 ("$duration", (object?)durationTicks ?? DBNull.Value)) > 0);
     }
 
-    public bool SetLoudness(string id, bool? hasAudio, double? integratedLoudness, double? peakDb, string? loudnessError)
+    public bool SetLoudness(
+        string id,
+        bool? hasAudio,
+        double? integratedLoudness,
+        double? peakDb,
+        string? loudnessError,
+        int loudnessAnalysisVersion)
     {
         return Commit((connection, transaction) =>
             LibraryCatalogStore.Execute(
@@ -1316,14 +1324,16 @@ public sealed class LibraryCatalogSession
                 transaction,
                 """
                 UPDATE items
-                SET has_audio = $audio, integrated_loudness = $loudness, peak_db = $peak, loudness_error = $error
+                SET has_audio = $audio, integrated_loudness = $loudness, peak_db = $peak, loudness_error = $error,
+                    loudness_analysis_version = $analysisVersion
                 WHERE id = $id;
                 """,
                 ("$id", id),
                 ("$audio", hasAudio switch { true => 1, false => 0, _ => DBNull.Value }),
                 ("$loudness", (object?)integratedLoudness ?? DBNull.Value),
                 ("$peak", (object?)peakDb ?? DBNull.Value),
-                ("$error", (object?)loudnessError ?? DBNull.Value)) > 0);
+                ("$error", (object?)loudnessError ?? DBNull.Value),
+                ("$analysisVersion", loudnessAnalysisVersion)) > 0);
     }
 
     public bool SetFileSize(string id, long? fileSizeBytes)
@@ -2939,6 +2949,9 @@ public sealed class CatalogRefreshItem
     public string? ThumbnailRevision { get; set; }
     public int? ThumbnailWidth { get; set; }
     public int? ThumbnailHeight { get; set; }
+
+    /// <summary>The loudness analysis version the stored loudness and peak were scanned under, or 0 before any scan recorded one.</summary>
+    public int LoudnessAnalysisVersion { get; set; }
 }
 
 public sealed class CatalogAutoTagAssignment

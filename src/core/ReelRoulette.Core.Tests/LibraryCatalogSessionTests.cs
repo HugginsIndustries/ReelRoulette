@@ -364,7 +364,7 @@ public sealed class LibraryCatalogSessionTests
 
         Assert.Equal(1, session.Revision);
 
-        Assert.True(session.SetLoudness("item-1", false, null, null, "no audio stream"));
+        Assert.True(session.SetLoudness("item-1", false, null, null, "no audio stream", LibraryCatalogStore.LoudnessAnalysisVersion));
         Assert.Equal(2, session.Revision);
         Assert.Equal("no audio stream", Assert.Single(LibraryCatalogStore.Read(session.DatabasePath).Items).LoudnessError);
     }

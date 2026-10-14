@@ -151,7 +151,7 @@ Last milestone completed: M12g
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Contract | ✅ Complete | `integratedLoudness` and `peakDb` named in the OpenAPI item schema, so the generated WebUI types carry them. |
-| Loudness scan | ⏳ Planned | A measured peak for each video with audio, no stored value where one is missing, and a loudness analysis version whose upgrade rescans the videos with audio without starving playback. |
+| Loudness scan | ✅ Complete | A measured peak for each video with audio, no stored value where one is missing, and a loudness analysis version whose upgrade rescans the videos with audio without starving playback. |
 | Stats tab | ⏳ Planned | The side panel's Stats tab with the current file's and the library's stats, opened from the header's file name, with coalesced refreshes. |
 
 #### Contract slice
@@ -238,6 +238,46 @@ Last milestone completed: M12g
 - The loudness stage runs one ffmpeg process at a time, in server tests of the stage's limit.
 - `peakDb`'s descriptions in `shared/api/openapi.yaml` and `docs/api.md` say it is the measured true peak, absent when not measured, and `npm run verify:contracts` passes.
 - `dotnet test ReelRoulette.sln` passes.
+
+**Evidence**
+
+- `LibraryCatalogStore` is at schema version 4.
+- `OldestUpgradableSchemaVersion` (2) replaces `MigratableSchemaVersion`.
+- An upgrade step per version runs in order, in one transaction, on open and import.
+- The file checks take each version's columns from one table, so versions 2 and 3 inspect as older and version 1 stays refused.
+- The step from version 3 adds `loudness_analysis_version` (`INTEGER NOT NULL DEFAULT 0`), last in a new catalog too.
+- The step from version 3 clears every `peak_db` and sets videos to analysis version 1 and photos to 0.
+- `LibraryCatalogStore.LoudnessAnalysisVersion` is 2.
+- `CatalogRefreshItem` carries each item's analysis version, and `SetLoudness` writes it.
+- The scan runs `ebur128=framelog=verbose:peak=true`.
+- `FileLoudnessInfo`'s loudness and peak are nullable.
+- The parser stores no peak for `-inf` or a missing peak line.
+- `TryPersistLoudness` writes the current analysis version with every result but a failed one, and counts only value changes as updated.
+- A failed scan, such as a timeout or a summary without an `I:` line, keeps the stored loudness, peak, and analysis version and records its error. Found in review.
+- `NeedsLoudness` also picks a video with audio that has a loudness error, so the next refresh scans a failed video again, also one already at the current analysis version. Found in review.
+- The stage runs `Parallel.ForEachAsync` at `LoudnessScanConcurrency` (1) in place of a task per video and the static four-slot semaphore.
+- `TryDetectAudioStreamAsync` is gone with its only call.
+- The parser's fallback for `volumedetect` lines (`mean_volume`, `max_volume`) went too, since the scan never runs `volumedetect` and the fallback stored a sample peak and the −5.0 stand-in. Found during implementation.
+- `LibraryCatalogMigrationTests` runs open and import for every version from 2 to one before current, and checks the version 3 step's peaks and analysis versions.
+- `RefreshPipelineServiceTests` covers the parser on ffmpeg n9.0.2 summaries, the stored values and analysis version, a failed scan's kept values and its next scan, which videos need a scan, and the one-at-a-time limit.
+- A real ffmpeg scan of a generated 12 kHz tone stores about −0.3 dBTP, not its −3.9 dBFS sample peak, in `RefreshPipelineServiceTests`.
+- `CatalogSeed` has a builder per shipped schema version.
+- Each guarded behavior made its tests fail when broken, and was restored from a copy:
+  - Without the version 3 step, every upgrade test failed.
+  - `peak=sample` failed the real ffmpeg test.
+  - A limit of 4 failed the limit test.
+  - Dropping the version check, the version-only write, or the cleared peak, or bringing back the −5.0 fallback, each failed its test.
+  - Clearing the stored values on a failed scan failed the failed-scan test and the real ffmpeg failure test.
+  - Dropping the loudness error from `NeedsLoudness` failed the failed-scan test.
+- A copy of the developer's catalog upgraded in 432 ms for 49,109 items (measured).
+- After the upgrade the copy had no peak, all 17,482 videos at analysis version 1 and its 31,627 photos at 0, and the next refresh would pick exactly its 10,528 videos with audio (measured).
+- `dotnet build ReelRoulette.sln` passed with no warnings.
+- `dotnet test ReelRoulette.sln` passed: 497 Core, 421 desktop, and 7 ServerApp tests.
+- SystemChecks passed.
+- `npm run verify` passed, `verify:contracts` included.
+- `shared/api/openapi.yaml` and `docs/api.md` describe `peakDb` as the measured true peak.
+- `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, `docs/dev-setup.md`, and `docs/domain-inventory.md` describe the upgrade chain and the scan.
+- `CONTEXT.md` and `docs/api.md` say a failed scan keeps the stored loudness and peak and is scanned again on the next refresh.
 
 #### Stats tab slice
 
@@ -2278,7 +2318,7 @@ Last milestone completed: M12g
 
 #### Traps
 
-- The catalog is at schema version 3 today.
+- The catalog is at schema version 4 today.
 - No metadata library is referenced today.
 
 #### Acceptance

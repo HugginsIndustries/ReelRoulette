@@ -1337,7 +1337,7 @@ export interface components {
             integratedLoudness?: number;
             /**
              * Format: double
-             * @description The peak stored for the item, in dB, present when the catalog has one.
+             * @description The true peak the loudness scan measured, in dBTP, present when the scan has measured one.
              */
             peakDb?: number;
             /** @description True when a generated thumbnail JPEG exists for this item id. */
