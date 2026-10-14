@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI becomes the only client on every device. Until the desktop removal release, the desktop client gets no significant changes or new features: bug fixes (crashes, data loss, broken playback, security) and small changes that keep it working with the server, or that match a small server-side change, are allowed. Until then server contract changes only add fields, so the last desktop build keeps working. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. The desktop still ships as a fallback, and its last build tells users it is retired. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12j, M12k, M12l1, M12l2, M12m, M12n1, M12n2, M12n3, M12o, M12p, M12q, M12r, M12s, M12t, M12u.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. The desktop still ships as a fallback, and its last build tells users it is retired. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12j, M12k, M12l1, M12l2, M12m, M12n1, M12n2, M12n3, M12o, M12p, M12q, M12r, M12s, M12t, M12u.
 - **v0.16.0 — Desktop removal**: Remove the desktop client, its packaging, and its tests, then move preset writes to per-preset routes. P48, P25.
 - **v0.16.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.17.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access. P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28j, P28k, P28l.
@@ -135,7 +135,55 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 Last milestone completed: M12h
 
-### M12i1 - WebUI Volume and Enhanced Audio
+### M12i1 - WebUI Ambient Mode
+
+- **Status**: ⏳ Planned
+- **Goal**: Ambient mode fills the black space around the picture with a soft glow of its colors.
+- **Depends on**: WebUI Settings Panel, whose Appearance section holds its settings.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- Ambient mode, as YouTube's: behind the player, a heavily blurred, dimmed copy of the current frame's colors fills the black space around the picture.
+  - At the update rate the player draws the frame into a tiny canvas, and the glow fades toward each new copy over the fade time, so the colors drift smoothly.
+  - The shown canvas blends toward each new sample instead of crossfading two layers, starting from what is on screen, so a sample that arrives mid-fade continues smoothly.
+  - A photo gets the same effect, drawn once from the photo.
+  - Sampling pauses while the video is paused or the tab is hidden.
+  - The glow sits on the player's dark background in both themes, so the light theme uses full color too, and each theme has its own strength, the same kind of setting in both.
+  - With ambient mode off, the space is plain black in both themes, as today.
+  - The effect never reads the canvas's pixels back, so it doesn't use `getImageData` or `toDataURL`.
+- Ambient mode's settings ship with it, apply as they change, and are kept per device:
+  - An Ambient mode toggle, on by default, in the Settings tab's Appearance section.
+  - Beside it, an expandable "Ambient mode settings" section, whose header shows a chevron that points right while it is closed and down while it is open.
+  - Its settings have plain labels, each showing its value: Update rate (1 per second by default, from 0.25 to 4), Fade time (2 s, from 0.25 to 4 s), Blur (64 px, from 10 to 80 px), Strength in the dark theme (50%), Strength in the light theme (75%), and Saturation (100%, from 0 to 200%).
+  - A Reset to defaults button.
+- The player is also clipped by a rounded `clip-path: inset(0 round 8px)`, square in fullscreen and on a phone on its side, as in the mockup, so its corners stay rounded on iOS with ambient mode on.
+- Ambient mode and its settings survive a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
+
+#### Traps
+
+- Two layers crossfading by CSS opacity flickered slightly in the mockup (measured).
+- The flicker came from the black background showing through whenever a sample arrived before the last fade finished (inferred).
+- Drawing a cross-origin video taints the canvas (inferred).
+- In every served setup the media is same-origin, so a tainted canvas happens only in development, where the Vite dev server plays media from the server's other origin, as WebUI Volume and Enhanced Audio sets out (inferred).
+- Showing a tainted canvas still works, since the effect never reads its pixels back (inferred).
+- In Safari and Firefox on iOS, the player's rounded corners turned square once ambient mode drew, and stayed rounded with it off or on other devices (measured).
+- WebKit doesn't clip a layer of its own, such as the blurred ambient canvas, to its parent's rounded corners (inferred).
+
+#### Acceptance
+
+- With ambient mode on, a blurred, dimmed copy of the frame's colors fills the black space around a playing video and crossfades as the picture changes, and a photo gets one from the photo. Sampling stops while the video is paused or the tab is hidden. Off, the space is plain black in both themes. The light theme uses full color at its own strength, and a sample that arrives mid-fade never lets the black background show through. Shown by ambient mode tests for sampling at the update rate while a video plays, holding while it is paused or the tab is hidden, and a photo drawn once.
+- The Ambient mode settings section offers each setting with its default and range, shows each value, applies changes as they're made, and Reset to defaults restores the defaults, in ambient mode tests of each of its settings.
+- The player is clipped by the rounded `clip-path`, square in fullscreen and on a phone on its side, in a WebUI test.
+- After a page refresh, ambient mode and its settings are each as they were, in tests for a page refresh keeping each setting this milestone adds.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check on the user's own browsers and phone, without the VM, including that with ambient mode on the player's corners stay rounded in Safari on iOS.
+
+#### Release checks
+
+- Manual: On an iPhone and an iPad, in Safari and Firefox, with ambient mode on, the player's corners stay rounded.
+
+### M12i2 - WebUI Volume and Enhanced Audio
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI has a volume control on every device, by slider, scroll wheel, and two-finger drag, through an Enhanced audio gain stage that also gives iPhone and iPad an in-app volume.
@@ -252,7 +300,7 @@ Last milestone completed: M12h
 - Enhanced audio's description naming loudness normalization, which is WebUI Loudness Normalization.
 - The [ and ] volume keys, which is WebUI Keyboard Shortcuts.
 
-### M12i2 - WebUI Loudness Normalization
+### M12i3 - WebUI Loudness Normalization
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI evens out loudness between videos toward a target the user picks, without clipping, and its Night mode evens out loudness within a video, in every browser the WebUI supports.
@@ -430,7 +478,7 @@ Last milestone completed: M12h
 - Peak measurement and the loudness rescan, which is WebUI Stats Panel.
 - Night mode settings beyond on and off.
 
-### M12i3 - WebUI Autoplay Modes
+### M12i4 - WebUI Autoplay Modes
 
 - **Status**: ⏳ Planned
 - **Goal**: Autoplay has two modes, Normal and Timer, in place of the desktop's Keep Playing, and a looping photo no longer flickers.
@@ -473,29 +521,16 @@ Last milestone completed: M12h
 
 - Moving the photo duration into the Settings tab as Advance after, which is WebUI Settings Panel.
 
-### M12i4 - WebUI Player Controls and Ambient Mode
+### M12i5 - WebUI Player Controls
 
 - **Status**: ⏳ Planned
-- **Goal**: The player's controls can hide after a time with no activity, and ambient mode fills the black space around the picture with a soft glow of its colors.
-- **Depends on**: WebUI Settings Panel, whose Player controls and Appearance sections hold its settings, and WebUI Volume and Enhanced Audio, whose volume slider keeps the controls shown while it is dragged.
+- **Goal**: The player's controls can hide after a time with no activity.
+- **Depends on**: WebUI Settings Panel, whose Player controls section holds its settings, and WebUI Volume and Enhanced Audio, whose volume slider keeps the controls shown while it is dragged.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
 
 - The fullscreen button shows the exit icon (`fullscreen_exit`) while the stage is in fullscreen or pseudo-fullscreen. Today it always shows `fullscreen`.
-- Ambient mode, as YouTube's: behind the player, a heavily blurred, dimmed copy of the current frame's colors fills the black space around the picture.
-  - At the update rate the player draws the frame into a tiny canvas, and the glow fades toward each new copy over the fade time, so the colors drift smoothly.
-  - The shown canvas blends toward each new sample instead of crossfading two layers, starting from what is on screen, so a sample that arrives mid-fade continues smoothly.
-  - A photo gets the same effect, drawn once from the photo.
-  - Sampling pauses while the video is paused or the tab is hidden.
-  - The glow sits on the player's dark background in both themes, so the light theme uses full color too, and each theme has its own strength, the same kind of setting in both.
-  - With ambient mode off, the space is plain black in both themes, as today.
-  - The effect never reads the canvas's pixels back, so it doesn't use `getImageData` or `toDataURL`.
-- Ambient mode's settings ship with it, apply as they change, and are kept per device:
-  - An Ambient mode toggle, on by default, in the Settings tab's Appearance section.
-  - Beside it, an expandable "Ambient mode settings" section, whose header shows a chevron that points right while it is closed and down while it is open.
-  - Its settings have plain labels, each showing its value: Update rate (1 per second by default, from 0.25 to 4), Fade time (2 s, from 0.25 to 4 s), Blur (64 px, from 10 to 80 px), Strength in the dark theme (50%), Strength in the light theme (75%), and Saturation (100%, from 0 to 200%).
-  - A Reset to defaults button.
 - Hide player controls, a Settings tab entry in its Player controls section, kept per device:
   - Timeout, the default: the controls hide after a set time with no activity. Moving the mouse or tapping shows them and restarts the countdown. They stay visible while a mouse or pen pointer is over them, while the scrub bar or volume is being dragged, and while the bell's list, which WebUI Notifications adds, is open, and their countdown starts again when it closes. A touch doesn't count as a pointer over them.
   - While Timeout is chosen, two settings show under it: Hide after, 1 to 30 seconds and 3 by default, a setting's field of the field validation pattern, which WebUI Settings Panel adds (`createSettingField` and `SettingTextField`), saved on Enter or when the field is left; and Keep visible while paused, on by default.
@@ -503,43 +538,28 @@ Last milestone completed: M12h
   - Never: the controls stay visible.
   - In every mode, hidden controls can't be pressed, so the first tap or click on them only shows them.
   - With Timeout, a key press counts as activity and shows them, and keyboard focus on a control, focus that `:focus-visible` matches, keeps them shown. Focus that a tap or click leaves on a control doesn't, so after a tap on Play they still hide.
-- The player is also clipped by a rounded `clip-path: inset(0 round 8px)`, square in fullscreen and on a phone on its side, as in the mockup, so its corners stay rounded on iOS with ambient mode on.
-- Ambient mode and its settings, and Hide player controls and its two settings, survive a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
+- Hide player controls and its two settings survive a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
 
 #### Traps
 
-- Two layers crossfading by CSS opacity flickered slightly in the mockup (measured).
-- The flicker came from the black background showing through whenever a sample arrived before the last fade finished (inferred).
-- Drawing a cross-origin video taints the canvas (inferred).
-- In every served setup the media is same-origin, so a tainted canvas happens only in development, where the Vite dev server plays media from the server's other origin, as WebUI Volume and Enhanced Audio sets out (inferred).
-- Showing a tainted canvas still works, since the effect never reads its pixels back (inferred).
 - The controls start visible, and a click or tap on the player toggles them (`controlsVisible` in `src/ui/Player.tsx`, `toggleControls` in `src/playback/mediaGestures.ts`).
 - There is no timeout, and hidden controls can still be pressed, since only their container ignores the pointer (`.overlay-controls` in `src/styles.css`).
-- In Safari and Firefox on iOS, the player's rounded corners turned square once ambient mode drew, and stayed rounded with it off or on other devices (measured).
-- WebKit doesn't clip a layer of its own, such as the blurred ambient canvas, to its parent's rounded corners (inferred).
 - A tap on Play left focus on it, and the mockup's first version, which kept the controls shown for any focus on a control, then kept them up until the next tap elsewhere (measured).
 - happy-dom, which the WebUI's screen tests use, matches `:focus-visible` for any focus, including focus a tap leaves, so a test can't tell keyboard focus from a tap's by it; the mockup tracks the last input itself (measured).
 
 #### Acceptance
 
 - The fullscreen button shows the exit icon while the stage is in fullscreen or pseudo-fullscreen, in a test of the fullscreen button's icon.
-- With ambient mode on, a blurred, dimmed copy of the frame's colors fills the black space around a playing video and crossfades as the picture changes, and a photo gets one from the photo. Sampling stops while the video is paused or the tab is hidden. Off, the space is plain black in both themes. The light theme uses full color at its own strength, and a sample that arrives mid-fade never lets the black background show through. Shown by ambient mode tests for sampling at the update rate while a video plays, holding while it is paused or the tab is hidden, and a photo drawn once.
-- The Ambient mode settings section offers each setting with its default and range, shows each value, applies changes as they're made, and Reset to defaults restores the defaults, in ambient mode tests of each of its settings.
 - With Hide player controls on Timeout, the controls hide after the Hide after time with no activity, moving the mouse or tapping shows them and restarts the countdown, and they stay while a mouse or pen pointer is over them, while keyboard focus is on a control, while the scrub bar or volume is dragged, while the bell's list is open, and, with Keep visible while paused, while paused. A touch over them and focus a tap leaves on Play don't keep them shown. On click/tap toggles them on a click or tap, and Never keeps them visible. Hide after accepts 1 to 30 seconds. Hidden controls can't be pressed. Shown by controls tests for each Hide player controls mode, the countdown, and each thing that keeps the controls shown.
-- The player is clipped by the rounded `clip-path`, square in fullscreen and on a phone on its side, in a WebUI test.
-- After a page refresh, ambient mode and its settings, and Hide player controls and its two settings, are each as they were, in tests for a page refresh keeping each setting this milestone adds.
+- After a page refresh, Hide player controls and its two settings are each as they were, in tests for a page refresh keeping each setting this milestone adds.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and a spot check on the user's own browsers and phone, without the VM, including that with ambient mode on the player's corners stay rounded in Safari on iOS.
+- `npm run verify` passes, and a spot check on the user's own browsers and phone, without the VM.
 
-#### Release checks
-
-- Manual: On an iPhone and an iPad, in Safari and Firefox, with ambient mode on, the player's corners stay rounded.
-
-### M12i5 - WebUI Keyboard Shortcuts
+### M12i6 - WebUI Keyboard Shortcuts
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI has the desktop's keyboard shortcuts wherever a browser allows them, plus seek-step and frame-step keys and a shortcut reference.
-- **Depends on**: WebUI Settings Panel, WebUI Stats Panel, so every panel tab exists, and WebUI Volume and Enhanced Audio, whose volume its keys step, and WebUI Autoplay Modes, whose autoplay it toggles, and WebUI Player Controls and Ambient Mode, whose controls show on a key press.
+- **Depends on**: WebUI Settings Panel, WebUI Stats Panel, so every panel tab exists, and WebUI Volume and Enhanced Audio, whose volume its keys step, and WebUI Autoplay Modes, whose autoplay it toggles, and WebUI Player Controls, whose controls show on a key press.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
@@ -1821,7 +1841,7 @@ Last milestone completed: M12h
 
 - **Status**: ⏳ Planned
 - **Goal**: Every part of the WebUI works from the keyboard alone, and keyboard focus is always visible, in the brand orange.
-- **Depends on**: WebUI In-App Dialogs, WebUI Drag Reordering, WebUI Responsive Layout and Panels, WebUI Library Tab, WebUI Tags and Filter Tabs, WebUI Auto-Pause and Photo Scrub Bar, WebUI Notifications, WebUI Settings Panel, WebUI Admin Section, Log Viewer Redesign, Recovery Page and Operator Retirement, Admin Refresh, Backup, and Duplicate Review, Admin Source Management, Admin Library Catalog Transfer, WebUI Stats Panel, WebUI Volume and Enhanced Audio, WebUI Player Controls and Ambient Mode, WebUI Keyboard Shortcuts, Testing Suite Overhaul, WebUI Grid Row Reuse, and WebUI Multi-Select and Bulk Actions.
+- **Depends on**: WebUI In-App Dialogs, WebUI Drag Reordering, WebUI Responsive Layout and Panels, WebUI Library Tab, WebUI Tags and Filter Tabs, WebUI Auto-Pause and Photo Scrub Bar, WebUI Notifications, WebUI Settings Panel, WebUI Admin Section, Log Viewer Redesign, Recovery Page and Operator Retirement, Admin Refresh, Backup, and Duplicate Review, Admin Source Management, Admin Library Catalog Transfer, WebUI Stats Panel, WebUI Ambient Mode, WebUI Volume and Enhanced Audio, WebUI Player Controls, WebUI Keyboard Shortcuts, Testing Suite Overhaul, WebUI Grid Row Reuse, and WebUI Multi-Select and Bulk Actions.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
@@ -3112,7 +3132,7 @@ Last milestone completed: M12h
 
 - **Status**: ⏳ Planned
 - **Goal**: The desktop client, its packaging, and its tests are gone, and the WebUI is the only client.
-- **Depends on**: WebUI Volume and Enhanced Audio, WebUI Loudness Normalization, WebUI Autoplay Modes, WebUI Player Controls and Ambient Mode, WebUI Keyboard Shortcuts, WebUI Stats Panel, WebUI Settings Panel, Admin Refresh, Backup, and Duplicate Review, Show in File Manager from the WebUI, Admin Source Management, Admin Library Catalog Transfer, WebUI Multi-Select and Bulk Actions, and Browser-Playable Filter.
+- **Depends on**: WebUI Volume and Enhanced Audio, WebUI Loudness Normalization, WebUI Autoplay Modes, WebUI Player Controls, WebUI Keyboard Shortcuts, WebUI Stats Panel, WebUI Settings Panel, Admin Refresh, Backup, and Duplicate Review, Show in File Manager from the WebUI, Admin Source Management, Admin Library Catalog Transfer, WebUI Multi-Select and Bulk Actions, and Browser-Playable Filter.
 
 #### Decisions
 

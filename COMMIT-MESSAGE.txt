@@ -19,12 +19,8 @@ Instructions:
 
 Commit Message:
 
-M12h: Add the WebUI's Stats tab, opened from the header's file name
+Docs: Split ambient mode into its own milestone, next in line
 
-- The side panel gains a Stats tab, between Tags and Settings: the playing file's name, path, plays, the time before this play, favorite, blacklist, duration, audio, loudness, true peak, and tags in the catalog's category order, then the library's cards from `GET /api/library/stats`.
-- The header's file name opens the panel on the Stats tab with a click, Enter, or Space, and its tooltip adds "Show stats".
-- True peak reads the scan's dBTP, "Silent" for a track at the -70 LUFS floor without a peak, "Not measured", or "N/A" without audio; Last played reads "Just now" through "{n} days ago", from the play's event, held until its item starts when it comes first.
-- The tab loads only while it shows, and refreshes coalesce as the desktop's do: a 250 ms gather, one load at a time, and one more for requests during it. A failed first load and the server's own no-library or compatibility message show as one message in Library, in place of the cards, and a playing file no longer in the catalog shows only its name and path while the cards still load.
-- A tag catalog shared by the Tags, Filter, and Stats tabs keeps the last catalog loaded and follows catalog change events, so the Stats tab rarely loads it itself.
-- The design mockup's Peak row becomes True peak, its data and checks cover each audio case and Last played's units, and its Mockup tab gains a Stats load option for a failed load and a removed playing file.
-- M12h is complete: it moves to `MILESTONES-COMPLETED.md`, and its two Release checks go into the testing checklist's Release Specific Manual checks.
+- WebUI Player Controls and Ambient Mode becomes two entries: WebUI Ambient Mode, which takes the effect, its settings and Reset to defaults, the rounded `clip-path` for iOS, and the iOS corners release check, and depends only on WebUI Settings Panel; and WebUI Player Controls, which keeps Hide player controls and the fullscreen exit icon and its dependency on WebUI Volume and Enhanced Audio.
+- WebUI Ambient Mode is the next active milestone, M12i1, so WebUI Volume and Enhanced Audio through WebUI Keyboard Shortcuts become M12i2 to M12i6, and the Planned Releases outline follows.
+- WebUI Keyboard Shortcuts and Desktop Client Removal now depend on WebUI Player Controls, and WebUI Keyboard Navigation and Focus on both new entries.
