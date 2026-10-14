@@ -135,7 +135,50 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 Last milestone completed: M12i1
 
-### M12i2 - WebUI Volume and Enhanced Audio
+### M12i2 - WebUI Autoplay Modes
+
+- **Status**: ⏳ Planned
+- **Goal**: Autoplay has two modes, Normal and Timer, in place of the desktop's Keep Playing, and a looping photo no longer flickers.
+- **Depends on**: WebUI Settings Panel, whose Advance after setting both modes use, and WebUI Auto-Pause and Photo Scrub Bar, whose photo timer they drive.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- Autoplay gets two modes, replacing the desktop's separate Keep Playing, which plays a random item every N seconds until stopped (Playback → Keep Playing (Timer) and Set Interval):
+  - Normal: photos advance after the timer and videos play to the end, as autoplay does today.
+  - Timer: every item advances after the timer, including a video that has not finished. With loop on, a video shorter than the timer repeats until the timer advances. Pausing a video holds the timer.
+  - With loop on in Normal mode, the current item repeats and autoplay waits, as today.
+- Both modes use one timer, Advance after, the photo duration in the Settings tab, with its 1–300 seconds.
+- This milestone widens Advance after to the desktop's 1–3600 seconds, so a Keep Playing interval longer than five minutes still fits.
+- The mode and the timer sit together in the Settings tab, and the player's autoplay button still turns autoplay on and off.
+- A looping photo flickers at the end of each loop, because it is restarted by reloading its image, unlike a video, which seeks back. Keep the photo on screen and restart only its timer, both at the end of each loop and when Autoplay is turned on while a photo shows.
+- Turning Loop on or off while a photo shows keeps the photo on screen and keeps its time, as the mockup does: its timer runs on from where it was while Autoplay or Loop stays on; with both off, its timer stops.
+- A looping photo then records one play, as a looping video does, and the Player screen tests that count a play per loop change with it.
+- The autoplay mode survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
+
+#### Traps
+
+- The WebUI's video end handler and photo timer both skip advancing while loop is on.
+- Changing the timer while a photo shows already keeps the time shown and changes only the length, through the photo timer's `setLength` (`photoDurationChanged` in `src/playback/player.ts`), which WebUI Settings Panel added.
+- The photo timer calls `playCurrent`, which clears the photo's source and hides it, then loads it again, records a play, and relays a new start.
+- Turning Loop or Autoplay on while a photo shows goes through the same restart.
+
+#### Acceptance
+
+- In Normal mode, photos advance after the timer and videos play to the end. In Timer mode, every item advances after the timer, including an unfinished video, and a paused video holds it. Shown by autoplay tests for both modes with loop on and off and with a paused video.
+- With loop on in Timer mode, a video shorter than the timer repeats until the timer advances. With loop on in Normal mode, the current item repeats and does not advance. Shown by the same autoplay tests.
+- A looping photo does not flicker: it stays on screen with its image loaded at the end of each loop, and only its timer restarts, in a test that a looping photo keeps its image shown through each loop.
+- Turning Loop on or off while a photo shows keeps the photo on screen and keeps its time, in tests that turning Loop on and then off on a photo keeps its image shown and runs its timer on from where it was while Autoplay or Loop stays on, and stops it with both off.
+- The Settings tab shows the autoplay mode beside Advance after, which accepts 1 to 3600 seconds and starts from the value stored before this milestone, in a test for Advance after's new range.
+- After a page refresh, the autoplay mode is as it was, in a test for a page refresh keeping the mode.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check.
+
+#### Not included
+
+- Moving the photo duration into the Settings tab as Advance after, which is WebUI Settings Panel.
+
+### M12i3 - WebUI Volume and Enhanced Audio
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI has a volume control on every device, by slider, scroll wheel, and two-finger drag, through an Enhanced audio gain stage that also gives iPhone and iPad an in-app volume.
@@ -252,7 +295,7 @@ Last milestone completed: M12i1
 - Enhanced audio's description naming loudness normalization, which is WebUI Loudness Normalization.
 - The [ and ] volume keys, which is WebUI Keyboard Shortcuts.
 
-### M12i3 - WebUI Loudness Normalization
+### M12i4 - WebUI Loudness Normalization
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI evens out loudness between videos toward a target the user picks, without clipping, and its Night mode evens out loudness within a video, in every browser the WebUI supports.
@@ -429,49 +472,6 @@ Last milestone completed: M12i1
 - Removing the desktop's own normalization, which is Desktop Client Removal.
 - Peak measurement and the loudness rescan, which is WebUI Stats Panel.
 - Night mode settings beyond on and off.
-
-### M12i4 - WebUI Autoplay Modes
-
-- **Status**: ⏳ Planned
-- **Goal**: Autoplay has two modes, Normal and Timer, in place of the desktop's Keep Playing, and a looping photo no longer flickers.
-- **Depends on**: WebUI Settings Panel, whose Advance after setting both modes use, and WebUI Auto-Pause and Photo Scrub Bar, whose photo timer they drive.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Scope
-
-- Autoplay gets two modes, replacing the desktop's separate Keep Playing, which plays a random item every N seconds until stopped (Playback → Keep Playing (Timer) and Set Interval):
-  - Normal: photos advance after the timer and videos play to the end, as autoplay does today.
-  - Timer: every item advances after the timer, including a video that has not finished. With loop on, a video shorter than the timer repeats until the timer advances. Pausing a video holds the timer.
-  - With loop on in Normal mode, the current item repeats and autoplay waits, as today.
-- Both modes use one timer, Advance after, the photo duration in the Settings tab, with its 1–300 seconds.
-- This milestone widens Advance after to the desktop's 1–3600 seconds, so a Keep Playing interval longer than five minutes still fits.
-- The mode and the timer sit together in the Settings tab, and the player's autoplay button still turns autoplay on and off.
-- A looping photo flickers at the end of each loop, because it is restarted by reloading its image, unlike a video, which seeks back. Keep the photo on screen and restart only its timer, both at the end of each loop and when Autoplay is turned on while a photo shows.
-- Turning Loop on or off while a photo shows keeps the photo on screen and keeps its time, as the mockup does: its timer runs on from where it was while Autoplay or Loop stays on; with both off, its timer stops.
-- A looping photo then records one play, as a looping video does, and the Player screen tests that count a play per loop change with it.
-- The autoplay mode survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
-
-#### Traps
-
-- The WebUI's video end handler and photo timer both skip advancing while loop is on.
-- Changing the timer while a photo shows already keeps the time shown and changes only the length, through the photo timer's `setLength` (`photoDurationChanged` in `src/playback/player.ts`), which WebUI Settings Panel added.
-- The photo timer calls `playCurrent`, which clears the photo's source and hides it, then loads it again, records a play, and relays a new start.
-- Turning Loop or Autoplay on while a photo shows goes through the same restart.
-
-#### Acceptance
-
-- In Normal mode, photos advance after the timer and videos play to the end. In Timer mode, every item advances after the timer, including an unfinished video, and a paused video holds it. Shown by autoplay tests for both modes with loop on and off and with a paused video.
-- With loop on in Timer mode, a video shorter than the timer repeats until the timer advances. With loop on in Normal mode, the current item repeats and does not advance. Shown by the same autoplay tests.
-- A looping photo does not flicker: it stays on screen with its image loaded at the end of each loop, and only its timer restarts, in a test that a looping photo keeps its image shown through each loop.
-- Turning Loop on or off while a photo shows keeps the photo on screen and keeps its time, in tests that turning Loop on and then off on a photo keeps its image shown and runs its timer on from where it was while Autoplay or Loop stays on, and stops it with both off.
-- The Settings tab shows the autoplay mode beside Advance after, which accepts 1 to 3600 seconds and starts from the value stored before this milestone, in a test for Advance after's new range.
-- After a page refresh, the autoplay mode is as it was, in a test for a page refresh keeping the mode.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and one quick spot check.
-
-#### Not included
-
-- Moving the photo duration into the Settings tab as Advance after, which is WebUI Settings Panel.
 
 ### M12i5 - WebUI Player Controls
 

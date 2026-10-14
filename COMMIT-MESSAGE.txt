@@ -19,12 +19,8 @@ Instructions:
 
 Commit Message:
 
-M12i1: Add the WebUI's ambient mode, a glow of the picture's colors around it
+Docs: Move WebUI Autoplay Modes up to be the next milestone
 
-- Behind the player, a blurred, dimmed copy of the picture fills the black space around it. It is taken at the update rate into a tiny canvas that fades to each new copy from what it shows, so a copy arriving mid-fade never lets the black through. It holds while the video is paused or the tab is hidden, copies a photo once, and hides once the media fails.
-- The Settings tab's Appearance section has Ambient mode, on by default, and Ambient mode settings with Update rate, Fade time, Blur, a strength for each theme, Saturation, and Reset to defaults, kept on each device as `appearance.ambient` and `appearance.ambientSettings`.
-- The player keeps its rounded corners in every view, fullscreen and a phone on its side included, and is clipped by a rounded `clip-path` too, since WebKit doesn't clip the glow's layer to rounded corners alone.
-- The mockup keeps the player's corners rounded in every view and names its ambient sliders by their labels with their value as value text, as the WebUI does, with checks for both, and its overview no longer says the Mockup tab tunes ambient mode.
-- The milestone is complete and moves to MILESTONES-COMPLETED.md, and its Release checks, the iPad's rounded corners and its battery and warmth with ambient mode on, join the testing checklist's Manual checks.
-- Manual checks that asked for an iPhone ask for the iPad instead, in WebUI Volume and Enhanced Audio and the testing checklist.
-- CONTEXT.md, the domain inventory, and the changelog describe ambient mode.
+- WebUI Autoplay Modes becomes M12i2, ahead of WebUI Volume and Enhanced Audio, now M12i3, and WebUI Loudness Normalization, now M12i4, which keep their order.
+- Autoplay Modes depends only on completed milestones, and neither audio milestone depends on it, so the entries move unchanged apart from their IDs.
+- The Planned Releases outline already lists M12i2 to M12i4 in order, and the tracker stays at M12i1.
