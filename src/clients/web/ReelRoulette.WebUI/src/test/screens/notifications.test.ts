@@ -57,7 +57,7 @@ async function mountWithServices(server = new FakeServer()): Promise<AppServices
   return services;
 }
 
-/** Keeps popup settings on this device, as the Settings tab will, before the page reads them. */
+/** Keeps popup settings on this device, as the Settings tab does, before the page reads them. */
 function keepSettings(settings: Partial<Omit<PopupSettings, "kinds">> & { kinds?: Partial<PopupSettings["kinds"]> }): void {
   localStorage.setItem(`rr_device.${POPUP_SETTINGS_KEY}`, JSON.stringify(settings));
 }

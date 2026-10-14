@@ -20,7 +20,7 @@ export type PopupPosition = "bottom-center" | "bottom-left" | "bottom-right" | "
 
 export const POPUP_POSITIONS: readonly PopupPosition[] = ["bottom-center", "bottom-left", "bottom-right", "top-center", "top-left", "top-right"];
 
-/** What pops up, where, and for how long, kept per device. WebUI Settings Panel's Notifications section sets them. */
+/** What pops up, where, and for how long, kept per device. The Settings tab's Notifications section sets them. */
 export interface PopupSettings {
   popups: boolean;
   kinds: Record<NotificationKind, boolean>;
@@ -42,6 +42,17 @@ export const DEFAULT_POPUP_SETTINGS: Readonly<PopupSettings> = {
 /** The per-device store's key for the popup settings. */
 export const POPUP_SETTINGS_KEY = "notifications.popups";
 
+/** A change to the popup settings: the settings it names, and the kinds it names, each in turn. */
+export type PopupSettingsChange = Partial<Omit<PopupSettings, "kinds">> & { kinds?: Partial<Record<NotificationKind, boolean>> };
+
+/** The sample popup's key, so a second sample replaces the one showing. */
+export const SAMPLE_POPUP_KEY = "preview";
+
+/** The sample popup's second line, for a popup time of `seconds`. */
+export function samplePopupDetail(seconds: number): string {
+  return `For ${seconds} seconds, unless you point at one or close it.`;
+}
+
 /** How many messages the list keeps, for the page's life. */
 export const NOTIFICATIONS_KEPT = 50;
 
@@ -60,8 +71,8 @@ export const LIST_TIME_REFRESH_MS = 30_000;
 /** A message the list keeps. */
 export interface NotificationEntry {
   id: number;
-  /** A notice the list keeps reads as "notice". */
-  kind: NotificationKind | "notice";
+  /** A notice the list keeps reads as "notice", and the sample popup, which the list never keeps, as "sample". */
+  kind: NotificationKind | "notice" | "sample";
   icon: string;
   text: string;
   /** A second line, such as the file name, or empty. */
@@ -133,6 +144,16 @@ export interface Notifications {
   dismissAll(): void;
   /** A mouse or pen points at a popup, or keyboard focus is in it: its time pauses while either holds. */
   hold(id: number, cause: "pointer" | "focus", held: boolean): void;
+  /**
+   * Changes the popup settings, keeps them on this device, and applies them at once: the popups' position, and for the
+   * next message, whether and for which kinds popups show, in fullscreen too, and for how long. Popups showing stay.
+   */
+  updateSettings(change: PopupSettingsChange): void;
+  /**
+   * Shows the sample popup where popups show and for as long, as a change to the position or the time does. The list
+   * doesn't keep it, the badge doesn't count it, and nothing is relayed; a second one replaces the one showing.
+   */
+  preview(): void;
 }
 
 export interface NotificationsOptions {
@@ -409,6 +430,28 @@ export function createNotifications(options: NotificationsOptions): Notification
       } else if (time.holds.delete(cause)) {
         run(id);
       }
+    },
+
+    updateSettings(change) {
+      const current = settings.peek();
+      const next: PopupSettings = { ...current, ...change, kinds: { ...current.kinds, ...change.kinds } };
+      settings.value = next;
+      options.device.write(POPUP_SETTINGS_KEY, next);
+    },
+
+    preview() {
+      const entry: NotificationEntry = {
+        id: ++lastId,
+        kind: "sample",
+        icon: "notifications",
+        text: "Popups show here.",
+        detail: samplePopupDetail(settings.peek().seconds),
+        warning: false,
+        time: now(),
+        unread: false,
+        highlight: false
+      };
+      show(entry, SAMPLE_POPUP_KEY);
     }
   };
 }

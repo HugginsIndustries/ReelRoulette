@@ -88,6 +88,10 @@ These need a person, real devices, or the Windows VM.
 - [ ] In both themes on a phone and a desktop browser, the scrub bar and checkboxes are orange, the player's time is white, and the scrub bar moves smoothly on a video and fills smoothly on a photo with Autoplay on.
 - [ ] With the server stopped, unavailable, or mismatched, and during a refresh, the player's indicator settles on one state.
 - [ ] On a phone and an iPad, popups, the bell, and its list show and work in the browser, in fullscreen, and on a phone on its side.
+- [ ] On a desktop browser and a phone, and as an installed app, every remembered setting is kept after a refresh and a browser restart, and the library search starts empty.
+- [ ] As an installed app on iOS and Android, in the light and the dark theme, the status bar's text reads against the page.
+- [ ] On a phone and an iPad, the field validation pattern's red icons, its tooltip, and a setting's saved check fade in and out, and with Reduce Motion on they show and hide at once.
+- [ ] On a phone and an iPad, the sample popup shows at each of the six positions, clear of the player's controls and the indicator.
 
 ## Release Flow
 

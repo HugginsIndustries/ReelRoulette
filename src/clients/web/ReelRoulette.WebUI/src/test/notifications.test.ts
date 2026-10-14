@@ -8,6 +8,7 @@ import {
   POPUP_LEAVE_MS,
   POPUP_SETTINGS_KEY,
   readPopupSettings,
+  SAMPLE_POPUP_KEY,
   timeAgo
 } from "../notifications/notifications";
 import { createDeviceStore } from "../state/deviceStore";
@@ -269,5 +270,59 @@ describe("notifications", () => {
     on.inFullscreen.value = true;
     on.notes.notify({ kind: "actions", text: "Paired." });
     expect(on.shown()).toEqual(["Filters applied.", "Paired."]);
+  });
+
+  it("changes the popup settings named, a kind at a time, keeps them all on this device, and applies them to the next message", () => {
+    const values = new Map<string, string>();
+    const device = createDeviceStore({ getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) });
+    const notes = createNotifications({ relay: () => {}, device, inFullscreen: signal(false) });
+    const shown = () => notes.popups.value.filter((popup) => !popup.leaving).map((popup) => popup.entry.text);
+    notes.notify({ kind: "actions", text: "Filters applied." });
+
+    notes.updateSettings({ kinds: { actions: false } });
+    notes.updateSettings({ position: "top-left", seconds: 10 });
+    const expected = { ...DEFAULT_POPUP_SETTINGS, kinds: { ...DEFAULT_POPUP_SETTINGS.kinds, actions: false }, position: "top-left", seconds: 10 };
+    expect(notes.settings.value).toEqual(expected);
+    expect(JSON.parse(values.get(`rr_device.${POPUP_SETTINGS_KEY}`)!)).toEqual(expected);
+    expect(readPopupSettings(device)).toEqual(expected);
+    // The popup showing stays.
+    expect(shown()).toEqual(["Filters applied."]);
+
+    notes.notify({ kind: "actions", text: "Paired." });
+    notes.notify({ kind: "connection", text: "Reconnected." });
+    expect(shown()).toEqual(["Filters applied.", "Reconnected."]);
+    vi.advanceTimersByTime(9_999);
+    expect(notes.popups.value.find((popup) => popup.entry.text === "Reconnected.")?.leaving).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(notes.popups.value.find((popup) => popup.entry.text === "Reconnected.")?.leaving).toBe(true);
+
+    notes.updateSettings({ popups: false });
+    notes.notify({ kind: "connection", text: "Reconnected." });
+    expect(notes.popups.value.filter((popup) => !popup.leaving)).toHaveLength(0);
+  });
+
+  it("shows a sample popup for the popup time, which a second one replaces, and which the list, the badge, and the log never get", () => {
+    const { notes, relayed, shown } = setup();
+    notes.preview();
+    expect(notes.popups.value).toHaveLength(1);
+    expect(notes.popups.value[0]).toMatchObject({
+      key: SAMPLE_POPUP_KEY,
+      entry: { kind: "sample", icon: "notifications", text: "Popups show here.", detail: "For 5 seconds, unless you point at one or close it.", warning: false }
+    });
+    expect(notes.entries.value).toEqual([]);
+    expect(notes.unread.value).toBe(0);
+    expect(relayed).toEqual([]);
+
+    vi.advanceTimersByTime(2_000);
+    notes.updateSettings({ seconds: 3 });
+    notes.preview();
+    expect(shown()).toEqual(["Popups show here."]);
+    expect(notes.popups.value[0]!.entry.detail).toBe("For 3 seconds, unless you point at one or close it.");
+    // Its time starts over at the new length.
+    vi.advanceTimersByTime(2_999);
+    expect(shown()).toEqual(["Popups show here."]);
+    vi.advanceTimersByTime(1);
+    expect(shown()).toEqual([]);
+    expect(notes.entries.value).toEqual([]);
   });
 });

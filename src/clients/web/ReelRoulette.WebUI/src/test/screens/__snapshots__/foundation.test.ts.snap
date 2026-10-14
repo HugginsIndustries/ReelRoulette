@@ -238,6 +238,99 @@ exports[`page structure > keeps the starting markup 1`] = `
                     "Show file names on tiles"
                 <p class="setting-hint" id="settings-tile-names-hint">
                   "Hovering a tile shows its name either way."
+            <section aria-labelledby="settings-notifications-heading" class="settings-section">
+              <h3 id="settings-notifications-heading">
+                "Notifications"
+              <div class="setting">
+                <div class="choice-row">
+                  <label>
+                    <input aria-describedby="settings-popups-hint" id="settings-popups" type="checkbox">
+                    "Show popups"
+                <p class="setting-hint" id="settings-popups-hint">
+                  "Short messages over the player. The bell on the player lists them either way."
+                <details class="setting-more" id="settings-popups-more">
+                  <summary>
+                    <span aria-hidden="true" class="material-symbol-icon setting-more-chevron">
+                      "chevron_right"
+                    "Popup settings"
+                  <fieldset class="setting-fields">
+                    <span class="setting-label" id="settings-popup-kinds-label">
+                      "Show popups for"
+                    <div aria-labelledby="settings-popup-kinds-label" class="choice-stack" role="group">
+                      <label>
+                        <input aria-describedby="settings-popup-kinds-actions-description" aria-labelledby="settings-popup-kinds-actions" name="settings-popup-kinds" type="checkbox" value="actions">
+                        <span>
+                          <span id="settings-popup-kinds-actions">
+                            "Your actions"
+                          <small id="settings-popup-kinds-actions-description">
+                            "Such as Added to favorites, Filters applied, and Path copied."
+                      <label>
+                        <input aria-describedby="settings-popup-kinds-devices-description" aria-labelledby="settings-popup-kinds-devices" name="settings-popup-kinds" type="checkbox" value="devices">
+                        <span>
+                          <span id="settings-popup-kinds-devices">
+                            "Other devices"
+                          <small id="settings-popup-kinds-devices-description">
+                            "Favorites and blacklist changes made on another device."
+                      <label>
+                        <input aria-describedby="settings-popup-kinds-refresh-description" aria-labelledby="settings-popup-kinds-refresh" name="settings-popup-kinds" type="checkbox" value="refresh">
+                        <span>
+                          <span id="settings-popup-kinds-refresh">
+                            "Library refresh"
+                          <small id="settings-popup-kinds-refresh-description">
+                            "When a refresh finishes or fails."
+                      <label>
+                        <input aria-describedby="settings-popup-kinds-skips-description" aria-labelledby="settings-popup-kinds-skips" name="settings-popup-kinds" type="checkbox" value="skips">
+                        <span>
+                          <span id="settings-popup-kinds-skips">
+                            "Skipped files"
+                          <small id="settings-popup-kinds-skips-description">
+                            "When playback skips a missing file or one this browser can't play."
+                      <label>
+                        <input aria-describedby="settings-popup-kinds-connection-description" aria-labelledby="settings-popup-kinds-connection" name="settings-popup-kinds" type="checkbox" value="connection">
+                        <span>
+                          <span id="settings-popup-kinds-connection">
+                            "Connection"
+                          <small id="settings-popup-kinds-connection-description">
+                            "When the connection to the server comes back, or the library can't load more."
+                    <label class="setting-label" for="settings-popup-position">
+                      "Position"
+                    <select class="ctl" id="settings-popup-position">
+                      <option value="bottom-center">
+                        "Bottom center"
+                      <option value="bottom-left">
+                        "Bottom left"
+                      <option value="bottom-right">
+                        "Bottom right"
+                      <option value="top-center">
+                        "Top center"
+                      <option value="top-left">
+                        "Top left"
+                      <option value="top-right">
+                        "Top right"
+                    <div class="choice-row">
+                      <label>
+                        <input id="settings-popup-fullscreen" type="checkbox">
+                        "Show in fullscreen"
+                    <span class="setting-label" id="settings-popup-time-label">
+                      "Show for"
+                    <div aria-labelledby="settings-popup-time-label" class="choice-row" role="radiogroup">
+                      <label>
+                        <input aria-labelledby="settings-popup-time-3" name="settings-popup-time" type="radio" value="3">
+                        <span>
+                          <span id="settings-popup-time-3">
+                            "3 seconds"
+                      <label>
+                        <input aria-labelledby="settings-popup-time-5" name="settings-popup-time" type="radio" value="5">
+                        <span>
+                          <span id="settings-popup-time-5">
+                            "5 seconds"
+                      <label>
+                        <input aria-labelledby="settings-popup-time-10" name="settings-popup-time" type="radio" value="10">
+                        <span>
+                          <span id="settings-popup-time-10">
+                            "10 seconds"
+                    <p class="setting-hint">
+                      "Pointing at a popup keeps it. A warning stays until you close it."
             <section aria-labelledby="settings-panel-heading" class="settings-section">
               <h3 id="settings-panel-heading">
                 "Panel"
@@ -328,5 +421,10 @@ exports[`page structure > keeps the starting markup 1`] = `
           <ul class="notify-entries">
           <p class="notify-empty">
             "No notifications yet."
+      <div class="notify-foot">
+        <button class="btn" data-act="settings" type="button">
+          <span aria-hidden="true" class="material-symbol-icon">
+            "settings"
+          "Notification settings"
 "
 `;

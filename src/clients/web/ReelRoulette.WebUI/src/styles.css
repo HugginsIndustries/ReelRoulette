@@ -817,7 +817,10 @@ body {
 .notify-head h2 { margin: 0; font-size: 1.05rem; flex: 1 1 auto; }
 /* The heading takes focus as the list opens, as the mockup does, without a ring. */
 .notify-head h2:focus { outline: none; }
-.notify-head .btn { min-height: 36px; padding: 4px 10px; font-size: 0.9rem; }
+.notify-head .btn, .notify-foot .btn { min-height: 36px; padding: 4px 10px; font-size: 0.9rem; }
+.notify-foot .btn .material-symbol-icon { font-size: 20px; }
+/* Notification settings, at the list's foot. */
+.notify-foot { display: flex; justify-content: flex-end; padding: 6px 8px; border-top: 1px solid var(--surface-border); flex: 0 0 auto; }
 .notify-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; }
 .notify-group-title { margin: 0; padding: 8px 14px 2px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-fg); }
 .notify-entries { list-style: none; margin: 0; padding: 0; }
@@ -1014,6 +1017,22 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
 .choice-stack label input { margin-top: 3px; }
 .choice-stack small { display: block; color: var(--muted-fg); font-size: 0.82rem; }
 .number-field { width: 8rem; }
+/* An expandable group of a setting's own options, such as Popup settings, opened from its summary. */
+.setting-more { margin: 6px 0 0 26px; }
+.setting-more summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; gap: 4px; font-size: 0.9rem; list-style: none; }
+.setting-more summary::-webkit-details-marker { display: none; }
+/* The chevron points right while the group is closed and down while it is open. */
+.setting-more-chevron { font-size: 22px; transition: transform 0.15s ease; }
+.setting-more[open] .setting-more-chevron { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) {
+  .setting-more-chevron { transition: none; }
+}
+/* A setting's own fields in its expandable group, disabled together while the setting can't apply. */
+.setting-fields { border: 0; margin: 0; padding: 4px 0 0; min-width: 0; display: grid; gap: 4px; }
+.setting-fields .setting-label { margin: 4px 0 0; font-weight: 400; font-size: 0.88rem; }
+.setting-fields:disabled, .choice-row label:has(input:disabled) { opacity: 0.55; }
+.setting-fields:disabled .choice-row label:has(input:disabled) { opacity: 1; }
+#settings-popup-position { justify-self: start; min-width: 12rem; }
 /* Diagnostics: the ids and the device name in full, wrapping anywhere, since they are for matching `last.log` lines. */
 .diag { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 0.9rem; }
 .diag dd { margin: 0; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8rem; word-break: break-all; }

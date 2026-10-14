@@ -30,7 +30,7 @@ export function advanceAfterProblem(text: string): FieldProblem | null {
 /**
  * The Settings tab's settings that no other part of the page keeps: the Auto-Pause mode, the theme, and whether tiles
  * show their file names. Each applies as it changes and is kept on this device. The panel keeps its side, the store
- * Advance after, and the player its buttons' state.
+ * Advance after, the player its buttons' state, and the notifications service the popup settings.
  */
 export interface Settings {
   readonly autoPauseMode: ReadonlySignal<AutoPauseMode>;
@@ -41,6 +41,12 @@ export interface Settings {
   /** Tiles show their file names, off by default; a tile's tooltip names it either way. */
   readonly tileNames: ReadonlySignal<boolean>;
   setTileNames(on: boolean): void;
+  /**
+   * Counts the requests to show the popup settings, which the bell's list's Notification settings makes: each one new,
+   * so asking again shows them again. The Settings tab opens Popup settings and moves to Show popups for each.
+   */
+  readonly popupSettingsRequest: ReadonlySignal<number>;
+  revealPopupSettings(): void;
 }
 
 export function createSettings(options: { device: DeviceStore }): Settings {
@@ -48,6 +54,7 @@ export function createSettings(options: { device: DeviceStore }): Settings {
   const autoPauseMode = signal(device.read(AUTO_PAUSE_KEY, DEFAULT_AUTO_PAUSE_MODE, isAutoPauseMode));
   const theme = signal(device.read(THEME_KEY, DEFAULT_THEME_CHOICE, isThemeChoice));
   const tileNames = signal(device.read(TILE_NAMES_KEY, false, (value): value is boolean => typeof value === "boolean"));
+  const popupSettingsRequest = signal(0);
   return {
     autoPauseMode,
     setAutoPauseMode(mode) {
@@ -63,6 +70,10 @@ export function createSettings(options: { device: DeviceStore }): Settings {
     setTileNames(on) {
       tileNames.value = on;
       device.write(TILE_NAMES_KEY, on);
+    },
+    popupSettingsRequest,
+    revealPopupSettings() {
+      popupSettingsRequest.value += 1;
     }
   };
 }

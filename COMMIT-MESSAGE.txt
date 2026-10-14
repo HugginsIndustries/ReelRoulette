@@ -19,9 +19,9 @@ Instructions:
 
 Commit Message:
 
-M12g: Add the Settings tab's Appearance section with Theme and file names on tiles
+M12g: Add the Settings tab's Notifications section and the bell list's link to it
 
-- Theme offers System, the default, Dark, and Light, kept per device; System follows the system's scheme as it changes, and Dark or Light holds.
-- The `theme-color` meta and the installed app's status bar style follow the theme in use, `default` in the light theme for dark status bar text, and an inline script in `index.html` applies the kept theme while the page loads, before it paints and before iOS reads the status bar style; a test runs it case by case against `src/settings/theme.ts`, and the build output check confirms the built page keeps it.
-- Show file names on tiles is off by default and kept per device; a class on the Library tab shows the name bars without rendering the tiles again, and each tile's tooltip names it either way.
-- The test harness runs as a dark-scheme device and clears the theme between tests, and the header's logo tests choose their theme as the Settings tab keeps it.
+- The Settings tab's Notifications section sets the popup settings: Show popups, and Popup settings, closed at first and disabled while Show popups is off, with the five kinds, Position, Show in fullscreen, and Show for, worded as in the mockup.
+- Each popup setting applies at once and is kept per device; changing the position or the time shows a sample popup there, which a second one replaces and which the list, the badge, and `last.log` never get.
+- The bell's list gains Notification settings, which closes it and opens the Settings tab at Show popups with Popup settings open.
+- M12g is complete: it moves to `MILESTONES-COMPLETED.md`, and its four Release checks go into the testing checklist's Release Specific Manual checks.

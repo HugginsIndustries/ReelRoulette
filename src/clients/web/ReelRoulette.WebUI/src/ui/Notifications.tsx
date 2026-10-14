@@ -186,10 +186,10 @@ function entryClass(entry: NotificationEntry): string {
  * active lasting state with its full text, and Recent the messages kept, newest first, with their times. It lines up
  * with the bell's left edge, or its right edge when the bell is in the right half of the window. It closes on its Close,
  * the bell, Escape, a press outside it, or the panel opening; Escape comes to it before anything else, except while an
- * in-app dialog is open.
+ * in-app dialog is open. Its Notification settings opens the Settings tab at Show popups with Popup settings open.
  */
 export function NotificationList() {
-  const { notifications, store } = useApp();
+  const { notifications, store, panel, settings } = useApp();
   const list = useRef<HTMLElement>(null);
   const open = notifications.listOpen.value;
 
@@ -250,6 +250,13 @@ export function NotificationList() {
     listTitle()?.focus({ preventScroll: true });
   }
 
+  // Focus goes to Show popups, not back to the bell.
+  async function openSettings(): Promise<void> {
+    notifications.closeList();
+    await panel.showTab("settings");
+    settings.revealPopupSettings();
+  }
+
   const now: ListRow[] = open
     ? activeLastingStates(store).map((state) => ({
         key: state.id,
@@ -300,6 +307,12 @@ export function NotificationList() {
           </ul>
           <p class="notify-empty" hidden={recent.length > 0 || now.length > 0}>No notifications yet.</p>
         </div>
+      </div>
+      <div class="notify-foot">
+        <button type="button" class="btn" data-act="settings" onClick={() => void openSettings()}>
+          <span class="material-symbol-icon" aria-hidden="true">settings</span>
+          Notification settings
+        </button>
       </div>
     </section>
   );

@@ -169,11 +169,11 @@ describe("the Settings tab", () => {
     expect(tab("Settings").getAttribute("aria-selected")).toBe("true");
   });
 
-  it("shows Playback, Appearance, Panel, and Diagnostics, in that order, then says settings apply at once, with no Save", async () => {
+  it("shows Playback, Appearance, Notifications, Panel, and Diagnostics, in that order, then says settings apply at once, with no Save", async () => {
     await mount();
     await openSettings();
     const headings = within(settingsPage()).getAllByRole("heading", { level: 3 });
-    expect(headings.map((heading) => heading.textContent)).toEqual(["Playback", "Appearance", "Panel", "Diagnostics"]);
+    expect(headings.map((heading) => heading.textContent)).toEqual(["Playback", "Appearance", "Notifications", "Panel", "Diagnostics"]);
     expect(within(settingsPage()).getByText("Settings apply at once and are kept on this device.")).toBeTruthy();
     expect(within(settingsPage()).queryAllByRole("button")).toHaveLength(0);
   });
@@ -794,7 +794,197 @@ describe("Show file names on tiles", () => {
   });
 });
 
+function checkbox(name: string): HTMLInputElement {
+  return within(settingsPage()).getByRole("checkbox", { name, hidden: true }) as HTMLInputElement;
+}
+
+function popupSettings(): HTMLDetailsElement {
+  return document.getElementById("settings-popups-more") as HTMLDetailsElement;
+}
+
+function positionSelect(): HTMLSelectElement {
+  return within(settingsPage()).getByRole("combobox", { name: "Position", hidden: true }) as HTMLSelectElement;
+}
+
+/** The popup settings' controls inside Popup settings: the five kinds, Position, Show in fullscreen, and Show for. */
+function popupSettingControls(): HTMLElement[] {
+  return Array.from(popupSettings().querySelectorAll<HTMLElement>("fieldset input, fieldset select"));
+}
+
+/** The popups showing, each as its text and second line, leaving out any that are fading out. */
+function popupsShown(): string[] {
+  return Array.from(document.querySelectorAll<HTMLElement>("#toasts .toast:not(.is-leaving)")).map((toast) =>
+    Array.from(toast.querySelectorAll(".toast-text > div")).map((line) => line.textContent).join(" | ")
+  );
+}
+
+function bell(): HTMLButtonElement {
+  return document.getElementById("notify-btn") as HTMLButtonElement;
+}
+
+function keptPopupSettings(): unknown {
+  const raw = localStorage.getItem("rr_device.notifications.popups");
+  return raw === null ? null : JSON.parse(raw);
+}
+
+const SAMPLE = "Popups show here.";
+
+describe("Notifications", () => {
+  it("starts with popups on for every kind, at the bottom center, in fullscreen, for 5 seconds, with Popup settings closed", async () => {
+    await mount();
+    await openSettings();
+    expect(checkbox("Show popups").checked).toBe(true);
+    expect(document.getElementById(checkbox("Show popups").getAttribute("aria-describedby")!)!.textContent).toBe(
+      "Short messages over the player. The bell on the player lists them either way."
+    );
+    expect(popupSettings().open).toBe(false);
+
+    await click(popupSettings().querySelector("summary")!);
+    expect(popupSettings().open).toBe(true);
+    const kinds = within(settingsPage()).getByRole("group", { name: "Show popups for", hidden: true });
+    expect(within(kinds).getAllByRole("checkbox", { hidden: true }).map((box) => [box.getAttribute("value"), (box as HTMLInputElement).checked])).toEqual([
+      ["actions", true],
+      ["devices", true],
+      ["refresh", true],
+      ["skips", true],
+      ["connection", true]
+    ]);
+    expect(Array.from(positionSelect().options).map((option) => [option.value, option.textContent])).toEqual([
+      ["bottom-center", "Bottom center"],
+      ["bottom-left", "Bottom left"],
+      ["bottom-right", "Bottom right"],
+      ["top-center", "Top center"],
+      ["top-left", "Top left"],
+      ["top-right", "Top right"]
+    ]);
+    expect(positionSelect().value).toBe("bottom-center");
+    expect(checkbox("Show in fullscreen").checked).toBe(true);
+    expect(radio("5 seconds").checked).toBe(true);
+    expect(keptPopupSettings()).toBeNull();
+  });
+
+  it("applies each popup setting at once and keeps it, as the next message shows", async () => {
+    const server = new FakeServer();
+    server.on("POST", "/api/random", () => json(VIDEO_ITEM));
+    server.on("POST", "/api/favorite", () => json({}));
+    await mount(server);
+    await click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
+    await openSettings();
+    await click(popupSettings().querySelector("summary")!);
+
+    // Your actions off: a favorite goes only to the list, and the bell counts it.
+    await click(checkbox("Your actions"));
+    expect(keptPopupSettings()).toMatchObject({ kinds: { actions: false, devices: true } });
+    await click(playerButton("Favorite"));
+    await waitFor(() => expect(bell().getAttribute("aria-label")).toBe("Notifications, 1 unread"));
+    expect(popupsShown()).toEqual([]);
+
+    // Back on, it pops up again.
+    await click(checkbox("Your actions"));
+    await click(playerButton("Favorite"));
+    await waitFor(() => expect(popupsShown()).toEqual(["Removed from favorites | clip 1.mp4"]));
+
+    fireEvent.change(positionSelect(), { target: { value: "top-right" } });
+    await settle();
+    expect(document.getElementById("toasts")!.dataset.pos).toBe("top-right");
+    await click(checkbox("Show in fullscreen"));
+    await click(radio("10 seconds"));
+    expect(keptPopupSettings()).toMatchObject({ position: "top-right", fullscreen: false, seconds: 10 });
+
+    // Show popups off: nothing pops up, and the list keeps it.
+    await click(checkbox("Show popups"));
+    await click(playerButton("Favorite"));
+    await waitFor(() => expect(bell().getAttribute("aria-label")).toBe("Notifications, 2 unread"));
+    expect(popupsShown().filter((popup) => popup.startsWith("Added to favorites"))).toEqual([]);
+    expect(keptPopupSettings()).toMatchObject({ popups: false });
+  });
+
+  it("disables Popup settings' controls while Show popups is off", async () => {
+    await mount();
+    await openSettings();
+    await click(popupSettings().querySelector("summary")!);
+    const fieldset = popupSettings().querySelector("fieldset")!;
+    expect(popupSettingControls()).toHaveLength(10);
+
+    await click(checkbox("Show popups"));
+    expect(fieldset.disabled).toBe(true);
+    expect(popupSettingControls().map((control) => (control as HTMLInputElement).disabled)).toEqual(Array(10).fill(true));
+
+    await click(checkbox("Show popups"));
+    expect(fieldset.disabled).toBe(false);
+    expect(popupSettingControls().map((control) => (control as HTMLInputElement).disabled)).toEqual(Array(10).fill(false));
+  });
+
+  it("shows one sample popup where and for as long as a Position or Show for change says, which the list, the bell, and the log never get", async () => {
+    const page = await mount();
+    await openSettings();
+    await click(popupSettings().querySelector("summary")!);
+
+    fireEvent.change(positionSelect(), { target: { value: "top-left" } });
+    await settle();
+    expect(document.getElementById("toasts")!.dataset.pos).toBe("top-left");
+    expect(popupsShown()).toEqual([`${SAMPLE} | For 5 seconds, unless you point at one or close it.`]);
+
+    await click(radio("3 seconds"));
+    expect(popupsShown()).toEqual([`${SAMPLE} | For 3 seconds, unless you point at one or close it.`]);
+
+    expect(bell().getAttribute("aria-label")).toBe("Notifications");
+    expect(page.server.logLines().some((line) => line.includes(SAMPLE))).toBe(false);
+    await click(bell());
+    expect(within(document.getElementById("notify-list")!).queryByText(SAMPLE)).toBeNull();
+  });
+
+  it("opens from the bell's list at Show popups, with Popup settings open, closing the list", async () => {
+    await mount();
+    await click(tab("Library"));
+    await click(bell());
+    const list = document.getElementById("notify-list")!;
+    expect(list.hidden).toBe(false);
+
+    await click(within(list).getByRole("button", { name: "Notification settings" }));
+    expect(list.hidden).toBe(true);
+    expect(settingsPage().hidden).toBe(false);
+    expect(tab("Settings").getAttribute("aria-selected")).toBe("true");
+    expect(popupSettings().open).toBe(true);
+    expect(document.activeElement).toBe(checkbox("Show popups"));
+
+    // Again, after Popup settings was closed, from a closed panel.
+    await click(popupSettings().querySelector("summary")!);
+    expect(popupSettings().open).toBe(false);
+    closePanel();
+    await settle();
+    await click(bell());
+    await click(within(list).getByRole("button", { name: "Notification settings" }));
+    expect(settingsPage().hidden).toBe(false);
+    expect(popupSettings().open).toBe(true);
+    expect(document.activeElement).toBe(checkbox("Show popups"));
+  });
+});
+
 describe("kept on this device", () => {
+  it("keeps every popup setting after a page refresh", async () => {
+    const page = await mount();
+    await openSettings();
+    await click(popupSettings().querySelector("summary")!);
+    await click(checkbox("Other devices"));
+    fireEvent.change(positionSelect(), { target: { value: "bottom-right" } });
+    await settle();
+    await click(checkbox("Show in fullscreen"));
+    await click(radio("3 seconds"));
+    await click(checkbox("Show popups"));
+    page.unmount();
+
+    await mount();
+    expect(document.getElementById("toasts")!.dataset.pos).toBe("bottom-right");
+    await openSettings();
+    expect(checkbox("Show popups").checked).toBe(false);
+    expect(checkbox("Other devices").checked).toBe(false);
+    expect(checkbox("Your actions").checked).toBe(true);
+    expect(positionSelect().value).toBe("bottom-right");
+    expect(checkbox("Show in fullscreen").checked).toBe(false);
+    expect(radio("3 seconds").checked).toBe(true);
+  });
+
   it("keeps the theme and Show file names on tiles after a page refresh", async () => {
     const page = await mount();
     await openSettings();
@@ -846,6 +1036,7 @@ describe("kept on this device", () => {
     await click(radio("Always"));
     await click(radio("Light"));
     await click(tileNamesBox());
+    await click(checkbox("Show popups"));
     await click(playerButton("Autoplay"));
     await click(playerButton("Loop"));
     await click(playerButton("Mute"));
@@ -854,6 +1045,7 @@ describe("kept on this device", () => {
     expect(storageKeys().filter((key) => !keysBefore.includes(key))).toEqual([
       "rr_device.appearance.theme",
       "rr_device.appearance.tileNames",
+      "rr_device.notifications.popups",
       "rr_device.panel.autoPause",
       "rr_device.panel.side",
       "rr_device.playback.advanceAfter",
