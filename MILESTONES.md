@@ -137,25 +137,16 @@ Last milestone completed: M12f8
 
 ### M12g - WebUI Settings Panel
 
-- **Status**: ⏳ Planned
+- **Status**: 🚧 In Progress
 - **Goal**: The WebUI side panel has a Settings tab for per-device preferences and diagnostics.
 - **Depends on**: WebUI Responsive Layout and Panels, WebUI Field Validation Pattern, and WebUI Library Tab, whose tiles Show file names on tiles changes, and WebUI Auto-Pause and Photo Scrub Bar, whose Auto-Pause mode it sets, and WebUI Notifications, whose popup settings its Notifications section sets.
 - **Design**: `docs/mockups/reelroulette/`.
 
-#### Scope
+#### Decisions
 
-- The Settings tab joins the side panel's tab row.
-- The header has no settings icon, since the tab row reaches the Settings tab. WebUI Responsive Layout and Panels already leaves it out.
-- The diagnostics information shows in the Settings tab.
 - Client settings live in the Settings tab, all kept per device.
-- Advance after is today's photo duration, renamed, and it leaves the header. It keeps today's 1–300 seconds.
-- The panel's side setting chooses the side the panel opens on, with options reading Left, then Right, matching the sides.
-- The player's panel button sits on the panel's side: at the player's top right, as today, or, with the panel on the left, at its top left just right of the bell that WebUI Notifications adds, with the `left_panel_open` and `left_panel_close` icons.
-- Auto-Pause offers Never, Always, or Responsive, the default. WebUI Auto-Pause and Photo Scrub Bar describes the modes and keeps Auto-Pause at Responsive until this setting exists.
-- Randomization mode is not a Settings tab entry; it is in the Library tab.
 - Every client setting survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
 - Remembering is the default, with no option to turn it off.
-- The photo duration already stored per device carries over.
 - Settings apply as they change; the Settings tab has no Save.
 - The Settings tab's layout, in this order:
   - Playback: Autoplay mode, Advance after (today's photo duration, renamed), and Seek step.
@@ -166,60 +157,172 @@ Last milestone completed: M12f8
   - Panel: Side and Auto-Pause.
   - Keyboard shortcuts: the shortcut reference, collapsed by default with a chevron, as Ambient mode settings is. `?` opens Settings with it expanded.
   - Diagnostics: the client id, the session id, the client type, the device name, the server's version with its API version, such as "0.15.0 (API 1)", and the app's own version, labeled "ReelRoulette", not "WebUI".
-- Below the sections, one line: "Settings apply at once and are kept on this device."
 - This milestone fills Playback with Advance after, Appearance with Theme and Show file names on tiles, Notifications, Panel, and Diagnostics. The other settings arrive with the milestones that build them, each in its section here.
-- The WebUI build reads the app's version from the repository's `.version` file, which `set-release-version.ps1` already sets for each release.
 - Hints say only what a label doesn't: no mockup notes, no "as on the desktop" asides, and no key badges in setting labels, since the shortcut reference lists the keys.
+- Settings fields that can hold a value that is not valid use the field validation pattern, and such a value is not kept.
+- Each setting's text is the mockup's, word for word, including hints that name what a later milestone of this release adds, such as Auto-Pause's "or the admin view".
+- No `last.log` line is written per setting change: what a setting does, such as Auto-Pause pausing, logs itself.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Settings tab | ✅ Complete | The tab in the panel's row, its sections in the mockup's order, Playback's Advance after out of the header, Panel's Side and Auto-Pause, Diagnostics with both versions, the closing line, the player's autoplay, loop, and mute kept across a refresh, a setting's field's saved check, and the field validation pattern's icons and tooltip fading in and out. |
+| Appearance | ⏳ Planned | Theme, with `theme-color` and the status bar style following it, and Show file names on tiles. |
+| Notifications settings | ⏳ Planned | The Notifications section with Popup settings and the sample popup, and the bell list's Notification settings link. |
+
+#### Settings tab slice
+
+**Scope**
+
+- The Settings tab joins the side panel's tab row, after Tags; WebUI Stats Panel puts Stats between them.
+- The header has no settings icon, since the tab row reaches the Settings tab. WebUI Responsive Layout and Panels already leaves it out.
+- The Settings tab holds no unsaved changes, so its tab has no dot.
+- The tab shows Playback, Panel, and Diagnostics, leaving the places the mockup gives the other sections to the slices and milestones that fill them.
+- Below the sections, one line: "Settings apply at once and are kept on this device."
+- Advance after is today's photo duration, renamed, and it leaves the header. It keeps today's 1–300 seconds.
+- Advance after uses the field validation pattern: a value that is not a whole number from 1 to 300, an emptied field included, is flagged as it is typed with "Use a whole number from 1 to 300 seconds." and is not kept, and the value in use stays.
+- A setting that applies without Save and must always hold a value has a setting's field, a rule of the field validation pattern built once, so later settings such as Hide after reuse it. Advance after uses it:
+  - A valid value is saved only on Enter or when the field loses focus, so a value passed through on the way, such as the "1" of "120", is never saved.
+  - While the field has focus, a value that is not valid stays flagged. When the field loses focus with one, or the Settings tab hides or the panel closes, since a hidden field may get no blur, it shows the value saved again, unflagged.
+  - Every setting field in the mockup follows the same rule: Advance after, Hide after, and Loudness normalization's three fields.
+  - When Enter or leaving the field saves a value that changes the setting, a green check, `check_circle`, shows inside the field on its right, where the red icon sits and styled like it, for about two seconds, then fades out, and a polite live region says "Saved". Nothing shows when the value stays as it was, or when a value that is not valid goes back to the one saved, and typing again hides the check. Choices such as Side show their change at once and get none.
+- Advance after starts at 10 seconds, the value the user always sets, in place of today's 15, and is kept in the per-device store as `playback.advanceAfter`. The photo duration stored before, `rr_photoDuration`, doesn't carry over, since old client settings aren't carried over.
+- Changing Advance after doesn't show the photo showing again: its timer takes the new length, keeping the time it has shown and whether it is paused, as the mockup's handler does, and a length no longer than the time already shown ends the photo as soon as it runs.
+- The panel's side setting chooses the side the panel opens on, with options reading Left, then Right, matching the sides.
+- The player's panel button sits on the panel's side: at the player's top right, as today, or, with the panel on the left, at its top left just right of the bell that WebUI Notifications adds, with the `left_panel_open` and `left_panel_close` icons.
+- Auto-Pause offers Never, Always, or Responsive, the default, kept as `panel.autoPause`. WebUI Auto-Pause and Photo Scrub Bar describes the modes and keeps Auto-Pause at Responsive until this setting exists.
+- A side or Auto-Pause change acts at once while the panel is open.
+- Randomization mode is not a Settings tab entry; it is in the Library tab, still kept as `rr_randomizationMode`.
+- Loop, autoplay, and mute are only the player's buttons, with no entry in the Settings tab, and each button's state survives a page refresh, kept as `player.loop`, `player.autoplay`, and `player.muted`.
+- The diagnostics information shows in the Settings tab on every browser.
+- Diagnostics shows the client and session ids and the device name in full, since they are for matching `last.log` lines.
+- Diagnostics' server version is `/api/version`'s `assetsVersion`, the release version, or its `appVersion` from a server that sends no `assetsVersion`, with its `apiVersion`, from the last version check the server answered, a server that fails the compatibility check included, and "Unknown" before one answers.
+- The WebUI build reads the app's version from the repository's `.version` file, which `set-release-version.ps1` already sets for each release, without its leading `v`.
+- The build output check fails unless the built WebUI holds that version.
+- The field validation pattern's red icons, in a field, on a held action, and after a Filter section's name, its tooltip, and a setting's saved check fade in and out over 250 ms on their opacity, each keeping its place while it fades out, on every screen that uses the pattern: the Filter and Tags tabs, the tag, category, and preset dialogs, and the Settings tab. Only the look lingers: a field's `aria-invalid` and description and a held action's state change at once. With `prefers-reduced-motion: reduce`, they show and hide at once.
+- The pairing prompt's Pair is only ever disabled while the token is empty, never held, so it shows no icon to fade, in the mockup too.
+
+**Traps**
+
+- In the v0.13.0 manual regression pass the diagnostics panel appeared only on the phone in Firefox (measured).
+- Photo duration and randomization mode are already kept per device in `localStorage`, as `rr_photoDuration` and `rr_randomizationMode`, outside the per-device store's `rr_device.` entries.
+- Autoplay and loop are not kept today and start off.
+- The mobile diagnostics line, which WebUI Notifications removed, showed the client id, session id, and client type below the player, on a mobile browser only (`isMobileBrowser()`).
+- `package.json`'s version is 0.1.0, not the release's, and `set-release-version.ps1` doesn't write it.
+- The header ignores a photo duration outside 1–300 seconds without saying so, and reads "12abc" as 12.
+- The server's `appVersion` is the 4-part assembly version, `0.15.0.0`, while `assetsVersion` is the release version, `0.15.0-dev.1`, which `set-release-version.ps1` writes for each release (measured).
+- A photo duration change calls the player's `playCurrent()`, which posts `/api/record-playback` unless told not to, so applying Advance after as it is typed would record a play per valid keystroke while a photo shows under Autoplay or Loop.
+- The panel's tab pages are shown and hidden by their `hidden`, never unmounted, so a field in a hidden tab keeps its text, and a browser may give it no blur as it hides.
+- The red icon and its tooltip (`useFieldValidation`'s `mark` in `src/ui/FieldValidation.tsx`), a held action's icon (`HeldButton`), and a Filter section's icon (`SectionProblemMark`, which `FilterDialog.tsx` renders only while a field in the section is flagged) are each rendered only while their field is flagged, so each unmounts the moment its field clears. Each has to stay mounted while it fades out, the tooltip with the last problem's text.
+- The tooltip shows only by its `is-shown` class and is `display: none` otherwise, so it has to keep the class while it fades out.
+- happy-dom's `matchMedia` never reports reduced motion, so tests stub it, as `stubCoarsePointer` in `src/test/screens/pageHarness.ts` does for a coarse pointer.
+
+**Acceptance**
+
+- The Settings tab holds the client settings, including Advance after, the panel's side, and Auto-Pause, and the header no longer shows photo duration, in WebUI tests.
+- An Advance after value outside 1–300 seconds is flagged with the field validation pattern as it is typed and is not kept, and the value in use stays as it was, in WebUI tests of Advance after with the field validation pattern.
+- Clearing "15" with Backspace and leaving the field keeps 15 in use, typing "120" saves nothing until the field is left and then only 120, and leaving Advance after with "abc" or emptied, or the Settings tab hiding or the panel closing while it has focus, shows the value saved again, unflagged, in WebUI tests of Advance after.
+- Changing Advance after while a photo shows under Autoplay keeps the time it has shown and changes only its length, beside the player and at phone size with Auto-Pause holding the photo, which stays held, in WebUI tests.
+- Auto-Pause offers Never, Always, and Responsive, starts at Responsive, and the panel pauses as the chosen mode says, in WebUI tests.
+- Each setting applies as it changes, with no Save, in WebUI tests.
+- The Settings tab has no loop or autoplay entry, in WebUI tests.
+- The Settings tab is in the panel's tab row, and the header has no settings icon, in WebUI tests.
+- With the panel on the left, the panel button sits at the player's top left, just right of the bell, with the left icons, and with the panel on the right at its top right with the right icons, in WebUI tests of the panel's side.
+- The Settings tab shows Playback, Panel, and Diagnostics, in that order, and no setting label carries a key badge, in WebUI tests.
+- The Settings tab shows the diagnostics information on desktop and mobile browsers, in WebUI tests.
+- Diagnostics shows the client and session ids, the client type, the device name, the server's version with its API version, and the app's version from `.version`, labeled "ReelRoulette", in WebUI tests and a build check that the app's version matches `.version`.
+- After a page refresh, Advance after, the panel's side, Auto-Pause, and the autoplay, loop, and mute buttons' state are each as they were, in WebUI tests of a page refresh keeping each setting this slice adds.
+- Preferences are stored per device and do not change other devices, in WebUI tests for preference storage.
+- Enter or leaving Advance after with a new value shows the green check and says "Saved", and the check fades out after about two seconds; the same value, a value that is not valid going back to the one saved, and typing again show none, in WebUI tests of Advance after.
+- Each red icon, in a field, on a held action, and after a Filter section's name, its tooltip, and the saved check fade in and out over 250 ms, rendered while they fade out and gone once faded, in WebUI tests on the Filter tab, the Tags tab, a dialog, and the Settings tab.
+- With reduced motion, they show and hide at once, in WebUI tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check on a phone.
+
+**Evidence**
+
+- The Settings tab is `src/ui/SettingsTab.tsx`, the fourth page of the side panel, after Tags (`PANEL_TABS` in `src/panel/panelHost.ts`), in its own screen boundary, with no unsaved dot. Its tab hooks load and keep nothing. Its sections are `section` elements headed Playback, Panel, and Diagnostics, then the closing line, with no button.
+- Advance after is a `SettingTextField` whose rule, `advanceAfterProblem` in the new `src/settings/settings.ts`, is a whole number from 1 to 300 through `wholeNumberProblem`, which later settings fields can use. A valid value goes to `setPhotoDuration`, which now takes a number and keeps it in the per-device store as `playback.advanceAfter`; while that key is absent the store starts at 10 seconds, and it neither reads nor writes `rr_photoDuration`. The mockup's Advance after starts at 10 seconds too, in place of 5. The header's Photo Duration and its styles are gone.
+- A photo duration change no longer shows the photo again: the player gives a showing photo's timer the new length with the photo timer's new `setLength`, which keeps the time it has run and whether it runs or is held, and ends it at the next tick once that time reaches the new length. Nothing loads or is recorded again, and Auto-Pause's hold stands. The player's own 1–300 clamp is gone, since the store refuses a duration outside the range.
+- The setting's field rule is `createSettingField` in `src/validation/fieldValidation.ts`, and `SettingTextField` in `src/ui/FieldValidation.tsx` renders it, saving on Enter, on blur, and when its `shown` turns false, which the Settings tab sets from the panel being open on it. The mockup's `settingField` in `build/common.js` is the same rule, used by Advance after, Hide after, and Loudness normalization's three fields, with `leaveSettingFields()` as the Settings tab hides or the panel closes. The validation page states the rule with a live specimen, and `check.mjs` checks it there and on Advance after.
+- Side calls the panel host's new `setSide`, which remembers `panel.side`, and `.fullscreen-stage[data-side="left"] #panel-btn.overlay-corner-btn` puts the panel button at `left: 64px`, just right of the bell; its icon already followed the side. Auto-Pause's mode is `createSettings`' `autoPauseMode`, kept as `panel.autoPause`, in place of the fixed Responsive signal in `appServices.ts`.
+- Loop and Autoplay are kept by the store's new `setLoop` and `setAutoplay`, which the player's buttons call, as `player.loop` and `player.autoplay`; the store's `loop`, `autoplay`, and `photoDurationSeconds` are now read-only signals. Mute is kept by the player as `player.muted`, so `createPlayer` takes the device store.
+- Each version check the server answers stores `serverVersionOf(version)`, in `src/state/serverCompatibility.ts`, before the compatibility check: `assetsVersion`, or `appVersion` from a server without it, with `apiVersion`. Diagnostics shows "Unknown" until then. The server's `appVersion` measured `0.15.0.0` and its `assetsVersion` `0.15.0-dev.1` on the built server.
+- `scripts/app-version.mjs` reads `.version` without its `v` and fails on a missing or empty file; `vite.config.ts` and `vitest.config.ts` define `__APP_VERSION__` from it, `src/env.d.ts` declares it (and `tsconfig.test.json` includes that file), and `src/config/appVersion.ts` exports it. `verify-build-output.mjs` fails unless a built script holds it.
+- Tests: `src/test/screens/settings.test.ts` (20 tests) covers the tab and header, section order, no Save, no loop, autoplay, or mute entry and no key badge, Advance after's start at 10 seconds or as saved, its flagging of "0", "301", "abc", "12abc", "1.5", and an emptied field, none of which Enter keeps, with the value in use shown again on leaving, saving nothing while it is typed, however long typing pauses, and then only on Enter or blur ("120" saves only 120 once the field is left), clearing "15" with Backspace and leaving keeping 15, the value saved shown again, unflagged, on blur and when the tab hides or the panel closes, a showing photo keeping its time beside the player and staying held under Auto-Pause at phone size, the side with the button's computed position and icons, Auto-Pause's three modes acting at once, Diagnostics on a desktop and an iPhone user agent, the `appVersion` fallback, a server that fails the check, "Unknown", a page refresh keeping every setting this slice adds, and settings writing only `rr_device.*` keys and sending no request. Unit tests cover `wholeNumberProblem`, `createSettings`, `createSettingField`, the photo timer's `setLength`, a held timer's time kept through a shorter length and then a longer one included, `setSide`, `serverVersionOf`, the store's 10-second default, Loop, and Autoplay, the player's Mute, and its duration change keeping a running or held photo's time.
+- Existing tests that changed: the header's photo duration tests moved to the Settings tests; the screen boundary tests find the header by its banner role, since the photo duration field they used is gone; the tab tests list four tabs; the player's storage test now expects its three keys; the full-page snapshot leaves out Diagnostics' values, which differ by run, browser, and release; the Filter and Tags snapshots changed only in `useId` numbers, since the Settings tab's field takes one first; the player's Loading… test now checks that a duration change waits for nothing; the page refresh tests save Advance after with Enter; the player screen tests' photo times and the mockup check's follow the 10-second default; and the player and Auto-Pause unit tests set 15 seconds, the time their photo timers assume.
+- Each guarded part was broken in turn and its tests failed: the rule taking "12abc" (2 tests), the photo duration change recording a play (2), Mute not kept (3), the side not kept (4), the left-side button rule removed (1), the server version stored after the compatibility check removed (3), Auto-Pause ignoring the setting (1), the setting's field saving as typing pauses (3), a held photo's timer keeping only the time up to a shorter length (1), and the build defining a wrong version, which the build output check refused. Before the setting's field and the duration change were fixed, the seven new tests of them in `settings.test.ts` failed, and with the old restart put back, both photo tests failed again, the one at phone size with four random picks behind the panel.
+- The build output check first looked for the version in double quotes, which the minifier doesn't use: it writes the version in backticks. It now takes any quote, and passes on the real build and fails on one that defines another version.
+- `npm run verify` passed: the contracts are fresh, typecheck, 63 test files and 1303 tests, the build, and the build output check. `node docs/mockups/reelroulette/build/check.mjs` and `check-milestones.ps1` passed. There are no C# changes.
+- The mockup's Diagnostics shows full-length ids and the device name as the WebUI builds it, so their wrapping can be checked on a phone, and `check.mjs` checks both. In Playback, Panel, and Diagnostics, nothing differs from what shipped apart from Advance after's 1–3600 seconds and Playback's Autoplay mode and Seek step, which WebUI Autoplay Modes and WebUI Keyboard Shortcuts bring. `CONTEXT.md`, `CHANGELOG.md`, `docs/domain-inventory.md`, and `docs/dev-setup.md` follow.
+- The field validation pattern's rule that an empty field is never flagged now says it holds only for a field that may sit empty, such as a name typed for an action, and that a field that must always hold a value, such as Advance after, is flagged when emptied: in `CONTEXT.md`, `docs/domain-inventory.md`, `src/validation/fieldValidation.ts`, the comments in `src/ui/FieldValidation.tsx` and `src/styles.css`, two test names in `src/test/fieldValidation.test.ts`, and the mockup's `build/common.js` and `build/validation.src.html`. The mockup's pages were rebuilt and `check.mjs` passed again, as did `npm run verify`.
+- The spot check on a phone passed: Advance after and Left were kept after a refresh, the panel button sat just right of the bell, and Diagnostics' full ids and device name wrapped in the panel.
+- The saved check is `createSettingField`'s `justSaved`, in `src/validation/fieldValidation.ts`, which a save turns on only when `saved()` changed and which goes off after `SETTING_SAVED_MS`, 2000, or on input. `SettingTextField` shows it as `.vfield-saved`, `check_circle` in `--success`, #22ef7f in the dark theme and #1a7f43 in the light as in the mockup, through `ValidatedField`'s new `trailing`, beside a polite `visually-hidden` live region that says "Saved".
+- The fades are `useFadeOut` in `src/ui/FieldValidation.tsx`, with `FADE_MS` of 250: the field's icon and its tooltip, which keeps the last problem's text, `HeldButton`'s icon, `SectionProblemMark`, which now takes `shown` and which `FilterDialog.tsx` always renders, and the saved check stay rendered for 250 ms with `is-fading-out` once they go, or go at once while `prefers-reduced-motion: reduce` matches. The stylesheet fades each in with the `field-mark-in` animation as it renders and out by an opacity transition under `is-fading-out`, which ignores the pointer, and does neither under reduced motion. The mockup fades in by setting a class after a reflow; the app's animation looks the same and needs no second render. A field's `aria-invalid` and description, and a held action's `aria-disabled` and hidden reason, still change at once. The pairing prompt's Pair, never held, shows no icon.
+- Tests: unit tests of `justSaved`, a second save's check lasting its full two seconds included (3); in `settings.test.ts`, the check on Enter and on blur, its two seconds and fade, "Saved", none for the same value or a value that is not valid going back, typing again fading it out as the red icon fades in, none for Side, and reduced motion (4), and the stylesheet's rules, which fade each in and out over `FADE_MS`, stop a fade in as the fade out starts, and take no motion under reduced motion (1); in `filter.test.ts`, a corrected duration's icon and tooltip, General's icon, and Apply's icon fading out, rendered until faded, showing again when flagged again during the fade, and going at once with reduced motion (2); the Tags tab's new tag name icon (1) and the Edit Tag dialog's name icon (1) fading out. `stubReducedMotion` in `src/test/screens/pageHarness.ts` makes the reduced-motion query match. The Filter tests' icon, tooltip, section, and held-action helpers and one Settings assertion now count an icon or tooltip that is fading out as not shown, and the full-page snapshot gains Advance after's live region.
+- Each guarded part was broken in turn and its tests failed: unmounting at once with no fade (5 tests), ignoring reduced motion (2), the check for a save that changed nothing (2), the stylesheet's reduced-motion rules removed, or the fade out no longer stopping the fade in (1 each), the first save's timer left running past a second save (1), and Advance after's save and the store both taking a value that is not valid (1).
+- `npm run verify` passed again: typecheck, 63 test files and 1315 tests, the build, and the build output check. `node docs/mockups/reelroulette/build/check.mjs`, 1000 checks, and `check-milestones.ps1` passed.
+- The spot check on a phone passed for the saved check and the fades.
+
+#### Appearance slice
+
+**Scope**
+
+- The Appearance section shows between Playback and Panel.
 - Theme is System (the default, following the system as the WebUI does today), Dark, or Light, kept per device.
 - The installed app's status bar style and the `theme-color` meta follow the theme in use, so the status bar's text reads against the page in the light theme too.
 - Show file names on tiles is off by default, kept per device. Hovering a tile with a mouse shows its name as a tooltip either way.
+
+**Traps**
+
+- `main.ts` sets the `theme-dark` or `theme-light` class on the root element from `prefers-color-scheme` before the page renders, and again when the system's scheme changes.
+- `index.html` fixes `theme-color` at `#1a1a1a` and `apple-mobile-web-app-status-bar-style` at `black-translucent`, whose white status bar text an installed iOS app draws over the page, which is light in the light theme (inferred).
+- iOS reads `apple-mobile-web-app-status-bar-style` when the installed app starts, so changing it while the app runs may not take effect until the next start (inferred).
+- Every tile shows its name today.
+- The library grid builds its tiles as HTML strings and moves the playing mark without rendering them again, so a tile change it doesn't render again needs a class the stylesheet reads.
+
+**Acceptance**
+
+- Theme offers System, Dark, and Light and starts at System, in WebUI tests.
+- The `theme-color` meta and the status bar style follow the theme in use, in WebUI tests of the theme.
+- Show file names on tiles starts off, and turning it on shows each tile's name on the tile, in WebUI tests.
+- Theme and Show file names on tiles apply as they change, in WebUI tests.
+- The Settings tab shows Appearance between Playback and Panel, in WebUI tests.
+- After a page refresh, the theme and whether file names show on tiles are each as they were, in WebUI tests of a page refresh.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check on a phone.
+
+#### Notifications settings slice
+
+**Scope**
+
+- The Notifications section shows between Appearance and Panel.
 - The Notifications section sets WebUI Notifications' popup settings, which keep their defaults until then:
   - Show popups, with the hint "Short messages over the player. The bell on the player lists them either way."
   - Under it, a collapsible Popup settings group, closed at first, with a chevron as Ambient mode settings has, and disabled while Show popups is off.
   - The group holds, in this order: Show popups for, the five kinds, each with its hint as in the mockup; Position; Show in fullscreen; and Show for, with the hint "Pointing at a popup keeps it. A warning stays until you close it."
   - Changing the position or the time shows a sample popup there, which the bell's list doesn't keep.
 - The bell's list gains a Notification settings link, which opens the Settings tab at Show popups with Popup settings expanded.
-- Loop, autoplay, and mute are only the player's buttons, with no entry in the Settings tab, and each button's state survives a page refresh.
-- Settings fields that can hold a value that is not valid use the field validation pattern, and such a value is not kept. Advance after is one.
 
-#### Traps
+**Traps**
 
-- In the v0.13.0 manual regression pass the diagnostics panel appeared only on the phone in Firefox (measured).
-- Photo duration and randomization mode are already kept per device in `localStorage`.
-- Autoplay and loop are not kept today and start off.
-- The mobile diagnostics line, which WebUI Notifications removed, showed the client id, session id, and client type below the player, on a mobile browser only (`isMobileBrowser()`).
-- `package.json`'s version is 0.1.0, not the release's, and `set-release-version.ps1` doesn't write it.
-- Every tile shows its name today.
-- The header ignores a photo duration outside 1–300 seconds without saying so.
-- `index.html` fixes `theme-color` at `#1a1a1a` and `apple-mobile-web-app-status-bar-style` at `black-translucent`, whose white status bar text an installed iOS app draws over the page, which is light in the light theme (inferred).
-- iOS reads `apple-mobile-web-app-status-bar-style` when the installed app starts, so changing it while the app runs may not take effect until the next start (inferred).
+- The notifications service reads the popup settings from `notifications.popups` once, when the page loads, and has nothing that changes them.
 
-#### Acceptance
+**Acceptance**
 
-- The Settings tab holds the client settings, including Advance after, the panel's side, and Auto-Pause, and the header no longer shows photo duration, in WebUI tests.
-- An Advance after value outside 1–300 seconds is flagged with the field validation pattern as it is typed and is not kept, and the value in use stays as it was, in WebUI tests of Advance after with the field validation pattern.
-- Auto-Pause offers Never, Always, and Responsive, starts at Responsive, and the panel pauses as the chosen mode says, in WebUI tests.
-- Each setting applies as it changes, with no Save, in WebUI tests.
-- Theme offers System, Dark, and Light and starts at System, in WebUI tests.
-- The `theme-color` meta and the status bar style follow the theme in use, in WebUI tests of the theme.
-- Show file names on tiles starts off, and turning it on shows each tile's name on the tile, in WebUI tests.
-- The Settings tab has no loop or autoplay entry, in WebUI tests.
-- The Settings tab is in the panel's tab row, and the header has no settings icon, in WebUI tests.
-- With the panel on the left, the panel button sits at the player's top left, just right of the bell, with the left icons, and with the panel on the right at its top right with the right icons, in WebUI tests of the panel's side.
 - The Notifications section sets each popup setting from its default, disables Popup settings while Show popups is off, and shows a sample popup when the position or time changes, in WebUI tests of the section.
 - The bell's list's Notification settings link opens the Settings tab at Show popups with Popup settings expanded, in WebUI tests.
-- The Settings tab shows Playback, Appearance, Notifications, Panel, and Diagnostics, in that order, with room for the sections later milestones add in the places the mockup gives them, and no setting label carries a key badge, in WebUI tests.
-- The Settings tab shows the diagnostics information on desktop and mobile browsers, in WebUI tests.
-- Diagnostics shows the client and session ids, the client type, the device name, the server's version with its API version, and the app's version from `.version`, labeled "ReelRoulette", in WebUI tests and a build check that the app's version matches `.version`.
-- After a page refresh, Advance after, the panel's side, Auto-Pause, the theme, whether file names show on tiles, the popup settings, and the autoplay, loop, and mute buttons' state are each as they were, in WebUI tests of a page refresh keeping each setting this milestone adds.
-- Preferences are stored per device and do not change other devices, in WebUI tests for preference storage.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- The Settings tab shows Notifications between Appearance and Panel, in WebUI tests.
+- After a page refresh, the popup settings are as they were, in WebUI tests of a page refresh.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check on a phone.
 
 #### Release checks
 
 - Manual: On a desktop browser and a phone, and as an installed app, every remembered setting is kept after a refresh and a browser restart, and the library search starts empty.
 - Manual: As an installed app on iOS and Android, in the light and the dark theme, the status bar's text reads against the page.
+- Manual: On a phone and an iPad, the field validation pattern's red icons, its tooltip, and a setting's saved check fade in and out, and with Reduce Motion on they show and hide at once.
 
 #### Not included
 
@@ -948,7 +1051,7 @@ Last milestone completed: M12f8
 
 **Scope**
 
-- Library and current-file stats live in the side panel's Stats tab, which joins the tab row here. Its icon is `bar_chart`.
+- Library and current-file stats live in the side panel's Stats tab, which joins the tab row here, between Tags and Settings. Its icon is `bar_chart`.
 - Clicking the current file name in the header opens the panel on the Stats tab. Its tooltip shows the full file name and then "Show stats".
 - The current file comes first, since the file name opens the tab: its name, then its full path, then its stats.
 - The full path leaves room beside it for Show in File Manager or Copy Path, which Show in File Manager from the WebUI adds.
@@ -1118,7 +1221,7 @@ Last milestone completed: M12f8
 - Settings in the Settings tab's Audio section, per device, with the desktop's ranges and defaults:
   - A **Loudness normalization** checkbox under Enhanced audio, off by default and disabled while Enhanced audio is off, since audio then plays directly.
   - An expandable "Loudness normalization settings" section, like Ambient mode's, with Maximum reduction (15 dB, from 1 to 30), Maximum boost (5 dB, from 0 to 10), and Baseline, Automatic, showing the library's baseline, or a Manual target (−23 LUFS, from −50 to −10).
-  - The fields use the field validation pattern. A value that is not valid is flagged and not kept, and the one in use stays.
+  - The fields are setting's fields of the field validation pattern, which WebUI Settings Panel adds (`createSettingField` and `SettingTextField`): a value that is not valid is flagged and not kept, the one in use stays, and a valid one is saved on Enter or when the field is left. Reset to defaults shows the saved values again in the fields.
   - Each setting survives a page refresh.
 - The option's hint is "Evens out loudness between videos.", which reads "Needs Enhanced audio." while it is disabled.
 - Automatic's line is "The library's baseline, {n} LUFS."
@@ -1171,10 +1274,9 @@ Last milestone completed: M12f8
   - Normal: photos advance after the timer and videos play to the end, as autoplay does today.
   - Timer: every item advances after the timer, including a video that has not finished. With loop on, a video shorter than the timer repeats until the timer advances. Pausing a video holds the timer.
   - With loop on in Normal mode, the current item repeats and autoplay waits, as today.
-- Both modes use one timer, Advance after, today's photo duration, which WebUI Settings Panel moves into the Settings tab under that name with today's 1–300 seconds.
+- Both modes use one timer, Advance after, the photo duration in the Settings tab, with its 1–300 seconds.
 - This milestone widens Advance after to the desktop's 1–3600 seconds, so a Keep Playing interval longer than five minutes still fits.
 - The mode and the timer sit together in the Settings tab, and the player's autoplay button still turns autoplay on and off.
-- Changing the timer while a photo shows keeps the time already shown and changes only the length.
 - A looping photo flickers at the end of each loop, because it is restarted by reloading its image, unlike a video, which seeks back. Keep the photo on screen and restart only its timer, both at the end of each loop and when Autoplay is turned on while a photo shows.
 - Turning Loop on or off while a photo shows keeps the photo on screen and keeps its time, as the mockup does: its timer runs on from where it was while Autoplay or Loop stays on; with both off, its timer stops.
 - A looping photo then records one play, as a looping video does, and the Player screen tests that count a play per loop change with it.
@@ -1183,7 +1285,7 @@ Last milestone completed: M12f8
 #### Traps
 
 - The WebUI's video end handler and photo timer both skip advancing while loop is on.
-- Changing the timer while a photo shows restarts the photo today (`photoDurationChanged` in `src/playback/player.ts`).
+- Changing the timer while a photo shows already keeps the time shown and changes only the length, through the photo timer's `setLength` (`photoDurationChanged` in `src/playback/player.ts`), which WebUI Settings Panel added.
 - The photo timer calls `playCurrent`, which clears the photo's source and hides it, then loads it again, records a play, and relays a new start.
 - Turning Loop or Autoplay on while a photo shows goes through the same restart.
 
@@ -1193,7 +1295,6 @@ Last milestone completed: M12f8
 - With loop on in Timer mode, a video shorter than the timer repeats until the timer advances. With loop on in Normal mode, the current item repeats and does not advance. Shown by the same autoplay tests.
 - A looping photo does not flicker: it stays on screen with its image loaded at the end of each loop, and only its timer restarts, in a test that a looping photo keeps its image shown through each loop.
 - Turning Loop on or off while a photo shows keeps the photo on screen and keeps its time, in tests that turning Loop on and then off on a photo keeps its image shown and runs its timer on from where it was while Autoplay or Loop stays on, and stops it with both off.
-- Changing the timer while a photo shows keeps the time already shown and changes only the length, in a test that changing the timer keeps the time shown.
 - The Settings tab shows the autoplay mode beside Advance after, which accepts 1 to 3600 seconds and starts from the value stored before this milestone, in a test for Advance after's new range.
 - After a page refresh, the autoplay mode is as it was, in a test for a page refresh keeping the mode.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
@@ -1228,7 +1329,7 @@ Last milestone completed: M12f8
   - A Reset to defaults button.
 - Hide player controls, a Settings tab entry in its Player controls section, kept per device:
   - Timeout, the default: the controls hide after a set time with no activity. Moving the mouse or tapping shows them and restarts the countdown. They stay visible while a mouse or pen pointer is over them, while the scrub bar or volume is being dragged, and while the bell's list, which WebUI Notifications adds, is open, and their countdown starts again when it closes. A touch doesn't count as a pointer over them.
-  - While Timeout is chosen, two settings show under it: Hide after, 1 to 30 seconds and 3 by default, using the field validation pattern; and Keep visible while paused, on by default.
+  - While Timeout is chosen, two settings show under it: Hide after, 1 to 30 seconds and 3 by default, a setting's field of the field validation pattern, which WebUI Settings Panel adds (`createSettingField` and `SettingTextField`), saved on Enter or when the field is left; and Keep visible while paused, on by default.
   - On click/tap: clicking or tapping the player shows or hides them, as today.
   - Never: the controls stay visible.
   - In every mode, hidden controls can't be pressed, so the first tap or click on them only shows them.

@@ -323,6 +323,22 @@ export function stubCoarsePointer(): void {
 }
 
 /**
+ * Makes `(prefers-reduced-motion: reduce)` match, as when the system asks for reduced motion; happy-dom's `matchMedia`
+ * never reports it. The stylesheet's own reduced-motion rules still don't apply.
+ */
+export function stubReducedMotion(): void {
+  const real = window.matchMedia.bind(window);
+  stubProperty(window, "matchMedia", {
+    value(query: string) {
+      if (!query.includes("prefers-reduced-motion: reduce")) {
+        return real(query);
+      }
+      return { matches: true, media: query, addEventListener() {}, removeEventListener() {} } as unknown as MediaQueryList;
+    }
+  });
+}
+
+/**
  * Gives the screen safe-area insets, in pixels, as a phone reports them, through the stylesheet's `--safe-area-*`
  * variables, since happy-dom has no `env()`. A side left out is 0.
  */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { serverCompatibilityError } from "../state/serverCompatibility";
+import { serverCompatibilityError, serverVersionOf } from "../state/serverCompatibility";
 
 const CAPABILITIES = [
   "auth.sessionCookie",
@@ -32,5 +32,20 @@ describe("serverCompatibilityError", () => {
     expect(serverCompatibilityError({ apiVersion: "1", capabilities: ["auth.sessionCookie", "identity.sessionId"] })).toBe(
       "Server missing required capabilities: events.refreshStatusChanged, events.resyncRequired, api.random.filterState, api.presets.match."
     );
+  });
+});
+
+describe("serverVersionOf", () => {
+  it("reads the release version from assetsVersion, not the assembly's appVersion, with the API version", () => {
+    expect(serverVersionOf({ appVersion: "0.15.0.0", assetsVersion: "0.15.0-dev.1", apiVersion: "1" })).toEqual({
+      version: "0.15.0-dev.1",
+      apiVersion: "1"
+    });
+  });
+
+  it("falls back to appVersion from a server that sends no assetsVersion, and leaves out what isn't text", () => {
+    expect(serverVersionOf({ appVersion: " 0.14.2.0 ", assetsVersion: null, apiVersion: "1" })).toEqual({ version: "0.14.2.0", apiVersion: "1" });
+    expect(serverVersionOf({ assetsVersion: "  ", apiVersion: 1 })).toEqual({ version: "", apiVersion: "" });
+    expect(serverVersionOf(null)).toEqual({ version: "", apiVersion: "" });
   });
 });

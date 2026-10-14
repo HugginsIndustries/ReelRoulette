@@ -1,4 +1,4 @@
-import { computed, signal, type ReadonlySignal } from "@preact/signals";
+import { computed, type ReadonlySignal } from "@preact/signals";
 import { getClientId, getClientType, getDeviceName, getSessionId } from "../api/coreApi";
 import { unauthorizedLogText } from "../api/serverRequest";
 import { createDialogs, type Dialogs } from "../dialogs/dialogs";
@@ -6,9 +6,10 @@ import { createFilterDialog, type FilterDialog } from "../filter/filterDialog";
 import { createLibrary, type Library } from "../library/library";
 import { createNotifications, type Notifications } from "../notifications/notifications";
 import { createPanelHost, type PanelHost } from "../panel/panelHost";
-import { createAutoPause, DEFAULT_AUTO_PAUSE_MODE, type AutoPauseMode } from "../playback/autoPause";
+import { createAutoPause } from "../playback/autoPause";
 import { createPlayer, type Player } from "../playback/player";
 import { createStageFullscreen, type StageFullscreen } from "../playback/stageFullscreen";
+import { createSettings, type Settings } from "../settings/settings";
 import { createTagEditor, type TagEditor } from "../tags/tagEditor";
 import type { RuntimeConfig } from "../types/runtimeConfig";
 import { createAppApi, type AppApi } from "./appApi";
@@ -25,8 +26,8 @@ export interface UnsavedTabs {
 
 /**
  * One page's runtime config, shared state, server requests, in-app dialogs, server connection, player, fullscreen,
- * side panel, and the panel's library, filter, and tag editor tabs, with Auto-Pause pausing the player as the panel
- * and Auto Tag cover it.
+ * side panel, the panel's library, filter, and tag editor tabs, and the settings its Settings tab sets, with
+ * Auto-Pause pausing the player as its mode says while the panel and Auto Tag cover it.
  */
 export interface AppServices {
   config: RuntimeConfig;
@@ -46,6 +47,8 @@ export interface AppServices {
   indicator: ReadonlySignal<LastingState | null>;
   /** The one-off messages' popups and the list behind the player's bell. */
   notifications: Notifications;
+  /** The Settings tab's settings that nothing else keeps. */
+  settings: Settings;
 }
 
 export function createAppServices(config: RuntimeConfig): AppServices {
@@ -95,7 +98,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
       notifications.closeList();
     }
   });
-  const player = createPlayer({ apiBaseUrl: config.apiBaseUrl, store, api, connection, dialogs, notifications });
+  const player = createPlayer({ apiBaseUrl: config.apiBaseUrl, store, device, api, connection, dialogs, notifications });
   // After the player, so the player handles an item-state event before the library does.
   const library = createLibrary({ config, store, api, connection, player, dialogs, notifications, panel, device });
   const filterDialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs, notifications });
@@ -110,8 +113,8 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     dialogs,
     notifications
   });
-  // Responsive until the Settings tab can change it.
-  createAutoPause({ mode: signal<AutoPauseMode>(DEFAULT_AUTO_PAUSE_MODE), panel, overPage: tagEditor.autoTagOpen, player });
+  const settings = createSettings({ device });
+  createAutoPause({ mode: settings.autoPauseMode, panel, overPage: tagEditor.autoTagOpen, player });
   panel.connectTabs({
     library: {
       enter: () => library.open(),
@@ -133,6 +136,11 @@ export function createAppServices(config: RuntimeConfig): AppServices {
         tagEditor.close();
         return true;
       }
+    },
+    // Settings load nothing and apply as they change, so there is nothing to keep.
+    settings: {
+      enter() {},
+      leave: () => true
     }
   });
   // A panel remembered open starts its tab once the server has passed or failed the compatibility check, or turned out
@@ -165,6 +173,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
       tags: tagEditor.view.value?.savePending ?? false
     })),
     indicator: createPlayerIndicator(store),
-    notifications
+    notifications,
+    settings
   };
 }

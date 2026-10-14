@@ -60,7 +60,7 @@ function fakeElements(viewport: ReturnType<typeof fakeViewport>) {
         },
         contains: () => false
       },
-      pages: { library: { hidden: true }, filter: { hidden: true }, tags: { hidden: true } }
+      pages: { library: { hidden: true }, filter: { hidden: true }, tags: { hidden: true }, settings: { hidden: true } }
     }
   };
 }
@@ -70,7 +70,7 @@ function recordingTabs() {
   const calls: string[] = [];
   const refuse: Partial<Record<PanelTab, boolean | Promise<boolean>>> = {};
   const hooks = {} as Record<PanelTab, PanelTabHooks>;
-  for (const tab of ["library", "filter", "tags"] as const) {
+  for (const tab of ["library", "filter", "tags", "settings"] as const) {
     hooks[tab] = {
       enter: () => calls.push(`enter ${tab}`),
       leave() {
@@ -150,6 +150,21 @@ describe("panel host", () => {
       expect(setup().panel.side.value).toBe("right");
       expect(setup({ saved: { "rr_device.panel.side": '"left"' } }).panel.side.value).toBe("left");
       expect(setup({ saved: { "rr_device.panel.side": '"top"' } }).panel.side.value).toBe("right");
+    });
+
+    it("moves to the side it is given and remembers it, open or closed, without changing its tab", () => {
+      const { panel, storage, tabs } = setup();
+      panel.setSide("left");
+      expect(panel.side.value).toBe("left");
+      expect(storage.values.get("rr_device.panel.side")).toBe('"left"');
+
+      void panel.showTab("settings");
+      tabs.calls.length = 0;
+      panel.setSide("right");
+      expect(panel.side.value).toBe("right");
+      expect(storage.values.get("rr_device.panel.side")).toBe('"right"');
+      expect([panel.isOpen.value, panel.tab.value]).toEqual([true, "settings"]);
+      expect(tabs.calls).toEqual([]);
     });
   });
 

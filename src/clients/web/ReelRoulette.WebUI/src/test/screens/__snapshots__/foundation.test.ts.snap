@@ -15,12 +15,6 @@ exports[`page structure > keeps the starting markup 1`] = `
       <button class="held-action" disabled="" id="pair-btn" type="button">
         <span class="btn-label">
           "Pair"
-    <div class="photo-duration-wrap">
-      <label>
-        "Photo Duration:"
-        <input aria-label="Photo duration in seconds" id="photo-duration" max="300" min="1" step="1" type="number" value="15">
-        <span class="unit">
-          "s"
     <div class="now-playing" id="now-playing" style="display: none">
       <span id="now-playing-name">
       <span class="muted" id="now-playing-duration">
@@ -91,6 +85,9 @@ exports[`page structure > keeps the starting markup 1`] = `
             <span class="material-symbol-icon">
               "tag"
             <span class="unsaved-dot" hidden="">
+          <button aria-controls="panel-page-settings" aria-label="Settings" aria-selected="false" class="panel-tab" id="panel-tab-settings" role="tab" title="Settings" type="button">
+            <span class="material-symbol-icon">
+              "settings"
         <span class="panel-tabs-spacer">
         <button aria-label="Close panel" class="icon-glyph-base icon-glyph-button panel-close" id="panel-close-btn" title="Close" type="button">
           <span class="material-symbol-icon">
@@ -194,6 +191,94 @@ exports[`page structure > keeps the starting markup 1`] = `
               <button aria-label="Save" class="icon-btn" id="tag-editor-apply-btn" title="Save" type="button">
                 <span class="material-symbol-icon">
                   "save"
+      <section aria-labelledby="panel-tab-settings" class="panel-page" hidden="" id="panel-page-settings" role="tabpanel">
+        <div class="settings-tab" id="settings-tab">
+          <div class="settings-tab-header">
+            <h2>
+              "Settings"
+          <div class="settings-body themed-scrollbar" id="settings-body">
+            <section aria-labelledby="settings-playback-heading" class="settings-section">
+              <h3 id="settings-playback-heading">
+                "Playback"
+              <div class="setting">
+                <label class="setting-label" for="settings-advance-after">
+                  "Advance after"
+                <div class="filter-row">
+                  <span class="vfield number-field">
+                    <input autocomplete="off" class="ctl" id="settings-advance-after" inputmode="numeric" type="text">
+                    <span aria-live="polite" class="visually-hidden">
+                  <span>
+                    "seconds"
+            <section aria-labelledby="settings-panel-heading" class="settings-section">
+              <h3 id="settings-panel-heading">
+                "Panel"
+              <div class="setting">
+                <span class="setting-label" id="settings-side-label">
+                  "Side"
+                <div aria-labelledby="settings-side-label" class="choice-row" role="radiogroup">
+                  <label>
+                    <input aria-labelledby="settings-side-left" name="settings-side" type="radio" value="left">
+                    <span>
+                      <span id="settings-side-left">
+                        "Left"
+                  <label>
+                    <input aria-labelledby="settings-side-right" name="settings-side" type="radio" value="right">
+                    <span>
+                      <span id="settings-side-right">
+                        "Right"
+              <div class="setting">
+                <span class="setting-label" id="settings-auto-pause-label">
+                  "Auto-Pause"
+                <div aria-labelledby="settings-auto-pause-label" class="choice-stack" role="radiogroup">
+                  <label>
+                    <input aria-describedby="settings-auto-pause-responsive-description" aria-labelledby="settings-auto-pause-responsive" name="settings-auto-pause" type="radio" value="responsive">
+                    <span>
+                      <span id="settings-auto-pause-responsive">
+                        "Responsive"
+                      <small id="settings-auto-pause-responsive-description">
+                        "Pauses only while the panel or the admin view covers the player."
+                  <label>
+                    <input aria-describedby="settings-auto-pause-always-description" aria-labelledby="settings-auto-pause-always" name="settings-auto-pause" type="radio" value="always">
+                    <span>
+                      <span id="settings-auto-pause-always">
+                        "Always"
+                      <small id="settings-auto-pause-always-description">
+                        "Pauses whenever the panel opens."
+                  <label>
+                    <input aria-labelledby="settings-auto-pause-never" name="settings-auto-pause" type="radio" value="never">
+                    <span>
+                      <span id="settings-auto-pause-never">
+                        "Never"
+            <section aria-labelledby="settings-diagnostics-heading" class="settings-section">
+              <h3 id="settings-diagnostics-heading">
+                "Diagnostics"
+              <dl class="diag">
+                <dt>
+                  "Client"
+                <dd>
+                  "…"
+                <dt>
+                  "Session"
+                <dd>
+                  "…"
+                <dt>
+                  "Client type"
+                <dd>
+                  "…"
+                <dt>
+                  "Device name"
+                <dd>
+                  "…"
+                <dt>
+                  "Server"
+                <dd>
+                  "…"
+                <dt>
+                  "ReelRoulette"
+                <dd>
+                  "…"
+            <p class="setting-hint">
+              "Settings apply at once and are kept on this device."
     <section aria-labelledby="notify-title" class="notify-list" hidden="" id="notify-list" role="dialog">
       <div class="notify-head">
         <h2 id="notify-title" tabindex="-1">

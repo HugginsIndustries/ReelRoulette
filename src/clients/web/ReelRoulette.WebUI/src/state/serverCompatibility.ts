@@ -1,3 +1,5 @@
+import type { ServerVersion } from "./appStore";
+
 const WEBUI_API_VERSION = "1";
 const SUPPORTED_SERVER_API_VERSIONS = new Set(["1", "0"]);
 const REQUIRED_SERVER_CAPABILITIES = [
@@ -9,11 +11,29 @@ const REQUIRED_SERVER_CAPABILITIES = [
   "api.presets.match"
 ];
 
-/** The parts of `GET /api/version` the compatibility check reads. */
+/** The parts of `GET /api/version` the compatibility check and Diagnostics read. */
 export interface ServerVersionInfo {
+  appVersion?: unknown;
+  assetsVersion?: unknown;
   apiVersion?: unknown;
   minimumCompatibleApiVersion?: unknown;
   capabilities?: unknown;
+}
+
+function trimmedText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+/**
+ * The server's release version and API version, which the Settings tab's Diagnostics shows. `assetsVersion` is the
+ * release version, such as "0.15.0", while `appVersion` is the server's 4-part assembly version, such as "0.15.0.0",
+ * so `appVersion` is read only from a server that sends no `assetsVersion`.
+ */
+export function serverVersionOf(version: ServerVersionInfo | null | undefined): ServerVersion {
+  return {
+    version: trimmedText(version?.assetsVersion) || trimmedText(version?.appVersion),
+    apiVersion: trimmedText(version?.apiVersion)
+  };
 }
 
 function parseApiVersion(value: unknown): number {

@@ -34,6 +34,7 @@
   --focus-ring: rgba(239, 127, 34, 0.8);
   /* New for the validation pattern. */
   --error: #ff5a52;
+  --success: #22ef7f;
   --tip-bg: #f1f1f1;
   --tip-fg: #141414;
   /* Mockup-only annotations. */
@@ -60,6 +61,7 @@ html.theme-light {
   --icon: #333333;
   --focus-ring: rgba(239, 127, 34, 0.95);
   --error: #c4291f;
+  --success: #1a7f43;
   --tip-bg: #1f2329;
   --tip-fg: #ffffff;
   --mock: #a000b8;
@@ -166,11 +168,9 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 .btn[aria-disabled="true"] { cursor: not-allowed; }
 .btn[aria-disabled="true"] .btn-label { opacity: 0.5; }
 .btn .btn-problem {
-  display: none;
   font-size: 22px;
   color: var(--error);
 }
-.btn.shows-problem .btn-problem { display: inline-flex; }
 
 /* The field validation pattern. */
 .vfield {
@@ -182,17 +182,23 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
   width: 100%;
   padding-right: 40px;
 }
-.vfield-icon {
+.vfield-icon,
+.vfield-saved {
   position: absolute;
   right: 8px;
   top: 50%;
   transform: translateY(-50%);
   font-size: 24px;
+}
+.vfield-icon {
   color: var(--error);
-  display: none;
   cursor: help;
 }
-.vfield.is-invalid .vfield-icon { display: inline-flex; }
+/* A setting's field that has just saved a new value shows a green check in the red icon's place. */
+.vfield-saved {
+  color: var(--success);
+  pointer-events: none;
+}
 /* A dropdown keeps its arrow on the right, so its icon sits just after it. */
 .vfield-after { align-items: center; gap: 6px; }
 .vfield-after > .vfield-icon { position: static; transform: none; }
@@ -208,9 +214,7 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
   line-height: 1.35;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   pointer-events: none;
-  display: none;
 }
-.vfield-tip.is-shown { display: block; }
 .vfield-tip::after {
   content: "";
   position: absolute;
@@ -222,6 +226,36 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 }
 .vfield-tip[data-place="above"]::after { bottom: -5px; }
 .vfield-tip[data-place="below"]::after { top: -5px; }
+/* The pattern's red icons, in a field, on a held action, and after a Filter section's name, its tooltip, and a setting's
+   saved check fade in and out on their opacity (`fadeShown`): each is rendered while shown or fading out, and opaque
+   while shown. */
+.vfield-icon,
+.vfield-saved,
+.btn .btn-problem,
+.filter-tab .tab-problem,
+.vfield-tip {
+  display: none;
+  opacity: 0;
+  transition: opacity 250ms ease;
+}
+.vfield-icon.fade-rendered,
+.vfield-saved.fade-rendered,
+.btn .btn-problem.fade-rendered,
+.filter-tab .tab-problem.fade-rendered { display: inline-flex; }
+.vfield-tip.fade-rendered { display: block; }
+.vfield-icon.fade-shown,
+.vfield-saved.fade-shown,
+.btn .btn-problem.fade-shown,
+.filter-tab .tab-problem.fade-shown,
+.vfield-tip.fade-shown { opacity: 1; }
+.vfield-icon:not(.fade-shown) { pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .vfield-icon,
+  .vfield-saved,
+  .btn .btn-problem,
+  .filter-tab .tab-problem,
+  .vfield-tip { transition: none; }
+}
 
 /* The Filter tab's sub-tabs, as today. */
 .filter-tabstrip { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -242,8 +276,7 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
   border-color: var(--huggins-orange);
   box-shadow: 0 0 0 1px var(--huggins-orange-soft-inset) inset;
 }
-.filter-tab .tab-problem { display: none; font-size: 20px; color: var(--error); }
-.filter-tab.has-problem .tab-problem { display: inline-flex; }
+.filter-tab .tab-problem { font-size: 20px; color: var(--error); }
 .filter-section { margin-bottom: 20px; }
 .filter-section h3 { margin: 0 0 8px; font-size: 0.95rem; font-weight: 600; }
 .filter-hint { font-size: 0.85rem; opacity: 0.75; margin: 0 0 8px; }

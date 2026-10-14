@@ -80,6 +80,69 @@ describe("createPhotoTimer", () => {
     expect(timer.elapsed()).toBe(10_000);
   });
 
+  it("changes its length, keeping the time it has run and whether it runs or is held", () => {
+    const { timer, onEnd } = setup();
+    timer.start(10_000);
+    vi.advanceTimersByTime(4_000);
+    timer.setLength(6_000);
+    expect([timer.length, timer.elapsed(), timer.running]).toEqual([6_000, 4_000, true]);
+    vi.advanceTimersByTime(1_999);
+    expect(onEnd).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onEnd).toHaveBeenCalledTimes(1);
+
+    timer.start(10_000);
+    vi.advanceTimersByTime(2_000);
+    timer.hold();
+    timer.setLength(20_000);
+    expect([timer.length, timer.elapsed(), timer.running]).toEqual([20_000, 2_000, false]);
+    vi.advanceTimersByTime(60_000);
+    expect(onEnd).toHaveBeenCalledTimes(1);
+    timer.resume();
+    vi.advanceTimersByTime(17_999);
+    expect(onEnd).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1);
+    expect(onEnd).toHaveBeenCalledTimes(2);
+  });
+
+  it("ends at the next tick when its new length is no longer than the time it has run, or once it resumes", () => {
+    const { timer, onEnd } = setup();
+    timer.start(10_000);
+    vi.advanceTimersByTime(5_000);
+    timer.setLength(3_000);
+    expect(onEnd).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(0);
+    expect(onEnd).toHaveBeenCalledTimes(1);
+
+    timer.start(10_000);
+    vi.advanceTimersByTime(5_000);
+    timer.hold();
+    timer.setLength(5_000);
+    expect(timer.elapsed()).toBe(5_000);
+    vi.advanceTimersByTime(60_000);
+    expect(onEnd).toHaveBeenCalledTimes(1);
+    timer.resume();
+    vi.advanceTimersByTime(0);
+    expect(onEnd).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the time a held timer has run through a shorter length and then a longer one", () => {
+    const { timer, onEnd } = setup();
+    timer.start(10_000);
+    vi.advanceTimersByTime(5_000);
+    timer.hold();
+    timer.setLength(1_000);
+    expect(timer.elapsed()).toBe(1_000);
+    timer.setLength(15_000);
+    expect([timer.length, timer.elapsed(), timer.running]).toEqual([15_000, 5_000, false]);
+
+    timer.resume();
+    vi.advanceTimersByTime(9_999);
+    expect(onEnd).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onEnd).toHaveBeenCalledTimes(1);
+  });
+
   it("stops once cleared, and a cleared timer neither resumes nor moves", () => {
     const { timer, onEnd } = setup();
     timer.start(5_000);

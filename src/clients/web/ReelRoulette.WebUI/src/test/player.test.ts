@@ -81,7 +81,8 @@ function fakeFrames() {
   };
 }
 
-function setup() {
+/** A player whose device store starts with `saved`, as the page's `localStorage` would hold it. */
+function setup(saved: Record<string, string> = {}) {
   const requests: Array<{ path: string; body: any }> = [];
   const replies = new Map<string, () => Response>();
   const randomAnswers: unknown[] = [];
@@ -99,10 +100,13 @@ function setup() {
     return json({});
   }) as typeof fetch;
   const relayed: string[] = [];
+  // Photos show for 15 seconds, the time these tests' photo timers assume.
+  const kept = new Map(Object.entries({ "rr_device.playback.advanceAfter": "15", ...saved }));
+  const device = createDeviceStore({ getItem: (key) => kept.get(key) ?? null, setItem: (key, value) => void kept.set(key, value) });
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
     storage: { getItem: () => null, setItem: () => {} },
-    device: createDeviceStore(null),
+    device,
     relay: (_level, message) => relayed.push(message)
   });
   /** The texts relayed without a message, such as "Playing". */
@@ -146,7 +150,7 @@ function setup() {
     }
   };
   const frames = fakeFrames();
-  const player = createPlayer({ apiBaseUrl: "http://server/", store, api, connection, dialogs, notifications, frames });
+  const player = createPlayer({ apiBaseUrl: "http://server/", store, device, api, connection, dialogs, notifications, frames });
   const elements = {
     video: fakeVideo(),
     photo: { src: "", style: { display: "none" } },
@@ -158,6 +162,7 @@ function setup() {
     store,
     player,
     elements,
+    kept,
     frames,
     notices,
     relayed,
@@ -343,7 +348,7 @@ describe("createPlayer", () => {
     vi.useFakeTimers();
     const page = setup();
     page.answerRandom(SECOND_VIDEO);
-    page.store.setPhotoDuration("4");
+    page.store.setPhotoDuration(4);
     page.player.toggleAutoplay();
     page.play(PHOTO);
 
@@ -366,24 +371,44 @@ describe("createPlayer", () => {
     expect(page.store.playAttemptId.value).toBe(attempt + 1);
   });
 
-  it("restarts a photo's timer when the photo duration changes, and stops it when detached", async () => {
+  it("changes a showing photo's timer length when the photo duration changes, keeping its time, and stops it when detached", async () => {
     vi.useFakeTimers();
     const page = setup();
     page.player.toggleAutoplay();
     page.play(PHOTO);
+    const attempt = page.store.playAttemptId.value;
     await vi.advanceTimersByTimeAsync(10_000);
 
-    page.store.setPhotoDuration("2");
-    expect(page.store.playAttemptId.value).toBe(2);
-    await vi.advanceTimersByTimeAsync(2_000);
+    // The photo doesn't show again, so nothing loads or is recorded again.
+    page.store.setPhotoDuration(12);
+    expect(page.store.playAttemptId.value).toBe(attempt);
+    expect(page.player.timeText.value).toBe("0:10 / 0:12");
+    expect(page.requests("/api/record-playback")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(page.requests("/api/random")).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
     expect(page.requests("/api/random")).toHaveLength(1);
 
+    // Held, as Auto-Pause holds it, it stays held, and a length shorter than the time shown ends it once it resumes.
     page.play(PHOTO);
-    page.player.detach();
+    await vi.advanceTimersByTimeAsync(5_000);
+    page.player.autoPause();
+    page.store.setPhotoDuration(3);
+    expect(page.player.playButton.value.showsPause).toBe(false);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(page.requests("/api/random")).toHaveLength(1);
+    page.player.autoResume();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.requests("/api/random")).toHaveLength(2);
+
+    page.play(PHOTO);
+    const lastAttempt = page.store.playAttemptId.value;
+    page.player.detach();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(page.requests("/api/random")).toHaveLength(2);
+    page.store.setPhotoDuration(4);
     page.player.playCurrent();
-    expect(page.store.playAttemptId.value).toBe(3);
+    expect(page.store.playAttemptId.value).toBe(lastAttempt);
   });
 
   it("Loop sets the video to loop once a source was set, and Autoplay plays the next item when a video ends", () => {
@@ -753,6 +778,20 @@ describe("createPlayer", () => {
     expect(page.elements.video.plays.at(-1)).toBe("display=block muted=true src=http://server/api/media/item-other?token=t");
   });
 
+  it("keeps Mute on this device, so the next page starts with sound muted as it was", () => {
+    const page = setup();
+    page.player.toggleMute();
+    expect(page.kept.get("rr_device.player.muted")).toBe("true");
+
+    const next = setup(Object.fromEntries(page.kept));
+    expect(next.player.muted.value).toBe(true);
+    next.play(VIDEO);
+    expect(next.elements.video.plays).toEqual(["display=block muted=true src=http://server/api/media/item-video?token=t"]);
+
+    next.player.toggleMute();
+    expect(next.kept.get("rr_device.player.muted")).toBe("false");
+  });
+
   it("favorites and blacklists the playing item with the device's client id, each clearing the other, and remembers it for history", async () => {
     const page = setup();
     page.play(VIDEO);
@@ -1031,7 +1070,7 @@ describe("Loading… on the player's indicator", () => {
     expect(page.store.loading.shown.value).toBe(false);
   });
 
-  it("holds for a history step and a photo shown again", async () => {
+  it("holds for a history step and a photo shown again, but not for a photo duration change", async () => {
     vi.useFakeTimers();
     const page = setup();
     page.play(VIDEO);
@@ -1051,10 +1090,11 @@ describe("Loading… on the player's indicator", () => {
     await vi.advanceTimersByTimeAsync(500);
     expect(page.store.loading.shown.value).toBe(true);
     page.player.photoLoaded();
-    page.store.setPhotoDuration("4");
+    expect(page.store.loading.shown.value).toBe(false);
+
+    // A photo duration change doesn't show the photo again, so nothing waits.
+    page.store.setPhotoDuration(4);
     await vi.advanceTimersByTimeAsync(500);
-    expect(page.store.loading.shown.value).toBe(true);
-    page.player.photoLoaded();
     expect(page.store.loading.shown.value).toBe(false);
   });
 });

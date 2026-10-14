@@ -110,7 +110,7 @@ function tabRow(): HTMLElement {
   return panel().querySelector(".panel-tablist") as HTMLElement;
 }
 
-function tab(name: "Library" | "Filter" | "Tags"): HTMLButtonElement {
+function tab(name: "Library" | "Filter" | "Tags" | "Settings"): HTMLButtonElement {
   // A tab's name says so while it holds unsaved changes.
   return within(tabRow()).getByRole("tab", { name: new RegExp(`^${name}(, unsaved changes)?$`), hidden: true }) as HTMLButtonElement;
 }
@@ -171,8 +171,9 @@ describe("main page", () => {
     expect(document.getElementById("now-playing-name")!.textContent).toBe("clip 1.mp4");
     expect(document.getElementById("media-container")).not.toBeNull();
     expect(document.getElementById("status")).toBeNull();
-    expect(screen.queryByRole("button", { name: /settings/i, hidden: true })).toBeNull();
-    expect(screen.queryByRole("tab", { name: /settings|stats/i, hidden: true })).toBeNull();
+    // The panel's tab row reaches Settings, so neither the header nor the player has a settings icon.
+    expect(within(header).queryByRole("button", { name: /settings/i, hidden: true })).toBeNull();
+    expect(within(document.getElementById("media-container")!).queryByRole("button", { name: /settings/i, hidden: true })).toBeNull();
   });
 
   it("says how to start before anything plays, and a tap starts a random pick", async () => {
@@ -249,13 +250,13 @@ describe("panel button", () => {
 });
 
 describe("tabs", () => {
-  it("are one row of icons, Library, Filter, and Tags, each with a tooltip and an accessible name", async () => {
+  it("are one row of icons, Library, Filter, Tags, and Settings, each with a tooltip and an accessible name", async () => {
     await mount();
     const tabs = within(tabRow()).getAllByRole("tab", { hidden: true });
 
-    expect(tabs.map((button) => button.getAttribute("aria-label"))).toEqual(["Library", "Filter", "Tags"]);
-    expect(tabs.map((button) => button.title)).toEqual(["Library", "Filter", "Tags"]);
-    expect(tabs.map(icon)).toEqual(["browse", "filter_alt", "tag"]);
+    expect(tabs.map((button) => button.getAttribute("aria-label"))).toEqual(["Library", "Filter", "Tags", "Settings"]);
+    expect(tabs.map((button) => button.title)).toEqual(["Library", "Filter", "Tags", "Settings"]);
+    expect(tabs.map(icon)).toEqual(["browse", "filter_alt", "tag", "settings"]);
     expect(tabs.every((button) => button.parentElement === tabRow())).toBe(true);
     expect(tabRow().getAttribute("role")).toBe("tablist");
   });
@@ -264,7 +265,7 @@ describe("tabs", () => {
     await mount();
     await click(panelButton());
 
-    for (const name of ["Tags", "Filter", "Library"] as const) {
+    for (const name of ["Settings", "Tags", "Filter", "Library"] as const) {
       await click(tab(name));
       expect(shownPages()).toEqual([name]);
       expect(selectedTab()).toBe(name);

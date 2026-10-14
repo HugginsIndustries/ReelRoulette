@@ -22,11 +22,14 @@ import { createLoadingHolds, type LoadingHolds } from "../playback/loadingHolds"
 import type { components } from "../types/openapi.generated";
 import type { DeviceStore } from "./deviceStore";
 
-const PHOTO_DURATION_KEY = "rr_photoDuration";
+/** The Settings tab's Advance after, the photo duration, in the per-device store. */
+const ADVANCE_AFTER_KEY = "playback.advanceAfter";
+const LOOP_KEY = "player.loop";
+const AUTOPLAY_KEY = "player.autoplay";
 const RANDOMIZATION_MODE_KEY = "rr_randomizationMode";
-const DEFAULT_PHOTO_DURATION_SECONDS = 15;
-const MIN_PHOTO_DURATION_SECONDS = 1;
-const MAX_PHOTO_DURATION_SECONDS = 300;
+const DEFAULT_PHOTO_DURATION_SECONDS = 10;
+export const MIN_PHOTO_DURATION_SECONDS = 1;
+export const MAX_PHOTO_DURATION_SECONDS = 300;
 const DEFAULT_RANDOMIZATION_MODE = "SmartShuffle";
 const APPLIED_FILTER_KEY = "filter.applied";
 /** A repeated message is relayed to the server log at most once in this window. */
@@ -93,13 +96,20 @@ export interface ClientIdentity {
   deviceName: string;
 }
 
+/** The server's version and API version, as its last answered version check reported them. */
+export interface ServerVersion {
+  /** The release version, such as "0.15.0". */
+  version: string;
+  apiVersion: string;
+}
+
 export type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
 /** Changes one screen makes that another screen acts on. */
 export interface AppStoreEvents {
   /** A pick in the preset dropdown, which the header held before the Library tab, changed the applied filter. */
   headerFilterChanged: () => void;
-  /** The photo duration changed from the header. */
+  /** The photo duration, the Settings tab's Advance after, changed. */
   photoDurationChanged: () => void;
 }
 
@@ -113,8 +123,10 @@ export interface AppStore {
   readonly history: Signal<PlayingItem[]>;
   /** The playing item's place in `history`, or -1 before anything plays. */
   readonly historyIndex: Signal<number>;
-  readonly loop: Signal<boolean>;
-  readonly autoplay: Signal<boolean>;
+  /** The player's Loop, kept on this device. Change it with `setLoop`. */
+  readonly loop: ReadonlySignal<boolean>;
+  /** The player's Autoplay, kept on this device. Change it with `setAutoplay`. */
+  readonly autoplay: ReadonlySignal<boolean>;
   /** Each item's favorite and blacklist as last seen, applied when an item plays again. */
   readonly itemStates: ItemStateCache;
   readonly presets: Signal<ApiPreset[]>;
@@ -126,13 +138,16 @@ export interface AppStore {
   /** The preset dropdown stays on None until the applied filter changes, even when a saved preset has the default filter. */
   readonly headerExplicitNone: Signal<boolean>;
   readonly randomizationMode: Signal<string>;
-  readonly photoDurationSeconds: Signal<number>;
+  /** How long a photo shows, the Settings tab's Advance after, kept on this device. Change it with `setPhotoDuration`. */
+  readonly photoDurationSeconds: ReadonlySignal<number>;
   /** The media sources as last loaded, or null before they have. The Library tab's Filters line counts them. */
   readonly sources: Signal<FilterSource[] | null>;
   readonly compatibilityBlocked: Signal<boolean>;
   /** Why the server failed the compatibility check, while it has. */
   readonly compatibilityMessage: Signal<string | null>;
   readonly pairingRequired: Signal<boolean>;
+  /** The server's version from the last version check it answered, or null before one has. */
+  readonly serverVersion: Signal<ServerVersion | null>;
   /**
    * The server can't be reached: the event stream isn't open, or the last version check didn't reach the server. False
    * while the last check found no library, since the server then refuses the stream.
@@ -171,8 +186,10 @@ export interface AppStore {
   /** The value of the preset dropdown's selected entry: a preset id, empty for None, or the starred row. */
   selectedPresetValue(): string;
   setRandomizationMode(mode: string): void;
-  /** Takes the text of the photo duration field. A value outside 1 to 300 seconds is ignored. */
-  setPhotoDuration(text: string): void;
+  /** Sets the photo duration and keeps it on this device. Anything but a whole number from 1 to 300 seconds is ignored. */
+  setPhotoDuration(seconds: number): void;
+  setLoop(on: boolean): void;
+  setAutoplay(on: boolean): void;
   /**
    * Makes `item` the playing item, with its last-seen favorite and blacklist, and the newest history entry. The
    * entries after the playing one are dropped.
@@ -185,22 +202,21 @@ export interface AppStore {
 
 export interface AppStoreOptions {
   identity: ClientIdentity;
-  /** Browser `localStorage`, for the per-device photo duration and randomization mode. */
+  /** Browser `localStorage`, for the per-device randomization mode. */
   storage: StorageLike;
-  /** Remembers the applied filter and its preset on this device. */
+  /** Remembers the applied filter and its preset, the photo duration, Loop, and Autoplay on this device. */
   device: DeviceStore;
   /** Sends one line to the server log. */
   relay: (level: string, message: string) => void;
   now?: () => number;
 }
 
-function readPhotoDuration(storage: StorageLike): number {
-  const saved = Number.parseInt(storage.getItem(PHOTO_DURATION_KEY) || "", 10);
-  return isPhotoDuration(saved) ? saved : DEFAULT_PHOTO_DURATION_SECONDS;
+function isPhotoDuration(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= MIN_PHOTO_DURATION_SECONDS && (value as number) <= MAX_PHOTO_DURATION_SECONDS;
 }
 
-function isPhotoDuration(value: number): boolean {
-  return !Number.isNaN(value) && value >= MIN_PHOTO_DURATION_SECONDS && value <= MAX_PHOTO_DURATION_SECONDS;
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === "boolean";
 }
 
 function readRandomizationMode(storage: StorageLike): string {
@@ -237,6 +253,9 @@ export function createAppStore(options: AppStoreOptions): AppStore {
 
   const compatibilityBlocked = signal(false);
   const libraryState = signal("ready");
+  const loop = signal(options.device.read(LOOP_KEY, false, isBoolean));
+  const autoplay = signal(options.device.read(AUTOPLAY_KEY, false, isBoolean));
+  const photoDurationSeconds = signal(options.device.read(ADVANCE_AFTER_KEY, DEFAULT_PHOTO_DURATION_SECONDS, isPhotoDuration));
   const noLibrary = computed(() => libraryState.value !== "ready");
 
   const store: AppStore = {
@@ -245,8 +264,8 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     playAttemptId: signal(0),
     history: signal<PlayingItem[]>([]),
     historyIndex: signal(-1),
-    loop: signal(false),
-    autoplay: signal(false),
+    loop,
+    autoplay,
     itemStates: createItemStateCache(),
     presets: signal<ApiPreset[]>([]),
     presetMenu: signal<PresetMenu>({ entries: [{ label: PRESET_MENU_LOADING, value: "" }], selectedValue: "", message: true }),
@@ -254,11 +273,12 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     activePresetName: signal<string | null>(remembered?.preset ?? null),
     headerExplicitNone: signal(remembered?.holdNone ?? false),
     randomizationMode: signal(readRandomizationMode(options.storage)),
-    photoDurationSeconds: signal(readPhotoDuration(options.storage)),
+    photoDurationSeconds,
     sources: signal<FilterSource[] | null>(null),
     compatibilityBlocked,
     compatibilityMessage: signal<string | null>(null),
     pairingRequired: signal(false),
+    serverVersion: signal<ServerVersion | null>(null),
     reconnecting: signal(false),
     libraryState,
     libraryMessage: signal<string | null>(null),
@@ -344,14 +364,23 @@ export function createAppStore(options: AppStoreOptions): AppStore {
       options.storage.setItem(RANDOMIZATION_MODE_KEY, store.randomizationMode.peek());
     },
 
-    setPhotoDuration(text) {
-      const next = Number.parseInt(text || "", 10);
-      if (!isPhotoDuration(next)) {
+    setPhotoDuration(seconds) {
+      if (!isPhotoDuration(seconds)) {
         return;
       }
-      store.photoDurationSeconds.value = next;
-      options.storage.setItem(PHOTO_DURATION_KEY, String(next));
+      photoDurationSeconds.value = seconds;
+      options.device.write(ADVANCE_AFTER_KEY, seconds);
       emit("photoDurationChanged");
+    },
+
+    setLoop(on) {
+      loop.value = on;
+      options.device.write(LOOP_KEY, on);
+    },
+
+    setAutoplay(on) {
+      autoplay.value = on;
+      options.device.write(AUTOPLAY_KEY, on);
     },
 
     pushHistory(item) {

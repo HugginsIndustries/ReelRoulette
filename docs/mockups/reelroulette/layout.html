@@ -43,6 +43,7 @@
   --focus-ring: rgba(239, 127, 34, 0.8);
   /* New for the validation pattern. */
   --error: #ff5a52;
+  --success: #22ef7f;
   --tip-bg: #f1f1f1;
   --tip-fg: #141414;
   /* Mockup-only annotations. */
@@ -69,6 +70,7 @@ html.theme-light {
   --icon: #333333;
   --focus-ring: rgba(239, 127, 34, 0.95);
   --error: #c4291f;
+  --success: #1a7f43;
   --tip-bg: #1f2329;
   --tip-fg: #ffffff;
   --mock: #a000b8;
@@ -175,11 +177,9 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 .btn[aria-disabled="true"] { cursor: not-allowed; }
 .btn[aria-disabled="true"] .btn-label { opacity: 0.5; }
 .btn .btn-problem {
-  display: none;
   font-size: 22px;
   color: var(--error);
 }
-.btn.shows-problem .btn-problem { display: inline-flex; }
 
 /* The field validation pattern. */
 .vfield {
@@ -191,17 +191,23 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
   width: 100%;
   padding-right: 40px;
 }
-.vfield-icon {
+.vfield-icon,
+.vfield-saved {
   position: absolute;
   right: 8px;
   top: 50%;
   transform: translateY(-50%);
   font-size: 24px;
+}
+.vfield-icon {
   color: var(--error);
-  display: none;
   cursor: help;
 }
-.vfield.is-invalid .vfield-icon { display: inline-flex; }
+/* A setting's field that has just saved a new value shows a green check in the red icon's place. */
+.vfield-saved {
+  color: var(--success);
+  pointer-events: none;
+}
 /* A dropdown keeps its arrow on the right, so its icon sits just after it. */
 .vfield-after { align-items: center; gap: 6px; }
 .vfield-after > .vfield-icon { position: static; transform: none; }
@@ -217,9 +223,7 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
   line-height: 1.35;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   pointer-events: none;
-  display: none;
 }
-.vfield-tip.is-shown { display: block; }
 .vfield-tip::after {
   content: "";
   position: absolute;
@@ -231,6 +235,36 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 }
 .vfield-tip[data-place="above"]::after { bottom: -5px; }
 .vfield-tip[data-place="below"]::after { top: -5px; }
+/* The pattern's red icons, in a field, on a held action, and after a Filter section's name, its tooltip, and a setting's
+   saved check fade in and out on their opacity (`fadeShown`): each is rendered while shown or fading out, and opaque
+   while shown. */
+.vfield-icon,
+.vfield-saved,
+.btn .btn-problem,
+.filter-tab .tab-problem,
+.vfield-tip {
+  display: none;
+  opacity: 0;
+  transition: opacity 250ms ease;
+}
+.vfield-icon.fade-rendered,
+.vfield-saved.fade-rendered,
+.btn .btn-problem.fade-rendered,
+.filter-tab .tab-problem.fade-rendered { display: inline-flex; }
+.vfield-tip.fade-rendered { display: block; }
+.vfield-icon.fade-shown,
+.vfield-saved.fade-shown,
+.btn .btn-problem.fade-shown,
+.filter-tab .tab-problem.fade-shown,
+.vfield-tip.fade-shown { opacity: 1; }
+.vfield-icon:not(.fade-shown) { pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .vfield-icon,
+  .vfield-saved,
+  .btn .btn-problem,
+  .filter-tab .tab-problem,
+  .vfield-tip { transition: none; }
+}
 
 /* The Filter tab's sub-tabs, as today. */
 .filter-tabstrip { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -251,8 +285,7 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
   border-color: var(--huggins-orange);
   box-shadow: 0 0 0 1px var(--huggins-orange-soft-inset) inset;
 }
-.filter-tab .tab-problem { display: none; font-size: 20px; color: var(--error); }
-.filter-tab.has-problem .tab-problem { display: inline-flex; }
+.filter-tab .tab-problem { font-size: 20px; color: var(--error); }
 .filter-section { margin-bottom: 20px; }
 .filter-section h3 { margin: 0 0 8px; font-size: 0.95rem; font-weight: 600; }
 .filter-hint { font-size: 0.85rem; opacity: 0.75; margin: 0 0 8px; }
@@ -1742,8 +1775,8 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
           <div class="settings-section">
             <h3>Diagnostics</h3>
             <dl class="diag">
-              <dt>Client</dt><dd>3f9c2e81-…</dd>
-              <dt>Session</dt><dd>7a01d6c4-…</dd>
+              <dt>Client</dt><dd>3f9c2e81-5b7d-4c2a-9e6f-1d8b0a4c7e53</dd>
+              <dt>Session</dt><dd>7a01d6c4-2e9b-4f13-8c5d-6b3a9e0f1d27</dd>
               <dt>Client type</dt><dd id="diag-type"></dd>
               <dt>Device name</dt><dd id="diag-device"></dd>
               <dt>Server</dt><dd>0.15.0 (API 1)</dd>
@@ -1895,6 +1928,33 @@ function iconSpan(name, extraClass) {
   return span;
 }
 
+/**
+ * Shows or hides one of the field validation pattern's icons, its tooltip, or a setting's saved check, fading it in and
+ * out over FADE_MS on its opacity. It stays rendered while it fades out, so an icon that takes room, such as a held
+ * action's, keeps its place until it has faded, and a tooltip stays where it was. With reduced motion it shows and
+ * hides at once.
+ */
+const FADE_MS = 250;
+const fades = new WeakMap();
+function fadeShown(el, shown) {
+  if (!el || el.classList.contains("fade-shown") === shown) return;
+  clearTimeout(fades.get(el));
+  fades.delete(el);
+  if (shown) {
+    el.classList.add("fade-rendered");
+    // Rendered transparent first, so the fade in runs.
+    void el.offsetWidth;
+    el.classList.add("fade-shown");
+    return;
+  }
+  el.classList.remove("fade-shown");
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    el.classList.remove("fade-rendered");
+    return;
+  }
+  fades.set(el, setTimeout(() => el.classList.remove("fade-rendered"), FADE_MS));
+}
+
 const store = {
   get(key, fallback) {
     try {
@@ -1964,9 +2024,11 @@ function checkDuration(value) {
 }
 
 /**
- * A field using the validation pattern. `check(value)` returns null when the value is valid, `{ empty: true }` for
- * an empty required field, or `{ message }` for any other problem. An empty required field is never flagged: the
- * action that needs it is disabled instead. Any other problem is flagged as it is typed, and `holdAction` decides
+ * A field using the validation pattern. `check(value)` returns null when the value is valid, `{ empty: true }` while
+ * a field that may sit empty, such as a name typed for an action, is empty, or `{ message }` for any other problem.
+ * Such a field is never flagged while it is empty: the action that needs it is disabled instead. A field that must
+ * always hold a value for the app to work, such as Advance after, returns `{ message }` when it is emptied, so it is
+ * flagged and the user sees it. Any other problem is flagged as it is typed, and `holdAction` decides
  * whether it disables or holds the action.
  * `partners` are other controls checked with this one, such as the other dropdown of a pair: they are marked and
  * described with it, and focusing one shows the tooltip too. The icon and tooltip stay with `input`.
@@ -2022,7 +2084,7 @@ class ValidatedField {
     return this.input.disabled ? null : this.check(this.input.value);
   }
 
-  /** An empty required field is never flagged. */
+  /** A field that may sit empty is never flagged while it is empty. */
   get flagged() {
     const problem = this.problem;
     return !!problem && !problem.empty;
@@ -2033,7 +2095,7 @@ class ValidatedField {
     return !!this.problem;
   }
 
-  /** True while the field is an empty required one, which disables the action that needs it. */
+  /** True while a field that may sit empty is empty, which disables the action that needs it. */
   get disables() {
     return !!this.problem?.empty;
   }
@@ -2055,6 +2117,7 @@ class ValidatedField {
     const problem = this.problem;
     const flagged = this.flagged;
     this.wrap.classList.toggle("is-invalid", flagged);
+    fadeShown(this.icon, flagged);
     if (flagged) this.tip.textContent = problem.message;
     [this.input, ...this.partners].forEach((control) => {
       if (flagged) {
@@ -2082,7 +2145,8 @@ class ValidatedField {
       (this.pinned || this.hover || [this.input, ...this.partners].includes(document.activeElement)) &&
       this.wrap.offsetParent !== null &&
       this.inScrollView();
-    this.tip.classList.toggle("is-shown", shown);
+    // Rendered before it is measured; hidden, it fades out where it was.
+    fadeShown(this.tip, shown);
     if (!shown) return;
     const icon = this.icon.getBoundingClientRect();
     const tip = this.tip.getBoundingClientRect();
@@ -2120,6 +2184,79 @@ function flagPairField(favBox, favMode, blBox, blMode, options) {
   return field;
 }
 
+/**
+ * A setting that applies without Save and must always hold a value, on a field using the validation pattern. A valid
+ * value typed is saved only on Enter or when the field loses focus, so a value passed through on the way, such as the
+ * "1" of "120", is never saved. While the field has focus, a value that is not valid stays flagged; once it loses focus,
+ * or hides with its tab or the panel, it shows the value saved again, unflagged. A save that changes the value shows a
+ * green check where the field's red icon sits for SETTING_SAVED_MS, then fades it out, and a polite live region says
+ * "Saved". Nothing
+ * shows when the value stays as it was, or when a value that is not valid goes back to the one saved. A hidden field
+ * may get no blur, so call `leaveSettingFields()` when the Settings tab hides or the panel closes.
+ * `saved()` gives the value in use as the field shows it, and `save(text)` keeps a valid one. `show()` shows the value
+ * saved again, as after a reset.
+ */
+const SETTING_SAVED_MS = 2000;
+const settingFields = new Set();
+function settingField(field, saved, save) {
+  // Typed since the last save, or since the field showed the value saved.
+  let edited = false;
+  let savedTimer = null;
+  const check = iconSpan("check_circle", "vfield-saved");
+  const live = document.createElement("span");
+  live.className = "vh";
+  live.setAttribute("aria-live", "polite");
+  field.wrap.append(check, live);
+  const hideSaved = () => {
+    clearTimeout(savedTimer);
+    savedTimer = null;
+    field.wrap.classList.remove("is-saved");
+    fadeShown(check, false);
+    live.textContent = "";
+  };
+  const showSaved = () => {
+    hideSaved();
+    field.wrap.classList.add("is-saved");
+    fadeShown(check, true);
+    live.textContent = "Saved";
+    savedTimer = setTimeout(hideSaved, SETTING_SAVED_MS);
+  };
+  const saveEdit = () => {
+    if (!edited || field.holds) return;
+    edited = false;
+    const before = saved();
+    save(field.input.value.trim());
+    if (saved() !== before) showSaved();
+  };
+  const entry = {
+    field,
+    leave() {
+      saveEdit();
+      edited = false;
+      field.reset(saved());
+    },
+    show() {
+      edited = false;
+      hideSaved();
+      field.reset(saved());
+    }
+  };
+  field.reset(saved());
+  field.input.addEventListener("input", () => {
+    edited = true;
+    hideSaved();
+  });
+  field.input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") saveEdit();
+  });
+  field.input.addEventListener("blur", () => entry.leave());
+  settingFields.add(entry);
+  return entry;
+}
+function leaveSettingFields() {
+  settingFields.forEach((entry) => entry.leave());
+}
+
 let placeQueued = false;
 function placeAllTips() {
   if (placeQueued) return;
@@ -2134,10 +2271,10 @@ window.addEventListener("resize", placeAllTips);
 
 /**
  * Wires an action button to the fields it uses.
- * - An empty required field disables the action: it dims, and pressing it does nothing. So does any problem in a
- *   field `beside()` returns: a field that sits right next to the action, such as a new name beside its Add button, or
- *   a field of the dialog the action is in, since the dialog has the user's attention. The field's own icon and
- *   tooltip say why. A field in `beside()` is also one of `fields()`. Disabling wins over holding.
+ * - A field that may sit empty disables the action while it is empty: it dims, and pressing it does nothing. So does
+ *   any problem in a field `beside()` returns: a field that sits right next to the action, such as a new name beside
+ *   its Add button, or a field of the dialog the action is in, since the dialog has the user's attention. The field's
+ *   own icon and tooltip say why. A field in `beside()` is also one of `fields()`. Disabling wins over holding.
  * - Otherwise a flagged field elsewhere holds it: the button's label dims, it reads as unavailable, and the red icon
  *   shows on its right. Pressing it does nothing but take the user to the first field that holds it.
  */
@@ -2162,6 +2299,7 @@ function holdAction(button, fields, options) {
     const field = blocker();
     const held = !!field;
     button.classList.toggle("shows-problem", held);
+    fadeShown(button.querySelector(".btn-problem"), held);
     if (held) {
       button.setAttribute("aria-disabled", "true");
       describe.textContent = opts.reason ? opts.reason(field) : "Correct the field first.";
@@ -2824,7 +2962,7 @@ const state = {
   side: store.get("side", "right"),
   autoPause: store.get("autoPause", "responsive"),
   autoplayMode: store.get("autoplayMode", "normal"),
-  advanceAfter: store.get("advanceAfter", 5),
+  advanceAfter: store.get("advanceAfter", 10),
   seekStep: store.get("seekStep", 5),
   volumeStep: store.get("volumeStep", 5),
   volume: store.get("volume", 80),
@@ -3488,6 +3626,7 @@ function applyLayout() {
 }
 
 function showTab(tab) {
+  if (tab !== "settings") leaveSettingFields();
   state.tab = tab;
   store.set("tab", tab);
   document.querySelectorAll(".panel-tab").forEach((button) => {
@@ -3513,6 +3652,7 @@ function openPanel(tab, from) {
 }
 // Focus goes back to what opened the panel, or the panel button, only when it was in the panel or on its handle.
 function closePanel() {
+  leaveSettingFields();
   const focused = document.activeElement;
   const hadFocus = $("panel").contains(focused) || $("handle").contains(focused);
   state.open = false;
@@ -4545,9 +4685,11 @@ function renderApply() {
   const generalTab = document.querySelector('.filter-tab[data-sub="general"]');
   const generalProblem = flagModesField.flagged || minField.flagged || maxField.flagged;
   generalTab.classList.toggle("has-problem", generalProblem);
+  fadeShown(generalTab.querySelector(".tab-problem"), generalProblem);
   generalTab.title = generalProblem ? "A field here is not valid" : "";
   const presetsTab = document.querySelector('.filter-tab[data-sub="presets"]');
   presetsTab.classList.toggle("has-problem", nameField.flagged);
+  fadeShown(presetsTab.querySelector(".tab-problem"), nameField.flagged);
   presetsTab.title = nameField.flagged ? "A field here is not valid" : "";
 }
 // Apply, Add Preset, and Update Preset all use the General section's pair and durations; Add Preset uses the name too.
@@ -6040,22 +6182,17 @@ function initLoudnessSettings() {
     renderLoudness();
     syncStandInSound();
   };
-  // A value that is not valid is flagged and not kept; the one in use stays.
+  // Settings' fields: a value that is not valid is flagged and not kept, and the one in use stays.
   const fields = [
     ["set-loud-reduction", "reduction", rangeCheck(1, 30, " dB", true)],
     ["set-loud-boost", "boost", rangeCheck(0, 10, " dB", true)],
     ["set-loud-target", "target", rangeCheck(-50, -10, " LUFS", false)]
-  ].map(([id, key, check]) => {
-    const field = new ValidatedField($(id), check);
-    field.input.value = String(loudnessTuning[key]);
-    field.update();
-    field.onChange(() => {
-      if (field.holds) return;
-      loudnessTuning[key] = Number(field.input.value);
+  ].map(([id, key, check]) =>
+    settingField(new ValidatedField($(id), check), () => String(loudnessTuning[key]), (text) => {
+      loudnessTuning[key] = Number(text);
       save();
-    });
-    return [field, key];
-  });
+    })
+  );
   document.querySelectorAll('input[name="set-loud-baseline"]').forEach((radio) => {
     radio.addEventListener("change", () => {
       loudnessTuning.baseline = radio.value;
@@ -6064,7 +6201,7 @@ function initLoudnessSettings() {
   });
   $("set-loud-reset").addEventListener("click", () => {
     Object.assign(loudnessTuning, LOUDNESS_DEFAULTS);
-    fields.forEach(([field, key]) => field.reset(String(loudnessTuning[key])));
+    fields.forEach((field) => field.show());
     store.remove("loudnessSettings");
     renderLoudness();
     syncStandInSound();
@@ -6085,12 +6222,8 @@ function initSettings() {
     applyControlsMode();
   });
   renderHideSettings();
-  const hideAfter = new ValidatedField($("set-hide-after"), rangeCheck(1, 30, " seconds", true));
-  hideAfter.input.value = String(state.hideAfter);
-  hideAfter.update();
-  hideAfter.onChange(() => {
-    if (hideAfter.holds) return;
-    state.hideAfter = Number(hideAfter.input.value);
+  settingField(new ValidatedField($("set-hide-after"), rangeCheck(1, 30, " seconds", true)), () => String(state.hideAfter), (text) => {
+    state.hideAfter = Number(text);
     store.set("hideAfter", state.hideAfter);
     restartHideCountdown();
   });
@@ -6102,13 +6235,9 @@ function initSettings() {
   });
   bindChoice("set-side", "side", String, applyLayout);
   bindChoice("set-autopause", "autoPause", String, applyLayout);
-  // A value that is not valid is flagged and not kept; the one in use stays.
-  const advance = new ValidatedField($("set-advance"), rangeCheck(1, 3600, " seconds", true));
-  advance.input.value = String(state.advanceAfter);
-  advance.update();
-  advance.onChange(() => {
-    if (advance.holds) return;
-    state.advanceAfter = Number(advance.input.value);
+  // A showing photo keeps the time it has shown and takes the new length.
+  settingField(new ValidatedField($("set-advance"), rangeCheck(1, 3600, " seconds", true)), () => String(state.advanceAfter), (text) => {
+    state.advanceAfter = Number(text);
     store.set("advanceAfter", state.advanceAfter);
     renderTime();
   });
@@ -6192,10 +6321,12 @@ function initSettings() {
       notes.preview();
     });
   });
-  // Today's client type and device name, which the WebUI reads from the user agent.
-  const mobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+  // The client type and device name as the WebUI builds them from the browser, shown in full, as the ids are, since
+  // they are for matching last.log lines.
+  const userAgent = navigator.userAgent || "";
+  const mobile = /Android|iPhone|iPad|iPod|Mobi/i.test(userAgent);
   $("diag-type").textContent = mobile ? "mobile-web" : "web";
-  $("diag-device").textContent = mobile ? "Mobile Browser" : "Web Browser";
+  $("diag-device").textContent = `${mobile ? "Mobile Browser" : "Web Browser"} (${navigator.platform || "unknown-platform"}${userAgent ? `; ${userAgent.slice(0, 40)}` : ""})`;
   const list = $("shortcut-list");
   SHORTCUTS.forEach(([keys, action]) => {
     const dt = document.createElement("dt");

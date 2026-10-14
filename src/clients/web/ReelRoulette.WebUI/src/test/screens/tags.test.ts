@@ -1605,6 +1605,20 @@ describe("Edit Tags", () => {
     expect(addTagButton().disabled).toBe(false);
   });
 
+  it("the new tag name's red icon fades out once the name is free, rendered until it has faded", async () => {
+    await mountTags();
+    await openEditor();
+    const field = newTagField();
+    const icon = () => field.closest(".vfield")!.querySelector(".vfield-icon");
+    await typeInto(field, "Calm");
+    expect(icon()?.classList.contains("is-fading-out")).toBe(false);
+
+    await typeInto(field, "Sunset");
+    expect(fieldProblem(field)).toBeNull();
+    expect(icon()?.classList.contains("is-fading-out")).toBe(true);
+    await waitFor(() => expect(icon()).toBeNull());
+  });
+
   it("the Edit Tag dialog opens on the tag's name and category, and Cancel or a click outside closes it", async () => {
     await mountTags();
     await openEditor();

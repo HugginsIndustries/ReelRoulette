@@ -83,17 +83,21 @@ function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
     requests.push(new URL(String(input)).pathname);
     return new Response(JSON.stringify({ mediaUrl: null }), { headers: { "Content-Type": "application/json" } });
   }) as typeof fetch;
+  const device = createDeviceStore(null);
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
     storage: { getItem: () => null, setItem: () => {} },
-    device: createDeviceStore(null),
+    device,
     relay: () => {}
   });
+  // Photos show for 15 seconds, the time these tests' photo timers assume.
+  store.setPhotoDuration(15);
   const api = createAppApi("http://server", { onUnauthorized: () => {}, fetch: fetchImpl });
   const connection = { on() {} } as unknown as ServerConnection;
   const player = createPlayer({
     apiBaseUrl: "http://server/",
     store,
+    device,
     api,
     connection,
     dialogs: { notice: () => Promise.resolve() },
@@ -111,7 +115,7 @@ function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
     stage: { get clientWidth() { return viewport.width(); } },
     panel: { hidden: true, contains: () => false },
     handle: { hidden: true, offsetWidth: 12, contains: () => false },
-    pages: { library: { hidden: true }, filter: { hidden: true }, tags: { hidden: true } }
+    pages: { library: { hidden: true }, filter: { hidden: true }, tags: { hidden: true }, settings: { hidden: true } }
   });
   const autoTagOpen = signal(false);
   createAutoPause({ mode: signal(mode), panel, overPage: autoTagOpen, player });

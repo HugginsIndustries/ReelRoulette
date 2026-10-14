@@ -104,7 +104,7 @@ export function FilterDialog() {
             return (
               <button key={tab} type="button" class={tab === active ? "filter-tab is-active" : "filter-tab"} role="tab" data-filter-tab={tab} aria-selected={tab === active ? "true" : "false"} title={problem ? SECTION_PROBLEM_TITLE : undefined} onClick={() => filterDialog.showTab(tab)}>
                 {label}
-                {problem ? <SectionProblemMark /> : null}
+                <SectionProblemMark shown={problem} />
               </button>
             );
           })}

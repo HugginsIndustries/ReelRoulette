@@ -445,56 +445,6 @@ describe("randomization mode", () => {
   });
 });
 
-describe("photo duration", () => {
-  it("starts at 15 seconds, restores a saved value, and ignores a saved value out of range", () => {
-    mountPage();
-    expect((screen.getByRole("spinbutton", { name: "Photo duration in seconds" }) as HTMLInputElement).value).toBe("15");
-
-    resetPage();
-    localStorage.setItem("rr_photoDuration", "42");
-    mountPage();
-    expect((screen.getByRole("spinbutton", { name: "Photo duration in seconds" }) as HTMLInputElement).value).toBe("42");
-
-    resetPage();
-    localStorage.setItem("rr_photoDuration", "500");
-    mountPage();
-    expect((screen.getByRole("spinbutton", { name: "Photo duration in seconds" }) as HTMLInputElement).value).toBe("15");
-  });
-
-  it("saves a duration from 1 to 300 seconds and ignores anything else", () => {
-    mountPage();
-    const input = screen.getByRole("spinbutton", { name: "Photo duration in seconds" }) as HTMLInputElement;
-
-    fireEvent.change(input, { target: { value: "30" } });
-    expect(localStorage.getItem("rr_photoDuration")).toBe("30");
-
-    for (const invalid of ["0", "301", "", "abc"]) {
-      fireEvent.change(input, { target: { value: invalid } });
-      expect(localStorage.getItem("rr_photoDuration")).toBe("30");
-    }
-  });
-
-  it("restarts a playing photo's autoplay timer with the new duration", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    const server = new FakeServer();
-    server.on("POST", "/api/random", () => json(PHOTO_ITEM));
-    mountPage({ server });
-    await vi.advanceTimersByTimeAsync(0);
-
-    fireEvent.click(screen.getByRole("button", { name: "Autoplay" }));
-    fireEvent.click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
-    await vi.advanceTimersByTimeAsync(0);
-    expect(server.requests("POST", "/api/random")).toHaveLength(1);
-
-    await vi.advanceTimersByTimeAsync(10_000);
-    fireEvent.change(screen.getByRole("spinbutton", { name: "Photo duration in seconds" }), { target: { value: "2" } });
-    await vi.advanceTimersByTimeAsync(1_999);
-    expect(server.requests("POST", "/api/random")).toHaveLength(1);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(server.requests("POST", "/api/random")).toHaveLength(2);
-  });
-});
-
 describe("now playing", () => {
   it("is hidden before anything plays, then shows the file name, its full name as a tooltip, and the duration", async () => {
     const server = new FakeServer();
@@ -697,7 +647,10 @@ describe("page structure", () => {
     const page = mountPage();
     await pageReady(page.server);
     await settle();
-    expect(normalizedMarkup(page.root)).toMatchSnapshot();
+    // Diagnostics' values differ by run, browser, and release, so they are left out; the Settings tab's tests check them.
+    const root = page.root.cloneNode(true) as HTMLElement;
+    root.querySelectorAll(".diag dd").forEach((value) => (value.textContent = "…"));
+    expect(normalizedMarkup(root)).toMatchSnapshot();
   });
 
   it("keeps the same video element while the header changes and the event stream opens", async () => {

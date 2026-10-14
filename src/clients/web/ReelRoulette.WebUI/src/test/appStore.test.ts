@@ -52,35 +52,54 @@ function setup(options: Partial<AppStoreOptions> & { saved?: Record<string, stri
 
 describe("createAppStore", () => {
   it("starts with the saved photo duration and randomization mode, and the defaults when they are missing or invalid", () => {
-    const saved = setup({ saved: { rr_photoDuration: "42", rr_randomizationMode: "SpreadMode" } }).store;
+    const saved = setup({ saved: { "rr_device.playback.advanceAfter": "42", rr_randomizationMode: "SpreadMode" } }).store;
     expect(saved.photoDurationSeconds.value).toBe(42);
     expect(saved.randomizationMode.value).toBe("SpreadMode");
 
-    const invalid = setup({ saved: { rr_photoDuration: "301", rr_randomizationMode: "Shuffle" } }).store;
-    expect(invalid.photoDurationSeconds.value).toBe(15);
+    const invalid = setup({ saved: { "rr_device.playback.advanceAfter": "301", rr_randomizationMode: "Shuffle" } }).store;
+    expect(invalid.photoDurationSeconds.value).toBe(10);
     expect(invalid.randomizationMode.value).toBe("SmartShuffle");
 
     const empty = setup().store;
-    expect(empty.photoDurationSeconds.value).toBe(15);
+    expect(empty.photoDurationSeconds.value).toBe(10);
     expect(empty.presetMenu.value).toEqual({ entries: [{ label: "Loading...", value: "" }], selectedValue: "", message: true });
   });
 
-  it("saves a photo duration from 1 to 300 seconds, tells listeners, and ignores anything else", () => {
+  it("saves a photo duration from 1 to 300 seconds on this device, tells listeners, and ignores anything else", () => {
     const { store, storage } = setup();
     const changed = vi.fn();
     store.on("photoDurationChanged", changed);
 
-    store.setPhotoDuration("1");
-    store.setPhotoDuration("300");
+    store.setPhotoDuration(1);
+    store.setPhotoDuration(300);
     expect(store.photoDurationSeconds.value).toBe(300);
-    expect(storage.values.get("rr_photoDuration")).toBe("300");
+    expect(storage.values.get("rr_device.playback.advanceAfter")).toBe("300");
     expect(changed).toHaveBeenCalledTimes(2);
 
-    for (const invalid of ["0", "301", "", "abc"]) {
+    for (const invalid of [0, 301, 1.5, Number.NaN]) {
       store.setPhotoDuration(invalid);
     }
     expect(store.photoDurationSeconds.value).toBe(300);
+    expect(storage.values.get("rr_device.playback.advanceAfter")).toBe("300");
     expect(changed).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts Loop and Autoplay as kept on this device, off by default, and keeps each change", () => {
+    const fresh = setup();
+    expect(fresh.store.loop.value).toBe(false);
+    expect(fresh.store.autoplay.value).toBe(false);
+
+    fresh.store.setLoop(true);
+    fresh.store.setAutoplay(true);
+    expect(fresh.storage.values.get("rr_device.player.loop")).toBe("true");
+    expect(fresh.storage.values.get("rr_device.player.autoplay")).toBe("true");
+
+    const kept = setup({ saved: Object.fromEntries(fresh.storage.values) }).store;
+    expect(kept.loop.value).toBe(true);
+    expect(kept.autoplay.value).toBe(true);
+
+    kept.setLoop(false);
+    expect(kept.loop.value).toBe(false);
   });
 
   it("saves the randomization mode, and an empty one as Smart Shuffle", () => {

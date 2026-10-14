@@ -126,9 +126,9 @@ function Broken(): never {
 
 const EMPTY_STATE_TEXT = "Tap to play, or open the panel to choose a preset or filter.";
 
-/** The header's photo duration, which shows that the header renders. */
-function photoDuration(): HTMLElement {
-  return screen.getByRole("spinbutton", { name: "Photo duration in seconds" });
+/** The header, which is there only while it renders. */
+function header(): HTMLElement {
+  return screen.getByRole("banner");
 }
 
 type PanelTabName = "Library" | "Filter" | "Tags";
@@ -206,13 +206,13 @@ describe("ScreenBoundary", () => {
     );
     const page = mountPage({ server });
     await pageReady(server);
-    expect(photoDuration()).toBeTruthy();
+    expect(header()).toBeTruthy();
 
     fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
 
     await waitFor(() => expect(server.logLines()).toContain("ui-error screen=header error=TypeError"));
     expect(server.logLines().some((line) => line.includes("holiday"))).toBe(false);
-    expect(screen.queryByRole("spinbutton", { name: "Photo duration in seconds" })).toBeNull();
+    expect(screen.queryByRole("banner")).toBeNull();
     expect((page.root.querySelector("video") as HTMLVideoElement).src).toContain("/api/media/item-video");
 
     page.stream().open();
@@ -267,7 +267,7 @@ describe("ScreenBoundary", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open panel" }));
     fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
     await waitFor(() => expect((page.root.querySelector("video") as HTMLVideoElement).src).toContain("/api/media/item-video"));
-    expect(photoDuration()).toBeTruthy();
+    expect(header()).toBeTruthy();
     page.stream().open();
     await streamOpened(server);
   });
@@ -307,7 +307,7 @@ describe("ScreenBoundary", () => {
     await waitFor(() => expect(isShowing("Library")).toBe(true));
     fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
     await waitFor(() => expect((page.root.querySelector("video") as HTMLVideoElement).src).toContain("/api/media/item-video"));
-    expect(photoDuration()).toBeTruthy();
+    expect(header()).toBeTruthy();
     showPanelTab("Filter");
     await waitFor(() => expect(isShowing("Filter")).toBe(true));
     expect(page.root.querySelector("#panel-page-filter #filter-dialog")).not.toBeNull();
@@ -345,7 +345,7 @@ describe("ScreenBoundary", () => {
 
     fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
     await waitFor(() => expect((page.root.querySelector("video") as HTMLVideoElement).src).toContain("/api/media/item-video"));
-    expect(photoDuration()).toBeTruthy();
+    expect(header()).toBeTruthy();
     showPanelTab("Library");
     await waitFor(() => expect(isShowing("Library")).toBe(true));
     await waitFor(() => expect(within(page.root.querySelector("#library-overlay") as HTMLElement).getByText("No media in library.")).toBeTruthy());
@@ -388,7 +388,7 @@ describe("ScreenBoundary", () => {
 
     fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
     await waitFor(() => expect((page.root.querySelector("video") as HTMLVideoElement).src).toContain("/api/media/item-video"));
-    expect(photoDuration()).toBeTruthy();
+    expect(header()).toBeTruthy();
     showPanelTab("Library");
     await waitFor(() => expect(isShowing("Library")).toBe(true));
     await waitFor(() => expect(within(page.root.querySelector("#library-overlay") as HTMLElement).getByText("No media in library.")).toBeTruthy());

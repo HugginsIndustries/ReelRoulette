@@ -722,7 +722,7 @@ describe("loop and autoplay", () => {
     await click(button("Autoplay"));
     await click(emptyState());
 
-    await vi.advanceTimersByTimeAsync(14_999);
+    await vi.advanceTimersByTimeAsync(9_999);
     expect(randomPicks(server)).toBe(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(randomPicks(server)).toBe(2);
@@ -738,7 +738,7 @@ describe("loop and autoplay", () => {
 
     await click(button("Loop"));
     expect(playRecords(server)).toBe(2);
-    await vi.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(playRecords(server)).toBe(3);
     expect(randomPicks(server)).toBe(1);
     expect(photo().src).toBe(PHOTO_URL);
@@ -1020,19 +1020,19 @@ describe("Auto-Pause", () => {
     await mount(server);
     await click(button("Autoplay"));
     await click(emptyState());
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(6_000);
 
     await openPanel("Library");
     await vi.advanceTimersByTimeAsync(30_000);
     expect(randomPicks(server)).toBe(1);
-    expect(timeDisplay()).toBe("0:10 / 0:15");
+    expect(timeDisplay()).toBe("0:06 / 0:10");
 
     await closePanel();
     expect(iconOf("Play/Pause")).toBe("pause");
     expect(photo().src).toBe(PHOTO_URL);
     expect(playRecords(server)).toBe(1);
     expect(server.logLines().filter((line) => line.startsWith("playback=start"))).toHaveLength(1);
-    await vi.advanceTimersByTimeAsync(4_999);
+    await vi.advanceTimersByTimeAsync(3_999);
     expect(randomPicks(server)).toBe(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(randomPicks(server)).toBe(2);
@@ -1055,14 +1055,14 @@ describe("scrub bar on a photo", () => {
     expect(row.style.display).toBe("");
     expect(photoTimerBar().parentElement).toBe(row);
     expect(photoTimerBar().disabled).toBe(false);
-    expect([photoTimerBar().max, photoTimerBar().value, timeDisplay()]).toEqual(["15", "0", "0:00 / 0:15"]);
+    expect([photoTimerBar().max, photoTimerBar().value, timeDisplay()]).toEqual(["10", "0", "0:00 / 0:10"]);
     expect(iconOf("Play/Pause")).toBe("pause");
 
     // The last animation frame before now, at most 16 ms ago, moved the bar.
     await vi.advanceTimersByTimeAsync(5_250);
     expect(Number(photoTimerBar().value)).toBeGreaterThan(5.23);
     expect(Number(photoTimerBar().value)).toBeLessThanOrEqual(5.25);
-    expect(timeDisplay()).toBe("0:05 / 0:15");
+    expect(timeDisplay()).toBe("0:05 / 0:10");
   });
 
   it("Play/Pause holds and resumes the photo's timer with the time it had left, and dragging the bar moves it", async () => {
@@ -1076,12 +1076,12 @@ describe("scrub bar on a photo", () => {
     await click(button("Play/Pause"));
     expect(iconOf("Play/Pause")).toBe("play_arrow");
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(timeDisplay()).toBe("0:05 / 0:15");
+    expect(timeDisplay()).toBe("0:05 / 0:10");
     expect(randomPicks(server)).toBe(1);
 
-    fireEvent.input(photoTimerBar(), { target: { value: "12" } });
+    fireEvent.input(photoTimerBar(), { target: { value: "7" } });
     await flush();
-    expect(timeDisplay()).toBe("0:12 / 0:15");
+    expect(timeDisplay()).toBe("0:07 / 0:10");
     await click(button("Play/Pause"));
     expect(iconOf("Play/Pause")).toBe("pause");
     await vi.advanceTimersByTimeAsync(2_999);
@@ -1102,15 +1102,15 @@ describe("scrub bar on a photo", () => {
     expect(randomPicks(server)).toBe(1);
 
     await click(button("Autoplay"));
-    expect(disabled()).toEqual([false, false, "0:00 / 0:15"]);
+    expect(disabled()).toEqual([false, false, "0:00 / 0:10"]);
     await vi.advanceTimersByTimeAsync(5_100);
-    expect(timeDisplay()).toBe("0:05 / 0:15");
+    expect(timeDisplay()).toBe("0:05 / 0:10");
 
     await click(button("Loop"));
     expect(disabled()).toEqual([true, true, "0:00 / 0:00"]);
     expect(photoTimerBar().value).toBe("0");
     await click(button("Loop"));
-    expect(disabled()).toEqual([false, false, "0:00 / 0:15"]);
+    expect(disabled()).toEqual([false, false, "0:00 / 0:10"]);
 
     await click(button("Autoplay"));
     expect(disabled()).toEqual([true, true, "0:00 / 0:00"]);
@@ -1434,7 +1434,7 @@ describe("page structure", () => {
     expect(records).toHaveLength(0);
   });
 
-  it("adds no browser storage keys", async () => {
+  it("adds no browser storage keys but its buttons' state on this device", async () => {
     const server = serverPicking(VIDEO_ITEM, PHOTO_ITEM);
     server.on("POST", "/api/favorite", () => json({}));
     await mountAndPlay(server);
@@ -1447,7 +1447,7 @@ describe("page structure", () => {
     await click(button("Next"));
     await click(button("Previous"));
 
-    expect(storageKeys(localStorage)).toEqual(["rr_clientId"]);
+    expect(storageKeys(localStorage)).toEqual(["rr_clientId", "rr_device.player.autoplay", "rr_device.player.loop", "rr_device.player.muted"]);
     expect(storageKeys(sessionStorage)).toEqual(["rr_sessionId"]);
   });
 });

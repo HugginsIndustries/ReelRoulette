@@ -27,6 +27,7 @@ import {
   settle,
   status,
   stubRowLayout,
+  stubReducedMotion,
   stubScroller,
   unauthorizedLogLine,
   useStylesheet,
@@ -226,17 +227,17 @@ function selectedTab(): string {
     .join("");
 }
 
-/** Whether a section's tab shows the red icon of a flagged field. */
+/** Whether a section's tab shows the red icon of a flagged field, not counting one that is fading out. */
 function tabMarked(name: "General" | "Tags" | "Presets"): boolean {
   const tab = within(dialog()).getByRole("tab", { name });
-  const marked = tab.querySelector(".section-problem") !== null;
+  const marked = tab.querySelector(".section-problem:not(.is-fading-out)") !== null;
   expect(tab.title).toBe(marked ? "A field here is not valid" : "");
   return marked;
 }
 
-/** A field's red icon, or null while it is not flagged. */
+/** A field's red icon, or null while it is not flagged, as while it fades out. */
 function fieldIcon(field: HTMLElement): HTMLElement | null {
-  return field.closest(".vfield")?.querySelector<HTMLElement>(".vfield-icon") ?? null;
+  return field.closest(".vfield")?.querySelector<HTMLElement>(".vfield-icon:not(.is-fading-out)") ?? null;
 }
 
 /** The tooltip that describes a flagged field. */
@@ -245,8 +246,10 @@ function tooltipOf(field: HTMLElement): HTMLElement | null {
   return id ? document.getElementById(id) : null;
 }
 
+/** Whether a flagged field's tooltip shows, not counting one that is fading out. */
 function tooltipShown(field: HTMLElement): boolean {
-  return tooltipOf(field)?.classList.contains("is-shown") ?? false;
+  const tip = tooltipOf(field);
+  return !!tip && tip.classList.contains("is-shown") && !tip.classList.contains("is-fading-out");
 }
 
 /** An action's label, without its red icon. */
@@ -254,9 +257,9 @@ function label(button: HTMLButtonElement): string {
   return button.querySelector(".btn-label")?.textContent ?? "";
 }
 
-/** Whether a field holds the action, and whether the action shows the red icon of a flagged field. */
+/** Whether a field holds the action, and whether the action shows the red icon of a flagged field, not one fading out. */
 function heldState(button: HTMLButtonElement): { held: boolean; icon: boolean } {
-  return { held: button.getAttribute("aria-disabled") === "true", icon: button.querySelector(".btn-problem") !== null };
+  return { held: button.getAttribute("aria-disabled") === "true", icon: button.querySelector(".btn-problem:not(.is-fading-out)") !== null };
 }
 
 function heading(): string {
@@ -849,6 +852,51 @@ describe("General tab", () => {
     expect(min.hasAttribute("aria-describedby")).toBe(false);
     expect(fieldIcon(min)).toBeNull();
     expect(tabMarked("General")).toBe(false);
+  });
+
+  /** A red icon's or tooltip's state: shown, fading out while still rendered, or gone. */
+  function fade(element: Element | null): "shown" | "fading" | "gone" {
+    return !element ? "gone" : element.classList.contains("is-fading-out") ? "fading" : "shown";
+  }
+
+  /** The minimum duration's icon and shown tooltip, General's icon, and Apply's icon. */
+  function minimumMarks(min: HTMLInputElement): Array<"shown" | "fading" | "gone"> {
+    const field = min.closest(".vfield")!;
+    const general = within(dialog()).getByRole("tab", { name: "General" });
+    return [field.querySelector(".vfield-icon"), field.querySelector(".vfield-tip.is-shown"), general.querySelector(".section-problem"), applyButton().querySelector(".btn-problem")].map(fade);
+  }
+
+  it("fades a corrected duration's icon and tooltip, General's icon, and Apply's icon out, rendered until they have faded", async () => {
+    await mountFilter();
+    await openDialog();
+    const min = byId<HTMLInputElement>("filter-min-dur-text");
+    min.focus();
+    await type(min, "abc");
+    expect(minimumMarks(min)).toEqual(["shown", "shown", "shown", "shown"]);
+
+    // Only the look lingers: the field and Apply change at once, and the tooltip keeps the problem it said.
+    await type(min, "1:07");
+    expect(minimumMarks(min)).toEqual(["fading", "fading", "fading", "fading"]);
+    expect([min.hasAttribute("aria-invalid"), min.hasAttribute("aria-describedby"), heldState(applyButton()).held, tabMarked("General")]).toEqual([false, false, false, false]);
+    expect(min.closest(".vfield")!.querySelector(".vfield-tip")!.textContent).toBe("Use MM:SS, HH:MM:SS, or seconds.");
+
+    // Flagged again while they fade, they show again.
+    await type(min, "1:7x");
+    expect(minimumMarks(min)).toEqual(["shown", "shown", "shown", "shown"]);
+    await type(min, "");
+    await waitFor(() => expect(minimumMarks(min)).toEqual(["gone", "gone", "gone", "gone"]));
+  });
+
+  it("with reduced motion, takes a corrected duration's icon and tooltip, General's icon, and Apply's icon away at once", async () => {
+    stubReducedMotion();
+    await mountFilter();
+    await openDialog();
+    const min = byId<HTMLInputElement>("filter-min-dur-text");
+    min.focus();
+    await type(min, "abc");
+    expect(minimumMarks(min)).toEqual(["shown", "shown", "shown", "shown"]);
+    await type(min, "1:07");
+    expect(minimumMarks(min)).toEqual(["gone", "gone", "gone", "gone"]);
   });
 
   it("shows the tooltip while the field has focus, while the pointer is on the icon, and after a tap on the icon", async () => {

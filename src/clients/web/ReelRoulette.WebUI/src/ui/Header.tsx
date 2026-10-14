@@ -4,9 +4,9 @@ import { useApp } from "./appContext";
 import { HeldButton } from "./FieldValidation";
 
 /**
- * The top bar: logo, pairing prompt, photo duration, and the playing file. The stylesheet
- * shows one of the logo's images, by theme and width, and each carries the name "ReelRoulette" for the heading. On a
- * phone on its side it shows only while the server asks for pairing.
+ * The top bar: logo, pairing prompt, and the playing file. The stylesheet shows one of the logo's images, by theme and
+ * width, and each carries the name "ReelRoulette" for the heading. On a phone on its side it shows only while the
+ * server asks for pairing.
  */
 export function Header() {
   const { store } = useApp();
@@ -18,7 +18,6 @@ export function Header() {
         <img class="brand-icon" src="/icons/logo-icon.svg" alt="ReelRoulette" />
       </h1>
       <PairingPrompt />
-      <PhotoDuration />
       <NowPlaying />
     </header>
   );
@@ -33,16 +32,6 @@ function PairingPrompt() {
     <div id="pair-section" class="pair-section" style={{ display: store.pairingRequired.value ? "flex" : "none" }}>
       <label class="pair-section-label"><span class="pair-section-label-hint">Pairing token</span> <input type="text" id="pair-token" placeholder="Enter token" defaultValue={config.pairToken} ref={tokenInput} onInput={(event) => setEmpty(!event.currentTarget.value.trim())} /></label>
       <HeldButton id="pair-btn" disabled={empty} heldReason={null} onClick={() => void connection.pair(tokenInput.current?.value ?? "")}>Pair</HeldButton>
-    </div>
-  );
-}
-
-function PhotoDuration() {
-  const { store } = useApp();
-  // Uncontrolled, so a value the store ignores stays in the field as typed.
-  return (
-    <div class="photo-duration-wrap">
-      <label>Photo Duration: <input type="number" id="photo-duration" min="1" max="300" step="1" defaultValue={String(store.photoDurationSeconds.peek())} aria-label="Photo duration in seconds" onChange={(event) => store.setPhotoDuration(event.currentTarget.value)} /><span class="unit">s</span></label>
     </div>
   );
 }

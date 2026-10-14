@@ -26,8 +26,9 @@
   --time-display-fg: #ffffff;
   --control-drop-shadow: 0 2px 10px rgba(0, 0, 0, 0.72);
   --transport-cluster-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
-  /* The field validation pattern's icon, and its tooltip. */
+  /* The field validation pattern's icon, a setting's saved check, and the tooltip. */
   --error: #ff5a52;
+  --success: #22ef7f;
   --tip-bg: #f1f1f1;
   --tip-fg: #141414;
   /* The in-app dialog and its controls. */
@@ -66,6 +67,7 @@ html.theme-light {
   --control-drop-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
   --transport-cluster-shadow: 0 3px 12px rgba(0, 0, 0, 0.22);
   --error: #c4291f;
+  --success: #1a7f43;
   --tip-bg: #1f2329;
   --tip-fg: #ffffff;
   --surface-raised: #ffffff;
@@ -225,6 +227,49 @@ input, progress, meter { accent-color: var(--huggins-orange); }
   font-size: 20px;
   color: var(--error);
 }
+/* A setting's field that has just saved a new value shows a green check in the red icon's place. */
+.vfield-saved {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 24px;
+  color: var(--success);
+  pointer-events: none;
+}
+/* The pattern's red icons, its tooltip, and a setting's saved check fade in as they show, and fade out, still
+   rendered, as they go (`useFadeOut`); a fade out takes over from a fade in that hasn't finished. With reduced motion
+   they show and hide at once. */
+.vfield-icon,
+.vfield-saved,
+.btn-problem,
+.section-problem,
+.vfield-tip.is-shown {
+  animation: field-mark-in 250ms ease;
+  transition: opacity 250ms ease;
+}
+.vfield-icon.is-fading-out,
+.vfield-saved.is-fading-out,
+.btn-problem.is-fading-out,
+.section-problem.is-fading-out,
+.vfield-tip.is-fading-out {
+  opacity: 0;
+  animation: none;
+  pointer-events: none;
+}
+@keyframes field-mark-in {
+  from { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vfield-icon,
+  .vfield-saved,
+  .btn-problem,
+  .section-problem,
+  .vfield-tip.is-shown {
+    animation: none;
+    transition: none;
+  }
+}
 /* Read by screen readers, not shown. */
 .visually-hidden {
   position: absolute !important;
@@ -237,7 +282,7 @@ input, progress, meter { accent-color: var(--huggins-orange); }
   white-space: nowrap;
   border: 0;
 }
-/* An action an empty required field, or a problem in a field right next to it, disables. */
+/* An action that a field which may sit empty, while it is empty, or a problem in a field right next to it, disables. */
 .held-action:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -577,27 +622,6 @@ body {
   outline: 2px solid #7aa7ff;
   outline-offset: 1px;
 }
-.photo-duration-wrap input[type="number"] {
-  width: 4ch;
-  padding: 6px 8px;
-  font-size: 0.95rem;
-  background: var(--input-bg);
-  color: var(--input-fg);
-  border: 1px solid var(--panel-border);
-  border-radius: 4px;
-}
-.photo-duration-wrap .unit {
-  margin-left: 6px;
-}
-.photo-duration-wrap input[type="number"]::-webkit-outer-spin-button,
-.photo-duration-wrap input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.photo-duration-wrap input[type="number"] {
-  appearance: textfield;
-}
-.photo-duration-wrap label { white-space: nowrap; }
 .now-playing {
   font-size: 0.95rem;
   margin-left: auto;
@@ -684,10 +708,12 @@ body {
   filter: drop-shadow(var(--control-drop-shadow));
 }
 /* The bell sits at the top left, so it can be reached in fullscreen and on a phone on its side, and it hides with the
-   other controls. */
+   other controls. The panel button sits on the panel's side: at the top right, or just right of the bell while the
+   panel is on the left. */
 #notify-btn.overlay-corner-btn { left: 12px; }
 #notify-btn .notify-badge { box-shadow: 0 0 0 2px #000; }
 #panel-btn.overlay-corner-btn { right: 116px; }
+.fullscreen-stage[data-side="left"] #panel-btn.overlay-corner-btn { right: auto; left: 64px; }
 #favorite-btn.overlay-corner-btn { right: 64px; }
 #blacklist-btn.overlay-corner-btn { right: 12px; }
 .overlay-seek-row {
@@ -859,10 +885,11 @@ body {
    indicator. */
 .fullscreen-stage:not(.covers-player) .media-container.controls-visible ~ .toasts[data-pos^="bottom"] { bottom: 112px; }
 .player-col.is-narrow .toasts[data-pos^="top"] { top: 104px; }
-/* The Filter and Tags tabs, as the mockup lays them out: a head with the heading and icon buttons, a bordered body
-   that scrolls, and a footer. */
+/* The Filter, Tags, and Settings tabs, as the mockup lays them out: a head with the heading and a body that scrolls,
+   with icon buttons in the head and a footer in the Filter and Tags tabs. */
 .filter-dialog,
-.tag-editor {
+.tag-editor,
+.settings-tab {
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -872,7 +899,8 @@ body {
   gap: 10px;
 }
 .filter-dialog-header,
-.tag-editor-header {
+.tag-editor-header,
+.settings-tab-header {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -880,7 +908,8 @@ body {
   flex: 0 0 auto;
 }
 .filter-dialog-header h2,
-.tag-editor-header h2 {
+.tag-editor-header h2,
+.settings-tab-header h2 {
   flex: 1 1 auto;
   min-width: 0;
   margin: 0;
@@ -963,6 +992,31 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
   padding: 10px;
 }
 .tag-editor-body .tag-category { background: var(--surface); }
+/* The Settings tab: its sections, each bordered, in a body that scrolls. */
+.settings-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.settings-section { border: 1px solid var(--surface-border); border-radius: 8px; padding: 10px 12px; }
+.settings-section h3 { margin: 0 0 8px; font-size: 0.95rem; }
+.setting { margin-bottom: 12px; }
+.setting:last-child { margin-bottom: 0; }
+.setting-label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 0.92rem; }
+.setting-hint { font-size: 0.82rem; color: var(--muted-fg); margin: 4px 0 0; }
+.choice-row { display: flex; flex-wrap: wrap; gap: 0 16px; }
+.choice-row label, .choice-stack label { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.choice-stack { display: flex; flex-direction: column; }
+.choice-stack label { align-items: flex-start; padding: 4px 0; }
+.choice-stack label input { margin-top: 3px; }
+.choice-stack small { display: block; color: var(--muted-fg); font-size: 0.82rem; }
+.number-field { width: 8rem; }
+/* Diagnostics: the ids and the device name in full, wrapping anywhere, since they are for matching `last.log` lines. */
+.diag { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 0.9rem; }
+.diag dd { margin: 0; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8rem; word-break: break-all; }
 /* The footer's two rows: add category and the new tag's category, then its name, Add tag, and Save. */
 .tag-editor-footer { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
 .tag-editor-footer-row { display: flex; align-items: center; gap: 8px; }
@@ -1496,10 +1550,6 @@ html.theme-light .library-overlay-result-row {
     flex: 0 0 auto;
     align-self: center;
   }
-  .top-bar > .photo-duration-wrap {
-    width: 100%;
-    max-width: 100%;
-  }
   .now-playing { margin-left: 0; }
 }
 
@@ -1706,17 +1756,20 @@ body.short-screen .panel-tab[aria-selected="true"]::after {
 }
 body.short-screen .library-overlay,
 body.short-screen .filter-dialog,
-body.short-screen .tag-editor {
+body.short-screen .tag-editor,
+body.short-screen .settings-tab {
   padding: 6px 10px;
   gap: 6px;
 }
 body.short-screen .filter-dialog-header,
-body.short-screen .tag-editor-header {
+body.short-screen .tag-editor-header,
+body.short-screen .settings-tab-header {
   min-height: 36px;
 }
 body.short-screen .library-overlay-header h2,
 body.short-screen .filter-dialog-header h2,
-body.short-screen .tag-editor-header h2 {
+body.short-screen .tag-editor-header h2,
+body.short-screen .settings-tab-header h2 {
   font-size: 1rem;
 }
 body.short-screen .library-overlay button:not(.icon-glyph-base):not(.library-filter-summary),

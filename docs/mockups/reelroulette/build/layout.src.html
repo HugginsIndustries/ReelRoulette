@@ -1222,8 +1222,8 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
           <div class="settings-section">
             <h3>Diagnostics</h3>
             <dl class="diag">
-              <dt>Client</dt><dd>3f9c2e81-…</dd>
-              <dt>Session</dt><dd>7a01d6c4-…</dd>
+              <dt>Client</dt><dd>3f9c2e81-5b7d-4c2a-9e6f-1d8b0a4c7e53</dd>
+              <dt>Session</dt><dd>7a01d6c4-2e9b-4f13-8c5d-6b3a9e0f1d27</dd>
               <dt>Client type</dt><dd id="diag-type"></dd>
               <dt>Device name</dt><dd id="diag-device"></dd>
               <dt>Server</dt><dd>0.15.0 (API 1)</dd>
@@ -1377,7 +1377,7 @@ const state = {
   side: store.get("side", "right"),
   autoPause: store.get("autoPause", "responsive"),
   autoplayMode: store.get("autoplayMode", "normal"),
-  advanceAfter: store.get("advanceAfter", 5),
+  advanceAfter: store.get("advanceAfter", 10),
   seekStep: store.get("seekStep", 5),
   volumeStep: store.get("volumeStep", 5),
   volume: store.get("volume", 80),
@@ -2041,6 +2041,7 @@ function applyLayout() {
 }
 
 function showTab(tab) {
+  if (tab !== "settings") leaveSettingFields();
   state.tab = tab;
   store.set("tab", tab);
   document.querySelectorAll(".panel-tab").forEach((button) => {
@@ -2066,6 +2067,7 @@ function openPanel(tab, from) {
 }
 // Focus goes back to what opened the panel, or the panel button, only when it was in the panel or on its handle.
 function closePanel() {
+  leaveSettingFields();
   const focused = document.activeElement;
   const hadFocus = $("panel").contains(focused) || $("handle").contains(focused);
   state.open = false;
@@ -3098,9 +3100,11 @@ function renderApply() {
   const generalTab = document.querySelector('.filter-tab[data-sub="general"]');
   const generalProblem = flagModesField.flagged || minField.flagged || maxField.flagged;
   generalTab.classList.toggle("has-problem", generalProblem);
+  fadeShown(generalTab.querySelector(".tab-problem"), generalProblem);
   generalTab.title = generalProblem ? "A field here is not valid" : "";
   const presetsTab = document.querySelector('.filter-tab[data-sub="presets"]');
   presetsTab.classList.toggle("has-problem", nameField.flagged);
+  fadeShown(presetsTab.querySelector(".tab-problem"), nameField.flagged);
   presetsTab.title = nameField.flagged ? "A field here is not valid" : "";
 }
 // Apply, Add Preset, and Update Preset all use the General section's pair and durations; Add Preset uses the name too.
@@ -4593,22 +4597,17 @@ function initLoudnessSettings() {
     renderLoudness();
     syncStandInSound();
   };
-  // A value that is not valid is flagged and not kept; the one in use stays.
+  // Settings' fields: a value that is not valid is flagged and not kept, and the one in use stays.
   const fields = [
     ["set-loud-reduction", "reduction", rangeCheck(1, 30, " dB", true)],
     ["set-loud-boost", "boost", rangeCheck(0, 10, " dB", true)],
     ["set-loud-target", "target", rangeCheck(-50, -10, " LUFS", false)]
-  ].map(([id, key, check]) => {
-    const field = new ValidatedField($(id), check);
-    field.input.value = String(loudnessTuning[key]);
-    field.update();
-    field.onChange(() => {
-      if (field.holds) return;
-      loudnessTuning[key] = Number(field.input.value);
+  ].map(([id, key, check]) =>
+    settingField(new ValidatedField($(id), check), () => String(loudnessTuning[key]), (text) => {
+      loudnessTuning[key] = Number(text);
       save();
-    });
-    return [field, key];
-  });
+    })
+  );
   document.querySelectorAll('input[name="set-loud-baseline"]').forEach((radio) => {
     radio.addEventListener("change", () => {
       loudnessTuning.baseline = radio.value;
@@ -4617,7 +4616,7 @@ function initLoudnessSettings() {
   });
   $("set-loud-reset").addEventListener("click", () => {
     Object.assign(loudnessTuning, LOUDNESS_DEFAULTS);
-    fields.forEach(([field, key]) => field.reset(String(loudnessTuning[key])));
+    fields.forEach((field) => field.show());
     store.remove("loudnessSettings");
     renderLoudness();
     syncStandInSound();
@@ -4638,12 +4637,8 @@ function initSettings() {
     applyControlsMode();
   });
   renderHideSettings();
-  const hideAfter = new ValidatedField($("set-hide-after"), rangeCheck(1, 30, " seconds", true));
-  hideAfter.input.value = String(state.hideAfter);
-  hideAfter.update();
-  hideAfter.onChange(() => {
-    if (hideAfter.holds) return;
-    state.hideAfter = Number(hideAfter.input.value);
+  settingField(new ValidatedField($("set-hide-after"), rangeCheck(1, 30, " seconds", true)), () => String(state.hideAfter), (text) => {
+    state.hideAfter = Number(text);
     store.set("hideAfter", state.hideAfter);
     restartHideCountdown();
   });
@@ -4655,13 +4650,9 @@ function initSettings() {
   });
   bindChoice("set-side", "side", String, applyLayout);
   bindChoice("set-autopause", "autoPause", String, applyLayout);
-  // A value that is not valid is flagged and not kept; the one in use stays.
-  const advance = new ValidatedField($("set-advance"), rangeCheck(1, 3600, " seconds", true));
-  advance.input.value = String(state.advanceAfter);
-  advance.update();
-  advance.onChange(() => {
-    if (advance.holds) return;
-    state.advanceAfter = Number(advance.input.value);
+  // A showing photo keeps the time it has shown and takes the new length.
+  settingField(new ValidatedField($("set-advance"), rangeCheck(1, 3600, " seconds", true)), () => String(state.advanceAfter), (text) => {
+    state.advanceAfter = Number(text);
     store.set("advanceAfter", state.advanceAfter);
     renderTime();
   });
@@ -4745,10 +4736,12 @@ function initSettings() {
       notes.preview();
     });
   });
-  // Today's client type and device name, which the WebUI reads from the user agent.
-  const mobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+  // The client type and device name as the WebUI builds them from the browser, shown in full, as the ids are, since
+  // they are for matching last.log lines.
+  const userAgent = navigator.userAgent || "";
+  const mobile = /Android|iPhone|iPad|iPod|Mobi/i.test(userAgent);
   $("diag-type").textContent = mobile ? "mobile-web" : "web";
-  $("diag-device").textContent = mobile ? "Mobile Browser" : "Web Browser";
+  $("diag-device").textContent = `${mobile ? "Mobile Browser" : "Web Browser"} (${navigator.platform || "unknown-platform"}${userAgent ? `; ${userAgent.slice(0, 40)}` : ""})`;
   const list = $("shortcut-list");
   SHORTCUTS.forEach(([keys, action]) => {
     const dt = document.createElement("dt");

@@ -267,7 +267,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
           "Manage Presets"
         <div class="filter-preset-list themed-scrollbar">
           <div class="filter-preset-row" data-preset-idx="0">
-            <button aria-describedby="P0-7" aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-describedby="P0-8" aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -276,7 +276,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
               <span class="material-symbol-icon">
                 "edit_note"
           <div class="filter-preset-row" data-preset-idx="1">
-            <button aria-describedby="P0-7" aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-describedby="P0-8" aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -284,7 +284,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
             <button aria-label="Edit preset Favorites" class="icon-btn" data-preset-edit="1" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
-        <p class="visually-hidden" id="P0-7">
+        <p class="visually-hidden" id="P0-8">
           "Drag to reorder, or press the up and down arrow keys."
         <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">
@@ -565,7 +565,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
           "Manage Presets"
         <div class="filter-preset-list themed-scrollbar">
           <div class="filter-preset-row" data-preset-idx="0">
-            <button aria-describedby="P0-7" aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-describedby="P0-8" aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -574,7 +574,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
               <span class="material-symbol-icon">
                 "edit_note"
           <div class="filter-preset-row" data-preset-idx="1">
-            <button aria-describedby="P0-7" aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-describedby="P0-8" aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -582,7 +582,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
             <button aria-label="Edit preset Favorites" class="icon-btn" data-preset-edit="1" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
-        <p class="visually-hidden" id="P0-7">
+        <p class="visually-hidden" id="P0-8">
           "Drag to reorder, or press the up and down arrow keys."
         <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">
@@ -863,7 +863,7 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
           "Manage Presets"
         <div class="filter-preset-list themed-scrollbar">
           <div class="filter-preset-row" data-preset-idx="0">
-            <button aria-describedby="P0-7" aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-describedby="P0-8" aria-label="Reorder Rich" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -872,7 +872,7 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
               <span class="material-symbol-icon">
                 "edit_note"
           <div class="filter-preset-row" data-preset-idx="1">
-            <button aria-describedby="P0-7" aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
+            <button aria-describedby="P0-8" aria-label="Reorder Favorites" class="drag-handle" title="Drag to reorder" type="button">
               <span class="material-symbol-icon">
                 "drag_indicator"
             <span class="filter-preset-name">
@@ -880,7 +880,7 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
             <button aria-label="Edit preset Favorites" class="icon-btn" data-preset-edit="1" title="Edit preset" type="button">
               <span class="material-symbol-icon">
                 "edit_note"
-        <p class="visually-hidden" id="P0-7">
+        <p class="visually-hidden" id="P0-8">
           "Drag to reorder, or press the up and down arrow keys."
         <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">

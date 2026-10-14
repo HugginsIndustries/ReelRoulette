@@ -1,7 +1,8 @@
-import { access, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 // Node runs this TypeScript module as is by stripping its types, so the build is checked by the app's own rules.
 import { parseRuntimeConfig } from "../src/config/runtimeConfig.ts";
+import { readAppVersion } from "./app-version.mjs";
 
 const cwd = process.cwd();
 const distDir = path.join(cwd, "dist");
@@ -95,6 +96,23 @@ async function verifyRuntimeConfig() {
   }
 }
 
+/**
+ * The built scripts hold the app's version from `.version`, which Diagnostics in the Settings tab shows, as a string in
+ * any of the quotes the minifier writes (it uses backticks).
+ */
+async function verifyAppVersion() {
+  const version = readAppVersion();
+  const literals = ['"', "'", "`"].map((quote) => `${quote}${version}${quote}`);
+  const scripts = (await readdir(assetsDir)).filter((name) => name.endsWith(".js"));
+  for (const name of scripts) {
+    const script = await readFile(path.join(assetsDir, name), "utf8");
+    if (literals.some((literal) => script.includes(literal))) {
+      return;
+    }
+  }
+  throw new Error(`No built script in dist/assets holds the app's version from .version, ${version}.`);
+}
+
 async function run() {
   await assertExists(distDir, "dist directory");
   await assertExists(indexPath, "index.html");
@@ -111,6 +129,7 @@ async function run() {
   await assertPngSize(appleTouchIconPath, 180, 180, "Apple touch icon");
   await verifyManifestIcons();
   await verifyRuntimeConfig();
+  await verifyAppVersion();
 
   const indexHtml = await readFile(indexPath, "utf8");
   if (!indexHtml.includes("assets/")) {

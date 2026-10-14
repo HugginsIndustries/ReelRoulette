@@ -8,8 +8,14 @@ import type { Player } from "./player";
  */
 export type AutoPauseMode = "never" | "always" | "responsive";
 
-/** The mode until the Settings tab can change it. */
+/** The mode a device starts with, until its Settings tab changes it. */
 export const DEFAULT_AUTO_PAUSE_MODE: AutoPauseMode = "responsive";
+
+export const AUTO_PAUSE_MODES: readonly AutoPauseMode[] = ["responsive", "always", "never"];
+
+export function isAutoPauseMode(value: unknown): value is AutoPauseMode {
+  return (AUTO_PAUSE_MODES as readonly unknown[]).includes(value);
+}
 
 export interface AutoPauseCover {
   panelOpen: boolean;

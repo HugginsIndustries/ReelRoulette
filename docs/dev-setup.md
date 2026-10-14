@@ -95,9 +95,10 @@ From `src/clients/web/ReelRoulette.WebUI`:
 - `npm run verify`
 - `npm run dev`/`npm run build` auto-sync shared assets into WebUI `public/`:
   - `assets/logo/favicon.ico` -> `public/favicon.ico`
-  - Logo and PWA icons: `scripts/sync-shared-icon.mjs` copies `logo-icon.svg`, `logo-lockup.svg`, `logo-lockup-dark.svg`, `png/pwa-192.png`, `png/pwa-512.png`, `png/pwa-maskable-192.png`, `png/pwa-maskable-512.png`, and `png/apple-touch-icon.png` from `assets/logo/` into `public/icons/` as they are. `scripts/verify-build-output.mjs` checks that each manifest icon's pixel size matches its `sizes`, and checks `dist/runtime-config.json` with the app's own `parseRuntimeConfig`
+  - Logo and PWA icons: `scripts/sync-shared-icon.mjs` copies `logo-icon.svg`, `logo-lockup.svg`, `logo-lockup-dark.svg`, `png/pwa-192.png`, `png/pwa-512.png`, `png/pwa-maskable-192.png`, `png/pwa-maskable-512.png`, and `png/apple-touch-icon.png` from `assets/logo/` into `public/icons/` as they are. `scripts/verify-build-output.mjs` checks that each manifest icon's pixel size matches its `sizes`, checks `dist/runtime-config.json` with the app's own `parseRuntimeConfig`, and checks that the built scripts hold the app's version
   - PWA service worker: `public/sw.js` (copied to `dist/` root) is registered from `src/main.ts` in secure contexts. Its fetch handler intercepts document navigations only, which satisfies Chromium installability for standalone install on Android Chrome. API calls, the event stream, and media are not intercepted. `ServerApp` sets `Cache-Control: no-store` for `sw.js` when serving WebUI static files.
   - `assets/fonts/MaterialSymbolsOutlined.var.ttf` -> `public/assets/fonts/MaterialSymbolsOutlined.var.ttf`
+- App version: the build and the tests read the repository's `.version` through `scripts/app-version.mjs`, without its leading `v`, for the Settings tab's Diagnostics; a missing or empty `.version` fails the build
 
 Optional helper scripts:
 

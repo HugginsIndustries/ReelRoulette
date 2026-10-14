@@ -1,10 +1,54 @@
 import type { ComponentChildren, JSX, RefObject } from "preact";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "preact/hooks";
-import type { FieldProblem, FieldReveal } from "../validation/fieldValidation";
+import {
+  createSettingField,
+  isFlagged,
+  type FieldProblem,
+  type FieldReveal,
+  type SettingFieldOptions
+} from "../validation/fieldValidation";
 
 // The field validation pattern: a field that holds a value that is not valid shows a red icon, whose tooltip says what
-// the field expects, and the actions that use it are disabled or held until it is corrected. An empty required field
-// is never flagged and only disables. Field problems never use a dialog or a popup.
+// the field expects, and the actions that use it are disabled or held until it is corrected. A field that may sit
+// empty, such as a name typed for an action, is never flagged while it is empty and only disables; a field that must
+// always hold a value is flagged when emptied. A setting's field, which applies without Save, saves on Enter or when it
+// is left, and then shows the value saved again, with a green check when the save changed it. The red icons, the
+// tooltip, and the check fade in and out. Field problems never use a dialog or a popup.
+
+/** How long the pattern's icons, its tooltip, and a setting's saved check take to fade in or out. */
+export const FADE_MS = 250;
+
+function prefersReducedMotion(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/**
+ * Keeps something that fades out rendered for `FADE_MS` once `shown` turns false, as `leaving`, so the stylesheet's
+ * fade can run; it fades in by itself as it renders. With reduced motion it goes at once.
+ */
+function useFadeOut(shown: boolean): { rendered: boolean; leaving: boolean } {
+  const [fading, setFading] = useState(false);
+  const wasShown = useRef(shown);
+  // The render that hides it starts the fade, so it is never unmounted in between.
+  const starts = wasShown.current && !shown && !prefersReducedMotion();
+  wasShown.current = shown;
+  useEffect(() => {
+    if (shown || !starts) {
+      setFading(false);
+      return;
+    }
+    setFading(true);
+    const timer = setTimeout(() => setFading(false), FADE_MS);
+    return () => clearTimeout(timer);
+  }, [shown]);
+  const leaving = !shown && (fading || starts);
+  return { rendered: shown || leaving, leaving };
+}
+
+/** An element's classes, with `is-fading-out` while it fades out. */
+function fadeClasses(classes: string, leaving: boolean): string {
+  return leaving ? `${classes} is-fading-out` : classes;
+}
 
 /** What a validated control takes: its invalid state and description while flagged, and focus for the tooltip. */
 export interface ValidatedControlProps {
@@ -29,7 +73,10 @@ export interface FieldValidation<T extends HTMLElement> {
   control: ValidatedControlProps & { ref: RefObject<T | null> };
   /** For another control checked with it, such as the other dropdown of a pair: marked and described with it. */
   partner: ValidatedControlProps;
-  /** The red icon and its tooltip while the field is flagged, for the caller to place in the field's `vfield` wrapper. */
+  /**
+   * The red icon and its tooltip while the field is flagged, and while they fade out once it isn't, for the caller to
+   * place in the field's `vfield` wrapper.
+   */
   mark: JSX.Element | null;
 }
 
@@ -92,6 +139,13 @@ export function useFieldValidation<T extends HTMLElement, F extends string = str
   const [focused, setFocused] = useState(false);
   const [hover, setHover] = useState(false);
   const shown = flagged && (focused || hover);
+  // The last problem flagged, which the tooltip says while it fades out.
+  const lastProblem = useRef(problem);
+  if (flagged && problem) {
+    lastProblem.current = problem;
+  }
+  const iconFade = useFadeOut(flagged && problem !== null);
+  const tipFade = useFadeOut(shown);
 
   // A request made before the field rendered was for an earlier view of it.
   const request = reveal ? reveal.from.request.value : null;
@@ -133,12 +187,13 @@ export function useFieldValidation<T extends HTMLElement, F extends string = str
     onFocus: () => setFocused(true),
     onBlur: () => setFocused(false)
   };
+  const marked = flagged && problem ? problem : lastProblem.current;
   const mark =
-    flagged && problem ? (
+    iconFade.rendered && marked ? (
       <>
         <span
           ref={icon}
-          class="vfield-icon material-symbol-icon"
+          class={fadeClasses("vfield-icon material-symbol-icon", iconFade.leaving)}
           aria-hidden="true"
           onPointerEnter={(event) => {
             if (event.pointerType === "mouse") {
@@ -155,8 +210,13 @@ export function useFieldValidation<T extends HTMLElement, F extends string = str
         >
           error
         </span>
-        <span ref={tip} id={tipId} role="tooltip" class={shown ? "vfield-tip is-shown" : "vfield-tip"}>
-          {problem.message}
+        <span
+          ref={tip}
+          id={tipId}
+          role="tooltip"
+          class={fadeClasses(tipFade.rendered ? "vfield-tip is-shown" : "vfield-tip", tipFade.leaving || iconFade.leaving)}
+        >
+          {marked.message}
         </span>
       </>
     ) : null;
@@ -167,17 +227,99 @@ export function useFieldValidation<T extends HTMLElement, F extends string = str
 export function ValidatedField<F extends string = string>({
   class: extraClass,
   children,
+  trailing,
   ...options
 }: FieldValidationOptions<F, HTMLInputElement> & {
   class?: string;
   children: (control: FieldValidation<HTMLInputElement>["control"]) => ComponentChildren;
+  /** More for the field's wrapper after the icon, such as a setting's saved check. */
+  trailing?: ComponentChildren;
 }) {
   const field = useFieldValidation<HTMLInputElement, F>(options);
   return (
     <span class={extraClass ? `vfield ${extraClass}` : "vfield"}>
       {children(field.control)}
       {field.mark}
+      {trailing}
     </span>
+  );
+}
+
+export interface SettingTextFieldProps extends SettingFieldOptions {
+  id: string;
+  /** Classes for the field's `vfield` wrapper, such as its width. */
+  class?: string;
+  inputMode?: "numeric" | "decimal" | "text";
+  /** False while the field is hidden, as when its tab hides or the panel closes, which may give it no blur. */
+  shown: boolean;
+}
+
+/**
+ * The text field of a setting that applies without Save and must always hold a value, with the pattern's icon:
+ * `createSettingField`'s rule, saving on Enter or when the field loses focus or hides, and showing the value saved
+ * again once it does. A save that changes the value shows a green check in the red icon's place while it says so, and
+ * a polite live region says "Saved".
+ */
+export function SettingTextField(props: SettingTextFieldProps) {
+  const { id, class: extraClass, inputMode, shown } = props;
+  // The latest render's callbacks, so the field reads what the page holds now.
+  const latest = useRef(props);
+  latest.current = props;
+  const [field] = useState(() =>
+    createSettingField({
+      saved: () => latest.current.saved(),
+      problemOf: (text) => latest.current.problemOf(text),
+      save: (text) => latest.current.save(text)
+    })
+  );
+  useEffect(() => {
+    if (!shown) {
+      field.leave();
+    }
+  }, [shown]);
+  const problem = field.problem.value;
+  const saved = field.justSaved.value;
+  const check = useFadeOut(saved);
+  return (
+    <ValidatedField
+      class={extraClass}
+      problem={problem}
+      flagged={isFlagged(problem)}
+      trailing={
+        <>
+          {check.rendered ? (
+            <span class={fadeClasses("vfield-saved material-symbol-icon", check.leaving)} aria-hidden="true">
+              check_circle
+            </span>
+          ) : null}
+          <span class="visually-hidden" aria-live="polite">
+            {saved ? "Saved" : ""}
+          </span>
+        </>
+      }
+    >
+      {(control) => (
+        <input
+          {...control}
+          type="text"
+          inputMode={inputMode}
+          id={id}
+          class="ctl"
+          autocomplete="off"
+          value={field.text.value}
+          onInput={(event) => field.input(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              field.commit();
+            }
+          }}
+          onBlur={() => {
+            control.onBlur();
+            field.leave();
+          }}
+        />
+      )}
+    </ValidatedField>
   );
 }
 
@@ -185,8 +327,8 @@ export interface HeldButtonProps {
   id: string;
   class?: string;
   /**
-   * An empty required field, or any problem in a field right next to the action, disables it, from `actionBlock`.
-   * The field says why, so the button shows nothing more.
+   * A field that may sit empty, while it is empty, or any problem in a field right next to the action, disables it,
+   * from `actionBlock`. The field says why, so the button shows nothing more.
    */
   disabled: boolean;
   /** Why a flagged field elsewhere holds the action, its title and accessible description, or null while none does. */
@@ -203,6 +345,8 @@ export interface HeldButtonProps {
 export function HeldButton({ id, class: extraClass, disabled, heldReason, onClick, children }: HeldButtonProps) {
   const describedId = useId();
   const held = !disabled && heldReason !== null;
+  // Only the icon fades out; the button's state and its description change at once.
+  const iconFade = useFadeOut(held);
   const classes = ["held-action", extraClass, held ? "shows-problem" : null].filter(Boolean).join(" ");
   return (
     <>
@@ -217,8 +361,8 @@ export function HeldButton({ id, class: extraClass, disabled, heldReason, onClic
         onClick={onClick}
       >
         <span class="btn-label">{children}</span>
-        {held ? (
-          <span class="btn-problem material-symbol-icon" aria-hidden="true">
+        {iconFade.rendered ? (
+          <span class={fadeClasses("btn-problem material-symbol-icon", iconFade.leaving)} aria-hidden="true">
             error
           </span>
         ) : null}
@@ -232,13 +376,17 @@ export function HeldButton({ id, class: extraClass, disabled, heldReason, onClic
   );
 }
 
-/** The red icon after a section's name while a field in it is flagged, so the field can be found from another section. */
-export function SectionProblemMark() {
-  return (
-    <span class="section-problem material-symbol-icon" aria-hidden="true">
+/**
+ * The red icon after a section's name while a field in it is flagged, `shown`, so the field can be found from another
+ * section. It fades in and out.
+ */
+export function SectionProblemMark({ shown }: { shown: boolean }) {
+  const fade = useFadeOut(shown);
+  return fade.rendered ? (
+    <span class={fadeClasses("section-problem material-symbol-icon", fade.leaving)} aria-hidden="true">
       error
     </span>
-  );
+  ) : null;
 }
 
 /** A section tab's title while a field in it is flagged. */

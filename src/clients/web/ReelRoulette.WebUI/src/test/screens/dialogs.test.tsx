@@ -254,6 +254,20 @@ describe("the dialog component", () => {
     expect(openDialogs()).toEqual([]);
   });
 
+  it("a corrected name's red icon fades out, rendered until it has faded, while Save is available at once", async () => {
+    renderWithDialogs();
+    const edit = await openEditTag();
+    const name = edit.querySelector("input") as HTMLInputElement;
+    const icon = () => edit.querySelector(".vfield-icon");
+    await type(name, "BOB");
+    expect(icon()?.classList.contains("is-fading-out")).toBe(false);
+
+    await type(name, "Shore");
+    expect(buttonIn(edit, "Save").disabled).toBe(false);
+    expect(icon()?.classList.contains("is-fading-out")).toBe(true);
+    await waitFor(() => expect(icon()).toBeNull());
+  });
+
   it("returns focus to its fallback only when what had focus before it opened is gone", async () => {
     render(<ReplacingHarness />);
     await press(screen.getByRole("button", { name: "Open first" }));

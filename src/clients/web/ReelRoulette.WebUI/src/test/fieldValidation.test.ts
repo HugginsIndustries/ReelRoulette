@@ -1,8 +1,19 @@
-import { describe, expect, it } from "vitest";
-import { actionBlock, createFieldReveal, EMPTY_FIELD, isFlagged } from "../validation/fieldValidation";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  actionBlock,
+  createFieldReveal,
+  createSettingField,
+  EMPTY_FIELD,
+  isFlagged,
+  SETTING_SAVED_MS
+} from "../validation/fieldValidation";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("field validation", () => {
-  it("flags a problem, but never an empty required field", () => {
+  it("flags a problem, but never a field that may sit empty while it is empty", () => {
     expect(isFlagged(null)).toBe(false);
     expect(isFlagged({ message: "Use MM:SS, HH:MM:SS, or seconds." })).toBe(true);
     expect(isFlagged(EMPTY_FIELD)).toBe(false);
@@ -14,7 +25,7 @@ describe("field validation", () => {
     expect(actionBlock(["min", "name"], problems)).toEqual({ disabled: false, heldBy: null });
   });
 
-  it("disables an action for an empty required field, even while another field has a problem", () => {
+  it("disables an action while a field that may sit empty is empty, even while another field has a problem", () => {
     const problems = { name: EMPTY_FIELD, min: { message: "Use seconds." } };
     expect(actionBlock(["min", "name"], problems)).toEqual({ disabled: true, heldBy: null });
   });
@@ -32,5 +43,116 @@ describe("field validation", () => {
     reveal.reveal("min");
     reveal.reveal("min");
     expect(reveal.request.value).toEqual({ field: "min", count: 2 });
+  });
+});
+
+describe("a setting's field", () => {
+  /** A setting of 1 to 300, kept in `value`, with each save in `saves`. */
+  function setup() {
+    const kept = { value: 15, saves: [] as string[] };
+    const field = createSettingField({
+      saved: () => String(kept.value),
+      problemOf: (text) => (/^\d+$/.test(text.trim()) && Number(text) >= 1 && Number(text) <= 300 ? null : { message: "Use 1 to 300." }),
+      save(text) {
+        kept.saves.push(text);
+        kept.value = Number(text.trim());
+      }
+    });
+    return { field, kept };
+  }
+
+  it("starts with the value saved, and saves nothing while it is typed, however long typing pauses", () => {
+    vi.useFakeTimers();
+    const { field, kept } = setup();
+    expect([field.text.value, field.problem.value]).toEqual(["15", null]);
+
+    for (const text of ["1", "12", "120"]) {
+      field.input(text);
+      vi.advanceTimersByTime(10_000);
+    }
+    expect([kept.saves, field.text.value]).toEqual([[], "120"]);
+    field.leave();
+    expect(kept.saves).toEqual(["120"]);
+  });
+
+  it("keeps the value in use when it is cleared, and shows it again once the field is left", () => {
+    const { field, kept } = setup();
+    field.input("1");
+    field.input("");
+    expect([field.text.value, isFlagged(field.problem.value)]).toEqual(["", true]);
+    field.leave();
+    expect([kept.saves, field.text.value, field.problem.value]).toEqual([[], "15", null]);
+  });
+
+  it("saves on Enter what was typed since, and nothing for a value that is not valid", () => {
+    const { field, kept } = setup();
+    field.commit();
+    field.input("42");
+    field.commit();
+    field.commit();
+    expect(kept.saves).toEqual(["42"]);
+    field.input("abc");
+    field.commit();
+    expect([kept.saves, isFlagged(field.problem.value)]).toEqual([["42"], true]);
+  });
+
+  it("on leaving, saves a valid value and shows the value saved, or shows it again for one that is not valid", () => {
+    const { field, kept } = setup();
+    field.leave();
+    expect(kept.saves).toEqual([]);
+
+    field.input(" 007 ");
+    field.leave();
+    expect([kept.saves, field.text.value, field.problem.value]).toEqual([[" 007 "], "7", null]);
+
+    field.input("abc");
+    field.leave();
+    expect([kept.saves, field.text.value, field.problem.value]).toEqual([[" 007 "], "7", null]);
+    field.leave();
+    expect(kept.saves).toEqual([" 007 "]);
+  });
+
+  it("says it saved for a while when a save changes the value, on Enter or on leaving", () => {
+    vi.useFakeTimers();
+    const { field } = setup();
+    expect(field.justSaved.value).toBe(false);
+    field.input("42");
+    field.commit();
+    expect(field.justSaved.value).toBe(true);
+    vi.advanceTimersByTime(SETTING_SAVED_MS - 1);
+    expect(field.justSaved.value).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(field.justSaved.value).toBe(false);
+
+    field.input("43");
+    field.leave();
+    expect(field.justSaved.value).toBe(true);
+  });
+
+  it("doesn't say it saved when the value stays as it was, or when a value that is not valid goes back to the one saved", () => {
+    const { field, kept } = setup();
+    field.input(" 015 ");
+    field.commit();
+    expect([kept.saves, field.justSaved.value]).toEqual([[" 015 "], false]);
+    field.input("abc");
+    field.leave();
+    expect([field.text.value, field.justSaved.value]).toEqual(["15", false]);
+  });
+
+  it("stops saying it saved as soon as the field is typed in again", () => {
+    vi.useFakeTimers();
+    const { field } = setup();
+    field.input("42");
+    field.commit();
+    vi.advanceTimersByTime(1_500);
+    field.input("4");
+    expect(field.justSaved.value).toBe(false);
+    // A save that changes the value again says so again, for its own while, which the first save's doesn't cut short.
+    field.input("44");
+    field.commit();
+    vi.advanceTimersByTime(SETTING_SAVED_MS - 1);
+    expect(field.justSaved.value).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(field.justSaved.value).toBe(false);
   });
 });

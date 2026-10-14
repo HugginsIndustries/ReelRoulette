@@ -1,0 +1,45 @@
+import { signal, type ReadonlySignal } from "@preact/signals";
+import { DEFAULT_AUTO_PAUSE_MODE, isAutoPauseMode, type AutoPauseMode } from "../playback/autoPause";
+import { MAX_PHOTO_DURATION_SECONDS, MIN_PHOTO_DURATION_SECONDS } from "../state/appStore";
+import type { DeviceStore } from "../state/deviceStore";
+import type { FieldProblem } from "../validation/fieldValidation";
+
+/** The per-device store's key for the Auto-Pause mode. */
+export const AUTO_PAUSE_KEY = "panel.autoPause";
+
+/**
+ * A field's text when it is a whole number from `min` to `max`, or the problem that says what it takes, such as "Use
+ * a whole number from 1 to 300 seconds." An emptied field is flagged too, since a setting's field must always hold a
+ * value for the app to work.
+ */
+export function wholeNumberProblem(text: string, min: number, max: number, unit: string): FieldProblem | null {
+  const trimmed = text.trim();
+  const value = Number(trimmed);
+  return /^\d+$/.test(trimmed) && value >= min && value <= max ? null : { message: `Use a whole number from ${min} to ${max} ${unit}.` };
+}
+
+/** Advance after's problem: it takes a whole number of seconds from 1 to 300. */
+export function advanceAfterProblem(text: string): FieldProblem | null {
+  return wholeNumberProblem(text, MIN_PHOTO_DURATION_SECONDS, MAX_PHOTO_DURATION_SECONDS, "seconds");
+}
+
+/**
+ * The Settings tab's settings that no other part of the page keeps: the Auto-Pause mode. Each applies as it changes and
+ * is kept on this device. The panel keeps its side, the store Advance after, and the player its buttons' state.
+ */
+export interface Settings {
+  readonly autoPauseMode: ReadonlySignal<AutoPauseMode>;
+  setAutoPauseMode(mode: AutoPauseMode): void;
+}
+
+export function createSettings(options: { device: DeviceStore }): Settings {
+  const { device } = options;
+  const autoPauseMode = signal(device.read(AUTO_PAUSE_KEY, DEFAULT_AUTO_PAUSE_MODE, isAutoPauseMode));
+  return {
+    autoPauseMode,
+    setAutoPauseMode(mode) {
+      autoPauseMode.value = mode;
+      device.write(AUTO_PAUSE_KEY, mode);
+    }
+  };
+}

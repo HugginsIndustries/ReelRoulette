@@ -1,12 +1,12 @@
 import { computed, signal, type ReadonlySignal } from "@preact/signals";
 import type { DeviceStore } from "../state/deviceStore";
 
-export type PanelTab = "library" | "filter" | "tags";
+export type PanelTab = "library" | "filter" | "tags" | "settings";
 export type PanelSide = "left" | "right";
 /** Beside the player, or as a full-screen overlay over it. */
 export type PanelMode = "side" | "overlay";
 
-export const PANEL_TABS: readonly PanelTab[] = ["library", "filter", "tags"];
+export const PANEL_TABS: readonly PanelTab[] = ["library", "filter", "tags", "settings"];
 export const PANEL_MIN_WIDTH = 360;
 export const PANEL_DEFAULT_WIDTH = 420;
 /** The narrowest the player gets beside the panel. */
@@ -86,9 +86,9 @@ export interface PanelElements {
 
 /**
  * The side panel: whether it is open, the tab it shows, its side, its width beside the player, and whether it sits
- * beside the player or covers it as the overlay. Its tabs hold the library, the filter, and the tag editor. The host
- * shows and hides the panel and its pages by their `hidden`, before a tab's `enter`, so a tab measures itself shown.
- * It remembers whether the panel is open, its tab, side, and width on this device.
+ * beside the player or covers it as the overlay. Its tabs hold the library, the filter, the tag editor, and the
+ * settings. The host shows and hides the panel and its pages by their `hidden`, before a tab's `enter`, so a tab
+ * measures itself shown. It remembers whether the panel is open, its tab, side, and width on this device.
  */
 export interface PanelHost {
   readonly isOpen: ReadonlySignal<boolean>;
@@ -133,6 +133,8 @@ export interface PanelHost {
   closeIfOverlay(): Promise<void>;
   /** Sets the width beside the player, within its limits, and remembers it when `remember`. */
   setWidth(width: number, remember: boolean): void;
+  /** Moves the panel to `side` and remembers it. An open panel beside the player moves at once. */
+  setSide(side: PanelSide): void;
 }
 
 export interface PanelHostOptions {
@@ -378,6 +380,11 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
       if (remember) {
         device.write(WIDTH_KEY, remembered.peek());
       }
+    },
+
+    setSide(next) {
+      side.value = next;
+      device.write(SIDE_KEY, next);
     }
   };
 }

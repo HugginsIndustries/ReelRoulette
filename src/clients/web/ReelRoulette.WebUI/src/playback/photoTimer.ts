@@ -18,6 +18,11 @@ export interface PhotoTimer {
   resume(): void;
   /** Moves it to `elapsedMs`, running on from there or staying held. */
   seek(elapsedMs: number): void;
+  /**
+   * Changes its length, keeping the time it has run and whether it runs or is held. A length no longer than that time
+   * ends it at the next tick while it runs, or as soon as it resumes.
+   */
+  setLength(lengthMs: number): void;
   clear(): void;
 }
 
@@ -103,6 +108,20 @@ export function createPhotoTimer(options: PhotoTimerOptions): PhotoTimer {
         return;
       }
       banked = Math.max(0, Math.min(length, elapsedMs));
+      if (startedAt !== null) {
+        run();
+      }
+    },
+
+    setLength(lengthMs) {
+      if (!active) {
+        return;
+      }
+      // The time run, not capped at the old length, so a shorter length and then a longer one keeps it.
+      if (startedAt !== null) {
+        banked += now() - startedAt;
+      }
+      length = Math.max(0, lengthMs);
       if (startedAt !== null) {
         run();
       }

@@ -7,11 +7,15 @@ import { playbackTraceLine } from "../logging/relayLogLines";
 import type { Notifications } from "../notifications/notifications";
 import type { AppApi } from "../state/appApi";
 import type { AppStore, PlayingItem } from "../state/appStore";
+import type { DeviceStore } from "../state/deviceStore";
 import { playRefusalNotice } from "../state/lastingStates";
 import type { ServerConnection } from "../state/serverConnection";
 import { basenameFromPath, formatPlaybackPosition } from "./nowPlaying";
 import { createPhotoTimer } from "./photoTimer";
 import { createRandomPicker, randomPickRequest } from "./randomPick";
+
+/** The per-device store's key for whether sound is muted. */
+const MUTED_KEY = "player.muted";
 
 /** An element the player shows and hides by setting its `display`. */
 export interface ShownElement {
@@ -84,7 +88,7 @@ export interface Player {
   readonly seekBar: ReadonlySignal<SeekBarView>;
   /**
    * Sound is muted, which the mute button shows lit with the muted icon. Mute works before anything plays and on a
-   * photo too, applying to the next video.
+   * photo too, applying to the next video. It is kept on this device.
    */
   readonly muted: ReadonlySignal<boolean>;
   readonly favorite: ReadonlySignal<boolean>;
@@ -138,6 +142,8 @@ export interface Player {
 export interface PlayerOptions {
   apiBaseUrl: string;
   store: AppStore;
+  /** Keeps whether sound is muted on this device. */
+  device: DeviceStore;
   api: AppApi;
   connection: ServerConnection;
   /**
@@ -159,8 +165,6 @@ interface ArmedAttempt {
   attemptId: number;
 }
 
-const MIN_PHOTO_SECONDS = 1;
-const MAX_PHOTO_SECONDS = 300;
 /** The time shown while no video's or photo timer's time is known, so the controls keep their look. */
 const NO_TIME = "0:00 / 0:00";
 
@@ -177,7 +181,7 @@ function absolutizeMediaUrl(apiBaseUrl: string, mediaUrl: string): string {
 }
 
 export function createPlayer(options: PlayerOptions): Player {
-  const { store, api, connection, dialogs, notifications } = options;
+  const { store, device, api, connection, dialogs, notifications } = options;
   const apiBaseUrl = String(options.apiBaseUrl || "").replace(/\/+$/, "");
   const frames: FrameScheduler = options.frames ?? {
     request: (callback) => requestAnimationFrame(callback),
@@ -195,7 +199,7 @@ export function createPlayer(options: PlayerOptions): Player {
 
   const playButton = signal<PlayButtonView>({ disabled: false, showsPause: false });
   const seekBar = signal<SeekBarView>({ disabled: true, label: "Seek" });
-  const muted = signal(false);
+  const muted = signal(device.read(MUTED_KEY, false, (value): value is boolean => typeof value === "boolean"));
   const favorite = signal(false);
   const blacklisted = signal(false);
   const timeText = signal(NO_TIME);
@@ -394,8 +398,7 @@ export function createPlayer(options: PlayerOptions): Player {
       photo.src = mediaUrl;
       photo.style.display = "block";
       if (store.loop.peek() || store.autoplay.peek()) {
-        const seconds = Math.max(MIN_PHOTO_SECONDS, Math.min(MAX_PHOTO_SECONDS, store.photoDurationSeconds.peek()));
-        photoTimer.start(seconds * 1000);
+        photoTimer.start(store.photoDurationSeconds.peek() * 1000);
       }
     } else {
       // Until its metadata gives its length.
@@ -570,11 +573,12 @@ export function createPlayer(options: PlayerOptions): Player {
     });
   });
 
+  // A showing photo's timer takes the new length, keeping the time it has shown and whether it runs or Auto-Pause or
+  // the user holds it, so a length no longer than that time ends it as soon as it runs.
   store.on("photoDurationChanged", () => {
-    const current = store.current.peek();
-    if (current && current.mediaType === "photo" && (store.autoplay.peek() || store.loop.peek())) {
-      playCurrent();
-    }
+    if (!photoShown() || !photoTimer.active) return;
+    photoTimer.setLength(store.photoDurationSeconds.peek() * 1000);
+    showPhotoTime();
   });
 
   return {
@@ -635,13 +639,14 @@ export function createPlayer(options: PlayerOptions): Player {
 
     toggleMute() {
       muted.value = !muted.peek();
+      device.write(MUTED_KEY, muted.peek());
       if (elements) {
         elements.video.muted = muted.peek();
       }
     },
 
     toggleLoop() {
-      store.loop.value = !store.loop.peek();
+      store.setLoop(!store.loop.peek());
       if (elements?.video.src) {
         elements.video.loop = store.loop.peek();
       }
@@ -650,7 +655,7 @@ export function createPlayer(options: PlayerOptions): Player {
     },
 
     toggleAutoplay() {
-      store.autoplay.value = !store.autoplay.peek();
+      store.setAutoplay(!store.autoplay.peek());
       restartPhotoForLoopOrAutoplay();
       showToggles();
     },

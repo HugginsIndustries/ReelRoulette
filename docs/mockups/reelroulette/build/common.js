@@ -24,6 +24,33 @@ function iconSpan(name, extraClass) {
   return span;
 }
 
+/**
+ * Shows or hides one of the field validation pattern's icons, its tooltip, or a setting's saved check, fading it in and
+ * out over FADE_MS on its opacity. It stays rendered while it fades out, so an icon that takes room, such as a held
+ * action's, keeps its place until it has faded, and a tooltip stays where it was. With reduced motion it shows and
+ * hides at once.
+ */
+const FADE_MS = 250;
+const fades = new WeakMap();
+function fadeShown(el, shown) {
+  if (!el || el.classList.contains("fade-shown") === shown) return;
+  clearTimeout(fades.get(el));
+  fades.delete(el);
+  if (shown) {
+    el.classList.add("fade-rendered");
+    // Rendered transparent first, so the fade in runs.
+    void el.offsetWidth;
+    el.classList.add("fade-shown");
+    return;
+  }
+  el.classList.remove("fade-shown");
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    el.classList.remove("fade-rendered");
+    return;
+  }
+  fades.set(el, setTimeout(() => el.classList.remove("fade-rendered"), FADE_MS));
+}
+
 const store = {
   get(key, fallback) {
     try {
@@ -93,9 +120,11 @@ function checkDuration(value) {
 }
 
 /**
- * A field using the validation pattern. `check(value)` returns null when the value is valid, `{ empty: true }` for
- * an empty required field, or `{ message }` for any other problem. An empty required field is never flagged: the
- * action that needs it is disabled instead. Any other problem is flagged as it is typed, and `holdAction` decides
+ * A field using the validation pattern. `check(value)` returns null when the value is valid, `{ empty: true }` while
+ * a field that may sit empty, such as a name typed for an action, is empty, or `{ message }` for any other problem.
+ * Such a field is never flagged while it is empty: the action that needs it is disabled instead. A field that must
+ * always hold a value for the app to work, such as Advance after, returns `{ message }` when it is emptied, so it is
+ * flagged and the user sees it. Any other problem is flagged as it is typed, and `holdAction` decides
  * whether it disables or holds the action.
  * `partners` are other controls checked with this one, such as the other dropdown of a pair: they are marked and
  * described with it, and focusing one shows the tooltip too. The icon and tooltip stay with `input`.
@@ -151,7 +180,7 @@ class ValidatedField {
     return this.input.disabled ? null : this.check(this.input.value);
   }
 
-  /** An empty required field is never flagged. */
+  /** A field that may sit empty is never flagged while it is empty. */
   get flagged() {
     const problem = this.problem;
     return !!problem && !problem.empty;
@@ -162,7 +191,7 @@ class ValidatedField {
     return !!this.problem;
   }
 
-  /** True while the field is an empty required one, which disables the action that needs it. */
+  /** True while a field that may sit empty is empty, which disables the action that needs it. */
   get disables() {
     return !!this.problem?.empty;
   }
@@ -184,6 +213,7 @@ class ValidatedField {
     const problem = this.problem;
     const flagged = this.flagged;
     this.wrap.classList.toggle("is-invalid", flagged);
+    fadeShown(this.icon, flagged);
     if (flagged) this.tip.textContent = problem.message;
     [this.input, ...this.partners].forEach((control) => {
       if (flagged) {
@@ -211,7 +241,8 @@ class ValidatedField {
       (this.pinned || this.hover || [this.input, ...this.partners].includes(document.activeElement)) &&
       this.wrap.offsetParent !== null &&
       this.inScrollView();
-    this.tip.classList.toggle("is-shown", shown);
+    // Rendered before it is measured; hidden, it fades out where it was.
+    fadeShown(this.tip, shown);
     if (!shown) return;
     const icon = this.icon.getBoundingClientRect();
     const tip = this.tip.getBoundingClientRect();
@@ -249,6 +280,79 @@ function flagPairField(favBox, favMode, blBox, blMode, options) {
   return field;
 }
 
+/**
+ * A setting that applies without Save and must always hold a value, on a field using the validation pattern. A valid
+ * value typed is saved only on Enter or when the field loses focus, so a value passed through on the way, such as the
+ * "1" of "120", is never saved. While the field has focus, a value that is not valid stays flagged; once it loses focus,
+ * or hides with its tab or the panel, it shows the value saved again, unflagged. A save that changes the value shows a
+ * green check where the field's red icon sits for SETTING_SAVED_MS, then fades it out, and a polite live region says
+ * "Saved". Nothing
+ * shows when the value stays as it was, or when a value that is not valid goes back to the one saved. A hidden field
+ * may get no blur, so call `leaveSettingFields()` when the Settings tab hides or the panel closes.
+ * `saved()` gives the value in use as the field shows it, and `save(text)` keeps a valid one. `show()` shows the value
+ * saved again, as after a reset.
+ */
+const SETTING_SAVED_MS = 2000;
+const settingFields = new Set();
+function settingField(field, saved, save) {
+  // Typed since the last save, or since the field showed the value saved.
+  let edited = false;
+  let savedTimer = null;
+  const check = iconSpan("check_circle", "vfield-saved");
+  const live = document.createElement("span");
+  live.className = "vh";
+  live.setAttribute("aria-live", "polite");
+  field.wrap.append(check, live);
+  const hideSaved = () => {
+    clearTimeout(savedTimer);
+    savedTimer = null;
+    field.wrap.classList.remove("is-saved");
+    fadeShown(check, false);
+    live.textContent = "";
+  };
+  const showSaved = () => {
+    hideSaved();
+    field.wrap.classList.add("is-saved");
+    fadeShown(check, true);
+    live.textContent = "Saved";
+    savedTimer = setTimeout(hideSaved, SETTING_SAVED_MS);
+  };
+  const saveEdit = () => {
+    if (!edited || field.holds) return;
+    edited = false;
+    const before = saved();
+    save(field.input.value.trim());
+    if (saved() !== before) showSaved();
+  };
+  const entry = {
+    field,
+    leave() {
+      saveEdit();
+      edited = false;
+      field.reset(saved());
+    },
+    show() {
+      edited = false;
+      hideSaved();
+      field.reset(saved());
+    }
+  };
+  field.reset(saved());
+  field.input.addEventListener("input", () => {
+    edited = true;
+    hideSaved();
+  });
+  field.input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") saveEdit();
+  });
+  field.input.addEventListener("blur", () => entry.leave());
+  settingFields.add(entry);
+  return entry;
+}
+function leaveSettingFields() {
+  settingFields.forEach((entry) => entry.leave());
+}
+
 let placeQueued = false;
 function placeAllTips() {
   if (placeQueued) return;
@@ -263,10 +367,10 @@ window.addEventListener("resize", placeAllTips);
 
 /**
  * Wires an action button to the fields it uses.
- * - An empty required field disables the action: it dims, and pressing it does nothing. So does any problem in a
- *   field `beside()` returns: a field that sits right next to the action, such as a new name beside its Add button, or
- *   a field of the dialog the action is in, since the dialog has the user's attention. The field's own icon and
- *   tooltip say why. A field in `beside()` is also one of `fields()`. Disabling wins over holding.
+ * - A field that may sit empty disables the action while it is empty: it dims, and pressing it does nothing. So does
+ *   any problem in a field `beside()` returns: a field that sits right next to the action, such as a new name beside
+ *   its Add button, or a field of the dialog the action is in, since the dialog has the user's attention. The field's
+ *   own icon and tooltip say why. A field in `beside()` is also one of `fields()`. Disabling wins over holding.
  * - Otherwise a flagged field elsewhere holds it: the button's label dims, it reads as unavailable, and the red icon
  *   shows on its right. Pressing it does nothing but take the user to the first field that holds it.
  */
@@ -291,6 +395,7 @@ function holdAction(button, fields, options) {
     const field = blocker();
     const held = !!field;
     button.classList.toggle("shows-problem", held);
+    fadeShown(button.querySelector(".btn-problem"), held);
     if (held) {
       button.setAttribute("aria-disabled", "true");
       describe.textContent = opts.reason ? opts.reason(field) : "Correct the field first.";

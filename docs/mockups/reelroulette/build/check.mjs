@@ -197,7 +197,107 @@ for (const name of ["index", "validation", "recovery", "desktop-notice", "layout
   jumpApply.click();
   check("validation: Apply held by the pair moves to the Blacklisted dropdown, applying nothing",
     mini.querySelector('[data-sub="general"]').classList.contains("is-active") && document.activeElement === miniBlMode && !jumpApply.textContent.includes("Applied"));
+  // A setting's field saves only on Enter or when it is left, and then shows the value saved. A save that changes the
+  // value shows the green check in the red icon's place and says "Saved"; going back from a value that is not valid,
+  // or a save that leaves the value as it was, shows neither.
+  const setting = document.getElementById("spec-advance");
+  const inUse = () => document.querySelector("[data-setting-out]").textContent;
+  const settingWrap = setting.closest(".vfield");
+  // The check is the font's glyph, one character, not its name as text.
+  const shownAsGlyph = (icon) => icon?.dataset.icon === "check_circle" && icon.textContent.length === 1;
+  const savedShown = () => settingWrap.classList.contains("is-saved") && shownAsGlyph(settingWrap.querySelector(".vfield-saved"));
+  const savedSaid = () => settingWrap.querySelector('[aria-live="polite"]')?.textContent ?? null;
+  const typeSetting = (value) => {
+    setting.value = value;
+    setting.dispatchEvent(new window.Event("input"));
+  };
+  const enterSetting = () => setting.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  setting.focus();
+  typeSetting("");
+  check("validation: an emptied setting's field is flagged, and the value in use stays", setting.getAttribute("aria-invalid") === "true" && inUse() === "In use: 10 seconds");
+  setting.blur();
+  check("validation: leaving it shows the value saved again, unflagged, with no check", setting.value === "10" && !setting.hasAttribute("aria-invalid") && !savedShown() && savedSaid() === "");
+  setting.focus();
+  typeSetting("120");
+  await new Promise((resolve) => setTimeout(resolve, 750));
+  check("validation: a setting's field saves nothing while it is typed, however long typing pauses", inUse() === "In use: 10 seconds" && !savedShown());
+  enterSetting();
+  check('validation: and saves on Enter, showing the green check and saying "Saved"', inUse() === "In use: 120 seconds" && savedShown() && savedSaid() === "Saved");
+  typeSetting("0120");
+  enterSetting();
+  check("validation: a save that leaves the value as it was shows no check", inUse() === "In use: 120 seconds" && !savedShown() && savedSaid() === "");
+  typeSetting("90");
+  setting.blur();
+  check("validation: leaving the field saves too, with the check", inUse() === "In use: 90 seconds" && setting.value === "90" && savedShown() && savedSaid() === "Saved");
+  await new Promise((resolve) => setTimeout(resolve, 2100));
+  check("validation: the check goes after about two seconds", !savedShown() && savedSaid() === "");
+
+  // The red icons and the saved check fade in and out over 250 ms on their opacity: each stays rendered while it fades
+  // out, then goes. A held action's icon and a Filter section's keep their place while they fade.
+  const iconFade = (icon) => (icon.classList.contains("fade-shown") ? "shown" : icon.classList.contains("fade-rendered") ? "fading" : "gone");
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const fadeIcons = () => [jumpApply.querySelector(".btn-problem"), mini.querySelector('[data-sub="general"] .tab-problem'), miniBlMode.closest(".vfield").querySelector(".vfield-icon")].map(iconFade);
+  check(`validation: the held Apply's icon, General's, and the pair's show (${fadeIcons()})`, fadeIcons().every((state) => state === "shown"));
+  miniBlMode.value = "excluded";
+  miniBlMode.dispatchEvent(new window.Event("change"));
+  check(`validation: correcting the pair fades them out, each rendered while it fades (${fadeIcons()})`,
+    !jumpApply.classList.contains("shows-problem") && fadeIcons().every((state) => state === "fading"));
+  await sleep(300);
+  check(`validation: and then they are gone (${fadeIcons()})`, fadeIcons().every((state) => state === "gone"));
+  miniBlMode.value = "only";
+  miniBlMode.dispatchEvent(new window.Event("change"));
+  check(`validation: they fade in again as the pair is flagged again (${fadeIcons()})`, fadeIcons().every((state) => state === "shown"));
+  const savedIcon = settingWrap.querySelector(".vfield-saved");
+  setting.focus();
+  typeSetting("45");
+  enterSetting();
+  typeSetting("abc");
+  check(`validation: typing after a save fades the check out as the red icon fades in (${iconFade(savedIcon)}, ${iconFade(setting.closest(".vfield").querySelector(".vfield-icon"))})`,
+    iconFade(savedIcon) === "fading" && iconFade(setting.closest(".vfield").querySelector(".vfield-icon")) === "shown");
+  await sleep(300);
+  check("validation: and the check is gone once faded", iconFade(savedIcon) === "gone");
+  const settingTip = settingWrap.querySelector(".vfield-tip");
+  const tipTop = settingTip.style.top;
+  check(`validation: the flagged field's tooltip shows while it has focus (${iconFade(settingTip)})`, iconFade(settingTip) === "shown");
+  setting.blur();
+  check(`validation: leaving the field fades the tooltip out where it was (${iconFade(settingTip)}, ${settingTip.style.top})`, iconFade(settingTip) === "fading" && settingTip.style.top === tipTop);
+  await sleep(300);
+  check("validation: and the tooltip is gone once faded", iconFade(settingTip) === "gone");
+  const css = [...document.querySelectorAll("style")].map((style) => style.textContent).join("\n");
+  const iconSelectors = ".vfield-icon,\n.vfield-saved,\n.btn .btn-problem,\n.filter-tab .tab-problem,\n.vfield-tip";
+  check("validation: the icons and the tooltip fade on opacity over 250 ms, and not with reduced motion",
+    css.includes(`${iconSelectors} {\n  display: none;\n  opacity: 0;\n  transition: opacity 250ms ease;\n}`) &&
+    /@media \(prefers-reduced-motion: reduce\) \{\s*\.vfield-icon,\s*\.vfield-saved,\s*\.btn \.btn-problem,\s*\.filter-tab \.tab-problem,\s*\.vfield-tip \{ transition: none; \}/.test(css));
   check(`validation: no script errors after interaction ${errors.join("; ")}`, errors.length === 0);
+}
+
+{
+  // With reduced motion, the icons show and hide at once.
+  const reduceMotion = (window) => {
+    const ownMatchMedia = window.matchMedia.bind(window);
+    window.matchMedia = (query) => (query.includes("prefers-reduced-motion") ? { ...ownMatchMedia(query), matches: true, media: query } : ownMatchMedia(query));
+  };
+  const { document, errors, window } = await load("validation", 1280, "", reduceMotion);
+  const setting = document.getElementById("spec-advance");
+  const icon = setting.closest(".vfield").querySelector(".vfield-icon");
+  const savedIcon = setting.closest(".vfield").querySelector(".vfield-saved");
+  setting.focus();
+  setting.value = "abc";
+  setting.dispatchEvent(new window.Event("input"));
+  const flagged = icon.classList.contains("fade-shown") && icon.classList.contains("fade-rendered");
+  const tip = setting.closest(".vfield").querySelector(".vfield-tip");
+  const tipShown = tip.classList.contains("fade-shown");
+  setting.value = "30";
+  setting.dispatchEvent(new window.Event("input"));
+  const tipGoneAtOnce = !tip.classList.contains("fade-rendered");
+  setting.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  const savedShownAtOnce = savedIcon.classList.contains("fade-shown");
+  setting.value = "31";
+  setting.dispatchEvent(new window.Event("input"));
+  check("validation, reduced motion: the red icon, its tooltip, and the saved check show and hide at once",
+    flagged && tipShown && tipGoneAtOnce && !icon.classList.contains("fade-rendered") && savedShownAtOnce && !savedIcon.classList.contains("fade-rendered"));
+  setting.blur();
+  check(`validation, reduced motion: no script errors ${errors.join("; ")}`, errors.length === 0);
 }
 
 for (const width of [1280, 390]) {
@@ -620,8 +720,11 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: Favorites only with Blacklisted only flags both dropdowns, with one icon after Blacklisted, and marks General`,
     $("filter-fav-mode").getAttribute("aria-invalid") === "true" && $("filter-bl-mode").getAttribute("aria-invalid") === "true" &&
     pairTip?.textContent === "Nothing is both a favorite and blacklisted. Use excluded for one of them." && $("filter-bl-mode").closest(".vfield").contains(pairTip) &&
-    document.querySelector('.filter-tab[data-sub="general"]').classList.contains("has-problem"));
-  const heldWithIcon = (id) => $(id).getAttribute("aria-disabled") === "true" && $(id).classList.contains("shows-problem");
+    document.querySelector('.filter-tab[data-sub="general"]').classList.contains("has-problem") &&
+    document.querySelector('.filter-tab[data-sub="general"] .tab-problem').classList.contains("fade-shown"));
+  // An icon fades out: it is rendered while it fades, then not.
+  const iconFade = (icon) => (icon.classList.contains("fade-shown") ? "shown" : icon.classList.contains("fade-rendered") ? "fading" : "gone");
+  const heldWithIcon = (id) => $(id).getAttribute("aria-disabled") === "true" && $(id).classList.contains("shows-problem") && iconFade($(id).querySelector(".btn-problem")) === "shown";
   const disabledNoIconId = (id) => disabledNoIcon($(id));
   check(`layout@${width}: the pair holds Apply and Update Preset, and Add Preset stays disabled while its name is empty`,
     heldWithIcon("filter-apply") && heldWithIcon("filter-update-preset") && disabledNoIconId("filter-add-preset") && $("filter-update-preset").title === "Change Favorites or Blacklisted first.");
@@ -631,8 +734,12 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: held Update Preset goes to the Blacklisted dropdown and sends no message`,
     !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === $("filter-bl-mode") && messages.entries().length === messagesBeforePair);
   change($("filter-bl"), false);
-  check(`layout@${width}: turning Blacklisted off clears the pair and lets Apply proceed`,
-    !$("filter-fav-mode").hasAttribute("aria-invalid") && !$("filter-bl-mode").hasAttribute("aria-invalid") && !$("filter-apply").hasAttribute("aria-disabled"));
+  const pairIcons = () => [$("filter-apply").querySelector(".btn-problem"), document.querySelector('.filter-tab[data-sub="general"] .tab-problem'), $("filter-bl-mode").closest(".vfield").querySelector(".vfield-icon")].map(iconFade);
+  check(`layout@${width}: turning Blacklisted off clears the pair and lets Apply proceed, and Apply's, General's, and the pair's icons fade out (${pairIcons()})`,
+    !$("filter-fav-mode").hasAttribute("aria-invalid") && !$("filter-bl-mode").hasAttribute("aria-invalid") && !$("filter-apply").hasAttribute("aria-disabled") &&
+    pairIcons().every((state) => state === "fading"));
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  check(`layout@${width}: and are gone once faded (${pairIcons()})`, pairIcons().every((state) => state === "gone"));
   input($("filter-min"), "1:7x");
   check(`layout@${width}: a duration that is not valid holds Update Preset too, and Add Preset stays disabled while its name is empty`,
     heldWithIcon("filter-update-preset") && disabledNoIconId("filter-add-preset") && $("filter-update-preset").title === "Correct the minimum duration first.");
@@ -642,7 +749,8 @@ for (const width of [1280, 390]) {
   const takenPresetTip = document.getElementById($("filter-new-preset").getAttribute("aria-describedby") || "none");
   check(`layout@${width}: a taken preset name is flagged and disables Add Preset without an icon, even while a duration holds it ("${takenPresetTip?.textContent}")`,
     $("filter-new-preset").getAttribute("aria-invalid") === "true" && takenPresetTip?.textContent === "Use a name no other preset has." &&
-    disabledNoIconId("filter-add-preset") && document.querySelector('.filter-tab[data-sub="presets"]').classList.contains("has-problem"));
+    disabledNoIconId("filter-add-preset") && document.querySelector('.filter-tab[data-sub="presets"]').classList.contains("has-problem") &&
+    iconFade(document.querySelector('.filter-tab[data-sub="presets"] .tab-problem')) === "shown");
   input($("filter-new-preset"), "Unique name");
   check(`layout@${width}: with a new name, the duration holds Add Preset with its icon`, heldWithIcon("filter-add-preset") && !$("filter-add-preset").disabled);
   $("filter-add-preset").click();
@@ -1053,7 +1161,7 @@ for (const width of [1280, 390]) {
     !$("mute-btn").disabled && !$("volume").disabled && muteLit() === mutedOnPhoto && muteIcon() === (mutedOnPhoto ? "volume_off" : "volume_up"));
   $("autoplay-btn").click();
   check(`layout@${width}: turning Autoplay on starts the photo's full time from then (${$("time-display").textContent})`,
-    !seek.disabled && !$("play-btn").disabled && Number(seek.value) === 0 && $("time-display").textContent === "0:00 / 0:05" && playIcon() === "pause");
+    !seek.disabled && !$("play-btn").disabled && Number(seek.value) === 0 && $("time-display").textContent === "0:00 / 0:10" && playIcon() === "pause");
   await sleep(600);
   check(`layout@${width}: the bar fills as the timer runs (${seek.value})`, Number(seek.value) > 0);
   // Read six times 30 ms apart, the bar has moved more often than the 250 ms interval would move it.
@@ -1081,7 +1189,7 @@ for (const width of [1280, 390]) {
   press(" ");
   check(`layout@${width}: and resumes it`, chip().includes("Photo timer"));
   input(seek, 2);
-  check(`layout@${width}: dragging the scrub bar moves the timer's position (${$("time-display").textContent})`, $("time-display").textContent === "0:02 / 0:05");
+  check(`layout@${width}: dragging the scrub bar moves the timer's position (${$("time-display").textContent})`, $("time-display").textContent === "0:02 / 0:10");
   $("loop-btn").click();
   check(`layout@${width}: with Loop on, Play and the scrub bar are disabled, and the time shows 0:00 / 0:00 (${$("time-display").textContent})`,
     $("play-btn").disabled && seek.disabled && $("time-display").textContent === "0:00 / 0:00");
@@ -1090,10 +1198,10 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: turning Autoplay off clears the timer, and Autoplay is remembered`,
     Number(seek.value) === 0 && $("time-display").textContent === "0:00 / 0:00" && $("play-btn").disabled && window.localStorage.getItem("rr-mockup.autoplay") === "false");
   $("autoplay-btn").click();
-  check(`layout@${width}: turning it on again starts the full time, not where the timer was (${$("time-display").textContent})`, $("time-display").textContent === "0:00 / 0:05");
+  check(`layout@${width}: turning it on again starts the full time, not where the timer was (${$("time-display").textContent})`, $("time-display").textContent === "0:00 / 0:10");
   // Once the timer ends, Play and the bar are disabled, with the time at 0:00 / 0:00, while the next pick fails here.
   situation("noanswer");
-  input(seek, 4.95);
+  input(seek, 9.95);
   await sleep(200);
   check(`layout@${width}: once a photo's timer ends, Play and the bar are disabled and the time shows 0:00 / 0:00 until the next item plays (${chip()}, ${$("time-display").textContent}, ${notice()})`,
     $("play-btn").disabled && seek.disabled && Number(seek.value) === 0 && $("time-display").textContent === "0:00 / 0:00" && chip().includes("Photo timer ended") &&
@@ -1123,13 +1231,45 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: on the server machine it offers Show in File Manager`, $("stats-body").textContent.includes("Show in File Manager"));
   $("mock-server-machine").click();
 
-  // Settings: Advance after is validated, and a value that is not valid is not kept.
+  // Settings: Advance after is a setting's field. A value that is not valid is flagged while the field has focus and is
+  // not kept; a valid one is saved only on Enter or when the field is left, with the green check; leaving the field, or
+  // the Settings tab hiding or the panel closing, shows the value saved again.
   $("tab-btn-settings").click();
   const advance = $("set-advance");
+  const keptAdvance = () => window.localStorage.getItem("rr-mockup.advanceAfter");
+  // The check is the font's glyph, one character, not its name as text.
+  const advanceSaved = () => {
+    const wrap = advance.closest(".vfield");
+    const icon = wrap.querySelector(".vfield-saved");
+    return wrap.classList.contains("is-saved") && icon?.dataset.icon === "check_circle" && icon.textContent.length === 1;
+  };
+  check(`layout@${width}: Advance after starts at 10`, advance.value === "10");
+  advance.focus();
   input(advance, "0");
-  check(`layout@${width}: Advance after flags 0 and keeps 5`, advance.getAttribute("aria-invalid") === "true" && window.localStorage.getItem("rr-mockup.advanceAfter") === null);
+  check(`layout@${width}: Advance after flags 0 and keeps 10`, advance.getAttribute("aria-invalid") === "true" && keptAdvance() === null);
+  advance.blur();
+  check(`layout@${width}: leaving Advance after with 0 shows 10 again, unflagged, with no check`, advance.value === "10" && !advance.hasAttribute("aria-invalid") && !advanceSaved());
+  advance.focus();
+  ["1", "12", "120"].forEach((text) => input(advance, text));
+  await sleep(750);
+  check(`layout@${width}: Advance after saves nothing while it is typed`, keptAdvance() === null);
+  key(advance, "Enter");
+  check(`layout@${width}: and saves 120 on Enter, never 1 or 12, with the green check`, keptAdvance() === "120" && advanceSaved());
+  input(advance, "1");
+  input(advance, "");
+  await sleep(750);
+  check(`layout@${width}: clearing it with Backspace keeps 120`, keptAdvance() === "120" && advance.getAttribute("aria-invalid") === "true" && !advanceSaved());
+  $("tab-btn-library").click();
+  $("tab-btn-settings").click();
+  check(`layout@${width}: the Settings tab hiding shows 120 again, unflagged`, advance.value === "120" && !advance.hasAttribute("aria-invalid"));
+  input(advance, "abc");
+  closePanel();
+  openTab("settings");
+  check(`layout@${width}: and so does the panel closing`, advance.value === "120" && !advance.hasAttribute("aria-invalid"));
   input(advance, "8");
-  check(`layout@${width}: Advance after keeps 8`, !advance.hasAttribute("aria-invalid") && window.localStorage.getItem("rr-mockup.advanceAfter") === "8");
+  key(advance, "Enter");
+  check(`layout@${width}: Advance after keeps 8 at once on Enter`, !advance.hasAttribute("aria-invalid") && keptAdvance() === "8");
+  advance.blur();
   check(`layout@${width}: the shortcut reference lists the bindings, ? among them`, $("shortcut-list").querySelectorAll("dt").length === 17 &&
     [...$("shortcut-list").querySelectorAll("dt")].some((dt) => dt.textContent === "?"));
   const sectionNames = [...$("settings-body").querySelectorAll(".settings-section h3")].map((h) => h.textContent).join(", ");
@@ -1145,7 +1285,10 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: Keyboard shortcuts starts collapsed, with a chevron`, !$("set-shortcuts").open && !!$("set-shortcuts").querySelector("summary .setting-more-chevron"));
   check(`layout@${width}: Loudness normalization sits in Audio, right under Enhanced audio`,
     sectionOf("set-loudness") === "Audio" && $("set-loudness").closest(".setting").previousElementSibling === $("set-enhanced-audio").closest(".setting"));
-  check(`layout@${width}: Diagnostics show today's client type and device name`, $("diag-type").textContent === "web" && $("diag-device").textContent === "Web Browser");
+  const diagValues = [...$("settings-body").querySelectorAll(".diag dd")].map((value) => value.textContent);
+  check(`layout@${width}: Diagnostics show the ids in full, and the client type and device name as the WebUI builds them`,
+    /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(diagValues[0]) && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(diagValues[1]) &&
+    $("diag-type").textContent === "web" && $("diag-device").textContent.startsWith("Web Browser (") && $("diag-device").textContent.endsWith(")"));
   document.querySelector('input[name="set-theme"][value="light"]').click();
   check(`layout@${width}: the Theme setting switches to Light`, document.documentElement.classList.contains("theme-light"));
   document.querySelector('input[name="set-theme"][value="dark"]').click();
@@ -1217,7 +1360,8 @@ for (const width of [1280, 390]) {
   input($("set-hide-after"), "31");
   check(`layout@${width}: Hide after flags 31 and keeps 3`, $("set-hide-after").getAttribute("aria-invalid") === "true" && window.localStorage.getItem("rr-mockup.hideAfter") === null);
   input($("set-hide-after"), "1");
-  check(`layout@${width}: and keeps 1`, window.localStorage.getItem("rr-mockup.hideAfter") === "1");
+  key($("set-hide-after"), "Enter");
+  check(`layout@${width}: and keeps 1, with the green check`, window.localStorage.getItem("rr-mockup.hideAfter") === "1" && $("set-hide-after").closest(".vfield").classList.contains("is-saved"));
   closePanel();
   // Closing with focus in the panel gives it to the panel button, and a control with keyboard focus keeps the controls up.
   $("panel-btn").blur();
@@ -1315,6 +1459,7 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: Never keeps them visible through clicks and time`, controlsUp() && $("set-hide-timeout").hidden && window.localStorage.getItem("rr-mockup.hideControls") === '"never"');
   hideChoice("timeout").click();
   input($("set-hide-after"), "3");
+  key($("set-hide-after"), "Enter");
 
   // Volume: the scroll wheel and a two-finger drag change it by the volume step, show the controls, and never scroll
   // the page over the player.
@@ -2115,6 +2260,11 @@ for (const width of [1280, 390]) {
     el.value = value;
     el.dispatchEvent(new window.Event("input"));
   };
+  // A setting's field saves a valid value at once on Enter.
+  const enter = (el, value) => {
+    input(el, value);
+    el.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  };
   const stored = (key) => JSON.parse(window.localStorage.getItem("rr-mockup." + key) ?? "null");
   const toggle = $("set-loudness");
   const more = $("set-loudness-more");
@@ -2151,15 +2301,16 @@ for (const width of [1280, 390]) {
     adjustment() === `${limitedDb >= 0 ? "+" : ""}${limitedDb.toFixed(1)} dB`);
   change(baseline("manual"), true);
   check("loudness: Manual shows the target", !$("set-loud-manual").hidden && stored("loudnessSettings").baseline === "manual");
-  input($("set-loud-target"), "-50");
+  enter($("set-loud-target"), "-50");
   check(`loudness: a target far below the item is limited to the maximum reduction (${param.level.toFixed(4)}, ${adjustment()})`,
     close(param.level, volume * Math.pow(10, -15 / 20)) && stored("loudnessSettings").target === -50 && adjustment() === "-15.0 dB");
   input($("set-loud-reduction"), "31");
   check("loudness: a reduction outside 1 to 30 is flagged and not kept, and the gain stays",
     $("set-loud-reduction").getAttribute("aria-invalid") === "true" && stored("loudnessSettings").reduction === 15 && close(param.level, volume * Math.pow(10, -15 / 20)));
-  input($("set-loud-reduction"), "6");
-  check(`loudness: a reduction of 6 dB applies at once (${param.level.toFixed(4)}, ${adjustment()})`,
-    close(param.level, volume * Math.pow(10, -6 / 20)) && stored("loudnessSettings").reduction === 6 && adjustment() === "-6.0 dB");
+  enter($("set-loud-reduction"), "6");
+  check(`loudness: a reduction of 6 dB applies at once, with the green check (${param.level.toFixed(4)}, ${adjustment()})`,
+    close(param.level, volume * Math.pow(10, -6 / 20)) && stored("loudnessSettings").reduction === 6 && adjustment() === "-6.0 dB" &&
+    $("set-loud-reduction").closest(".vfield").classList.contains("is-saved"));
   input($("set-loud-target"), "-5");
   input($("set-loud-boost"), "11");
   check("loudness: a target above -10 LUFS and a boost above 10 dB are flagged",
@@ -2171,9 +2322,10 @@ for (const width of [1280, 390]) {
   change($("set-enhanced-audio"), true);
   check("loudness: turning Enhanced audio back on enables them", !toggle.disabled && !$("set-loudness-fields").disabled && $("set-loudness-hint").textContent === "Evens out loudness between videos.");
   $("set-loud-reset").click();
-  check("loudness: Reset to defaults restores each setting, and forgets the stored ones",
+  check("loudness: Reset to defaults restores each setting, with no check, and forgets the stored ones",
     $("set-loud-reduction").value === "15" && $("set-loud-boost").value === "5" && $("set-loud-target").value === "-23" && baseline("auto").checked &&
-    $("set-loud-manual").hidden && !$("set-loud-boost").hasAttribute("aria-invalid") && stored("loudnessSettings") === null && toggle.checked);
+    $("set-loud-manual").hidden && !$("set-loud-boost").hasAttribute("aria-invalid") && stored("loudnessSettings") === null && toggle.checked &&
+    !more.querySelector(".vfield.is-saved"));
   check(`loudness: no script errors ${errors.join("; ")}`, errors.length === 0);
 }
 
