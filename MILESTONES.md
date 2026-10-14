@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI becomes the only client on every device. Until the desktop removal release, the desktop client gets no significant changes or new features: bug fixes (crashes, data loss, broken playback, security) and small changes that keep it working with the server, or that match a small server-side change, are allowed. Until then server contract changes only add fields, so the last desktop build keeps working. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. The desktop still ships as a fallback, and its last build tells users it is retired. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h1, M12h2, M12h3, M12i, M12j, M12k, M12l, M12m, M12n1, M12n2, M12n3, M12n4, M12n5, M12o, M12q, M12r, M12s1, M12s2, M12t, M12u, M12v.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. The desktop still ships as a fallback, and its last build tells users it is retired. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12j, M12k, M12l1, M12l2, M12m, M12n1, M12n2, M12n3, M12o, M12p, M12q, M12r, M12s, M12t, M12u.
 - **v0.16.0 — Desktop removal**: Remove the desktop client, its packaging, and its tests, then move preset writes to per-preset routes. P48, P25.
 - **v0.16.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.17.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access. P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28j, P28k, P28l.
@@ -135,689 +135,7 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 Last milestone completed: M12g
 
-### M12h1 - WebUI Admin Section
-
-- **Status**: ⏳ Planned
-- **Goal**: Everything the Operator page does, apart from its logs, moves into a full-page admin section of the WebUI.
-- **Depends on**: WebUI Responsive Layout and Panels, whose header holds the admin icon, and WebUI Auto-Pause and Photo Scrub Bar, whose Auto-Pause the admin view follows, and WebUI In-App Dialogs, whose confirmation the control token change uses, and WebUI Field Validation Pattern, whose pattern its settings fields use, and Catalog Open and Backup Safety, whose library state and message the admin section shows, and WebUI Notifications, whose bell and popups the admin view uses.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Slices
-
-| Slice | Status | Delivers |
-| --- | --- | --- |
-| Update download report | ⏳ Planned | The cause of the Operator's two-attempt update download, reported before the admin section's update controls are built. |
-| Admin section | ⏳ Planned | A full-page admin view with every Operator section but its Server Logs, as Preact screens on the same control routes. |
-
-#### Update download report slice
-
-**Scope**
-
-- Find and report the cause of the Operator's update download needing two attempts, so the admin section's update controls don't inherit it.
-
-**Traps**
-
-- The Operator's update download needs two attempts every time: click Download and confirm, and nothing happens; click Download and confirm again, and it downloads (measured).
-- No commit has fixed it.
-
-**Acceptance**
-
-- The report names the cause of the Operator's two attempts, and is written before the Admin section slice starts.
-
-#### Admin section slice
-
-**Scope**
-
-- Admin is a full-page view opened from the header's admin icon, not a panel tab. The icon is always visible.
-- The view keeps the Operator page's responsive layout, restyled to match the rest of the WebUI.
-- Its layout: a bar with a back arrow ("Back to the player"), the title Admin, and at its right end the notifications bell; a row of jump links to its sections; and cards, each titled with its icon, in this order: Server (`dns`), Web access (`lan`), Control (`key`), Library refresh (`sync`), Library transfer (`swap_vert`), Backups (`storage`), Sources (`folder`), Duplicates (`content_paste`), Testing suite (`bug_report`), Connected clients (`group`), Log Viewer (`article`), and API events (`description`).
-- Sources, Duplicates, the Log Viewer, and API events take the full width, and on a wide screen the others take half.
-- The cards for refresh, transfer, backups, sources, duplicates, and the Log Viewer arrive with the milestones that build them, in their places.
-- The admin view covers the player, so opening it pauses playback under the Always and Responsive Auto-Pause modes, and leaving it resumes playback only if Auto-Pause paused it, as WebUI Auto-Pause and Photo Scrub Bar describes.
-- Move every Operator section but its Server Logs into the admin section as Preact screens:
-  - server updates;
-  - runtime status with restart and stop, including the message when the server runs without a library;
-  - web runtime settings: port, Allow remote connections, mDNS advertising and LAN hostname, and auth mode and shared token, without Enable Web UI;
-  - control settings: control token, dev channel, Launch Server on Startup;
-  - the testing suite;
-  - connected clients;
-  - incoming and outgoing API events.
-- The screens call the same control routes, so there is no contract change.
-- The Operator page stays until Recovery Page and Operator Retirement retires it, so its Server Logs stay reachable until Log Viewer Redesign adds the Log Viewer.
-- The control token shows hidden, with Show and Copy beside it.
-- Saving a changed token asks first, "Change the control token? Other machines will be signed out and need the new token to open admin.", with Cancel focused and a red Change Token. Saving it unchanged asks nothing.
-- The control token's hint keeps today's warning: "Other machines need it to open admin. Changing it signs them out."
-- Settings fields that can hold a value that is not valid, such as the port, use the field validation pattern, and their Save can't proceed while one is not valid.
-- The values each field accepts are read from the server's checks when this slice starts.
-- Connected clients show each client's id and, where its user agent names one, its operating system, then its type, address, and the time it connected, with counts of API sessions, control sessions, and event streams.
-- Connected clients leave out the session id, which the Operator page shows today.
-- On a phone on its side, where the app's header hides, the admin view keeps its own bar, with the back arrow, its title, and the bell.
-- The admin view has no status line. Its acknowledgments, such as "Control settings saved.", pop up as Your actions popups, and its bell opens the same list as the player's, whose Now shows the lasting states, since the admin view has no player, as WebUI Notifications sets out.
-- Gating: opening admin from another machine asks for the control token first, through `POST /control/pair`, and shows nothing until it is accepted. On the server machine, which the merged localhost helper decides, it opens directly.
-
-**Traps**
-
-- The Operator page is 842 lines of HTML, CSS, and JavaScript inside a raw string in `src/core/ReelRoulette.ServerApp/Program.cs` (measured).
-- No test covers the Operator page's content; the only test that names `/operator` checks that the library route gate leaves it open (measured).
-- The sections listed in Scope match the Operator page (measured).
-- `verify-linux-packaged-server-smoke.sh` still requests `/operator` (measured).
-- The Operator page's responsive layout is a 12-column grid that changes at 620 and 980 px wide.
-- The Operator page shows the control token as plain text and saves a change without asking (`adminSharedToken` in `Program.cs`).
-- The server keeps each event stream's client id, user agent, and connection time (`ConnectedClientTracker`), so connected clients need no contract change.
-
-**Acceptance**
-
-- The header's admin icon is always visible and opens the admin section as a full-page view, not a panel tab, in admin section UI tests of the admin icon opening the full-page view.
-- Under Always and Responsive, opening the admin section pauses playback and leaving it resumes only playback Auto-Pause paused; under Never, playback keeps going, in admin section UI tests of Auto-Pause on opening and leaving it in each mode.
-- The admin section has the mockup's layout, on the Operator page's 12-column grid, at phone and desktop widths, and matches the rest of the WebUI's styling, checked in the spot check.
-- The admin section offers every action and setting the Operator page offers today, apart from its Server Logs and Enable Web UI, and calls the same routes, in admin section UI tests of loading status and settings, saving settings, and the testing panel.
-- Connected clients show each client's id with its operating system where the user agent names one, its type, address, and connection time, and the three counts, without the session id, in admin section UI tests.
-- In the admin section, one Download click and one confirmation start the update download, in admin section UI tests.
-- The admin view has no status line, its bar ends with the bell, which opens the list, and its acknowledgments pop up, in admin section UI tests of its notifications.
-- The control token shows hidden with Show and Copy, saving a changed token asks first and warns that other machines will be signed out, and saving it unchanged asks nothing, in admin section UI tests of the control token's Show, Copy, and change confirmation.
-- An admin settings field with a value the server would not accept, such as the port, is flagged with the field validation pattern as it is typed, and its Save can't proceed until it is corrected, in admin section UI tests of settings fields with the field validation pattern.
-- From another machine, opening admin asks for the control token first, and nothing in the admin section is shown until a valid token is entered; on the server machine it opens without one, in admin section UI tests of control-token gating.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and one quick spot check.
-
-#### Release checks
-
-- Manual: From another machine, the admin section asks for the control token and works after it is entered.
-
-#### Not included
-
-- The Log Viewer, which is Log Viewer Redesign.
-- The recovery page and retiring the Operator page, which is Recovery Page and Operator Retirement.
-- Dropping Enable Web UI, which is Recovery Page and Operator Retirement.
-- Refresh, backup, and duplicate review, with duplicate review opening within the admin section, which is Admin Refresh, Backup, and Duplicate Review.
-- Source and item management, which is Admin Source and Item Management.
-- Catalog transfer, which is Admin Library Catalog Transfer.
-- The Log Viewer's move to structured entries, which is Admin Log Viewer.
-- Account administration, which is Account Administration.
-- Replacing the control token with admin accounts, which is Auth Cutover for API and Admin.
-
-### M12h2 - Log Viewer Redesign
-
-- **Status**: ⏳ Planned
-- **Goal**: The admin section's Log Viewer filters today's log by time, source, level, and text, in the design Admin Log Viewer later moves to structured entries.
-- **Depends on**: WebUI Admin Section.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Decisions
-
-- Only the route, `GET /control/logs/server`, keeps its old name. Everywhere the interface names the logs, it says Log Viewer.
-- The route gets no paging parameter. The Log Viewer fetches the newest matching lines once, up to the route's limit, and renders older ones as the list scrolls, as the mockup does, since paging through the route would read the whole file again for each page (see the Contract slice's Traps).
-
-#### Slices
-
-| Slice | Status | Delivers |
-| --- | --- | --- |
-| Contract | ⏳ Planned | `GET /control/logs/server` takes several levels, several sources, and a time window, in OpenAPI and the generated WebUI types. |
-| Log Viewer | ⏳ Planned | The Operator's Server Logs redesigned as the admin section's Log Viewer, with filters, chips, a live indicator, and expanding rows. |
-
-#### Contract slice
-
-**Scope**
-
-- `GET /control/logs/server` also takes several levels, several sources, and a time window, applied before it takes the last lines, as level and text are. The change only adds.
-- OpenAPI and the generated WebUI types carry the new filters.
-- Server tests call the handlers and gating as functions over `DefaultHttpContext`, as the library route gate's tests do. `Microsoft.AspNetCore.TestHost` is not added.
-
-**Traps**
-
-- `GET /control/logs/server` filters by one level and contained text, then takes the last 1–5000 lines.
-- `ServerLogService.Read` returns at most the last 5000 lines.
-- `ServerLogService.Read` walks the whole file on every request, so paging through the route would read the file again for each page.
-- Taking several levels, several sources, and a time window, applied before the last lines are taken, is the route's natural extension (inferred).
-- No test project has an HTTP test host.
-
-**Acceptance**
-
-- `GET /control/logs/server` filters by several levels, several sources, and a time window before it takes the last lines, in server tests for the log route's level, source, and time filters.
-- The route's new filters are in OpenAPI, and `npm run verify:contracts` passes.
-- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
-
-#### Log Viewer slice
-
-**Scope**
-
-- The Operator's Server Logs becomes the **Log Viewer** in the admin section, redesigned to its final design from Admin Log Viewer rather than moved as it is.
-- Its filters sit in a panel that starts collapsed, with chips for the active ones.
-- A live indicator pauses while the list is scrolled away from the newest lines, with a resume control.
-- Rows expand to the full line.
-- The Operator's Tail lines field goes.
-- It reads today's line format, `[timestamp] [source] [level] message`.
-- It filters by time window; by source (the second bracket: `server`, `webui`, and the desktop's sources, such as `desktop-app` and `desktop-update`); by level, with one checkbox per level found (today `info`, `warn`, and `error`); and by contained text.
-
-**Traps**
-
-- `ServerLogService.Append` writes today's line format, `[timestamp] [source] [level] message`.
-
-**Acceptance**
-
-- The interface names the logs section Log Viewer in the admin section, and nowhere Server Logs; the route is still `GET /control/logs/server`, in admin section UI tests.
-- The Log Viewer filters by time window, by several sources and several levels, and by contained text, with its filters in a collapsed panel with chips, a live indicator that pauses away from the newest lines, and rows that expand to the full line, in admin section UI tests for the Log Viewer's filters, chips, and live indicator.
-- The Log Viewer has no Tail lines field: it fetches the newest matching lines once, up to 5000, and shows older ones as the list scrolls without another request, in admin section UI tests for showing older lines.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and one quick spot check.
-
-#### Not included
-
-- The Log Viewer on the recovery page, which is Recovery Page and Operator Retirement.
-- Structured entries, category and component filters, and the route's rename, which is Admin Log Viewer.
-
-### M12h3 - Recovery Page and Operator Retirement
-
-- **Status**: ⏳ Planned
-- **Goal**: The server keeps a minimal recovery page for when the WebUI's files are broken, always serves the WebUI, and retires the Operator page.
-- **Depends on**: WebUI Admin Section and Log Viewer Redesign, so the Operator page goes only once the admin section offers everything it does.
-- **Design**: `docs/mockups/reelroulette/`, including its recovery page.
-
-#### Decisions
-
-- Server tests call the handlers and gating as functions over `DefaultHttpContext`, as the library route gate's tests do. `Microsoft.AspNetCore.TestHost` is not added, and no test project has an HTTP test host.
-
-#### Slices
-
-| Slice | Status | Delivers |
-| --- | --- | --- |
-| Recovery page | ⏳ Planned | A minimal built-in recovery page with restart, stop, a Log Viewer, and updates, that works without the WebUI's files. |
-| Operator retirement | ⏳ Planned | `/operator` redirects to the admin section, the tray's item opens ReelRoulette, and the smoke script and the checklist's Smoke item check the admin section. |
-| Always-on WebUI | ⏳ Planned | The server always serves the WebUI, ignores and reports on the `enabled` setting, and the desktop loses its Enable Web UI switch. |
-
-#### Recovery page slice
-
-**Scope**
-
-- The server keeps a minimal built-in page with restart, stop, a log tail named Log Viewer, and updates, at a fixed path such as `/recovery`.
-- It is plain, in the WebUI's theme colors, and titled "ReelRoulette Recovery", laid out as the mockup's recovery page shows.
-- `logo-icon.svg` sits beside its title and is its page icon. The icon is built into the page, since the page loads none of the WebUI's files.
-- It does not load the WebUI's files, so it works when they are missing or broken.
-- It has the same control-token gating.
-- It renders settings and status text without `innerHTML` interpolation.
-
-**Traps**
-
-- The Operator HTML page interpolates user input via `innerHTML`.
-
-**Acceptance**
-
-- The recovery page is titled "ReelRoulette Recovery", in server tests.
-- The recovery page names its logs Log Viewer, and nowhere Server Logs, in server tests.
-- With the WebUI's files removed, the server still serves the recovery page, in server tests that the recovery page is served without WebUI assets.
-- The recovery page keeps control-token gating, in server tests.
-- The recovery page renders settings, status, and log text without `innerHTML` interpolation, checked by reading the page's source.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `dotnet test ReelRoulette.sln` passes.
-
-#### Operator retirement slice
-
-**Scope**
-
-- `/operator` redirects to the admin section.
-- The tray's Open Operator UI item becomes **Open ReelRoulette** and opens the WebUI's main page.
-- `verify-linux-packaged-server-smoke.sh` checks the recovery page and the admin section entry instead of `/operator`.
-- The testing checklist's Smoke item checks the admin section instead of the Operator page.
-
-**Traps**
-
-- The tray's Open Operator UI item is in `AvaloniaTrayHostUi.cs`.
-
-**Acceptance**
-
-- The tray's Open ReelRoulette opens the WebUI's main page, checked by reading `AvaloniaTrayHostUi.cs`.
-- `/operator` reaches the admin section, in server tests that `/operator` redirects to the admin section, and the packaged Linux server smoke passes against the recovery page.
-- `dotnet test ReelRoulette.sln` and `./tools/scripts/verify-linux-packaged-server-smoke.sh` pass.
-
-#### Always-on WebUI slice
-
-**Scope**
-
-- The server always serves the WebUI from this release, since the admin section lives there, and ignores the web runtime settings' `enabled` field.
-- The field stays in the contract, so the last desktop build keeps working, and the server reports it as on.
-- The frozen desktop's Settings dialog loses its Enable Web UI switch, which would no longer do anything. This is an approved desktop change outside bug fixes.
-- `docs/api.md` and `docs/dev-setup.md` stop describing the WebUI as optional.
-
-**Traps**
-
-- Turned off, the `enabled` field stops the server serving the WebUI's files and `/runtime-config.json` from its next start, leaves the WebUI's origins out of CORS, and stops mDNS advertising.
-- Turned off from the admin section, `enabled` would remove the admin section itself, and the recovery page has no way to turn it back on.
-- The desktop enables its Open Web UI menu item only when the server reports the WebUI as on, and the button in Desktop Retirement Notice's notice does what that item does.
-
-**Acceptance**
-
-- With the web runtime settings' `enabled` stored or posted as off, the server still serves the WebUI and `/runtime-config.json`, allows the WebUI's CORS origins, and, with remote connections and mDNS on, advertises over mDNS after a restart, and it reports `enabled` as on, in server tests that a stored or posted `enabled` of off is ignored and reported as on.
-- Neither the admin section nor the desktop Settings dialog shows an Enable Web UI switch, and `enabled` is still in OpenAPI, in a desktop test that the Settings dialog has no Enable Web UI switch.
-- `dotnet test ReelRoulette.sln` passes.
-
-#### Release checks
-
-- Manual: With the WebUI files removed, the recovery page restarts, stops, shows logs, and applies an update, on Linux and Windows.
-
-#### Not included
-
-- Dropping the `enabled` field from the contract, which is Desktop Client Removal.
-
-### M12i - Server Settings Robustness
-
-- **Status**: ⏳ Planned
-- **Goal**: A settings save changes only the fields it sends, a crash mid-write can't truncate the server's settings, and an unreadable settings file is kept aside and reported instead of being replaced with defaults.
-- **Depends on**: WebUI Admin Section, whose status shows a settings file that could not be read.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Slices
-
-| Slice | Status | Delivers |
-| --- | --- | --- |
-| Contract | ⏳ Planned | Partial settings posts: nullable request fields for the refresh, backup, and web runtime settings, with an omitted field left unchanged. |
-| Settings file | ⏳ Planned | An atomic settings write, and an unreadable settings file kept aside, logged, and reported on the admin section's status. |
-
-#### Contract slice
-
-**Scope**
-
-- Make the request fields of the refresh, backup, and web runtime settings posts nullable, with an omitted field left unchanged, as `devChannelEnabled` already is.
-- The change only relaxes what a request must send: the frozen desktop posts every field it knows and is unaffected.
-- OpenAPI and the generated WebUI types carry the nullable fields.
-- This makes Admin Refresh, Backup, and Duplicate Review's settings saves safe to send in part.
-
-**Traps**
-
-- `CoreSettingsService.UpdateRefreshSettings`, `UpdateBackupSettings`, and `UpdateWebRuntimeSettings` assign every field from the posted snapshot, and the contract fields are not nullable, so a post that leaves out a field writes its default (for example `fingerprintScanMaxDegreeOfParallelism` back to 4).
-- The desktop's backup settings save posts its three fields (`MainWindow.axaml.cs`).
-
-**Acceptance**
-
-- A partial post to the refresh, backup, or web runtime settings changes only the fields it names, and leaves the other fields and the other settings sections unchanged on disk, in server tests that a partial post leaves the other fields and sections unchanged on disk.
-- A post with every field, as the desktop sends, saves as it does today, in server tests that a full post saves as before.
-- The nullable request fields are in OpenAPI, and `npm run verify:contracts` passes.
-- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
-
-#### Settings file slice
-
-**Scope**
-
-- `CoreSettingsService.PersistSettings` writes a temporary file in the same folder and renames it over `core-settings.json`.
-- When `CoreSettingsService.LoadSettings` can't read `core-settings.json`, it logs a warning, moves the unreadable file aside before anything is written, and reports it on the admin section's status.
-- The report needs a field on `/control/status`, a contract change that only adds, in OpenAPI and the generated WebUI types.
-- The admin section's report of an unreadable settings file is added to the mockup, which doesn't show it yet, with its wording approved there.
-
-**Traps**
-
-- `CoreSettingsService.PersistSettings` writes `core-settings.json` in place with `File.WriteAllText`, so a crash mid-write leaves it truncated.
-- `CoreSettingsService.LoadSettings` ends in an empty `catch` and falls back to defaults, so an unreadable or corrupt `core-settings.json` looks like a fresh install and the next persist overwrites it.
-
-**Acceptance**
-
-- Killing the server during a settings write leaves the previous or the new file, never a truncated one, in server tests that an interrupted write leaves the previous or the new file.
-- An unreadable `core-settings.json` is moved aside before anything is written, a warning is logged, and the admin section's status shows it, in server tests that an unreadable file is kept aside, logged, and reported, and an admin section UI test for the status message.
-- The new status field is in OpenAPI, and `npm run verify:contracts` passes.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
-
-#### Not included
-
-- The server's other robustness findings and the desktop's settings file, which is Server Robustness Findings.
-
-### M12j - Admin Refresh, Backup, and Duplicate Review
-
-- **Status**: ⏳ Planned
-- **Goal**: The admin section starts a refresh, edits refresh and backup settings, reviews and applies duplicates, and clears the whole library's playback stats, so none of these needs the desktop.
-- **Depends on**: WebUI Admin Section and Server Settings Robustness, so a settings save sends only the fields it changes.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Decisions
-
-- Everything this milestone adds is gated like the rest of the admin section.
-- The refresh and backup fields use the field validation pattern: a value outside the range the server enforces is flagged as it is typed, and Save can't proceed while one is.
-- The admin section's refresh and backup settings saves send only the fields that changed. The refresh and backup settings routes assigned every field from the posted snapshot, so a partial post wrote defaults; Server Settings Robustness makes them change only the fields a post sends.
-
-#### Slices
-
-| Slice | Status | Delivers |
-| --- | --- | --- |
-| Refresh | ⏳ Planned | Refresh Now with the refresh status, the refresh settings, and clearing the whole library's playback stats from the Library refresh card. |
-| Backup | ⏳ Planned | The backup settings, and daily retention in catalog backup rotation with its days setting. |
-| Duplicate review | ⏳ Planned | Scanning for duplicates, reviewing each group, and deleting the files not kept after a confirmation. |
-
-#### Refresh slice
-
-**Scope**
-
-- Refresh Now with the refresh status.
-- While a refresh runs, the Refresh card shows its stage and progress, and its result pops up as WebUI Notifications' Library refresh popup, a warning when it fails.
-- The refresh settings the desktop Settings dialog shows: auto-refresh and its interval (5–1440 minutes), forced loudness and duration rescans on the next refresh, and fingerprint scan parallelism (1–16).
-- Clear playback stats for the whole library, which the desktop offers from its Playback menu through `POST /api/playback/clear-stats`. It is an admin action, in the admin view's library section: a red Clear All Playback Stats… button under Playback stats in the Library refresh card.
-- Clear All Playback Stats… asks "Clear the playback stats of every item in the library? Plays and last played go back to none." with a red Clear, and a Your actions popup then says "Cleared the library's playback stats.".
-
-**Traps**
-
-- Only the desktop calls `POST /api/refresh/start` and `/api/refresh/settings`. The routes exist, so this needs no contract change (measured).
-- The tray can also start a refresh (measured).
-- The interval and parallelism ranges are the ones the server already clamps to.
-- The WebUI never calls `POST /api/playback/clear-stats` (measured).
-
-**Acceptance**
-
-- Refresh Now starts a refresh, its card shows the refresh's stage and progress, and its result pops up, in admin section UI tests.
-- Refresh settings load and save, and saving one field leaves the others as they were on the server, in admin section UI tests.
-- Each refresh field accepts the range the server enforces, in admin section UI tests.
-- A refresh value outside its range is flagged with the field validation pattern as it is typed, and Save can't proceed until it is corrected, in admin section UI tests of each refresh field.
-- The whole library's playback stats can be cleared from the admin view's Library refresh card, after a confirmation, in admin section UI tests of clearing all playback stats.
-- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and one quick spot check of a refresh.
-
-#### Backup slice
-
-**Scope**
-
-- The backup settings: server backups on or off, the time between backups (1–10080 minutes), the number kept (1–100), and the days of daily backups kept (0–365, 0 by default, which turns daily retention off).
-- Daily retention: on top of the existing count limit, catalog backup rotation keeps one backup per date for a number of days set in the server's backup settings.
-- Daily retention applies to current- and older-version backups alike, so older-version backups, which rotation keeps and does not count today, age out with their dates.
-- Newer-version backups and files rotation does not recognize are never touched.
-- The days setting adds a field to the backup settings, a contract change that only adds.
-- The days setting defaults to 0, which turns daily retention off and keeps today's rotation, so upgrading changes nothing until it is set.
-- Like the other settings fields after Server Settings Robustness, the days field is nullable in the request, and a post without it keeps the stored value.
-
-**Traps**
-
-- Only the desktop calls `/api/backup/settings`. The route exists (measured).
-- The ranges for the time between backups and the number kept are the ones the server already clamps to.
-- The frozen desktop's backup settings save posts only its three fields (`MainWindow.axaml.cs`), so without the rule that a post without the days field keeps the stored value, each desktop save would reset the days.
-
-**Acceptance**
-
-- Backup settings load and save, and saving one field leaves the others as they were on the server, in admin section UI tests.
-- Each backup field accepts the range the server enforces, and the days of daily backups accept 0 to 365, where 0, the default, turns daily retention off, in admin section UI tests.
-- A backup value outside its range is flagged with the field validation pattern as it is typed, and Save can't proceed until it is corrected, in admin section UI tests of each backup field.
-- With the days at 0, rotation keeps and deletes exactly the backups it does today, and a backup settings post without the days field keeps the stored value, in server tests.
-- With daily retention set to a number of days, rotation keeps the count limit's newest current-version backups plus the newest backup of each date in that window, current-version or older-version, and deletes older-version backups whose dates fall outside it, in server tests of the window and of older-version backups aging out.
-- Newer-version backups and unrecognized files in `backups/` are byte-identical after rotation, with daily retention on or off, in server tests.
-- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
-
-#### Duplicate review slice
-
-**Scope**
-
-- Scan the whole library or one source.
-- Show each group with thumbnails and the comparison details the desktop shows: file name, plays, tags, favorite, and blacklisted.
-- Choose Keep All or a file to keep per group.
-- Each group starts at Keep All or Select Best, from a per-device preference.
-- The preference is chosen in duplicate review rather than the Settings tab, since nothing else uses it. It starts at Keep All, as on the desktop, and survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
-- Apply deletes the files not kept from disk after a plain confirmation that says so and names the groups and files to delete, as the desktop's does, without the desktop's step of typing DELETE.
-- Duplicate review opens within the admin section's full-page view, not as a panel tab.
-- The Duplicates card has the scan's scope (the whole library or one source), Scan, and the default, labeled "Each group starts at".
-- Review replaces the admin view's contents and has its own bar, with a back arrow to admin, the title Duplicate review, and the group count.
-- Each group, headed "Group {n} of {total}" with Keep All beside it, shows its files as cards with a thumbnail, the file name, its folder and size, plays with Favorite or Blacklisted, tags, and "Keep this one".
-- The kept file's card is outlined green, and the others red with a dimmed thumbnail.
-- A footer sums up "{n} files to delete from {n} groups; Keep All groups are left as they are." or "Keep All everywhere: nothing will be deleted.", with Cancel and a red Delete {n} Files, disabled while nothing would be deleted.
-- The confirmation says "This permanently deletes the duplicate files you didn't keep from disk.", then "Groups to process: {n}" and "Files to delete: {n}", with a red Delete {n} Files.
-- Afterwards the card says "Deleted {n} files." and a Your actions popup "Deleted {n} duplicate files.".
-- A count of one is singular, such as "Delete 1 File".
-
-**Traps**
-
-- Only the desktop calls `/api/duplicates/scan` and `/api/duplicates/apply`. The routes exist, so this needs no contract change (measured).
-
-**Acceptance**
-
-- Duplicate review opens within the admin section, in admin section UI tests.
-- Duplicate apply deletes only the files not kept, from disk, after a confirmation that names the groups and files to delete and asks for nothing to be typed, and Keep All deletes nothing in that group, in admin section UI tests.
-- The duplicate default is chosen in duplicate review, starts at Keep All, is kept per device, and survives a page refresh, in admin section UI tests.
-- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and one quick spot check of a duplicate scan.
-
-#### Release checks
-
-- Manual: From the admin section, start a refresh, change refresh and backup settings, scan and apply duplicates with Keep All and with a chosen file, and clear all playback stats, and the library updates.
-
-### M12k - Admin Source and Item Management
-
-- **Status**: ⏳ Planned
-- **Goal**: Manage sources and remove library items from the WebUI admin section, with server routes for what no client can do today, and every open WebUI follows source changes without a reload.
-- **Depends on**: WebUI Admin Section.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Decisions
-
-- Everything this milestone adds is gated like the rest of the admin section: localhost, or the control token from other machines.
-- Adding a folder takes a path on the server machine. The admin section takes a plain typed path, with no autocomplete or folder browser, and the server checks it as it is typed: a folder on the server that is not already a source.
-
-#### Slices
-
-| Slice | Status | Delivers |
-| --- | --- | --- |
-| Contract | ⏳ Planned | Server routes to rename and remove a source, remove library items, and check a typed source path, with events for source and item changes, in OpenAPI and the generated WebUI types. |
-| Manage Sources | ⏳ Planned | The admin section's source list with statistics, adding by server path, Edit Source with rename and Remove, enable and disable, and one Refresh. |
-| WebUI source sync | ⏳ Planned | Every open WebUI reloads its library window and Filter tab source list on a source event, with one resync in flight at a time. |
-
-#### Contract slice
-
-**Scope**
-
-- Server routes to rename a source, remove a source (its items leave the catalog; files stay on disk), and remove items from the library, with the delete-from-disk option the desktop remove dialog offers.
-- The item removal route also serves bulk removal in WebUI Multi-Select and Bulk Actions.
-- An admin-only route that checks a typed path: a folder on the server that is not already a source. A contract change that only adds.
-- Source and item changes publish events so connected clients update. Import gets an event too.
-- OpenAPI and generated WebUI types for the new routes.
-
-**Traps**
-
-- The desktop Manage Sources dialog shows Rename and Remove buttons and the grid shows Remove from Library, but none of them has a server route, so v0.14.0 hides them. The routes are still missing and the three controls are still hidden.
-- The path check is a new admin-only route, a contract change that only adds (inferred).
-- Only enabling or disabling a source publishes an event (`sourceStateChanged`), and `POST /api/sources/import` publishes nothing.
-
-**Acceptance**
-
-- Removing a source removes its items from the catalog and leaves its files, in server tests of the route.
-- The item removal route removes items with and without deleting from disk, in server tests of the route.
-- The path check route flags a typed path that is not a folder on the server, or is already a source, in server tests of the route.
-- Adding, renaming, removing, enabling, and disabling a source each publish an event, in server tests of the event each source change publishes.
-- New routes are in OpenAPI, and `npm run verify:contracts` passes.
-- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
-
-#### Manage Sources slice
-
-**Scope**
-
-- List sources with the statistics the desktop dialog shows: total media, videos, photos, total duration, and videos with and without audio.
-- Add a folder, rename, remove, enable and disable, and refresh.
-- The list has one Refresh for all sources, not one per source, since the refresh route takes no source id.
-- Each source row has an enable switch, the source's name, path, and statistics, and an Edit button (`edit_note`, "Edit source").
-- Edit opens an Edit Source dialog with the name, built as Edit Tag, Edit Category, and Edit Preset are.
-- The name uses the field validation pattern: a name another source has, ignoring case, is flagged with "Use a name no other source has.", and Save is disabled while the name is taken or empty, as WebUI In-App Dialogs sets out for the fields of a dialog. An empty name is not flagged.
-- Edit Source has **Remove**, not Delete, since the source's files stay on disk. It asks `Remove the source "{name}"? Its items leave the library; its files stay on disk.` in a dialog stacked above, with a red Remove.
-- The path field uses the field validation pattern, and a path that is already a source is flagged with "That folder is already a source.". An empty path is not flagged.
-- Add Source sits beside the path field, so it is disabled while the path is empty or flagged, with no icon on the button, as WebUI In-App Dialogs sets out for an action whose fields sit right next to it.
-- A Your actions popup acknowledges each change: "Source renamed.", "Source added. Importing its files…", "{name} enabled." or "{name} disabled.", and "Source removed.", the last three followed by "ReelRoulette updates the library everywhere it's open.".
-
-**Traps**
-
-- Folder import, enable and disable, and refresh routes already exist.
-- The per-source statistics already come from the `sources` list of `GET /api/library/stats`, so they need no contract change.
-- The refresh route takes no source id.
-- A browser folder picker returns paths on the browser's machine (inferred).
-- The desktop's Import Folder sends its own folder picker path to the server, so it only works on the server machine.
-
-**Acceptance**
-
-- From the admin section, sources can be added by server path, renamed, removed, enabled, disabled, and refreshed, with per-source statistics, and one Refresh covers the whole list, in admin section UI tests for Manage Sources.
-- A typed path that is not a folder on the server, or is already a source, is flagged with the field validation pattern as it is typed, and Add Source is disabled without an icon on it until the path is corrected, as it is while the path is empty, in admin section UI tests for Manage Sources.
-- An Edit Source name another source has, ignoring case, is flagged with the field validation pattern, and Save is disabled without an icon on it while the name is taken or empty, in admin section UI tests for Manage Sources.
-- Edit Source's button and its confirmation's button say Remove, not Delete, in admin section UI tests for Manage Sources.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes.
-
-#### WebUI source sync slice
-
-**Scope**
-
-- On a source event, reload the loaded library window, keeping the scroll position as the desktop does, and refresh the Filter tab's source list.
-- Overlapping resyncs: keep one in flight and coalesce events that arrive meanwhile, since this milestone adds source events that reload every open WebUI.
-
-**Traps**
-
-- The server already applies source state: the list query, random selection, and item play only use enabled sources.
-- The WebUI keeps no source authority of its own; its source checkboxes are a filter choice.
-- The WebUI ignores `sourceStateChanged` and reads `GET /api/sources` only when the filter dialog loads its data.
-- `src/events/sseClient.ts` calls `void handleResyncRequired(...)` for every `resyncRequired` event, so several authoritative reloads can run at once and finish out of order.
-
-**Acceptance**
-
-- Adding, renaming, removing, enabling, or disabling a source from the admin section or the desktop updates every open WebUI's library window and Filter tab source list without a reload, in WebUI tests for source event handling.
-- Removing items updates connected WebUI sessions through events and list requery, in WebUI tests for event handling.
-- Overlapping resync events cause one reload at a time, in WebUI tests for overlapping resyncs.
-- `npm run verify` passes, and one quick spot check of an admin section source toggle seen in another WebUI tab.
-
-#### Release checks
-
-- Manual: On Linux and Windows, from the admin section, add a source by its server path, then rename, disable, refresh, and remove it, and other open WebUI sessions update without a reload.
-
-#### Not included
-
-- Showing the desktop's Rename, Remove, and Remove from Library controls again; the frozen desktop keeps them hidden.
-- Bulk item removal in the WebUI, which is WebUI Multi-Select and Bulk Actions.
-- Duplicate review, which is Admin Refresh, Backup, and Duplicate Review.
-- Moving source and item management behind admin accounts, which is Auth Cutover for API and Admin.
-- Per-user source visibility, which is Per-User Source Permissions.
-- Browsing for a source folder, which is Desktop App Shell.
-
-### M12l - Admin Library Catalog Transfer
-
-- **Status**: ⏳ Planned
-- **Goal**: Export and import the library from the WebUI admin section, with the server applying the catalog, so catalog transfer does not need the desktop app.
-- **Depends on**: WebUI Admin Section, Remove library.json Library Support, and Catalog Open and Backup Safety, so import can restore a library while the server runs without one, and Admin Source and Item Management, whose server path check the remap fields use, and Admin Refresh, Backup, and Duplicate Review, whose daily retention marks the backups the restore list labels daily.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Decisions
-
-- Everything this milestone adds is gated like the rest of the admin section.
-- Settings and backups are not part of the transfer. Presets and thumbnail revision and dimensions travel with `library.db`. JPEG files stay in the local thumbnail directory.
-- Import also works while the server runs without a library, and can import one of the server's own backups, which is how the admin section restores a backup.
-- Before it replaces the library, an import or a restore takes a catalog backup of the current one, even with server backups off and whatever the backup gap, so a mistaken import or restore can be undone from the restore list.
-- That backup is listed first in the restore list, labeled by when it was made and what it came before, such as "Today 14:32 (before import)" or "Today 14:32 (before restore)".
-
-#### Slices
-
-| Slice | Status | Delivers |
-| --- | --- | --- |
-| Report | ⏳ Planned | A report on every holder of catalog state and connections in the server and how each is handled for a replace, written before the import slice. |
-| Export name | ⏳ Planned | The export route's suggested name `library-{date}.db`, and Export Library in the admin section. |
-| Import | ⏳ Planned | Import while the server runs, with replace and recovery, the not-a-library check, the upload limit, the remap, and the admin section's Import Library flow. |
-| Backup restore | ⏳ Planned | A route listing the server's backups, the Backups card's restore list, and Restore. |
-
-#### Report slice
-
-**Scope**
-
-- List every holder of catalog state and connections in the server, such as the catalog session and its SQLite connection pool, the cached list counts, the random shuffle bag, refresh stages, catalog backups, duplicate and auto-tag scans, and the event revision, and how each is stopped, cleared, or reloaded for a replace.
-- Include how SQLite connections are closed before the rename on Windows.
-- Decide whether an import waits for or refuses a running refresh.
-
-**Traps**
-
-- On Windows, a file that is open can't be renamed (inferred).
-
-**Acceptance**
-
-- The report on catalog state holders is written before the import slice starts. It names every holder of catalog state and connections and how each is stopped, cleared, or reloaded for a replace, how SQLite connections are closed before the rename on Windows, and whether an import waits for or refuses a running refresh.
-
-#### Export name slice
-
-**Scope**
-
-- The export route suggests `library-{date}.db` as the download's name (its `Content-Disposition` file name) in place of `library.db`, dated by the server's local date, such as `library-2026-10-08.db`. Only the suggested name changes.
-- **Export Library** in the admin section uses the same route, `GET /api/library/catalog-checkpoint`. Export is a plain download in every browser, with no save picker, so it has no ellipsis.
-- A Your actions popup says "Downloading {file}." as the download starts.
-- The library transfer card's hint reads "Export saves the whole library: items, tags, presets, and stats. Import replaces it while the server runs; the current library is kept aside until the new one opens."
-
-**Traps**
-
-- Export is already a server operation: `GET /api/library/catalog-checkpoint` writes a standalone checkpoint while the server has `library.db` open, and the desktop's Library Export saves that file.
-- `GET /api/library/catalog-checkpoint` passes `library.db` to `Results.Stream` (`ServerHostComposition.cs`).
-- The desktop's Library Export is unaffected: it saves to the path its own save picker returns, which suggests `library.db` (`MainWindow.axaml.cs`).
-- A browser doesn't report when a download finishes (inferred).
-
-**Acceptance**
-
-- The admin section can export a server-produced checkpoint, in admin section UI tests for export.
-- The export downloads as `library-{date}.db`, dated by the server's local date, in server tests for the export's suggested name.
-- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
-
-#### Import slice
-
-**Scope**
-
-- Import moves onto server operations and runs while the server is up.
-- Reuse the replace-and-recover protocol already in `LibraryCatalogStore` (incoming file, finished-file rename, recovery), which the desktop import uses today with the server stopped. What is new is replacing the database while the server's catalog session is open.
-- The previous database stays aside until the new file is in place and opens.
-- A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed.
-- A file that is not a library database is rejected.
-- The import upload has its own limit and streams to the incoming file rather than buffering in memory.
-- `verify-linux-packaged-server-smoke.sh` uploads a file larger than 30 MB that isn't a library and gets the not-a-library answer, not a refusal for its size.
-- Import keeps the source folder remap the desktop import offers. Each remap field checks for a folder on the server, through the path check Admin Source and Item Management adds; left empty, it keeps the old path.
-- **Import Library…** in the admin section's library transfer card.
-- While an import uploads, a progress bar shows in the library transfer section, with "Uploading {file}: {n}%".
-- The file uploads first; the server then reads its source folders for the remap dialog, or rejects a file that isn't a library with the notice "{file} isn't a ReelRoulette library. The library wasn't changed."
-- The remap dialog, titled "Import {file}", says "Its source folders were on another machine. Point each one at its folder on this server, or leave it to keep the path.", with one field per source folder labeled with its old path, using the field validation pattern, and Cancel and Import.
-- Import is disabled while a remap field is flagged, with no icon on it, as WebUI In-App Dialogs sets out for the fields of a dialog.
-- Import then asks "Replace the library with {file}? The current library is kept aside until the new one opens.", with Cancel focused and a red Replace, and a Your actions popup says "Imported {file}. Connected clients reload the library."
-
-**Traps**
-
-- Today import is desktop-only and needs the server stopped: `LibraryArchiveMigration.ImportDatabase` writes the server's `library.db` from the desktop process. This is the main blocker for removing the desktop.
-- On a copy of the developer's catalog, `library.db` is 92.5 MB (92,520,448 bytes, no free pages) for 49,055 items (measured).
-- That is larger than ASP.NET Core's default request body limit of about 30 MB, the framework default (inferred).
-- The server raises the multipart form limit (`FormOptions.MultipartBodyLengthLimit`) to 512 MB, left from earlier library import work, but no route reads a form now and the request body limit itself is not raised.
-- The limit is Kestrel's, and the server tests call handlers without an HTTP host, so the packaged server smoke script covers it.
-
-**Acceptance**
-
-- The admin section can import a `library.db` while the server is running, in server tests for running-server import and admin section UI tests for import.
-- An interrupted import leaves the previous catalog or the finished incoming file, never a partial database or an empty catalog, in server tests for interrupted-replace recovery.
-- Import rejects a file that is not a library database and does not replace the live catalog, in server tests for its rejection.
-- Import replaces the catalog, including presets and thumbnail revision and dimensions, while settings and backups stay where they are and JPEG files stay in the local thumbnail directory, in server tests for running-server import.
-- Connected clients resync after an import, in server tests for running-server import.
-- Before an import replaces the library, a catalog backup of the current one is taken, even with server backups off, in server tests for the backup taken before a replace.
-- An import while a refresh, backup, or scan runs does what the report decided, and never leaves a partial catalog, in server tests for an import during a refresh.
-- Each remap field checks for a folder on the server, Import is disabled without an icon on it while one is flagged, and one left empty keeps the old path, in admin section UI tests for the remap fields.
-- A file larger than 30 MB uploads to the packaged server without a refusal for its size, in `./tools/scripts/verify-linux-packaged-server-smoke.sh` with its upload larger than 30 MB.
-- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `./tools/scripts/verify-linux-packaged-server-smoke.sh`, `dotnet test ReelRoulette.sln`, and `npm run verify` pass.
-
-#### Backup restore slice
-
-**Scope**
-
-- A new route lists the server's backups, a contract change that only adds.
-- The Backups card lists the server's backups under Restore, newest first, each named by when it was made, such as "Today 06:00", "Yesterday 18:00", or "3 days ago (daily)", with a Restore… button.
-- A backup kept only by daily retention is labeled "(daily)".
-- Restore asks "Restore the backup from {when}? The current library is kept aside until the backup opens.", with Cancel focused and a red Restore, and a Your actions popup then says "Restored the backup from {when}.".
-
-**Traps**
-
-- No route lists the server's backups.
-
-**Acceptance**
-
-- The Backups card lists the server's backups, and restoring one asks first and then replaces the library with it, in admin section UI tests for restore.
-- Before a restore replaces the library, a catalog backup of the current one is taken, even with server backups off, in server tests for the backup taken before a replace.
-- The backup taken before an import or a restore shows first in the restore list, labeled "(before import)" or "(before restore)", in admin section UI tests of the safety backup's place and label.
-- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
-
-#### Release checks
-
-- Manual: With no desktop app, export the library from the admin section and import it into a fresh server, on Linux and Windows.
-
-#### Not included
-
-- A Save as dialog for the export, which is Desktop App Shell.
-- Removing the desktop's Library Export and Import menus, which is Desktop Client Removal.
-
-### M12m - WebUI Stats Panel
+### M12h - WebUI Stats Panel
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI shows library and playback statistics and details of the current file in a Stats tab, as the desktop stats panel does.
@@ -887,7 +205,7 @@ Last milestone completed: M12g
 - Filling in Adjustment, which is WebUI Loudness Normalization.
 - Playback history charts, which is Playback History and Analytics.
 
-### M12n1 - WebUI Volume and Enhanced Audio
+### M12i1 - WebUI Volume and Enhanced Audio
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI has a volume control on every device, by slider, scroll wheel, and two-finger drag, through an Enhanced audio gain stage that also gives iPhone and iPad an in-app volume.
@@ -1004,7 +322,7 @@ Last milestone completed: M12g
 - Enhanced audio's description naming loudness normalization, which is WebUI Loudness Normalization.
 - The [ and ] volume keys, which is WebUI Keyboard Shortcuts.
 
-### M12n2 - WebUI Loudness Normalization
+### M12i2 - WebUI Loudness Normalization
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI evens out loudness between videos, as the desktop's volume normalization does, and it works properly in every browser the WebUI supports.
@@ -1061,7 +379,7 @@ Last milestone completed: M12g
 
 - Leaving the fixture as WebUI test data once the desktop is gone, which is Desktop Client Removal.
 
-### M12n3 - WebUI Autoplay Modes
+### M12i3 - WebUI Autoplay Modes
 
 - **Status**: ⏳ Planned
 - **Goal**: Autoplay has two modes, Normal and Timer, in place of the desktop's Keep Playing, and a looping photo no longer flickers.
@@ -1104,7 +422,7 @@ Last milestone completed: M12g
 
 - Moving the photo duration into the Settings tab as Advance after, which is WebUI Settings Panel.
 
-### M12n4 - WebUI Player Controls and Ambient Mode
+### M12i4 - WebUI Player Controls and Ambient Mode
 
 - **Status**: ⏳ Planned
 - **Goal**: The player's controls can hide after a time with no activity, and ambient mode fills the black space around the picture with a soft glow of its colors.
@@ -1166,7 +484,7 @@ Last milestone completed: M12g
 
 - Manual: On an iPhone and an iPad, in Safari and Firefox, with ambient mode on, the player's corners stay rounded.
 
-### M12n5 - WebUI Keyboard Shortcuts
+### M12i5 - WebUI Keyboard Shortcuts
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI has the desktop's keyboard shortcuts wherever a browser allows them, plus seek-step and frame-step keys and a shortcut reference.
@@ -1227,7 +545,7 @@ Last milestone completed: M12g
 - Rebinding, which is Customizable Keyboard Shortcuts.
 - The Actions menu and selection in the Esc order, after Auto Tag and before the panel, which is WebUI Multi-Select and Bulk Actions.
 
-### M12o - Show in File Manager from the WebUI
+### M12j - Show in File Manager from the WebUI
 
 - **Status**: ⏳ Planned
 - **Goal**: A WebUI on the server machine opens the system file manager at the playing file, and elsewhere copies its path.
@@ -1306,71 +624,7 @@ Last milestone completed: M12g
 
 - Manual: On the server machine at `http://localhost`, Show in File Manager opens the file manager at the playing file on Linux and Windows; from another device, Copy Path copies it, at the LAN address and through an HTTPS proxy.
 
-### M12q - Testing Suite Overhaul
-
-- **Status**: ⏳ Planned
-- **Goal**: The testing suite produces clear results that match the WebUI's connection and status handling.
-- **Depends on**: WebUI Notifications, Server Shutdown Fixes, and WebUI Admin Section.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Slices
-
-| Slice | Status | Delivers |
-| --- | --- | --- |
-| Report | ⏳ Planned | A report of what the WebUI shows, and how SSE disconnect closes and reconnects, for each scenario run several times against a running server. |
-| Scenarios | ⏳ Planned | The scenarios redesigned against current WebUI behavior, each with its expected WebUI message, checked as part of the suite. |
-
-#### Report slice
-
-**Scope**
-
-- With a running server, which needs the user's approval to start, run each scenario against the WebUI several times.
-- Report what the WebUI shows and how SSE disconnect closes and reconnects on each run, so the redesign starts from measured behavior.
-
-**Traps**
-
-- The suite predates the current client connection and status handling and no longer produces clear results.
-- With the API unavailable, the WebUI shows "library load failed: HTTP 503" only briefly before settling on "SSE reconnecting..." (measured before promotion).
-- WebUI Notifications replaces "SSE reconnecting..." with the indicator's Reconnecting…, and the library keeps its load failure in its body.
-- SSE disconnect behaves inconsistently and may need redesigning (measured before promotion).
-- The Operator testing suite has five scenario flags: API version mismatch, capability mismatch, API unavailable, missing media, and SSE disconnect.
-
-**Acceptance**
-
-- The report of each scenario's behavior on a running server, naming what the WebUI shows and how SSE disconnect closes and reconnects on each run, is written before the Scenarios slice starts.
-
-#### Scenarios slice
-
-**Scope**
-
-- Redesign the scenarios against current WebUI behavior, define the expected WebUI message for each, and verify the WebUI's behavior as part of the suite.
-- The suite runs from the admin section.
-- Each scenario shows its expected message under it, labeled "Expected message:": the lasting state the player's indicator shows, or the popup the WebUI sends. The mockup leaves the messages to this milestone, which takes them from WebUI Notifications' per-event messages.
-- If the redesign changes the scenarios the testing routes under `/control` take, that is a contract change that doesn't only add, and OpenAPI and the admin section change together.
-
-**Traps**
-
-- Server Shutdown Fixes changed how event streams close.
-- Neither client calls the testing routes under `/control`, and the Operator page is retired by then, so the admin section, which ships in the same build, is their only caller.
-
-**Acceptance**
-
-- Each scenario lists the expected WebUI message, and the WebUI shows it while the scenario is active, in automated tests that each scenario's simulated server responses make the WebUI show its expected message.
-- SSE disconnect behaves the same way on every run, in automated tests that it closes and reconnects the same way on repeated runs.
-- Running and resetting each scenario leaves the WebUI connected and working, in automated tests that each scenario sets and resets the server state it describes.
-- If the scenarios change, contract tests cover the testing routes' new shape.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `dotnet test ReelRoulette.sln` and `npm run verify` pass, and one quick spot check of one scenario.
-
-#### Release checks
-
-- Manual: Every testing suite scenario shows its expected WebUI message, and resetting it leaves the WebUI connected.
-
-#### Not included
-
-- The desktop's expected messages, since the desktop is frozen.
-
-### M12r - Browser-Playable Filter
+### M12k - Browser-Playable Filter
 
 - **Status**: ⏳ Planned
 - **Goal**: Browse and random play can be limited to files a browser can play, and a file the browser cannot play, or one the server can't read, says so instead of "not found".
@@ -1497,7 +751,7 @@ Last milestone completed: M12g
 - Playing formats a browser can't, which is WebUI Playback Cutover and Format Resilience.
 - Keeping the option on a preset the desktop renames in the same save, which is Per-Preset Preset Writes.
 
-### M12s1 - WebUI Grid Row Reuse
+### M12l1 - WebUI Grid Row Reuse
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI library grid updates only the rows and tiles that change, so it no longer flickers on an iPad or after a hard refresh.
@@ -1541,7 +795,7 @@ Last milestone completed: M12g
 - Extending the layout for appended pages instead of rebuilding it, since a rebuild measured a few milliseconds per page.
 - Placeholder tiles and loading the page at the scroll position, which is WebUI Grid Scrollbar Seek.
 
-### M12s2 - WebUI Grid Scrollbar Seek
+### M12l2 - WebUI Grid Scrollbar Seek
 
 - **Status**: ⏳ Planned
 - **Goal**: Dragging the library grid's scrollbar reaches any part of the results without loading every page before it.
@@ -1599,11 +853,11 @@ Last milestone completed: M12g
 
 - Manual: In a desktop browser and on a phone, dragging the library grid's scrollbar to the end of a large library shows its last tiles without loading every page before them.
 
-### M12t - WebUI Multi-Select and Bulk Actions
+### M12m - WebUI Multi-Select and Bulk Actions
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI selects several library items, or every item that matches, and applies the desktop's bulk actions to them.
-- **Depends on**: Admin Source and Item Management, whose item removal route bulk removal uses, and WebUI Grid Row Reuse, which updates a tile in place, so selection marks are tile updates, and WebUI Grid Scrollbar Seek, whose placeholder tiles show selection once their page loads, and WebUI Tags and Filter Tabs, whose Tags tab edits several items, and WebUI Keyboard Shortcuts, whose Esc order it extends.
+- **Depends on**: WebUI Grid Row Reuse, which updates a tile in place, so selection marks are tile updates, and WebUI Grid Scrollbar Seek, whose placeholder tiles show selection once their page loads, and WebUI Tags and Filter Tabs, whose Tags tab edits several items, and WebUI Keyboard Shortcuts, whose Esc order it extends.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -1615,9 +869,9 @@ Last milestone completed: M12g
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Contract | ⏳ Planned | An ids-only library query, a bulk favorite and blacklist route with one event, clear playback stats by ids, the tag-count read for a selection, and the clients' handling of the bulk event. |
+| Contract | ⏳ Planned | An ids-only library query, a bulk favorite and blacklist route with one event, clear playback stats by ids, an item removal route with its event, the tag-count read for a selection, and the clients' handling of the bulk and item removal events. |
 | Selection | ⏳ Planned | Selecting tiles by their check icon or a long press, the selection bar with Select all, and the Esc order. |
-| Bulk actions | ⏳ Planned | The Actions menu's favorite, blacklist, clear playback stats, and remove from library actions, and favorite and blacklist answers applied to the item they were for. |
+| Bulk actions | ⏳ Planned | The Actions menu's favorite, blacklist, clear playback stats, and remove from library actions, the control-token prompt remove from library asks through, and favorite and blacklist answers applied to the item they were for. |
 | Tag edits | ⏳ Planned | Editing several items' tags in the Tags tab. |
 
 #### Contract slice
@@ -1628,6 +882,9 @@ Last milestone completed: M12g
 - The library query gains an ids-only option that returns every matching id in one response, for Select all.
 - One bulk route takes many ids and sets or clears favorite or blacklist on all of them in one request, publishing one event for all of them in place of one request and one `itemStateChanged` per item.
 - Clear playback stats takes ids beside its paths, so a selection of items that aren't loaded can be cleared.
+- A route removes items from the library, with the delete-from-disk option the desktop remove dialog offers.
+- The item removal route is gated as the `/control` routes are: open from the server machine, and from another machine only with the control token.
+- Removing items publishes an event so connected clients update, and every open WebUI requeries its library window on it.
 - The WebUI applies the patch-or-reload rule to each id in the bulk event and reloads its window at most once.
 - The bulk request sends the device's `clientId`, and the bulk event carries it back as `clientId`, as WebUI Notifications does for one item's favorite or blacklist.
 - Other devices show one Other devices popup for the batch: "Added {n} items to favorites on another device", "Removed {n} items from favorites on another device", "Blacklisted {n} items on another device", or "Removed {n} items from the blacklist on another device", with "1 item" for one. The device whose `clientId` the event carries shows only its Your actions popup.
@@ -1639,6 +896,7 @@ Last milestone completed: M12g
 
 - `POST /api/favorite` and `POST /api/blacklist` take one item path each, and the desktop sends one request per selected item.
 - `POST /api/playback/clear-stats` takes a list of item paths, and `POST /api/tag-editor/apply-item-tags` a list of item ids.
+- The desktop grid shows Remove from Library, but it has no server route, so v0.14.0 hides it. The route is still missing and the control is still hidden.
 - The ids-only response is about 1.9 MB for the developer catalog's 49,055 items, worked out from 36-character ids (inferred).
 - The frozen desktop ignores event types it doesn't know: its event switch in `MainWindow.axaml.cs` has no default case.
 - The tag-editor model takes item ids (`TagEditorModelRequest.itemIds`).
@@ -1649,8 +907,10 @@ Last milestone completed: M12g
 - Bulk favorite and blacklist send one request and publish one event, the WebUI reloads its window at most once for it, and the desktop reloads its loaded window on it, in server tests for the bulk route and its one event and a desktop test that the bulk event reloads the loaded window, and WebUI tests that the bulk event reloads the window at most once.
 - The bulk event carries the request's `clientId`, in server tests for the bulk route, and other devices show one Other devices popup for the batch while the device that made the change shows only its Your actions popup, in WebUI tests of the bulk event's popups.
 - Clear playback stats clears items given by id, in server tests for clearing stats by ids.
+- The item removal route removes items with and without deleting from disk, in server tests of the route.
+- Removing items updates connected WebUI sessions through events and list requery, in WebUI tests for event handling.
 - The measurement of the tag-editor model against a counts-only addition on the 49,055-item catalog is recorded, and the cheaper read is used.
-- The ids-only query, the bulk route, and clear-stats ids are in OpenAPI, and `npm run verify:contracts` passes, in contract tests.
+- The ids-only query, the bulk route, clear-stats ids, and the item removal route and its event are in OpenAPI, and `npm run verify:contracts` passes, in contract tests.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
 #### Selection slice
@@ -1695,7 +955,8 @@ Last milestone completed: M12g
 - Add to and Remove from favorites and the blacklist send one request to the bulk route, and Clear playback stats sends ids.
 - Bulk Add to favorites clears each item's blacklisting, and Add to blacklist clears its favorite, as the player's buttons do.
 - Clear playback stats… asks "Clear playback stats for {n} items?", with Cancel focused and a red Clear.
-- Remove from library is an admin action. From another machine it asks for the control token first, as the admin view does. It then asks to confirm, naming the count.
+- Remove from library is an admin action. From another machine it asks for the control token first, in a control-token prompt that this milestone builds on `POST /control/pair`; on the server machine, which the merged localhost helper decides, it asks for none. It then asks to confirm, naming the count, and sends the selection to the item removal route.
+- WebUI Admin Section's gate reuses the control-token prompt.
 - Deleting the files from disk is an option in Remove from library's confirmation, off by default, and when it is on the question says the files will be permanently deleted from disk.
 - The wording of Remove from library:
   - The token prompt is a dialog titled "Control token" that says "This is an admin action. Enter the server's control token.", with the token field under the field validation pattern and Continue.
@@ -1717,6 +978,7 @@ Last milestone completed: M12g
 - The WebUI applies favorite, blacklist, clear stats, and, for admins, remove from library to all selected items, in WebUI tests for each bulk action.
 - Each bulk action applies to every item Select all selected, including items not loaded, in WebUI tests for each bulk action.
 - Remove from library asks to confirm with the count. Deleting files from disk is off by default, and turning it on makes the question say the files will be permanently deleted from disk, in WebUI tests for each bulk action.
+- From another machine, Remove from library asks for the control token in the control-token prompt before its confirmation, and on the server machine it asks for none, in WebUI tests of the control-token prompt.
 - Bulk Add to favorites clears blacklisting, and Add to blacklist clears favorite, on each selected item, in WebUI tests for each bulk action.
 - Bulk favorite and blacklist send one request for the whole selection, in WebUI tests for each bulk action.
 - A favorite or blacklist answer that arrives after Next applies to the item it was for, not the item now playing, in WebUI tests for a favorite answer after Next.
@@ -1756,13 +1018,759 @@ Last milestone completed: M12g
 - Keep Playing, which is WebUI Autoplay Modes, whose Timer mode replaces it.
 - Loudness normalization, which is WebUI Loudness Normalization.
 - The desktop's FFmpeg log: nothing has written to its buffer since the server took over refresh, so its window is always empty.
+- Showing the desktop's Remove from Library again; the frozen desktop keeps it hidden.
+- Removing a source with its items, which is Admin Source Management.
 - The desktop features a browser cannot offer, which is Desktop Client Removal, where they are recorded.
 
-### M12u - WebUI Keyboard Navigation and Focus
+### M12n1 - WebUI Admin Section
+
+- **Status**: ⏳ Planned
+- **Goal**: Everything the Operator page does, apart from its logs, moves into a full-page admin section of the WebUI.
+- **Depends on**: WebUI Responsive Layout and Panels, whose header holds the admin icon, and WebUI Auto-Pause and Photo Scrub Bar, whose Auto-Pause the admin view follows, and WebUI In-App Dialogs, whose confirmation the control token change uses, and WebUI Field Validation Pattern, whose pattern its settings fields use, and Catalog Open and Backup Safety, whose library state and message the admin section shows, and WebUI Notifications, whose bell and popups the admin view uses, and WebUI Multi-Select and Bulk Actions, whose control-token prompt its gate reuses.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Update download report | ⏳ Planned | The cause of the Operator's two-attempt update download, reported before the admin section's update controls are built. |
+| Admin section | ⏳ Planned | A full-page admin view with every Operator section but its Server Logs, as Preact screens on the same control routes. |
+
+#### Update download report slice
+
+**Scope**
+
+- Find and report the cause of the Operator's update download needing two attempts, so the admin section's update controls don't inherit it.
+
+**Traps**
+
+- The Operator's update download needs two attempts every time: click Download and confirm, and nothing happens; click Download and confirm again, and it downloads (measured).
+- No commit has fixed it.
+
+**Acceptance**
+
+- The report names the cause of the Operator's two attempts, and is written before the Admin section slice starts.
+
+#### Admin section slice
+
+**Scope**
+
+- Admin is a full-page view opened from the header's admin icon, not a panel tab. The icon is always visible.
+- The view keeps the Operator page's responsive layout, restyled to match the rest of the WebUI.
+- Its layout: a bar with a back arrow ("Back to the player"), the title Admin, and at its right end the notifications bell; a row of jump links to its sections; and cards, each titled with its icon, in this order: Server (`dns`), Web access (`lan`), Control (`key`), Library refresh (`sync`), Library transfer (`swap_vert`), Backups (`storage`), Sources (`folder`), Duplicates (`content_paste`), Testing suite (`bug_report`), Connected clients (`group`), Log Viewer (`article`), and API events (`description`).
+- Sources, Duplicates, the Log Viewer, and API events take the full width, and on a wide screen the others take half.
+- The cards for refresh, transfer, backups, sources, duplicates, and the Log Viewer arrive with the milestones that build them, in their places.
+- The admin view covers the player, so opening it pauses playback under the Always and Responsive Auto-Pause modes, and leaving it resumes playback only if Auto-Pause paused it, as WebUI Auto-Pause and Photo Scrub Bar describes.
+- Move every Operator section but its Server Logs into the admin section as Preact screens:
+  - server updates;
+  - runtime status with restart and stop, including the message when the server runs without a library;
+  - web runtime settings: port, Allow remote connections, mDNS advertising and LAN hostname, and auth mode and shared token, without Enable Web UI;
+  - control settings: control token, dev channel, Launch Server on Startup;
+  - the testing suite;
+  - connected clients;
+  - incoming and outgoing API events.
+- The screens call the same control routes, so there is no contract change.
+- The Operator page stays until Recovery Page and Operator Retirement retires it, so its Server Logs stay reachable until Log Viewer Redesign adds the Log Viewer.
+- The control token shows hidden, with Show and Copy beside it.
+- Saving a changed token asks first, "Change the control token? Other machines will be signed out and need the new token to open admin.", with Cancel focused and a red Change Token. Saving it unchanged asks nothing.
+- The control token's hint keeps today's warning: "Other machines need it to open admin. Changing it signs them out."
+- Settings fields that can hold a value that is not valid, such as the port, use the field validation pattern, and their Save can't proceed while one is not valid.
+- The values each field accepts are read from the server's checks when this slice starts.
+- Connected clients show each client's id and, where its user agent names one, its operating system, then its type, address, and the time it connected, with counts of API sessions, control sessions, and event streams.
+- Connected clients leave out the session id, which the Operator page shows today.
+- On a phone on its side, where the app's header hides, the admin view keeps its own bar, with the back arrow, its title, and the bell.
+- The admin view has no status line. Its acknowledgments, such as "Control settings saved.", pop up as Your actions popups, and its bell opens the same list as the player's, whose Now shows the lasting states, since the admin view has no player, as WebUI Notifications sets out.
+- Gating: opening admin from another machine asks for the control token first, in the control-token prompt that WebUI Multi-Select and Bulk Actions builds on `POST /control/pair`, and shows nothing until it is accepted. On the server machine, which the merged localhost helper decides, it opens directly.
+
+**Traps**
+
+- The Operator page is 842 lines of HTML, CSS, and JavaScript inside a raw string in `src/core/ReelRoulette.ServerApp/Program.cs` (measured).
+- No test covers the Operator page's content; the only test that names `/operator` checks that the library route gate leaves it open (measured).
+- The sections listed in Scope match the Operator page (measured).
+- `verify-linux-packaged-server-smoke.sh` still requests `/operator` (measured).
+- The Operator page's responsive layout is a 12-column grid that changes at 620 and 980 px wide.
+- The Operator page shows the control token as plain text and saves a change without asking (`adminSharedToken` in `Program.cs`).
+- The server keeps each event stream's client id, user agent, and connection time (`ConnectedClientTracker`), so connected clients need no contract change.
+
+**Acceptance**
+
+- The header's admin icon is always visible and opens the admin section as a full-page view, not a panel tab, in admin section UI tests of the admin icon opening the full-page view.
+- Under Always and Responsive, opening the admin section pauses playback and leaving it resumes only playback Auto-Pause paused; under Never, playback keeps going, in admin section UI tests of Auto-Pause on opening and leaving it in each mode.
+- The admin section has the mockup's layout, on the Operator page's 12-column grid, at phone and desktop widths, and matches the rest of the WebUI's styling, checked in the spot check.
+- The admin section offers every action and setting the Operator page offers today, apart from its Server Logs and Enable Web UI, and calls the same routes, in admin section UI tests of loading status and settings, saving settings, and the testing panel.
+- Connected clients show each client's id with its operating system where the user agent names one, its type, address, and connection time, and the three counts, without the session id, in admin section UI tests.
+- In the admin section, one Download click and one confirmation start the update download, in admin section UI tests.
+- The admin view has no status line, its bar ends with the bell, which opens the list, and its acknowledgments pop up, in admin section UI tests of its notifications.
+- The control token shows hidden with Show and Copy, saving a changed token asks first and warns that other machines will be signed out, and saving it unchanged asks nothing, in admin section UI tests of the control token's Show, Copy, and change confirmation.
+- An admin settings field with a value the server would not accept, such as the port, is flagged with the field validation pattern as it is typed, and its Save can't proceed until it is corrected, in admin section UI tests of settings fields with the field validation pattern.
+- From another machine, opening admin asks for the control token first, and nothing in the admin section is shown until a valid token is entered; on the server machine it opens without one, in admin section UI tests of control-token gating.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check.
+
+#### Release checks
+
+- Manual: From another machine, the admin section asks for the control token and works after it is entered.
+
+#### Not included
+
+- The Log Viewer, which is Log Viewer Redesign.
+- The recovery page and retiring the Operator page, which is Recovery Page and Operator Retirement.
+- Dropping Enable Web UI, which is Recovery Page and Operator Retirement.
+- Refresh, backup, and duplicate review, with duplicate review opening within the admin section, which is Admin Refresh, Backup, and Duplicate Review.
+- Source management, which is Admin Source Management.
+- Removing library items, which is WebUI Multi-Select and Bulk Actions.
+- Catalog transfer, which is Admin Library Catalog Transfer.
+- The Log Viewer's move to structured entries, which is Admin Log Viewer.
+- Account administration, which is Account Administration.
+- Replacing the control token with admin accounts, which is Auth Cutover for API and Admin.
+
+### M12n2 - Log Viewer Redesign
+
+- **Status**: ⏳ Planned
+- **Goal**: The admin section's Log Viewer filters today's log by time, source, level, and text, in the design Admin Log Viewer later moves to structured entries.
+- **Depends on**: WebUI Admin Section.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- Only the route, `GET /control/logs/server`, keeps its old name. Everywhere the interface names the logs, it says Log Viewer.
+- The route gets no paging parameter. The Log Viewer fetches the newest matching lines once, up to the route's limit, and renders older ones as the list scrolls, as the mockup does, since paging through the route would read the whole file again for each page (see the Contract slice's Traps).
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Contract | ⏳ Planned | `GET /control/logs/server` takes several levels, several sources, and a time window, in OpenAPI and the generated WebUI types. |
+| Log Viewer | ⏳ Planned | The Operator's Server Logs redesigned as the admin section's Log Viewer, with filters, chips, a live indicator, and expanding rows. |
+
+#### Contract slice
+
+**Scope**
+
+- `GET /control/logs/server` also takes several levels, several sources, and a time window, applied before it takes the last lines, as level and text are. The change only adds.
+- OpenAPI and the generated WebUI types carry the new filters.
+- Server tests call the handlers and gating as functions over `DefaultHttpContext`, as the library route gate's tests do. `Microsoft.AspNetCore.TestHost` is not added.
+
+**Traps**
+
+- `GET /control/logs/server` filters by one level and contained text, then takes the last 1–5000 lines.
+- `ServerLogService.Read` returns at most the last 5000 lines.
+- `ServerLogService.Read` walks the whole file on every request, so paging through the route would read the file again for each page.
+- Taking several levels, several sources, and a time window, applied before the last lines are taken, is the route's natural extension (inferred).
+- No test project has an HTTP test host.
+
+**Acceptance**
+
+- `GET /control/logs/server` filters by several levels, several sources, and a time window before it takes the last lines, in server tests for the log route's level, source, and time filters.
+- The route's new filters are in OpenAPI, and `npm run verify:contracts` passes.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Log Viewer slice
+
+**Scope**
+
+- The Operator's Server Logs becomes the **Log Viewer** in the admin section, redesigned to its final design from Admin Log Viewer rather than moved as it is.
+- Its filters sit in a panel that starts collapsed, with chips for the active ones.
+- A live indicator pauses while the list is scrolled away from the newest lines, with a resume control.
+- Rows expand to the full line.
+- The Operator's Tail lines field goes.
+- It reads today's line format, `[timestamp] [source] [level] message`.
+- It filters by time window; by source (the second bracket: `server`, `webui`, and the desktop's sources, such as `desktop-app` and `desktop-update`); by level, with one checkbox per level found (today `info`, `warn`, and `error`); and by contained text.
+
+**Traps**
+
+- `ServerLogService.Append` writes today's line format, `[timestamp] [source] [level] message`.
+
+**Acceptance**
+
+- The interface names the logs section Log Viewer in the admin section, and nowhere Server Logs; the route is still `GET /control/logs/server`, in admin section UI tests.
+- The Log Viewer filters by time window, by several sources and several levels, and by contained text, with its filters in a collapsed panel with chips, a live indicator that pauses away from the newest lines, and rows that expand to the full line, in admin section UI tests for the Log Viewer's filters, chips, and live indicator.
+- The Log Viewer has no Tail lines field: it fetches the newest matching lines once, up to 5000, and shows older ones as the list scrolls without another request, in admin section UI tests for showing older lines.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check.
+
+#### Not included
+
+- The Log Viewer on the recovery page, which is Recovery Page and Operator Retirement.
+- Structured entries, category and component filters, and the route's rename, which is Admin Log Viewer.
+
+### M12n3 - Recovery Page and Operator Retirement
+
+- **Status**: ⏳ Planned
+- **Goal**: The server keeps a minimal recovery page for when the WebUI's files are broken, always serves the WebUI, and retires the Operator page.
+- **Depends on**: WebUI Admin Section and Log Viewer Redesign, so the Operator page goes only once the admin section offers everything it does.
+- **Design**: `docs/mockups/reelroulette/`, including its recovery page.
+
+#### Decisions
+
+- Server tests call the handlers and gating as functions over `DefaultHttpContext`, as the library route gate's tests do. `Microsoft.AspNetCore.TestHost` is not added, and no test project has an HTTP test host.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Recovery page | ⏳ Planned | A minimal built-in recovery page with restart, stop, a Log Viewer, and updates, that works without the WebUI's files. |
+| Operator retirement | ⏳ Planned | `/operator` redirects to the admin section, the tray's item opens ReelRoulette, and the smoke script and the checklist's Smoke item check the admin section. |
+| Always-on WebUI | ⏳ Planned | The server always serves the WebUI, ignores and reports on the `enabled` setting, and the desktop loses its Enable Web UI switch. |
+
+#### Recovery page slice
+
+**Scope**
+
+- The server keeps a minimal built-in page with restart, stop, a log tail named Log Viewer, and updates, at a fixed path such as `/recovery`.
+- It is plain, in the WebUI's theme colors, and titled "ReelRoulette Recovery", laid out as the mockup's recovery page shows.
+- `logo-icon.svg` sits beside its title and is its page icon. The icon is built into the page, since the page loads none of the WebUI's files.
+- It does not load the WebUI's files, so it works when they are missing or broken.
+- It has the same control-token gating.
+- It renders settings and status text without `innerHTML` interpolation.
+
+**Traps**
+
+- The Operator HTML page interpolates user input via `innerHTML`.
+
+**Acceptance**
+
+- The recovery page is titled "ReelRoulette Recovery", in server tests.
+- The recovery page names its logs Log Viewer, and nowhere Server Logs, in server tests.
+- With the WebUI's files removed, the server still serves the recovery page, in server tests that the recovery page is served without WebUI assets.
+- The recovery page keeps control-token gating, in server tests.
+- The recovery page renders settings, status, and log text without `innerHTML` interpolation, checked by reading the page's source.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `dotnet test ReelRoulette.sln` passes.
+
+#### Operator retirement slice
+
+**Scope**
+
+- `/operator` redirects to the admin section.
+- The tray's Open Operator UI item becomes **Open ReelRoulette** and opens the WebUI's main page.
+- `verify-linux-packaged-server-smoke.sh` checks the recovery page and the admin section entry instead of `/operator`.
+- The testing checklist's Smoke item checks the admin section instead of the Operator page.
+
+**Traps**
+
+- The tray's Open Operator UI item is in `AvaloniaTrayHostUi.cs`.
+
+**Acceptance**
+
+- The tray's Open ReelRoulette opens the WebUI's main page, checked by reading `AvaloniaTrayHostUi.cs`.
+- `/operator` reaches the admin section, in server tests that `/operator` redirects to the admin section, and the packaged Linux server smoke passes against the recovery page.
+- `dotnet test ReelRoulette.sln` and `./tools/scripts/verify-linux-packaged-server-smoke.sh` pass.
+
+#### Always-on WebUI slice
+
+**Scope**
+
+- The server always serves the WebUI from this release, since the admin section lives there, and ignores the web runtime settings' `enabled` field.
+- The field stays in the contract, so the last desktop build keeps working, and the server reports it as on.
+- The frozen desktop's Settings dialog loses its Enable Web UI switch, which would no longer do anything. This is an approved desktop change outside bug fixes.
+- `docs/api.md` and `docs/dev-setup.md` stop describing the WebUI as optional.
+
+**Traps**
+
+- Turned off, the `enabled` field stops the server serving the WebUI's files and `/runtime-config.json` from its next start, leaves the WebUI's origins out of CORS, and stops mDNS advertising.
+- Turned off from the admin section, `enabled` would remove the admin section itself, and the recovery page has no way to turn it back on.
+- The desktop enables its Open Web UI menu item only when the server reports the WebUI as on, and the button in Desktop Retirement Notice's notice does what that item does.
+
+**Acceptance**
+
+- With the web runtime settings' `enabled` stored or posted as off, the server still serves the WebUI and `/runtime-config.json`, allows the WebUI's CORS origins, and, with remote connections and mDNS on, advertises over mDNS after a restart, and it reports `enabled` as on, in server tests that a stored or posted `enabled` of off is ignored and reported as on.
+- Neither the admin section nor the desktop Settings dialog shows an Enable Web UI switch, and `enabled` is still in OpenAPI, in a desktop test that the Settings dialog has no Enable Web UI switch.
+- `dotnet test ReelRoulette.sln` passes.
+
+#### Release checks
+
+- Manual: With the WebUI files removed, the recovery page restarts, stops, shows logs, and applies an update, on Linux and Windows.
+
+#### Not included
+
+- Dropping the `enabled` field from the contract, which is Desktop Client Removal.
+
+### M12o - Server Settings Robustness
+
+- **Status**: ⏳ Planned
+- **Goal**: A settings save changes only the fields it sends, a crash mid-write can't truncate the server's settings, and an unreadable settings file is kept aside and reported instead of being replaced with defaults.
+- **Depends on**: WebUI Admin Section, whose status shows a settings file that could not be read.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Contract | ⏳ Planned | Partial settings posts: nullable request fields for the refresh, backup, and web runtime settings, with an omitted field left unchanged. |
+| Settings file | ⏳ Planned | An atomic settings write, and an unreadable settings file kept aside, logged, and reported on the admin section's status. |
+
+#### Contract slice
+
+**Scope**
+
+- Make the request fields of the refresh, backup, and web runtime settings posts nullable, with an omitted field left unchanged, as `devChannelEnabled` already is.
+- The change only relaxes what a request must send: the frozen desktop posts every field it knows and is unaffected.
+- OpenAPI and the generated WebUI types carry the nullable fields.
+- This makes Admin Refresh, Backup, and Duplicate Review's settings saves safe to send in part.
+
+**Traps**
+
+- `CoreSettingsService.UpdateRefreshSettings`, `UpdateBackupSettings`, and `UpdateWebRuntimeSettings` assign every field from the posted snapshot, and the contract fields are not nullable, so a post that leaves out a field writes its default (for example `fingerprintScanMaxDegreeOfParallelism` back to 4).
+- The desktop's backup settings save posts its three fields (`MainWindow.axaml.cs`).
+
+**Acceptance**
+
+- A partial post to the refresh, backup, or web runtime settings changes only the fields it names, and leaves the other fields and the other settings sections unchanged on disk, in server tests that a partial post leaves the other fields and sections unchanged on disk.
+- A post with every field, as the desktop sends, saves as it does today, in server tests that a full post saves as before.
+- The nullable request fields are in OpenAPI, and `npm run verify:contracts` passes.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Settings file slice
+
+**Scope**
+
+- `CoreSettingsService.PersistSettings` writes a temporary file in the same folder and renames it over `core-settings.json`.
+- When `CoreSettingsService.LoadSettings` can't read `core-settings.json`, it logs a warning, moves the unreadable file aside before anything is written, and reports it on the admin section's status.
+- The report needs a field on `/control/status`, a contract change that only adds, in OpenAPI and the generated WebUI types.
+- The admin section's report of an unreadable settings file is added to the mockup, which doesn't show it yet, with its wording approved there.
+
+**Traps**
+
+- `CoreSettingsService.PersistSettings` writes `core-settings.json` in place with `File.WriteAllText`, so a crash mid-write leaves it truncated.
+- `CoreSettingsService.LoadSettings` ends in an empty `catch` and falls back to defaults, so an unreadable or corrupt `core-settings.json` looks like a fresh install and the next persist overwrites it.
+
+**Acceptance**
+
+- Killing the server during a settings write leaves the previous or the new file, never a truncated one, in server tests that an interrupted write leaves the previous or the new file.
+- An unreadable `core-settings.json` is moved aside before anything is written, a warning is logged, and the admin section's status shows it, in server tests that an unreadable file is kept aside, logged, and reported, and an admin section UI test for the status message.
+- The new status field is in OpenAPI, and `npm run verify:contracts` passes.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Not included
+
+- The server's other robustness findings and the desktop's settings file, which is Server Robustness Findings.
+
+### M12p - Admin Refresh, Backup, and Duplicate Review
+
+- **Status**: ⏳ Planned
+- **Goal**: The admin section starts a refresh, edits refresh and backup settings, reviews and applies duplicates, and clears the whole library's playback stats, so none of these needs the desktop.
+- **Depends on**: WebUI Admin Section and Server Settings Robustness, so a settings save sends only the fields it changes.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- Everything this milestone adds is gated like the rest of the admin section.
+- The refresh and backup fields use the field validation pattern: a value outside the range the server enforces is flagged as it is typed, and Save can't proceed while one is.
+- The admin section's refresh and backup settings saves send only the fields that changed. The refresh and backup settings routes assigned every field from the posted snapshot, so a partial post wrote defaults; Server Settings Robustness makes them change only the fields a post sends.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Refresh | ⏳ Planned | Refresh Now with the refresh status, the refresh settings, and clearing the whole library's playback stats from the Library refresh card. |
+| Backup | ⏳ Planned | The backup settings, and daily retention in catalog backup rotation with its days setting. |
+| Duplicate review | ⏳ Planned | Scanning for duplicates, reviewing each group, and deleting the files not kept after a confirmation. |
+
+#### Refresh slice
+
+**Scope**
+
+- Refresh Now with the refresh status.
+- While a refresh runs, the Refresh card shows its stage and progress, and its result pops up as WebUI Notifications' Library refresh popup, a warning when it fails.
+- The refresh settings the desktop Settings dialog shows: auto-refresh and its interval (5–1440 minutes), forced loudness and duration rescans on the next refresh, and fingerprint scan parallelism (1–16).
+- Clear playback stats for the whole library, which the desktop offers from its Playback menu through `POST /api/playback/clear-stats`. It is an admin action, in the admin view's library section: a red Clear All Playback Stats… button under Playback stats in the Library refresh card.
+- Clear All Playback Stats… asks "Clear the playback stats of every item in the library? Plays and last played go back to none." with a red Clear, and a Your actions popup then says "Cleared the library's playback stats.".
+
+**Traps**
+
+- Only the desktop calls `POST /api/refresh/start` and `/api/refresh/settings`. The routes exist, so this needs no contract change (measured).
+- The tray can also start a refresh (measured).
+- The interval and parallelism ranges are the ones the server already clamps to.
+- Before WebUI Multi-Select and Bulk Actions, which clears a selection's playback stats by ids, the WebUI never called `POST /api/playback/clear-stats` (measured).
+
+**Acceptance**
+
+- Refresh Now starts a refresh, its card shows the refresh's stage and progress, and its result pops up, in admin section UI tests.
+- Refresh settings load and save, and saving one field leaves the others as they were on the server, in admin section UI tests.
+- Each refresh field accepts the range the server enforces, in admin section UI tests.
+- A refresh value outside its range is flagged with the field validation pattern as it is typed, and Save can't proceed until it is corrected, in admin section UI tests of each refresh field.
+- The whole library's playback stats can be cleared from the admin view's Library refresh card, after a confirmation, in admin section UI tests of clearing all playback stats.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check of a refresh.
+
+#### Backup slice
+
+**Scope**
+
+- The backup settings: server backups on or off, the time between backups (1–10080 minutes), the number kept (1–100), and the days of daily backups kept (0–365, 0 by default, which turns daily retention off).
+- Daily retention: on top of the existing count limit, catalog backup rotation keeps one backup per date for a number of days set in the server's backup settings.
+- Daily retention applies to current- and older-version backups alike, so older-version backups, which rotation keeps and does not count today, age out with their dates.
+- Newer-version backups and files rotation does not recognize are never touched.
+- The days setting adds a field to the backup settings, a contract change that only adds.
+- The days setting defaults to 0, which turns daily retention off and keeps today's rotation, so upgrading changes nothing until it is set.
+- Like the other settings fields after Server Settings Robustness, the days field is nullable in the request, and a post without it keeps the stored value.
+
+**Traps**
+
+- Only the desktop calls `/api/backup/settings`. The route exists (measured).
+- The ranges for the time between backups and the number kept are the ones the server already clamps to.
+- The frozen desktop's backup settings save posts only its three fields (`MainWindow.axaml.cs`), so without the rule that a post without the days field keeps the stored value, each desktop save would reset the days.
+
+**Acceptance**
+
+- Backup settings load and save, and saving one field leaves the others as they were on the server, in admin section UI tests.
+- Each backup field accepts the range the server enforces, and the days of daily backups accept 0 to 365, where 0, the default, turns daily retention off, in admin section UI tests.
+- A backup value outside its range is flagged with the field validation pattern as it is typed, and Save can't proceed until it is corrected, in admin section UI tests of each backup field.
+- With the days at 0, rotation keeps and deletes exactly the backups it does today, and a backup settings post without the days field keeps the stored value, in server tests.
+- With daily retention set to a number of days, rotation keeps the count limit's newest current-version backups plus the newest backup of each date in that window, current-version or older-version, and deletes older-version backups whose dates fall outside it, in server tests of the window and of older-version backups aging out.
+- Newer-version backups and unrecognized files in `backups/` are byte-identical after rotation, with daily retention on or off, in server tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Duplicate review slice
+
+**Scope**
+
+- Scan the whole library or one source.
+- Show each group with thumbnails and the comparison details the desktop shows: file name, plays, tags, favorite, and blacklisted.
+- Choose Keep All or a file to keep per group.
+- Each group starts at Keep All or Select Best, from a per-device preference.
+- The preference is chosen in duplicate review rather than the Settings tab, since nothing else uses it. It starts at Keep All, as on the desktop, and survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
+- Apply deletes the files not kept from disk after a plain confirmation that says so and names the groups and files to delete, as the desktop's does, without the desktop's step of typing DELETE.
+- Duplicate review opens within the admin section's full-page view, not as a panel tab.
+- The Duplicates card has the scan's scope (the whole library or one source), Scan, and the default, labeled "Each group starts at".
+- Review replaces the admin view's contents and has its own bar, with a back arrow to admin, the title Duplicate review, and the group count.
+- Each group, headed "Group {n} of {total}" with Keep All beside it, shows its files as cards with a thumbnail, the file name, its folder and size, plays with Favorite or Blacklisted, tags, and "Keep this one".
+- The kept file's card is outlined green, and the others red with a dimmed thumbnail.
+- A footer sums up "{n} files to delete from {n} groups; Keep All groups are left as they are." or "Keep All everywhere: nothing will be deleted.", with Cancel and a red Delete {n} Files, disabled while nothing would be deleted.
+- The confirmation says "This permanently deletes the duplicate files you didn't keep from disk.", then "Groups to process: {n}" and "Files to delete: {n}", with a red Delete {n} Files.
+- Afterwards the card says "Deleted {n} files." and a Your actions popup "Deleted {n} duplicate files.".
+- A count of one is singular, such as "Delete 1 File".
+
+**Traps**
+
+- Only the desktop calls `/api/duplicates/scan` and `/api/duplicates/apply`. The routes exist, so this needs no contract change (measured).
+
+**Acceptance**
+
+- Duplicate review opens within the admin section, in admin section UI tests.
+- Duplicate apply deletes only the files not kept, from disk, after a confirmation that names the groups and files to delete and asks for nothing to be typed, and Keep All deletes nothing in that group, in admin section UI tests.
+- The duplicate default is chosen in duplicate review, starts at Keep All, is kept per device, and survives a page refresh, in admin section UI tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check of a duplicate scan.
+
+#### Release checks
+
+- Manual: From the admin section, start a refresh, change refresh and backup settings, scan and apply duplicates with Keep All and with a chosen file, and clear all playback stats, and the library updates.
+
+### M12q - Admin Source Management
+
+- **Status**: ⏳ Planned
+- **Goal**: Manage sources from the WebUI admin section, with server routes for what no client can do today, and every open WebUI follows source changes without a reload.
+- **Depends on**: WebUI Admin Section and WebUI Multi-Select and Bulk Actions, whose item removal route it uses.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- Everything this milestone adds is gated like the rest of the admin section: localhost, or the control token from other machines.
+- Adding a folder takes a path on the server machine. The admin section takes a plain typed path, with no autocomplete or folder browser, and the server checks it as it is typed: a folder on the server that is not already a source.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Contract | ⏳ Planned | Server routes to rename and remove a source and check a typed source path, with events for source changes, in OpenAPI and the generated WebUI types. |
+| Manage Sources | ⏳ Planned | The admin section's source list with statistics, adding by server path, Edit Source with rename and Remove, enable and disable, and one Refresh. |
+| WebUI source sync | ⏳ Planned | Every open WebUI reloads its library window and Filter tab source list on a source event, with one resync in flight at a time. |
+
+#### Contract slice
+
+**Scope**
+
+- Server routes to rename a source and remove a source (its items leave the catalog; files stay on disk).
+- An admin-only route that checks a typed path: a folder on the server that is not already a source. A contract change that only adds.
+- Source changes publish events so connected clients update. Import gets an event too.
+- OpenAPI and generated WebUI types for the new routes.
+
+**Traps**
+
+- The desktop Manage Sources dialog shows Rename and Remove buttons, but neither has a server route, so v0.14.0 hides them. The routes are still missing and the two buttons are still hidden.
+- The path check is a new admin-only route, a contract change that only adds (inferred).
+- Only enabling or disabling a source publishes an event (`sourceStateChanged`), and `POST /api/sources/import` publishes nothing.
+
+**Acceptance**
+
+- Removing a source removes its items from the catalog and leaves its files, in server tests of the route.
+- The path check route flags a typed path that is not a folder on the server, or is already a source, in server tests of the route.
+- Adding, renaming, removing, enabling, and disabling a source each publish an event, in server tests of the event each source change publishes.
+- New routes are in OpenAPI, and `npm run verify:contracts` passes.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Manage Sources slice
+
+**Scope**
+
+- List sources with the statistics the desktop dialog shows: total media, videos, photos, total duration, and videos with and without audio.
+- Add a folder, rename, remove, enable and disable, and refresh.
+- The list has one Refresh for all sources, not one per source, since the refresh route takes no source id.
+- Each source row has an enable switch, the source's name, path, and statistics, and an Edit button (`edit_note`, "Edit source").
+- Edit opens an Edit Source dialog with the name, built as Edit Tag, Edit Category, and Edit Preset are.
+- The name uses the field validation pattern: a name another source has, ignoring case, is flagged with "Use a name no other source has.", and Save is disabled while the name is taken or empty, as WebUI In-App Dialogs sets out for the fields of a dialog. An empty name is not flagged.
+- Edit Source has **Remove**, not Delete, since the source's files stay on disk. It asks `Remove the source "{name}"? Its items leave the library; its files stay on disk.` in a dialog stacked above, with a red Remove.
+- The path field uses the field validation pattern, and a path that is already a source is flagged with "That folder is already a source.". An empty path is not flagged.
+- Add Source sits beside the path field, so it is disabled while the path is empty or flagged, with no icon on the button, as WebUI In-App Dialogs sets out for an action whose fields sit right next to it.
+- A Your actions popup acknowledges each change: "Source renamed.", "Source added. Importing its files…", "{name} enabled." or "{name} disabled.", and "Source removed.", the last three followed by "ReelRoulette updates the library everywhere it's open.".
+
+**Traps**
+
+- Folder import, enable and disable, and refresh routes already exist.
+- The per-source statistics already come from the `sources` list of `GET /api/library/stats`, so they need no contract change.
+- The refresh route takes no source id.
+- A browser folder picker returns paths on the browser's machine (inferred).
+- The desktop's Import Folder sends its own folder picker path to the server, so it only works on the server machine.
+
+**Acceptance**
+
+- From the admin section, sources can be added by server path, renamed, removed, enabled, disabled, and refreshed, with per-source statistics, and one Refresh covers the whole list, in admin section UI tests for Manage Sources.
+- A typed path that is not a folder on the server, or is already a source, is flagged with the field validation pattern as it is typed, and Add Source is disabled without an icon on it until the path is corrected, as it is while the path is empty, in admin section UI tests for Manage Sources.
+- An Edit Source name another source has, ignoring case, is flagged with the field validation pattern, and Save is disabled without an icon on it while the name is taken or empty, in admin section UI tests for Manage Sources.
+- Edit Source's button and its confirmation's button say Remove, not Delete, in admin section UI tests for Manage Sources.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+#### WebUI source sync slice
+
+**Scope**
+
+- On a source event, reload the loaded library window, keeping the scroll position as the desktop does, and refresh the Filter tab's source list.
+- Overlapping resyncs: keep one in flight and coalesce events that arrive meanwhile, since this milestone adds source events that reload every open WebUI.
+
+**Traps**
+
+- The server already applies source state: the list query, random selection, and item play only use enabled sources.
+- The WebUI keeps no source authority of its own; its source checkboxes are a filter choice.
+- The WebUI ignores `sourceStateChanged` and reads `GET /api/sources` only when the filter dialog loads its data.
+- `src/events/sseClient.ts` calls `void handleResyncRequired(...)` for every `resyncRequired` event, so several authoritative reloads can run at once and finish out of order.
+
+**Acceptance**
+
+- Adding, renaming, removing, enabling, or disabling a source from the admin section or the desktop updates every open WebUI's library window and Filter tab source list without a reload, in WebUI tests for source event handling.
+- Overlapping resync events cause one reload at a time, in WebUI tests for overlapping resyncs.
+- `npm run verify` passes, and one quick spot check of an admin section source toggle seen in another WebUI tab.
+
+#### Release checks
+
+- Manual: On Linux and Windows, from the admin section, add a source by its server path, then rename, disable, refresh, and remove it, and other open WebUI sessions update without a reload.
+
+#### Not included
+
+- Showing the desktop's Rename and Remove buttons again; the frozen desktop keeps them hidden.
+- The item removal route and removing items from the library, which is WebUI Multi-Select and Bulk Actions.
+- Duplicate review, which is Admin Refresh, Backup, and Duplicate Review.
+- Moving source management behind admin accounts, which is Auth Cutover for API and Admin.
+- Per-user source visibility, which is Per-User Source Permissions.
+- Browsing for a source folder, which is Desktop App Shell.
+
+### M12r - Admin Library Catalog Transfer
+
+- **Status**: ⏳ Planned
+- **Goal**: Export and import the library from the WebUI admin section, with the server applying the catalog, so catalog transfer does not need the desktop app.
+- **Depends on**: WebUI Admin Section, Remove library.json Library Support, and Catalog Open and Backup Safety, so import can restore a library while the server runs without one, and Admin Source Management, whose server path check the remap fields use, and Admin Refresh, Backup, and Duplicate Review, whose daily retention marks the backups the restore list labels daily.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- Everything this milestone adds is gated like the rest of the admin section.
+- Settings and backups are not part of the transfer. Presets and thumbnail revision and dimensions travel with `library.db`. JPEG files stay in the local thumbnail directory.
+- Import also works while the server runs without a library, and can import one of the server's own backups, which is how the admin section restores a backup.
+- Before it replaces the library, an import or a restore takes a catalog backup of the current one, even with server backups off and whatever the backup gap, so a mistaken import or restore can be undone from the restore list.
+- That backup is listed first in the restore list, labeled by when it was made and what it came before, such as "Today 14:32 (before import)" or "Today 14:32 (before restore)".
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Report | ⏳ Planned | A report on every holder of catalog state and connections in the server and how each is handled for a replace, written before the import slice. |
+| Export name | ⏳ Planned | The export route's suggested name `library-{date}.db`, and Export Library in the admin section. |
+| Import | ⏳ Planned | Import while the server runs, with replace and recovery, the not-a-library check, the upload limit, the remap, and the admin section's Import Library flow. |
+| Backup restore | ⏳ Planned | A route listing the server's backups, the Backups card's restore list, and Restore. |
+
+#### Report slice
+
+**Scope**
+
+- List every holder of catalog state and connections in the server, such as the catalog session and its SQLite connection pool, the cached list counts, the random shuffle bag, refresh stages, catalog backups, duplicate and auto-tag scans, and the event revision, and how each is stopped, cleared, or reloaded for a replace.
+- Include how SQLite connections are closed before the rename on Windows.
+- Decide whether an import waits for or refuses a running refresh.
+
+**Traps**
+
+- On Windows, a file that is open can't be renamed (inferred).
+
+**Acceptance**
+
+- The report on catalog state holders is written before the import slice starts. It names every holder of catalog state and connections and how each is stopped, cleared, or reloaded for a replace, how SQLite connections are closed before the rename on Windows, and whether an import waits for or refuses a running refresh.
+
+#### Export name slice
+
+**Scope**
+
+- The export route suggests `library-{date}.db` as the download's name (its `Content-Disposition` file name) in place of `library.db`, dated by the server's local date, such as `library-2026-10-08.db`. Only the suggested name changes.
+- **Export Library** in the admin section uses the same route, `GET /api/library/catalog-checkpoint`. Export is a plain download in every browser, with no save picker, so it has no ellipsis.
+- A Your actions popup says "Downloading {file}." as the download starts.
+- The library transfer card's hint reads "Export saves the whole library: items, tags, presets, and stats. Import replaces it while the server runs; the current library is kept aside until the new one opens."
+
+**Traps**
+
+- Export is already a server operation: `GET /api/library/catalog-checkpoint` writes a standalone checkpoint while the server has `library.db` open, and the desktop's Library Export saves that file.
+- `GET /api/library/catalog-checkpoint` passes `library.db` to `Results.Stream` (`ServerHostComposition.cs`).
+- The desktop's Library Export is unaffected: it saves to the path its own save picker returns, which suggests `library.db` (`MainWindow.axaml.cs`).
+- A browser doesn't report when a download finishes (inferred).
+
+**Acceptance**
+
+- The admin section can export a server-produced checkpoint, in admin section UI tests for export.
+- The export downloads as `library-{date}.db`, dated by the server's local date, in server tests for the export's suggested name.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Import slice
+
+**Scope**
+
+- Import moves onto server operations and runs while the server is up.
+- Reuse the replace-and-recover protocol already in `LibraryCatalogStore` (incoming file, finished-file rename, recovery), which the desktop import uses today with the server stopped. What is new is replacing the database while the server's catalog session is open.
+- The previous database stays aside until the new file is in place and opens.
+- A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed.
+- A file that is not a library database is rejected.
+- The import upload has its own limit and streams to the incoming file rather than buffering in memory.
+- `verify-linux-packaged-server-smoke.sh` uploads a file larger than 30 MB that isn't a library and gets the not-a-library answer, not a refusal for its size.
+- Import keeps the source folder remap the desktop import offers. Each remap field checks for a folder on the server, through the path check Admin Source Management adds; left empty, it keeps the old path.
+- **Import Library…** in the admin section's library transfer card.
+- While an import uploads, a progress bar shows in the library transfer section, with "Uploading {file}: {n}%".
+- The file uploads first; the server then reads its source folders for the remap dialog, or rejects a file that isn't a library with the notice "{file} isn't a ReelRoulette library. The library wasn't changed."
+- The remap dialog, titled "Import {file}", says "Its source folders were on another machine. Point each one at its folder on this server, or leave it to keep the path.", with one field per source folder labeled with its old path, using the field validation pattern, and Cancel and Import.
+- Import is disabled while a remap field is flagged, with no icon on it, as WebUI In-App Dialogs sets out for the fields of a dialog.
+- Import then asks "Replace the library with {file}? The current library is kept aside until the new one opens.", with Cancel focused and a red Replace, and a Your actions popup says "Imported {file}. Connected clients reload the library."
+
+**Traps**
+
+- Today import is desktop-only and needs the server stopped: `LibraryArchiveMigration.ImportDatabase` writes the server's `library.db` from the desktop process. This is the main blocker for removing the desktop.
+- On a copy of the developer's catalog, `library.db` is 92.5 MB (92,520,448 bytes, no free pages) for 49,055 items (measured).
+- That is larger than ASP.NET Core's default request body limit of about 30 MB, the framework default (inferred).
+- The server raises the multipart form limit (`FormOptions.MultipartBodyLengthLimit`) to 512 MB, left from earlier library import work, but no route reads a form now and the request body limit itself is not raised.
+- The limit is Kestrel's, and the server tests call handlers without an HTTP host, so the packaged server smoke script covers it.
+
+**Acceptance**
+
+- The admin section can import a `library.db` while the server is running, in server tests for running-server import and admin section UI tests for import.
+- An interrupted import leaves the previous catalog or the finished incoming file, never a partial database or an empty catalog, in server tests for interrupted-replace recovery.
+- Import rejects a file that is not a library database and does not replace the live catalog, in server tests for its rejection.
+- Import replaces the catalog, including presets and thumbnail revision and dimensions, while settings and backups stay where they are and JPEG files stay in the local thumbnail directory, in server tests for running-server import.
+- Connected clients resync after an import, in server tests for running-server import.
+- Before an import replaces the library, a catalog backup of the current one is taken, even with server backups off, in server tests for the backup taken before a replace.
+- An import while a refresh, backup, or scan runs does what the report decided, and never leaves a partial catalog, in server tests for an import during a refresh.
+- Each remap field checks for a folder on the server, Import is disabled without an icon on it while one is flagged, and one left empty keeps the old path, in admin section UI tests for the remap fields.
+- A file larger than 30 MB uploads to the packaged server without a refusal for its size, in `./tools/scripts/verify-linux-packaged-server-smoke.sh` with its upload larger than 30 MB.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `./tools/scripts/verify-linux-packaged-server-smoke.sh`, `dotnet test ReelRoulette.sln`, and `npm run verify` pass.
+
+#### Backup restore slice
+
+**Scope**
+
+- A new route lists the server's backups, a contract change that only adds.
+- The Backups card lists the server's backups under Restore, newest first, each named by when it was made, such as "Today 06:00", "Yesterday 18:00", or "3 days ago (daily)", with a Restore… button.
+- A backup kept only by daily retention is labeled "(daily)".
+- Restore asks "Restore the backup from {when}? The current library is kept aside until the backup opens.", with Cancel focused and a red Restore, and a Your actions popup then says "Restored the backup from {when}.".
+
+**Traps**
+
+- No route lists the server's backups.
+
+**Acceptance**
+
+- The Backups card lists the server's backups, and restoring one asks first and then replaces the library with it, in admin section UI tests for restore.
+- Before a restore replaces the library, a catalog backup of the current one is taken, even with server backups off, in server tests for the backup taken before a replace.
+- The backup taken before an import or a restore shows first in the restore list, labeled "(before import)" or "(before restore)", in admin section UI tests of the safety backup's place and label.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Release checks
+
+- Manual: With no desktop app, export the library from the admin section and import it into a fresh server, on Linux and Windows.
+
+#### Not included
+
+- A Save as dialog for the export, which is Desktop App Shell.
+- Removing the desktop's Library Export and Import menus, which is Desktop Client Removal.
+
+### M12s - Testing Suite Overhaul
+
+- **Status**: ⏳ Planned
+- **Goal**: The testing suite produces clear results that match the WebUI's connection and status handling.
+- **Depends on**: WebUI Notifications, Server Shutdown Fixes, and WebUI Admin Section.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Report | ⏳ Planned | A report of what the WebUI shows, and how SSE disconnect closes and reconnects, for each scenario run several times against a running server. |
+| Scenarios | ⏳ Planned | The scenarios redesigned against current WebUI behavior, each with its expected WebUI message, checked as part of the suite. |
+
+#### Report slice
+
+**Scope**
+
+- With a running server, which needs the user's approval to start, run each scenario against the WebUI several times.
+- Report what the WebUI shows and how SSE disconnect closes and reconnects on each run, so the redesign starts from measured behavior.
+
+**Traps**
+
+- The suite predates the current client connection and status handling and no longer produces clear results.
+- With the API unavailable, the WebUI shows "library load failed: HTTP 503" only briefly before settling on "SSE reconnecting..." (measured before promotion).
+- WebUI Notifications replaces "SSE reconnecting..." with the indicator's Reconnecting…, and the library keeps its load failure in its body.
+- SSE disconnect behaves inconsistently and may need redesigning (measured before promotion).
+- The Operator testing suite has five scenario flags: API version mismatch, capability mismatch, API unavailable, missing media, and SSE disconnect.
+
+**Acceptance**
+
+- The report of each scenario's behavior on a running server, naming what the WebUI shows and how SSE disconnect closes and reconnects on each run, is written before the Scenarios slice starts.
+
+#### Scenarios slice
+
+**Scope**
+
+- Redesign the scenarios against current WebUI behavior, define the expected WebUI message for each, and verify the WebUI's behavior as part of the suite.
+- The suite runs from the admin section.
+- Each scenario shows its expected message under it, labeled "Expected message:": the lasting state the player's indicator shows, or the popup the WebUI sends. The mockup leaves the messages to this milestone, which takes them from WebUI Notifications' per-event messages.
+- If the redesign changes the scenarios the testing routes under `/control` take, that is a contract change that doesn't only add, and OpenAPI and the admin section change together.
+
+**Traps**
+
+- Server Shutdown Fixes changed how event streams close.
+- Neither client calls the testing routes under `/control`, and the Operator page is retired by then, so the admin section, which ships in the same build, is their only caller.
+
+**Acceptance**
+
+- Each scenario lists the expected WebUI message, and the WebUI shows it while the scenario is active, in automated tests that each scenario's simulated server responses make the WebUI show its expected message.
+- SSE disconnect behaves the same way on every run, in automated tests that it closes and reconnects the same way on repeated runs.
+- Running and resetting each scenario leaves the WebUI connected and working, in automated tests that each scenario sets and resets the server state it describes.
+- If the scenarios change, contract tests cover the testing routes' new shape.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass, and one quick spot check of one scenario.
+
+#### Release checks
+
+- Manual: Every testing suite scenario shows its expected WebUI message, and resetting it leaves the WebUI connected.
+
+#### Not included
+
+- The desktop's expected messages, since the desktop is frozen.
+
+### M12t - WebUI Keyboard Navigation and Focus
 
 - **Status**: ⏳ Planned
 - **Goal**: Every part of the WebUI works from the keyboard alone, and keyboard focus is always visible, in the brand orange.
-- **Depends on**: WebUI In-App Dialogs, WebUI Drag Reordering, WebUI Responsive Layout and Panels, WebUI Library Tab, WebUI Tags and Filter Tabs, WebUI Auto-Pause and Photo Scrub Bar, WebUI Notifications, WebUI Settings Panel, WebUI Admin Section, Log Viewer Redesign, Recovery Page and Operator Retirement, Admin Refresh, Backup, and Duplicate Review, Admin Source and Item Management, Admin Library Catalog Transfer, WebUI Stats Panel, WebUI Volume and Enhanced Audio, WebUI Player Controls and Ambient Mode, WebUI Keyboard Shortcuts, Testing Suite Overhaul, WebUI Grid Row Reuse, and WebUI Multi-Select and Bulk Actions.
+- **Depends on**: WebUI In-App Dialogs, WebUI Drag Reordering, WebUI Responsive Layout and Panels, WebUI Library Tab, WebUI Tags and Filter Tabs, WebUI Auto-Pause and Photo Scrub Bar, WebUI Notifications, WebUI Settings Panel, WebUI Admin Section, Log Viewer Redesign, Recovery Page and Operator Retirement, Admin Refresh, Backup, and Duplicate Review, Admin Source Management, Admin Library Catalog Transfer, WebUI Stats Panel, WebUI Volume and Enhanced Audio, WebUI Player Controls and Ambient Mode, WebUI Keyboard Shortcuts, Testing Suite Overhaul, WebUI Grid Row Reuse, and WebUI Multi-Select and Bulk Actions.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
@@ -1810,7 +1818,7 @@ Last milestone completed: M12g
 
 - Rebinding keys, which is Customizable Keyboard Shortcuts.
 
-### M12v - Desktop Retirement Notice
+### M12u - Desktop Retirement Notice
 
 - **Status**: ⏳ Planned
 - **Goal**: The last desktop build tells users the desktop app is retired and points them to the WebUI.
@@ -2845,7 +2853,7 @@ Last milestone completed: M12g
 
 - **Status**: ⏳ Planned
 - **Goal**: Admins choose which sources each user sees, and the source access policy enforces it.
-- **Depends on**: Source Access Policy, Account Administration, and Admin Source and Item Management.
+- **Depends on**: Source Access Policy, Account Administration, and Admin Source Management.
 
 #### Scope
 
@@ -3042,7 +3050,7 @@ Last milestone completed: M12g
 
 - The desktop's findings (unbounded event payload, ambiguous API results, an undisposed cancellation source, timers after close, plain HTTP to another machine, and undetected black video on Fedora), since the desktop is frozen to bug fixes.
 - The startup error markup finding, which is WebUI Preact Migration.
-- Overlapping resyncs, which is Admin Source and Item Management, since it already changes that code.
+- Overlapping resyncs, which is Admin Source Management, since it already changes that code.
 - Unchecked JSON, which is WebUI Notifications, since it already changes that code.
 - Favorite and blacklist after Next, which is WebUI Multi-Select and Bulk Actions, since it already changes that code.
 - The weak build check, which is New Logo and Icons, since it already changes that code.
@@ -3053,7 +3061,7 @@ Last milestone completed: M12g
 
 - **Status**: ⏳ Planned
 - **Goal**: The desktop client, its packaging, and its tests are gone, and the WebUI is the only client.
-- **Depends on**: WebUI Volume and Enhanced Audio, WebUI Loudness Normalization, WebUI Autoplay Modes, WebUI Player Controls and Ambient Mode, WebUI Keyboard Shortcuts, WebUI Stats Panel, WebUI Settings Panel, Admin Refresh, Backup, and Duplicate Review, Show in File Manager from the WebUI, Admin Source and Item Management, Admin Library Catalog Transfer, WebUI Multi-Select and Bulk Actions, and Browser-Playable Filter.
+- **Depends on**: WebUI Volume and Enhanced Audio, WebUI Loudness Normalization, WebUI Autoplay Modes, WebUI Player Controls and Ambient Mode, WebUI Keyboard Shortcuts, WebUI Stats Panel, WebUI Settings Panel, Admin Refresh, Backup, and Duplicate Review, Show in File Manager from the WebUI, Admin Source Management, Admin Library Catalog Transfer, WebUI Multi-Select and Bulk Actions, and Browser-Playable Filter.
 
 #### Decisions
 
@@ -3194,7 +3202,7 @@ Last milestone completed: M12g
 
 - **Status**: ⏳ Planned
 - **Goal**: An optional desktop app wraps the WebUI as-is and adds the native features a browser can't offer: browsing for a source folder and saving the library export with Save as.
-- **Depends on**: Admin Source and Item Management, whose add-folder field gets Browse, and Admin Library Catalog Transfer, whose export gets Save as, and it starts only once the new UI has been in daily use.
+- **Depends on**: Admin Source Management, whose add-folder field gets Browse, and Admin Library Catalog Transfer, whose export gets Save as, and it starts only once the new UI has been in daily use.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope

@@ -19,9 +19,10 @@ Instructions:
 
 Commit Message:
 
-M12g: Add the Settings tab's Notifications section and the bell list's link to it
+Docs: Plan the WebUI's main screens ahead of its admin section
 
-- The Settings tab's Notifications section sets the popup settings: Show popups, and Popup settings, closed at first and disabled while Show popups is off, with the five kinds, Position, Show in fullscreen, and Show for, worded as in the mockup.
-- Each popup setting applies at once and is kept per device; changing the position or the time shows a sample popup there, which a second one replaces and which the list, the badge, and `last.log` never get.
-- The bell's list gains Notification settings, which closes it and opens the Settings tab at Show popups with Popup settings open.
-- M12g is complete: it moves to `MILESTONES-COMPLETED.md`, and its four Release checks go into the testing checklist's Release Specific Manual checks.
+- Move WebUI Stats Panel through WebUI Multi-Select and Bulk Actions ahead of WebUI Admin Section in Active Milestones, each keeping its relative order, and reassign the active IDs from M12h to M12u in the Planned Releases outline.
+- WebUI Multi-Select and Bulk Actions takes over the item removal route, with its delete-from-disk option, event, OpenAPI entry, server tests, and the WebUI's requery on the event, and no longer depends on an admin milestone. The admin milestone that had the route keeps the source routes and is renamed Admin Source Management.
+- WebUI Multi-Select and Bulk Actions builds the control-token prompt its Remove from library asks through, and WebUI Admin Section's gate reuses it, so both WebUI Admin Section and Admin Source Management now depend on it.
+- Admin Refresh, Backup, and Duplicate Review no longer says the WebUI never clears playback stats, since multi-select clears a selection's stats by ids first.
+- The script tests' Depends on case with a condition on starting uses fixture titles instead of a copy of Desktop App Shell's line, so they never have to follow MILESTONES.md.
