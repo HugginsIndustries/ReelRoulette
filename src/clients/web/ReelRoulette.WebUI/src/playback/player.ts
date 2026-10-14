@@ -43,6 +43,12 @@ export interface SeekSliderElement {
   max: string;
 }
 
+/** The stretch behind the scrub bar's track, which the player shows and places through its CSS variables. */
+export interface SeekStretchElement {
+  hidden: boolean;
+  readonly style: { setProperty(name: string, value: string): void };
+}
+
 /**
  * The player's elements. The player sets their sources, playback, and `display` itself: it sets the source and
  * shows the element, then a video's loop and mute, then calls `play()`.
@@ -53,6 +59,8 @@ export interface PlayerElements {
   emptyState: ShownElement;
   /** Not rendered from state, so a re-render never moves it while it is dragged. */
   seekSlider: SeekSliderElement;
+  /** Timer mode's repeating stretch, shown faintly behind the scrub bar while Loop holds autoplay. */
+  seekStretch: SeekStretchElement;
 }
 
 export interface PlayButtonView {
@@ -80,8 +88,13 @@ export interface PlayOptions {
 }
 
 /**
- * Plays the current item and history, and runs the player's controls. On a photo with Autoplay on and Loop off, the
- * scrub bar shows the photo's timer, which Play/Pause holds and resumes and the bar moves, until it ends.
+ * Plays the current item and history, and runs the player's controls and autoplay. On a photo autoplay will advance,
+ * the scrub bar shows the photo's timer, which Play/Pause holds and resumes and the bar moves, until it ends.
+ *
+ * Autoplay advances a photo after Advance after, and a video at its end in Normal mode or after Advance after in Timer
+ * mode. With Loop on, Loop stops autoplay decides: on, the item repeats and nothing advances, and in Timer mode a video
+ * repeats a stretch of Advance after seconds; off, autoplay goes on, and a video shorter than Advance after repeats
+ * until it has run. A repeat only restarts the photo's timer or the video's position.
  */
 export interface Player {
   readonly playButton: ReadonlySignal<PlayButtonView>;
@@ -119,7 +132,11 @@ export interface Player {
   toggleAutoplay(): void;
   toggleFavorite(): Promise<void>;
   toggleBlacklist(): Promise<void>;
-  /** Takes the seek slider's value, in seconds: a video's position, or a photo's timer's while the bar shows it. */
+  /**
+   * Takes the seek slider's value, in seconds: a video's position, or a photo's timer's while the bar shows it. While
+   * Timer mode repeats a stretch, the stretch starts where a seek lands, or, for a seek to the video's end, Advance
+   * after seconds before it.
+   */
   seek(value: string): void;
   /** Auto-Pause: pauses the video, or holds a photo's timer, keeping the time it has left. */
   autoPause(): void;
@@ -207,6 +224,11 @@ export function createPlayer(options: PlayerOptions): Player {
   const timeText = signal(NO_TIME);
   const mediaFailed = signal(false);
   const photoTimer = createPhotoTimer({ onEnd: photoTimerEnded });
+  /**
+   * A video's timer: set as each video starts, it runs while it advances the video and the video plays, from its first
+   * `playing`, so loading doesn't count. Anything else holds it with its time.
+   */
+  const videoTimer = createPhotoTimer({ onEnd: videoTimerEnded });
 
   let elements: PlayerElements | null = null;
   /** The animation frame that moves the bar next, while something plays. */
@@ -218,6 +240,15 @@ export function createPlayer(options: PlayerOptions): Player {
   let autoPausedAttempt = 0;
   /** A random pick waits for the server, holding Loading…. */
   let pickWaiting = false;
+  /** The video of the attempt playing now has played, so its timer can run. */
+  let videoStarted = false;
+  /** In Normal mode, a short video's timer has run, so the repeat in progress is its last. */
+  let videoTimerDone = false;
+  /** Where Timer mode's repeating stretch starts, in seconds, and whether it applies now. */
+  let stretchStart = 0;
+  let stretching = false;
+  /** Timer mode's stretch went back to its start from the video's end, so the `playing` that follows is a repeat's. */
+  let stretchRestarting = false;
 
   function trace(level: string, message: string, context: Record<string, unknown> = {}): void {
     void api.relayLog(level, playbackTraceLine(message, store.current.peek(), store.playAttemptId.peek(), context));
@@ -254,12 +285,126 @@ export function createPlayer(options: PlayerOptions): Player {
     return elements !== null && elements.photo.style.display !== "none";
   }
 
-  /**
-   * On a photo with Autoplay on and Loop off, the scrub bar shows its timer, and Play and the bar move it, until the
-   * timer ends.
-   */
+  /** Autoplay goes on to the next item unless Loop holds it there, which it does while Loop stops autoplay is on. */
+  function autoplayGoesOn(): boolean {
+    return store.autoplay.peek() && !(store.loop.peek() && store.loopStopsAutoplay.peek());
+  }
+
+  function advanceAfterMs(): number {
+    return store.advanceAfterSeconds.peek() * 1000;
+  }
+
+  /** A photo's timer runs with Autoplay or Loop on: it advances the photo, or starts over while the photo repeats. */
+  function photoTimerRuns(): boolean {
+    return store.autoplay.peek() || store.loop.peek();
+  }
+
+  /** On a photo autoplay will advance, the scrub bar shows its timer, and Play and the bar move it, until it ends. */
   function photoBarShown(): boolean {
-    return photoShown() && store.autoplay.peek() && !store.loop.peek() && photoTimer.active;
+    return photoShown() && autoplayGoesOn() && photoTimer.active;
+  }
+
+  /** The video's length is known and shorter than Advance after. */
+  function videoShorterThanTimer(): boolean {
+    const duration = elements!.video.duration;
+    return Number.isFinite(duration) && duration > 0 && duration < store.advanceAfterSeconds.peek();
+  }
+
+  /**
+   * The video's timer advances it: in Timer mode, and in either mode for a video shorter than Advance after that Loop
+   * repeats while autoplay goes on.
+   */
+  function videoTimerApplies(): boolean {
+    return autoplayGoesOn() && (store.autoplayMode.peek() === "timer" || (store.loop.peek() && videoShorterThanTimer()));
+  }
+
+  /** In Timer mode, while Loop holds autoplay, a video repeats a stretch of Advance after seconds. */
+  function stretchApplies(): boolean {
+    return store.autoplay.peek() && store.loop.peek() && store.loopStopsAutoplay.peek() && store.autoplayMode.peek() === "timer";
+  }
+
+  /** The stretch ends Advance after seconds from its start, or at the video's end when that comes first. */
+  function stretchEnd(): number {
+    const end = stretchStart + store.advanceAfterSeconds.peek();
+    const duration = elements!.video.duration;
+    return Number.isFinite(duration) ? Math.min(end, duration) : end;
+  }
+
+  /**
+   * Where Timer mode's stretch starts for a position: there, or, at the video's end, Advance after seconds before it, or
+   * at 0 for a shorter video.
+   */
+  function stretchStartAt(position: number): number {
+    const duration = elements!.video.duration;
+    return position >= duration ? Math.max(0, duration - store.advanceAfterSeconds.peek()) : position;
+  }
+
+  /** Timer mode's stretch is the whole video, from its start to its end. */
+  function stretchIsWholeVideo(): boolean {
+    const duration = elements!.video.duration;
+    return stretchStart === 0 && Number.isFinite(duration) && duration > 0 && stretchEnd() >= duration;
+  }
+
+  /**
+   * The browser repeats the video itself, without a pause or its end, while Loop repeats it whole: with Autoplay off,
+   * while Loop holds autoplay in Normal mode, for a video shorter than Advance after until, in Normal mode, its timer
+   * has run, and while Timer mode's stretch is the whole video. Any other stretch goes back to its start itself.
+   */
+  function videoLoops(): boolean {
+    if (!store.loop.peek()) return false;
+    if (stretchApplies()) return stretchIsWholeVideo();
+    return !autoplayGoesOn() || (videoShorterThanTimer() && !videoTimerDone);
+  }
+
+  /**
+   * Brings the video in line with Autoplay, Loop, the autoplay settings, and whether it plays: its timer runs or holds
+   * with its time, the browser repeats it or not, and Timer mode's stretch starts where the video is when it starts to
+   * apply, or, for a video at its end, where a seek to its end starts it, with the video, and shows on the scrub bar.
+   */
+  function syncVideo(): void {
+    if (!elements || !videoShown() || !armedFor("video")) return;
+    const { video } = elements;
+    const applies = stretchApplies();
+    if (applies && !stretching) {
+      stretchStart = stretchStartAt(video.currentTime);
+      if (stretchStart !== video.currentTime) {
+        video.currentTime = stretchStart;
+      }
+    }
+    stretching = applies;
+    if (videoTimerApplies() && videoStarted && !video.paused) {
+      videoTimer.resume();
+    } else {
+      videoTimer.hold();
+    }
+    video.loop = videoLoops();
+    showStretch();
+  }
+
+  /** Shows Timer mode's stretch faintly behind the scrub bar, once the video's length places it, and hides it otherwise. */
+  function showStretch(): void {
+    if (!elements) return;
+    const { seekStretch, video } = elements;
+    const duration = video.duration;
+    const shown = stretching && videoShown() && Number.isFinite(duration) && duration > 0;
+    seekStretch.hidden = !shown;
+    if (shown) {
+      seekStretch.style.setProperty("--loop-from", String(stretchStart / duration));
+      seekStretch.style.setProperty("--loop-to", String(stretchEnd() / duration));
+    }
+  }
+
+  /**
+   * Timer mode's stretch goes back to its start once the video reaches the stretch's end, checked on each time update and
+   * animation frame; one that ends at the video's end starts over when the video ends.
+   */
+  function repeatStretch(): void {
+    if (!stretching || !elements) return;
+    const { video } = elements;
+    const end = stretchEnd();
+    if (end < video.duration && video.currentTime >= end) {
+      video.currentTime = stretchStart;
+    }
   }
 
   /** The user played or paused, which Auto-Pause then leaves as it is. */
@@ -307,6 +452,7 @@ export function createPlayer(options: PlayerOptions): Player {
     if (photoShown()) {
       showPhotoTime();
     } else {
+      repeatStretch();
       showTime();
     }
     moveBarWhilePlaying();
@@ -335,14 +481,48 @@ export function createPlayer(options: PlayerOptions): Player {
     timeText.value = formatPlaybackPosition(elapsed, seconds);
   }
 
-  /** Loop shows the photo again; otherwise the next item plays. */
+  /**
+   * The photo advances while autoplay goes on. Otherwise it repeats: it stays on screen and only its timer starts over,
+   * so it neither loads again nor counts another play.
+   */
   function photoTimerEnded(): void {
-    showPlayState();
-    if (store.loop.peek()) {
-      playCurrent();
+    if (!autoplayGoesOn()) {
+      photoTimer.start(advanceAfterMs());
+      showPlayState();
       return;
     }
+    showPlayState();
     next();
+  }
+
+  /** Timer mode advances the video; in Normal mode, a short video Loop repeats finishes the repeat in progress first. */
+  function videoTimerEnded(): void {
+    if (!videoShown()) return;
+    if (store.autoplayMode.peek() === "timer") {
+      trace("info", "timer-advance", { mediaType: "video" });
+      next();
+      return;
+    }
+    videoTimerDone = true;
+    syncVideo();
+  }
+
+  /**
+   * Loop or Loop stops autoplay changed while a photo shows, and the photo keeps its time. With Autoplay and Loop off its
+   * timer stops. One that wasn't set, or had ended, starts from its full time when the photo now repeats, and one the
+   * user held runs on once the bar no longer shows it, since Play can't resume it then; one Auto-Pause holds stays held.
+   */
+  function followLoopChange(): void {
+    if (!photoShown()) return;
+    if (!photoTimerRuns()) {
+      photoTimer.clear();
+    } else if (!photoTimer.active) {
+      if (!autoplayGoesOn()) {
+        photoTimer.start(advanceAfterMs());
+      }
+    } else if (!photoTimer.running && !autoHeldPhoto && !photoBarShown()) {
+      photoTimer.resume();
+    }
   }
 
   /**
@@ -385,6 +565,13 @@ export function createPlayer(options: PlayerOptions): Player {
 
     store.itemStates.applyTo(item);
     photoTimer.clear();
+    videoTimer.clear();
+    videoStarted = false;
+    videoTimerDone = false;
+    // A new item's stretch starts at its start.
+    stretchStart = 0;
+    stretching = false;
+    stretchRestarting = false;
     armed = null;
     mediaFailed.value = false;
     video.pause();
@@ -401,16 +588,21 @@ export function createPlayer(options: PlayerOptions): Player {
       armed = { mediaType: "photo", id: item.id, attemptId };
       photo.src = mediaUrl;
       photo.style.display = "block";
-      if (store.loop.peek() || store.autoplay.peek()) {
-        photoTimer.start(store.photoDurationSeconds.peek() * 1000);
+      if (photoTimerRuns()) {
+        photoTimer.start(advanceAfterMs());
       }
+      showStretch();
     } else {
       // Until its metadata gives its length.
       timeText.value = NO_TIME;
       video.src = mediaUrl;
       video.style.display = "block";
-      video.loop = store.loop.peek();
       armed = { mediaType: "video", id: item.id, attemptId };
+      // Held until the video first plays.
+      videoTimer.start(advanceAfterMs());
+      videoTimer.hold();
+      stretching = stretchApplies();
+      syncVideo();
       video.muted = muted.peek();
       // A browser that won't play it, as when it blocks autoplay, leaves it waiting for the user. A rejection that
       // arrives after another attempt has started is that earlier play's, cut short by the new source.
@@ -493,15 +685,6 @@ export function createPlayer(options: PlayerOptions): Player {
     }
   }
 
-  function restartPhotoForLoopOrAutoplay(): void {
-    if (store.current.peek()?.mediaType !== "photo") return;
-    if (store.loop.peek() || store.autoplay.peek()) {
-      playCurrent();
-    } else {
-      photoTimer.clear();
-    }
-  }
-
   /** Favoriting clears the blacklist, and blacklisting clears the favorite. */
   async function toggleFlag(flag: "isFavorite" | "isBlacklisted"): Promise<void> {
     const isFavorite = flag === "isFavorite";
@@ -577,12 +760,24 @@ export function createPlayer(options: PlayerOptions): Player {
     });
   });
 
-  // A showing photo's timer takes the new length, keeping the time it has shown and whether it runs or Auto-Pause or
-  // the user holds it, so a length no longer than that time ends it as soon as it runs.
-  store.on("photoDurationChanged", () => {
-    if (!photoShown() || !photoTimer.active) return;
-    photoTimer.setLength(store.photoDurationSeconds.peek() * 1000);
-    showPhotoTime();
+  // A showing photo's timer, and a video's, takes the new length, keeping the time it has run and whether it runs or
+  // Auto-Pause or the user holds it, so a length no longer than that time ends it as soon as it runs. Whether a video is
+  // shorter than Advance after, and where its stretch ends, follow.
+  store.on("advanceAfterChanged", () => {
+    if (photoShown() && photoTimer.active) {
+      photoTimer.setLength(advanceAfterMs());
+      showPhotoTime();
+    }
+    if (videoTimer.active) {
+      videoTimer.setLength(advanceAfterMs());
+    }
+    syncVideo();
+  });
+
+  store.on("autoplaySettingsChanged", () => {
+    followLoopChange();
+    syncVideo();
+    showPlayState();
   });
 
   return {
@@ -600,6 +795,7 @@ export function createPlayer(options: PlayerOptions): Player {
 
     detach() {
       photoTimer.clear();
+      videoTimer.clear();
       stopMovingBar();
       armed = null;
       elements = null;
@@ -636,6 +832,7 @@ export function createPlayer(options: PlayerOptions): Player {
           mediaSettled();
         }
         showPlayState();
+        syncVideo();
       }
     },
 
@@ -652,16 +849,23 @@ export function createPlayer(options: PlayerOptions): Player {
 
     toggleLoop() {
       store.setLoop(!store.loop.peek());
-      if (elements?.video.src) {
-        elements.video.loop = store.loop.peek();
-      }
-      restartPhotoForLoopOrAutoplay();
+      followLoopChange();
+      syncVideo();
       showToggles();
     },
 
     toggleAutoplay() {
       store.setAutoplay(!store.autoplay.peek());
-      restartPhotoForLoopOrAutoplay();
+      // A photo stays on screen: its timer starts over from its full time, or stops with Loop off too.
+      if (photoShown()) {
+        if (photoTimerRuns()) {
+          handBackToUser();
+          photoTimer.start(advanceAfterMs());
+        } else {
+          photoTimer.clear();
+        }
+      }
+      syncVideo();
       showToggles();
     },
 
@@ -677,7 +881,17 @@ export function createPlayer(options: PlayerOptions): Player {
         return;
       }
       if (!elements?.video.duration) return;
-      elements.video.currentTime = Number(value);
+      const { video } = elements;
+      if (!stretching) {
+        video.currentTime = Number(value);
+        return;
+      }
+      // While Timer mode repeats a stretch, the stretch, and its timer, start over where the seek lands, or, for a seek
+      // that lands at the video's end, Advance after seconds before it, or at 0 for a shorter video, and the video
+      // plays from there. Whether the browser repeats the video itself follows.
+      stretchStart = stretchStartAt(Number(value));
+      video.currentTime = stretchStart;
+      syncVideo();
     },
 
     autoPause() {
@@ -690,6 +904,7 @@ export function createPlayer(options: PlayerOptions): Player {
       } else if (elements && videoShown()) {
         autoPausedVideo = !elements.video.paused;
         elements.video.pause();
+        syncVideo();
       }
       showPlayState();
       if (autoPausedVideo || autoHeldPhoto) {
@@ -711,10 +926,14 @@ export function createPlayer(options: PlayerOptions): Player {
         trace("info", "auto-resume", { mediaType: "video" });
         void elements.video.play().catch(() => {});
         showPlayState();
+        syncVideo();
       }
     },
 
-    videoPlayStateChanged: showPlayState,
+    videoPlayStateChanged() {
+      showPlayState();
+      syncVideo();
+    },
 
     videoPlaying() {
       const attempt = armedFor("video");
@@ -723,9 +942,18 @@ export function createPlayer(options: PlayerOptions): Player {
         trace("info", "video-onplaying-stale", { expectedPlayAttemptId: attempt.attemptId });
         return;
       }
-      trace("info", "video-onplaying");
+      // A stretch's repeat from the video's end only plays on, so it relays nothing.
+      const repeat = stretchRestarting;
+      stretchRestarting = false;
+      if (!repeat) {
+        trace("info", "video-onplaying");
+      }
       mediaSettled();
-      store.relayStatus("Playing");
+      if (!repeat) {
+        store.relayStatus("Playing");
+      }
+      videoStarted = true;
+      syncVideo();
     },
 
     videoFailed() {
@@ -749,18 +977,31 @@ export function createPlayer(options: PlayerOptions): Player {
         elements.seekSlider.max = String(elements.video.duration || 100);
       }
       showTime();
-      // Its length decides whether the bar is enabled.
+      // Its length decides whether the bar is enabled, whether it is shorter than Advance after, and where its stretch
+      // shows.
       showPlayState();
+      syncVideo();
     },
 
     videoTimeUpdated() {
       if (!armedFor("video")) return;
+      repeatStretch();
       showTime();
     },
 
     videoEnded() {
-      if (!armedFor("video")) return;
-      if (!store.autoplay.peek() || store.loop.peek()) return;
+      if (!armedFor("video") || !elements) return;
+      // A stretch that starts mid-video and reaches the video's end starts over from its start, without loading again;
+      // the browser repeats one that is the whole video itself.
+      if (stretching) {
+        stretchRestarting = true;
+        elements.video.currentTime = stretchStart;
+        void elements.video.play().catch(() => {
+          stretchRestarting = false;
+        });
+        return;
+      }
+      if (!autoplayGoesOn()) return;
       next();
     },
 
@@ -786,7 +1027,7 @@ export function createPlayer(options: PlayerOptions): Player {
       trace("warn", "photo-onerror");
       mediaFailed.value = true;
       mediaSettled();
-      // Under Autoplay or Loop the photo's timer runs on and can fail again; the notice already open doesn't stack.
+      // Under Autoplay the photo's timer runs on and the next item can fail too; the notice already open doesn't stack.
       void dialogs.notice("Photo file not found.");
     }
   };

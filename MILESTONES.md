@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI becomes the only client on every device. Until the desktop removal release, the desktop client gets no significant changes or new features: bug fixes (crashes, data loss, broken playback, security) and small changes that keep it working with the server, or that match a small server-side change, are allowed. Until then server contract changes only add fields, so the last desktop build keeps working. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. The desktop still ships as a fallback, and its last build tells users it is retired. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12j, M12k, M12l1, M12l2, M12m, M12n1, M12n2, M12n3, M12o, M12p, M12q, M12r, M12s, M12t, M12u.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. The desktop still ships as a fallback, and its last build tells users it is retired. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12j, M12k, M12l1, M12l2, M12m, M12n, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t, M12u, M12v.
 - **v0.16.0 — Desktop removal**: Remove the desktop client, its packaging, and its tests, then move preset writes to per-preset routes. P48, P25.
 - **v0.16.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.17.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access. P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28j, P28k, P28l.
@@ -133,50 +133,7 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 ## Active Milestones
 
-Last milestone completed: M12i1
-
-### M12i2 - WebUI Autoplay Modes
-
-- **Status**: ⏳ Planned
-- **Goal**: Autoplay has two modes, Normal and Timer, in place of the desktop's Keep Playing, and a looping photo no longer flickers.
-- **Depends on**: WebUI Settings Panel, whose Advance after setting both modes use, and WebUI Auto-Pause and Photo Scrub Bar, whose photo timer they drive.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Scope
-
-- Autoplay gets two modes, replacing the desktop's separate Keep Playing, which plays a random item every N seconds until stopped (Playback → Keep Playing (Timer) and Set Interval):
-  - Normal: photos advance after the timer and videos play to the end, as autoplay does today.
-  - Timer: every item advances after the timer, including a video that has not finished. With loop on, a video shorter than the timer repeats until the timer advances. Pausing a video holds the timer.
-  - With loop on in Normal mode, the current item repeats and autoplay waits, as today.
-- Both modes use one timer, Advance after, the photo duration in the Settings tab, with its 1–300 seconds.
-- This milestone widens Advance after to the desktop's 1–3600 seconds, so a Keep Playing interval longer than five minutes still fits.
-- The mode and the timer sit together in the Settings tab, and the player's autoplay button still turns autoplay on and off.
-- A looping photo flickers at the end of each loop, because it is restarted by reloading its image, unlike a video, which seeks back. Keep the photo on screen and restart only its timer, both at the end of each loop and when Autoplay is turned on while a photo shows.
-- Turning Loop on or off while a photo shows keeps the photo on screen and keeps its time, as the mockup does: its timer runs on from where it was while Autoplay or Loop stays on; with both off, its timer stops.
-- A looping photo then records one play, as a looping video does, and the Player screen tests that count a play per loop change with it.
-- The autoplay mode survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
-
-#### Traps
-
-- The WebUI's video end handler and photo timer both skip advancing while loop is on.
-- Changing the timer while a photo shows already keeps the time shown and changes only the length, through the photo timer's `setLength` (`photoDurationChanged` in `src/playback/player.ts`), which WebUI Settings Panel added.
-- The photo timer calls `playCurrent`, which clears the photo's source and hides it, then loads it again, records a play, and relays a new start.
-- Turning Loop or Autoplay on while a photo shows goes through the same restart.
-
-#### Acceptance
-
-- In Normal mode, photos advance after the timer and videos play to the end. In Timer mode, every item advances after the timer, including an unfinished video, and a paused video holds it. Shown by autoplay tests for both modes with loop on and off and with a paused video.
-- With loop on in Timer mode, a video shorter than the timer repeats until the timer advances. With loop on in Normal mode, the current item repeats and does not advance. Shown by the same autoplay tests.
-- A looping photo does not flicker: it stays on screen with its image loaded at the end of each loop, and only its timer restarts, in a test that a looping photo keeps its image shown through each loop.
-- Turning Loop on or off while a photo shows keeps the photo on screen and keeps its time, in tests that turning Loop on and then off on a photo keeps its image shown and runs its timer on from where it was while Autoplay or Loop stays on, and stops it with both off.
-- The Settings tab shows the autoplay mode beside Advance after, which accepts 1 to 3600 seconds and starts from the value stored before this milestone, in a test for Advance after's new range.
-- After a page refresh, the autoplay mode is as it was, in a test for a page refresh keeping the mode.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and one quick spot check.
-
-#### Not included
-
-- Moving the photo duration into the Settings tab as Advance after, which is WebUI Settings Panel.
+Last milestone completed: M12i2
 
 ### M12i3 - WebUI Volume and Enhanced Audio
 
@@ -531,6 +488,7 @@ Last milestone completed: M12i1
 - Frame stepping, as YouTube does it: while a video is paused, comma steps one frame back and period one frame forward.
   - It uses the browser's frame timings (`requestVideoFrameCallback`) where the browser provides them, and, where it doesn't, an assumed frame rate that this milestone decides.
   - It replaces the desktop's Frame seek step (Shift and the arrow keys), which LibVLC drives.
+- J, L, and a frame step are seeks: while Timer mode repeats a stretch, each starts the stretch where it lands, as a seek by the scrub bar does, which the mockup shows.
 - Shortcuts do nothing while focus is in a text field.
 - Esc closes the first of these that is open: the bell's list, the panel, and then pseudo-fullscreen. An open dialog, Auto Tag included, takes Esc itself.
 - A shortcut reference in the Settings tab's Keyboard shortcuts section, collapsed by default with a chevron. `?`, pressed anywhere outside a text field, opens Settings with it expanded, and the reference lists `?` too.
@@ -538,6 +496,7 @@ Last milestone completed: M12i1
 
 #### Traps
 
+- A seek by the scrub bar starts Timer mode's repeating stretch where it lands through the player's `seek` (`src/playback/player.ts`); a key that moves the video's position some other way leaves the stretch where it was.
 - The WebUI handles only Escape, which closes overlays, and Enter or Space on a focused library tile (measured).
 - The desktop binds K play or pause, J and L seek, Left and Right previous and next, R random, F favorite, B blacklist, A autoplay, M mute, comma and period volume, T tags, P player view, S settings, O import folder, Q quit, F11 fullscreen, and 1 to 5 to show or hide parts of the window. It also swallows 6 to 8 and Space, which do nothing (measured).
 - The browser keeps Ctrl+Q, Ctrl+O, and F11, for its own fullscreen (inferred).
@@ -552,6 +511,7 @@ Last milestone completed: M12i1
 - [ and ] change the volume by the volume step, and do nothing on a photo, in keyboard tests per binding.
 - J and L seek by the seek step, and the Settings tab offers the desktop's seek step choices, in keyboard tests per binding.
 - While a video is paused, comma and period step one frame back and forward; while it plays, they do nothing. Shown by frame stepping tests with and without the browser's frame timings.
+- While Timer mode repeats a stretch, J, L, and a frame step start it where they land, in keyboard tests per binding.
 - Shift+F enters and leaves fullscreen, in keyboard tests per binding.
 - Space plays or pauses as K does, and leaves a focused button or tile to its own action, in keyboard tests per binding.
 - The shortcut reference matches the bindings, and `?` opens Settings with it expanded, in a test that the reference lists every binding.
@@ -1045,7 +1005,45 @@ Last milestone completed: M12i1
 - Removing a source with its items, which is Admin Source Management.
 - The desktop features a browser cannot offer, which is Desktop Client Removal, where they are recorded.
 
-### M12n1 - WebUI Admin Section
+### M12n - WebUI Loop Range
+
+- **Status**: ⏳ Planned
+- **Goal**: With Loop on, the user can set a start and an end marker on a video's scrub bar, and the video repeats between them.
+- **Depends on**: WebUI Autoplay Modes, whose Timer mode's repeating stretch the markers define while they are set, WebUI Player Controls, whose controls stay shown while the scrub bar is dragged, and WebUI Keyboard Shortcuts, whose keys the markers' own keys have to fit around.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- With Loop on, the user can set a start and an end marker on a video's scrub bar, and the video repeats between them, in Normal and Timer mode and with Autoplay off.
+- While markers are set, they define Timer mode's repeating stretch, in place of the stretch that starts where a seek lands and runs for Advance after.
+- A repeat between the markers only moves the video's position: nothing loads again, shows Loading…, or records another play, as Loop's other repeats do.
+- Before the app is built, the markers are designed in the mockup and approved: how they are set, moved, and cleared with a mouse, on a touch screen, and from the keyboard; how they show on the scrub bar beside Timer mode's stretch; whether a video keeps them when it plays again or the page refreshes; and what they do while Loop stops autoplay is off.
+
+#### Traps
+
+- The scrub bar is a native range input that the player sets rather than renders from state, so a re-render never moves it while it is dragged (`seekSlider` in `src/playback/player.ts`). Markers drawn on it must leave the bar its own dragging (inferred).
+- WebUI Autoplay Modes wraps the scrub bar in `seek-wrap`, with Timer mode's stretch, `seek-loop`, behind its track, inset by half the thumb's width at each end so it lines up with the thumb.
+- WebUI Player Controls keeps the controls shown while the scrub bar or volume is dragged, so dragging a marker has to keep them shown too (inferred).
+- The keyboard shortcuts WebUI Keyboard Shortcuts adds, listed in the mockup's shortcut reference, already take most of the keys a marker could use.
+
+#### Acceptance
+
+- With Loop on and both markers set, a video repeats between them with Autoplay off and in Normal and Timer mode, in player and Player screen tests.
+- While markers are set, Timer mode's repeating stretch is the range between them, in a test.
+- A repeat between the markers records no other play and keeps the video's source, in a test.
+- The markers are set, moved, and cleared as the approved mockup shows, by mouse, touch, and keyboard, in Player screen tests.
+- The mockup shows the markers as approved and matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check.
+
+#### Release checks
+
+- Manual: On the iPad and a desktop browser, setting, moving, and clearing the markers on the scrub bar works by touch and by mouse, and a video repeats between them.
+
+#### Not included
+
+- Markers on a photo, whose scrub bar is its timer.
+
+### M12o1 - WebUI Admin Section
 
 - **Status**: ⏳ Planned
 - **Goal**: Everything the Operator page does, apart from its logs, moves into a full-page admin section of the WebUI.
@@ -1147,7 +1145,7 @@ Last milestone completed: M12i1
 - Account administration, which is Account Administration.
 - Replacing the control token with admin accounts, which is Auth Cutover for API and Admin.
 
-### M12n2 - Log Viewer Redesign
+### M12o2 - Log Viewer Redesign
 
 - **Status**: ⏳ Planned
 - **Goal**: The admin section's Log Viewer filters today's log by time, source, level, and text, in the design Admin Log Viewer later moves to structured entries.
@@ -1217,7 +1215,7 @@ Last milestone completed: M12i1
 - The Log Viewer on the recovery page, which is Recovery Page and Operator Retirement.
 - Structured entries, category and component filters, and the route's rename, which is Admin Log Viewer.
 
-### M12n3 - Recovery Page and Operator Retirement
+### M12o3 - Recovery Page and Operator Retirement
 
 - **Status**: ⏳ Planned
 - **Goal**: The server keeps a minimal recovery page for when the WebUI's files are broken, always serves the WebUI, and retires the Operator page.
@@ -1309,7 +1307,7 @@ Last milestone completed: M12i1
 
 - Dropping the `enabled` field from the contract, which is Desktop Client Removal.
 
-### M12o - Server Settings Robustness
+### M12p - Server Settings Robustness
 
 - **Status**: ⏳ Planned
 - **Goal**: A settings save changes only the fields it sends, a crash mid-write can't truncate the server's settings, and an unreadable settings file is kept aside and reported instead of being replaced with defaults.
@@ -1370,7 +1368,7 @@ Last milestone completed: M12i1
 
 - The server's other robustness findings and the desktop's settings file, which is Server Robustness Findings.
 
-### M12p - Admin Refresh, Backup, and Duplicate Review
+### M12q - Admin Refresh, Backup, and Duplicate Review
 
 - **Status**: ⏳ Planned
 - **Goal**: The admin section starts a refresh, edits refresh and backup settings, reviews and applies duplicates, and clears the whole library's playback stats, so none of these needs the desktop.
@@ -1483,7 +1481,7 @@ Last milestone completed: M12i1
 
 - Manual: From the admin section, start a refresh, change refresh and backup settings, scan and apply duplicates with Keep All and with a chosen file, and clear all playback stats, and the library updates.
 
-### M12q - Admin Source Management
+### M12r - Admin Source Management
 
 - **Status**: ⏳ Planned
 - **Goal**: Manage sources from the WebUI admin section, with server routes for what no client can do today, and every open WebUI follows source changes without a reload.
@@ -1591,7 +1589,7 @@ Last milestone completed: M12i1
 - Per-user source visibility, which is Per-User Source Permissions.
 - Browsing for a source folder, which is Desktop App Shell.
 
-### M12r - Admin Library Catalog Transfer
+### M12s - Admin Library Catalog Transfer
 
 - **Status**: ⏳ Planned
 - **Goal**: Export and import the library from the WebUI admin section, with the server applying the catalog, so catalog transfer does not need the desktop app.
@@ -1725,7 +1723,7 @@ Last milestone completed: M12i1
 - A Save as dialog for the export, which is Desktop App Shell.
 - Removing the desktop's Library Export and Import menus, which is Desktop Client Removal.
 
-### M12s - Testing Suite Overhaul
+### M12t - Testing Suite Overhaul
 
 - **Status**: ⏳ Planned
 - **Goal**: The testing suite produces clear results that match the WebUI's connection and status handling.
@@ -1789,7 +1787,7 @@ Last milestone completed: M12i1
 
 - The desktop's expected messages, since the desktop is frozen.
 
-### M12t - WebUI Keyboard Navigation and Focus
+### M12u - WebUI Keyboard Navigation and Focus
 
 - **Status**: ⏳ Planned
 - **Goal**: Every part of the WebUI works from the keyboard alone, and keyboard focus is always visible, in the brand orange.
@@ -1841,7 +1839,7 @@ Last milestone completed: M12i1
 
 - Rebinding keys, which is Customizable Keyboard Shortcuts.
 
-### M12u - Desktop Retirement Notice
+### M12v - Desktop Retirement Notice
 
 - **Status**: ⏳ Planned
 - **Goal**: The last desktop build tells users the desktop app is retired and points them to the WebUI.

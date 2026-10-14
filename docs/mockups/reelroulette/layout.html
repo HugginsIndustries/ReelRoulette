@@ -759,6 +759,17 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
 .overlay-seek-row { display: flex; align-items: center; gap: 12px; pointer-events: auto; }
 /* The sliders drop a browser's own margin, 2 px, so the bar, the time, and the volume sit the row's gap apart. */
 .overlay-seek-row input[type="range"] { flex: 1; min-width: 0; height: 24px; margin: 0; }
+/* The scrub bar's wrapper holds the stretch Timer mode repeats while Loop holds autoplay, shown faintly behind the bar's
+   track. The thumb's center runs from half its width in from each end, so the stretch lines up with it. */
+.seek-wrap { flex: 1; min-width: 0; display: flex; align-items: center; position: relative; }
+.seek-wrap input[type="range"] { position: relative; }
+.seek-loop {
+  --thumb-half: 8px;
+  position: absolute; top: 50%; height: 12px; transform: translateY(-50%); border-radius: 6px; pointer-events: none;
+  left: calc(var(--thumb-half) + (100% - 2 * var(--thumb-half)) * var(--loop-from, 0));
+  width: calc((100% - 2 * var(--thumb-half)) * (var(--loop-to, 0) - var(--loop-from, 0)));
+  background: rgb(239 127 34 / 0.35);
+}
 .overlay-seek-row input[type="range"]:disabled { cursor: default; }
 /* Its digits are all one width, so the time doesn't jitter while it plays. It takes its own width, so that width may
    change between items with different time formats. */
@@ -1378,7 +1389,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
             <button id="fullscreen-btn" class="overlay-btn" aria-label="Fullscreen" title="Fullscreen"><span class="material-symbol-icon">fullscreen</span></button>
           </div>
           <div class="overlay-seek-row">
-            <input type="range" id="seek" min="0" max="100" step="any" value="0" aria-label="Seek">
+            <span class="seek-wrap" id="seek-wrap"><span class="seek-loop" id="seek-loop" hidden></span><input type="range" id="seek" min="0" max="100" step="any" value="0" aria-label="Seek"></span>
             <span id="time-display"></span>
             <span class="volume" id="volume-wrap"><input type="range" id="volume" min="0" max="100" step="1" value="80" aria-label="Volume" title="Volume"></span>
           </div>
@@ -1605,6 +1616,10 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
             <div class="setting">
               <label class="setting-label" for="set-advance">Advance after</label>
               <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="numeric" id="set-advance" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>seconds</span></div>
+            </div>
+            <div class="setting">
+              <div class="choice-row"><label><input type="checkbox" id="set-loop-stops" aria-describedby="set-loop-stops-hint"> Loop stops autoplay</label></div>
+              <p class="setting-hint" id="set-loop-stops-hint">With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances.</p>
             </div>
             <div class="setting">
               <span class="setting-label" id="set-seek-label">Seek step</span>
@@ -2968,6 +2983,7 @@ const state = {
   autoPause: store.get("autoPause", "responsive"),
   autoplayMode: store.get("autoplayMode", "normal"),
   advanceAfter: store.get("advanceAfter", 10),
+  loopStopsAutoplay: store.get("loopStopsAutoplay", true),
   seekStep: store.get("seekStep", 5),
   volumeStep: store.get("volumeStep", 5),
   volume: store.get("volume", 80),
@@ -3145,6 +3161,9 @@ const playback = {
   pausedBy: null,
   time: 0,
   timer: 0,
+  // Where Timer mode's repeating stretch starts, and whether it applies, while Loop holds autoplay.
+  loopStart: 0,
+  stretching: false,
   autoplay: store.get("autoplay", false),
   loop: store.get("loop", false),
   muted: store.get("muted", false),
@@ -3205,25 +3224,56 @@ function setLoading(reason, on) {
   }, mockHooks.instant ? 0 : LOADING_GRACE);
 }
 
-// "Advance after" in the Settings tab: today's photo duration, renamed, and the Timer mode's interval.
+// "Advance after" in the Settings tab: today's photo duration, renamed, and the timer both autoplay modes use.
 const photoSeconds = () => state.advanceAfter;
-// The photo timer runs with Autoplay or Loop on, as today; the bar shows it only when it will advance to another item,
+// Autoplay goes on to the next item unless Loop holds it there, which it does while Loop stops autoplay is on.
+const autoplayGoesOn = () => playback.autoplay && !(playback.loop && state.loopStopsAutoplay);
+// The photo timer runs with Autoplay or Loop on, as today. When it ends, the photo advances while autoplay goes on, and
+// otherwise stays, only its timer starting over. The bar shows the timer only when it will advance to another item,
 // until it ends, while the next item comes.
 const photoTimerRuns = () => !!playback.item && isPhoto(playback.item) && (playback.autoplay || playback.loop);
-const photoBarFills = () => !!playback.item && isPhoto(playback.item) && playback.autoplay && !playback.loop && playback.pausedBy !== "end";
+const photoBarFills = () => !!playback.item && isPhoto(playback.item) && autoplayGoesOn() && playback.pausedBy !== "end";
 const cannotPlay = (item) => item.missing || item.removed || !isPlayable(item);
+const shortVideo = (item) => item.duration < state.advanceAfter;
+// A video's timer runs while autoplay will advance it: in Timer mode, and in either mode for a video shorter than the
+// timer that Loop repeats while autoplay goes on. Anything that stops it applying holds it, keeping its time, and so
+// does pausing the video. Timer mode advances the video once it has run, even mid-way; Normal mode lets a repeat in
+// progress finish first.
+const videoTimerRuns = () =>
+  !!playback.item && !isPhoto(playback.item) && autoplayGoesOn() && (state.autoplayMode === "timer" || (playback.loop && shortVideo(playback.item)));
+const videoTimerHasRun = () => playback.timer >= state.advanceAfter;
+// Loop repeats a video whole, except a video longer than the timer while autoplay goes on, which plays once.
+const videoRepeats = (item) => playback.loop && (!autoplayGoesOn() || shortVideo(item));
+// In Timer mode, while Loop holds autoplay, a video repeats a stretch of Advance after seconds, or up to its end when
+// that comes first. The stretch starts at the start of the item, where the video is when the stretch starts to apply,
+// and where a seek lands, and shows faintly on the scrub bar.
+const repeatsStretch = () =>
+  !!playback.item && !isPhoto(playback.item) && playback.autoplay && playback.loop && state.loopStopsAutoplay && state.autoplayMode === "timer";
+const stretchEnd = (item) => Math.min(playback.loopStart + state.advanceAfter, item.duration);
+// The stretch starts where the video is, except that a video at its end starts it, and goes back, Advance after seconds
+// before the end, or at 0 for a shorter video.
+function startStretchHere() {
+  const duration = playback.item.duration;
+  if (playback.time >= duration) setTime(Math.max(0, duration - state.advanceAfter));
+  playback.loopStart = playback.time;
+  playback.stretching = true;
+}
+function followStretch() {
+  const applies = repeatsStretch();
+  if (applies && !playback.stretching) startStretchHere();
+  playback.stretching = applies;
+}
 
 // The clock: while something plays, a video or a photo whose timer runs, the time runs on from when it was last
-// brought up to now, and so does Timer mode's timer on a video; a paused video holds both.
+// brought up to now, and so does a video's timer while it runs; a paused video holds both.
 let clockAt = performance.now();
 const clockRuns = () => !!playback.item && playback.playing && (!isPhoto(playback.item) || photoTimerRuns());
-const timerModeRuns = () => playback.autoplay && state.autoplayMode === "timer" && !isPhoto(playback.item);
 function catchUp() {
   const now = performance.now();
   if (clockRuns()) {
     const seconds = (now - clockAt) / 1000;
     playback.time += seconds;
-    if (timerModeRuns()) playback.timer += seconds;
+    if (videoTimerRuns()) playback.timer += seconds;
   }
   clockAt = now;
 }
@@ -3233,27 +3283,31 @@ function setTime(seconds) {
   playback.time = seconds;
 }
 
-// Brings the time up to now and acts on the end of the item or of Timer mode's timer: every 250 ms, and every animation
-// frame while something plays, so the scrub bar moves smoothly. The time shown still changes once a second.
+// Brings the time up to now and acts on the end of the item or of its timer: every 250 ms, and every animation frame
+// while something plays, so the scrub bar moves smoothly. The time shown still changes once a second. A repeat only
+// moves the photo's timer or the video back to its start: nothing loads, shows Loading…, or is recorded again.
 function advance() {
   const item = playback.item;
   if (!item || !playback.playing) return;
   catchUp();
-  // Timer mode: every item advances after the timer, even a video that hasn't finished; a paused video holds it.
-  if (timerModeRuns() && playback.timer >= state.advanceAfter) return void goNext();
   if (isPhoto(item)) {
     if (!photoTimerRuns()) return;
     // A changed timer keeps the time already shown and changes only the length.
     if (playback.time >= photoSeconds()) {
-      if (playback.loop) setTime(0);
+      if (!autoplayGoesOn()) setTime(0);
       else {
         // The timer has ended: Play and the bar are disabled until the next item plays, even if its pick fails.
         setPlaying(false, "end");
         return void goNext();
       }
     }
+  } else if (repeatsStretch()) {
+    followStretch();
+    if (playback.time >= stretchEnd(item)) setTime(playback.loopStart);
+  } else if (state.autoplayMode === "timer" && videoTimerRuns() && videoTimerHasRun()) {
+    return void goNext();
   } else if (playback.time >= item.duration) {
-    if (playback.loop) setTime(0);
+    if (videoRepeats(item) && !(autoplayGoesOn() && videoTimerHasRun())) setTime(0);
     else if (playback.autoplay) return void goNext();
     else {
       setTime(item.duration);
@@ -3280,6 +3334,8 @@ function moveBarWhilePlaying() {
 function renderTime() {
   const item = playback.item;
   const seek = $("seek");
+  // First, since a stretch that starts at the video's end moves the video.
+  followStretch();
   if (!item || isPhoto(item)) {
     // While a photo's timer runs, the bar shows it and dragging moves it; otherwise the bar is disabled, and the time
     // shows 0:00 / 0:00, as it does before anything plays, so the controls keep their look.
@@ -3295,6 +3351,12 @@ function renderTime() {
     seek.setAttribute("aria-label", "Seek");
     $("time-display").textContent = fmtPosition(playback.time, item.duration);
   }
+  const stretch = $("seek-loop");
+  stretch.hidden = !repeatsStretch();
+  if (!stretch.hidden) {
+    stretch.style.setProperty("--loop-from", String(playback.loopStart / item.duration));
+    stretch.style.setProperty("--loop-to", String(stretchEnd(item) / item.duration));
+  }
 }
 
 function chipText() {
@@ -3304,7 +3366,7 @@ function chipText() {
     if (!photoTimerRuns()) return ["photo", "Photo, no timer"];
     if (playback.pausedBy === "end") return ["photo", "Photo timer ended"];
     if (!playback.playing) return ["pause", playback.pausedBy === "auto" ? "Timer held by Auto-Pause" : "Timer paused"];
-    return ["play_arrow", playback.loop ? "Photo looping" : "Photo timer"];
+    return ["play_arrow", autoplayGoesOn() ? "Photo timer" : "Photo looping"];
   }
   if (playback.playing) return ["play_arrow", "Playing"];
   if (playback.frameStep) return ["pause", `Paused, stepped a frame ${playback.frameStep}`];
@@ -3375,6 +3437,9 @@ function start(item) {
   item.playedBefore = item.lastPlayedAt;
   setTime(0);
   playback.timer = 0;
+  // A new item's repeating stretch starts at its start.
+  playback.loopStart = 0;
+  playback.stretching = repeatsStretch();
   playback.failed = isPlayable(item) ? null : "format";
   if (playback.failed) {
     // A file chosen from the library that this browser can't play: its notice, not a popup.
@@ -4119,16 +4184,37 @@ $("play-btn").addEventListener("click", () => {
 });
 $("next-btn").addEventListener("click", () => goNext());
 $("prev-btn").addEventListener("click", () => goPrevious());
+// While Timer mode repeats a stretch, a seek, by the bar, J or L, or a frame step, starts the stretch where it lands,
+// and its timer over from there. A seek that lands at the video's end starts it, and the video, Advance after seconds
+// before the end, or at 0 for a shorter video.
+function seekStartsStretch() {
+  if (repeatsStretch()) startStretchHere();
+}
 $("seek").addEventListener("input", (event) => {
   setTime(Number(event.target.value));
+  seekStartsStretch();
   renderTime();
 });
+// Loop or Loop stops autoplay changed, and a photo keeps its time. One whose timer had ended starts over if it now
+// repeats, and one the user paused runs on once the bar no longer shows its timer, since Play can't resume it then.
+// One Auto-Pause holds stays held.
+function followLoopChange() {
+  const item = playback.item;
+  if (!item || !isPhoto(item) || playback.playing || !photoTimerRuns()) return;
+  if (playback.pausedBy === "end" && !autoplayGoesOn()) {
+    setTime(0);
+    setPlaying(true, "user");
+  } else if (playback.pausedBy === "user" && !photoBarFills()) {
+    setPlaying(true, "user");
+  }
+}
 // Loop, Autoplay, and Mute keep their state across a page refresh (WebUI Settings Panel).
 // Each brings the time up to now first, since it can start or stop a photo's timer.
 $("loop-btn").addEventListener("click", () => {
   catchUp();
   playback.loop = !playback.loop;
   store.set("loop", playback.loop);
+  followLoopChange();
   renderPlayback();
 });
 $("autoplay-btn").addEventListener("click", () => {
@@ -6309,11 +6395,21 @@ function initSettings() {
   });
   bindChoice("set-side", "side", String, applyLayout);
   bindChoice("set-autopause", "autoPause", String, applyLayout);
-  // A showing photo keeps the time it has shown and takes the new length.
+  // A showing photo keeps the time it has shown and takes the new length, and so does a playing video's timer.
   settingField(new ValidatedField($("set-advance"), rangeCheck(1, 3600, " seconds", true)), () => String(state.advanceAfter), (text) => {
+    catchUp();
     state.advanceAfter = Number(text);
     store.set("advanceAfter", state.advanceAfter);
     renderTime();
+  });
+  // Loop stops autoplay, on by default: with Autoplay and Loop on, the item repeats and nothing advances.
+  $("set-loop-stops").checked = state.loopStopsAutoplay;
+  $("set-loop-stops").addEventListener("change", () => {
+    catchUp();
+    state.loopStopsAutoplay = $("set-loop-stops").checked;
+    store.set("loopStopsAutoplay", state.loopStopsAutoplay);
+    followLoopChange();
+    renderPlayback();
   });
   document.querySelectorAll('input[name="set-theme"]').forEach((radio) => {
     radio.checked = radio.value === store.get("theme", "system");
@@ -6477,6 +6573,7 @@ document.addEventListener("keydown", (event) => {
     handled();
     catchUp();
     playback.time = Math.max(0, Math.min(item.duration, playback.time + (key === "l" ? 1 : -1) * state.seekStep));
+    seekStartsStretch();
     return renderTime();
   }
   // Arrow keys keep their own job on radio buttons and checkboxes.
@@ -6495,6 +6592,7 @@ document.addEventListener("keydown", (event) => {
     catchUp();
     playback.time = Math.max(0, Math.min(item.duration, playback.time + (key === "." ? 1 : -1) / 30));
     playback.frameStep = key === "." ? "forward" : "back";
+    seekStartsStretch();
     return renderPlayback();
   }
   if ((key === "[" || key === "]") && volumeAdjustable()) return handled(), setVolume(state.volume + (key === "]" ? 1 : -1) * state.volumeStep);

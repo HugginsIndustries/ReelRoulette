@@ -7,6 +7,7 @@ import { AMBIENT_RANGES, AMBIENT_SETTINGS, formatAmbientSetting, type AmbientSet
 import type { AutoPauseMode } from "../playback/autoPause";
 import { advanceAfterProblem } from "../settings/settings";
 import type { ThemeChoice } from "../settings/theme";
+import type { AutoplayMode } from "../state/appStore";
 import { useApp } from "./appContext";
 import { SettingTextField } from "./FieldValidation";
 
@@ -16,6 +17,11 @@ interface Choice<T extends string> {
   title: string;
   description?: string;
 }
+
+const AUTOPLAY_MODE_CHOICES: readonly Choice<AutoplayMode>[] = [
+  { value: "normal", title: "Normal", description: "Photos advance after the timer; videos play to the end." },
+  { value: "timer", title: "Timer", description: "Every item advances after the timer. Pausing a video holds it." }
+];
 
 const THEME_OPTIONS: readonly Choice<ThemeChoice>[] = [
   { value: "system", title: "System" },
@@ -79,7 +85,7 @@ export function SettingsTab() {
       </div>
       <div id="settings-body" class="settings-body themed-scrollbar">
         <Section id="playback" title="Playback">
-          <AdvanceAfter />
+          <PlaybackSettings />
         </Section>
         <Section id="appearance" title="Appearance">
           <AppearanceSettings />
@@ -110,7 +116,8 @@ function Section({ id, title, children }: { id: string; title: string; children:
 
 /**
  * A labeled list of radio buttons, for one value, or checkboxes, for each of a set. Each is named by its choice's title
- * alone, with its line, when it has one, as its description, so a screen reader reads them apart.
+ * alone, with its line, when it has one, as its description, so a screen reader reads them apart. The group's hint,
+ * when it has one, is its description.
  */
 function OptionList<T extends string>(props: {
   id: string;
@@ -120,13 +127,19 @@ function OptionList<T extends string>(props: {
   isChecked: (value: T) => boolean;
   onChange: (value: T, checked: boolean) => void;
   disabled?: boolean;
+  describedBy?: string;
 }) {
-  const { id, label, type, choices, isChecked, onChange, disabled } = props;
+  const { id, label, type, choices, isChecked, onChange, disabled, describedBy } = props;
   const stacked = choices.some((choice) => choice.description);
   return (
     <>
       <span class="setting-label" id={`${id}-label`}>{label}</span>
-      <div class={stacked ? "choice-stack" : "choice-row"} role={type === "radio" ? "radiogroup" : "group"} aria-labelledby={`${id}-label`}>
+      <div
+        class={stacked ? "choice-stack" : "choice-row"}
+        role={type === "radio" ? "radiogroup" : "group"}
+        aria-labelledby={`${id}-label`}
+        aria-describedby={describedBy}
+      >
         {choices.map((choice) => {
           const input = {
             name: id,
@@ -152,25 +165,62 @@ function OptionList<T extends string>(props: {
   );
 }
 
-/** Radio buttons for one setting, as an `OptionList`. */
+/** Radio buttons for one setting, as an `OptionList`, with a hint under them when it has one. */
 function Choices<T extends string>(props: {
   id: string;
   label: string;
   choices: readonly Choice<T>[];
   value: T;
   onChange: (value: T) => void;
+  hint?: string;
 }) {
-  const { value, onChange, ...list } = props;
+  const { value, onChange, hint, ...list } = props;
   return (
     <div class="setting">
-      <OptionList {...list} type="radio" isChecked={(choice) => choice === value} onChange={(choice) => onChange(choice)} />
+      <OptionList
+        {...list}
+        type="radio"
+        isChecked={(choice) => choice === value}
+        onChange={(choice) => onChange(choice)}
+        describedBy={hint ? `${list.id}-hint` : undefined}
+      />
+      {hint ? (
+        <p class="setting-hint" id={`${list.id}-hint`}>
+          {hint}
+        </p>
+      ) : null}
     </div>
   );
 }
 
+/** Autoplay mode, Advance after, and Loop stops autoplay, which the store keeps and the player follows at once. */
+function PlaybackSettings() {
+  const { store } = useApp();
+  return (
+    <>
+      <Choices
+        id="settings-autoplay-mode"
+        label="Autoplay mode"
+        choices={AUTOPLAY_MODE_CHOICES}
+        value={store.autoplayMode.value}
+        onChange={store.setAutoplayMode}
+        hint="The player's autoplay button turns it on and off."
+      />
+      <AdvanceAfter />
+      <Checkbox
+        id="settings-loop-stops-autoplay"
+        label="Loop stops autoplay"
+        hint="With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances."
+        checked={store.loopStopsAutoplay.value}
+        onChange={store.setLoopStopsAutoplay}
+      />
+    </>
+  );
+}
+
 /**
- * How long a photo shows, the photo duration. A value that is not a whole number from 1 to 300 is flagged and not
- * kept, and the one in use stays; a valid one is saved as a setting's field saves it.
+ * The timer both autoplay modes use, and how long a photo shows. A value that is not a whole number from 1 to 3600 is
+ * flagged and not kept, and the one in use stays; a valid one is saved as a setting's field saves it.
  */
 function AdvanceAfter() {
   const { store, panel } = useApp();
@@ -183,9 +233,9 @@ function AdvanceAfter() {
           class="number-field"
           inputMode="numeric"
           shown={panel.isOpen.value && panel.tab.value === "settings"}
-          saved={() => String(store.photoDurationSeconds.peek())}
+          saved={() => String(store.advanceAfterSeconds.peek())}
           problemOf={advanceAfterProblem}
-          save={(text) => store.setPhotoDuration(Number(text.trim()))}
+          save={(text) => store.setAdvanceAfter(Number(text.trim()))}
         />
         <span>seconds</span>
       </div>

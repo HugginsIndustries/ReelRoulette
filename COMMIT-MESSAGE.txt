@@ -19,8 +19,13 @@ Instructions:
 
 Commit Message:
 
-Docs: Move WebUI Autoplay Modes up to be the next milestone
+M12i2: Add the WebUI's autoplay modes and Loop stops autoplay
 
-- WebUI Autoplay Modes becomes M12i2, ahead of WebUI Volume and Enhanced Audio, now M12i3, and WebUI Loudness Normalization, now M12i4, which keep their order.
-- Autoplay Modes depends only on completed milestones, and neither audio milestone depends on it, so the entries move unchanged apart from their IDs.
-- The Planned Releases outline already lists M12i2 to M12i4 in order, and the tracker stays at M12i1.
+- Autoplay has two modes in the Settings tab, Normal and Timer, in place of the desktop's Keep Playing. Timer advances every item after Advance after, a video still playing too, counting from when the video plays and holding while it is paused.
+- Advance after, now the timer both modes use, takes 1 to 3600 seconds, and the store's photo duration names become Advance after's.
+- A new Loop stops autoplay setting, on by default, keeps a looping item repeating. Turned off, autoplay goes on with Loop on, repeating a short video until Advance after has run, and in Normal mode finishing the repeat in progress first.
+- In Timer mode while Loop holds autoplay, a video repeats a stretch of Advance after seconds that starts where a seek lands, shown faintly behind the scrub bar.
+- A repeat only restarts a photo's timer or the video's position, so a looping photo no longer reloads, flickers, or counts another play, and Loop keeps a photo's time.
+- The mockup gets the setting and its behavior, with checks for each case at both widths.
+- New WebUI Loop Range milestone, M12n, before WebUI Admin Section, for start and end markers that set what Loop repeats. The milestones after it move one letter on, to M12o1 through M12v.
+- The milestone is complete and moves to MILESTONES-COMPLETED.md, its three Release checks join the testing checklist's Manual checks, and WebUI Keyboard Shortcuts records that its seek and frame-step keys move Timer mode's stretch.

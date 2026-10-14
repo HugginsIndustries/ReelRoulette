@@ -58,6 +58,37 @@ function fakeVideo() {
   return video;
 }
 
+/** A stand-in for the `<img>`. It notes each source it is given, so a test sees whether a photo loaded again. */
+function fakePhoto() {
+  let src = "";
+  const photo = {
+    style: { display: "none" },
+    sources: [] as string[],
+    get src() {
+      return src;
+    },
+    set src(value: string) {
+      src = value;
+      photo.sources.push(value);
+    }
+  };
+  return photo;
+}
+
+/** A stand-in for the stretch behind the scrub bar, keeping the CSS variables the player sets on it. */
+function fakeStretch() {
+  const vars = new Map<string, string>();
+  return {
+    hidden: true,
+    vars,
+    style: {
+      setProperty(name: string, value: string) {
+        vars.set(name, value);
+      }
+    }
+  };
+}
+
 /** Animation frames that run only when a test runs them. */
 function fakeFrames() {
   const pending = new Map<number, () => void>();
@@ -153,9 +184,10 @@ function setup(saved: Record<string, string> = {}) {
   const player = createPlayer({ apiBaseUrl: "http://server/", store, device, api, connection, dialogs, notifications, frames });
   const elements = {
     video: fakeVideo(),
-    photo: { src: "", style: { display: "none" } },
+    photo: fakePhoto(),
     emptyState: { style: { display: "" } },
-    seekSlider: { value: "0", max: "100" }
+    seekSlider: { value: "0", max: "100" },
+    seekStretch: fakeStretch()
   };
   player.attach(elements satisfies PlayerElements);
   return {
@@ -175,7 +207,21 @@ function setup(saved: Record<string, string> = {}) {
     play(item: PlayingItem) {
       store.pushHistory({ ...item });
       player.playCurrent();
-    }
+    },
+    /** Plays `item` as a video `seconds` long whose metadata has loaded and that has started playing. */
+    playVideo(item: PlayingItem, seconds: number) {
+      store.pushHistory({ ...item });
+      player.playCurrent();
+      elements.video.duration = seconds;
+      player.videoMetadataLoaded();
+      player.videoPlaying();
+    },
+    /** The stretch behind the scrub bar: whether it shows, and where it starts and ends, as fractions of the video. */
+    stretch: () => ({
+      hidden: elements.seekStretch.hidden,
+      from: elements.seekStretch.vars.get("--loop-from"),
+      to: elements.seekStretch.vars.get("--loop-to")
+    })
   };
 }
 
@@ -344,11 +390,11 @@ describe("createPlayer", () => {
     expect(page.notified).toEqual([]);
   });
 
-  it("with Autoplay, moves a photo on after the photo duration, and with Loop shows it again", async () => {
+  it("with Autoplay, moves a photo on after Advance after, and with Loop repeats it, keeping it on screen without loading or recording it again", async () => {
     vi.useFakeTimers();
     const page = setup();
     page.answerRandom(SECOND_VIDEO);
-    page.store.setPhotoDuration(4);
+    page.store.setAdvanceAfter(4);
     page.player.toggleAutoplay();
     page.play(PHOTO);
 
@@ -361,14 +407,24 @@ describe("createPlayer", () => {
     page.player.toggleAutoplay();
     page.player.toggleLoop();
     page.play(PHOTO);
+    page.player.photoLoaded();
     const attempt = page.store.playAttemptId.value;
-    await vi.advanceTimersByTimeAsync(4_000);
-    expect(page.store.playAttemptId.value).toBe(attempt + 1);
-    expect(page.store.current.value?.itemId).toBe("item-photo");
+    const sources = [...page.elements.photo.sources];
+    const records = page.requests("/api/record-playback").length;
+    const starts = () => page.relayed.filter((line) => line.startsWith("playback=start ")).length;
+    const startsBefore = starts();
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(page.store.playAttemptId.value).toBe(attempt);
+    expect(page.elements.photo.sources).toEqual(sources);
+    expect([page.elements.photo.src, page.elements.photo.style.display]).toEqual(["http://server/api/media/item-photo?token=t", "block"]);
+    expect(page.requests("/api/record-playback")).toHaveLength(records);
+    expect(page.store.loading.shown.value).toBe(false);
+    expect(starts()).toBe(startsBefore);
 
     page.player.toggleLoop();
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(page.store.playAttemptId.value).toBe(attempt + 1);
+    expect(page.store.playAttemptId.value).toBe(attempt);
+    expect(page.requests("/api/random")).toHaveLength(1);
   });
 
   it("changes a showing photo's timer length when the photo duration changes, keeping its time, and stops it when detached", async () => {
@@ -380,7 +436,7 @@ describe("createPlayer", () => {
     await vi.advanceTimersByTimeAsync(10_000);
 
     // The photo doesn't show again, so nothing loads or is recorded again.
-    page.store.setPhotoDuration(12);
+    page.store.setAdvanceAfter(12);
     expect(page.store.playAttemptId.value).toBe(attempt);
     expect(page.player.timeText.value).toBe("0:10 / 0:12");
     expect(page.requests("/api/record-playback")).toHaveLength(1);
@@ -393,7 +449,7 @@ describe("createPlayer", () => {
     page.play(PHOTO);
     await vi.advanceTimersByTimeAsync(5_000);
     page.player.autoPause();
-    page.store.setPhotoDuration(3);
+    page.store.setAdvanceAfter(3);
     expect(page.player.playButton.value.showsPause).toBe(false);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(page.requests("/api/random")).toHaveLength(1);
@@ -406,7 +462,7 @@ describe("createPlayer", () => {
     page.player.detach();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(page.requests("/api/random")).toHaveLength(2);
-    page.store.setPhotoDuration(4);
+    page.store.setAdvanceAfter(4);
     page.player.playCurrent();
     expect(page.store.playAttemptId.value).toBe(lastAttempt);
   });
@@ -475,6 +531,7 @@ describe("createPlayer", () => {
   it("holds a looping photo's timer for Auto-Pause and resumes it with the time it had left", async () => {
     vi.useFakeTimers();
     const page = setup();
+    page.player.toggleAutoplay();
     page.player.toggleLoop();
     page.play(PHOTO);
     await vi.advanceTimersByTimeAsync(12_000);
@@ -483,9 +540,16 @@ describe("createPlayer", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     page.player.autoResume();
     await vi.advanceTimersByTimeAsync(2_999);
-    expect(page.store.playAttemptId.value).toBe(1);
+    // With Loop off, the bar shows the time it kept.
+    page.player.toggleLoop();
+    expect(page.player.timeText.value).toBe("0:14 / 0:15");
+    page.player.toggleLoop();
     await vi.advanceTimersByTimeAsync(1);
-    expect(page.store.playAttemptId.value).toBe(2);
+    // It started over, rather than showing the photo again.
+    page.player.toggleLoop();
+    expect(page.player.timeText.value).toBe("0:00 / 0:15");
+    expect(page.store.playAttemptId.value).toBe(1);
+    expect(page.requests("/api/random")).toHaveLength(0);
   });
 
   it("leaves playback as the user left it with Play/Pause while Auto-Pause held it", async () => {
@@ -694,7 +758,7 @@ describe("createPlayer", () => {
     expect(shown()).toEqual({ play: { disabled: false, showsPause: true }, bar: { disabled: false, label: "Seek" }, time: "0:00 / 0:00" });
   });
 
-  it("disables Play and the bar on a photo with Autoplay off or Loop on, and Autoplay starts and clears its timer", async () => {
+  it("disables Play and the bar on a photo with Autoplay off or Loop on, and Autoplay starts and clears its timer without showing it again", async () => {
     vi.useFakeTimers();
     const page = setup();
     page.play(PHOTO);
@@ -707,21 +771,25 @@ describe("createPlayer", () => {
     expect(page.store.playAttemptId.value).toBe(1);
 
     page.player.toggleAutoplay();
-    expect(page.store.playAttemptId.value).toBe(2);
+    expect(page.store.playAttemptId.value).toBe(1);
     expect(shown()).toEqual({ play: { disabled: false, showsPause: true }, bar: { disabled: false, label: "Photo timer" }, time: "0:00 / 0:15" });
     await vi.advanceTimersByTimeAsync(5_000);
 
+    // Loop keeps the photo's time.
     page.player.toggleLoop();
     expect(shown()).toEqual(disabled);
     expect(page.elements.seekSlider.value).toBe("0");
+    await vi.advanceTimersByTimeAsync(2_000);
     page.player.toggleLoop();
-    expect(page.player.timeText.value).toBe("0:00 / 0:15");
+    expect(page.player.timeText.value).toBe("0:07 / 0:15");
 
     page.player.toggleAutoplay();
     expect(shown()).toEqual(disabled);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(page.requests("/api/random")).toHaveLength(0);
-    expect(page.store.playAttemptId.value).toBe(4);
+    expect(page.store.playAttemptId.value).toBe(1);
+    expect(page.requests("/api/record-playback")).toHaveLength(1);
+    expect(page.elements.photo.sources.filter(Boolean)).toHaveLength(1);
   });
 
   it("empties the bar for each new item, and shows a video's time from 0:00 until its length is known", async () => {
@@ -930,6 +998,349 @@ describe("createPlayer", () => {
   });
 });
 
+describe("autoplay modes and Loop stops autoplay", () => {
+  /** Lets a random pick the timer or the video's end started answer. */
+  const settle = () => vi.advanceTimersByTimeAsync(0);
+
+  it("in Timer mode, advances a playing video after Advance after, counted from when it first plays, and a pause by the user or Auto-Pause holds the timer", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.store.setAdvanceAfter(4);
+    page.store.setAutoplayMode("timer");
+    page.player.toggleAutoplay();
+    page.answerRandom(SECOND_VIDEO);
+    page.play(VIDEO);
+    page.elements.video.duration = 65;
+    page.player.videoMetadataLoaded();
+
+    // Loading doesn't count.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(page.requests("/api/random")).toHaveLength(0);
+    page.player.videoPlaying();
+    await vi.advanceTimersByTimeAsync(1_000);
+    page.player.playOrPause();
+    await vi.advanceTimersByTimeAsync(60_000);
+    page.player.playOrPause();
+    await vi.advanceTimersByTimeAsync(1_000);
+    page.player.autoPause();
+    await vi.advanceTimersByTimeAsync(60_000);
+    page.player.autoResume();
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(page.requests("/api/random")).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(page.requests("/api/random")).toHaveLength(1);
+    await settle();
+    expect(page.elements.video.src).toContain("item-other");
+    expect(page.relayed).toContain("playback=timer-advance attempt=1 hasCurrent=true mediaType=video");
+  });
+
+  it("gives a playing video's timer a new Advance after, keeping the time it has run", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.store.setAdvanceAfter(10);
+    page.store.setAutoplayMode("timer");
+    page.player.toggleAutoplay();
+    page.playVideo(VIDEO, 65);
+    await vi.advanceTimersByTimeAsync(3_000);
+
+    page.store.setAdvanceAfter(5);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(page.requests("/api/random")).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(page.requests("/api/random")).toHaveLength(1);
+  });
+
+  it("in Normal mode, plays a video to its end, and in Timer mode a video shorter than Advance after advances at its end, with Loop off", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.store.setAdvanceAfter(4);
+    page.player.toggleAutoplay();
+    page.answerRandom(SECOND_VIDEO, SECOND_VIDEO);
+    page.playVideo(VIDEO, 65);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(page.requests("/api/random")).toHaveLength(0);
+    page.player.videoEnded();
+    expect(page.requests("/api/random")).toHaveLength(1);
+    await settle();
+
+    page.store.setAutoplayMode("timer");
+    page.playVideo(VIDEO, 3);
+    expect(page.elements.video.loop).toBe(false);
+    page.player.videoEnded();
+    expect(page.requests("/api/random")).toHaveLength(2);
+  });
+
+  it("with Loop stops autoplay on, advances nothing with Autoplay and Loop on: a video repeats whole in Normal mode, and a photo stays in either mode, only its timer starting over", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.store.setAdvanceAfter(4);
+    page.player.toggleAutoplay();
+    page.player.toggleLoop();
+    page.playVideo(VIDEO, 65);
+    expect(page.elements.video.loop).toBe(true);
+    expect(page.stretch().hidden).toBe(true);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(page.requests("/api/random")).toHaveLength(0);
+
+    page.play(PHOTO);
+    page.player.photoLoaded();
+    const sources = [...page.elements.photo.sources];
+    await vi.advanceTimersByTimeAsync(12_000);
+    page.store.setAutoplayMode("timer");
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(page.requests("/api/random")).toHaveLength(0);
+    expect(page.elements.photo.sources).toEqual(sources);
+    expect(page.elements.photo.style.display).toBe("block");
+    expect(page.store.playAttemptId.value).toBe(2);
+    expect(page.requests("/api/record-playback")).toHaveLength(2);
+    expect(page.store.loading.shown.value).toBe(false);
+    expect([page.player.playButton.value.disabled, page.player.seekBar.value.disabled, page.player.timeText.value]).toEqual([true, true, "0:00 / 0:00"]);
+  });
+
+  it("in Timer mode, with Loop stops autoplay on, repeats a stretch of Advance after seconds from the video's start, where a seek lands, or where it is when Loop turns on, and shows it on the scrub bar", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.store.setAdvanceAfter(10);
+    page.store.setAutoplayMode("timer");
+    page.player.toggleAutoplay();
+    page.player.toggleLoop();
+    page.playVideo(VIDEO, 120);
+    const { video } = page.elements;
+    const source = video.src;
+    expect(video.loop).toBe(false);
+    expect(page.stretch()).toEqual({ hidden: false, from: "0", to: String(10 / 120) });
+
+    video.currentTime = 10.1;
+    page.player.videoTimeUpdated();
+    expect(video.currentTime).toBe(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(page.requests("/api/random")).toHaveLength(0);
+
+    page.player.seek("60");
+    expect(page.stretch()).toEqual({ hidden: false, from: "0.5", to: String(70 / 120) });
+    video.currentTime = 70.2;
+    page.player.videoTimeUpdated();
+    expect(video.currentTime).toBe(60);
+
+    // A stretch the video's end cuts short starts over as the video ends.
+    page.player.seek("115");
+    expect(page.stretch().to).toBe("1");
+    const plays = video.plays.length;
+    page.player.videoEnded();
+    expect(video.currentTime).toBe(115);
+    expect(video.plays).toHaveLength(plays + 1);
+    expect(video.src).toBe(source);
+    expect(page.store.playAttemptId.value).toBe(1);
+    expect(page.requests("/api/random")).toHaveLength(0);
+    expect(page.requests("/api/record-playback")).toHaveLength(1);
+
+    page.player.toggleLoop();
+    expect(page.stretch().hidden).toBe(true);
+    video.currentTime = 30;
+    page.player.toggleLoop();
+    expect(page.stretch()).toEqual({ hidden: false, from: "0.25", to: String(40 / 120) });
+
+    // Normal mode repeats the whole video, and shows no stretch.
+    page.store.setAutoplayMode("normal");
+    expect([page.stretch().hidden, video.loop]).toEqual([true, true]);
+  });
+
+  it("in Timer mode, starts the stretch a seek to the video's end lands on Advance after seconds before the end, or at 0 for a shorter video, and lets the browser repeat a stretch that is the whole video", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.store.setAdvanceAfter(10);
+    page.store.setAutoplayMode("timer");
+    page.player.toggleAutoplay();
+    page.player.toggleLoop();
+    page.playVideo(VIDEO, 120);
+    const { video } = page.elements;
+
+    page.player.seek("120");
+    expect([video.currentTime, video.loop]).toEqual([110, false]);
+    expect(page.stretch()).toEqual({ hidden: false, from: String(110 / 120), to: "1" });
+
+    // A video no longer than Advance after: its stretch from 0 is the whole video, which the browser repeats itself.
+    page.playVideo(VIDEO, 3);
+    expect([video.loop, page.stretch()]).toEqual([true, { hidden: false, from: "0", to: "1" }]);
+    page.player.seek("1");
+    expect([video.loop, page.stretch().from]).toEqual([false, String(1 / 3)]);
+    page.player.seek("3");
+    expect([video.currentTime, video.loop, page.stretch().from]).toEqual([0, true, "0"]);
+    page.store.setAdvanceAfter(2);
+    expect([video.loop, page.stretch().to]).toEqual([false, String(2 / 3)]);
+    expect(page.requests("/api/random")).toHaveLength(0);
+  });
+
+  it("in Timer mode, starts a stretch that begins to apply while the video sits at its end as a seek to the end does, and the video there", () => {
+    const page = setup();
+    page.store.setAdvanceAfter(10);
+    page.store.setAutoplayMode("timer");
+    page.playVideo(VIDEO, 120);
+    const { video } = page.elements;
+
+    // With Autoplay and Loop off, the video plays to its end and stays there.
+    video.currentTime = 120;
+    video.pause();
+    page.player.videoPlayStateChanged();
+    page.player.videoEnded();
+    page.player.toggleAutoplay();
+    page.player.toggleLoop();
+    expect([video.currentTime, video.loop]).toEqual([110, false]);
+    expect(page.stretch()).toEqual({ hidden: false, from: String(110 / 120), to: "1" });
+
+    // A video no longer than Advance after starts its stretch at 0, which is the whole video, so the browser repeats it.
+    page.player.toggleLoop();
+    page.player.toggleAutoplay();
+    page.playVideo(VIDEO, 3);
+    video.currentTime = 3;
+    video.pause();
+    page.player.videoPlayStateChanged();
+    page.player.videoEnded();
+    page.player.toggleLoop();
+    page.player.toggleAutoplay();
+    expect([video.currentTime, video.loop]).toEqual([0, true]);
+    expect(page.stretch()).toEqual({ hidden: false, from: "0", to: "1" });
+    expect(page.requests("/api/random")).toHaveLength(0);
+  });
+
+  it("with Loop stops autoplay off, goes on with Loop on: a photo advances with its timer on the bar, a video shorter than Advance after repeats until it has run, and a longer one advances at the timer in Timer mode and at its end in Normal mode", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.store.setAdvanceAfter(4);
+    page.store.setLoopStopsAutoplay(false);
+    page.player.toggleAutoplay();
+    page.player.toggleLoop();
+    page.answerRandom(SECOND_VIDEO, SECOND_VIDEO, SECOND_VIDEO, SECOND_VIDEO, SECOND_VIDEO);
+    const picks = () => page.requests("/api/random").length;
+
+    page.play(PHOTO);
+    expect([page.player.playButton.value.disabled, page.player.seekBar.value.disabled]).toEqual([false, false]);
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(picks()).toBe(1);
+    await settle();
+
+    // Normal mode: a short video finishes the repeat in progress once the timer has run, then advances.
+    page.playVideo(VIDEO, 3);
+    expect(page.elements.video.loop).toBe(true);
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(picks()).toBe(1);
+    expect(page.elements.video.loop).toBe(false);
+    page.player.videoEnded();
+    expect(picks()).toBe(2);
+    await settle();
+
+    page.playVideo(VIDEO, 65);
+    expect(page.elements.video.loop).toBe(false);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(picks()).toBe(2);
+    page.player.videoEnded();
+    expect(picks()).toBe(3);
+    await settle();
+
+    // Timer mode: a short video advances once the timer has run, mid-repeat, and so does a longer one.
+    page.store.setAutoplayMode("timer");
+    page.playVideo(VIDEO, 3);
+    expect(page.elements.video.loop).toBe(true);
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(picks()).toBe(4);
+    await settle();
+    page.playVideo(VIDEO, 65);
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(picks()).toBe(5);
+    expect(page.stretch().hidden).toBe(true);
+  });
+
+  it("with Autoplay off, repeats a video whole and a photo with Loop on in either mode", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.store.setAdvanceAfter(4);
+    page.player.toggleLoop();
+    for (const mode of ["normal", "timer"] as const) {
+      page.store.setAutoplayMode(mode);
+      page.playVideo(VIDEO, 65);
+      expect([mode, page.elements.video.loop, page.stretch().hidden]).toEqual([mode, true, true]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      page.play(PHOTO);
+      const attempt = page.store.playAttemptId.value;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect([mode, page.store.playAttemptId.value, page.elements.photo.style.display]).toEqual([mode, attempt, "block"]);
+    }
+    expect(page.requests("/api/random")).toHaveLength(0);
+  });
+
+  it("keeps a photo on screen and its time as Loop turns on and off, running on a timer the user paused once Loop hides the bar, and leaving one Auto-Pause holds", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.player.toggleAutoplay();
+    page.play(PHOTO);
+    page.player.photoLoaded();
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    page.player.toggleLoop();
+    await vi.advanceTimersByTimeAsync(2_000);
+    page.player.toggleLoop();
+    expect(page.player.timeText.value).toBe("0:07 / 0:15");
+
+    page.player.playOrPause();
+    page.player.toggleLoop();
+    await vi.advanceTimersByTimeAsync(3_000);
+    page.player.toggleLoop();
+    expect([page.player.timeText.value, page.player.playButton.value.showsPause]).toEqual(["0:10 / 0:15", true]);
+
+    page.player.autoPause();
+    page.player.toggleLoop();
+    await vi.advanceTimersByTimeAsync(60_000);
+    page.player.toggleLoop();
+    expect([page.player.timeText.value, page.player.playButton.value.showsPause]).toEqual(["0:10 / 0:15", false]);
+    page.player.autoResume();
+    expect(page.player.playButton.value.showsPause).toBe(true);
+
+    // The same holds for Loop stops autoplay, which hides the bar too.
+    page.player.toggleLoop();
+    page.store.setLoopStopsAutoplay(false);
+    page.player.playOrPause();
+    page.store.setLoopStopsAutoplay(true);
+    await vi.advanceTimersByTimeAsync(1_000);
+    page.store.setLoopStopsAutoplay(false);
+    expect([page.player.timeText.value, page.player.playButton.value.showsPause]).toEqual(["0:11 / 0:15", true]);
+
+    expect(page.store.playAttemptId.value).toBe(1);
+    expect(page.elements.photo.sources.filter(Boolean)).toHaveLength(1);
+    expect(page.requests("/api/record-playback")).toHaveLength(1);
+  });
+
+  it("starts a photo's ended timer over when Loop makes it repeat, but not while autoplay still goes on, and stops it with Autoplay and Loop off", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.player.toggleAutoplay();
+    page.play(PHOTO);
+    // The pick at the end of the photo's timer finds nothing, so the photo stays, its timer ended.
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(page.requests("/api/random")).toHaveLength(1);
+
+    page.store.setLoopStopsAutoplay(false);
+    page.player.toggleLoop();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(page.requests("/api/random")).toHaveLength(1);
+    expect(page.player.playButton.value.disabled).toBe(true);
+
+    page.player.toggleLoop();
+    page.store.setLoopStopsAutoplay(true);
+    page.player.toggleLoop();
+    await vi.advanceTimersByTimeAsync(2_000);
+    page.player.toggleLoop();
+    expect(page.player.timeText.value).toBe("0:02 / 0:15");
+
+    page.player.toggleAutoplay();
+    expect(page.player.timeText.value).toBe("0:00 / 0:00");
+    page.player.toggleLoop();
+    page.player.toggleLoop();
+    page.player.toggleAutoplay();
+    expect(page.player.timeText.value).toBe("0:00 / 0:15");
+    expect(page.store.playAttemptId.value).toBe(1);
+  });
+});
+
 describe("Loading… on the player's indicator", () => {
   /** Records each change of whether Loading… shows from here on. */
   function watchLoading(page: ReturnType<typeof setup>) {
@@ -1070,7 +1481,7 @@ describe("Loading… on the player's indicator", () => {
     expect(page.store.loading.shown.value).toBe(false);
   });
 
-  it("holds for a history step and a photo shown again, but not for a photo duration change", async () => {
+  it("holds for a history step, but not for Loop, Autoplay, a photo's repeat, or an Advance after change", async () => {
     vi.useFakeTimers();
     const page = setup();
     page.play(VIDEO);
@@ -1084,16 +1495,16 @@ describe("Loading… on the player's indicator", () => {
     page.player.videoPlaying();
     expect(page.store.loading.shown.value).toBe(false);
 
+    // None of them shows the photo again, so nothing waits.
     page.play(PHOTO);
     page.player.photoLoaded();
     page.player.toggleLoop();
+    page.player.toggleAutoplay();
     await vi.advanceTimersByTimeAsync(500);
-    expect(page.store.loading.shown.value).toBe(true);
-    page.player.photoLoaded();
     expect(page.store.loading.shown.value).toBe(false);
-
-    // A photo duration change doesn't show the photo again, so nothing waits.
-    page.store.setPhotoDuration(4);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(page.store.loading.shown.value).toBe(false);
+    page.store.setAdvanceAfter(4);
     await vi.advanceTimersByTimeAsync(500);
     expect(page.store.loading.shown.value).toBe(false);
   });

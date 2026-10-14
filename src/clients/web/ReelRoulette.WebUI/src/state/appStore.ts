@@ -22,14 +22,16 @@ import { createLoadingHolds, type LoadingHolds } from "../playback/loadingHolds"
 import type { components } from "../types/openapi.generated";
 import type { DeviceStore } from "./deviceStore";
 
-/** The Settings tab's Advance after, the photo duration, in the per-device store. */
+/** The Settings tab's Advance after, the timer both autoplay modes use, in the per-device store. */
 const ADVANCE_AFTER_KEY = "playback.advanceAfter";
+const AUTOPLAY_MODE_KEY = "playback.autoplayMode";
+const LOOP_STOPS_AUTOPLAY_KEY = "playback.loopStopsAutoplay";
 const LOOP_KEY = "player.loop";
 const AUTOPLAY_KEY = "player.autoplay";
 const RANDOMIZATION_MODE_KEY = "rr_randomizationMode";
-const DEFAULT_PHOTO_DURATION_SECONDS = 10;
-export const MIN_PHOTO_DURATION_SECONDS = 1;
-export const MAX_PHOTO_DURATION_SECONDS = 300;
+const DEFAULT_ADVANCE_AFTER_SECONDS = 10;
+export const MIN_ADVANCE_AFTER_SECONDS = 1;
+export const MAX_ADVANCE_AFTER_SECONDS = 3600;
 const DEFAULT_RANDOMIZATION_MODE = "SmartShuffle";
 const APPLIED_FILTER_KEY = "filter.applied";
 /** A repeated message is relayed to the server log at most once in this window. */
@@ -50,6 +52,12 @@ export const PRESET_MENU_NO_LIBRARY = "Running without a library";
 
 /** The playing item, as the random and play responses describe it. */
 export type PlayingItem = components["schemas"]["RandomResponse"];
+
+/**
+ * How autoplay moves on: Normal advances a photo after Advance after and a video at its end; Timer advances every item
+ * after Advance after, a video that hasn't finished too.
+ */
+export type AutoplayMode = "normal" | "timer";
 
 /** A saved preset as `GET /api/presets` returns it. */
 export type ApiPreset = components["schemas"]["PresetResponse"];
@@ -109,8 +117,10 @@ export type StorageLike = Pick<Storage, "getItem" | "setItem">;
 export interface AppStoreEvents {
   /** A pick in the preset dropdown, which the header held before the Library tab, changed the applied filter. */
   headerFilterChanged: () => void;
-  /** The photo duration, the Settings tab's Advance after, changed. */
-  photoDurationChanged: () => void;
+  /** The Settings tab's Advance after changed. */
+  advanceAfterChanged: () => void;
+  /** The autoplay mode, or Loop stops autoplay, changed. */
+  autoplaySettingsChanged: () => void;
 }
 
 /** State several screens use, and the actions that cross screens. */
@@ -138,8 +148,18 @@ export interface AppStore {
   /** The preset dropdown stays on None until the applied filter changes, even when a saved preset has the default filter. */
   readonly headerExplicitNone: Signal<boolean>;
   readonly randomizationMode: Signal<string>;
-  /** How long a photo shows, the Settings tab's Advance after, kept on this device. Change it with `setPhotoDuration`. */
-  readonly photoDurationSeconds: ReadonlySignal<number>;
+  /**
+   * The Settings tab's Advance after, in seconds, kept on this device: how long a photo shows, and the timer of Timer
+   * mode and of a short video Loop repeats. Change it with `setAdvanceAfter`.
+   */
+  readonly advanceAfterSeconds: ReadonlySignal<number>;
+  /** The Settings tab's Autoplay mode, Normal until set, kept on this device. Change it with `setAutoplayMode`. */
+  readonly autoplayMode: ReadonlySignal<AutoplayMode>;
+  /**
+   * The Settings tab's Loop stops autoplay, on until set, kept on this device: with Autoplay and Loop on, the item
+   * repeats and nothing advances. Change it with `setLoopStopsAutoplay`.
+   */
+  readonly loopStopsAutoplay: ReadonlySignal<boolean>;
   /** The media sources as last loaded, or null before they have. The Library tab's Filters line counts them. */
   readonly sources: Signal<FilterSource[] | null>;
   readonly compatibilityBlocked: Signal<boolean>;
@@ -186,8 +206,10 @@ export interface AppStore {
   /** The value of the preset dropdown's selected entry: a preset id, empty for None, or the starred row. */
   selectedPresetValue(): string;
   setRandomizationMode(mode: string): void;
-  /** Sets the photo duration and keeps it on this device. Anything but a whole number from 1 to 300 seconds is ignored. */
-  setPhotoDuration(seconds: number): void;
+  /** Sets Advance after and keeps it on this device. Anything but a whole number from 1 to 3600 seconds is ignored. */
+  setAdvanceAfter(seconds: number): void;
+  setAutoplayMode(mode: AutoplayMode): void;
+  setLoopStopsAutoplay(on: boolean): void;
   setLoop(on: boolean): void;
   setAutoplay(on: boolean): void;
   /**
@@ -204,15 +226,19 @@ export interface AppStoreOptions {
   identity: ClientIdentity;
   /** Browser `localStorage`, for the per-device randomization mode. */
   storage: StorageLike;
-  /** Remembers the applied filter and its preset, the photo duration, Loop, and Autoplay on this device. */
+  /** Remembers the applied filter and its preset, Advance after, the autoplay settings, Loop, and Autoplay on this device. */
   device: DeviceStore;
   /** Sends one line to the server log. */
   relay: (level: string, message: string) => void;
   now?: () => number;
 }
 
-function isPhotoDuration(value: unknown): value is number {
-  return Number.isInteger(value) && (value as number) >= MIN_PHOTO_DURATION_SECONDS && (value as number) <= MAX_PHOTO_DURATION_SECONDS;
+function isAdvanceAfter(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= MIN_ADVANCE_AFTER_SECONDS && (value as number) <= MAX_ADVANCE_AFTER_SECONDS;
+}
+
+function isAutoplayMode(value: unknown): value is AutoplayMode {
+  return value === "normal" || value === "timer";
 }
 
 function isBoolean(value: unknown): value is boolean {
@@ -240,7 +266,8 @@ export function createAppStore(options: AppStoreOptions): AppStore {
   const now = options.now ?? (() => Date.now());
   const listeners: { [K in keyof AppStoreEvents]: AppStoreEvents[K][] } = {
     headerFilterChanged: [],
-    photoDurationChanged: []
+    advanceAfterChanged: [],
+    autoplaySettingsChanged: []
   };
   let lastRelayedStatus = "";
   let lastRelayedStatusAtMs = 0;
@@ -255,7 +282,9 @@ export function createAppStore(options: AppStoreOptions): AppStore {
   const libraryState = signal("ready");
   const loop = signal(options.device.read(LOOP_KEY, false, isBoolean));
   const autoplay = signal(options.device.read(AUTOPLAY_KEY, false, isBoolean));
-  const photoDurationSeconds = signal(options.device.read(ADVANCE_AFTER_KEY, DEFAULT_PHOTO_DURATION_SECONDS, isPhotoDuration));
+  const advanceAfterSeconds = signal(options.device.read(ADVANCE_AFTER_KEY, DEFAULT_ADVANCE_AFTER_SECONDS, isAdvanceAfter));
+  const autoplayMode = signal(options.device.read<AutoplayMode>(AUTOPLAY_MODE_KEY, "normal", isAutoplayMode));
+  const loopStopsAutoplay = signal(options.device.read(LOOP_STOPS_AUTOPLAY_KEY, true, isBoolean));
   const noLibrary = computed(() => libraryState.value !== "ready");
 
   const store: AppStore = {
@@ -273,7 +302,9 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     activePresetName: signal<string | null>(remembered?.preset ?? null),
     headerExplicitNone: signal(remembered?.holdNone ?? false),
     randomizationMode: signal(readRandomizationMode(options.storage)),
-    photoDurationSeconds,
+    advanceAfterSeconds,
+    autoplayMode,
+    loopStopsAutoplay,
     sources: signal<FilterSource[] | null>(null),
     compatibilityBlocked,
     compatibilityMessage: signal<string | null>(null),
@@ -364,13 +395,25 @@ export function createAppStore(options: AppStoreOptions): AppStore {
       options.storage.setItem(RANDOMIZATION_MODE_KEY, store.randomizationMode.peek());
     },
 
-    setPhotoDuration(seconds) {
-      if (!isPhotoDuration(seconds)) {
+    setAdvanceAfter(seconds) {
+      if (!isAdvanceAfter(seconds)) {
         return;
       }
-      photoDurationSeconds.value = seconds;
+      advanceAfterSeconds.value = seconds;
       options.device.write(ADVANCE_AFTER_KEY, seconds);
-      emit("photoDurationChanged");
+      emit("advanceAfterChanged");
+    },
+
+    setAutoplayMode(mode) {
+      autoplayMode.value = mode;
+      options.device.write(AUTOPLAY_MODE_KEY, mode);
+      emit("autoplaySettingsChanged");
+    },
+
+    setLoopStopsAutoplay(on) {
+      loopStopsAutoplay.value = on;
+      options.device.write(LOOP_STOPS_AUTOPLAY_KEY, on);
+      emit("autoplaySettingsChanged");
     },
 
     setLoop(on) {

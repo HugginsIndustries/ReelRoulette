@@ -6,6 +6,110 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12i2 - WebUI Autoplay Modes
+
+- **Status**: ✅ Complete
+- **Goal**: Autoplay has two modes, Normal and Timer, in place of the desktop's Keep Playing, and a looping photo no longer flickers.
+- **Depends on**: WebUI Settings Panel, whose Advance after setting both modes use, and WebUI Auto-Pause and Photo Scrub Bar, whose photo timer they drive.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- Autoplay gets two modes, replacing the desktop's separate Keep Playing, which plays a random item every N seconds until stopped (Playback → Keep Playing (Timer) and Set Interval):
+  - Normal: photos advance after the timer and videos play to the end, as autoplay does today.
+  - Timer: every item advances after the timer, including a video that has not finished. Pausing a video holds the timer.
+  - In Timer mode with Loop off, a video shorter than the timer advances at its end, as in Normal mode.
+- Both modes use one timer, Advance after, the photo duration in the Settings tab, which this milestone widens from 1–300 to the desktop's 1–3600 seconds, so a Keep Playing interval longer than five minutes still fits.
+- A new setting, Loop stops autoplay, on by default and kept per device, decides what Loop does while Autoplay is on:
+  - On: with Autoplay and Loop on, nothing advances, in either mode. In Normal mode a video repeats whole and a photo stays. In Timer mode a video repeats a stretch of Advance after seconds, or up to its end when that comes first, and a photo stays.
+  - Off: Loop doesn't stop autoplay. A photo advances after the timer, as with Loop off. A video shorter than the timer repeats until the timer has run, then advances: at once in Timer mode, and once the repeat in progress finishes in Normal mode. A longer video advances at the timer in Timer mode and at its end in Normal mode.
+  - With Autoplay off, Loop works as today, in either mode.
+- In Timer mode while Loop holds autoplay, the repeating stretch starts at 0 for a new item, where the video is when the stretch starts to apply, such as when Loop is turned on mid-video, and where a seek by the scrub bar lands, except that a seek landing at the video's end starts it, and the video, Advance after seconds before the end, or at 0 for a shorter video; J, L, and frame steps, which WebUI Keyboard Shortcuts adds, do the same there. The user scrubs as normal, and a seek starts the stretch's timer over there. The stretch shows faintly on the scrub bar, behind its track, and nowhere else.
+- A video's timer starts when the video first plays, so loading doesn't count, and holds while the video is paused, by the user or Auto-Pause. A change that stops it applying, such as switching mode or turning Autoplay off, holds it with its time, and it runs on from there once it applies again. A new item starts it from zero, and changing Advance after changes only its length, as for a photo.
+- A repeat only restarts the photo's timer or the video's position: nothing loads again, shows Loading…, or records another play. Today a looping photo flickers at the end of each loop, because it is restarted by reloading its image, unlike a video, which seeks back.
+- On a photo, the scrub bar shows its timer, and Play and the bar hold and move it, only while autoplay will advance the photo: Autoplay on, and Loop off or Loop stops autoplay off.
+- Turning Loop on or off, or changing Loop stops autoplay, while a photo shows keeps the photo on screen and its time, as the mockup does:
+  - its timer runs on from where it was while Autoplay or Loop stays on, and stops with both off;
+  - a timer that had ended starts over when the photo now repeats;
+  - a timer the user paused runs on once the bar no longer shows it, since Play is disabled then, and one Auto-Pause holds stays held.
+- Turning Autoplay on, or off while Loop is on, starts a photo's timer over from its full time without loading the photo again.
+- The Settings tab's Playback section shows Autoplay mode (Normal, "Photos advance after the timer; videos play to the end.", and Timer, "Every item advances after the timer. Pausing a video holds it.", then the hint "The player's autoplay button turns it on and off."), Advance after, and Loop stops autoplay with the hint "With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances.", in that order. The player's autoplay button still turns autoplay on and off.
+- The autoplay mode and Loop stops autoplay survive a page refresh in the per-device store, as `playback.autoplayMode` and `playback.loopStopsAutoplay`.
+- The store's names for the photo duration become Advance after's (`advanceAfterSeconds`, `setAdvanceAfter`, `advanceAfterChanged`), since it now drives both modes.
+- The Player screen tests that count a play per loop, or per Loop or Autoplay change on a photo, change with it.
+
+#### Traps
+
+- The WebUI's video end handler and photo timer both skip advancing while loop is on.
+- Changing the timer while a photo shows already keeps the time shown and changes only the length, through the photo timer's `setLength` (`photoDurationChanged` in `src/playback/player.ts`), which WebUI Settings Panel added.
+- The photo timer calls `playCurrent`, which clears the photo's source and hides it, then loads it again, records a play, and relays a new start.
+- Turning Loop or Autoplay on while a photo shows goes through the same restart.
+- The video's `loop` is set from Loop alone, in `playCurrent` and `toggleLoop`. With Loop stops autoplay off, it has to follow whether the video is shorter than Advance after, which is known only once its metadata gives its length, and change as Advance after and the settings change (inferred).
+- With `loop` set, a browser starts a video over without firing `pause` or `ended`, so its timer runs across repeats (inferred, from the HTML spec). A release check confirms it on real browsers.
+- Animation frames stop in a hidden tab, and time updates come only about every 250 ms, so Timer mode's repeating stretch has to check the position on both (inferred).
+- The scrub bar is a native range input whose thumb's center runs from half the thumb's width in from each end, so the stretch behind it has to be inset by that much to line up with the thumb; the mockup assumes a 16 px thumb (inferred).
+- The scrub bar is set by the player, not rendered from state, so a re-render never moves it while it is dragged (`seekSlider` in `src/playback/player.ts`). The mockup wraps it in `seek-wrap` with the stretch, `seek-loop`, behind it, and the seek row's other children stay as they were.
+
+#### Acceptance
+
+- In Normal mode, photos advance after the timer and videos play to the end. In Timer mode, every item advances after the timer, including an unfinished video, a paused video holds the timer, and with Loop off a video shorter than the timer advances at its end. Shown by player and Player screen autoplay tests for both modes.
+- With Loop stops autoplay on and Autoplay and Loop on, nothing advances: in Normal mode a video repeats whole and a photo stays, and in Timer mode a video repeats a stretch of Advance after seconds, or up to its end when that comes first, and a photo stays. Shown by a test for each.
+- Timer mode's repeating stretch starts at 0 for a new item, where the video is when Loop is turned on, and where a seek by the bar lands, and shows on the scrub bar while it repeats and not otherwise, in tests for each.
+- With Loop stops autoplay off and Autoplay and Loop on, a photo shows its timer and advances after it, a video shorter than the timer repeats until the timer has run and then advances, at once in Timer mode and once the repeat in progress finishes in Normal mode, and a longer video advances at the timer in Timer mode and at its end in Normal mode. Shown by a test for each.
+- With Autoplay off, Loop repeats a video whole and a photo's timer in either mode, in a test.
+- A repeat records no other play and shows no Loading…: a looping photo keeps its image loaded and shown through each loop, and a repeating video keeps its source, in tests.
+- Turning Loop on or off, or changing Loop stops autoplay, while a photo shows keeps its image shown and its time, in tests for a timer that runs on, one that stops with Autoplay and Loop off, one that had ended, one the user paused, and one Auto-Pause holds.
+- The Settings tab's Playback section shows Autoplay mode, Advance after, and Loop stops autoplay, in that order; Advance after accepts 1 to 3600 seconds and starts from the value stored before this milestone, and Loop stops autoplay starts on. Shown by Settings screen tests.
+- After a page refresh, the autoplay mode and Loop stops autoplay are as they were, in a test.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes, with checks for each case above.
+- `npm run verify` passes, and one quick spot check.
+
+#### Evidence
+
+- `npm run verify` passes, with 71 test files and 1448 tests, up from 1431, and the build output check.
+- `src/test/player.test.ts` covers the modes and Loop stops autoplay:
+  - Timer mode advances a playing video after Advance after, counted from its first `playing`, holds through a pause by the user and by Auto-Pause, and relays `playback=timer-advance`; a new Advance after keeps the time a video's timer has run.
+  - Normal mode plays a video to its end, and with Loop off Timer mode advances a video shorter than Advance after at its end.
+  - With Loop stops autoplay on, a video repeats whole in Normal mode, and a photo stays in either mode, its image never set again, with no new attempt, play, or Loading….
+  - Timer mode's stretch starts at 0, where a seek lands, Advance after seconds before the end, or at 0 for a shorter video, for a seek to the end and for a video that sits at its end as the stretch starts to apply, moving the video there too, and where the video is when Loop turns on, goes back from its end, stops at the video's end and starts over as the video ends, keeping its source and recording nothing, and shows on the stretch element only while it repeats; the browser repeats a stretch that is the whole video.
+  - With Loop stops autoplay off, a photo shows its timer and advances, a short video repeats until Advance after has run, finishing the repeat in progress in Normal mode and advancing at once in Timer mode, and a longer one advances at its end in Normal mode and at Advance after in Timer mode.
+  - With Autoplay off, Loop repeats a video whole and a photo in either mode.
+  - Loop and Loop stops autoplay keep a photo's time; a timer the user paused runs on once the bar hides, one Auto-Pause holds stays held, and an ended timer starts over only when the photo now repeats.
+- `src/test/appStore.test.ts` and `src/test/settings.test.ts` cover Advance after's 1 to 3600 seconds, the autoplay mode, Normal until set, and Loop stops autoplay, on until set, each read back and kept on the device.
+- `src/test/screens/player.test.ts` shows on the page that Loop repeats a photo without setting its image again, counting a play, or showing Loading…, that Timer mode advances a playing video and a pause holds it, that the stretch sits behind the bar in `#seek-wrap` and moves with a seek, that a stretch starting over from the video's end, through its `pause`, `ended`, and `playing`, relays no line while the user's own play after it does, and that the seek row's gap holds with the wrapper.
+- `src/test/screens/settings.test.ts` covers Playback's order, each mode's line and the hints, Timer and Loop stops autoplay applying at once, 3600 accepted and 3601 flagged, both settings surviving a page refresh, and their two storage keys.
+- Existing tests changed with the new behavior:
+  - Tests that counted a new attempt or play per loop, or per Loop or Autoplay change on a photo, now count none, and Loop off keeps a photo's time instead of starting it over.
+  - Loading… no longer shows for Loop or Autoplay on a photo.
+  - The starting markup snapshot gains the scrub bar's wrapper and stretch, Autoplay mode, and Loop stops autoplay.
+  - The Settings tab's test for no Loop, Autoplay, or Mute entry now looks for a checkbox that turns them on or off, since Autoplay mode and Loop stops autoplay name them.
+- Each guarded behavior was broken in turn by editing the code, and its tests failed (measured): a photo's repeat showing it again (5 tests), Loop stops autoplay ignored (3), no Timer mode (5), loading counted on a video's timer (1), a seek not moving the stretch (2), Normal mode cutting a short video's repeat (1), Loop starting a photo's time over (5), a paused photo staying held (1), the stretch starting at 0 when Loop turns on (1), Advance after's old 300-second cap (7), a seek to the end leaving the stretch empty (1), a video at its end starting the stretch there (1), the browser not repeating a stretch that is the whole video (1), and a stretch's repeat from the video's end relaying lines (1).
+- Deviations from the plan:
+  - J, L, and frame steps don't move the stretch yet, since the WebUI has no such keys; WebUI Keyboard Shortcuts' entry now says they do.
+  - A video's timer counts from its first `playing`, where the mockup, which never loads, counts from its start.
+  - A stretch that starts mid-video and ends at the video's end starts over from the video's `ended`, since the browser's own loop would go back to 0, and the `playing` that follows relays no line; the browser repeats a stretch that is the whole video itself.
+- The mockup was approved after two rounds on the desktop and the iPad: Loop stops autoplay, Timer mode's stretch that a seek moves, Normal mode finishing a short video's repeat, and the WebUI Loop Range milestone came from them.
+  - `node docs/mockups/reelroulette/build/check.mjs` passes, with 1110 checks, up from 1038.
+  - Each new mockup behavior was broken in turn, and its checks failed (measured).
+- `check-milestones.ps1` passes.
+- CONTEXT.md, `docs/domain-inventory.md`, and CHANGELOG.md describe the modes, Loop stops autoplay, and Timer mode's stretch.
+- The user's spot check passed every step:
+  - Settings → Playback shows Autoplay mode with each mode's line and its hint, Advance after, and Loop stops autoplay, on.
+  - In Timer mode with Advance after at 5 and Loop off, a long video moves on about 5 seconds after it starts playing, and pausing it holds the timer.
+  - With Advance after at 10 and Loop on, a long video repeats 0:00 to 0:10 with the faint band behind the bar, lined up with the thumb, and dragging the bar moves the band and the repeat there.
+  - With Autoplay off and Loop on, a photo stays on screen without a flicker each time its timer starts over.
+
+#### Release checks
+
+- Manual: On the iPad in Safari and on a desktop browser, with Autoplay and Loop on and Loop stops autoplay off, a video shorter than Advance after repeats and advances once Advance after has passed, and pausing it holds the timer.
+- Manual: On the iPad in Safari and on a desktop browser, in Timer mode with Autoplay and Loop on and Loop stops autoplay on, a video longer than Advance after repeats a stretch of Advance after seconds from its start and from where a seek lands, and the stretch shows faintly on the scrub bar, lined up with the thumb.
+- Manual: On the iPad and a desktop browser, a photo with Loop on stays on screen with no flicker each time its timer starts over.
+
+#### Not included
+
+- Moving the photo duration into the Settings tab as Advance after, which is WebUI Settings Panel.
+- Start and end markers on the scrub bar that set the range Loop repeats, which is WebUI Loop Range.
+
 ### M12i1 - WebUI Ambient Mode
 
 - **Status**: ✅ Complete

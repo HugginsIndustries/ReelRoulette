@@ -1205,6 +1205,8 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: with Loop on, Play and the scrub bar are disabled, and the time shows 0:00 / 0:00 (${$("time-display").textContent})`,
     $("play-btn").disabled && seek.disabled && $("time-display").textContent === "0:00 / 0:00");
   $("loop-btn").click();
+  check(`layout@${width}: turning Loop off shows the photo's timer again with the time it kept (${$("time-display").textContent})`,
+    !$("play-btn").disabled && !seek.disabled && $("time-display").textContent === "0:02 / 0:10");
   $("autoplay-btn").click();
   check(`layout@${width}: turning Autoplay off clears the timer, and Autoplay is remembered`,
     Number(seek.value) === 0 && $("time-display").textContent === "0:00 / 0:00" && $("play-btn").disabled && window.localStorage.getItem("rr-mockup.autoplay") === "false");
@@ -1353,7 +1355,221 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: Keyboard shortcuts starts collapsed, with a chevron`, !$("set-shortcuts").open && !!$("set-shortcuts").querySelector("summary .setting-more-chevron"));
   check(`layout@${width}: Loudness normalization sits in Audio, right under Enhanced audio`,
     sectionOf("set-loudness") === "Audio" && $("set-loudness").closest(".setting").previousElementSibling === $("set-enhanced-audio").closest(".setting"));
-  const diagValues = [...$("settings-body").querySelectorAll(".diag dd")].map((value) => value.textContent);
+
+  {
+    // Autoplay modes and Loop stops autoplay. The check moves the page's clock on, so an item's timer or length passes at
+    // once, and the page's own interval then acts on it.
+    const loopStops = $("set-loop-stops");
+    check(`layout@${width}: Loop stops autoplay sits in Playback after Advance after, on by default, with its hint`,
+      sectionOf("set-loop-stops") === "Playback" && loopStops.closest(".setting").previousElementSibling === $("set-advance").closest(".setting") && loopStops.checked &&
+      $("set-loop-stops-hint").textContent.startsWith("With Autoplay and Loop on, the item repeats and nothing advances."));
+    const realNow = window.performance.now.bind(window.performance);
+    let skipped = 0;
+    window.performance.now = () => realNow() + skipped;
+    const skip = async (seconds) => {
+      skipped += seconds * 1000;
+      await sleep(300);
+    };
+    const setAdvanceAfter = (seconds) => {
+      openTab("settings");
+      advance.focus();
+      input(advance, String(seconds));
+      key(advance, "Enter");
+      advance.blur();
+    };
+    const autoplayMode = (value) => document.querySelector(`input[name="set-autoplay"][value="${value}"]`).click();
+    const setButton = (id, on) => {
+      if ($(id).classList.contains("active") !== on) $(id).click();
+    };
+    const playingNow = () => {
+      const { ids, index } = window.mockup.history();
+      return ids[index];
+    };
+    const begin = (item) => window.mockup.choose(item.id);
+    const position = () => Number($("seek").value);
+    const playableVideos = items.filter((item) => item.type === "video" && playable(item));
+    const shortVideo = playableVideos.reduce((a, b) => (b.duration < a.duration ? b : a));
+    // Advance after is 10 seconds longer than the shortest video, so it is shorter than the timer and the rest are longer.
+    const timer = shortVideo.duration + 10;
+    const longVideo = playableVideos.find((item) => item.duration > 3 * timer + 60);
+    const nextVideo = playableVideos.find((item) => item !== shortVideo && item !== longVideo);
+    const loopPhoto = items.find((item) => item.type === "photo" && playable(item));
+    const autoplayWasOn = $("autoplay-btn").classList.contains("active");
+    const loopWasOn = $("loop-btn").classList.contains("active");
+    setAdvanceAfter(timer);
+    closePanel();
+    setButton("autoplay-btn", true);
+    setButton("loop-btn", true);
+
+    // Loop stops autoplay on: with Autoplay and Loop on, nothing advances, and a repeat records no other play.
+    autoplayMode("normal");
+    begin(longVideo);
+    let plays = longVideo.plays;
+    await skip(longVideo.duration + 1);
+    check(`layout@${width}: in Normal mode, with Autoplay and Loop on, a video repeats whole, without advancing or counting another play (${$("time-display").textContent})`,
+      playingNow() === longVideo.id && position() < 2 && longVideo.plays === plays);
+    begin(loopPhoto);
+    plays = loopPhoto.plays;
+    await skip(timer + 1);
+    check(`layout@${width}: and a photo stays, with Play and the bar disabled, as only its timer starts over (${chip()})`,
+      playingNow() === loopPhoto.id && $("play-btn").disabled && $("seek").disabled && chip().includes("Photo looping") && loopPhoto.plays === plays);
+    autoplayMode("timer");
+    await skip(timer + 1);
+    check(`layout@${width}: a photo stays in Timer mode too`, playingNow() === loopPhoto.id && chip().includes("Photo looping"));
+    // Timer mode's repeating stretch: Advance after seconds from the start of the item, from where a seek lands, or from
+    // where the video is when the stretch starts to apply, up to the video's end when that comes first, shown faintly
+    // on the scrub bar.
+    const stretch = $("seek-loop");
+    const shownStretch = () => (stretch.hidden ? "hidden" : `${stretch.style.getPropertyValue("--loop-from")}–${stretch.style.getPropertyValue("--loop-to")}`);
+    const showsStretch = (from, to, duration) =>
+      !stretch.hidden && Math.abs(Number(stretch.style.getPropertyValue("--loop-from")) - from / duration) < 0.005 &&
+      Math.abs(Number(stretch.style.getPropertyValue("--loop-to")) - to / duration) < 0.005;
+    check(`layout@${width}: the scrub bar sits in a wrapper with the stretch behind it, hidden while no stretch repeats`,
+      $("seek").parentElement === $("seek-wrap") && stretch.parentElement === $("seek-wrap") && stretch.hidden);
+    begin(longVideo);
+    plays = longVideo.plays;
+    check(`layout@${width}: in Timer mode, a video longer than Advance after shows its first Advance after seconds faintly on the bar (${shownStretch()})`,
+      showsStretch(0, timer, longVideo.duration));
+    await skip(timer + 1);
+    check(`layout@${width}: and repeats them, without counting another play (${$("time-display").textContent})`,
+      playingNow() === longVideo.id && position() < 2 && longVideo.plays === plays);
+    const landing = Math.round(longVideo.duration / 2);
+    input($("seek"), landing);
+    check(`layout@${width}: a seek starts the stretch where it lands (${shownStretch()})`, showsStretch(landing, landing + timer, longVideo.duration));
+    await skip(timer + 1);
+    check(`layout@${width}: and the video repeats from there (${$("time-display").textContent})`, playingNow() === longVideo.id && position() >= landing && position() < landing + 2);
+    press("l");
+    check(`layout@${width}: so does a seek by L (${shownStretch()})`, showsStretch(position(), position() + timer, longVideo.duration) && position() >= landing + 5);
+    const nearEnd = longVideo.duration - 5;
+    input($("seek"), nearEnd);
+    check(`layout@${width}: a stretch that would run past the end stops at it (${shownStretch()})`, showsStretch(nearEnd, longVideo.duration, longVideo.duration));
+    await skip(6);
+    check(`layout@${width}: and repeats from where the seek landed (${$("time-display").textContent})`, playingNow() === longVideo.id && position() >= nearEnd && position() < nearEnd + 2);
+    const endStretch = longVideo.duration - timer;
+    input($("seek"), longVideo.duration);
+    check(`layout@${width}: a seek to the end starts the stretch Advance after seconds before it, and the video there (${shownStretch()})`,
+      showsStretch(endStretch, longVideo.duration, longVideo.duration) && position() >= endStretch && position() < endStretch + 1);
+    await skip(timer + 1);
+    check(`layout@${width}: and repeats from there (${$("time-display").textContent})`, playingNow() === longVideo.id && position() >= endStretch && position() < endStretch + 2);
+    setButton("loop-btn", false);
+    check(`layout@${width}: with Loop off, the bar shows no stretch`, stretch.hidden);
+    begin(longVideo);
+    await skip(timer / 2);
+    const turnedOnAt = position();
+    setButton("loop-btn", true);
+    check(`layout@${width}: turning Loop on starts the stretch where the video is (${shownStretch()})`, showsStretch(turnedOnAt, turnedOnAt + timer, longVideo.duration));
+    await skip(timer + 1);
+    check(`layout@${width}: and it repeats from there (${$("time-display").textContent})`, playingNow() === longVideo.id && position() >= turnedOnAt && position() < turnedOnAt + 2);
+    // A video that played to its end with Autoplay and Loop off starts the stretch as a seek to its end does.
+    setButton("loop-btn", false);
+    setButton("autoplay-btn", false);
+    begin(longVideo);
+    input($("seek"), longVideo.duration - 1);
+    await skip(2);
+    const endedChip = chip();
+    setButton("autoplay-btn", true);
+    setButton("loop-btn", true);
+    check(`layout@${width}: turning Autoplay and Loop on at a video's end starts the stretch Advance after seconds before it, and the video there (${endedChip}, ${shownStretch()})`,
+      endedChip.includes("Ended") && showsStretch(endStretch, longVideo.duration, longVideo.duration) && position() >= endStretch && position() < endStretch + 1);
+    $("play-btn").click();
+    await skip(timer + 1);
+    check(`layout@${width}: and once played, it repeats from there (${$("time-display").textContent})`, playingNow() === longVideo.id && position() >= endStretch && position() < endStretch + 2);
+    begin(shortVideo);
+    check(`layout@${width}: a shorter one's stretch is the whole video (${shownStretch()})`, showsStretch(0, shortVideo.duration, shortVideo.duration));
+    await skip(shortVideo.duration + 1);
+    const shortRepeated = position() < 2;
+    await skip(timer);
+    check(`layout@${width}: and it repeats whole, without advancing`, shortRepeated && playingNow() === shortVideo.id);
+    input($("seek"), shortVideo.duration);
+    check(`layout@${width}: a seek to its end starts the stretch at 0, and the video there (${shownStretch()})`,
+      showsStretch(0, shortVideo.duration, shortVideo.duration) && position() < 1);
+    autoplayMode("normal");
+    check(`layout@${width}: in Normal mode, the bar shows no stretch`, stretch.hidden);
+    autoplayMode("timer");
+
+    // Loop stops autoplay off: autoplay goes on with Loop on.
+    change(loopStops, false);
+    check(`layout@${width}: Loop stops autoplay is kept on this device`, window.localStorage.getItem("rr-mockup.loopStopsAutoplay") === "false");
+    autoplayMode("normal");
+    begin(loopPhoto);
+    check(`layout@${width}: with it off, a photo with Loop on shows its timer on the bar, and Play works (${chip()})`,
+      !$("play-btn").disabled && !$("seek").disabled && chip().includes("Photo timer"));
+    queue.push(nextVideo.id);
+    await skip(timer + 1);
+    check(`layout@${width}: and advances after Advance after`, playingNow() === nextVideo.id);
+    begin(shortVideo);
+    plays = shortVideo.plays;
+    await skip(shortVideo.duration + 1);
+    const normalShortRepeated = playingNow() === shortVideo.id && position() < 2;
+    await skip(10);
+    const finishesRepeat = playingNow() === shortVideo.id;
+    queue.push(nextVideo.id);
+    await skip(shortVideo.duration);
+    check(`layout@${width}: in Normal mode, a video shorter than Advance after repeats until it has run, finishes the repeat in progress, then advances`,
+      normalShortRepeated && finishesRepeat && playingNow() === nextVideo.id && shortVideo.plays === plays);
+    begin(longVideo);
+    await skip(timer + 1);
+    const pastTimer = playingNow() === longVideo.id;
+    queue.push(nextVideo.id);
+    await skip(longVideo.duration);
+    check(`layout@${width}: and a longer one plays on past it, then advances at its end`, pastTimer && playingNow() === nextVideo.id);
+    autoplayMode("timer");
+    begin(longVideo);
+    queue.push(nextVideo.id);
+    await skip(timer + 1);
+    check(`layout@${width}: in Timer mode, a video longer than Advance after advances at it`, playingNow() === nextVideo.id);
+    begin(shortVideo);
+    await skip(shortVideo.duration + 1);
+    const timerShortRepeated = playingNow() === shortVideo.id && position() < 2;
+    queue.push(nextVideo.id);
+    await skip(10);
+    check(`layout@${width}: and a shorter one repeats until it has run, then advances`, timerShortRepeated && playingNow() === nextVideo.id);
+
+    // Timer mode with Loop off: every item advances after the timer, and pausing a video holds it.
+    setButton("loop-btn", false);
+    begin(longVideo);
+    await skip(timer / 2);
+    $("play-btn").click();
+    await skip(timer * 2);
+    const heldWhilePaused = playingNow() === longVideo.id;
+    $("play-btn").click();
+    queue.push(nextVideo.id);
+    await skip(timer / 2 + 1);
+    check(`layout@${width}: with Loop off, Timer mode advances an unfinished video after Advance after, and pausing it holds the timer`,
+      heldWhilePaused && playingNow() === nextVideo.id);
+    begin(shortVideo);
+    queue.push(nextVideo.id);
+    await skip(shortVideo.duration + 1);
+    check(`layout@${width}: and a video shorter than Advance after advances at its end`, playingNow() === nextVideo.id);
+
+    // With Autoplay off, Loop works as before in either mode: a video repeats whole.
+    setButton("autoplay-btn", false);
+    setButton("loop-btn", true);
+    begin(longVideo);
+    await skip(timer + 1);
+    const pastFirstSeconds = position() > timer;
+    await skip(longVideo.duration);
+    check(`layout@${width}: with Autoplay off, Loop repeats a video whole in Timer mode too`, pastFirstSeconds && playingNow() === longVideo.id && position() < 2);
+
+    // A photo the user paused runs on once Loop hides its bar, since Play can't resume it then, and keeps its time.
+    change(loopStops, true);
+    setButton("loop-btn", false);
+    setButton("autoplay-btn", true);
+    begin(loopPhoto);
+    await skip(3);
+    $("play-btn").click();
+    const pausedAt = $("time-display").textContent;
+    $("loop-btn").click();
+    check(`layout@${width}: turning Loop on runs a photo timer the user paused, as Play is disabled then (${chip()})`, chip().includes("Photo looping") && $("play-btn").disabled);
+    $("loop-btn").click();
+    check(`layout@${width}: and turning it off shows the timer again with its time kept (${pausedAt}, ${$("time-display").textContent})`,
+      pausedAt.startsWith("0:03 /") && $("time-display").textContent === pausedAt && chip().includes("Photo timer"));
+    autoplayMode("normal");
+    setButton("autoplay-btn", autoplayWasOn);
+    setButton("loop-btn", loopWasOn);
+    setAdvanceAfter(8);
+  }
+  const diagValues =[...$("settings-body").querySelectorAll(".diag dd")].map((value) => value.textContent);
   check(`layout@${width}: Diagnostics show the ids in full, and the client type and device name as the WebUI builds them`,
     /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(diagValues[0]) && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(diagValues[1]) &&
     $("diag-type").textContent === "web" && $("diag-device").textContent.startsWith("Web Browser (") && $("diag-device").textContent.endsWith(")"));
@@ -1680,16 +1896,17 @@ for (const width of [1280, 390]) {
   document.querySelector('input[name="set-theme"][value="dark"]').click();
   check(`layout@${width}: and in the dark theme`, window.getComputedStyle($("time-display")).color === "#ffffff");
   // The scrub bar, the time, and the volume slider sit the row's 12 px gap apart: neither slider keeps a browser's
-  // margin, 2 px, the volume's wrapper adds none, and the time takes its own width, with its digits all one width.
+  // margin, 2 px, neither slider's wrapper adds any, and the time takes its own width, with its digits all one width.
   const styleOf = (el) => window.getComputedStyle(el);
   const unset = (value) => value === "" || value === "0px";
   const seekRow = document.querySelector(".overlay-seek-row");
   const timeStyle = styleOf($("time-display"));
-  const wrapStyle = styleOf($("volume-wrap"));
+  const wrapStyles = [styleOf($("seek-wrap")), styleOf($("volume-wrap"))];
   const sliderMargins = [$("seek"), $("volume")].map((el) => `${styleOf(el).marginLeft} ${styleOf(el).marginRight}`);
   check(`layout@${width}: the scrub bar, the time, and the volume slider sit the row's 12 px gap apart (gap ${styleOf(seekRow).gap}, slider margins ${sliderMargins.join(", ")}, time ${timeStyle.minWidth || "no minimum"} ${timeStyle.textAlign || "start"} ${timeStyle.fontVariantNumeric})`,
-    [...seekRow.children].map((el) => el.id).join() === "seek,time-display,volume-wrap" && styleOf(seekRow).gap === "12px" &&
-    sliderMargins.every((margins) => margins === "0px 0px") && [wrapStyle.marginLeft, wrapStyle.marginRight, wrapStyle.paddingLeft, wrapStyle.paddingRight].every(unset) &&
+    [...seekRow.children].map((el) => el.id).join() === "seek-wrap,time-display,volume-wrap" && styleOf(seekRow).gap === "12px" &&
+    sliderMargins.every((margins) => margins === "0px 0px") &&
+    wrapStyles.every((wrapStyle) => [wrapStyle.marginLeft, wrapStyle.marginRight, wrapStyle.paddingLeft, wrapStyle.paddingRight].every(unset)) &&
     timeStyle.minWidth === "" && timeStyle.textAlign === "" && timeStyle.fontVariantNumeric === "tabular-nums");
   // No rule, a phone's container query among them, gives the volume slider another width.
   const innerRules = (rules) => [...rules].flatMap((rule) => [rule, ...(rule.cssRules ? innerRules(rule.cssRules) : [])]);

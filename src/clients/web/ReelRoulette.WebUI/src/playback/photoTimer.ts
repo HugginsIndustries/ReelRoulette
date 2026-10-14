@@ -1,6 +1,6 @@
 /**
- * A photo's timer, which moves on after the photo duration. It holds and resumes with the time it had left, and moves
- * to a position. It measures the time by a clock, so a browser that delays timers in a hidden tab doesn't stretch it.
+ * The timer behind a photo's and a video's Advance after. It holds and resumes with the time it had left, and moves to
+ * a position. It measures the time by a clock, so a browser that delays timers in a hidden tab doesn't stretch it.
  */
 export interface PhotoTimer {
   /** A timer is set, running or held. */

@@ -51,36 +51,69 @@ function setup(options: Partial<AppStoreOptions> & { saved?: Record<string, stri
 }
 
 describe("createAppStore", () => {
-  it("starts with the saved photo duration and randomization mode, and the defaults when they are missing or invalid", () => {
-    const saved = setup({ saved: { "rr_device.playback.advanceAfter": "42", rr_randomizationMode: "SpreadMode" } }).store;
-    expect(saved.photoDurationSeconds.value).toBe(42);
+  it("starts with the saved Advance after, autoplay settings, and randomization mode, and the defaults when they are missing or invalid", () => {
+    const saved = setup({
+      saved: {
+        "rr_device.playback.advanceAfter": "3600",
+        "rr_device.playback.autoplayMode": '"timer"',
+        "rr_device.playback.loopStopsAutoplay": "false",
+        rr_randomizationMode: "SpreadMode"
+      }
+    }).store;
+    expect(saved.advanceAfterSeconds.value).toBe(3600);
+    expect(saved.autoplayMode.value).toBe("timer");
+    expect(saved.loopStopsAutoplay.value).toBe(false);
     expect(saved.randomizationMode.value).toBe("SpreadMode");
 
-    const invalid = setup({ saved: { "rr_device.playback.advanceAfter": "301", rr_randomizationMode: "Shuffle" } }).store;
-    expect(invalid.photoDurationSeconds.value).toBe(10);
+    const invalid = setup({
+      saved: {
+        "rr_device.playback.advanceAfter": "3601",
+        "rr_device.playback.autoplayMode": '"keep"',
+        "rr_device.playback.loopStopsAutoplay": '"no"',
+        rr_randomizationMode: "Shuffle"
+      }
+    }).store;
+    expect(invalid.advanceAfterSeconds.value).toBe(10);
+    expect(invalid.autoplayMode.value).toBe("normal");
+    expect(invalid.loopStopsAutoplay.value).toBe(true);
     expect(invalid.randomizationMode.value).toBe("SmartShuffle");
 
     const empty = setup().store;
-    expect(empty.photoDurationSeconds.value).toBe(10);
+    expect(empty.advanceAfterSeconds.value).toBe(10);
+    expect(empty.autoplayMode.value).toBe("normal");
+    expect(empty.loopStopsAutoplay.value).toBe(true);
     expect(empty.presetMenu.value).toEqual({ entries: [{ label: "Loading...", value: "" }], selectedValue: "", message: true });
   });
 
-  it("saves a photo duration from 1 to 300 seconds on this device, tells listeners, and ignores anything else", () => {
+  it("saves Advance after from 1 to 3600 seconds on this device, tells listeners, and ignores anything else", () => {
     const { store, storage } = setup();
     const changed = vi.fn();
-    store.on("photoDurationChanged", changed);
+    store.on("advanceAfterChanged", changed);
 
-    store.setPhotoDuration(1);
-    store.setPhotoDuration(300);
-    expect(store.photoDurationSeconds.value).toBe(300);
-    expect(storage.values.get("rr_device.playback.advanceAfter")).toBe("300");
+    store.setAdvanceAfter(1);
+    store.setAdvanceAfter(3600);
+    expect(store.advanceAfterSeconds.value).toBe(3600);
+    expect(storage.values.get("rr_device.playback.advanceAfter")).toBe("3600");
     expect(changed).toHaveBeenCalledTimes(2);
 
-    for (const invalid of [0, 301, 1.5, Number.NaN]) {
-      store.setPhotoDuration(invalid);
+    for (const invalid of [0, 3601, 1.5, Number.NaN]) {
+      store.setAdvanceAfter(invalid);
     }
-    expect(store.photoDurationSeconds.value).toBe(300);
-    expect(storage.values.get("rr_device.playback.advanceAfter")).toBe("300");
+    expect(store.advanceAfterSeconds.value).toBe(3600);
+    expect(storage.values.get("rr_device.playback.advanceAfter")).toBe("3600");
+    expect(changed).toHaveBeenCalledTimes(2);
+  });
+
+  it("saves the autoplay mode and Loop stops autoplay on this device, and tells listeners", () => {
+    const { store, storage } = setup();
+    const changed = vi.fn();
+    store.on("autoplaySettingsChanged", changed);
+
+    store.setAutoplayMode("timer");
+    store.setLoopStopsAutoplay(false);
+    expect([store.autoplayMode.value, store.loopStopsAutoplay.value]).toEqual(["timer", false]);
+    expect(storage.values.get("rr_device.playback.autoplayMode")).toBe('"timer"');
+    expect(storage.values.get("rr_device.playback.loopStopsAutoplay")).toBe("false");
     expect(changed).toHaveBeenCalledTimes(2);
   });
 

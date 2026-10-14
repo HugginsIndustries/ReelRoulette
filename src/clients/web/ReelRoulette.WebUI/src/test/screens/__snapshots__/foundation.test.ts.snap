@@ -67,7 +67,9 @@ exports[`page structure > keeps the starting markup 1`] = `
               <span class="material-symbol-icon">
                 "fullscreen"
           <div class="overlay-seek-row" id="seek-row">
-            <input aria-label="Seek" disabled="" id="seek-slider" max="100" min="0" step="any" type="range" value="0">
+            <span class="seek-wrap" id="seek-wrap">
+              <span aria-hidden="true" class="seek-loop" hidden="" id="seek-loop">
+              <input aria-label="Seek" disabled="" id="seek-slider" max="100" min="0" step="any" type="range" value="0">
             <span id="time-display">
               "0:00 / 0:00"
       <div aria-live="polite" class="toasts" data-pos="bottom-center" id="toasts" role="status">
@@ -220,6 +222,26 @@ exports[`page structure > keeps the starting markup 1`] = `
               <h3 id="settings-playback-heading">
                 "Playback"
               <div class="setting">
+                <span class="setting-label" id="settings-autoplay-mode-label">
+                  "Autoplay mode"
+                <div aria-describedby="settings-autoplay-mode-hint" aria-labelledby="settings-autoplay-mode-label" class="choice-stack" role="radiogroup">
+                  <label>
+                    <input aria-describedby="settings-autoplay-mode-normal-description" aria-labelledby="settings-autoplay-mode-normal" name="settings-autoplay-mode" type="radio" value="normal">
+                    <span>
+                      <span id="settings-autoplay-mode-normal">
+                        "Normal"
+                      <small id="settings-autoplay-mode-normal-description">
+                        "Photos advance after the timer; videos play to the end."
+                  <label>
+                    <input aria-describedby="settings-autoplay-mode-timer-description" aria-labelledby="settings-autoplay-mode-timer" name="settings-autoplay-mode" type="radio" value="timer">
+                    <span>
+                      <span id="settings-autoplay-mode-timer">
+                        "Timer"
+                      <small id="settings-autoplay-mode-timer-description">
+                        "Every item advances after the timer. Pausing a video holds it."
+                <p class="setting-hint" id="settings-autoplay-mode-hint">
+                  "The player's autoplay button turns it on and off."
+              <div class="setting">
                 <label class="setting-label" for="settings-advance-after">
                   "Advance after"
                 <div class="filter-row">
@@ -228,6 +250,13 @@ exports[`page structure > keeps the starting markup 1`] = `
                     <span aria-live="polite" class="visually-hidden">
                   <span>
                     "seconds"
+              <div class="setting">
+                <div class="choice-row">
+                  <label>
+                    <input aria-describedby="settings-loop-stops-autoplay-hint" id="settings-loop-stops-autoplay" type="checkbox">
+                    "Loop stops autoplay"
+                <p class="setting-hint" id="settings-loop-stops-autoplay-hint">
+                  "With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances."
             <section aria-labelledby="settings-appearance-heading" class="settings-section">
               <h3 id="settings-appearance-heading">
                 "Appearance"

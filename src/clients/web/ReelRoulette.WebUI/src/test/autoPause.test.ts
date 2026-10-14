@@ -91,7 +91,7 @@ function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
     relay: () => {}
   });
   // Photos show for 15 seconds, the time these tests' photo timers assume.
-  store.setPhotoDuration(15);
+  store.setAdvanceAfter(15);
   const api = createAppApi("http://server", { onUnauthorized: () => {}, fetch: fetchImpl });
   const connection = { on() {} } as unknown as ServerConnection;
   const player = createPlayer({
@@ -107,7 +107,13 @@ function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
   });
   const video = fakeVideo();
   const photo = { src: "", style: { display: "none" } };
-  player.attach({ video, photo, emptyState: { style: { display: "" } }, seekSlider: { value: "0", max: "100" } } satisfies PlayerElements);
+  player.attach({
+    video,
+    photo,
+    emptyState: { style: { display: "" } },
+    seekSlider: { value: "0", max: "100" },
+    seekStretch: { hidden: true, style: { setProperty() {} } }
+  } satisfies PlayerElements);
 
   const viewport = fakeViewport(size);
   const panel = createPanelHost({ device: createDeviceStore(null), viewport });
@@ -246,8 +252,9 @@ describe("Auto-Pause with the panel and the player", () => {
   it("holds a photo's timer as the overlay opens, and resumes it with the time it had left, without loading or recording it again", async () => {
     vi.useFakeTimers();
     const page = setup("responsive", PHONE, PHOTO);
+    // Autoplay starts the photo's timer without showing it again.
     page.player.toggleAutoplay();
-    expect(page.store.playAttemptId.value).toBe(2);
+    expect(page.store.playAttemptId.value).toBe(1);
     await vi.advanceTimersByTimeAsync(10_000);
 
     await page.panel.showTab("library");
@@ -259,12 +266,12 @@ describe("Auto-Pause with the panel and the player", () => {
     await page.panel.close();
     expect(page.playing()).toBe(true);
     expect(page.photo.src).toBe("still loaded");
-    expect(page.store.playAttemptId.value).toBe(2);
+    expect(page.store.playAttemptId.value).toBe(1);
     await vi.advanceTimersByTimeAsync(4_999);
     expect(page.requests("/api/random")).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(1);
     expect(page.requests("/api/random")).toHaveLength(1);
-    expect(page.requests("/api/record-playback")).toHaveLength(2);
+    expect(page.requests("/api/record-playback")).toHaveLength(1);
   });
 
   it("ends Loading… for a video still loading as the overlay pauses it", async () => {

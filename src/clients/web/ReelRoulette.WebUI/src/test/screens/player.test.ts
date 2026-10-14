@@ -733,23 +733,41 @@ describe("loop and autoplay", () => {
     expect(photo().style.display).toBe("none");
   });
 
-  it("Loop shows a photo again after the photo duration, and turning it off stops the timer", async () => {
+  it("Loop repeats a photo after Advance after, keeping its image shown without loading it or counting a play again, and turning it off stops the timer", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const server = serverPicking(PHOTO_ITEM);
     await mountAndPlay(server);
+    fireEvent.load(photo());
+    await flush();
     expect(playRecords(server)).toBe(1);
 
+    // The image is never cleared or set again, so it doesn't flicker.
+    const sources: string[] = [];
+    const image = photo();
+    const setSource = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src")!.set!;
+    Object.defineProperty(image, "src", {
+      configurable: true,
+      get: () => image.getAttribute("src") ?? "",
+      set(value: string) {
+        sources.push(value);
+        setSource.call(image, value);
+      }
+    });
     await click(button("Loop"));
-    expect(playRecords(server)).toBe(2);
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(playRecords(server)).toBe(3);
+    for (let loop = 0; loop < 3; loop++) {
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect([image.getAttribute("src"), image.style.display]).toEqual([PHOTO_URL, "block"]);
+    }
+    expect(sources).toEqual([]);
+    expect(playRecords(server)).toBe(1);
     expect(randomPicks(server)).toBe(1);
-    expect(photo().src).toBe(PHOTO_URL);
+    expect(indicatorState()).toBeNull();
 
     await click(button("Loop"));
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(playRecords(server)).toBe(3);
+    expect(playRecords(server)).toBe(1);
     expect(randomPicks(server)).toBe(1);
+    delete (image as { src?: string }).src;
   });
 
   it("turning Autoplay off stops a photo's timer", async () => {
@@ -763,6 +781,95 @@ describe("loop and autoplay", () => {
     await click(button("Autoplay"));
     await vi.advanceTimersByTimeAsync(60_000);
     expect(randomPicks(server)).toBe(1);
+  });
+
+  it("in Timer mode, advances a playing video after Advance after, and a pause holds the timer", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    localStorage.setItem("rr_device.playback.autoplayMode", '"timer"');
+    localStorage.setItem("rr_device.playback.advanceAfter", "4");
+    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO);
+    await mount(server);
+    await click(button("Autoplay"));
+    await click(emptyState());
+    Object.defineProperty(video(), "duration", { configurable: true, value: 65 });
+    fireEvent.loadedMetadata(video());
+    fireEvent.playing(video());
+    await flush();
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    await click(button("Play/Pause"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(randomPicks(server)).toBe(1);
+    await click(button("Play/Pause"));
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(randomPicks(server)).toBe(2);
+    expect(video().src).toBe(SECOND_VIDEO_URL);
+  });
+
+  it("in Timer mode, with Loop holding autoplay, repeats a stretch that starts where a seek lands, shown faintly behind the scrub bar", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    localStorage.setItem("rr_device.playback.autoplayMode", '"timer"');
+    localStorage.setItem("rr_device.playback.advanceAfter", "10");
+    const server = serverPicking(VIDEO_ITEM);
+    await mount(server);
+    await click(button("Autoplay"));
+    await click(button("Loop"));
+    await click(emptyState());
+    Object.defineProperty(video(), "duration", { configurable: true, value: 120 });
+    fireEvent.loadedMetadata(video());
+    fireEvent.playing(video());
+    await flush();
+    const stretch = document.getElementById("seek-loop") as HTMLElement;
+    expect(stretch.parentElement).toBe(seekSlider().parentElement);
+    expect([stretch.hidden, stretch.style.getPropertyValue("--loop-from")]).toEqual([false, "0"]);
+
+    fireEvent.input(seekSlider(), { target: { value: "60" } });
+    await flush();
+    expect([stretch.style.getPropertyValue("--loop-from"), stretch.style.getPropertyValue("--loop-to")]).toEqual(["0.5", String(70 / 120)]);
+    video().currentTime = 70.2;
+    fireEvent.timeUpdate(video());
+    await flush();
+    expect(video().currentTime).toBe(60);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(randomPicks(server)).toBe(1);
+    expect(playRecords(server)).toBe(1);
+
+    await click(button("Loop"));
+    expect(stretch.hidden).toBe(true);
+  });
+
+  it("in Timer mode, starts a stretch that ends at the video's end over without relaying a line, and relays the user's own play after it", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    localStorage.setItem("rr_device.playback.autoplayMode", '"timer"');
+    localStorage.setItem("rr_device.playback.advanceAfter", "10");
+    const server = serverPicking(VIDEO_ITEM);
+    await mount(server);
+    await click(button("Autoplay"));
+    await click(button("Loop"));
+    await click(emptyState());
+    Object.defineProperty(video(), "duration", { configurable: true, value: 120 });
+    fireEvent.loadedMetadata(video());
+    fireEvent.playing(video());
+    fireEvent.input(seekSlider(), { target: { value: "115" } });
+    await flush();
+    expect(video().loop).toBe(false);
+    const lines = server.logLines().length;
+
+    // The video reaches its end: the browser pauses it and fires ended, and the stretch plays again, firing play and
+    // playing.
+    for (let repeat = 0; repeat < 3; repeat++) {
+      video().currentTime = 120;
+      video().pause();
+      fireEvent.ended(video());
+      await flush();
+      expect([video().currentTime, video().paused]).toEqual([115, false]);
+    }
+    expect(server.logLines().slice(lines)).toEqual([]);
+
+    await click(button("Play/Pause"));
+    await click(button("Play/Pause"));
+    expect(server.logLines().slice(lines).filter((line) => line.startsWith("playback=video-onplaying "))).toHaveLength(1);
+    expect(playRecords(server)).toBe(1);
   });
 
   it("ignores the hidden video's events while a photo shows", async () => {
@@ -1056,7 +1163,7 @@ describe("scrub bar on a photo", () => {
 
     expect(seekRow()).toBe(row);
     expect(row.style.display).toBe("");
-    expect(photoTimerBar().parentElement).toBe(row);
+    expect(photoTimerBar().parentElement!.parentElement).toBe(row);
     expect(photoTimerBar().disabled).toBe(false);
     expect([photoTimerBar().max, photoTimerBar().value, timeDisplay()]).toEqual(["10", "0", "0:00 / 0:10"]);
     expect(iconOf("Play/Pause")).toBe("pause");
@@ -1094,7 +1201,7 @@ describe("scrub bar on a photo", () => {
     expect(playRecords(server)).toBe(2);
   });
 
-  it("with Autoplay off or Loop on, disables Play and the bar with the time at 0:00 / 0:00; Autoplay starts the full time, and off clears it", async () => {
+  it("with Autoplay off or Loop on, disables Play and the bar with the time at 0:00 / 0:00; Loop keeps the time, Autoplay starts the full time, and off clears it", async () => {
     useFakeClock();
     const server = serverPicking(PHOTO_ITEM, VIDEO_ITEM);
     await mountAndPlay(server);
@@ -1113,7 +1220,7 @@ describe("scrub bar on a photo", () => {
     expect(disabled()).toEqual([true, true, "0:00 / 0:00"]);
     expect(photoTimerBar().value).toBe("0");
     await click(button("Loop"));
-    expect(disabled()).toEqual([false, false, "0:00 / 0:10"]);
+    expect(disabled()).toEqual([false, false, "0:05 / 0:10"]);
 
     await click(button("Autoplay"));
     expect(disabled()).toEqual([true, true, "0:00 / 0:00"]);
@@ -1303,12 +1410,15 @@ describe("seek row", () => {
     const server = serverPicking(VIDEO_ITEM);
     await mountAndPlay(server);
     const row = currentStyle(seekRow());
+    const wrap = currentStyle(document.getElementById("seek-wrap")!);
     const bar = currentStyle(seekSlider());
     const time = currentStyle(document.getElementById("time-display")!);
 
+    expect([...seekRow().children].map((child) => child.id)).toEqual(["seek-wrap", "time-display"]);
     expect([row.display, row.gap]).toEqual(["flex", "12px"]);
-    // A range input's own margin, 2 px in browsers, would widen the gap.
+    // A range input's own margin, 2 px in browsers, would widen the gap, and so would its wrapper's.
     expect([bar.marginLeft, bar.marginRight]).toEqual(["0px", "0px"]);
+    expect([wrap.marginLeft, wrap.marginRight, wrap.paddingLeft, wrap.paddingRight].every((value) => value === "" || value === "0px")).toBe(true);
     // The time takes its own width, with no minimum or alignment adding space beside it.
     expect([time.minWidth, time.textAlign, time.fontVariantNumeric]).toEqual(["", "", "tabular-nums"]);
   });

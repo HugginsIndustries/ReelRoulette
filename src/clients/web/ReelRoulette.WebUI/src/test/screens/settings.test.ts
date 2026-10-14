@@ -181,11 +181,71 @@ describe("the Settings tab", () => {
     expect(within(settingsPage()).queryAllByRole("button", { hidden: true }).map((button) => button.textContent)).toEqual(["Reset to defaults"]);
   });
 
-  it("has no loop, autoplay, or mute entry, and no key badge in a label", async () => {
+  it("has no entry that turns Loop, Autoplay, or Mute on or off, which the player's buttons do, and no key badge in a label", async () => {
     await mount();
     await openSettings();
-    expect(within(settingsPage()).queryByText(/loop|autoplay|mute/i)).toBeNull();
+    expect(within(settingsPage()).queryByRole("checkbox", { name: /^(loop|autoplay|mute)$/i, hidden: true })).toBeNull();
     expect(settingsPage().querySelectorAll("kbd")).toHaveLength(0);
+  });
+});
+
+describe("Autoplay mode and Loop stops autoplay", () => {
+  it("sit in Playback around Advance after: Autoplay mode first, Normal until chosen, each mode with its line and the group with its hint, and Loop stops autoplay last, on until turned off, with its hint", async () => {
+    await mount();
+    await openSettings();
+    const playback = advanceAfter().closest("section")!;
+    const settings = Array.from(playback.querySelectorAll(":scope > .setting"));
+    expect(settings).toHaveLength(3);
+    expect(within(settings[0] as HTMLElement).getByRole("radiogroup", { name: "Autoplay mode", hidden: true })).toBeTruthy();
+    expect(settings[1]!.contains(advanceAfter())).toBe(true);
+    expect(settings[2]!.contains(checkbox("Loop stops autoplay"))).toBe(true);
+
+    expect([radio("Normal").checked, radio("Timer").checked]).toEqual([true, false]);
+    const description = (input: HTMLElement) => document.getElementById(input.getAttribute("aria-describedby")!)!.textContent;
+    expect(description(radio("Normal"))).toBe("Photos advance after the timer; videos play to the end.");
+    expect(description(radio("Timer"))).toBe("Every item advances after the timer. Pausing a video holds it.");
+    expect(description(within(settings[0] as HTMLElement).getByRole("radiogroup", { hidden: true }))).toBe("The player's autoplay button turns it on and off.");
+    expect(checkbox("Loop stops autoplay").checked).toBe(true);
+    expect(description(checkbox("Loop stops autoplay"))).toBe(
+      "With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances."
+    );
+  });
+
+  it("apply at once: Timer advances a playing video after Advance after, and with Loop stops autoplay off a photo with Loop on advances", async () => {
+    fakeTimers();
+    const server = new FakeServer();
+    server.on("POST", "/api/random", () => json(VIDEO_ITEM));
+    mountPage({ server });
+    await flush();
+    fireEvent.click(playerButton("Autoplay"));
+    fireEvent.click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
+    await flush();
+    Object.defineProperty(video(), "duration", { configurable: true, value: 65 });
+    fireEvent.loadedMetadata(video());
+    fireEvent.playing(video());
+    await flush();
+
+    fireEvent.click(tab("Settings"));
+    fireEvent.click(radio("Timer"));
+    await flush();
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(server.requests("POST", "/api/random")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(server.requests("POST", "/api/random")).toHaveLength(2);
+
+    server.on("POST", "/api/random", () => json(PHOTO_ITEM));
+    fireEvent.click(radio("Normal"));
+    await flush();
+    fireEvent.click(playerButton("Next"));
+    await flush();
+    fireEvent.click(playerButton("Loop"));
+    await flush();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(server.requests("POST", "/api/random")).toHaveLength(3);
+    fireEvent.click(checkbox("Loop stops autoplay"));
+    await flush();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(server.requests("POST", "/api/random")).toHaveLength(4);
   });
 });
 
@@ -202,17 +262,17 @@ describe("Advance after", () => {
     expect(advanceAfter().value).toBe("42");
   });
 
-  it("flags a value that isn't a whole number from 1 to 300 while the field has focus, and keeps none of them", async () => {
+  it("flags a value that isn't a whole number from 1 to 3600 while the field has focus, and keeps none of them", async () => {
     await mount();
     await openSettings();
     fakeTimers();
     const input = advanceAfter();
     input.focus();
 
-    for (const text of ["0", "301", "abc", "12abc", "1.5", ""]) {
+    for (const text of ["0", "3601", "abc", "12abc", "1.5", ""]) {
       type(input, text);
       await vi.advanceTimersByTimeAsync(1_000);
-      expect([text, problemOf(input)]).toEqual([text, "Use a whole number from 1 to 300 seconds."]);
+      expect([text, problemOf(input)]).toEqual([text, "Use a whole number from 1 to 3600 seconds."]);
       expect([text, input.closest(".vfield")!.querySelector(".vfield-icon")]).not.toEqual([text, null]);
       fireEvent.keyDown(input, { key: "Enter" });
       await flush();
@@ -262,6 +322,13 @@ describe("Advance after", () => {
     expect(input.value).toBe("7");
     await vi.advanceTimersByTimeAsync(1_000);
     expect(kept()).toBe("7");
+
+    // Up to an hour.
+    input.focus();
+    type(input, "3600");
+    fireEvent.keyDown(input, { key: "Enter" });
+    await flush();
+    expect([kept(), problemOf(input)]).toEqual(["3600", null]);
   });
 
   it("keeps the value in use when the field is cleared with Backspace and left", async () => {
@@ -277,7 +344,7 @@ describe("Advance after", () => {
     await vi.advanceTimersByTimeAsync(2_000);
     type(input, "");
     await vi.advanceTimersByTimeAsync(2_000);
-    expect(problemOf(input)).toBe("Use a whole number from 1 to 300 seconds.");
+    expect(problemOf(input)).toBe("Use a whole number from 1 to 3600 seconds.");
     expect(kept()).toBe("15");
 
     fireEvent.blur(input);
@@ -295,7 +362,7 @@ describe("Advance after", () => {
       input.focus();
       type(input, text);
       await flush();
-      expect([text, problemOf(input)]).toEqual([text, "Use a whole number from 1 to 300 seconds."]);
+      expect([text, problemOf(input)]).toEqual([text, "Use a whole number from 1 to 3600 seconds."]);
       fireEvent.blur(input);
       await flush();
       expect([text, input.value, problemOf(input)]).toEqual([text, "10", null]);
@@ -1214,11 +1281,13 @@ describe("kept on this device", () => {
     ]);
   });
 
-  it("keeps Advance after, the side, Auto-Pause, and the player's Autoplay, Loop, and Mute after a page refresh", async () => {
+  it("keeps Advance after, the autoplay mode, Loop stops autoplay, the side, Auto-Pause, and the player's Autoplay, Loop, and Mute after a page refresh", async () => {
     const page = await mount();
     await openSettings();
     type(advanceAfter(), "42");
     fireEvent.keyDown(advanceAfter(), { key: "Enter" });
+    await click(radio("Timer"));
+    await click(checkbox("Loop stops autoplay"));
     await click(radio("Left"));
     await click(radio("Never"));
     await click(playerButton("Autoplay"));
@@ -1234,6 +1303,7 @@ describe("kept on this device", () => {
     expect(document.getElementById("fullscreen-stage")!.dataset.side).toBe("left");
     await openSettings();
     expect(advanceAfter().value).toBe("42");
+    expect([radio("Timer").checked, checkbox("Loop stops autoplay").checked]).toEqual([true, false]);
     expect(radio("Left").checked).toBe(true);
     expect(radio("Never").checked).toBe(true);
   });
@@ -1246,6 +1316,8 @@ describe("kept on this device", () => {
 
     type(advanceAfter(), "20");
     fireEvent.keyDown(advanceAfter(), { key: "Enter" });
+    await click(radio("Timer"));
+    await click(checkbox("Loop stops autoplay"));
     await click(radio("Left"));
     await click(radio("Always"));
     await click(radio("Light"));
@@ -1268,6 +1340,8 @@ describe("kept on this device", () => {
       "rr_device.panel.autoPause",
       "rr_device.panel.side",
       "rr_device.playback.advanceAfter",
+      "rr_device.playback.autoplayMode",
+      "rr_device.playback.loopStopsAutoplay",
       "rr_device.player.autoplay",
       "rr_device.player.loop",
       "rr_device.player.muted"

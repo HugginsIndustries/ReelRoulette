@@ -29,10 +29,11 @@ describe("wholeNumberProblem", () => {
 });
 
 describe("advanceAfterProblem", () => {
-  it("takes 1 to 300 seconds", () => {
+  it("takes 1 to 3600 seconds", () => {
     expect(advanceAfterProblem("1")).toBeNull();
-    expect(advanceAfterProblem("300")).toBeNull();
-    expect(advanceAfterProblem("301")).toEqual({ message: "Use a whole number from 1 to 300 seconds." });
+    expect(advanceAfterProblem("3600")).toBeNull();
+    expect(advanceAfterProblem("0")).toEqual({ message: "Use a whole number from 1 to 3600 seconds." });
+    expect(advanceAfterProblem("3601")).toEqual({ message: "Use a whole number from 1 to 3600 seconds." });
   });
 });
 

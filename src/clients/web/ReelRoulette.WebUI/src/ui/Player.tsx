@@ -33,9 +33,9 @@ function stopPropagation(event: Event): void {
 /**
  * The media area: ambient mode's glow, the video and photo, the empty state, and the controls over them. The player
  * sets the media elements' sources and which of them shows itself, and ambient mode whether its glow shows and its
- * settings, so their `style`, the glow's `hidden`, and the seek slider's value are rendered once and never changed here,
- * and the video element is never replaced or moved. The seek row stays in its place before anything plays and on a
- * photo too, so the controls never move.
+ * settings, so their `style`, the glow's `hidden`, the seek slider's value, and the stretch behind it are rendered once
+ * and never changed here, and the video element is never replaced or moved. The seek row stays in its place before
+ * anything plays and on a photo too, so the controls never move.
  */
 export function Player() {
   const { store, player, ambient, fullscreen, notifications } = useApp();
@@ -46,6 +46,7 @@ export function Player() {
   const photo = useRef<HTMLImageElement>(null);
   const emptyState = useRef<HTMLDivElement>(null);
   const seekSlider = useRef<HTMLInputElement>(null);
+  const seekStretch = useRef<HTMLSpanElement>(null);
   const [controlsVisible, setControlsVisible] = useState(true);
   const gestures = useMemo(
     () =>
@@ -63,7 +64,8 @@ export function Player() {
       video: video.current!,
       photo: photo.current!,
       emptyState: emptyState.current!,
-      seekSlider: seekSlider.current!
+      seekSlider: seekSlider.current!,
+      seekStretch: seekStretch.current!
     });
     ambient.attach({ layer: ambientLayer.current!, canvas: ambientCanvas.current!, video: video.current!, photo: photo.current! });
 
@@ -140,7 +142,10 @@ export function Player() {
           <button id="fullscreen-btn" class={OVERLAY_BUTTON} aria-label="Fullscreen" title="Fullscreen" onClick={press(fullscreen.toggle)}><span class="material-symbol-icon">fullscreen</span></button>
         </div>
         <div id="seek-row" class="overlay-seek-row">
-          <input type="range" id="seek-slider" min="0" max="100" step="any" defaultValue="0" aria-label={seekBar.label} disabled={seekBar.disabled} ref={seekSlider} onInput={(event) => player.seek(event.currentTarget.value)} />
+          <span id="seek-wrap" class="seek-wrap">
+            <span id="seek-loop" class="seek-loop" aria-hidden="true" hidden ref={seekStretch}></span>
+            <input type="range" id="seek-slider" min="0" max="100" step="any" defaultValue="0" aria-label={seekBar.label} disabled={seekBar.disabled} ref={seekSlider} onInput={(event) => player.seek(event.currentTarget.value)} />
+          </span>
           <span id="time-display">{player.timeText}</span>
         </div>
       </div>

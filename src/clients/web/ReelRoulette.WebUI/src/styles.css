@@ -748,6 +748,29 @@ html.theme-light .ambient canvas {
   margin: 0;
 }
 .overlay-seek-row input[type="range"]:disabled { cursor: default; }
+/* The scrub bar's wrapper holds the stretch Timer mode repeats while Loop holds autoplay, shown faintly behind the bar's
+   track. The thumb's center runs from half its width in from each end, so the stretch is inset by that much to line
+   up with it. */
+.seek-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+.seek-wrap input[type="range"] { position: relative; }
+.seek-loop {
+  --thumb-half: 8px;
+  position: absolute;
+  top: 50%;
+  height: 12px;
+  transform: translateY(-50%);
+  border-radius: 6px;
+  pointer-events: none;
+  left: calc(var(--thumb-half) + (100% - 2 * var(--thumb-half)) * var(--loop-from, 0));
+  width: calc((100% - 2 * var(--thumb-half)) * (var(--loop-to, 0) - var(--loop-from, 0)));
+  background: rgb(239 127 34 / 0.35);
+}
 /* Its digits are all one width, so the time doesn't jitter while it plays. It takes its own width, the row's gap from
    the bar, so that width may change between items with different time formats. */
 #time-display { font-size: 0.9rem; white-space: nowrap; color: var(--time-display-fg); font-variant-numeric: tabular-nums; }
