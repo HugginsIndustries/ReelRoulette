@@ -3,6 +3,7 @@ import { useEffect, useRef } from "preact/hooks";
 import { APP_VERSION } from "../config/appVersion";
 import { POPUP_POSITIONS, type NotificationKind, type PopupPosition } from "../notifications/notifications";
 import type { PanelSide } from "../panel/panelHost";
+import { AMBIENT_RANGES, AMBIENT_SETTINGS, formatAmbientSetting, type AmbientSetting } from "../playback/ambient";
 import type { AutoPauseMode } from "../playback/autoPause";
 import { advanceAfterProblem } from "../settings/settings";
 import type { ThemeChoice } from "../settings/theme";
@@ -21,6 +22,15 @@ const THEME_OPTIONS: readonly Choice<ThemeChoice>[] = [
   { value: "dark", title: "Dark" },
   { value: "light", title: "Light" }
 ];
+
+const AMBIENT_LABELS: Readonly<Record<AmbientSetting, string>> = {
+  rate: "Update rate",
+  fade: "Fade time",
+  blur: "Blur",
+  dark: "Strength in the dark theme",
+  light: "Strength in the light theme",
+  saturation: "Saturation"
+};
 
 const POPUP_KIND_CHOICES: readonly Choice<NotificationKind>[] = [
   { value: "actions", title: "Your actions", description: "Such as Added to favorites, Filters applied, and Path copied." },
@@ -208,6 +218,7 @@ function AppearanceSettings() {
   return (
     <>
       <Choices id="settings-theme" label="Theme" choices={THEME_OPTIONS} value={settings.theme.value} onChange={settings.setTheme} />
+      <AmbientMode />
       <Checkbox
         id="settings-tile-names"
         label="Show file names on tiles"
@@ -216,6 +227,64 @@ function AppearanceSettings() {
         onChange={settings.setTileNames}
       />
     </>
+  );
+}
+
+/**
+ * Ambient mode, and its Ambient mode settings, which start closed. Each setting's slider shows its value, applies as it
+ * moves, whether ambient mode is on or off, and is kept on this device; Reset to defaults puts them all back. A slider
+ * is named by its label alone, and its value, as shown, is its value text.
+ */
+function AmbientMode() {
+  const { settings } = useApp();
+  const tuning = settings.ambientTuning.value;
+  return (
+    <div class="setting">
+      <div class="choice-row">
+        <label>
+          <input type="checkbox" id="settings-ambient" checked={settings.ambient.value} aria-describedby="settings-ambient-hint" onChange={(event) => settings.setAmbient(event.currentTarget.checked)} />
+          Ambient mode
+        </label>
+      </div>
+      <p class="setting-hint" id="settings-ambient-hint">
+        A soft glow of the picture's colors fills the black space around it.
+      </p>
+      <details class="setting-more" id="settings-ambient-more">
+        <summary>
+          <span class="material-symbol-icon setting-more-chevron" aria-hidden="true">chevron_right</span>
+          Ambient mode settings
+        </summary>
+        <div class="setting-sliders">
+          {AMBIENT_SETTINGS.map((setting) => {
+            const id = `settings-ambient-${setting}`;
+            const { min, max, step } = AMBIENT_RANGES[setting];
+            const shown = formatAmbientSetting(setting, tuning[setting]);
+            return (
+              <Fragment key={setting}>
+                <label for={id}>
+                  <span id={`${id}-label`}>{AMBIENT_LABELS[setting]}</span>
+                  <output for={id}>{shown}</output>
+                </label>
+                <input
+                  type="range"
+                  id={id}
+                  min={min}
+                  max={max}
+                  step={step}
+                  value={tuning[setting]}
+                  aria-labelledby={`${id}-label`}
+                  aria-valuetext={shown}
+                  onInput={(event) => settings.setAmbientTuning({ [setting]: Number(event.currentTarget.value) })}
+                />
+              </Fragment>
+            );
+          })}
+          <button class="btn" type="button" id="settings-ambient-reset" onClick={settings.resetAmbientTuning}>
+            Reset to defaults
+          </button>
+        </div>
+      </details>
+    </div>
   );
 }
 

@@ -98,6 +98,8 @@ export interface Player {
    * video's, or a photo's timer while the bar shows it, and otherwise 0:00 / 0:00.
    */
   readonly timeText: ReadonlySignal<string>;
+  /** The video or photo of the attempt playing now failed to load, which hides ambient mode's glow until the next. */
+  readonly mediaFailed: ReadonlySignal<boolean>;
 
   attach(elements: PlayerElements): void;
   /** Stops the photo timer and lets go of the elements. */
@@ -203,6 +205,7 @@ export function createPlayer(options: PlayerOptions): Player {
   const favorite = signal(false);
   const blacklisted = signal(false);
   const timeText = signal(NO_TIME);
+  const mediaFailed = signal(false);
   const photoTimer = createPhotoTimer({ onEnd: photoTimerEnded });
 
   let elements: PlayerElements | null = null;
@@ -383,6 +386,7 @@ export function createPlayer(options: PlayerOptions): Player {
     store.itemStates.applyTo(item);
     photoTimer.clear();
     armed = null;
+    mediaFailed.value = false;
     video.pause();
     video.src = "";
     photo.src = "";
@@ -588,6 +592,7 @@ export function createPlayer(options: PlayerOptions): Player {
     favorite,
     blacklisted,
     timeText,
+    mediaFailed,
 
     attach(attached) {
       elements = attached;
@@ -733,6 +738,7 @@ export function createPlayer(options: PlayerOptions): Player {
       trace("warn", "video-onerror");
       // A source that fails fires no pause, so the video still reads as playing; its bar has nothing more to show.
       stopMovingBar();
+      mediaFailed.value = true;
       mediaSettled();
       void dialogs.notice("Video file not found.");
     },
@@ -778,6 +784,7 @@ export function createPlayer(options: PlayerOptions): Player {
         return;
       }
       trace("warn", "photo-onerror");
+      mediaFailed.value = true;
       mediaSettled();
       // Under Autoplay or Loop the photo's timer runs on and can fail again; the notice already open doesn't stack.
       void dialogs.notice("Photo file not found.");

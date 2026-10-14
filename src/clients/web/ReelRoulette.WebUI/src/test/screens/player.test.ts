@@ -22,8 +22,11 @@ import {
   status,
   currentStyle,
   unauthorizedLogLine,
+  stubCanvas,
+  stubElementProperty,
   stubFullscreenApi,
   stubLayoutSize,
+  stubTabHidden,
   useStylesheet,
   type MountedPage
 } from "./pageHarness";
@@ -1116,6 +1119,153 @@ describe("scrub bar on a photo", () => {
     expect(disabled()).toEqual([true, true, "0:00 / 0:00"]);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(randomPicks(server)).toBe(1);
+  });
+});
+
+function ambientLayer(): HTMLElement {
+  return document.getElementById("ambient") as HTMLElement;
+}
+
+function ambientCanvas(): HTMLCanvasElement {
+  return ambientLayer().querySelector("canvas") as HTMLCanvasElement;
+}
+
+/** Runs `check` in the dark and then the light theme, leaving the page's theme as it was. */
+function inEachTheme(check: (theme: string) => void): void {
+  const root = document.documentElement;
+  const before = Array.from(root.classList).filter((name) => name.startsWith("theme-"));
+  try {
+    for (const theme of ["theme-dark", "theme-light"]) {
+      root.classList.remove("theme-dark", "theme-light");
+      root.classList.add(theme);
+      check(theme);
+    }
+  } finally {
+    root.classList.remove("theme-dark", "theme-light");
+    root.classList.add(...before);
+  }
+}
+
+describe("ambient mode", () => {
+  /** Fakes the timers ambient mode samples by, and a picture for the video and the photo, which happy-dom never loads. */
+  function sampling() {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    return stubCanvas();
+  }
+
+  function givePictures(): void {
+    stubElementProperty(video(), "readyState", 4);
+    stubElementProperty(photo(), "naturalWidth", 640);
+  }
+
+  it("glows behind a playing video, copying its picture once a second, and holds while it is paused or the tab is hidden", async () => {
+    const canvases = sampling();
+    const setHidden = stubTabHidden(false);
+    await mount(serverPicking(VIDEO_ITEM));
+    expect(ambientLayer().hidden).toBe(true);
+    givePictures();
+    await click(emptyState());
+    expect(ambientLayer().hidden).toBe(false);
+    expect(video().paused).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(canvases.copiesOf(video())).toBe(3);
+
+    await click(button("Play/Pause"));
+    expect(video().paused).toBe(true);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(canvases.copiesOf(video())).toBe(3);
+
+    await click(button("Play/Pause"));
+    setHidden(true);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(canvases.copiesOf(video())).toBe(3);
+
+    setHidden(false);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(canvases.copiesOf(video())).toBe(4);
+  });
+
+  it("copies a photo once", async () => {
+    const canvases = sampling();
+    await mount(serverPicking(PHOTO_ITEM));
+    givePictures();
+    await click(emptyState());
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(canvases.copiesOf(photo())).toBe(1);
+    expect(ambientLayer().hidden).toBe(false);
+  });
+
+  it("hides its glow once the media fails, until the next item plays", async () => {
+    await mountAndPlay(serverPicking(VIDEO_ITEM, SECOND_VIDEO));
+    expect(ambientLayer().hidden).toBe(false);
+    fireEvent.error(video());
+    await flush();
+    expect(ambientLayer().hidden).toBe(true);
+    await closeNotices();
+    await click(button("Next"));
+    expect(ambientLayer().hidden).toBe(false);
+  });
+
+  it("off, leaves the space around the picture plain black in both themes, and copies nothing", async () => {
+    useStylesheet();
+    localStorage.setItem("rr_device.appearance.ambient", "false");
+    const canvases = sampling();
+    await mount(serverPicking(VIDEO_ITEM));
+    givePictures();
+    await click(emptyState());
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(ambientLayer().hidden).toBe(true);
+    expect(canvases.copiesOf(video())).toBe(0);
+    inEachTheme((theme) => expect([theme, currentStyle(mediaArea()).backgroundColor]).toEqual([theme, "#000"]));
+  });
+
+  it("sits behind the video and the photo, which are positioned to draw above it", async () => {
+    useStylesheet();
+    await mountAndPlay(serverPicking(VIDEO_ITEM));
+    expect(mediaArea().firstElementChild).toBe(ambientLayer());
+    expect(ambientLayer().getAttribute("aria-hidden")).toBe("true");
+    expect(currentStyle(ambientLayer()).zIndex).toBe("0");
+    expect([currentStyle(video()).position, currentStyle(photo()).position]).toEqual(["relative", "relative"]);
+    expect([ambientCanvas().width, ambientCanvas().height]).toEqual([32, 18]);
+  });
+
+  it("blurs and dims its copy, at the light theme's own strength in the light theme", async () => {
+    useStylesheet();
+    await mountAndPlay(serverPicking(VIDEO_ITEM));
+    const filters: string[] = [];
+    inEachTheme(() => filters.push(currentStyle(ambientCanvas()).filter));
+    expect(filters).toEqual(["blur(64px) brightness(0.5) saturate(1)", "blur(64px) brightness(0.75) saturate(1)"]);
+  });
+});
+
+describe("the player's rounded corners", () => {
+  /** The selectors of the stylesheet's rules, nested ones included, that give the player its corners. */
+  function playerCornerRules(): string[] {
+    const flatten = (rules: CSSRuleList): CSSRule[] =>
+      Array.from(rules).flatMap((rule) => [rule, ...("cssRules" in rule ? flatten((rule as CSSGroupingRule).cssRules) : [])]);
+    return Array.from(document.styleSheets)
+      .flatMap((sheet) => flatten(sheet.cssRules))
+      .filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule && rule.selectorText.split(",").some((part) => part.trim().endsWith(".media-container")))
+      .filter((rule) => rule.style.borderRadius || rule.style.clipPath)
+      .map((rule) => rule.selectorText);
+  }
+
+  function corners(): string[] {
+    return [currentStyle(mediaArea()).clipPath, currentStyle(mediaArea()).borderRadius];
+  }
+
+  it("are clipped by a rounded clip-path as well as overflow, so they stay rounded on iOS, and stay rounded in fullscreen", async () => {
+    useStylesheet();
+    await mount(serverPicking(VIDEO_ITEM));
+    expect(corners()).toEqual(["inset(0 round 8px)", "8px"]);
+
+    await click(button("Fullscreen"));
+    expect(isPseudoFullscreen()).toBe(true);
+    expect(corners()).toEqual(["inset(0 round 8px)", "8px"]);
+    // happy-dom doesn't match the browser's fullscreen, so the stylesheet is read: only the player's own rule sets its
+    // corners.
+    expect(playerCornerRules()).toEqual([".media-container"]);
   });
 });
 

@@ -1,4 +1,5 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
+import { AMBIENT_KEY, AMBIENT_TUNING_KEY, DEFAULT_AMBIENT_TUNING, readAmbientTuning, type AmbientTuning } from "../playback/ambient";
 import { DEFAULT_AUTO_PAUSE_MODE, isAutoPauseMode, type AutoPauseMode } from "../playback/autoPause";
 import { MAX_PHOTO_DURATION_SECONDS, MIN_PHOTO_DURATION_SECONDS } from "../state/appStore";
 import type { DeviceStore } from "../state/deviceStore";
@@ -28,9 +29,10 @@ export function advanceAfterProblem(text: string): FieldProblem | null {
 }
 
 /**
- * The Settings tab's settings that no other part of the page keeps: the Auto-Pause mode, the theme, and whether tiles
- * show their file names. Each applies as it changes and is kept on this device. The panel keeps its side, the store
- * Advance after, the player its buttons' state, and the notifications service the popup settings.
+ * The Settings tab's settings that no other part of the page keeps: the Auto-Pause mode, the theme, ambient mode and its
+ * settings, and whether tiles show their file names. Each applies as it changes and is kept on this device. The panel
+ * keeps its side, the store Advance after, the player its buttons' state, and the notifications service the popup
+ * settings.
  */
 export interface Settings {
   readonly autoPauseMode: ReadonlySignal<AutoPauseMode>;
@@ -38,6 +40,15 @@ export interface Settings {
   /** The theme chosen, System by default, which the page follows. */
   readonly theme: ReadonlySignal<ThemeChoice>;
   setTheme(choice: ThemeChoice): void;
+  /** Ambient mode, on by default: a soft glow of the picture's colors fills the black space around it. */
+  readonly ambient: ReadonlySignal<boolean>;
+  setAmbient(on: boolean): void;
+  /** Ambient mode's settings, which apply whether it is on or off. */
+  readonly ambientTuning: ReadonlySignal<AmbientTuning>;
+  /** Changes the settings given, keeping the others. */
+  setAmbientTuning(changes: Partial<AmbientTuning>): void;
+  /** Puts every one of ambient mode's settings back to its default. */
+  resetAmbientTuning(): void;
   /** Tiles show their file names, off by default; a tile's tooltip names it either way. */
   readonly tileNames: ReadonlySignal<boolean>;
   setTileNames(on: boolean): void;
@@ -53,6 +64,8 @@ export function createSettings(options: { device: DeviceStore }): Settings {
   const { device } = options;
   const autoPauseMode = signal(device.read(AUTO_PAUSE_KEY, DEFAULT_AUTO_PAUSE_MODE, isAutoPauseMode));
   const theme = signal(device.read(THEME_KEY, DEFAULT_THEME_CHOICE, isThemeChoice));
+  const ambient = signal(device.read(AMBIENT_KEY, true, (value): value is boolean => typeof value === "boolean"));
+  const ambientTuning = signal(readAmbientTuning(device));
   const tileNames = signal(device.read(TILE_NAMES_KEY, false, (value): value is boolean => typeof value === "boolean"));
   const popupSettingsRequest = signal(0);
   return {
@@ -65,6 +78,20 @@ export function createSettings(options: { device: DeviceStore }): Settings {
     setTheme(choice) {
       theme.value = choice;
       device.write(THEME_KEY, choice);
+    },
+    ambient,
+    setAmbient(on) {
+      ambient.value = on;
+      device.write(AMBIENT_KEY, on);
+    },
+    ambientTuning,
+    setAmbientTuning(changes) {
+      ambientTuning.value = { ...ambientTuning.peek(), ...changes };
+      device.write(AMBIENT_TUNING_KEY, ambientTuning.peek());
+    },
+    resetAmbientTuning() {
+      ambientTuning.value = { ...DEFAULT_AMBIENT_TUNING };
+      device.write(AMBIENT_TUNING_KEY, ambientTuning.peek());
     },
     tileNames,
     setTileNames(on) {

@@ -31,14 +31,17 @@ function stopPropagation(event: Event): void {
 }
 
 /**
- * The media area: the video and photo, the empty state, and the controls over them. The player sets the media
- * elements' sources and which of them shows itself, so their `style` and the seek slider's value are rendered
- * once and never changed here, and the video element is never replaced or moved. The seek row stays in its place
- * before anything plays and on a photo too, so the controls never move.
+ * The media area: ambient mode's glow, the video and photo, the empty state, and the controls over them. The player
+ * sets the media elements' sources and which of them shows itself, and ambient mode whether its glow shows and its
+ * settings, so their `style`, the glow's `hidden`, and the seek slider's value are rendered once and never changed here,
+ * and the video element is never replaced or moved. The seek row stays in its place before anything plays and on a
+ * photo too, so the controls never move.
  */
 export function Player() {
-  const { store, player, fullscreen, notifications } = useApp();
+  const { store, player, ambient, fullscreen, notifications } = useApp();
   const container = useRef<HTMLDivElement>(null);
+  const ambientLayer = useRef<HTMLDivElement>(null);
+  const ambientCanvas = useRef<HTMLCanvasElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const photo = useRef<HTMLImageElement>(null);
   const emptyState = useRef<HTMLDivElement>(null);
@@ -62,6 +65,7 @@ export function Player() {
       emptyState: emptyState.current!,
       seekSlider: seekSlider.current!
     });
+    ambient.attach({ layer: ambientLayer.current!, canvas: ambientCanvas.current!, video: video.current!, photo: photo.current! });
 
     // Passive, which JSX cannot set, so scrolling never waits for them.
     const area = container.current!;
@@ -75,6 +79,7 @@ export function Player() {
     return () => {
       area.removeEventListener("touchstart", onTouchStart);
       area.removeEventListener("touchend", onTouchEnd);
+      ambient.detach();
       player.detach();
     };
   }, []);
@@ -100,6 +105,9 @@ export function Player() {
   const showsControls = controlsVisible || notifications.listOpen.value;
   return (
     <div id="media-container" class={showsControls ? "media-container controls-visible" : "media-container"} ref={container} onClick={onAreaClick}>
+      <div id="ambient" class="ambient" aria-hidden="true" ref={ambientLayer}>
+        <canvas width="32" height="18" ref={ambientCanvas}></canvas>
+      </div>
       <video
         id="video"
         {...VIDEO_FLAGS}

@@ -126,7 +126,9 @@ describe("a phone on its side", () => {
     expect(document.body.classList.contains("short-screen")).toBe(true);
     expect(shows(header())).toBe(false);
     expect(padding(app())).toEqual(["0px", "0px", "0px", "0px"]);
-    expect(currentStyle(document.getElementById("media-container")!).borderRadius).toBe("0px");
+    const player = currentStyle(document.getElementById("media-container")!);
+    // Its corners stay rounded, as in every view.
+    expect([player.borderRadius, player.clipPath]).toEqual(["8px", "inset(0 round 8px)"]);
 
     await click(panelButton());
     expect(stage().dataset.panelMode).toBe("overlay");
@@ -147,6 +149,7 @@ describe("a phone on its side", () => {
 
       expect(document.body.classList.contains("short-screen")).toBe(false);
       expect(shows(header())).toBe(true);
+      expect(currentStyle(document.getElementById("media-container")!).clipPath).toBe("inset(0 round 8px)");
     }
   });
 

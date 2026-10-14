@@ -525,11 +525,6 @@ body {
     height: var(--page-height);
   }
 }
-.fullscreen-stage:fullscreen .media-container,
-.fullscreen-stage:-webkit-full-screen .media-container,
-.fullscreen-stage.fullscreen-pseudo .media-container {
-  border-radius: 0;
-}
 .fullscreen-stage:fullscreen .media-container video,
 .fullscreen-stage:fullscreen .media-container img,
 .fullscreen-stage:-webkit-full-screen .media-container video,
@@ -635,10 +630,14 @@ body {
 .now-playing .is-link { cursor: pointer; border-radius: 4px; }
 .now-playing .is-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .now-playing .is-link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+/* The player keeps its rounded corners in every view, fullscreen and a phone on its side too. It is clipped by a rounded
+   clip-path as well as overflow: WebKit doesn't clip a layer of its own, such as ambient mode's blurred canvas, to its
+   parent's rounded corners, so on iOS they turned square once ambient mode drew. */
 .media-container {
   position: relative;
   background: #000;
   border-radius: 8px;
+  clip-path: inset(0 round 8px);
   overflow: hidden;
   flex: 1;
   display: flex;
@@ -648,10 +647,26 @@ body {
   width: 100%;
   min-height: 0;
 }
+/* Positioned, so they draw above ambient mode's glow. */
 .media-container video, .media-container img {
+  position: relative;
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+/* Ambient mode: a heavily blurred, dimmed copy of the picture fills the black space around it. The glow sits on the
+   player's dark background in both themes, so each theme only sets its own strength; the Settings tab sets the blur,
+   both strengths, and saturation. Off, the space stays plain black. */
+.ambient { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.ambient canvas {
+  position: absolute;
+  inset: -15%;
+  width: 130%;
+  height: 130%;
+  filter: blur(var(--ambient-blur)) brightness(var(--ambient-dark)) saturate(var(--ambient-saturation));
+}
+html.theme-light .ambient canvas {
+  filter: blur(var(--ambient-blur)) brightness(var(--ambient-light)) saturate(var(--ambient-saturation));
 }
 .empty-state { color: var(--muted-fg); padding: 24px; text-align: center; }
 .overlay-controls {
@@ -1041,7 +1056,8 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
 .choice-stack label input { margin-top: 3px; }
 .choice-stack small { display: block; color: var(--muted-fg); font-size: 0.82rem; }
 .number-field { width: 8rem; }
-/* An expandable group of a setting's own options, such as Popup settings, opened from its summary. */
+/* An expandable group of a setting's own options, such as Ambient mode settings or Popup settings, opened from its
+   summary. */
 .setting-more { margin: 6px 0 0 26px; }
 .setting-more summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; gap: 4px; font-size: 0.9rem; list-style: none; }
 .setting-more summary::-webkit-details-marker { display: none; }
@@ -1051,6 +1067,12 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
 @media (prefers-reduced-motion: reduce) {
   .setting-more-chevron { transition: none; }
 }
+/* A setting's sliders in its expandable group, such as Ambient mode settings, each under its label and value. */
+.setting-sliders { display: grid; gap: 2px; padding: 4px 0 0; }
+.setting-sliders label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 0.88rem; padding-top: 4px; }
+.setting-sliders output { color: var(--muted-fg); font-variant-numeric: tabular-nums; }
+.setting-sliders input[type="range"] { width: 100%; margin: 0; }
+.setting-sliders .btn { justify-self: start; margin-top: 6px; }
 /* A setting's own fields in its expandable group, disabled together while the setting can't apply. */
 .setting-fields { border: 0; margin: 0; padding: 4px 0 0; min-width: 0; display: grid; gap: 4px; }
 .setting-fields .setting-label { margin: 4px 0 0; font-weight: 400; font-size: 0.88rem; }
@@ -1761,9 +1783,6 @@ body.short-screen .top-bar:not(.is-pairing) {
 body.short-screen .top-bar.is-pairing {
   padding: 6px 0;
   margin: 0;
-}
-body.short-screen .media-container {
-  border-radius: 0;
 }
 /* The player's controls stay off the home indicator and the status bar, which the stage itself keeps clear of in
    fullscreen and pseudo-fullscreen. Only `:fullscreen` is left out, since an unknown pseudo-class would drop the whole

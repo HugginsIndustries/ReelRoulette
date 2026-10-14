@@ -205,6 +205,51 @@ export function stubFullscreenApi(options: { refuse?: boolean } = {}): FakeFulls
   return { requests, exits: () => exits };
 }
 
+export interface FakeCanvases {
+  /** How many times the page drew `image` onto a canvas, as ambient mode copies the picture playing. */
+  copiesOf(image: object): number;
+}
+
+/**
+ * Gives every canvas a 2D context that records what is drawn on it, which happy-dom lacks: its `getContext("2d")`
+ * returns null.
+ */
+export function stubCanvas(): FakeCanvases {
+  const drawn: object[] = [];
+  const contexts = new Map<HTMLCanvasElement, object>();
+  stubProperty(HTMLCanvasElement.prototype, "getContext", {
+    value(this: HTMLCanvasElement) {
+      let context = contexts.get(this);
+      if (!context) {
+        context = {
+          globalAlpha: 1,
+          clearRect() {},
+          drawImage(image: object) {
+            drawn.push(image);
+          }
+        };
+        contexts.set(this, context);
+      }
+      return context;
+    }
+  });
+  return { copiesOf: (image) => drawn.filter((source) => source === image).length };
+}
+
+/** Makes the page's tab read as hidden or shown, as `document.hidden` says. Returns a function that changes it. */
+export function stubTabHidden(hidden: boolean): (hidden: boolean) => void {
+  let value = hidden;
+  stubProperty(document, "hidden", { get: () => value });
+  return (next) => {
+    value = next;
+  };
+}
+
+/** Makes `element` report `value` for a property happy-dom doesn't set, such as a video's `readyState`. */
+export function stubElementProperty(element: Element, name: string, value: unknown): void {
+  Object.defineProperty(element, name, { configurable: true, value });
+}
+
 /**
  * Gives every rendered element a layout size, which happy-dom does not compute, so the library grid renders its
  * tiles. An element that is not in the page, or is inside one that is `hidden` or has `display: none`, has no

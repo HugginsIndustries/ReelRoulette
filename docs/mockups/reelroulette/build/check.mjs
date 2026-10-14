@@ -316,6 +316,17 @@ for (const width of [1280, 390]) {
     el.dispatchEvent(new window.Event("change", { bubbles: true }));
   };
   const key = (el, k) => el.dispatchEvent(new window.KeyboardEvent("keydown", { key: k, bubbles: true }));
+  // The player's corners, measured on a fresh element in its place, since happy-dom keeps an element's computed style
+  // after an ancestor's class changes.
+  const playerCorners = () => {
+    const probe = document.createElement("div");
+    probe.className = "media-container";
+    $("media").after(probe);
+    const style = window.getComputedStyle(probe);
+    const corners = `${style.borderRadius} ${style.clipPath}`;
+    probe.remove();
+    return corners;
+  };
   const press = (k, target = document.body, extra = {}) =>
     target.dispatchEvent(new window.KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...extra }));
   const nativeCalls = [];
@@ -1393,6 +1404,7 @@ for (const width of [1280, 390]) {
   await tick();
   const inFullscreen = () => !!document.fullscreenElement || $("stage").classList.contains("fullscreen-pseudo");
   check(`layout@${width}: with Show in fullscreen off, entering fullscreen closes the popups showing`, inFullscreen() && messages.toasts().length === 0);
+  check(`layout@${width}: the player keeps its rounded corners in fullscreen (${playerCorners()})`, playerCorners() === "8px inset(0 round 8px)");
   test("devices");
   check(`layout@${width}: and a message there goes only to the list, which the bell counts`,
     newest() === "Blacklisted on another device" && messages.toasts().length === 0 && $("notify-btn").querySelector(".notify-badge").textContent === "1");
@@ -1566,6 +1578,14 @@ for (const width of [1280, 390]) {
     volumeNow() === 65 && dragPrevented && window.getComputedStyle($("media")).touchAction === "none" && controlsUp());
   check(`layout@${width}: the player is clipped by a rounded shape as well, which keeps its corners on iOS (${window.getComputedStyle($("media")).clipPath})`,
     /^inset\(0(px)? round /.test(window.getComputedStyle($("media")).clipPath));
+  // The player keeps its rounded corners in every view: no rule, the browser's fullscreen included, gives it others.
+  const cornerRules = (rules) => [...rules].flatMap((rule) => [rule, ...(rule.cssRules ? cornerRules(rule.cssRules) : [])]);
+  const playerCornerRules = cornerRules([...document.styleSheets].flatMap((sheet) => [...sheet.cssRules]))
+    .filter((rule) => rule.selectorText?.includes("media-container") && rule.selectorText.split(",").some((part) => part.trim().endsWith(".media-container")))
+    .filter((rule) => rule.style?.borderRadius || rule.style?.clipPath || rule.style?.getPropertyValue("--player-radius"))
+    .map((rule) => rule.selectorText);
+  check(`layout@${width}: and only the player's own rule sets its corners, so they stay rounded in fullscreen and on a phone on its side (${playerCornerRules.join(" | ")})`,
+    playerCornerRules.join() === ".media-container");
   input($("volume"), "80");
 
   // Ambient mode: on by default, with its settings in an expandable section beside the toggle. It samples at the
@@ -1610,7 +1630,16 @@ for (const width of [1280, 390]) {
     settingNames === "Update rate, Fade time, Blur, Strength in the dark theme, Strength in the light theme, Saturation" &&
     out("rate") === "1 per second" && out("fade") === "2 s" && out("blur") === "64 px" && out("dark") === "50%" && out("light") === "75%" && out("saturation") === "100%" &&
     ambientFilter() === "blur(64px) brightness(0.5) saturate(1)" && !!button(more, "Reset to defaults"));
+  // Each slider is named by its label alone, and the value shown is its value text.
+  const sliderNames = ["rate", "fade", "blur", "dark", "light", "saturation"].map((key) => {
+    const slider = $(`set-ambient-${key}`);
+    return `${document.getElementById(slider.getAttribute("aria-labelledby"))?.textContent}=${slider.getAttribute("aria-valuetext")}`;
+  });
+  check(`layout@${width}: its sliders are named by their labels, with the value shown as their value text (${sliderNames.join(", ")})`,
+    sliderNames.join() === "Update rate=1 per second,Fade time=2 s,Blur=64 px,Strength in the dark theme=50%,Strength in the light theme=75%,Saturation=100%");
   setSlider("rate", 4);
+  check(`layout@${width}: and a slider's value text follows it as it moves (${$("set-ambient-rate").getAttribute("aria-valuetext")})`,
+    $("set-ambient-rate").getAttribute("aria-valuetext") === "4 per second");
   let ambientBefore = samples();
   await wait(900);
   check(`layout@${width}: at 4 per second it samples while the video plays (${samples() - ambientBefore} in 0.9 s)`, samples() - ambientBefore >= 2);
@@ -2008,6 +2037,7 @@ for (const width of [1280, 390]) {
   // A phone on its side: the header hides, the panel opens as the overlay, and the player's indicator still shows.
   $("mock-short").click();
   check(`layout@${width}: a short touch screen gets the full-screen player layout and the overlay`, document.body.classList.contains("short-screen") && $("stage").classList.contains("is-overlay"));
+  check(`layout@${width}: and the player keeps its rounded corners there (${playerCorners()})`, playerCorners() === "8px inset(0 round 8px)");
   situation("reconnecting");
   check(`layout@${width}: there the player shows the reconnecting indicator`, indicatorText() === "Reconnecting…");
   $("mock-pairing").click();

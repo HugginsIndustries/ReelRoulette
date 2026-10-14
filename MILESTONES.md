@@ -133,55 +133,7 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 ## Active Milestones
 
-Last milestone completed: M12h
-
-### M12i1 - WebUI Ambient Mode
-
-- **Status**: ⏳ Planned
-- **Goal**: Ambient mode fills the black space around the picture with a soft glow of its colors.
-- **Depends on**: WebUI Settings Panel, whose Appearance section holds its settings.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Scope
-
-- Ambient mode, as YouTube's: behind the player, a heavily blurred, dimmed copy of the current frame's colors fills the black space around the picture.
-  - At the update rate the player draws the frame into a tiny canvas, and the glow fades toward each new copy over the fade time, so the colors drift smoothly.
-  - The shown canvas blends toward each new sample instead of crossfading two layers, starting from what is on screen, so a sample that arrives mid-fade continues smoothly.
-  - A photo gets the same effect, drawn once from the photo.
-  - Sampling pauses while the video is paused or the tab is hidden.
-  - The glow sits on the player's dark background in both themes, so the light theme uses full color too, and each theme has its own strength, the same kind of setting in both.
-  - With ambient mode off, the space is plain black in both themes, as today.
-  - The effect never reads the canvas's pixels back, so it doesn't use `getImageData` or `toDataURL`.
-- Ambient mode's settings ship with it, apply as they change, and are kept per device:
-  - An Ambient mode toggle, on by default, in the Settings tab's Appearance section.
-  - Beside it, an expandable "Ambient mode settings" section, whose header shows a chevron that points right while it is closed and down while it is open.
-  - Its settings have plain labels, each showing its value: Update rate (1 per second by default, from 0.25 to 4), Fade time (2 s, from 0.25 to 4 s), Blur (64 px, from 10 to 80 px), Strength in the dark theme (50%), Strength in the light theme (75%), and Saturation (100%, from 0 to 200%).
-  - A Reset to defaults button.
-- The player is also clipped by a rounded `clip-path: inset(0 round 8px)`, square in fullscreen and on a phone on its side, as in the mockup, so its corners stay rounded on iOS with ambient mode on.
-- Ambient mode and its settings survive a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
-
-#### Traps
-
-- Two layers crossfading by CSS opacity flickered slightly in the mockup (measured).
-- The flicker came from the black background showing through whenever a sample arrived before the last fade finished (inferred).
-- Drawing a cross-origin video taints the canvas (inferred).
-- In every served setup the media is same-origin, so a tainted canvas happens only in development, where the Vite dev server plays media from the server's other origin, as WebUI Volume and Enhanced Audio sets out (inferred).
-- Showing a tainted canvas still works, since the effect never reads its pixels back (inferred).
-- In Safari and Firefox on iOS, the player's rounded corners turned square once ambient mode drew, and stayed rounded with it off or on other devices (measured).
-- WebKit doesn't clip a layer of its own, such as the blurred ambient canvas, to its parent's rounded corners (inferred).
-
-#### Acceptance
-
-- With ambient mode on, a blurred, dimmed copy of the frame's colors fills the black space around a playing video and crossfades as the picture changes, and a photo gets one from the photo. Sampling stops while the video is paused or the tab is hidden. Off, the space is plain black in both themes. The light theme uses full color at its own strength, and a sample that arrives mid-fade never lets the black background show through. Shown by ambient mode tests for sampling at the update rate while a video plays, holding while it is paused or the tab is hidden, and a photo drawn once.
-- The Ambient mode settings section offers each setting with its default and range, shows each value, applies changes as they're made, and Reset to defaults restores the defaults, in ambient mode tests of each of its settings.
-- The player is clipped by the rounded `clip-path`, square in fullscreen and on a phone on its side, in a WebUI test.
-- After a page refresh, ambient mode and its settings are each as they were, in tests for a page refresh keeping each setting this milestone adds.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and a spot check on the user's own browsers and phone, without the VM, including that with ambient mode on the player's corners stay rounded in Safari on iOS.
-
-#### Release checks
-
-- Manual: On an iPhone and an iPad, in Safari and Firefox, with ambient mode on, the player's corners stay rounded.
+Last milestone completed: M12i1
 
 ### M12i2 - WebUI Volume and Enhanced Audio
 
@@ -208,7 +160,7 @@ Last milestone completed: M12h
 **Scope**
 
 - Route a real video through the gain stage (`createMediaElementSource` into a `GainNode`) in a throwaway page under `artifacts/scratch/`, served over the LAN as the mockup is.
-- Try it in Safari and Firefox on an iPhone and an iPad, Chrome and Firefox on Android, and Chrome, Firefox, and Safari on a desktop.
+- Try it in Safari and Firefox on the iPad, Chrome and Firefox on Android, and Chrome, Firefox, and Safari on a desktop.
 - Report silent output, sound drifting from the picture, behavior in iOS pseudo-fullscreen, and resuming after the app was in the background.
 - The report decides whether WebUI Loudness Normalization stays in v0.15.0.
 
@@ -292,7 +244,7 @@ Last milestone completed: M12h
 #### Release checks
 
 - Manual: With Enhanced audio on, videos play with sound in Chrome, Firefox, and Safari on a desktop and on Android and iOS, including with the WebUI behind an HTTPS proxy, and turning it off plays sound directly.
-- Manual: On an iPhone and an iPad, in Safari and Firefox, the volume slider shows after the first tap, and the slider and a two-finger drag change the video's volume relative to the system volume, without crackles, and play and pause don't pop.
+- Manual: On the iPad, in Safari and Firefox, the volume slider shows after the first tap, and the slider and a two-finger drag change the video's volume relative to the system volume, without crackles, and play and pause don't pop.
 
 #### Not included
 

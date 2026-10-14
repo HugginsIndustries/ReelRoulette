@@ -16,7 +16,9 @@ import {
   resetPage,
   setViewport,
   settle,
+  stubCanvas,
   stubColorScheme,
+  stubElementProperty,
   stubLayoutSize,
   stubReducedMotion,
   useStylesheet,
@@ -175,7 +177,8 @@ describe("the Settings tab", () => {
     const headings = within(settingsPage()).getAllByRole("heading", { level: 3 });
     expect(headings.map((heading) => heading.textContent)).toEqual(["Playback", "Appearance", "Notifications", "Panel", "Diagnostics"]);
     expect(within(settingsPage()).getByText("Settings apply at once and are kept on this device.")).toBeTruthy();
-    expect(within(settingsPage()).queryAllByRole("button")).toHaveLength(0);
+    // Ambient mode settings' Reset to defaults is the tab's only button.
+    expect(within(settingsPage()).queryAllByRole("button", { hidden: true }).map((button) => button.textContent)).toEqual(["Reset to defaults"]);
   });
 
   it("has no loop, autoplay, or mute entry, and no key badge in a label", async () => {
@@ -759,6 +762,189 @@ describe("Theme", () => {
   });
 });
 
+function ambientBox(): HTMLInputElement {
+  return checkbox("Ambient mode");
+}
+
+function ambientSettings(): HTMLDetailsElement {
+  return document.getElementById("settings-ambient-more") as HTMLDetailsElement;
+}
+
+function slider(name: string): HTMLInputElement {
+  return within(settingsPage()).getByRole("slider", { name, hidden: true }) as HTMLInputElement;
+}
+
+/** The value a slider shows beside its label. */
+function shownValue(input: HTMLInputElement): string {
+  return settingsPage().querySelector(`output[for="${input.id}"]`)!.textContent ?? "";
+}
+
+function moveSlider(input: HTMLInputElement, value: number): void {
+  fireEvent.input(input, { target: { value: String(value) } });
+}
+
+function ambientLayer(): HTMLElement {
+  return document.getElementById("ambient") as HTMLElement;
+}
+
+/** The glow's filter in the dark theme and then the light one. */
+function ambientFilters(): string[] {
+  const root = document.documentElement;
+  const canvas = ambientLayer().querySelector("canvas")!;
+  const filters: string[] = [];
+  try {
+    for (const theme of ["theme-dark", "theme-light"]) {
+      root.classList.remove("theme-dark", "theme-light");
+      root.classList.add(theme);
+      filters.push(currentStyle(canvas).filter);
+    }
+  } finally {
+    root.classList.remove("theme-light");
+    root.classList.add("theme-dark");
+  }
+  return filters;
+}
+
+function keptAmbientSettings(): unknown {
+  const raw = localStorage.getItem("rr_device.appearance.ambientSettings");
+  return raw === null ? null : JSON.parse(raw);
+}
+
+/** Ambient mode's sliders: each one's name, with its range, step, value, value text, and the value shown. */
+const AMBIENT_SLIDERS = ["Update rate", "Fade time", "Blur", "Strength in the dark theme", "Strength in the light theme", "Saturation"];
+
+function ambientSliders(): string[][] {
+  return AMBIENT_SLIDERS.map((name) => {
+    const input = slider(name);
+    return [name, input.min, input.max, input.step, input.value, input.getAttribute("aria-valuetext") ?? "", shownValue(input)];
+  });
+}
+
+const DEFAULT_AMBIENT_SLIDERS = [
+  ["Update rate", "0.25", "4", "0.25", "1", "1 per second", "1 per second"],
+  ["Fade time", "0.25", "4", "0.25", "2", "2 s", "2 s"],
+  ["Blur", "10", "80", "1", "64", "64 px", "64 px"],
+  ["Strength in the dark theme", "0", "100", "1", "50", "50%", "50%"],
+  ["Strength in the light theme", "0", "100", "1", "75", "75%", "75%"],
+  ["Saturation", "0", "200", "5", "100", "100%", "100%"]
+];
+
+const EMPTY_STATE_TEXT = "Tap to play, or open the panel to choose a preset or filter.";
+
+describe("Ambient mode", () => {
+  it("is on by default, in Appearance between Theme and Show file names on tiles, with its hint", async () => {
+    await mount();
+    await openSettings();
+    expect(ambientBox().checked).toBe(true);
+    expect(document.getElementById(ambientBox().getAttribute("aria-describedby")!)!.textContent).toBe(
+      "A soft glow of the picture's colors fills the black space around it."
+    );
+    const appearance = document.getElementById("settings-appearance-heading")!.closest("section")!;
+    const parts = Array.from(appearance.querySelectorAll('[role="radiogroup"], input[type="checkbox"], details')).map((part) => part.id || part.getAttribute("aria-labelledby"));
+    expect(parts).toEqual(["settings-theme-label", "settings-ambient", "settings-ambient-more", "settings-tile-names"]);
+  });
+
+  it("has its settings in Ambient mode settings beside it, closed at first, under a chevron that points right, then down while open", async () => {
+    useStylesheet();
+    await mount();
+    await openSettings();
+    const more = ambientSettings();
+    expect(more.closest(".setting")).toBe(ambientBox().closest(".setting"));
+    expect(more.open).toBe(false);
+    const summary = more.querySelector("summary")!;
+    expect(summary.textContent).toBe("chevron_rightAmbient mode settings");
+    const chevron = summary.querySelector(".setting-more-chevron")!;
+    expect(chevron.getAttribute("aria-hidden")).toBe("true");
+    const closed = currentStyle(chevron).transform;
+    await click(summary);
+    expect(more.open).toBe(true);
+    expect([closed, currentStyle(chevron).transform]).toEqual(["", "rotate(90deg)"]);
+  });
+
+  it("offers each setting by its plain label, with its default, range, and step, and shows each value", async () => {
+    await mount();
+    await openSettings();
+    expect(ambientSliders()).toEqual(DEFAULT_AMBIENT_SLIDERS);
+    expect(within(ambientSettings()).getByRole("button", { name: "Reset to defaults", hidden: true })).toBeTruthy();
+    expect(keptAmbientSettings()).toBeNull();
+  });
+
+  it("applies at once: off hides the glow around a playing video, and on shows it again, and each is kept", async () => {
+    const server = new FakeServer();
+    server.on("POST", "/api/random", () => json(VIDEO_ITEM));
+    await mount(server);
+    await click(screen.getByText(EMPTY_STATE_TEXT));
+    await openSettings();
+    expect(ambientLayer().hidden).toBe(false);
+
+    await click(ambientBox());
+    expect(ambientLayer().hidden).toBe(true);
+    expect(localStorage.getItem("rr_device.appearance.ambient")).toBe("false");
+    await click(ambientBox());
+    expect(ambientLayer().hidden).toBe(false);
+    expect(localStorage.getItem("rr_device.appearance.ambient")).toBe("true");
+  });
+
+  it("applies each setting as its slider moves, showing and keeping its value: the glow's update rate, blur, strengths, and saturation", async () => {
+    useStylesheet();
+    fakeTimers();
+    const canvases = stubCanvas();
+    const server = new FakeServer();
+    server.on("POST", "/api/random", () => json(VIDEO_ITEM));
+    mountPage({ server });
+    await flush();
+    stubElementProperty(video(), "readyState", 4);
+    fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
+    await flush();
+    fireEvent.click(tab("Settings"));
+    await flush();
+    expect(video().paused).toBe(false);
+    expect(ambientFilters()).toEqual(["blur(64px) brightness(0.5) saturate(1)", "blur(64px) brightness(0.75) saturate(1)"]);
+
+    moveSlider(slider("Update rate"), 4);
+    await flush();
+    const copied = canvases.copiesOf(video());
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(canvases.copiesOf(video()) - copied).toBe(4);
+
+    moveSlider(slider("Fade time"), 3);
+    moveSlider(slider("Blur"), 40);
+    moveSlider(slider("Strength in the dark theme"), 30);
+    moveSlider(slider("Strength in the light theme"), 60);
+    moveSlider(slider("Saturation"), 150);
+    await flush();
+    expect(ambientSliders()).toEqual([
+      ["Update rate", "0.25", "4", "0.25", "4", "4 per second", "4 per second"],
+      ["Fade time", "0.25", "4", "0.25", "3", "3 s", "3 s"],
+      ["Blur", "10", "80", "1", "40", "40 px", "40 px"],
+      ["Strength in the dark theme", "0", "100", "1", "30", "30%", "30%"],
+      ["Strength in the light theme", "0", "100", "1", "60", "60%", "60%"],
+      ["Saturation", "0", "200", "5", "150", "150%", "150%"]
+    ]);
+    expect(ambientFilters()).toEqual(["blur(40px) brightness(0.3) saturate(1.5)", "blur(40px) brightness(0.6) saturate(1.5)"]);
+    expect(keptAmbientSettings()).toEqual({ rate: 4, fade: 3, blur: 40, dark: 30, light: 60, saturation: 150 });
+  });
+
+  it("Reset to defaults puts every setting back, and the glow with them", async () => {
+    useStylesheet();
+    await mount();
+    await openSettings();
+    moveSlider(slider("Update rate"), 0.25);
+    moveSlider(slider("Fade time"), 4);
+    moveSlider(slider("Blur"), 10);
+    moveSlider(slider("Strength in the dark theme"), 100);
+    moveSlider(slider("Strength in the light theme"), 0);
+    moveSlider(slider("Saturation"), 0);
+    await settle();
+
+    await click(within(ambientSettings()).getByRole("button", { name: "Reset to defaults", hidden: true }));
+    expect(ambientSliders()).toEqual(DEFAULT_AMBIENT_SLIDERS);
+    expect(ambientFilters()).toEqual(["blur(64px) brightness(0.5) saturate(1)", "blur(64px) brightness(0.75) saturate(1)"]);
+    expect(keptAmbientSettings()).toEqual({ rate: 1, fade: 2, blur: 64, dark: 50, light: 75, saturation: 100 });
+    expect(ambientBox().checked).toBe(true);
+  });
+});
+
 describe("Show file names on tiles", () => {
   it("starts off, and shows each tile's name on it once turned on, while the tile's tooltip names it either way", async () => {
     useStylesheet();
@@ -1000,6 +1186,34 @@ describe("kept on this device", () => {
     expect(tileNamesBox().checked).toBe(true);
   });
 
+  it("keeps ambient mode and each of its settings after a page refresh", async () => {
+    useStylesheet();
+    const page = await mount();
+    await openSettings();
+    await click(ambientBox());
+    moveSlider(slider("Update rate"), 2.5);
+    moveSlider(slider("Fade time"), 0.5);
+    moveSlider(slider("Blur"), 20);
+    moveSlider(slider("Strength in the dark theme"), 35);
+    moveSlider(slider("Strength in the light theme"), 90);
+    moveSlider(slider("Saturation"), 50);
+    await settle();
+    page.unmount();
+
+    await mount();
+    expect(ambientFilters()).toEqual(["blur(20px) brightness(0.35) saturate(0.5)", "blur(20px) brightness(0.9) saturate(0.5)"]);
+    await openSettings();
+    expect(ambientBox().checked).toBe(false);
+    expect(ambientSliders().map((row) => [row[0], row[6]])).toEqual([
+      ["Update rate", "2.5 per second"],
+      ["Fade time", "0.5 s"],
+      ["Blur", "20 px"],
+      ["Strength in the dark theme", "35%"],
+      ["Strength in the light theme", "90%"],
+      ["Saturation", "50%"]
+    ]);
+  });
+
   it("keeps Advance after, the side, Auto-Pause, and the player's Autoplay, Loop, and Mute after a page refresh", async () => {
     const page = await mount();
     await openSettings();
@@ -1036,6 +1250,9 @@ describe("kept on this device", () => {
     await click(radio("Always"));
     await click(radio("Light"));
     await click(tileNamesBox());
+    await click(ambientBox());
+    moveSlider(slider("Blur"), 30);
+    await settle();
     await click(checkbox("Show popups"));
     await click(playerButton("Autoplay"));
     await click(playerButton("Loop"));
@@ -1043,6 +1260,8 @@ describe("kept on this device", () => {
 
     expect(page.server.calls.slice(requestsBefore)).toEqual([]);
     expect(storageKeys().filter((key) => !keysBefore.includes(key))).toEqual([
+      "rr_device.appearance.ambient",
+      "rr_device.appearance.ambientSettings",
       "rr_device.appearance.theme",
       "rr_device.appearance.tileNames",
       "rr_device.notifications.popups",

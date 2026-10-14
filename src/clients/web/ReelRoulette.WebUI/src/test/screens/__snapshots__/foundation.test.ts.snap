@@ -21,6 +21,8 @@ exports[`page structure > keeps the starting markup 1`] = `
   <div class="fullscreen-stage" data-panel-mode="side" data-side="right" id="fullscreen-stage" style="--panel-width: 420px">
     <main class="player-col">
       <div class="media-container controls-visible" id="media-container">
+        <div aria-hidden="true" class="ambient" hidden="" id="ambient" style="--ambient-blur: 64px; --ambient-dark: 0.5; --ambient-light: 0.75; --ambient-saturation: 1">
+          <canvas height="18" width="32">
         <video disablepictureinpicture="" disableremoteplayback="" id="video" playsinline="" preload="auto" style="display: none" webkit-playsinline="">
         <img alt="Photo" id="photo" style="display: none">
         <div class="empty-state" id="empty-state">
@@ -248,6 +250,57 @@ exports[`page structure > keeps the starting markup 1`] = `
                     <span>
                       <span id="settings-theme-light">
                         "Light"
+              <div class="setting">
+                <div class="choice-row">
+                  <label>
+                    <input aria-describedby="settings-ambient-hint" id="settings-ambient" type="checkbox">
+                    "Ambient mode"
+                <p class="setting-hint" id="settings-ambient-hint">
+                  "A soft glow of the picture's colors fills the black space around it."
+                <details class="setting-more" id="settings-ambient-more">
+                  <summary>
+                    <span aria-hidden="true" class="material-symbol-icon setting-more-chevron">
+                      "chevron_right"
+                    "Ambient mode settings"
+                  <div class="setting-sliders">
+                    <label for="settings-ambient-rate">
+                      <span id="settings-ambient-rate-label">
+                        "Update rate"
+                      <output for="settings-ambient-rate">
+                        "1 per second"
+                    <input aria-labelledby="settings-ambient-rate-label" aria-valuetext="1 per second" id="settings-ambient-rate" max="4" min="0.25" step="0.25" type="range">
+                    <label for="settings-ambient-fade">
+                      <span id="settings-ambient-fade-label">
+                        "Fade time"
+                      <output for="settings-ambient-fade">
+                        "2 s"
+                    <input aria-labelledby="settings-ambient-fade-label" aria-valuetext="2 s" id="settings-ambient-fade" max="4" min="0.25" step="0.25" type="range">
+                    <label for="settings-ambient-blur">
+                      <span id="settings-ambient-blur-label">
+                        "Blur"
+                      <output for="settings-ambient-blur">
+                        "64 px"
+                    <input aria-labelledby="settings-ambient-blur-label" aria-valuetext="64 px" id="settings-ambient-blur" max="80" min="10" step="1" type="range">
+                    <label for="settings-ambient-dark">
+                      <span id="settings-ambient-dark-label">
+                        "Strength in the dark theme"
+                      <output for="settings-ambient-dark">
+                        "50%"
+                    <input aria-labelledby="settings-ambient-dark-label" aria-valuetext="50%" id="settings-ambient-dark" max="100" min="0" step="1" type="range">
+                    <label for="settings-ambient-light">
+                      <span id="settings-ambient-light-label">
+                        "Strength in the light theme"
+                      <output for="settings-ambient-light">
+                        "75%"
+                    <input aria-labelledby="settings-ambient-light-label" aria-valuetext="75%" id="settings-ambient-light" max="100" min="0" step="1" type="range">
+                    <label for="settings-ambient-saturation">
+                      <span id="settings-ambient-saturation-label">
+                        "Saturation"
+                      <output for="settings-ambient-saturation">
+                        "100%"
+                    <input aria-labelledby="settings-ambient-saturation-label" aria-valuetext="100%" id="settings-ambient-saturation" max="200" min="0" step="5" type="range">
+                    <button class="btn" id="settings-ambient-reset" type="button">
+                      "Reset to defaults"
               <div class="setting">
                 <div class="choice-row">
                   <label>

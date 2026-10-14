@@ -6,6 +6,7 @@ import { createFilterDialog, type FilterDialog } from "../filter/filterDialog";
 import { createLibrary, type Library } from "../library/library";
 import { createNotifications, type Notifications } from "../notifications/notifications";
 import { createPanelHost, type PanelHost } from "../panel/panelHost";
+import { createAmbient, type Ambient } from "../playback/ambient";
 import { createAutoPause } from "../playback/autoPause";
 import { createPlayer, type Player } from "../playback/player";
 import { createStageFullscreen, type StageFullscreen } from "../playback/stageFullscreen";
@@ -27,9 +28,9 @@ export interface UnsavedTabs {
 }
 
 /**
- * One page's runtime config, shared state, server requests, in-app dialogs, server connection, player, fullscreen,
- * side panel, the panel's library, filter, tag editor, and stats tabs, and the settings its Settings tab sets, with
- * Auto-Pause pausing the player as its mode says while the panel and Auto Tag cover it.
+ * One page's runtime config, shared state, server requests, in-app dialogs, server connection, player, ambient mode's
+ * glow, fullscreen, side panel, the panel's library, filter, tag editor, and stats tabs, and the settings its Settings
+ * tab sets, with Auto-Pause pausing the player as its mode says while the panel and Auto Tag cover it.
  */
 export interface AppServices {
   config: RuntimeConfig;
@@ -38,6 +39,8 @@ export interface AppServices {
   dialogs: Dialogs;
   connection: ServerConnection;
   player: Player;
+  /** Ambient mode's glow behind the player, which the Settings tab turns on and off and tunes. */
+  ambient: Ambient;
   fullscreen: StageFullscreen;
   panel: PanelHost;
   library: Library;
@@ -121,6 +124,13 @@ export function createAppServices(config: RuntimeConfig): AppServices {
   });
   const statsTab = createStatsTab({ store, api, connection, tagCatalog });
   const settings = createSettings({ device });
+  const ambient = createAmbient({
+    enabled: settings.ambient,
+    tuning: settings.ambientTuning,
+    current: store.current,
+    attemptId: store.playAttemptId,
+    failed: player.mediaFailed
+  });
   createAutoPause({ mode: settings.autoPauseMode, panel, overPage: tagEditor.autoTagOpen, player });
   panel.connectTabs({
     library: {
@@ -177,6 +187,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     dialogs,
     connection,
     player,
+    ambient,
     fullscreen,
     panel,
     library,

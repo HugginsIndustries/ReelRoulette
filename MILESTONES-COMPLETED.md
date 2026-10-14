@@ -6,6 +6,97 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12i1 - WebUI Ambient Mode
+
+- **Status**: ✅ Complete
+- **Goal**: Ambient mode fills the black space around the picture with a soft glow of its colors.
+- **Depends on**: WebUI Settings Panel, whose Appearance section holds its settings.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- Ambient mode, as YouTube's: behind the player, a heavily blurred, dimmed copy of the current frame's colors fills the black space around the picture.
+  - At the update rate the player draws the frame into a tiny canvas, and the glow fades toward each new copy over the fade time, so the colors drift smoothly.
+  - The shown canvas blends toward each new sample instead of crossfading two layers, starting from what is on screen, so a sample that arrives mid-fade continues smoothly.
+  - A photo gets the same effect, drawn once from the photo.
+  - Sampling pauses while the video is paused or the tab is hidden.
+  - The glow sits on the player's dark background in both themes, so the light theme uses full color too, and each theme has its own strength, the same kind of setting in both.
+  - With ambient mode off, the space is plain black in both themes, as today.
+  - The effect never reads the canvas's pixels back, so it doesn't use `getImageData` or `toDataURL`.
+- Ambient mode's settings ship with it, apply as they change, and are kept per device:
+  - An Ambient mode toggle, on by default, in the Settings tab's Appearance section.
+  - Beside it, an expandable "Ambient mode settings" section, whose header shows a chevron that points right while it is closed and down while it is open.
+  - Its settings have plain labels, each showing its value: Update rate (1 per second by default, from 0.25 to 4), Fade time (2 s, from 0.25 to 4 s), Blur (64 px, from 10 to 80 px), Strength in the dark theme (50%), Strength in the light theme (75%), and Saturation (100%, from 0 to 200%).
+  - A Reset to defaults button.
+- The player is also clipped by a rounded `clip-path: inset(0 round 8px)`, so its corners stay rounded on iOS with ambient mode on, and it keeps its rounded corners in every view, fullscreen and a phone on its side included.
+- Ambient mode and its settings survive a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
+
+#### Traps
+
+- Two layers crossfading by CSS opacity flickered slightly in the mockup (measured).
+- The flicker came from the black background showing through whenever a sample arrived before the last fade finished (inferred).
+- Drawing a cross-origin video taints the canvas (inferred).
+- In every served setup the media is same-origin, so a tainted canvas happens only in development, where the Vite dev server plays media from the server's other origin, as WebUI Volume and Enhanced Audio sets out (inferred).
+- Showing a tainted canvas still works, since the effect never reads its pixels back (inferred).
+- In Safari and Firefox on iOS, the player's rounded corners turned square once ambient mode drew, and stayed rounded with it off or on other devices (measured).
+- WebKit doesn't clip a layer of its own, such as the blurred ambient canvas, to its parent's rounded corners (inferred).
+
+#### Acceptance
+
+- With ambient mode on, a blurred, dimmed copy of the frame's colors fills the black space around a playing video and crossfades as the picture changes, and a photo gets one from the photo. Sampling stops while the video is paused or the tab is hidden. Off, the space is plain black in both themes. The light theme uses full color at its own strength, and a sample that arrives mid-fade never lets the black background show through. Shown by ambient mode tests for sampling at the update rate while a video plays, holding while it is paused or the tab is hidden, and a photo drawn once.
+- The Ambient mode settings section offers each setting with its default and range, shows each value, applies changes as they're made, and Reset to defaults restores the defaults, in ambient mode tests of each of its settings.
+- The player is clipped by the rounded `clip-path`, and its corners stay rounded in fullscreen and on a phone on its side, in WebUI tests.
+- After a page refresh, ambient mode and its settings are each as they were, in tests for a page refresh keeping each setting this milestone adds.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check on the user's own browsers and phone, without the VM, including that with ambient mode on the player's corners stay rounded in Safari on iOS.
+
+#### Evidence
+
+- `npm run verify` passes, with 71 test files and 1431 tests, up from 70 and 1399, and the build output check.
+- `src/test/ambient.test.ts` covers ambient mode's settings: their defaults, ranges, steps, values shown, and reading, with each one outside its range at its default.
+- `src/test/ambient.test.ts` covers the glow:
+  - It shows and hides as ambient mode, the item playing, and a media failure say, and its layer carries the settings.
+  - It copies at the update rate, holds while the video is paused or the tab is hidden, copies a new paused video once and a photo once per play, copies a photo again when ambient mode turns back on, and waits for a picture.
+  - A new rate applies at once, and a new fade time applies to the fade under way.
+  - It fades from what is on screen without clearing it, a copy that arrives mid-fade carries on from there, and it stops while off or detached and draws nothing without a 2D context.
+- `src/test/settings.test.ts` covers ambient mode and its settings, kept on the device, and Reset to defaults.
+- `src/test/screens/player.test.ts` shows the glow on the page:
+  - It copies once a second while a video plays, holds while it is paused or the tab is hidden, and copies a photo once.
+  - It hides once the media fails, sits behind the video and the photo, and blurs at each theme's strength.
+  - With ambient mode off, the space is plain black in both themes.
+  - The player's corners are clipped by the rounded `clip-path` and stay rounded in pseudo-fullscreen, and only the player's own rule sets its corners, so the browser's fullscreen keeps them too.
+- `src/test/screens/phone.test.ts` shows the corners rounded on a phone on its side and on a taller screen.
+- `src/test/screens/settings.test.ts` covers the section's place, hint, and chevron, each slider's label, default, range, step, and value, and each setting applying as it moves.
+  - It also covers Reset to defaults, ambient mode and each setting surviving a page refresh, and the two new storage keys.
+- Each guarded behavior was broken in turn by editing the code, and its tests failed (measured):
+  - The glow: ignoring a paused video (3 tests) or a hidden tab (2), copying a photo on every update (2), clearing the canvas on screen each frame (1), starting a mid-fade copy from the last copy (2), and not copying a photo again when ambient mode turns back on (1).
+  - Timing and failure: a new rate waiting for the old timer (2), and a failure not hiding the glow (1).
+  - The stylesheet: no `clip-path` (3), a square rule back for pseudo-fullscreen (1), the browser's fullscreen (1), or a phone on its side (2), the video and photo not positioned (1), and the light theme at the dark theme's strength (2).
+  - Settings not read back after a page refresh (1).
+- happy-dom computes the player's `clip-path` as `inset(0 round 8px)` (measured). The tests enter pseudo-fullscreen, so the browser's fullscreen is checked through the stylesheet's rules.
+- happy-dom has no 2D canvas context and never loads media (measured), so the tests record draws through a stubbed `getContext` and set a video's `readyState` and a photo's `naturalWidth`.
+- Two existing tests changed with the new UI:
+  - The starting markup snapshot gains the glow's layer and Appearance's Ambient mode.
+  - The Settings tab's no-Save test now finds Reset to defaults as the tab's only button.
+- The sliders differ from the approved mockup: each is named by its label alone, with the value shown as its value text. The mockup's label wrapped the value, so a slider's name changed as it moved.
+- The player's corners differ from the approved mockup, which squared them in fullscreen and on a phone on its side. After trying rounded corners in the mockup on the iPad, the phone, and the desktop, the user chose to keep them rounded in every view.
+- The mockup now matches, with checks for the sliders' names and value text and for the player's rounded corners in fullscreen, on a phone on its side, and under every rule, and its overview no longer says the Mockup tab tunes ambient mode.
+  - With the square rules put back, its six corner checks failed (measured).
+  - `node docs/mockups/reelroulette/build/check.mjs` passes, with 1038 checks, up from 1028.
+- `check-milestones.ps1` passes.
+- CONTEXT.md, `docs/domain-inventory.md`, and CHANGELOG.md describe ambient mode.
+- The user's spot check passed every step:
+  - On the desktop, a playing video glows, drifting as it plays and holding while paused, and the light theme glows at full color.
+  - The settings apply as they move, Reset to defaults restores them, and off, which survives a page refresh, leaves plain black.
+  - A photo glows from the photo.
+  - On the iPad in Safari, with ambient mode on, the player's corners stay rounded, and the glow shows in fullscreen.
+  - Playback stays smooth on the phone.
+
+#### Release checks
+
+- Manual: On the iPad, in Safari and Firefox, with ambient mode on, the player's corners stay rounded.
+- Manual: On the iPad, with ambient mode on, a video playing for an hour or more doesn't make it run noticeably warm or drain its battery noticeably faster than with ambient mode off, and playback stays smooth.
+
 ### M12h - WebUI Stats Panel
 
 - **Status**: ✅ Complete

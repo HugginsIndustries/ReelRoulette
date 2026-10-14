@@ -81,20 +81,18 @@ body { height: var(--page-height); overflow: hidden; display: flex; flex-directi
   :root { --page-height: 100lvh; }
   .stage.fullscreen-pseudo { height: var(--page-height); }
 }
-.stage:fullscreen .media-container { --player-radius: 0px; }
-.stage.fullscreen-pseudo .media-container { --player-radius: 0px; }
 /* The player column holds the popups beside the player, which clips what it holds. It sets no z-index or containment,
    since either makes a stacking context that would keep the popups under the overlay panel. */
 .player-col { flex: 1 1 0; min-width: 0; display: flex; position: relative; }
 
-/* The player is clipped by a rounded clip-path as well as overflow: WebKit doesn't clip a layer of its own, such as the
-   blurred ambient canvas, to its parent's rounded corners, so on iOS they turned square once ambient mode drew. */
+/* The player keeps its rounded corners in every view, fullscreen and a phone on its side too. It is clipped by a rounded
+   clip-path as well as overflow: WebKit doesn't clip a layer of its own, such as the blurred ambient canvas, to its
+   parent's rounded corners, so on iOS they turned square once ambient mode drew. */
 .media-container {
-  --player-radius: 8px;
   position: relative;
   background: #000;
-  border-radius: var(--player-radius);
-  clip-path: inset(0 round var(--player-radius));
+  border-radius: 8px;
+  clip-path: inset(0 round 8px);
   overflow: hidden;
   flex: 1;
   display: flex;
@@ -639,7 +637,6 @@ kbd {
    fullscreen without the browser's fullscreen mode. The panel and dialogs still open, compacted. */
 body.short-screen #app { padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); }
 body.short-screen .top-bar { display: none; }
-body.short-screen .media-container { --player-radius: 0px; }
 body.short-screen .panel-tabs { padding: 2px 6px; }
 body.short-screen .panel-tab, body.short-screen #panel-close { width: 40px; height: 40px; min-width: 40px; }
 body.short-screen .panel-tab[aria-selected="true"]::after { bottom: -3px; }
@@ -1137,18 +1134,18 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
               <details class="setting-more" id="set-ambient-more">
                 <summary><span class="material-symbol-icon setting-more-chevron">chevron_right</span>Ambient mode settings</summary>
                 <div class="setting-sliders">
-                  <label for="set-ambient-rate"><span>Update rate</span><output id="set-ambient-rate-out" for="set-ambient-rate"></output></label>
-                  <input type="range" id="set-ambient-rate" min="0.25" max="4" step="0.25">
-                  <label for="set-ambient-fade"><span>Fade time</span><output id="set-ambient-fade-out" for="set-ambient-fade"></output></label>
-                  <input type="range" id="set-ambient-fade" min="0.25" max="4" step="0.25">
-                  <label for="set-ambient-blur"><span>Blur</span><output id="set-ambient-blur-out" for="set-ambient-blur"></output></label>
-                  <input type="range" id="set-ambient-blur" min="10" max="80" step="1">
-                  <label for="set-ambient-dark"><span>Strength in the dark theme</span><output id="set-ambient-dark-out" for="set-ambient-dark"></output></label>
-                  <input type="range" id="set-ambient-dark" min="0" max="100" step="1">
-                  <label for="set-ambient-light"><span>Strength in the light theme</span><output id="set-ambient-light-out" for="set-ambient-light"></output></label>
-                  <input type="range" id="set-ambient-light" min="0" max="100" step="1">
-                  <label for="set-ambient-saturation"><span>Saturation</span><output id="set-ambient-saturation-out" for="set-ambient-saturation"></output></label>
-                  <input type="range" id="set-ambient-saturation" min="0" max="200" step="5">
+                  <label for="set-ambient-rate"><span id="set-ambient-rate-label">Update rate</span><output id="set-ambient-rate-out" for="set-ambient-rate"></output></label>
+                  <input type="range" id="set-ambient-rate" aria-labelledby="set-ambient-rate-label" min="0.25" max="4" step="0.25">
+                  <label for="set-ambient-fade"><span id="set-ambient-fade-label">Fade time</span><output id="set-ambient-fade-out" for="set-ambient-fade"></output></label>
+                  <input type="range" id="set-ambient-fade" aria-labelledby="set-ambient-fade-label" min="0.25" max="4" step="0.25">
+                  <label for="set-ambient-blur"><span id="set-ambient-blur-label">Blur</span><output id="set-ambient-blur-out" for="set-ambient-blur"></output></label>
+                  <input type="range" id="set-ambient-blur" aria-labelledby="set-ambient-blur-label" min="10" max="80" step="1">
+                  <label for="set-ambient-dark"><span id="set-ambient-dark-label">Strength in the dark theme</span><output id="set-ambient-dark-out" for="set-ambient-dark"></output></label>
+                  <input type="range" id="set-ambient-dark" aria-labelledby="set-ambient-dark-label" min="0" max="100" step="1">
+                  <label for="set-ambient-light"><span id="set-ambient-light-label">Strength in the light theme</span><output id="set-ambient-light-out" for="set-ambient-light"></output></label>
+                  <input type="range" id="set-ambient-light" aria-labelledby="set-ambient-light-label" min="0" max="100" step="1">
+                  <label for="set-ambient-saturation"><span id="set-ambient-saturation-label">Saturation</span><output id="set-ambient-saturation-out" for="set-ambient-saturation"></output></label>
+                  <input type="range" id="set-ambient-saturation" aria-labelledby="set-ambient-saturation-label" min="0" max="200" step="5">
                   <button class="btn" type="button" id="set-ambient-reset">Reset to defaults</button>
                 </div>
               </details>
@@ -4740,7 +4737,8 @@ function initSettings() {
       applyTheme();
     });
   });
-  // Ambient mode settings: each control shows its value, applies as it moves, and is kept on this device.
+  // Ambient mode settings: each control shows its value, applies as it moves, and is kept on this device. A slider is
+  // named by its label alone, and the value shown is its value text.
   const ambientControls = [
     ["rate", (value) => `${value} per second`],
     ["fade", (value) => `${value} s`],
@@ -4752,6 +4750,7 @@ function initSettings() {
   const renderAmbientSettings = () => {
     ambientControls.forEach(([key, format]) => {
       $(`set-ambient-${key}`).value = String(tuning[key]);
+      $(`set-ambient-${key}`).setAttribute("aria-valuetext", format(tuning[key]));
       $(`set-ambient-${key}-out`).textContent = format(tuning[key]);
     });
     renderAmbient();

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_AMBIENT_TUNING } from "../playback/ambient";
 import { advanceAfterProblem, createSettings, wholeNumberProblem } from "../settings/settings";
 import { createDeviceStore } from "../state/deviceStore";
 
@@ -67,5 +68,34 @@ describe("createSettings' Appearance", () => {
     settings.setTileNames(false);
     expect([settings.theme.value, settings.tileNames.value]).toEqual(["dark", false]);
     expect([storage.values.get("rr_device.appearance.theme"), storage.values.get("rr_device.appearance.tileNames")]).toEqual(['"dark"', "false"]);
+  });
+});
+
+describe("createSettings' ambient mode", () => {
+  it("starts on, or as this device keeps it, and keeps each change", () => {
+    expect(createSettings({ device: createDeviceStore(memoryStorage()) }).ambient.value).toBe(true);
+    expect(createSettings({ device: createDeviceStore(memoryStorage({ "rr_device.appearance.ambient": '"off"' })) }).ambient.value).toBe(true);
+
+    const storage = memoryStorage({ "rr_device.appearance.ambient": "false" });
+    const settings = createSettings({ device: createDeviceStore(storage) });
+    expect(settings.ambient.value).toBe(false);
+    settings.setAmbient(true);
+    expect(settings.ambient.value).toBe(true);
+    expect(storage.values.get("rr_device.appearance.ambient")).toBe("true");
+  });
+
+  it("changes the settings given, keeping the others, and Reset to defaults puts every one back", () => {
+    const storage = memoryStorage({ "rr_device.appearance.ambientSettings": JSON.stringify({ ...DEFAULT_AMBIENT_TUNING, blur: 40 }) });
+    const settings = createSettings({ device: createDeviceStore(storage) });
+    expect(settings.ambientTuning.value).toEqual({ ...DEFAULT_AMBIENT_TUNING, blur: 40 });
+
+    settings.setAmbientTuning({ rate: 2.5 });
+    const changed = { ...DEFAULT_AMBIENT_TUNING, blur: 40, rate: 2.5 };
+    expect(settings.ambientTuning.value).toEqual(changed);
+    expect(JSON.parse(storage.values.get("rr_device.appearance.ambientSettings")!)).toEqual(changed);
+
+    settings.resetAmbientTuning();
+    expect(settings.ambientTuning.value).toEqual(DEFAULT_AMBIENT_TUNING);
+    expect(JSON.parse(storage.values.get("rr_device.appearance.ambientSettings")!)).toEqual(DEFAULT_AMBIENT_TUNING);
   });
 });
