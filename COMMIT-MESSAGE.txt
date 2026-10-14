@@ -19,13 +19,12 @@ Instructions:
 
 Commit Message:
 
-M12i2: Add the WebUI's autoplay modes and Loop stops autoplay
+Docs: Plan 5-star item ratings with half stars for v0.15.0
 
-- Autoplay has two modes in the Settings tab, Normal and Timer, in place of the desktop's Keep Playing. Timer advances every item after Advance after, a video still playing too, counting from when the video plays and holding while it is paused.
-- Advance after, now the timer both modes use, takes 1 to 3600 seconds, and the store's photo duration names become Advance after's.
-- A new Loop stops autoplay setting, on by default, keeps a looping item repeating. Turned off, autoplay goes on with Loop on, repeating a short video until Advance after has run, and in Normal mode finishing the repeat in progress first.
-- In Timer mode while Loop holds autoplay, a video repeats a stretch of Advance after seconds that starts where a seek lands, shown faintly behind the scrub bar.
-- A repeat only restarts a photo's timer or the video's position, so a looping photo no longer reloads, flickers, or counts another play, and Loop keeps a photo's time.
-- The mockup gets the setting and its behavior, with checks for each case at both widths.
-- New WebUI Loop Range milestone, M12n, before WebUI Admin Section, for start and end markers that set what Loop repeats. The milestones after it move one letter on, to M12o1 through M12v.
-- The milestone is complete and moves to MILESTONES-COMPLETED.md, its three Release checks join the testing checklist's Manual checks, and WebUI Keyboard Shortcuts records that its seek and frame-step keys move Timer mode's stretch.
+- New Item Ratings milestone, M12i3, next in line: a half-star rating kept on the server in a new catalog schema step, set from the Stats tab's Current file section, with its own event so every open WebUI updates and pops up Your actions or Other devices, and a Rated card. It also freezes the shipped 2→3 upgrade step's index SQL, names the fields the server always sends in `LibraryProjectionItem`, and adds a mockup check that every icon is in the font subset.
+- New WebUI Player Rating (M12i7), Rating Filter and Sort (M12k2), Rating-Weighted Random Picks (M12k3), and WebUI Ratings on Tiles (M12l2) milestones. The player and tile ratings are designed in the mockup first, and the weighting's open points are settled before it is built.
+- WebUI Keyboard Shortcuts gains Shift+1 to Shift+5, Shift+0, and - and = for the rating, and its Trap about which keys the WebUI handles now names the header's file name.
+- WebUI Multi-Select and Bulk Actions gains bulk rating, and Admin Refresh, Backup, and Duplicate Review shows ratings in duplicate review, with Select Best preferring the highest-rated file.
+- File Metadata Sync and Extended Metadata syncs Item Ratings' rating with media files instead of adding its own, and Desktop Client Removal moves the WebUI-only fixture cases into the shared fixtures.
+- WebUI Keyboard Navigation and Focus now also depends on the new rating controls and on WebUI Loop Range.
+- Active milestones are renumbered to stay in order: WebUI Volume and Enhanced Audio, Loudness Normalization, and Player Controls become M12i4 to M12i6, WebUI Keyboard Shortcuts M12i8, Browser-Playable Filter M12k1, and WebUI Grid Scrollbar Seek M12l3, and the Planned Releases outline follows.
