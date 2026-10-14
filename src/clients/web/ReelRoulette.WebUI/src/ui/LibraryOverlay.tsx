@@ -19,7 +19,7 @@ function tileItemId(target: EventTarget | null): string | null {
  * the Filters line collapse together. The panel shows and hides the tab's page.
  */
 export function LibraryOverlay() {
-  const { library, store } = useApp();
+  const { library, store, settings } = useApp();
 
   useLayoutEffect(() => {
     library.attach();
@@ -33,8 +33,10 @@ export function LibraryOverlay() {
   // Nothing loads while the server fails the compatibility check or runs without a library, so search and sort have
   // nothing to change.
   const blocked = store.heldBack.value;
+  // The tiles show their file names only with the Settings tab's option, which the stylesheet reads from this class, so
+  // the grid's tiles aren't rendered again.
   return (
-    <div id="library-overlay" class="library-overlay">
+    <div id="library-overlay" class={settings.tileNames.value ? "library-overlay show-tile-names" : "library-overlay"}>
       <div class="library-overlay-header">
         <h2>Library</h2>
         <p id="library-overlay-summary" class="library-overlay-summary" aria-live="polite" hidden={summary === null}>{summary}</p>

@@ -13,6 +13,26 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <title>ReelRoulette</title>
+    <script>
+      // Applies the theme kept on this device while the page loads, before it paints and before an installed iOS app
+      // reads its status bar style. It matches src/settings/theme.ts, which a test checks; without a kept theme or
+      // with one it can't read, it follows the system, as System does.
+      (function () {
+        var choice = "system";
+        try {
+          var kept = JSON.parse(localStorage.getItem("rr_device.appearance.theme"));
+          if (kept === "system" || kept === "dark" || kept === "light") choice = kept;
+        } catch (e) {}
+        var dark = choice === "system" ? !window.matchMedia || window.matchMedia("(prefers-color-scheme: dark)").matches : choice === "dark";
+        var root = document.documentElement;
+        root.classList.remove("theme-dark", "theme-light");
+        root.classList.add(dark ? "theme-dark" : "theme-light");
+        var color = document.querySelector('meta[name="theme-color"]');
+        if (color) color.setAttribute("content", dark ? "#1a1a1a" : "#eceff4");
+        var bar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+        if (bar) bar.setAttribute("content", dark ? "black-translucent" : "default");
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

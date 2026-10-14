@@ -19,13 +19,9 @@ Instructions:
 
 Commit Message:
 
-M12g: Add the WebUI's Settings tab with Advance after, the panel's side, Auto-Pause, and Diagnostics
+M12g: Add the Settings tab's Appearance section with Theme and file names on tiles
 
-- The side panel gains a Settings tab after Tags, in the mockup's sections, Playback, Panel, and Diagnostics so far, then a line saying settings apply at once and are kept on this device; there is no Save.
-- Advance after, the photo duration, leaves the header. It takes a whole number of seconds from 1 to 300, starts at 10 in place of 15, is kept as `playback.advanceAfter` with nothing carried over from the older `rr_photoDuration`, and a change gives a showing photo's timer the new length, keeping the time it has shown and whether it runs or Auto-Pause holds it, without showing the photo again.
-- Side moves the panel and its button, which sits just right of the bell while the panel is on the left, and Auto-Pause offers Responsive, Always, and Never; both act at once while the panel is open.
-- Diagnostics shows the client and session ids, client type, and device name in full, the server's release version (`assetsVersion`, else `appVersion`) with its API version, and the app's version, which the build reads from `.version` and the build output check confirms.
-- Mute, Loop, and Autoplay are remembered per device.
-- The M12g entry is split into Settings tab, Appearance, and Notifications settings slices, and the mockup's Diagnostics shows realistic full-length values.
-- The field validation pattern gains a setting's field, used by Advance after and every Settings field in the mockup: it saves a valid value only on Enter or on leaving the field, never as it is typed, and shows the value saved again once the field loses focus or hides with the tab or the panel. Its rule also now says only a field that may sit empty is never flagged while empty; one that must always hold a value, such as Advance after, is flagged when emptied.
-- A setting's field shows a green check in the red icon's place for about two seconds when Enter or leaving it saves a new value, and says "Saved" in a polite live region, but not for the same value or for a value that isn't valid going back. The field validation pattern's red icons, in a field, on a held action, and after a Filter section's name, its tooltip, and the check fade in and out over 250 ms, staying rendered while they fade out, on every screen that uses the pattern; with reduced motion they show and hide at once, and `aria-invalid`, the field's description, and a held action's state change at once either way.
+- Theme offers System, the default, Dark, and Light, kept per device; System follows the system's scheme as it changes, and Dark or Light holds.
+- The `theme-color` meta and the installed app's status bar style follow the theme in use, `default` in the light theme for dark status bar text, and an inline script in `index.html` applies the kept theme while the page loads, before it paints and before iOS reads the status bar style; a test runs it case by case against `src/settings/theme.ts`, and the build output check confirms the built page keeps it.
+- Show file names on tiles is off by default and kept per device; a class on the Library tab shows the name bars without rendering the tiles again, and each tile's tooltip names it either way.
+- The test harness runs as a dark-scheme device and clears the theme between tests, and the header's logo tests choose their theme as the Settings tab keeps it.

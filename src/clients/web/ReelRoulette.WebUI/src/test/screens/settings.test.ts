@@ -16,6 +16,8 @@ import {
   resetPage,
   setViewport,
   settle,
+  stubColorScheme,
+  stubLayoutSize,
   stubReducedMotion,
   useStylesheet,
   type MountedPage
@@ -167,11 +169,11 @@ describe("the Settings tab", () => {
     expect(tab("Settings").getAttribute("aria-selected")).toBe("true");
   });
 
-  it("shows Playback, Panel, and Diagnostics, in that order, then says settings apply at once, with no Save", async () => {
+  it("shows Playback, Appearance, Panel, and Diagnostics, in that order, then says settings apply at once, with no Save", async () => {
     await mount();
     await openSettings();
     const headings = within(settingsPage()).getAllByRole("heading", { level: 3 });
-    expect(headings.map((heading) => heading.textContent)).toEqual(["Playback", "Panel", "Diagnostics"]);
+    expect(headings.map((heading) => heading.textContent)).toEqual(["Playback", "Appearance", "Panel", "Diagnostics"]);
     expect(within(settingsPage()).getByText("Settings apply at once and are kept on this device.")).toBeTruthy();
     expect(within(settingsPage()).queryAllByRole("button")).toHaveLength(0);
   });
@@ -680,7 +682,134 @@ describe("Diagnostics", () => {
   });
 });
 
+/** The theme on the page: the root element's theme class, and the `theme-color` and status bar style metas. */
+function pageTheme(): { classes: string[]; color: string | null; statusBar: string | null } {
+  const meta = (name: string) => document.head.querySelector(`meta[name="${name}"]`)?.getAttribute("content") ?? null;
+  return {
+    classes: Array.from(document.documentElement.classList).filter((name) => name.startsWith("theme-")),
+    color: meta("theme-color"),
+    statusBar: meta("apple-mobile-web-app-status-bar-style")
+  };
+}
+
+const DARK = { classes: ["theme-dark"], color: "#1a1a1a", statusBar: "black-translucent" };
+const LIGHT = { classes: ["theme-light"], color: "#eceff4", statusBar: "default" };
+
+function tileNamesBox(): HTMLInputElement {
+  return within(settingsPage()).getByRole("checkbox", { name: "Show file names on tiles", hidden: true }) as HTMLInputElement;
+}
+
+const LIBRARY_ITEM = {
+  id: "item-1",
+  sourceId: "source-1",
+  fileName: "clip 1.mp4",
+  fullPath: "C:\\media\\clip 1.mp4",
+  relativePath: "clip 1.mp4",
+  mediaType: 0,
+  durationSeconds: 60,
+  playCount: 0,
+  isFavorite: false,
+  isBlacklisted: false,
+  tags: [] as string[],
+  hasThumbnail: false,
+  thumbnailWidth: 1920,
+  thumbnailHeight: 1080
+};
+
+describe("Theme", () => {
+  it("offers System, Dark, and Light, starts at System, and applies each at once, with the metas an installed app reads", async () => {
+    // The harness's system is dark.
+    await mount();
+    await openSettings();
+    const group = within(settingsPage()).getByRole("radiogroup", { name: "Theme", hidden: true });
+    expect(within(group).getAllByRole("radio", { hidden: true }).map((choice) => choice.getAttribute("value"))).toEqual(["system", "dark", "light"]);
+    expect(radio("System").checked).toBe(true);
+    expect(pageTheme()).toEqual(DARK);
+
+    await click(radio("Light"));
+    expect(pageTheme()).toEqual(LIGHT);
+    expect(localStorage.getItem("rr_device.appearance.theme")).toBe('"light"');
+
+    await click(radio("Dark"));
+    expect(pageTheme()).toEqual(DARK);
+    expect(localStorage.getItem("rr_device.appearance.theme")).toBe('"dark"');
+
+    await click(radio("System"));
+    expect(pageTheme()).toEqual(DARK);
+    expect(localStorage.getItem("rr_device.appearance.theme")).toBe('"system"');
+  });
+
+  it("follows the system's scheme as it changes while System is chosen, and not while Dark or Light is", async () => {
+    const setSystemDark = stubColorScheme(false);
+    await mount();
+    expect(pageTheme()).toEqual(LIGHT);
+    setSystemDark(true);
+    expect(pageTheme()).toEqual(DARK);
+
+    await openSettings();
+    await click(radio("Light"));
+    setSystemDark(false);
+    setSystemDark(true);
+    expect(pageTheme()).toEqual(LIGHT);
+
+    await click(radio("System"));
+    expect(pageTheme()).toEqual(DARK);
+    setSystemDark(false);
+    expect(pageTheme()).toEqual(LIGHT);
+  });
+});
+
+describe("Show file names on tiles", () => {
+  it("starts off, and shows each tile's name on it once turned on, while the tile's tooltip names it either way", async () => {
+    useStylesheet();
+    stubLayoutSize();
+    const server = new FakeServer();
+    server.on("POST", "/api/library/query", () => json({ items: [LIBRARY_ITEM], totalCount: 1, searchBaselineCount: 1 }));
+    await mount(server);
+    await click(tab("Library"));
+    const tile = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>('.library-grid-tile[data-item-id="item-1"]');
+      expect(found).not.toBeNull();
+      return found!;
+    });
+    const name = tile.querySelector(".library-grid-tile-filename")!;
+    expect(name.textContent).toBe("clip 1.mp4");
+    expect(tile.title).toBe("clip 1.mp4");
+    expect(currentStyle(name).display).toBe("none");
+
+    await openSettings();
+    expect(tileNamesBox().checked).toBe(false);
+    expect(document.getElementById(tileNamesBox().getAttribute("aria-describedby")!)!.textContent).toBe("Hovering a tile shows its name either way.");
+    await click(tileNamesBox());
+    expect(localStorage.getItem("rr_device.appearance.tileNames")).toBe("true");
+    await click(tab("Library"));
+    // The same tile, not rendered again.
+    expect(document.querySelector('.library-grid-tile[data-item-id="item-1"]')).toBe(tile);
+    expect(currentStyle(name).display).toBe("block");
+    expect(tile.title).toBe("clip 1.mp4");
+
+    await openSettings();
+    await click(tileNamesBox());
+    expect(currentStyle(name).display).toBe("none");
+  });
+});
+
 describe("kept on this device", () => {
+  it("keeps the theme and Show file names on tiles after a page refresh", async () => {
+    const page = await mount();
+    await openSettings();
+    await click(radio("Light"));
+    await click(tileNamesBox());
+    page.unmount();
+
+    await mount();
+    expect(pageTheme()).toEqual(LIGHT);
+    expect(document.getElementById("library-overlay")!.classList.contains("show-tile-names")).toBe(true);
+    await openSettings();
+    expect(radio("Light").checked).toBe(true);
+    expect(tileNamesBox().checked).toBe(true);
+  });
+
   it("keeps Advance after, the side, Auto-Pause, and the player's Autoplay, Loop, and Mute after a page refresh", async () => {
     const page = await mount();
     await openSettings();
@@ -715,12 +844,16 @@ describe("kept on this device", () => {
     fireEvent.keyDown(advanceAfter(), { key: "Enter" });
     await click(radio("Left"));
     await click(radio("Always"));
+    await click(radio("Light"));
+    await click(tileNamesBox());
     await click(playerButton("Autoplay"));
     await click(playerButton("Loop"));
     await click(playerButton("Mute"));
 
     expect(page.server.calls.slice(requestsBefore)).toEqual([]);
     expect(storageKeys().filter((key) => !keysBefore.includes(key))).toEqual([
+      "rr_device.appearance.theme",
+      "rr_device.appearance.tileNames",
       "rr_device.panel.autoPause",
       "rr_device.panel.side",
       "rr_device.playback.advanceAfter",

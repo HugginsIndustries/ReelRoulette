@@ -1333,7 +1333,10 @@ html.theme-light .library-grid-tile:focus-visible {
   color: var(--huggins-orange);
   opacity: 0.8;
 }
+/* File names show on tiles only with the Settings tab's option; the tile's tooltip names it either way. */
+.library-overlay.show-tile-names .library-grid-tile-filename { display: block; }
 .library-grid-tile-filename {
+  display: none;
   position: absolute;
   left: 0;
   right: 0;

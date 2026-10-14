@@ -135,6 +135,10 @@ async function run() {
   if (!indexHtml.includes("assets/")) {
     throw new Error("dist/index.html does not reference built asset bundles.");
   }
+  // The boot script applies the theme kept on this device while the page loads, before the app's own script runs.
+  if (!/<script>[\s\S]*rr_device\.appearance\.theme[\s\S]*?<\/script>/.test(indexHtml)) {
+    throw new Error("dist/index.html has lost its theme boot script.");
+  }
 
   console.log("Build output verification passed.");
 }

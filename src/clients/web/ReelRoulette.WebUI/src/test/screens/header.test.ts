@@ -29,11 +29,12 @@ afterEach(() => {
 });
 
 /**
- * Mounts the page with the stylesheet, a theme, and a window width. The theme and width are set before the page
- * mounts, since happy-dom can keep an element's computed style after a class on `<html>` changes.
+ * Mounts the page with the stylesheet, a theme chosen as the Settings tab keeps it, and a window width. The theme and
+ * width are set before the page mounts, since happy-dom can keep an element's computed style after a class on `<html>`
+ * changes.
  */
 async function mountStyledPage(theme: "dark" | "light", width: number): Promise<HTMLElement> {
-  document.documentElement.classList.add(`theme-${theme}`);
+  localStorage.setItem("rr_device.appearance.theme", JSON.stringify(theme));
   setViewport({ width, height: 800 });
   style = document.createElement("style");
   style.textContent = STYLESHEET;

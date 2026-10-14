@@ -168,7 +168,7 @@ Last milestone completed: M12f8
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Settings tab | ✅ Complete | The tab in the panel's row, its sections in the mockup's order, Playback's Advance after out of the header, Panel's Side and Auto-Pause, Diagnostics with both versions, the closing line, the player's autoplay, loop, and mute kept across a refresh, a setting's field's saved check, and the field validation pattern's icons and tooltip fading in and out. |
-| Appearance | ⏳ Planned | Theme, with `theme-color` and the status bar style following it, and Show file names on tiles. |
+| Appearance | ✅ Complete | Theme, with `theme-color` and the status bar style following it, and Show file names on tiles. |
 | Notifications settings | ⏳ Planned | The Notifications section with Popup settings and the sample popup, and the bell list's Notification settings link. |
 
 #### Settings tab slice
@@ -292,6 +292,20 @@ Last milestone completed: M12f8
 - After a page refresh, the theme and whether file names show on tiles are each as they were, in WebUI tests of a page refresh.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check on a phone.
+
+**Evidence**
+
+- Theme is `src/settings/theme.ts`: the choices, `resolveTheme`, `THEME_META` with each theme's `theme-color` (`#1a1a1a`, `#eceff4`) and status bar style (`black-translucent`, `default`), `applyTheme`, which sets the root element's class and both metas, creating a missing meta, and `followTheme`, which applies the choice now and again as it or the system's scheme changes. The settings service keeps it as `appearance.theme`, System by default, beside `appearance.tileNames`, off by default. `App.tsx` follows it in a layout effect, as it toggles `short-screen`, so it stops when the page unmounts; `main.ts`'s own system sync is gone.
+- `index.html`'s head has an inline boot script, after the two metas, that reads `rr_device.appearance.theme`, takes only the three choices, falls back to System, and sets the class and the metas while the page loads; the metas' static values stay dark. The server sends no Content-Security-Policy, so it runs (read from the server code). Vite keeps it in the built page, ahead of the app's module script (measured), and the build output check now fails unless the built page holds it, which it did when the script was stripped from `dist/index.html`.
+- Show file names on tiles is the `show-tile-names` class on `#library-overlay`, from `settings.tileNames`, and the stylesheet hides `.library-grid-tile-filename` unless that class is there; the tiles aren't rendered again, and their `title` is unchanged.
+- The Appearance section, between Playback and Panel, holds Theme's radio buttons and a `Checkbox` with the hint as its description, with the mockup's wording; the mockup needed no change.
+- happy-dom reports a light system scheme (measured), so the test harness's `resetPage` sets its scheme to dark and clears the theme classes and metas between tests, and gains `stubColorScheme`, a query that sends `change` as the system's scheme changes. Without the dark setting, only the new Theme test, which assumes it, failed; no existing test depended on it (measured). The header's logo tests choose their theme through `rr_device.appearance.theme`.
+- Tests: in `src/test/screens/settings.test.ts`, Theme's three choices starting at System and each applying the class and both metas at once and being kept, System following the system's changes and Dark or Light holding, Show file names on tiles starting off, a tile's name bar shown and hidden by the stylesheet on the same tile with its tooltip either way, a page refresh keeping both, the section order, and the storage test's two new keys; `src/test/screens/themeBoot.test.ts` (16 tests) runs the boot script with nothing kept, each choice, an unknown value, and text that isn't JSON, under a dark and a light system, against `resolveTheme` and `applyTheme`, with storage that throws, and checks the static metas are dark; `src/test/theme.test.ts` and `src/test/settings.test.ts` cover `resolveTheme`, `isThemeChoice`, `THEME_META`, and the two settings' defaults and writes. The full-page snapshot gains only the Appearance section.
+- Each guarded part was broken in turn and its tests failed: the boot script ignoring the kept choice (2 tests), the light theme keeping `black-translucent` (12), System ignoring the system's change (1), the tile-names rule removed (1), the theme not kept (4), file names on tiles not kept (4), and the page not following the theme (4, the light logo test included).
+- `npm run verify` passed: the contracts are fresh, typecheck, 65 test files and 1339 tests, the build, and the build output check. The mockup's pages rebuilt unchanged and `node docs/mockups/reelroulette/build/check.mjs` and `check-milestones.ps1` passed. There are no C# changes.
+- `CONTEXT.md`, `CHANGELOG.md`, and `docs/domain-inventory.md` follow.
+- The spot check passed: on a phone in the browser, Light, Dark, and System each applied and Show file names on tiles showed the names, both kept after a refresh; and the iPad's installed app in Light, after a relaunch, in portrait and landscape, showed readable status bar text with the header below the status bar and nothing cut off or left as a gap at the top or bottom edge.
+- The installed iOS app's status bar followed a theme change at once while the app was running, with no relaunch (measured on the user's iPad).
 
 #### Notifications settings slice
 

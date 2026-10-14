@@ -3,6 +3,7 @@ import { APP_VERSION } from "../config/appVersion";
 import type { PanelSide } from "../panel/panelHost";
 import type { AutoPauseMode } from "../playback/autoPause";
 import { advanceAfterProblem } from "../settings/settings";
+import type { ThemeChoice } from "../settings/theme";
 import { useApp } from "./appContext";
 import { SettingTextField } from "./FieldValidation";
 
@@ -12,6 +13,12 @@ interface Choice<T extends string> {
   title: string;
   description?: string;
 }
+
+const THEME_OPTIONS: readonly Choice<ThemeChoice>[] = [
+  { value: "system", title: "System" },
+  { value: "dark", title: "Dark" },
+  { value: "light", title: "Light" }
+];
 
 const SIDE_CHOICES: readonly Choice<PanelSide>[] = [
   { value: "left", title: "Left" },
@@ -27,7 +34,8 @@ const AUTO_PAUSE_CHOICES: readonly Choice<AutoPauseMode>[] = [
 /**
  * The panel's Settings tab: the settings kept on this device, in the mockup's sections, and Diagnostics. Each setting
  * applies as it changes, so there is no Save. Sections that later work fills go in the mockup's places: Audio and
- * Player controls after Playback, Appearance and Notifications before Panel, and Keyboard shortcuts before Diagnostics.
+ * Player controls after Playback, Notifications between Appearance and Panel, and Keyboard shortcuts before
+ * Diagnostics.
  */
 export function SettingsTab() {
   return (
@@ -38,6 +46,9 @@ export function SettingsTab() {
       <div id="settings-body" class="settings-body themed-scrollbar">
         <Section id="playback" title="Playback">
           <AdvanceAfter />
+        </Section>
+        <Section id="appearance" title="Appearance">
+          <AppearanceSettings />
         </Section>
         <Section id="panel" title="Panel">
           <PanelSettings />
@@ -121,6 +132,42 @@ function AdvanceAfter() {
         <span>seconds</span>
       </div>
     </div>
+  );
+}
+
+/** A setting that is on or off, with a hint under it, when it has one, as its description. */
+function Checkbox(props: { id: string; label: string; hint?: string; checked: boolean; onChange: (on: boolean) => void }) {
+  const { id, label, hint, checked, onChange } = props;
+  return (
+    <div class="setting">
+      <div class="choice-row">
+        <label>
+          <input type="checkbox" id={id} checked={checked} aria-describedby={hint ? `${id}-hint` : undefined} onChange={(event) => onChange(event.currentTarget.checked)} />
+          {label}
+        </label>
+      </div>
+      {hint ? (
+        <p class="setting-hint" id={`${id}-hint`}>
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function AppearanceSettings() {
+  const { settings } = useApp();
+  return (
+    <>
+      <Choices id="settings-theme" label="Theme" choices={THEME_OPTIONS} value={settings.theme.value} onChange={settings.setTheme} />
+      <Checkbox
+        id="settings-tile-names"
+        label="Show file names on tiles"
+        hint="Hovering a tile shows its name either way."
+        checked={settings.tileNames.value}
+        onChange={settings.setTileNames}
+      />
+    </>
   );
 }
 

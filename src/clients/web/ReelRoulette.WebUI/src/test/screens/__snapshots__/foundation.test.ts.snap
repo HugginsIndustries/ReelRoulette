@@ -209,6 +209,35 @@ exports[`page structure > keeps the starting markup 1`] = `
                     <span aria-live="polite" class="visually-hidden">
                   <span>
                     "seconds"
+            <section aria-labelledby="settings-appearance-heading" class="settings-section">
+              <h3 id="settings-appearance-heading">
+                "Appearance"
+              <div class="setting">
+                <span class="setting-label" id="settings-theme-label">
+                  "Theme"
+                <div aria-labelledby="settings-theme-label" class="choice-row" role="radiogroup">
+                  <label>
+                    <input aria-labelledby="settings-theme-system" name="settings-theme" type="radio" value="system">
+                    <span>
+                      <span id="settings-theme-system">
+                        "System"
+                  <label>
+                    <input aria-labelledby="settings-theme-dark" name="settings-theme" type="radio" value="dark">
+                    <span>
+                      <span id="settings-theme-dark">
+                        "Dark"
+                  <label>
+                    <input aria-labelledby="settings-theme-light" name="settings-theme" type="radio" value="light">
+                    <span>
+                      <span id="settings-theme-light">
+                        "Light"
+              <div class="setting">
+                <div class="choice-row">
+                  <label>
+                    <input aria-describedby="settings-tile-names-hint" id="settings-tile-names" type="checkbox">
+                    "Show file names on tiles"
+                <p class="setting-hint" id="settings-tile-names-hint">
+                  "Hovering a tile shows its name either way."
             <section aria-labelledby="settings-panel-heading" class="settings-section">
               <h3 id="settings-panel-heading">
                 "Panel"

@@ -323,6 +323,30 @@ export function stubCoarsePointer(): void {
 }
 
 /**
+ * Makes `(prefers-color-scheme: dark)` answer as `dark` says, through a query that sends `change` when the returned
+ * function changes it, as a browser does when the system's scheme changes; happy-dom sends none.
+ */
+export function stubColorScheme(dark: boolean): (dark: boolean) => void {
+  const real = window.matchMedia.bind(window);
+  const listeners = new Set<() => void>();
+  const query = {
+    matches: dark,
+    media: "(prefers-color-scheme: dark)",
+    addEventListener: (_type: string, listener: () => void) => listeners.add(listener),
+    removeEventListener: (_type: string, listener: () => void) => listeners.delete(listener)
+  };
+  stubProperty(window, "matchMedia", {
+    value(text: string) {
+      return text.includes("prefers-color-scheme: dark") ? (query as unknown as MediaQueryList) : real(text);
+    }
+  });
+  return (next) => {
+    query.matches = next;
+    listeners.forEach((listener) => listener());
+  };
+}
+
+/**
  * Makes `(prefers-reduced-motion: reduce)` match, as when the system asks for reduced motion; happy-dom's `matchMedia`
  * never reports it. The stylesheet's own reduced-motion rules still don't apply.
  */
@@ -450,6 +474,11 @@ export function resetPage(userAgent = DESKTOP_USER_AGENT): void {
   if (window.innerWidth !== DEFAULT_VIEWPORT.width || window.innerHeight !== DEFAULT_VIEWPORT.height) {
     setViewport(DEFAULT_VIEWPORT);
   }
+  // The page follows the system's scheme by default, and happy-dom reports a light one, so the tests run as a dark
+  // device, the theme the stylesheet's own tokens give. The theme a page applied goes with it.
+  (window as unknown as HappyDomWindow).happyDOM.settings.device.prefersColorScheme = "dark";
+  document.documentElement.classList.remove("theme-dark", "theme-light");
+  document.head.querySelectorAll('meta[name="theme-color"], meta[name="apple-mobile-web-app-status-bar-style"]').forEach((meta) => meta.remove());
 }
 
 export function setUserAgent(userAgent: string): void {
