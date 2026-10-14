@@ -9,6 +9,7 @@ import type { AppApi } from "../state/appApi";
 import type { AppStore } from "../state/appStore";
 import type { DeviceStore } from "../state/deviceStore";
 import type { ServerConnection } from "../state/serverConnection";
+import type { TagCatalog } from "../tags/tagCatalog";
 import {
   actionBlock,
   createFieldReveal,
@@ -205,6 +206,8 @@ export interface FilterDialogOptions {
   dialogs: Pick<Dialogs, "confirm" | "notice">;
   /** The one-off messages: Apply, Refresh, and Update preset say what they did. */
   notifications: Pick<Notifications, "notify">;
+  /** The tag catalog the tabs share, which takes each catalog the dialog loads. */
+  tagCatalog?: Pick<TagCatalog, "take">;
 }
 
 export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
@@ -294,6 +297,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
   async function loadRemote(): Promise<{ sources: FilterSource[]; tagModel: FilterTagModel | null; presets: PresetRow[] }> {
     const sources = await api.getJson("/api/sources");
     const tagModel = (await api.postJson("/api/tag-editor/model", { itemIds: [] })) as FilterTagModel | null;
+    options.tagCatalog?.take(tagModel);
     await connection.loadPresets();
     const sourceList: FilterSource[] = Array.isArray(sources) ? sources : [];
     // The Library tab's Filters line counts the sources the Filter tab shows.

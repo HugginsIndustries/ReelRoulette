@@ -323,6 +323,7 @@ export function getVisibleRowCountForFixture(
     isBlacklisted: false,
     hasAudio: null,
     integratedLoudness: null,
+    peakDb: null,
     tags: [],
     hasThumbnail: false,
     thumbnailVersion: null,

@@ -10,6 +10,8 @@ import { createAutoPause } from "../playback/autoPause";
 import { createPlayer, type Player } from "../playback/player";
 import { createStageFullscreen, type StageFullscreen } from "../playback/stageFullscreen";
 import { createSettings, type Settings } from "../settings/settings";
+import { createStatsTab, type StatsTab } from "../stats/statsTab";
+import { createTagCatalog } from "../tags/tagCatalog";
 import { createTagEditor, type TagEditor } from "../tags/tagEditor";
 import type { RuntimeConfig } from "../types/runtimeConfig";
 import { createAppApi, type AppApi } from "./appApi";
@@ -26,7 +28,7 @@ export interface UnsavedTabs {
 
 /**
  * One page's runtime config, shared state, server requests, in-app dialogs, server connection, player, fullscreen,
- * side panel, the panel's library, filter, and tag editor tabs, and the settings its Settings tab sets, with
+ * side panel, the panel's library, filter, tag editor, and stats tabs, and the settings its Settings tab sets, with
  * Auto-Pause pausing the player as its mode says while the panel and Auto Tag cover it.
  */
 export interface AppServices {
@@ -41,6 +43,7 @@ export interface AppServices {
   library: Library;
   filterDialog: FilterDialog;
   tagEditor: TagEditor;
+  statsTab: StatsTab;
   /** Whether the Filter and Tags tabs hold unsaved changes, which the tabs' dots and the panel button's dot both show. */
   unsaved: ReadonlySignal<UnsavedTabs>;
   /** The lasting state the player's indicator shows, or null. */
@@ -101,7 +104,9 @@ export function createAppServices(config: RuntimeConfig): AppServices {
   const player = createPlayer({ apiBaseUrl: config.apiBaseUrl, store, device, api, connection, dialogs, notifications });
   // After the player, so the player handles an item-state event before the library does.
   const library = createLibrary({ config, store, api, connection, player, dialogs, notifications, panel, device });
-  const filterDialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs, notifications });
+  // The tag catalog the Filter and Tags tabs load, which the Stats tab orders a file's tags by.
+  const tagCatalog = createTagCatalog({ api, connection });
+  const filterDialog = createFilterDialog({ store, api, connection, library, panel, device, dialogs, notifications, tagCatalog });
   const tagEditor = createTagEditor({
     store,
     api,
@@ -111,8 +116,10 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     device,
     localStorage,
     dialogs,
-    notifications
+    notifications,
+    tagCatalog
   });
+  const statsTab = createStatsTab({ store, api, connection, tagCatalog });
   const settings = createSettings({ device });
   createAutoPause({ mode: settings.autoPauseMode, panel, overPage: tagEditor.autoTagOpen, player });
   panel.connectTabs({
@@ -134,6 +141,13 @@ export function createAppServices(config: RuntimeConfig): AppServices {
       enter: () => tagEditor.open(),
       leave() {
         tagEditor.close();
+        return true;
+      }
+    },
+    stats: {
+      enter: () => statsTab.open(),
+      leave() {
+        statsTab.close();
         return true;
       }
     },
@@ -168,6 +182,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     library,
     filterDialog,
     tagEditor,
+    statsTab,
     unsaved: computed(() => ({
       filter: filterDialog.view.value?.unsaved ?? false,
       tags: tagEditor.view.value?.savePending ?? false

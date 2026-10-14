@@ -1,12 +1,12 @@
 import { computed, signal, type ReadonlySignal } from "@preact/signals";
 import type { DeviceStore } from "../state/deviceStore";
 
-export type PanelTab = "library" | "filter" | "tags" | "settings";
+export type PanelTab = "library" | "filter" | "tags" | "stats" | "settings";
 export type PanelSide = "left" | "right";
 /** Beside the player, or as a full-screen overlay over it. */
 export type PanelMode = "side" | "overlay";
 
-export const PANEL_TABS: readonly PanelTab[] = ["library", "filter", "tags", "settings"];
+export const PANEL_TABS: readonly PanelTab[] = ["library", "filter", "tags", "stats", "settings"];
 export const PANEL_MIN_WIDTH = 360;
 export const PANEL_DEFAULT_WIDTH = 420;
 /** The narrowest the player gets beside the panel. */
@@ -86,8 +86,8 @@ export interface PanelElements {
 
 /**
  * The side panel: whether it is open, the tab it shows, its side, its width beside the player, and whether it sits
- * beside the player or covers it as the overlay. Its tabs hold the library, the filter, the tag editor, and the
- * settings. The host shows and hides the panel and its pages by their `hidden`, before a tab's `enter`, so a tab
+ * beside the player or covers it as the overlay. Its tabs hold the library, the filter, the tag editor, the stats, and
+ * the settings. The host shows and hides the panel and its pages by their `hidden`, before a tab's `enter`, so a tab
  * measures itself shown. It remembers whether the panel is open, its tab, side, and width on this device.
  */
 export interface PanelHost {

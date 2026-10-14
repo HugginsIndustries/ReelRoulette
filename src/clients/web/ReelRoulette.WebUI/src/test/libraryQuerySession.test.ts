@@ -51,6 +51,7 @@ function item(id: string, overrides: Partial<LibraryProjectionItem> = {}): Libra
     isBlacklisted: false,
     hasAudio: null,
     integratedLoudness: null,
+    peakDb: null,
     tags: [],
     hasThumbnail: true,
     thumbnailVersion: "v1",

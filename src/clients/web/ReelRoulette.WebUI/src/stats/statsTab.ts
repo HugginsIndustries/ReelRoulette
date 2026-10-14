@@ -1,0 +1,173 @@
+import { batch, computed, signal, type ReadonlySignal } from "@preact/signals";
+import { errorText, HttpStatusError, UnauthorizedError } from "../api/serverRequest";
+import { parseLibraryItem, type LibraryProjectionItem } from "../library/libraryProjectionModel";
+import { basenameFromPath } from "../playback/nowPlaying";
+import type { AppApi } from "../state/appApi";
+import type { AppStore } from "../state/appStore";
+import { noLibraryText } from "../state/lastingStates";
+import type { ServerConnection } from "../state/serverConnection";
+import type { TagCatalog } from "../tags/tagCatalog";
+import { createCoalescedRefresh } from "./coalescedRefresh";
+import { createLastPlayedBeforePlay } from "./lastPlayed";
+import { fileRows, libraryCards, orderTags, type LibraryStats, type StatsLibraryView, type StatsView } from "./statsModel";
+
+/**
+ * The panel's Stats tab: the playing file's stats and the library's. It loads only while it shows: showing it loads
+ * once, and while it shows, a new playing item and the server's events load again, a burst of them once. A failed load
+ * keeps what the tab showed; with nothing loaded yet, the Library section says why. Nothing loads while the server
+ * fails the compatibility check, runs without a library, or asks for pairing.
+ */
+export interface StatsTab {
+  readonly view: ReadonlySignal<StatsView>;
+  /** The tab shows: it loads. */
+  open(): void;
+  /** The tab hides: nothing loads until it shows again. */
+  close(): void;
+}
+
+export interface StatsTabOptions {
+  store: AppStore;
+  api: Pick<AppApi, "getJson" | "postJson">;
+  connection: Pick<ServerConnection, "on">;
+  /** The tag catalog the Tags and Filter tabs share, which orders the file's tags. */
+  tagCatalog: TagCatalog;
+}
+
+interface LoadedItem {
+  itemId: string;
+  item: LibraryProjectionItem | null;
+}
+
+export function createStatsTab(options: StatsTabOptions): StatsTab {
+  const { store, api, connection, tagCatalog } = options;
+  const isOpen = signal(false);
+  const stats = signal<LibraryStats | null>(null);
+  const loadedItem = signal<LoadedItem | null>(null);
+  /** Why the last load failed, while the library has never loaded. */
+  const failure = signal<string | null>(null);
+  const lastPlayed = createLastPlayedBeforePlay();
+  /** Changes with what the playback events said about the time before this play. */
+  const lastPlayedChanged = signal(0);
+
+  /** The server's own message while it fails the compatibility check or runs without a library. */
+  function blockedMessage(): string | null {
+    if (store.compatibilityBlocked.value) {
+      return store.compatibilityMessage.value;
+    }
+    return store.noLibrary.value ? noLibraryText(store.libraryMessage.value) : null;
+  }
+
+  const view = computed<StatsView>(() => {
+    const playing = store.current.value;
+    const blocked = blockedMessage();
+    const unavailable = blocked !== null || store.pairingRequired.value;
+    // Read so the view follows what the playback events said, which the tracker keeps outside signals.
+    void lastPlayedChanged.value;
+    let file: StatsView["file"] = null;
+    if (playing) {
+      const loaded = loadedItem.value;
+      const item = !unavailable && loaded?.itemId === playing.itemId ? loaded.item : null;
+      file = {
+        name: basenameFromPath(playing.displayName || playing.id),
+        path: playing.id,
+        rows: item ? fileRows(item, lastPlayed.shownFor(item.lastPlayedUtcMs), Date.now()) : null,
+        tags: item ? orderTags(item.tags, tagCatalog.catalog.value) : []
+      };
+    }
+    let library: StatsLibraryView = { kind: "none" };
+    const loadedStats = stats.value;
+    if (store.pairingRequired.value) {
+      library = { kind: "none" };
+    } else if (blocked !== null) {
+      library = { kind: "message", text: blocked, error: true };
+    } else if (loadedStats) {
+      library = { kind: "cards", cards: libraryCards(loadedStats) };
+    } else if (failure.value !== null) {
+      library = { kind: "message", text: failure.value, error: true };
+    }
+    return { file, library };
+  });
+
+  /**
+   * The playing item's read, or null once the item has left the catalog, as a refresh drops a file gone from disk and
+   * a duplicate's delete its file, so the file shows only its name and path and the library still loads.
+   */
+  async function readItem(itemId: string): Promise<unknown> {
+    try {
+      return await api.postJson("/api/library/item", { id: itemId });
+    } catch (error) {
+      if (error instanceof HttpStatusError && error.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  async function load(): Promise<void> {
+    if (!isOpen.peek() || store.heldBack.peek() || store.pairingRequired.peek()) {
+      return;
+    }
+    const itemId = store.current.peek()?.itemId || null;
+    try {
+      const [loadedStats, rawItem] = await Promise.all([
+        api.getJson("/api/library/stats") as Promise<LibraryStats>,
+        itemId ? readItem(itemId) : Promise.resolve(null),
+        // The tags show by name without the catalog, so a catalog that fails to load doesn't fail the tab.
+        tagCatalog.ensureLoaded().catch(() => {})
+      ]);
+      batch(() => {
+        stats.value = loadedStats;
+        loadedItem.value = itemId ? { itemId, item: parseLibraryItem(rawItem) } : null;
+        failure.value = null;
+      });
+    } catch (error) {
+      // A 401's pairing prompt is the only thing to act on.
+      if (error instanceof UnauthorizedError) {
+        return;
+      }
+      const text = `Stats load failed: ${errorText(error)}`;
+      failure.value = text;
+      store.relayStatus(text);
+    }
+  }
+
+  // A request while the tab is hidden comes to nothing, since a load checks that the tab shows.
+  const refresh = createCoalescedRefresh(load);
+  function request(): void {
+    void refresh.request();
+  }
+
+  store.current.subscribe((playing) => {
+    lastPlayed.started(playing?.itemId);
+    lastPlayedChanged.value += 1;
+    request();
+  });
+  connection.on("playbackRecorded", (payload) => {
+    const previous = payload && typeof payload === "object" && "previousLastPlayedUtc" in payload ? payload.previousLastPlayedUtc : undefined;
+    lastPlayed.recorded(payload?.itemId, previous);
+    lastPlayedChanged.value += 1;
+    request();
+  });
+  connection.on("itemStateChanged", request);
+  connection.on("itemTagsChanged", request);
+  connection.on("tagCatalogChanged", request);
+  connection.on("refreshCompleted", request);
+  connection.on("resyncRequired", request);
+  connection.on("serverReady", request);
+  store.pairingRequired.subscribe((required) => {
+    if (!required) {
+      request();
+    }
+  });
+
+  return {
+    view,
+    open() {
+      isOpen.value = true;
+      request();
+    },
+    close() {
+      isOpen.value = false;
+    }
+  };
+}

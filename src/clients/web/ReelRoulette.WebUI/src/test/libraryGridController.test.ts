@@ -131,6 +131,7 @@ function item(id: string): LibraryProjectionItem {
     isBlacklisted: false,
     hasAudio: null,
     integratedLoudness: null,
+    peakDb: null,
     tags: [],
     hasThumbnail: false,
     thumbnailVersion: null,

@@ -228,7 +228,8 @@ function canonicalizeCategories(categories: readonly Partial<TagCategory>[]): Ta
   return Array.from(deduped.values());
 }
 
-function bySortOrderThenName(a: TagCategory, b: TagCategory): number {
+/** Orders categories by their saved sort order, then name, as the Tags tab starts them and the Stats tab orders tags. */
+export function bySortOrderThenName(a: TagCategory, b: TagCategory): number {
   const x = Number(a.sortOrder || 0);
   const y = Number(b.sortOrder || 0);
   return x !== y ? x - y : compareTagNames(a.name, b.name);

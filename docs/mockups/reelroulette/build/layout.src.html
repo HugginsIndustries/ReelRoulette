@@ -570,6 +570,7 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
 .stat-card { border: 1px solid var(--surface-border); border-radius: 8px; padding: 8px 10px; }
 .stat-card .value { font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .stat-card .label { font-size: 0.8rem; color: var(--muted-fg); }
+.stats-section .filter-hint.is-error { color: var(--error); opacity: 1; }
 
 /* Settings tab. */
 .setting { margin-bottom: 12px; }
@@ -1298,6 +1299,13 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <p class="mock-small mock-keep">What the Library tab's grid says in place of the tiles.</p>
       </fieldset>
       <fieldset>
+        <legend>Stats load</legend>
+        <label><input type="radio" name="mock-stats-load" value="loads" checked> Loads</label>
+        <label><input type="radio" name="mock-stats-load" value="failed"> Fails, here with HTTP 500</label>
+        <label><input type="radio" name="mock-stats-load" value="removed"> Playing file removed: the server no longer has it, as after a refresh drops its file or a duplicate's delete removes it</label>
+        <p class="mock-small mock-keep">What the Stats tab says when its first load fails, and shows for a playing file the server no longer has. A later failed load keeps what the tab showed.</p>
+      </fieldset>
+      <fieldset>
         <legend>Situation</legend>
         <label><input type="checkbox" id="mock-pairing"> The server asks for pairing (a token of "wrong" fails)</label>
         <label><input type="checkbox" id="mock-server-machine"> This browser is on the server machine: Show in File Manager, and admin actions without the control token</label>
@@ -1399,6 +1407,8 @@ const state = {
   situation: null,
   // How the Library tab's load goes: it loads, fails, or times out.
   libraryLoad: "loads",
+  // How the Stats tab's first load goes: it loads, fails, or finds the playing file removed from the server.
+  statsLoad: "loads",
   mode: "side",
   autoTag: false
 };
@@ -1444,12 +1454,24 @@ const isPlayable = (item) => isPhoto(item) || PLAYABLE.includes(extOf(item));
 const statRand = rng(23);
 ITEMS.forEach((item) => {
   item.plays = statRand() < 0.2 ? 0 : 1 + Math.floor(statRand() * 40);
-  item.lastPlayedDays = item.plays ? 1 + Math.floor(statRand() * 300) : null;
+  // When it was last played before this page: days ago for most, and hours or minutes ago for a few.
+  const days = item.plays ? 1 + Math.floor(statRand() * 300) : null;
+  const ago = item.id % 6 === 1 ? (1 + (item.id % 5)) * 3600e3 : item.id % 6 === 4 ? (2 + (item.id % 50)) * 60e3 : days * 86400e3;
+  item.lastPlayedAt = days == null ? null : Date.now() - ago;
   // Favorite and blacklisted never go together, as the player's buttons keep them.
   item.blacklisted = !item.favorite && statRand() < 0.12;
   item.hasAudio = !isPhoto(item) && statRand() < 0.85;
   item.loudness = isPhoto(item) ? null : -(12 + Math.round(statRand() * 180) / 10);
   item.peak = isPhoto(item) ? null : -(Math.round(statRand() * 60) / 10);
+  // As the server's loudness scan leaves them: no loudness or peak for a video without audio; a few videos not scanned
+  // yet, whose audio isn't known; a silent one at the -70 LUFS floor, whose true peak ffmpeg measures as -inf and the
+  // server stores as none; and a few without a peak yet.
+  if (!isPhoto(item)) {
+    if (!item.hasAudio) Object.assign(item, { loudness: null, peak: null });
+    else if (item.id % 25 === 13) Object.assign(item, { hasAudio: null, loudness: null, peak: null });
+    else if (item.id % 25 === 19) Object.assign(item, { loudness: -70, peak: null });
+    else if (item.id % 11 === 6) item.peak = null;
+  }
   item.missing = item.id === 13;
   item.removed = false;
   item.path = `${isPhoto(item) ? "/media/phone" : "/media/videos"}/${item.year}/${item.name}`;
@@ -1767,6 +1789,8 @@ function skipNotice(item) {
 let mediaLoads = 0;
 function start(item) {
   playback.item = item;
+  // The Stats tab shows when the item was last played before this play.
+  item.playedBefore = item.lastPlayedAt;
   setTime(0);
   playback.timer = 0;
   playback.failed = isPlayable(item) ? null : "format";
@@ -1781,6 +1805,7 @@ function start(item) {
     return;
   }
   item.plays += 1;
+  item.lastPlayedAt = Date.now();
   setPlaying(true, "user");
   followPlayingItem();
   const load = ++mediaLoads;
@@ -4006,6 +4031,7 @@ function applySituation(situation) {
   renderFilterEmpty();
   renderTags();
   layoutGrid(true);
+  renderStats();
 }
 document.querySelectorAll('input[name="mock-situation"]').forEach((radio) => {
   radio.addEventListener("change", () => applySituation(radio.value));
@@ -4014,6 +4040,12 @@ document.querySelectorAll('input[name="mock-library-load"]').forEach((radio) => 
   radio.addEventListener("change", () => {
     state.libraryLoad = radio.value;
     layoutGrid(true);
+  });
+});
+document.querySelectorAll('input[name="mock-stats-load"]').forEach((radio) => {
+  radio.addEventListener("change", () => {
+    state.statsLoad = radio.value;
+    renderStats();
   });
 });
 
@@ -4379,7 +4411,8 @@ async function runBulk(kind) {
     if (!(await confirmDialog({ message: `Clear playback stats for ${noun}?`, confirmLabel: "Clear", danger: true }))) return;
     items.forEach((item) => {
       item.plays = 0;
-      item.lastPlayedDays = null;
+      item.lastPlayedAt = null;
+      item.playedBefore = null;
     });
     status(`Cleared playback stats for ${noun}.`);
   }
@@ -4460,6 +4493,41 @@ function statRow(list, label, value) {
   list.append(dt, dd);
 }
 const yesNo = (value) => (value ? "Yes" : "No");
+// How long ago the item was last played before this play.
+function playedAgo(at) {
+  if (at == null) return "Never";
+  const minutes = Math.floor((Date.now() - at) / 60000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} ${days === 1 ? "day" : "days"} ago`;
+}
+// The scan's true peak. ffmpeg measures a silent track's as -inf, which the server stores as none, so a track at the
+// -70 LUFS floor without one is Silent.
+function truePeakText(item) {
+  if (item.hasAudio === false) return "N/A";
+  if (item.peak != null) return `${item.peak.toFixed(1)} dBTP`;
+  return item.hasAudio && item.loudness != null && item.loudness <= -70 ? "Silent" : "Not measured";
+}
+// What the Stats tab says in place of its library stats, as the Library tab does in place of its tiles: nothing while
+// the server asks for pairing, the server's own message while it fails the compatibility check or runs without a
+// library, and a failed first load. The current file then shows only its name and path.
+function statsMessage() {
+  if (state.pairing) return { text: "" };
+  if (state.situation === "incompatible") return { text: "Unsupported server API version: 2.", error: true };
+  if (state.situation === "nolibrary") return { text: NO_LIBRARY_MESSAGE, error: true };
+  if (state.statsLoad === "failed") return { text: "Stats load failed: HTTP 500", error: true };
+  return null;
+}
+function statsHint(text, error) {
+  const hint = document.createElement("p");
+  hint.className = error ? "filter-hint is-error" : "filter-hint";
+  if (error) hint.setAttribute("role", "alert");
+  hint.textContent = text;
+  return hint;
+}
 function fileStats(item) {
   const name = document.createElement("p");
   name.className = "stats-file-name";
@@ -4480,21 +4548,24 @@ function fileStats(item) {
     }
   });
   path.append(code, action);
+  // The name and path come with the playing item; the rest needs the load, whose message shows once, in Library. A
+  // playing file the server no longer has, whose read answers 404, shows only them while the library's cards load.
+  if (statsMessage() || state.statsLoad === "removed") return [name, path];
   const table = document.createElement("dl");
   table.className = "stats-table";
   statRow(table, "Plays", String(item.plays));
-  statRow(table, "Last played", item.lastPlayedDays ? `${item.lastPlayedDays} days ago` : "Never");
+  statRow(table, "Last played", playedAgo(item.playedBefore));
   statRow(table, "Favorite", yesNo(item.favorite));
   statRow(table, "Blacklisted", yesNo(item.blacklisted));
   if (!isPhoto(item)) {
     statRow(table, "Duration", fmt(item.duration));
-    statRow(table, "Has audio", yesNo(item.hasAudio));
+    statRow(table, "Has audio", item.hasAudio == null ? "Unknown" : yesNo(item.hasAudio));
     // What normalization applies, as the desktop shows it: the baseline difference limited by its settings, signed, or
     // Off while it or Enhanced audio is off, and N/A for a file without loudness data, which plays at the volume.
     const adjustment = loudnessAdjustment(item);
-    statRow(table, "Loudness", item.loudness == null ? "Unknown" : `${item.loudness.toFixed(1)} LUFS`);
+    statRow(table, "Loudness", item.hasAudio === false ? "N/A" : item.loudness == null ? "Unknown" : `${item.loudness.toFixed(1)} LUFS`);
     statRow(table, "Adjustment", item.loudness == null ? "N/A" : adjustment == null ? "Off" : `${adjustment >= 0 ? "+" : ""}${adjustment.toFixed(1)} dB`);
-    statRow(table, "Peak", `${item.peak.toFixed(1)} dBFS`);
+    statRow(table, "True peak", truePeakText(item));
   }
   const tags = document.createElement("div");
   tags.className = "stats-tags";
@@ -4517,7 +4588,7 @@ function renderStats() {
   file.className = "stats-section";
   file.innerHTML = "<h3>Current file</h3>";
   if (item) file.append(...fileStats(item));
-  else file.append(Object.assign(document.createElement("p"), { className: "filter-hint", textContent: "Nothing is playing yet." }));
+  else file.append(statsHint("Nothing is playing yet.", false));
 
   const library = document.createElement("section");
   library.className = "stats-section";
@@ -4533,10 +4604,16 @@ function renderStats() {
     ["Total plays", live.reduce((n, x) => n + x.plays, 0)],
     ["Unique played", live.filter((x) => x.plays).length],
     ["Never played", live.filter((x) => !x.plays).length],
-    ["Videos with audio", videos.filter((x) => x.hasAudio).length],
-    ["Videos without audio", videos.filter((x) => !x.hasAudio).length],
+    ["Videos with audio", videos.filter((x) => x.hasAudio === true).length],
+    ["Videos without audio", videos.filter((x) => x.hasAudio === false).length],
     ["Baseline loudness", `${BASELINE} LUFS`]
   ];
+  const message = statsMessage();
+  if (message) {
+    if (message.text) library.append(statsHint(message.text, message.error));
+    host.append(file, library);
+    return;
+  }
   const grid = document.createElement("div");
   grid.className = "stats-grid";
   cards.forEach(([label, value]) => {

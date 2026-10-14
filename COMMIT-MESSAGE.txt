@@ -19,10 +19,12 @@ Instructions:
 
 Commit Message:
 
-M12h: Measure each video's true peak in the loudness scan, one video at a time
+M12h: Add the WebUI's Stats tab, opened from the header's file name
 
-- The loudness scan runs `ebur128` with true peak and stores the measured peak, or none: the -5.0 and 0.0 stand-ins go, and a silent track's -inf peak stores none. A failed scan keeps the stored loudness and peak and records its error, and the next refresh scans that video again. The item schema describes `peakDb` as the measured true peak.
-- Catalog schema version 4 adds each item's loudness analysis version. Upgrades become a chain, one step per version from the oldest shipped one, 2, run in one transaction on open and import, and the file checks take every version in between as older rather than damaged.
-- The upgrade from version 3 clears every stored peak and marks every video as scanned under analysis version 1, so the next refresh scans the videos with audio again, about 2.8 hours on the developer's library over the NAS. A restart midway picks up where it stopped, since each result records its version.
-- The loudness stage scans one video at a time, and the ffprobe it started for every queued video at once, whose result it ignored, is gone.
-- Tests cover the upgrade from every older shipped version on open and import, the new step, the parser on real ffmpeg n9.0.2 summaries, the stored values and analysis version, a failed scan's kept values and its next scan, which videos need a scan, the limit, and an end-to-end scan with real ffmpeg of a tone whose true peak differs from its sample peak. `CatalogSeed` has a builder per shipped schema version.
+- The side panel gains a Stats tab, between Tags and Settings: the playing file's name, path, plays, the time before this play, favorite, blacklist, duration, audio, loudness, true peak, and tags in the catalog's category order, then the library's cards from `GET /api/library/stats`.
+- The header's file name opens the panel on the Stats tab with a click, Enter, or Space, and its tooltip adds "Show stats".
+- True peak reads the scan's dBTP, "Silent" for a track at the -70 LUFS floor without a peak, "Not measured", or "N/A" without audio; Last played reads "Just now" through "{n} days ago", from the play's event, held until its item starts when it comes first.
+- The tab loads only while it shows, and refreshes coalesce as the desktop's do: a 250 ms gather, one load at a time, and one more for requests during it. A failed first load and the server's own no-library or compatibility message show as one message in Library, in place of the cards, and a playing file no longer in the catalog shows only its name and path while the cards still load.
+- A tag catalog shared by the Tags, Filter, and Stats tabs keeps the last catalog loaded and follows catalog change events, so the Stats tab rarely loads it itself.
+- The design mockup's Peak row becomes True peak, its data and checks cover each audio case and Last played's units, and its Mockup tab gains a Stats load option for a failed load and a removed playing file.
+- M12h is complete: it moves to `MILESTONES-COMPLETED.md`, and its two Release checks go into the testing checklist's Release Specific Manual checks.

@@ -39,6 +39,7 @@ import {
   type AutoTagResults,
   type AutoTagRow
 } from "./autoTagModel";
+import type { TagCatalog } from "./tagCatalog";
 import {
   UNCATEGORIZED_CATEGORY_ID,
   addCategoryToOrder,
@@ -270,6 +271,8 @@ export interface TagEditorOptions {
   notifications: Pick<Notifications, "notify">;
   /** Ids for new categories. */
   newId?: () => string;
+  /** The tag catalog the tabs share, which takes each catalog the editor loads. */
+  tagCatalog?: Pick<TagCatalog, "take">;
 }
 
 function isIdList(value: unknown): value is string[] {
@@ -451,6 +454,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     const load = ++loads;
     const loaded = (await api.postJson("/api/tag-editor/model", { itemIds: state.itemIds.slice() })) as TagEditorModel | null;
     const model = loaded || { categories: [], tags: [], items: [] };
+    options.tagCatalog?.take(loaded);
     if (load === loads) {
       update({ model, order: state.order.length > 0 ? state.order : initialCategoryOrder(model) });
     }

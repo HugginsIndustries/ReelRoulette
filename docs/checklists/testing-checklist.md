@@ -92,6 +92,8 @@ These need a person, real devices, or the Windows VM.
 - [ ] As an installed app on iOS and Android, in the light and the dark theme, the status bar's text reads against the page.
 - [ ] On a phone and an iPad, the field validation pattern's red icons, its tooltip, and a setting's saved check fade in and out, and with Reduce Motion on they show and hide at once.
 - [ ] On a phone and an iPad, the sample popup shows at each of the six positions, clear of the player's controls and the indicator.
+- [ ] While the loudness rescan runs, a video from the NAS plays on the iPad without stalling, and starts and seeks without a noticeable wait.
+- [ ] After the loudness rescan, the Stats tab shows a peak for a video with audio.
 
 ## Release Flow
 

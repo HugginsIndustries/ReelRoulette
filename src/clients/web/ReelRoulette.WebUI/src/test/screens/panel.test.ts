@@ -250,13 +250,13 @@ describe("panel button", () => {
 });
 
 describe("tabs", () => {
-  it("are one row of icons, Library, Filter, Tags, and Settings, each with a tooltip and an accessible name", async () => {
+  it("are one row of icons, Library, Filter, Tags, Stats, and Settings, each with a tooltip and an accessible name", async () => {
     await mount();
     const tabs = within(tabRow()).getAllByRole("tab", { hidden: true });
 
-    expect(tabs.map((button) => button.getAttribute("aria-label"))).toEqual(["Library", "Filter", "Tags", "Settings"]);
-    expect(tabs.map((button) => button.title)).toEqual(["Library", "Filter", "Tags", "Settings"]);
-    expect(tabs.map(icon)).toEqual(["browse", "filter_alt", "tag", "settings"]);
+    expect(tabs.map((button) => button.getAttribute("aria-label"))).toEqual(["Library", "Filter", "Tags", "Stats", "Settings"]);
+    expect(tabs.map((button) => button.title)).toEqual(["Library", "Filter", "Tags", "Stats", "Settings"]);
+    expect(tabs.map(icon)).toEqual(["browse", "filter_alt", "tag", "bar_chart", "settings"]);
     expect(tabs.every((button) => button.parentElement === tabRow())).toBe(true);
     expect(tabRow().getAttribute("role")).toBe("tablist");
   });

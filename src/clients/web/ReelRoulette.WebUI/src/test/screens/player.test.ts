@@ -511,7 +511,7 @@ describe("transport", () => {
     await click(button("Next"));
     expect(randomPicks(server)).toBe(3);
     expect(photo().src).toBe(PHOTO_URL);
-    expect(screen.getByTitle("beach.jpg")).toBeTruthy();
+    expect(document.getElementById("now-playing-name")!.textContent).toBe("beach.jpg");
   });
 });
 

@@ -38,6 +38,8 @@ export interface LibraryProjectionItem {
   isBlacklisted: boolean;
   hasAudio: boolean | null;
   integratedLoudness: number | null;
+  /** The true peak in dBTP the loudness scan measured, or null when it hasn't measured one. */
+  peakDb: number | null;
   tags: string[];
   hasThumbnail: boolean;
   /** Changes whenever the thumbnail is written again; part of the thumbnail URL so it can be cached. */
@@ -178,12 +180,18 @@ function parseQueryItem(row: Record<string, unknown>): LibraryProjectionItem {
       typeof row.integratedLoudness === "number" && Number.isFinite(row.integratedLoudness)
         ? row.integratedLoudness
         : null,
+    peakDb: typeof row.peakDb === "number" && Number.isFinite(row.peakDb) ? row.peakDb : null,
     tags: parseStringArray(row.tags),
     hasThumbnail: row.hasThumbnail === true,
     thumbnailVersion: typeof row.thumbnailVersion === "string" && row.thumbnailVersion !== "" ? row.thumbnailVersion : null,
     thumbnailWidth: parseOptionalPositiveInt(row.thumbnailWidth),
     thumbnailHeight: parseOptionalPositiveInt(row.thumbnailHeight)
   };
+}
+
+/** One item as `POST /api/library/item` returns it, or null for a body that isn't one. */
+export function parseLibraryItem(raw: unknown): LibraryProjectionItem | null {
+  return raw && typeof raw === "object" && !Array.isArray(raw) ? parseQueryItem(raw as Record<string, unknown>) : null;
 }
 
 function parseItem(row: Record<string, unknown>, enabledSourceIds: Set<string>): LibraryProjectionItem | null {

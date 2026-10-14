@@ -1231,6 +1231,63 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: on the server machine it offers Show in File Manager`, $("stats-body").textContent.includes("Show in File Manager"));
   $("mock-server-machine").click();
 
+  // Stats: each audio row as the server's loudness scan leaves the item, Last played as the time before this play, and
+  // what the tab says in place of its stats.
+  const statValue = (label) => [...$("stats-body").querySelectorAll("dt")].find((el) => el.textContent === label)?.nextElementSibling.textContent;
+  const audioRows = () => ["Has audio", "Loudness", "True peak"].map(statValue).join(", ");
+  const videoWhere = (test) => items.findIndex((item) => item.type === "video" && playable(item) && test(item));
+  const audioCases = [
+    ["a measured video", (item) => item.hasAudio === true && item.loudness > -70 && item.peak != null, (item) => `Yes, ${item.loudness.toFixed(1)} LUFS, ${item.peak.toFixed(1)} dBTP`],
+    ["a silent video", (item) => item.hasAudio === true && item.loudness === -70, () => "Yes, -70.0 LUFS, Silent"],
+    ["a video without a peak yet", (item) => item.hasAudio === true && item.loudness > -70 && item.peak == null, (item) => `Yes, ${item.loudness.toFixed(1)} LUFS, Not measured`],
+    ["a video without audio", (item) => item.hasAudio === false, () => "No, N/A, N/A"],
+    ["a video not scanned yet", (item) => item.hasAudio == null, () => "Unknown, Unknown, Not measured"]
+  ];
+  for (const [label, test, expected] of audioCases) {
+    const index = videoWhere(test);
+    if (index >= 0) window.mockup.choose(index);
+    check(`layout@${width}: Stats shows ${label} as ${index >= 0 ? audioRows() : "no such item"}`, index >= 0 && audioRows() === expected(items[index]));
+  }
+  const agoCases = [
+    ["days", (ms) => ms >= 86400e3, /^(1 day|\d+ days) ago$/],
+    ["hours", (ms) => ms >= 3600e3 && ms < 86400e3, /^(1 hour|\d+ hours) ago$/],
+    ["minutes", (ms) => ms >= 60e3 && ms < 3600e3, /^\d+ min ago$/]
+  ];
+  for (const [unit, test, shape] of agoCases) {
+    const index = videoWhere((item) => item.lastPlayedAt != null && test(Date.now() - item.lastPlayedAt));
+    if (index >= 0) window.mockup.choose(index);
+    check(`layout@${width}: Last played counts ${unit} for a play that long ago (${statValue("Last played")})`, index >= 0 && shape.test(statValue("Last played")));
+  }
+  const neverPlayed = videoWhere((item) => item.lastPlayedAt == null);
+  window.mockup.choose(neverPlayed);
+  const firstPlay = statValue("Last played");
+  window.mockup.choose(neverPlayed);
+  check(`layout@${width}: Last played is the time before this play: Never on a first play, Just now on the next (${firstPlay}, ${statValue("Last played")})`,
+    firstPlay === "Never" && statValue("Last played") === "Just now");
+  const card = (label) => [...$("stats-body").querySelectorAll(".stat-card")].find((el) => el.lastChild.textContent === label)?.firstChild.textContent;
+  const liveVideos = items.filter((item) => !item.removed && item.type === "video");
+  check(`layout@${width}: the audio cards count only videos whose audio is known (${card("Videos with audio")} with, ${card("Videos without audio")} without)`,
+    card("Videos with audio") === liveVideos.filter((item) => item.hasAudio === true).length.toLocaleString() &&
+      card("Videos without audio") === liveVideos.filter((item) => item.hasAudio === false).length.toLocaleString() &&
+      liveVideos.some((item) => item.hasAudio == null));
+  const statsHints = () => [...$("stats-body").querySelectorAll(".filter-hint")].map((el) => el.textContent);
+  document.querySelector('input[name="mock-stats-load"][value="failed"]').click();
+  const [fileSection, librarySection] = $("stats-body").querySelectorAll(".stats-section");
+  check(`layout@${width}: a failed first load says so once, in place of the cards, and the current file keeps its name and path (${statsHints().join(" | ")})`,
+    statsHints().length === 1 && librarySection.textContent.includes("Stats load failed: HTTP 500") &&
+      !$("stats-body").querySelector("dl, .stats-grid") && fileSection.textContent.includes(np()) && !!fileSection.querySelector(".stats-path"));
+  document.querySelector('input[name="mock-stats-load"][value="removed"]').click();
+  const [removedFile, removedLibrary] = $("stats-body").querySelectorAll(".stats-section");
+  check(`layout@${width}: a playing file the server no longer has shows only its name and path, and the library's cards load (${removedLibrary.querySelectorAll(".stat-card").length} cards)`,
+    statsHints().length === 0 && !removedFile.querySelector("dl") && removedFile.querySelector(".stats-file-name")?.textContent === np() &&
+      !!removedFile.querySelector(".stats-path") && removedLibrary.querySelectorAll(".stat-card").length === 11);
+  document.querySelector('input[name="mock-stats-load"][value="loads"]').click();
+  window.mockup.situation("nolibrary");
+  check(`layout@${width}: running without a library, Stats shows the server's message (${statsHints().join(" | ")})`,
+    statsHints().length === 1 && statsHints()[0].startsWith("Running without a library.") && !$("stats-body").querySelector("dl, .stats-grid"));
+  window.mockup.situation("connected");
+  check(`layout@${width}: and its stats again once the server has one`, !!$("stats-body").querySelector("dl") && !!$("stats-body").querySelector(".stats-grid"));
+
   // Settings: Advance after is a setting's field. A value that is not valid is flagged while the field has focus and is
   // not kept; a valid one is saved only on Enter or when the field is left, with the green check; leaving the field, or
   // the Settings tab hiding or the panel closing, shows the value saved again.

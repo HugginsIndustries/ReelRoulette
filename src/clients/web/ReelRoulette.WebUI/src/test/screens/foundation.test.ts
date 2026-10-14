@@ -446,15 +446,16 @@ describe("randomization mode", () => {
 });
 
 describe("now playing", () => {
-  it("is hidden before anything plays, then shows the file name, its full name as a tooltip, and the duration", async () => {
+  it("is hidden before anything plays, then shows the file name, its full name and Show stats as a tooltip, and the duration", async () => {
     const server = new FakeServer();
     server.on("POST", "/api/random", () => json(VIDEO_ITEM));
     mountPage({ server });
-    expect(screen.queryByTitle("holiday clip.mp4")).toBeNull();
+    const name = document.getElementById("now-playing-name")!;
+    expect((name.closest(".now-playing") as HTMLElement).style.display).toBe("none");
 
     await startRandomPick();
-    const name = await screen.findByTitle("holiday clip.mp4");
-    expect(name.textContent).toBe("holiday clip.mp4");
+    await waitFor(() => expect(name.textContent).toBe("holiday clip.mp4"));
+    expect(name.title).toBe("holiday clip.mp4\nShow stats");
     const line = name.closest(".now-playing") as HTMLElement;
     expect(line.style.display).not.toBe("none");
     expect((line.textContent ?? "").replace(/\s+/g, " ").trim()).toBe("holiday clip.mp4 1:05");
@@ -467,8 +468,9 @@ describe("now playing", () => {
     mountPage({ server });
 
     await startRandomPick();
-    const name = await screen.findByTitle(longName);
-    expect(name.textContent).toBe(`${"a".repeat(42)}...`);
+    const name = document.getElementById("now-playing-name")!;
+    await waitFor(() => expect(name.textContent).toBe(`${"a".repeat(42)}...`));
+    expect(name.title).toBe(`${longName}\nShow stats`);
   });
 });
 
@@ -663,7 +665,7 @@ describe("page structure", () => {
 
     await pageReady(server);
     await startRandomPick();
-    await screen.findByTitle("holiday clip.mp4");
+    await waitFor(() => expect(document.getElementById("now-playing-name")!.textContent).toBe("holiday clip.mp4"));
     // Each start empties the bar; after that only the player moves it.
     seek.value = "40";
     await pickPreset("preset-favorites");

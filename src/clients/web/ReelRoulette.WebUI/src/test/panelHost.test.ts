@@ -60,7 +60,7 @@ function fakeElements(viewport: ReturnType<typeof fakeViewport>) {
         },
         contains: () => false
       },
-      pages: { library: { hidden: true }, filter: { hidden: true }, tags: { hidden: true }, settings: { hidden: true } }
+      pages: { library: { hidden: true }, filter: { hidden: true }, tags: { hidden: true }, stats: { hidden: true }, settings: { hidden: true } }
     }
   };
 }
@@ -70,7 +70,7 @@ function recordingTabs() {
   const calls: string[] = [];
   const refuse: Partial<Record<PanelTab, boolean | Promise<boolean>>> = {};
   const hooks = {} as Record<PanelTab, PanelTabHooks>;
-  for (const tab of ["library", "filter", "tags", "settings"] as const) {
+  for (const tab of ["library", "filter", "tags", "stats", "settings"] as const) {
     hooks[tab] = {
       enter: () => calls.push(`enter ${tab}`),
       leave() {
@@ -388,7 +388,7 @@ describe("panel host", () => {
     });
 
     it("starts closed on Library when what it remembers can't be read", () => {
-      const { panel } = setup({ saved: { "rr_device.panel.open": "yes", "rr_device.panel.tab": '"stats"', "rr_device.panel.width": '"wide"' } });
+      const { panel } = setup({ saved: { "rr_device.panel.open": "yes", "rr_device.panel.tab": '"queue"', "rr_device.panel.width": '"wide"' } });
       expect(panel.isOpen.value).toBe(false);
       expect(panel.tab.value).toBe("library");
       expect(panel.width.value).toBe(420);

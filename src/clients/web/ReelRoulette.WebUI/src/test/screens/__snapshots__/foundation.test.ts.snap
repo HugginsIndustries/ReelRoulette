@@ -16,7 +16,7 @@ exports[`page structure > keeps the starting markup 1`] = `
         <span class="btn-label">
           "Pair"
     <div class="now-playing" id="now-playing" style="display: none">
-      <span id="now-playing-name">
+      <span class="is-link" id="now-playing-name" role="button" tabindex="0">
       <span class="muted" id="now-playing-duration">
   <div class="fullscreen-stage" data-panel-mode="side" data-side="right" id="fullscreen-stage" style="--panel-width: 420px">
     <main class="player-col">
@@ -85,6 +85,9 @@ exports[`page structure > keeps the starting markup 1`] = `
             <span class="material-symbol-icon">
               "tag"
             <span class="unsaved-dot" hidden="">
+          <button aria-controls="panel-page-stats" aria-label="Stats" aria-selected="false" class="panel-tab" id="panel-tab-stats" role="tab" title="Stats" type="button">
+            <span class="material-symbol-icon">
+              "bar_chart"
           <button aria-controls="panel-page-settings" aria-label="Settings" aria-selected="false" class="panel-tab" id="panel-tab-settings" role="tab" title="Settings" type="button">
             <span class="material-symbol-icon">
               "settings"
@@ -191,6 +194,20 @@ exports[`page structure > keeps the starting markup 1`] = `
               <button aria-label="Save" class="icon-btn" id="tag-editor-apply-btn" title="Save" type="button">
                 <span class="material-symbol-icon">
                   "save"
+      <section aria-labelledby="panel-tab-stats" class="panel-page" hidden="" id="panel-page-stats" role="tabpanel">
+        <div class="stats-tab" id="stats-tab">
+          <div class="stats-tab-header">
+            <h2>
+              "Stats"
+          <div class="stats-body themed-scrollbar" id="stats-body">
+            <section aria-labelledby="stats-file-heading" class="stats-section">
+              <h3 id="stats-file-heading">
+                "Current file"
+              <p class="filter-hint">
+                "Nothing is playing yet."
+            <section aria-labelledby="stats-library-heading" class="stats-section">
+              <h3 id="stats-library-heading">
+                "Library"
       <section aria-labelledby="panel-tab-settings" class="panel-page" hidden="" id="panel-page-settings" role="tabpanel">
         <div class="settings-tab" id="settings-tab">
           <div class="settings-tab-header">

@@ -28,6 +28,7 @@ function item(overrides: Partial<LibraryProjectionItem> = {}): LibraryProjection
     isBlacklisted: false,
     hasAudio: null,
     integratedLoudness: null,
+    peakDb: null,
     tags: [],
     hasThumbnail: true,
     thumbnailVersion: "1a-2b",
