@@ -7,15 +7,14 @@ It tracks scope, sequencing, acceptance criteria, and evidence by milestone.
 
 An outline of upcoming releases and the milestones each one ships, in order. Each release becomes a new `M*` series when it is promoted.
 
-The WebUI becomes the only client on every device. Until the desktop removal release, the desktop client gets no significant changes or new features: bug fixes (crashes, data loss, broken playback, security) and small changes that keep it working with the server, or that match a small server-side change, are allowed. Until then server contract changes only add fields, so the last desktop build keeps working. The native Android client is dropped.
+The WebUI is the only client on every device from v0.15.0, which removes the desktop client. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter, sort, and weight random picks. The desktop still ships as a fallback, and its last build tells users it is retired. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12j, M12k1, M12k2, M12k3, M12l1, M12l2, M12l3, M12m, M12n, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t, M12u, M12v.
-- **v0.16.0 — Desktop removal**: Remove the desktop client, its packaging, and its tests, then move preset writes to per-preset routes. P48, P25.
-- **v0.16.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
-- **v0.17.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access. P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28j, P28k, P28l.
-- **v0.18.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
-- **v0.19.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for the WebUI. P2a, P2b, P2c, P2d, P2f, P2g, P2h.
-- **Unscheduled backlog**: P1, P4, P5, P6, P9a, P9b, P10, P33, P35, P36, P50.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter, sort, and weight random picks. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12l1, M12l2, M12l3, M12m, M12n, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t, M12u.
+- **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
+- **v0.16.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access. P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28j, P28k, P28l.
+- **v0.17.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
+- **v0.18.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for the WebUI. P2a, P2b, P2c, P2d, P2f, P2g, P2h.
+- **Unscheduled backlog**: P1, P4, P5, P6, P9a, P9b, P10, P33, P35, P36, P50, P51.
 
 ## Document Purpose
 
@@ -135,11 +134,343 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 Last milestone completed: M12i2
 
-### M12i3 - Item Ratings
+### M12i3 - Desktop Client Removal
+
+- **Status**: ⏳ Planned
+- **Goal**: The desktop client, its packaging, its tests, and everything only it used are gone, and the WebUI is the only client.
+
+#### Decisions
+
+- The desktop goes before the WebUI does everything it did. Until the milestones that bring them back, these desktop features have no equivalent:
+  - the volume slider, scroll-wheel volume, and volume steps, which WebUI Volume and Enhanced Audio brings back;
+  - loudness normalization and the Stats panel's Adjustment row, which WebUI Loudness Normalization brings back;
+  - an on-screen Random button, which WebUI Player Controls brings back;
+  - the keyboard shortcuts, which WebUI Keyboard Shortcuts brings back;
+  - Show in File Manager, which Show in File Manager from the WebUI brings back;
+  - multi-select, its bulk actions, and editing several items' tags, which WebUI Multi-Select and Bulk Actions brings back;
+  - Refresh Now, the refresh and backup settings, duplicate review, and clearing the whole library's playback stats, which Admin Refresh, Backup, and Duplicate Review brings back;
+  - Manage Sources, with its statistics, adding a folder, enabling and disabling a source, and refreshing one source, which Admin Source Management brings back;
+  - library export and import with the source remap, which Admin Library Catalog Transfer brings back, with restoring a backup;
+  - volume above 100%, which WebUI Volume Boost may bring back.
+- Until the admin milestones land, nothing offers a UI for library management, a gap that is accepted.
+- Meanwhile the tray's Refresh Library still starts a refresh, and auto-refresh and backups keep running on the stored settings.
+- Formats only LibVLC plays, such as avi and wmv, play in no client until the playback sessions release, and Browser-Playable Filter only hides them.
+- These desktop features are dropped without a WebUI equivalent, because a browser cannot offer them:
+  - always-on-top (the closest is picture-in-picture, which the WebUI turns off with `disablepictureinpicture`),
+  - desktop self-update,
+  - the Linux dependency dialog,
+  - application menu registration,
+  - the FFmpeg log window, which has been empty since the server took over refresh,
+  - Player View's lock of the window to the video's aspect ratio.
+- These desktop Settings dialog entries are dropped as not useful in the WebUI:
+  - the desktop's own dev update channel (the server's is in the admin section),
+  - client settings backups (the WebUI's settings are a few values in browser storage),
+  - the core server base URL (the WebUI calls the server that served it),
+  - Force API playback (the WebUI always plays through `/api/media`),
+  - image scaling (it limited how large the desktop decoded photos, and the browser scales photos to fit by itself).
+- These are dropped as not worth bringing back:
+  - the Diagnostics dialog's last SSE revision, API reachability line, and Copy button, beside the client and session ids and versions the Settings tab's Diagnostics shows,
+  - the status line's times to the millisecond.
+- A route, field, or event that only the desktop calls today stays while a planned milestone is written to use it: the refresh start, status, and settings routes, the backup settings, duplicate scan and apply, source import and enable, the catalog checkpoint, clear playback stats, `sourceStateChanged`, and the source statistics' duration fields.
+- Requests name a library item only by its catalog id, in a field named for it, and the server no longer looks an item up by its full path.
+- The filter state's old `favoritesOnly` and `excludeBlacklisted` fields are no longer written, and the server and the WebUI keep reading them in stored presets until Per-Preset Preset Writes rewrites those presets.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Code and tests | ⏳ Planned | The desktop projects, the Core code only the desktop uses, and their tests removed from the solution and the repository. |
+| Packaging | ⏳ Planned | A release that builds and publishes only the server, with FFmpeg's license text, and the old icons deleted. |
+| Contract | ⏳ Planned | Routes, fields, and lookups only the desktop used removed, item requests named by id, and the old filter fields no longer written, in OpenAPI, the generated WebUI types, and the WebUI. |
+| Fixtures | ⏳ Planned | The fixtures only the WebUI reads moved to its tests, so every shared fixture has a Core and a WebUI reader. |
+| Mockup | ⏳ Planned | The mockup without the desktop notice, the desktop client, or its log sources. |
+| Docs | ⏳ Planned | `AGENTS.md`, the pre-release skill, current-state docs, the testing checklist, and the changelog without the desktop client. |
+
+#### Code and tests slice
+
+**Scope**
+
+- Remove `ReelRoulette.DesktopApp`, `ReelRoulette.LibraryArchive`, and `ReelRoulette.DesktopApp.Tests` from the solution and the repository.
+- Remove the Core tests' link to the desktop's `CoreServerApiClient.cs` (`ReelRoulette.Core.Tests.csproj`) and `CoreServerApiClientTests.cs`, which tests it.
+- Remove Core's `LibraryGridLayout` and its tests, and `JsonFileStorageService`, `CoreStorageServices`, and `Abstractions/CoreInterfaces.cs`, which only the desktop uses.
+- Comments in Core, the server, and the Core tests that describe the desktop as a client go or are reworded.
+- `LibraryCatalogStore`'s import and replace API stays (`ReadSourceRootPaths`, `PrepareIncomingFromFile`, `RemapSources`, `PublishIncoming`, and its recovery), since Admin Library Catalog Transfer reuses it.
+
+**Traps**
+
+- The three projects are 107 tracked files and 31,740 lines of C# and AXAML, including 4,231 test lines, 173 test methods, and 421 test cases (measured).
+- `ReelRoulette.Core.Tests.csproj` compiles the desktop's `CoreServerApiClient.cs` for `CoreServerApiClientTests.cs`, 15 test cases, so with the desktop folder gone and that link left the build fails with CS2001 (measured).
+- With the projects, the link, and the test file removed, the solution builds with no warnings, and the remaining 482 Core tests and 7 ServerApp tests pass (measured).
+- Only `LibraryArchive` and the Core tests call `LibraryCatalogStore`'s import API (measured).
+- `src/clients/desktop` also holds 3.6 GB of untracked build output, which removing the tracked files leaves behind (measured).
+- `LibVLCSharp.Avalonia`, `VideoLAN.LibVLC.Windows`, `TagLibSharp`, and `Avalonia.Fonts.Inter` leave with the desktop project. Avalonia itself stays, since the server's tray uses it (measured).
+- The desktop's duplicate Select Best rule (`DuplicateGroupViewModel` in `DuplicatesDialog.axaml.cs`), its import remap dialog, and its Manage Sources statistics stay readable in git history for the admin milestones that rebuild them.
+
+**Acceptance**
+
+- The solution has no desktop projects, and nothing refers to `src/clients/desktop`, checked by a search of the repository.
+- `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and `npm run verify` pass.
+
+#### Packaging slice
+
+**Scope**
+
+- Remove the `desktop` component from the `release.yml` matrix, with its `--icon` choice, its `native_component`, and the Windows LibVLC relocation step.
+- Remove `stage_native`, which `release.yml` computes but never reads.
+- Stop publishing the desktop update feeds.
+- Remove the desktop's `<Version>` updates and the `-NoUpdateDesktopVersion` switch from `set-release-version.ps1`, and the docs that describe the switch.
+- Delete the old icons `assets/HI.ico`, `assets/HI-256.png`, and `assets/HI-512.png`.
+- The Windows server package, which bundles FFmpeg and ffprobe, ships the license text its FFmpeg build needs from `licenses/`.
+- `licenses/LGPL-2.1.txt`, which only LibVLC needed, is deleted once nothing ships it.
+- `README.md`'s Third-Party Components section names FFmpeg's license correctly and no longer names LibVLC.
+
+**Traps**
+
+- `release.yml` lists `components=(server desktop)` and gives the desktop its own case, `--icon` choice, `native_component`, and the step "Relocate LibVLC into probe path (Windows desktop)".
+- Every leg packs, uploads to B2, and mirrors to GitHub with no per-component code, so dropping the desktop legs stops the desktop feeds and the `ReelRoulette.Desktop` assets.
+- `--shortcuts "Desktop,StartMenuRoot"` makes the server's Windows desktop shortcut, and stays.
+- Only `DesktopApp.csproj` copies `licenses/GPL-3.0.txt` and `licenses/LGPL-2.1.txt` into a build, so the Windows server package ships no license text for the FFmpeg build it bundles (measured).
+- The Windows server package bundles BtbN's `win64-gpl` FFmpeg build, and Linux packages bundle no FFmpeg.
+- `README.md` says LibVLC and FFmpeg are "licensed under the GNU GPL and LGPL respectively", which pairs them the wrong way round (inferred).
+- `verify-linux-packaged-server-smoke.sh` has no desktop-client references: its `.desktop` matches are the server's freedesktop menu entries (measured).
+- CI has no desktop job, so `ci.yml` needs no change (measured).
+- An installed desktop's updater polls its own feed (`reelroulette/desktop{-dev}` on B2, channel `{os}-desktop{-dev}`, package `ReelRoulette.Desktop`) and never reads GitHub, so it can't pick up a server package.
+- Once no desktop is published, the installed desktop reports itself up to date, since the old feed files stay on B2 (inferred).
+
+**Acceptance**
+
+- `release.yml` builds and publishes only server packages and feeds, and the Windows server package carries FFmpeg's license text, checked by reading it.
+- Nothing in the code, scripts, or current-state docs refers to `HI.ico`, `HI-256.png`, `HI-512.png`, LibVLC, or `-NoUpdateDesktopVersion`, checked by a search of the repository.
+- `./tools/scripts/verify-linux-packaged-server-smoke.sh` passes.
+
+#### Contract slice
+
+**Scope**
+
+- Remove `POST /api/library-states`, `LibraryStatesRequest`, and `LibraryCatalogSession.ReadItemStates`, which only that route uses. `LibraryStateResponse` stays, since favorite and blacklist return it.
+- Remove `PresetResponse.summary`, which the server never fills.
+- Remove the fields only the desktop reads: `itemTagsChanged.itemIds`, the auto-tag apply response's `changedItemPaths` (at its top and in `applied`) and `assignmentsAdded`, `playbackRecorded.path`, and the library stats' `uniquePlayed*` and `neverPlayed*` fields.
+- Remove `AutoTagScanRequest.itemIds`, which only the desktop fills.
+- Item lookups take only a catalog id: `ResolveItemId` no longer falls back to the full path, and `POST /api/library/item` reads by id only.
+- `GET /api/media/{idOrToken}` becomes `GET /api/media/{token}` and streams only the tokens the random and play routes issue.
+- Rename the request fields that now hold only an item id: `path` becomes `itemId` in the favorite, blacklist, and record-playback requests, and `itemPaths` becomes `itemIds` in clear playback stats. `LibraryItemReadRequest.id` keeps its name.
+- The WebUI's serializer, and Core's `FlagFilterModes.Name`, `FavoritesOnly`, and `ExcludeBlacklisted`, stop writing `favoritesOnly` and `excludeBlacklisted`, and the FilterState schema drops them.
+- The server's filter parser and the WebUI keep reading the old fields in stored presets.
+- `ClientLogRequest.Source` no longer defaults to `"desktop"`.
+- The comment that the random and play responses' `id` is for the desktop, and the WebUI's comments about the desktop, are corrected.
+- OpenAPI, the generated WebUI types, the WebUI's requests, and `docs/api.md` change with the routes and fields.
+
+**Traps**
+
+- The WebUI's Stats tab reads the playing item through `POST /api/library/item` with its id (`src/stats/statsTab.ts`), so the route stays.
+- The WebUI's Stats tab shows the random and play responses' `id` as the file's path, and the player falls back to it for the display name (`src/stats/statsTab.ts`, `src/playback/nowPlaying.ts`, `src/playback/player.ts`), so the field stays.
+- The WebUI sends auto-tag apply's `itemPaths` as full paths, which the server finds with `ResolveItemByPath`, so that lookup stays.
+- The WebUI names items by catalog id at every call to the routes `ResolveItemId` serves, and plays media only by token (inferred, from its call sites).
+- `POST /api/play/{itemId}` accepts a full path through `ResolveItemId`, though OpenAPI and `docs/api.md` say it doesn't.
+- `serializeFilterStateForApi` (`src/filter/filterStateModel.ts`) writes `favoritesOnly` and `excludeBlacklisted` beside the modes for older readers, and fails type-checking against generated types without them.
+- `LibraryListFilterParser` reads the old fields through `FlagFilterModes.ResolveFavorites` and `ResolveBlacklisted`, and the WebUI through `resolveFlagModes`.
+- No release contains the Favorites and Blacklisted modes, so every preset a release saved has only the old fields (measured).
+- `Spec_ListsEveryMappedApiAndControlRoute` fails for a route the server maps that the spec doesn't list, and `OpenApiSpec.AssertMatchesSchema` needs a payload's fields and its schema's to be the same set.
+
+**Acceptance**
+
+- OpenAPI has none of the removed routes and fields and names the renamed fields, checked by reading `shared/api/openapi.yaml`, and `npm run verify:contracts` passes.
+- A full path no longer finds an item on any route, and the media route streams only issued tokens, in server tests of the id lookup and the media route.
+- The favorite, blacklist, record-playback, and clear playback stats requests send `itemId` or `itemIds`, in WebUI tests of each request and server tests of each route.
+- The WebUI writes neither `favoritesOnly` nor `excludeBlacklisted`, and a stored preset with only the old fields still filters as before, in WebUI filter model tests and server filter parser tests.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Fixtures slice
+
+**Scope**
+
+- `event-revision.json`, `library-tile-effect.json`, `preset-filter-equality.json`, `sort-direction-labels.json`, and `filter-state-written.json` lose their C# readers and move to the WebUI's tests, so `shared/fixtures/` holds only fixtures that Core and the WebUI both read.
+- `filter-mode-projection.json` and its readers go, since nothing writes the old fields.
+- `filter-state-written.json`'s half of a filter written with the old fields stays until Per-Preset Preset Writes rewrites stored presets.
+- `filter-mode-resolution.json`, `filter-enum-values.json`, and `tag-name-order.json` stay in `shared/fixtures/`, read by Core and the WebUI.
+
+**Traps**
+
+- Desktop tests are the only C# readers of the five fixtures that move (measured).
+- `filter-mode-projection.json`'s only C# reader tests `FlagFilterModes.Name`, `FavoritesOnly`, and `ExcludeBlacklisted`, which only the desktop called (measured).
+- No WebUI-only copies of shared fixture cases exist. WebUI tests only note that the desktop reads the same fixture (measured).
+
+**Acceptance**
+
+- The moved fixtures are read by WebUI tests from their new place, and every fixture left in `shared/fixtures/` has a Core reader and a WebUI reader, checked by a search of the tests.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Mockup slice
+
+**Scope**
+
+- Remove the desktop notice page (`desktop-notice.html` and `build/desktop-notice.src.html`), its card in the index, its line in the mockup's `README.md`, its entry in `build_pages.py`, and its checks in `check.mjs`.
+- The admin page's connected clients and Log Viewer sources lose the desktop client and its log sources.
+- Notes in the mockup that describe the desktop as a current client go.
+
+**Traps**
+
+- `check.mjs` checks the desktop notice, a connected client `desktop-0c9e7a22`, and the log sources `desktop-main-window` and `desktop-update` (measured).
+- The mockup's loudness settings follow the desktop's defaults and formula until WebUI Loudness Normalization replaces them.
+
+**Acceptance**
+
+- The mockup has no desktop notice page or card, and its admin page shows no desktop client or desktop log source, checked by reading it, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+
+#### Docs slice
+
+**Scope**
+
+- `AGENTS.md`:
+  - The desktop freeze rule goes, keeping "Don't change user-facing UX without explicit approval".
+  - The architecture rule names only the WebUI as the orchestration and render layer, without the desktop flows `docs/domain-inventory.md` records.
+  - The "WebUI" naming rule loses "the desktop's retirement notice" and says `CHANGELOG.md` keeps "WebUI" as developer history.
+  - The test isolation rule names the Core tests' `TestIsolation` in place of the desktop tests' initializer.
+  - The note that `MILESTONES-COMPLETED.md` describes retired tooling names the desktop client too.
+- The pre-release skill's standard environment no longer lists the desktop app (`.claude/skills/pre-release/SKILL.md`).
+- `CONTEXT.md`, `README.md`, `docs/architecture.md`, `docs/api.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, OpenAPI's descriptions, and `MILESTONES.md`'s Ownership Boundaries no longer describe the desktop client.
+- The testing checklist loses the desktop app from its environment line, its desktop Smoke item, its desktop in-app update item in Release Flow, the Release Specific checks of the desktop retirement notice, the desktop update note, the desktop's old icon, and the desktop's filter dialog, and "and desktop" in its check of `release.yml`'s finish.
+- `CHANGELOG.md`'s `[Unreleased]` loses the desktop halves of its bullets, since v0.15.0 ships no desktop, and gains a Removed entry for the desktop app. Its bullets keep "WebUI".
+
+**Traps**
+
+- Current-state docs mention the desktop on 24 lines in `CONTEXT.md`, 18 in `README.md`, 17 in `docs/architecture.md` (including its diagram), 11 in `docs/api.md`, 20 in `docs/dev-setup.md`, 31 in `docs/domain-inventory.md`, and 3 in OpenAPI (measured).
+- `CLAUDE.md` doesn't mention the desktop (measured).
+- `[Unreleased]` describes desktop changes in its filter modes, true peak, Allow remote connections, new logo, and desktop preset picks bullets.
+
+**Acceptance**
+
+- No current-state doc, `AGENTS.md`, or the pre-release skill describes the desktop client as current, checked by a search of them.
+- `pwsh ./tools/scripts/check-milestones.ps1` passes.
+
+#### Release checks
+
+- Agent: On Linux and Windows, the release publishes only the server, and the Windows package carries FFmpeg's license text, checked in a dev-channel release run of `release.yml`.
+- Agent: The v0.15.0 release notes say the desktop app is no longer released and that ReelRoulette in the browser replaces it.
+
+#### Not included
+
+- Rewriting historical `CHANGELOG.md` sections and completed milestones, which keep their desktop references.
+- Rewriting stored presets' old Favorites and Blacklisted fields, which is Per-Preset Preset Writes.
+- Removing the web runtime settings' `enabled` field, which is Recovery Page and Operator Retirement.
+- Making `/api/web-runtime/settings` admin-only and removing token query auth, which is Auth Cutover for API and Admin.
+- The random and play responses' `id`, which keeps the full path the WebUI's Stats tab shows.
+- Auto-tag apply's full-path `itemPaths`, which the WebUI sends.
+- Refresh, backup settings, duplicate review, and clearing all playback stats in the admin section, which is Admin Refresh, Backup, and Duplicate Review.
+- Managing sources in the admin section, which is Admin Source Management.
+- Library export, import, and backup restore in the admin section, which is Admin Library Catalog Transfer.
+- Volume above 100%, which is WebUI Volume Boost.
+
+### M12i4 - Per-Preset Preset Writes
+
+- **Status**: ⏳ Planned
+- **Goal**: Saving, renaming, reordering, or deleting a preset on one device changes only that preset on the server, so two devices editing presets do not overwrite each other.
+- **Depends on**: Desktop Client Removal, so only the WebUI moves to per-preset writes and the whole-list replace goes in the same change.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- Each preset has a stable id, kept across renames, which the preset routes, the random request's `presetId`, and the preset event use.
+- The catalog moves to schema version 5, with its own upgrade step from 4 that adds the preset id column, gives each stored preset an id, and rewrites each stored filter state's old `favoritesOnly` and `excludeBlacklisted` into its Favorites and Blacklisted modes, so every stored preset has one shape.
+- Once stored presets are rewritten, the server and the WebUI stop reading the old fields.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Server | ⏳ Planned | The schema step with preset ids and rewritten filter states, per-preset writes in the catalog, the preset event, and the server's filter parser without the old fields. |
+| Contract | ⏳ Planned | Per-preset routes, the preset id in responses and random requests, and the preset event, in OpenAPI and the generated WebUI types, with the whole-list replace removed. |
+| WebUI | ⏳ Planned | The Filter tab saving each changed preset by id, the preset list following the preset event, and the WebUI without the old fields. |
+
+#### Server slice
+
+**Scope**
+
+- The catalog moves to schema version 5 with its own step from 4, as the Decisions describe. A new catalog has the id column too, last in its table.
+- The step rewrites the old fields with `FlagFilterModes.ResolveFavorites` and `ResolveBlacklisted`, and removes the old keys.
+- Create, update, rename, reorder, and delete one preset in the catalog under the library operations lock. Reorder takes the ids in their new order and changes no preset's filter.
+- Tag rename and delete keep updating presets on the server.
+- Each preset change publishes `presetCatalogChanged` with the changed preset's id and the request's `clientId`.
+- `LibraryListFilterParser` no longer reads the old fields.
+- `filter-mode-resolution.json` moves to the Core tests, which keep locking the step's rule, and leaves `shared/fixtures/`.
+
+**Traps**
+
+- The `presets` table is keyed by `position`, with `name`, `name_fold`, and `filter_state` (`LibraryCatalogStore.cs`), so a preset has no id of its own.
+- `PresetResponse.id` is the preset's name (`GetPresets` in `LibraryPlaybackService.cs`), and the random request's `presetId` matches a stored preset by name (`ResolvePreset`).
+- `PersistPresetCatalog` in `ServerStateService.cs` writes the whole list, and presets are stored as the posted JSON, so the server keeps fields it doesn't read.
+- The catalog is at schema version 4, which hasn't shipped: no release tag contains it (measured before promotion). A catalog already at 4, such as a development server's, would fail `HasRequiredCatalogSchema` and be moved aside as damaged if version 4 changed, so the id column takes its own step.
+- `LibraryCatalogMigrationTests` compares an upgraded catalog with a new one through `CatalogSeedTests.DescribeSchema`, column by column in order, so the new column is last in the new catalog's table too.
+- `OlderSchemaVersions()` covers every version from 2 to the one before current, so `CatalogSeed` needs schema 4 tables and a schema 5 seed.
+- No release contains the Favorites and Blacklisted modes, so every preset a release saved has only the old fields (measured).
+- A WebUI preset save writes every preset with its modes, so only presets nobody saved since keep only the old fields (inferred).
+- The server publishes no event when presets change.
+
+**Acceptance**
+
+- A catalog at each version from 2 to 4 opens upgraded and imports upgraded with preset ids, and matches a new catalog's schema, in the catalog upgrade tests.
+- A stored preset with only the old fields filters the same after the step, with its modes written and the old keys gone, in catalog upgrade tests of stored presets.
+- Each per-preset write changes only the preset it names, and reorder changes only the order, in server tests for each write.
+- Each preset change publishes `presetCatalogChanged` with the preset's id and the request's `clientId`, in server tests of each write.
+- `dotnet test ReelRoulette.sln` passes.
+
+#### Contract slice
+
+**Scope**
+
+- Per-preset routes to create, update, rename, reorder, and delete a preset, naming it by id.
+- `PresetResponse.id` is the preset's stable id, and the random request's `presetId` matches it.
+- The `presetCatalogChanged` event and its schema.
+- The whole-list replace, `POST /api/presets`, is removed.
+- OpenAPI, the generated WebUI types, and `docs/api.md`, which describes the routes and the event.
+
+**Traps**
+
+- `docs/api.md` says the random request's `presetId` matches a stored preset's name.
+- `Spec_ListsEveryMappedApiAndControlRoute` fails for a route the server maps that the spec doesn't list, and for one the spec lists that the server doesn't serve.
+- `OpenApiSpec.AssertMatchesSchema` needs a payload's fields and its schema's to be the same set.
+
+**Acceptance**
+
+- The per-preset routes and the event match their schemas, and `POST /api/presets` is gone from OpenAPI, in contract tests, and `npm run verify:contracts` passes.
+- A random request's `presetId` finds a preset by id and not by name, in server tests of random selection.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### WebUI slice
+
+**Scope**
+
+- The Filter tab keeps its Save and Apply, which send one write for each preset it changed and never the whole list.
+- On `presetCatalogChanged` from another device, the preset list updates without a reload. While the Filter tab holds unsaved preset changes, presets it hasn't changed take the server's version, and its own changes stay until saved or discarded.
+- The WebUI remembers its active preset by id.
+- `resolveFlagModes` and the WebUI's readers of `filter-mode-resolution.json` go, and so does `filter-state-written.json`'s half of a filter written with the old fields.
+- Builds on the preset-equality fixture from Remove the Preset Match Route.
+
+**Traps**
+
+- The WebUI posts the whole preset list to `POST /api/presets` (`presetsToPostBody` in `src/filter/filterStateModel.ts`), which replaces the server's preset catalog, so the last writer wins.
+- The WebUI's Filter tab keeps a preset list Apply hasn't saved while it is hidden and the panel is closed, for as long as the page stays open, and doesn't take the server's list while it holds one, so its Apply can overwrite preset changes another device made hours earlier (inferred).
+- The WebUI loads presets when the server's version check passes (`src/state/serverConnection.ts`) and has no preset event to follow.
+- `filterStateFromApiObject` reads the old fields through `resolveFlagModes` (`src/filter/filterStateModel.ts`).
+- The WebUI remembers its active preset by name on each device (`activePresetName` in `src/state/appStore.ts`).
+
+**Acceptance**
+
+- A preset saved on one device while another device has its preset list open is still present after the other device saves a different preset, in a two-session test of concurrent saves.
+- Every open WebUI shows the same preset list after any device changes it, and unsaved changes in the Filter tab stay, in WebUI tests of the preset event.
+- The WebUI never posts the whole preset list, in WebUI tests of each preset write.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+#### Release checks
+
+- Manual: On two devices, saving, renaming, reordering, and deleting a preset on one shows on the other without a reload, and neither overwrites the other's changes.
+
+### M12i5 - Item Ratings
 
 - **Status**: ⏳ Planned
 - **Goal**: Library items have a 5-star rating with half stars, set from the Stats tab's Current file section and shared by every device.
-- **Depends on**: WebUI Stats Panel, whose Current file section holds the rating and whose catalog upgrade chain takes its schema step, and WebUI Notifications, whose Your actions and Other devices popups announce a rating change.
+- **Depends on**: WebUI Stats Panel, whose Current file section holds the rating and whose catalog upgrade chain takes its schema step, and WebUI Notifications, whose Your actions and Other devices popups announce a rating change, and Per-Preset Preset Writes, whose schema step comes before this one's.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -147,14 +478,13 @@ Last milestone completed: M12i2
 - A rating is ½ to 5 stars in half-star steps, or none. The catalog stores it as a whole number of half stars from 1 to 10, with no value for none and never 0, so "0 stars" and "not rated" can't both exist. The API gives it in stars, a multiple of 0.5 from 0.5 to 5.
 - Ratings are shared by every device, and by every account once accounts exist, as favorites and the blacklist are. Account Store keeps accounts out of the catalog, which per-account ratings would have to reference, and File Metadata Sync and Extended Metadata writes one rating into each file.
 - A rating is independent of favorite and blacklist: blacklisting an item keeps its rating, and rating an item changes neither flag.
-- A rating change publishes its own event, `itemRatingChanged`, with the item's id and path, its rating and previous rating, and the `clientId` of the request that made it. Reusing `itemStateChanged` would show a rating change as a favorite change on other devices and make the desktop refresh its stats and reload its grid.
+- A rating change publishes its own event, `itemRatingChanged`, with the item's id and path, its rating and previous rating, and the `clientId` of the request that made it. Reusing `itemStateChanged` would show a rating change as a favorite change on other devices.
 - The rating has its own line in the Current file section, under the path: the label Rating, five stars, and a Clear button while the item is rated.
   - A mouse over a star previews the value under it, the star's left half meaning half a star less than its right half, and a click sets it.
   - On a touch screen a tap on a star's half sets that value, and a drag along the stars changes the value as it moves and sets it on release.
   - From the keyboard it is one tab stop: the left and down arrows step down half a star, the right and up arrows step up half a star, Home is Not rated, End is 5 stars, and Delete or Backspace clears it.
   - To screen readers it is a slider named Rating, from 0 to 5, whose value text is "3.5 stars", "1 star", or "Not rated".
 - The popups are "Rated {rating}" and "Rating cleared" as Your actions, with the file name as the second line, and the same text followed by "on another device" as Other devices, where {rating} reads as the value text does, such as "3.5 stars".
-- This milestone changes no desktop code and no shared fixture. The desktop ignores the new event and fields and shows no ratings.
 
 #### Slices
 
@@ -199,7 +529,7 @@ Last milestone completed: M12i2
 
 **Scope**
 
-- The catalog moves to schema version 5, with its own upgrade step from 4 that adds only a nullable `rating` column to `items`. A new catalog has the column last too.
+- The catalog moves to schema version 6, with its own upgrade step from 5 that adds only a nullable `rating` column to `items`. A new catalog has the column last too.
 - The shipped 2→3 step's sort indexes move into their own constant, so a later change to the indexes a new catalog gets can't change a shipped step.
 - Setting a rating writes it under the library operations lock, reading the value before and after, as a favorite does, and reports whether it changed.
 - Item reads, `POST /api/library/item` and `POST /api/library/query`, send `rating` in stars when the item is rated, from `ToItem`.
@@ -207,20 +537,19 @@ Last milestone completed: M12i2
 
 **Traps**
 
-- The catalog is at schema version 4, which hasn't shipped: no release tag contains it (measured). A catalog already at 4, such as a development server's, would fail `HasRequiredCatalogSchema` and be moved aside as damaged if version 4 gained the column, so the column takes its own step.
+- Per-Preset Preset Writes moves the catalog to schema version 5, and neither 4 nor 5 has shipped (inferred). A catalog already at 5, such as a development server's, would fail `HasRequiredCatalogSchema` and be moved aside as damaged if version 5 gained the column, so the column takes its own step.
 - `UpgradeSchema2To3` runs `SortIndexesSql`, the constant `WriteEmptyDatabase` runs for a new catalog, so adding an index to it would change the shipped step and break upgrading a schema-2 catalog, which doesn't have a newer index's column yet.
 - `LibraryCatalogMigrationTests` compares an upgraded catalog with a new one through `CatalogSeedTests.DescribeSchema`, column by column in order and index by index, so the new column is last in the new catalog's table too.
-- `OlderSchemaVersions()` covers every version from 2 to the one before current, so `CatalogSeed` needs schema 4 tables and a schema 5 seed.
+- `OlderSchemaVersions()` covers every version from 2 to the one before current, so `CatalogSeed` needs schema 5 tables and a schema 6 seed.
 - `ListPageSql` and the item readers read columns by position.
 - Adding the column costs no space, and rating all 49,000 items of a synthetic catalog added about 0.3 MB (measured).
 - `ToItem` leaves `peakDb` out when there is none.
 - `ReadStatsGroups` is one `GROUP BY source_id, media_type` pass behind `GET /api/library/stats`.
-- The frozen desktop imports a catalog through its own compiled copy of Core (`LibraryArchiveMigration`), and each release builds the desktop from the same code, so the v0.15.0 desktop knows schema 5.
 - Backups of the previous schema version stay in `backups/`, untrimmed, after an upgrade.
 
 **Acceptance**
 
-- A catalog at each version from 2 to 4 opens upgraded and imports upgraded with the rating column, and matches a new catalog's schema, in the catalog upgrade tests.
+- A catalog at each version from 2 to 5 opens upgraded and imports upgraded with the rating column, and matches a new catalog's schema, in the catalog upgrade tests.
 - The 2→3 step runs its own index SQL, not the constant a new catalog runs, checked by reading it, and a schema-2 catalog still upgrades, in the catalog upgrade tests.
 - Setting, changing, and clearing a rating stores it, and setting the same value again reports no change, in server tests of setting a rating.
 - Item reads send `rating` in stars for a rated item and leave it out for an unrated one, in server tests of both reads.
@@ -231,9 +560,8 @@ Last milestone completed: M12i2
 
 **Scope**
 
-- The contract change only adds.
-- `POST /api/rating` takes `path`, an item id or full path as `POST /api/favorite` takes it, `rating`, in stars, or null to clear, and `clientId`.
-  - It answers 400 for an empty path or a rating that isn't a multiple of 0.5 from 0.5 to 5, and 404 for an item that isn't in the library.
+- `POST /api/rating` takes `itemId`, the item's catalog id as `POST /api/favorite` takes it, `rating`, in stars, or null to clear, and `clientId`.
+  - It answers 400 for an empty item id or a rating that isn't a multiple of 0.5 from 0.5 to 5, and 404 for an item that isn't in the library.
   - It answers with the item's id, its rating, and the revision of the event it published, as the favorite route does.
 - It publishes `itemRatingChanged` only when the rating changed, with `itemId`, `path`, `rating`, `previousRating`, and the request's `clientId`, no rating being null.
 - The library stats response carries the rated count.
@@ -248,7 +576,6 @@ Last milestone completed: M12i2
 - `OpenApiSpec.AssertMatchesSchema` needs a payload's fields and its schema's to be the same set, so the event's schema and payload type change together, and so do the stats response's (`GetLibraryStats_ResponseMatchesSpec`).
 - `LibraryProjectionItem` allows extra properties, so the fields it doesn't name are missing from the generated WebUI types, and `ItemIdContractTests.LibraryItems_CarryLoudnessAndPeak_AsTheSchemaNamesThem` reads the names it has.
 - `npm run verify:contracts` only checks that the generated types match the OpenAPI file.
-- The desktop's event switch in `HandleCoreServerEnvelopeAsync` has no default case and moves its revision on before it, so it ignores the new event, and it ignores JSON fields it doesn't know.
 
 **Acceptance**
 
@@ -309,10 +636,9 @@ Last milestone completed: M12i2
 - Rating several items at once, which is WebUI Multi-Select and Bulk Actions.
 - Ratings in duplicate review, which is Admin Refresh, Backup, and Duplicate Review.
 - Reading ratings from media files and writing them back, which is File Metadata Sync and Extended Metadata.
-- Showing ratings in the desktop client.
 - Ratings kept per account.
 
-### M12i4 - WebUI Volume and Enhanced Audio
+### M12i6 - WebUI Volume and Enhanced Audio
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI has a volume control on every device, by slider, scroll wheel, and two-finger drag, through an Enhanced audio gain stage that also gives iPhone and iPad an in-app volume.
@@ -330,7 +656,7 @@ Last milestone completed: M12i2
 | --- | --- | --- |
 | Audio spike | ⏳ Planned | A report on a real video routed through the gain stage in each target browser and device. |
 | Server | ⏳ Planned | Cross-origin headers on media responses, and `crossorigin` on the player's media elements, so media from another origin in development isn't silent through Web Audio. |
-| Volume | ⏳ Planned | The Enhanced audio gain stage and setting, the volume slider, scroll wheel and two-finger drag volume, the volume steps, and their per-device settings. |
+| Volume | ⏳ Planned | The Enhanced audio gain stage and setting, the volume slider, Mute in the seek row, scroll wheel and two-finger drag volume, the volume steps, and their per-device settings. |
 
 #### Audio spike slice
 
@@ -375,8 +701,13 @@ Last milestone completed: M12i2
 
 - A volume slider at the end of the seek row. With Enhanced audio on, it sets the gain stage, on every device, which is also how iOS, where Safari makes a media element's volume read-only, gets one.
   - It stays enabled on a photo, as Mute does, and the level set there is the next video's, as the mockup shows.
-  - It is 84 px wide on every screen, keeping its width on a phone, where the mockup used to narrow it to 60 px, and sits the seek row's 12 px gap from the time.
-- The Settings tab offers the desktop's volume steps: 1, 2, or 5 percent, used by the scroll wheel, a two-finger drag, and the [ and ] keys that WebUI Keyboard Shortcuts binds.
+  - It is 84 px wide on every screen, keeping its width on a phone, where the mockup used to narrow it to 60 px, and sits the seek row's 12 px gap from Mute.
+  - It goes from 0 to 100%.
+- Mute moves from the transport row to the seek row, between the time and the volume slider.
+- The mockup shows Mute in the seek row, and the user judges the seek row on a phone in the mockup review, before the app is built.
+- `check.mjs` confirms the scrub bar keeps a minimum usable width, set in the mockup review, at 320 and 360 px wide.
+- Only where the scrub bar would fall below that minimum does the volume slider open from Mute instead of sitting in the seek row.
+- The Settings tab offers volume steps of 1, 2, or 5 percent, used by the scroll wheel, a two-finger drag, and the [ and ] keys that WebUI Keyboard Shortcuts binds.
 - Changing the volume, by the slider or otherwise, sends no notification.
 - The scroll wheel over the player changes the volume by the volume step, one step per notch.
   - A trackpad's small deltas add up into notches, so a light swipe doesn't jump the volume.
@@ -400,6 +731,9 @@ Last milestone completed: M12i2
 **Traps**
 
 - The WebUI has a mute button and no volume control (measured).
+- Mute sits in the transport row between Next and Loop, in the WebUI (`src/ui/Player.tsx`) and in the mockup (`#mute-btn` in `layout.src.html`).
+- Mute adds its 44 px and a 12 px gap to the seek row, which take that width from the scrub bar, so at 320 px the scrub bar would be about 45 px wide (inferred).
+- `check.mjs` runs the pages in happy-dom, which computes styles but lays nothing out, so it works out the scrub bar's width from the seek row's fixed widths and gaps (inferred).
 - The mockup tries the gain stage with a stand-in sound, a soft chord it plays with videos through the same path.
 - In the mockup, stepping the volume crackled and play and pause popped, on every device (measured).
 - An element routed through Web Audio stays routed (inferred).
@@ -407,7 +741,8 @@ Last milestone completed: M12i2
 
 **Acceptance**
 
-- The volume slider sits at the end of the seek row and sets the volume, and the Settings tab offers the desktop's volume steps, in WebUI tests.
+- The volume slider sits at the end of the seek row, goes from 0 to 100%, and sets the volume, Mute sits between the time and the slider, and the Settings tab offers the volume steps, in WebUI tests.
+- The scrub bar keeps its minimum usable width at 320 and 360 px, with the volume slider opening from Mute only where it would fall below it, in `check.mjs`'s check of the seek row at those widths.
 - On a photo the volume slider stays enabled, and the next video plays at the level set there, in a WebUI test that a volume set on a photo applies to the next video.
 - The scroll wheel over the player changes the volume by the volume step, one step per notch with a trackpad's small deltas added up, without scrolling the page; on a touch screen a two-finger drag does too, without zooming. Each shows the controls, and on a photo each sets the next video's level. Shown by wheel tests for notches, added-up trackpad deltas, and a photo, and two-finger drag tests, a photo's among them.
 - Changing the volume sends no notification, in WebUI tests.
@@ -428,8 +763,9 @@ Last milestone completed: M12i2
 - Loudness normalization, which is WebUI Loudness Normalization.
 - Enhanced audio's description naming loudness normalization, which is WebUI Loudness Normalization.
 - The [ and ] volume keys, which is WebUI Keyboard Shortcuts.
+- Volume above 100%, which is WebUI Volume Boost.
 
-### M12i5 - WebUI Loudness Normalization
+### M12i7 - WebUI Loudness Normalization
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI evens out loudness between videos toward a target the user picks, without clipping, and its Night mode evens out loudness within a video, in every browser the WebUI supports.
@@ -438,19 +774,19 @@ Last milestone completed: M12i2
 
 #### Decisions
 
-- The WebUI doesn't follow the desktop's normalization, and the frozen desktop keeps its own unchanged: the desktop sets LibVLC's volume as if it were linear, which is likely cubic, so its corrections were about tripled (inferred), and its formula on a linear gain stage leaves 58% of audible videos at its 5 dB boost limit (measured).
+- The WebUI doesn't follow the desktop's normalization: the desktop set LibVLC's volume as if it were linear, which is likely cubic, so its corrections were about tripled (inferred), and its formula on a linear gain stage leaves 58% of audible videos at its 5 dB boost limit (measured).
 - The gain is worked out only in the WebUI, from the server's loudness and peak and the device's settings, so its rule is locked to a WebUI-only fixture of loudness, peak, settings, and the resulting gain.
 - The audio chain runs from the video through the normalization gain, Night mode's compressor, and the limiter, to the volume stage and its fades from WebUI Volume and Enhanced Audio.
 - The limiter is in the chain whenever normalization or Night mode is on. Allow limiting only decides whether a boost may go past a video's headroom for the limiter to catch.
 - The defaults (normalization on, Standard, a 15 dB boost limit, and Allow limiting on, with Night mode off) and Night mode's fixed values are provisional until the Listening check slice settles them, with the full library.
-- If the audio spike in WebUI Volume and Enhanced Audio doesn't find the gain stage reliable, including on iOS, this milestone moves to v0.16.0.
+- If the audio spike in WebUI Volume and Enhanced Audio doesn't find the gain stage reliable, including on iOS, this milestone moves to the release after v0.15.0.
 
 #### Slices
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Mockup | ⏳ Planned | The new Audio settings, Night mode's included, and the Adjustment row's "(limited by peak)" in the mockup, reviewed by the user on devices. |
-| Automatic baseline | ⏳ Planned | The library statistic Automatic uses, chosen by the user from measured figures, in a new library stats field if it isn't the server's current baseline. |
+| Automatic baseline | ⏳ Planned | The library statistic Automatic uses, chosen by the user from measured figures, carried by the library stats' baseline loudness. |
 | Normalization | ⏳ Planned | The gain rule, its fixed values, the limiter, the loudness normalization settings, and the Stats tab's Adjustment row. |
 | Night mode | ⏳ Planned | A compressor that evens out loudness within a video, and its setting under Enhanced audio. |
 | Listening check | ⏳ Planned | The defaults and Night mode's fixed values, settled by the user's listening check with the full library. |
@@ -480,19 +816,18 @@ Last milestone completed: M12i2
 **Scope**
 
 - The slice's plan measures candidate statistics on a copy of the catalog, such as the server's current baseline, the 75th percentile of audible videos, and their median, and shows the figures to the user, who chooses the one Automatic uses.
-- If the choice isn't the server's current baseline, a new field in the library stats carries it, a contract change that only adds, in OpenAPI and the generated WebUI types. `baselineLoudnessLufs` keeps its value for the desktop.
+- If the choice isn't the server's current baseline, the library stats' `baselineLoudnessLufs` carries the chosen statistic in its place, and its description in OpenAPI and the generated WebUI types changes with it.
 - The Stats tab's Baseline loudness shows the chosen statistic.
 
 **Traps**
 
 - The server's baseline is the 75th percentile of the loudness of videos with audio, near-silent ones included (`ReadBaselineLoudness` in `LibraryCatalogSession.cs`).
 - On the developer's catalog the server's baseline is −28.7 LUFS, the 75th percentile of the 8,892 videos louder than −60 LUFS is −27.1, and their median is −38.3 (measured).
-- The frozen desktop's Automatic baseline reads `baselineLoudnessLufs`.
 
 **Acceptance**
 
 - The measured figures and the user's choice are recorded before the Normalization slice starts.
-- If the slice adds a field, its value is the chosen statistic, in server tests of the library stats, and it is in OpenAPI, and `npm run verify:contracts` passes.
+- `baselineLoudnessLufs` is the chosen statistic, in server tests of the library stats, and `npm run verify:contracts` passes.
 - The Stats tab's Baseline loudness shows the chosen statistic, in a component test.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
@@ -603,15 +938,14 @@ Last milestone completed: M12i2
 
 #### Not included
 
-- Removing the desktop's own normalization, which is Desktop Client Removal.
 - Peak measurement and the loudness rescan, which is WebUI Stats Panel.
 - Night mode settings beyond on and off.
 
-### M12i6 - WebUI Player Controls
+### M12i8 - WebUI Player Controls
 
 - **Status**: ⏳ Planned
-- **Goal**: The player's controls can hide after a time with no activity.
-- **Depends on**: WebUI Settings Panel, whose Player controls section holds its settings, and WebUI Volume and Enhanced Audio, whose volume slider keeps the controls shown while it is dragged.
+- **Goal**: The player's controls can hide after a time with no activity, and a Random button picks a new item from anywhere in the history.
+- **Depends on**: WebUI Settings Panel, whose Player controls section holds its settings, and WebUI Volume and Enhanced Audio, whose volume slider keeps the controls shown while it is dragged and whose move of Mute to the seek row frees the place Random takes.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
@@ -624,7 +958,13 @@ Last milestone completed: M12i2
   - Never: the controls stay visible.
   - In every mode, hidden controls can't be pressed, so the first tap or click on them only shows them.
   - With Timeout, a key press counts as activity and shows them, and keyboard focus on a control, focus that `:focus-visible` matches, keeps them shown. Focus that a tap or click leaves on a control doesn't, so after a tap on Play they still hide.
-- Hide player controls and its two settings survive a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
+- A Random button, with the `casino` icon, sits in the transport row in Mute's old place, right of Next and left of Loop.
+- Random picks a new item as Next does at the end of the history, from anywhere in it.
+- Random behavior, a Settings tab entry in its Playback section, kept per device, decides where the pick goes:
+  - Jump, the default: the pick is added at the end of the history, as Next adds one at the end of the queue.
+  - Insert: the pick goes right after the current item, and the plays ahead in the history stay after it.
+- The mockup shows the Random button and Random behavior.
+- Hide player controls, its two settings, and Random behavior survive a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
 
 #### Traps
 
@@ -632,16 +972,21 @@ Last milestone completed: M12i2
 - There is no timeout, and hidden controls can still be pressed, since only their container ignores the pointer (`.overlay-controls` in `src/styles.css`).
 - A tap on Play left focus on it, and the mockup's first version, which kept the controls shown for any focus on a control, then kept them up until the next tap elsewhere (measured).
 - happy-dom, which the WebUI's screen tests use, matches `:focus-visible` for any focus, including focus a tap leaves, so a test can't tell keyboard focus from a tap's by it; the mockup tracks the last input itself (measured).
+- `pushHistory` in `src/state/appStore.ts` drops every history entry after the current one before it adds a pick, so neither Random behavior can use it as it is.
+- `next` in `src/playback/player.ts` picks a new item only at the end of the history, and a tap on the empty player picks one too.
+- The desktop's Random button always picked a new item, even in the middle of its history (measured).
+- `casino` isn't in the mockup's icon subset, which `build_font.py` cuts from its `ICONS` list into `icons.json` (measured).
 
 #### Acceptance
 
 - The fullscreen button shows the exit icon while the stage is in fullscreen or pseudo-fullscreen, in a test of the fullscreen button's icon.
 - With Hide player controls on Timeout, the controls hide after the Hide after time with no activity, moving the mouse or tapping shows them and restarts the countdown, and they stay while a mouse or pen pointer is over them, while keyboard focus is on a control, while the scrub bar or volume is dragged, while the bell's list is open, and, with Keep visible while paused, while paused. A touch over them and focus a tap leaves on Play don't keep them shown. On click/tap toggles them on a click or tap, and Never keeps them visible. Hide after accepts 1 to 30 seconds. Hidden controls can't be pressed. Shown by controls tests for each Hide player controls mode, the countdown, and each thing that keeps the controls shown.
-- After a page refresh, Hide player controls and its two settings are each as they were, in tests for a page refresh keeping each setting this milestone adds.
+- Random from the middle of the history adds the pick at the end with Jump, and right after the current item with the plays ahead kept after it with Insert, in Player screen tests of each Random behavior.
+- After a page refresh, Hide player controls, its two settings, and Random behavior are each as they were, in tests for a page refresh keeping each setting this milestone adds.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and a spot check on the user's own browsers and phone, without the VM.
 
-### M12i7 - WebUI Player Rating
+### M12i9 - WebUI Player Rating
 
 - **Status**: ⏳ Planned
 - **Goal**: The player shows the playing item's rating and sets it without opening the Stats tab.
@@ -675,16 +1020,17 @@ Last milestone completed: M12i2
 
 - Manual: On the iPad and an Android phone, in both orientations, the player's rating shows the playing item's rating and sets one by touch.
 
-### M12i8 - WebUI Keyboard Shortcuts
+### M12i10 - WebUI Keyboard Shortcuts
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI has the desktop's keyboard shortcuts wherever a browser allows them, plus seek-step and frame-step keys and a shortcut reference.
-- **Depends on**: WebUI Settings Panel, WebUI Stats Panel, so every panel tab exists, and WebUI Volume and Enhanced Audio, whose volume its keys step, and WebUI Autoplay Modes, whose autoplay it toggles, and WebUI Player Controls, whose controls show on a key press, and Item Ratings, whose rating its keys set.
+- **Depends on**: WebUI Settings Panel, WebUI Stats Panel, so every panel tab exists, and WebUI Volume and Enhanced Audio, whose volume its keys step, and WebUI Autoplay Modes, whose autoplay it toggles, and WebUI Player Controls, whose controls show on a key press and whose Random button R presses, and Item Ratings, whose rating its keys set.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
 
 - Use the desktop keys.
+- R does what WebUI Player Controls' Random button does, following Random behavior.
 - Ctrl+Q, Ctrl+O, and F11 are not bound, since the browser keeps them.
 - Q quit and O import folder have no WebUI equivalent.
 - Each panel tab has a shortcut: Library, Filter, Tags, Stats, and Settings.
@@ -694,11 +1040,11 @@ Last milestone completed: M12i2
   - P shows or hides the panel.
 - Shift+F enters and leaves fullscreen, since F stays Favorite.
 - Space plays or pauses as K does, and pauses and resumes a photo's timer, except while focus is on something Space already activates, such as a button or a library tile.
-- [ and ] step the volume by the volume step from WebUI Volume and Enhanced Audio. The desktop steps volume with comma and period, which step frames here instead.
+- [ and ] step the volume by the volume step from WebUI Volume and Enhanced Audio. The desktop stepped volume with comma and period, which step frames here instead.
 - J and L seek by a seek step preference. The Settings tab offers the desktop's seek steps: 1, 5, or 10 seconds.
 - Frame stepping, as YouTube does it: while a video is paused, comma steps one frame back and period one frame forward.
   - It uses the browser's frame timings (`requestVideoFrameCallback`) where the browser provides them, and, where it doesn't, an assumed frame rate that this milestone decides.
-  - It replaces the desktop's Frame seek step (Shift and the arrow keys), which LibVLC drives.
+  - It replaces the desktop's Frame seek step (Shift and the arrow keys), which LibVLC drove.
 - J, L, and a frame step are seeks: while Timer mode repeats a stretch, each starts the stretch where it lands, as a seek by the scrub bar does, which the mockup shows.
 - Rating keys set the playing item's rating as Item Ratings' control does, with its popups, and do nothing while nothing plays:
   - Shift+1 to Shift+5 set 1 to 5 stars, and Shift+0 clears the rating.
@@ -716,13 +1062,13 @@ Last milestone completed: M12i2
 - Besides Escape, which closes overlays, the WebUI handles keys only on the element that has focus: Enter or Space on a library tile and on the header's file name, which opens the Stats tab, the arrow keys, Home, and End on the panel's resize handle, the up and down arrows on drag handles, and Enter in text fields (measured).
 - Item Ratings' star control takes the arrow keys, Home, End, Delete, and Backspace while it has focus.
 - With Shift held, a digit key's `event.key` is the shifted character, such as "!" on a US layout (inferred).
-- The desktop binds K play or pause, J and L seek, Left and Right previous and next, R random, F favorite, B blacklist, A autoplay, M mute, comma and period volume, T tags, P player view, S settings, O import folder, Q quit, F11 fullscreen, and 1 to 5 to show or hide parts of the window. It also swallows 6 to 8 and Space, which do nothing (measured).
+- The desktop bound K play or pause, J and L seek, Left and Right previous and next, R random, F favorite, B blacklist, A autoplay, M mute, comma and period volume, T tags, P player view, S settings, O import folder, Q quit, F11 fullscreen, and 1 to 5 to show or hide parts of the window. It also swallowed 6 to 8 and Space, which did nothing (measured).
 - The browser keeps Ctrl+Q, Ctrl+O, and F11, for its own fullscreen (inferred).
 - Auto Tag is already an in-app dialog (`src/ui/AutoTag.tsx`): Esc does what its X does and waits while a scan runs, and the stage's Escape handler leaves Esc to any open dialog (`src/ui/Stage.tsx`), so the Esc order needs nothing for it (measured).
 
 #### Acceptance
 
-- Each bound shortcut does what the desktop's does, in keyboard tests per binding under `happy-dom`.
+- Each bound shortcut does what this entry describes, and otherwise what the desktop's did as the Traps list them, in keyboard tests per binding under `happy-dom`.
 - 1 to 5 open the panel on Library, Filter, Tags, Stats, and Settings, T and S on Tags and Settings, and the open tab's key closes the panel; P shows or hides the panel. Shown by keyboard tests per binding.
 - Esc closes the bell's list, the panel, and pseudo-fullscreen, in that order, in tests of the Esc order.
 - Shortcuts are ignored while a text field has focus, in keyboard tests per binding.
@@ -792,7 +1138,7 @@ Last milestone completed: M12i2
 
 **Traps**
 
-- The desktop's `OpenFileLocation` opens Explorer with the file selected on Windows and opens the folder with `xdg-open` on Linux.
+- The desktop's `OpenFileLocation`, in git history from before Desktop Client Removal, opened Explorer with the file selected on Windows and the folder with `xdg-open` on Linux.
 - The tray already launches programs (`AvaloniaTrayHostUi.cs`).
 
 **Acceptance**
@@ -831,7 +1177,7 @@ Last milestone completed: M12i2
 
 - **Status**: ⏳ Planned
 - **Goal**: Browse and random play can be limited to files a browser can play, and a file the browser cannot play, or one the server can't read, says so instead of "not found".
-- **Depends on**: WebUI Preact Migration, Favorite and Blacklist Filter Modes, whose FilterState schema it adds its field to, and WebUI Notifications, whose Skipped files popups announce the skips.
+- **Depends on**: WebUI Preact Migration, Favorite and Blacklist Filter Modes, whose FilterState schema it adds its field to, and WebUI Notifications, whose Skipped files popups announce the skips, and Per-Preset Preset Writes, whose per-preset writes save its field.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -840,13 +1186,13 @@ Last milestone completed: M12i2
   - The profile lists the playable video containers, starting with mp4, m4v, webm, and mkv.
   - Any other video container, including avi and wmv, is not browser-playable.
   - Photos are always playable.
-- The browser-playable field is nullable, the WebUI always sends it, and a posted preset without it keeps the stored value, matched to the stored preset by name, since a posted preset carries no id. This keeps a desktop preset save from dropping the option (see the Contract slice's Traps).
+- A stored preset without the browser-playable field reads it as off.
 
 #### Slices
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Contract | ⏳ Planned | A nullable browser-playable field in the FilterState schema, applied by the server in the list query, its counts, and random selection, and kept when a posted preset leaves it out, and a `503` with its own play error code from the media and play routes for a file the server can't read. |
+| Contract | ⏳ Planned | A browser-playable field in the FilterState schema, applied by the server in the list query, its counts, and random selection, and a `503` with its own play error code from the media and play routes for a file the server can't read. |
 | WebUI | ⏳ Planned | The "Only files this browser can play" option in the Filter tab, saved in presets and compared in preset matching. |
 | Error message | ⏳ Planned | A format-not-supported message for a file the browser can't play, "not found" only for a missing file, a couldn't-load message for any other answer, such as the server's `503` for a file it can't read, and skipping missing and unplayable files during autoplay, Next, Previous, and random picks. |
 
@@ -854,26 +1200,19 @@ Last milestone completed: M12i2
 
 **Scope**
 
-- A nullable browser-playable field in the FilterState schema that Favorite and Blacklist Filter Modes adds, applied by the server in the list query, its counts, and random selection.
-- OpenAPI and generated WebUI types; it only adds a field.
-- The server keeps a preset's stored value when a posted preset leaves the field out, matching it to the stored preset by name.
+- A browser-playable field in the FilterState schema that Favorite and Blacklist Filter Modes adds, applied by the server in the list query, its counts, and random selection.
+- OpenAPI and generated WebUI types.
 - The profile is documented in `docs/api.md`.
-- `GET /api/media/{idOrToken}` and `POST /api/play/{itemId}` answer `503` when the file can't be read, such as on a stalled drive or share, and `404` only when it is missing.
+- `GET /api/media/{token}` and `POST /api/play/{itemId}` answer `503` when the file can't be read, such as on a stalled drive or share, and `404` only when it is missing.
 - The play route's `503` carries the code `play_media_unreadable`.
-- OpenAPI and the generated WebUI types document the new `503` reason on both routes and the new code; the change only adds.
+- OpenAPI and the generated WebUI types document the new `503` reason on both routes and the new code.
 
 **Traps**
 
-- Browsers cannot play every format LibVLC plays on the desktop, a gap accepted until playback sessions.
+- Browsers cannot play every format the desktop's LibVLC played, so since Desktop Client Removal those files play in no client until playback sessions.
 - A copy of the developer's catalog has 17,423 videos by file extension, of which 16,611 are mp4, 533 mkv (3.1%), 225 avi, and 54 wmv (measured). The codecs inside the files were not measured.
 - avi and wmv files from that library fail in the WebUI (measured).
 - mkv plays in Chrome and Firefox with common codecs but not in Safari or on iOS (inferred), and counts as browser-playable.
-- Until Per-Preset Preset Writes, the desktop posts the whole preset list, and the frozen desktop does not know the new field, so a desktop preset save would drop the option from every preset (inferred).
-- The desktop still posts the whole list to `POST /api/presets`.
-- The desktop rebuilds every posted preset from its typed filter model, dropping fields it doesn't know (measured).
-- The desktop posted its cached list not only on a preset save but on every header preset pick and every filter dialog Apply, with the cache refreshed only on connect, reconnect, resync, and filter dialog open. Favorite and Blacklist Filter Modes limits the post to an Apply that changed presets, so by this milestone a desktop preset save is what drops the option.
-- `FilterPresetSnapshot` is `name` and `filterState`, so a posted preset carries no id.
-- A preset the desktop renames in the same save loses the option, until Per-Preset Preset Writes (inferred).
 - `ServeMedia` in `ServerHostComposition.cs` and `TryPlayItem` in `LibraryPlaybackService.cs` check `File.Exists`, which returns false on any I/O error, so a file on a stalled drive or share answers `404`.
 - `File.Exists` and `FileInfo.Exists` can't tell a missing file from an unreadable one, so the server needs the exception from opening the file or reading its metadata (inferred).
 - Both routes already answer `503` with `LibraryUnavailable` when the server has no library.
@@ -882,8 +1221,8 @@ Last milestone completed: M12i2
 **Acceptance**
 
 - With the option on, the list query, its counts, and random selection exclude videos outside the profile, and with it off, results are unchanged, in server tests for the option in the list query, counts, and random selection.
-- A preset the desktop saves without the field keeps its stored option, in server tests that a preset posted without the field keeps it.
-- OpenAPI and the generated WebUI types carry the nullable field, in contract tests.
+- A stored preset without the field filters with the option off, in server tests of a stored preset without it.
+- OpenAPI and the generated WebUI types carry the field, in contract tests.
 - The media and play routes answer `503` for a file whose read fails with an I/O error and `404` for a missing one, and the play route's `503` carries `play_media_unreadable`, in server tests of both routes with a missing and an unreadable file.
 - OpenAPI and the generated WebUI types carry the new `503` reason and code, in contract tests.
 - The profile is documented in `docs/api.md`, checked by reading it.
@@ -895,11 +1234,11 @@ Last milestone completed: M12i2
 
 - The option, labeled "Only files this browser can play", last in the Filter tab's Basic Filters and saved in presets.
 - It is off by default, so current behavior does not change.
-- Preset matching compares the option. Its cases go in a WebUI-only fixture until Desktop Client Removal, since the desktop doesn't compare the new field.
+- Preset matching compares the option, with its cases in `preset-filter-equality.json`.
 
 **Traps**
 
-- Preset equality is locked to `preset-filter-equality.json`, which the desktop tests also read.
+- Preset equality is locked to `preset-filter-equality.json`, which Desktop Client Removal moves to the WebUI's tests.
 
 **Acceptance**
 
@@ -952,59 +1291,54 @@ Last milestone completed: M12i2
 
 - Codec-level playability detection, which waits for the probe in Server Playback Decision Engine.
 - Playing formats a browser can't, which is WebUI Playback Cutover and Format Resilience.
-- Keeping the option on a preset the desktop renames in the same save, which is Per-Preset Preset Writes.
 
 ### M12k2 - Rating Filter and Sort
 
 - **Status**: ⏳ Planned
 - **Goal**: Browse and random play can be limited to items rated at or above a minimum, and the Library tab sorts by rating.
-- **Depends on**: Item Ratings, and Browser-Playable Filter, whose rule for presets posted without its field and whose WebUI-only preset matching fixture this milestone extends.
+- **Depends on**: Item Ratings, and Browser-Playable Filter, whose FilterState field and preset matching cases this milestone's follow.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
 
 - The minimum rating keeps items rated at or above it. An Include unrated option, off by default, keeps unrated items too.
-- The filter's fields are nullable, the WebUI always sends them, and a posted preset without them keeps the stored values, as Browser-Playable Filter's field does, so a desktop preset save doesn't drop them.
+- A stored preset without the filter's fields reads them as no minimum and Include unrated off, as Browser-Playable Filter's field reads as off.
 - Unrated items sort last in both directions of the rating sort.
-- Rating cases for preset matching, the tile effect rule, and the sort direction labels go in WebUI-only fixtures until Desktop Client Removal, so the desktop and its tests don't change.
+- Rating cases for preset matching, the tile effect rule, and the sort direction labels go in `preset-filter-equality.json`, `library-tile-effect.json`, and `sort-direction-labels.json`.
 
 #### Slices
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Contract | ⏳ Planned | The minimum rating and Include unrated in the FilterState schema, applied by the server in the list query, its counts, and random selection, and kept when a posted preset leaves them out, and a rating sort with its indexes. |
+| Contract | ⏳ Planned | The minimum rating and Include unrated in the FilterState schema, applied by the server in the list query, its counts, and random selection, and a rating sort with its indexes. |
 | WebUI | ⏳ Planned | The minimum rating in the Filter tab and the Filters line, saved in presets and compared in preset matching, the rating sort, and rating changes patching or reloading the loaded window. |
 
 #### Contract slice
 
 **Scope**
 
-- Nullable `minRating`, in stars, and `includeUnrated` fields in the FilterState schema, applied by the server in the list query, its counts, and random selection.
-- The server keeps a preset's stored values when a posted preset leaves the fields out, as it does for Browser-Playable Filter's field.
+- `minRating`, in stars or null for no minimum, and `includeUnrated` fields in the FilterState schema, applied by the server in the list query, its counts, and random selection.
 - A shared fixture locks how the server's filter parser and the WebUI read `minRating`, such as a number or a string, a value between half steps, one out of range, and null, and Core and WebUI tests read it.
 - A Rating sort mode, with unrated items last in both directions.
-- The sort's two indexes, one per direction, come with a catalog schema step from 5 to 6, in their own constant.
-- OpenAPI and generated WebUI types; the change only adds.
+- The sort's two indexes, one per direction, come with a catalog schema step from 6 to 7, in their own constant.
+- OpenAPI and generated WebUI types.
 
 **Traps**
 
 - FilterState goes through `FilterStateModel` (`FilteringContracts.cs`), `LibraryListFilterParser`, and `AppendFilter` in `LibraryCatalogListQuery.cs`, which the list query, its counts, and random selection share.
 - `FilterStateSchema_NamesEveryFieldTheParserReads` fails when the parser reads a field the schema doesn't name.
 - `items.rating >= {min}` leaves unrated items out by itself (inferred).
-- Presets are stored as the posted JSON (`PersistPresetCatalog` in `ServerStateService.cs`), so the server keeps fields it doesn't read, and `POST /api/presets` replaces the whole list.
-- The desktop's `FilterState` keeps no fields it doesn't know, so its preset save (`SyncPresetsToCoreAsync` in `MainWindow.axaml.cs`, run when a filter dialog Apply changed presets) drops `minRating` and `includeUnrated` from every preset (measured).
 - Counts are cached by the WHERE text and its values until the next catalog write.
 - `BuildOrderBy` sorts the other modes by `COALESCE({column}, 0)` and then the name key, which would put unrated items first ascending and last descending (measured), so unrated last in both directions needs its own expression for ascending.
 - Each sort index's expression must match the ORDER BY. SQLite scans a `COALESCE(rating, 0) DESC, file_name_sort_key` index for that sort, as `EXPLAIN QUERY PLAN` shows (measured).
 - A rating sort index cost about 2.4 MB on a synthetic 49,000-item catalog with 40-byte sort keys (measured).
 - Item Ratings gives the 2→3 step its own index SQL, so the new indexes go in their own constant, run for a new catalog and by the new step.
 - `LibraryListSort` rejects an unknown mode with a message that lists the modes (`LibraryOperationsService.cs`).
-- The desktop keeps its own sort and never sees the WebUI's.
 
 **Acceptance**
 
 - With a minimum rating, the list query, its counts, and random selection keep only items rated at or above it, plus unrated items with Include unrated, and without one, results are unchanged, in server tests for the filter in the list query, counts, and random selection.
-- A preset posted without the fields keeps its stored values, in server tests that a preset posted without them keeps them.
+- A stored preset without the fields filters with no minimum and without Include unrated, in server tests of a stored preset without them.
 - The server's parser reads `minRating` as the shared fixture says, in Core tests of the fixture.
 - The rating sort orders by rating in both directions with unrated items last and reads its index, in server tests of the sort and its query plan.
 - A catalog at each older version opens upgraded and imports upgraded with the sort indexes, in the catalog upgrade tests.
@@ -1027,29 +1361,26 @@ Last milestone completed: M12i2
 **Traps**
 
 - `serializeFilterStateForApi`, `filterStateFromApiObject`, and `filterStatesEqualForPresetMatch` in `src/filter/filterStateModel.ts` write, read, and compare FilterState, and a field the serializer writes joins preset matching.
-- `preset-filter-equality.json`, `library-tile-effect.json`, and `sort-direction-labels.json` are also read by desktop tests, which run every row. `LibraryTileEffectFixtureTests` throws on an event kind it doesn't know, and `GetSortDirectionLabel` gives any other mode "A–Z" and "Z–A".
 - `libraryQueryTileEffect` in `src/library/libraryQuerySession.ts` is locked to `library-tile-effect.json`.
 - The WebUI remembers its sort per device and checks it against its list of sort modes.
 
 **Acceptance**
 
-- The minimum rating and Include unrated are saved in presets and compared in preset matching, in tests of the WebUI-only preset matching fixture.
+- The minimum rating and Include unrated are saved in presets and compared in preset matching, in tests of `preset-filter-equality.json`.
 - The Filters line names them, in Library screen tests.
-- The rating sort shows its direction labels, in tests of the WebUI-only sort label fixture.
-- A rating change patches or reloads as the rule says, in tests of the WebUI-only tile effect fixture.
+- The rating sort shows its direction labels, in tests of `sort-direction-labels.json`.
+- A rating change patches or reloads as the rule says, in tests of `library-tile-effect.json`.
 - The WebUI reads `minRating` as the shared fixture says, in WebUI filter model tests.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
 #### Release checks
 
-- Manual: In the WebUI, a minimum rating with and without Include unrated limits browse and random play, the rating sort orders the library, and a preset saved with a minimum rating keeps it after a desktop preset save.
+- Manual: In the WebUI, a minimum rating with and without Include unrated limits browse and random play, the rating sort orders the library, and a preset saved with a minimum rating keeps it.
 
 #### Not included
 
 - Weighting random picks by rating, which is Rating-Weighted Random Picks.
-- Moving the WebUI-only fixture cases into the shared fixtures, which is Desktop Client Removal.
-- Keeping the fields on a preset the desktop renames in the same save, which is Per-Preset Preset Writes.
 
 ### M12k3 - Rating-Weighted Random Picks
 
@@ -1075,7 +1406,7 @@ Last milestone completed: M12i2
 - Weights are worked out on every pick, with no state kept.
 - `RandomCandidatesSql` reads only each eligible item's id, full path, play count, and last played, so it needs the rating too.
 - Smart shuffle's bag is a uniform shuffle of the eligible ids, built again only when the eligible set or the mode changes, so weighting it needs a weighted fill.
-- The randomization mode is a separate request field, `randomizationMode`, not part of FilterState, and `ParseRandomizationMode` in `LibraryPlaybackService.cs` reads an unknown or empty mode as SmartShuffle, so the desktop, with its own list of modes, is unaffected.
+- The randomization mode is a separate request field, `randomizationMode`, not part of FilterState, and `ParseRandomizationMode` in `LibraryPlaybackService.cs` reads an unknown or empty mode as SmartShuffle.
 
 #### Acceptance
 
@@ -1216,7 +1547,7 @@ Last milestone completed: M12i2
 ### M12m - WebUI Multi-Select and Bulk Actions
 
 - **Status**: ⏳ Planned
-- **Goal**: The WebUI selects several library items, or every item that matches, and applies the desktop's bulk actions, and a rating, to them.
+- **Goal**: The WebUI selects several library items, or every item that matches, and favorites, blacklists, rates, tags, clears the playback stats of, or removes them all at once.
 - **Depends on**: WebUI Grid Row Reuse, which updates a tile in place, so selection marks are tile updates, and WebUI Grid Scrollbar Seek, whose placeholder tiles show selection once their page loads, and WebUI Tags and Filter Tabs, whose Tags tab edits several items, and WebUI Keyboard Shortcuts, whose Esc order it extends, and Item Ratings, whose rating and star control Rate… uses, and Rating Filter and Sort, whose rating change kind in the tile effect rule the bulk rating event goes through.
 - **Design**: `docs/mockups/reelroulette/`.
 
@@ -1229,7 +1560,7 @@ Last milestone completed: M12i2
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Contract | ⏳ Planned | An ids-only library query, a bulk favorite and blacklist route with one event, bulk rating with one event, clear playback stats by ids, an item removal route with its event, the tag-count read for a selection, and the clients' handling of the bulk and item removal events. |
+| Contract | ⏳ Planned | An ids-only library query, a bulk favorite and blacklist route with one event, bulk rating with one event, an item removal route with its event, the tag-count read for a selection, and the WebUI's handling of the bulk and item removal events. |
 | Selection | ⏳ Planned | Selecting tiles by their check icon or a long press, the selection bar with Select all, and the Esc order. |
 | Bulk actions | ⏳ Planned | The Actions menu's favorite, blacklist, rate, clear playback stats, and remove from library actions, the control-token prompt remove from library asks through, and favorite and blacklist answers applied to the item they were for. |
 | Tag edits | ⏳ Planned | Editing several items' tags in the Tags tab. |
@@ -1238,42 +1569,37 @@ Last milestone completed: M12i2
 
 **Scope**
 
-- The contract change only adds.
 - The library query gains an ids-only option that returns every matching id in one response, for Select all.
 - One bulk route takes many ids and sets or clears favorite or blacklist on all of them in one request, publishing one event for all of them in place of one request and one `itemStateChanged` per item.
-- Bulk rating sets or clears one rating on many ids in one request and publishes one rating event for all of them, carrying each item's previous rating. It isn't the bulk favorite and blacklist event, since the desktop reloads its loaded window on that one and shows no ratings.
-- Clear playback stats takes ids beside its paths, so a selection of items that aren't loaded can be cleared.
-- A route removes items from the library, with the delete-from-disk option the desktop remove dialog offers.
+- Bulk rating sets or clears one rating on many ids in one request and publishes one rating event for all of them, carrying each item's previous rating. Promotion decides whether it stays its own event or shares the bulk favorite and blacklist event.
+- A route removes items from the library, with the delete-from-disk option the desktop remove dialog offered.
 - The item removal route is gated as the `/control` routes are: open from the server machine, and from another machine only with the control token.
 - Removing items publishes an event so connected clients update, and every open WebUI requeries its library window on it.
 - The WebUI applies the patch-or-reload rule to each id in a bulk event, the bulk rating event included, and reloads its window at most once.
 - The bulk requests send the device's `clientId`, and the bulk events carry it back as `clientId`, as WebUI Notifications does for one item's favorite or blacklist.
 - Other devices show one Other devices popup for the batch: "Added {n} items to favorites on another device", "Removed {n} items from favorites on another device", "Blacklisted {n} items on another device", "Removed {n} items from the blacklist on another device", "Rated {n} items {rating} on another device", or "Cleared the rating on {n} items on another device", with "1 item" for one. The device whose `clientId` the event carries shows only its Your actions popup.
-- The desktop reloads its loaded window on the bulk event, a small change matching the server's, which the freeze allows.
 - For a selection of every matching item, the Tags tab's chip states and collapsed counts need each tag's count across the selection, which the WebUI can't work out for items it hasn't loaded. The slice measures the existing tag-editor model, which takes item ids, on the 49,055-item catalog against a counts-only addition, and uses the cheaper one.
 - OpenAPI and generated WebUI types.
 
 **Traps**
 
-- `POST /api/favorite` and `POST /api/blacklist` take one item path each, and the desktop sends one request per selected item.
-- `POST /api/playback/clear-stats` takes a list of item paths, and `POST /api/tag-editor/apply-item-tags` a list of item ids.
-- The desktop grid shows Remove from Library, but it has no server route, so v0.14.0 hides it. The route is still missing and the control is still hidden.
+- `POST /api/favorite` and `POST /api/blacklist` take one item id each.
+- `POST /api/playback/clear-stats` and `POST /api/tag-editor/apply-item-tags` each take a list of item ids, `itemIds`, so a selection of items that aren't loaded can be cleared.
+- No route removes items from the library.
 - The ids-only response is about 1.9 MB for the developer catalog's 49,055 items, worked out from 36-character ids (inferred).
-- The frozen desktop ignores event types it doesn't know: its event switch in `MainWindow.axaml.cs` has no default case.
 - Item Ratings' `POST /api/rating` takes one item, and its `itemRatingChanged` names one item.
 - The tag-editor model takes item ids (`TagEditorModelRequest.itemIds`).
 
 **Acceptance**
 
 - The ids-only query returns every matching id, in server tests for the ids-only query.
-- Bulk favorite and blacklist send one request and publish one event, the WebUI reloads its window at most once for it, and the desktop reloads its loaded window on it, in server tests for the bulk route and its one event and a desktop test that the bulk event reloads the loaded window, and WebUI tests that the bulk event reloads the window at most once.
+- Bulk favorite and blacklist send one request and publish one event, and the WebUI reloads its window at most once for it, in server tests for the bulk route and its one event, and WebUI tests that the bulk event reloads the window at most once.
 - The bulk event carries the request's `clientId`, in server tests for the bulk route, and other devices show one Other devices popup for the batch while the device that made the change shows only its Your actions popup, in WebUI tests of the bulk event's popups.
 - Bulk rating sends one request and publishes one rating event with each item's previous rating and the request's `clientId`, the WebUI reloads its window at most once for it, and its popups follow the same rule, in server tests for bulk rating and its event and WebUI tests of the bulk rating event.
-- Clear playback stats clears items given by id, in server tests for clearing stats by ids.
 - The item removal route removes items with and without deleting from disk, in server tests of the route.
 - Removing items updates connected WebUI sessions through events and list requery, in WebUI tests for event handling.
 - The measurement of the tag-editor model against a counts-only addition on the 49,055-item catalog is recorded, and the cheaper read is used.
-- The ids-only query, the bulk route, bulk rating and its event, clear-stats ids, and the item removal route and its event are in OpenAPI, and `npm run verify:contracts` passes, in contract tests.
+- The ids-only query, the bulk route, bulk rating and its event, and the item removal route and its event are in OpenAPI, and `npm run verify:contracts` passes, in contract tests.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
 #### Selection slice
@@ -1296,7 +1622,7 @@ Last milestone completed: M12i2
 
 **Traps**
 
-- The desktop library grid selects several items (click, Ctrl+click, Shift+click).
+- The desktop's library grid selected several items with click, Ctrl+click, and Shift+click.
 - The WebUI library plays one item per click and has no selection.
 - Filled icons take `.material-symbol-icon.is-filled` (FILL 1, weight 700, optical size 20), and icons on a tile take the drop shadow from `.library-grid-tile .material-symbol-icon.is-filled` (`src/styles.css`).
 - Every tile has the playing icon, which the stylesheet shows only on the tile with `is-playing`, and the grid controller moves that class between the tiles shown without rendering them again (`setPlayingItemId` in `libraryGridController.ts`).
@@ -1332,7 +1658,7 @@ Last milestone completed: M12i2
 
 **Traps**
 
-- The desktop acts on selected items from its context menu: add to or remove from favorites and the blacklist, add or remove tags, clear playback stats, and remove from library.
+- The desktop acted on selected items from its context menu: add to or remove from favorites and the blacklist, add or remove tags, clear playback stats, and remove from library.
 - `toggleFlag` in `src/playback/player.ts` clears the other flag when it sets one.
 - `src/playback/player.ts` applies a favorite or blacklist answer to the item playing when the answer arrives, so pressing Next before it does marks the new item locally and caches that state under its id until an event for it corrects it.
 - The server's answer carries the changed item's `itemId` and both flags (`LibraryStateResponse`, which `shared/api/openapi.yaml` does not describe yet).
@@ -1362,7 +1688,7 @@ Last milestone completed: M12i2
 
 **Traps**
 
-- The desktop `ItemTagsDialog` adds and removes tags across all selected items at once; the WebUI tag editor works on the current item only.
+- The desktop's `ItemTagsDialog` added and removed tags across all selected items at once; the WebUI tag editor works on the current item only.
 
 **Acceptance**
 
@@ -1382,10 +1708,7 @@ Last milestone completed: M12i2
 - Clearing the whole library's playback stats, which is Admin Refresh, Backup, and Duplicate Review.
 - Keep Playing, which is WebUI Autoplay Modes, whose Timer mode replaces it.
 - Loudness normalization, which is WebUI Loudness Normalization.
-- The desktop's FFmpeg log: nothing has written to its buffer since the server took over refresh, so its window is always empty.
-- Showing the desktop's Remove from Library again; the frozen desktop keeps it hidden.
 - Removing a source with its items, which is Admin Source Management.
-- The desktop features a browser cannot offer, which is Desktop Client Removal, where they are recorded.
 
 ### M12n - WebUI Loop Range
 
@@ -1578,7 +1901,7 @@ Last milestone completed: M12i2
 - Rows expand to the full line.
 - The Operator's Tail lines field goes.
 - It reads today's line format, `[timestamp] [source] [level] message`.
-- It filters by time window; by source (the second bracket: `server`, `webui`, and the desktop's sources, such as `desktop-app` and `desktop-update`); by level, with one checkbox per level found (today `info`, `warn`, and `error`); and by contained text.
+- It filters by time window; by source (the second bracket: `server` and `webui`); by level, with one checkbox per level found (today `info`, `warn`, and `error`); and by contained text.
 
 **Traps**
 
@@ -1614,7 +1937,7 @@ Last milestone completed: M12i2
 | --- | --- | --- |
 | Recovery page | ⏳ Planned | A minimal built-in recovery page with restart, stop, a Log Viewer, and updates, that works without the WebUI's files. |
 | Operator retirement | ⏳ Planned | `/operator` redirects to the admin section, the tray's item opens ReelRoulette, and the smoke script and the checklist's Smoke item check the admin section. |
-| Always-on WebUI | ⏳ Planned | The server always serves the WebUI, ignores and reports on the `enabled` setting, and the desktop loses its Enable Web UI switch. |
+| Always-on WebUI | ⏳ Planned | The server always serves the WebUI, and the web runtime settings' `enabled` field is gone. |
 
 #### Recovery page slice
 
@@ -1664,30 +1987,26 @@ Last milestone completed: M12i2
 
 **Scope**
 
-- The server always serves the WebUI from this release, since the admin section lives there, and ignores the web runtime settings' `enabled` field.
-- The field stays in the contract, so the last desktop build keeps working, and the server reports it as on.
-- The frozen desktop's Settings dialog loses its Enable Web UI switch, which would no longer do anything. This is an approved desktop change outside bug fixes.
+- The server always serves the WebUI from this release, since the admin section lives there.
+- The web runtime settings' `enabled` field leaves the contract and the settings, and an `enabled` of off stored in `core-settings.json` is ignored.
+- OpenAPI and the generated WebUI types drop the field.
 - `docs/api.md` and `docs/dev-setup.md` stop describing the WebUI as optional.
 
 **Traps**
 
 - Turned off, the `enabled` field stops the server serving the WebUI's files and `/runtime-config.json` from its next start, leaves the WebUI's origins out of CORS, and stops mDNS advertising.
 - Turned off from the admin section, `enabled` would remove the admin section itself, and the recovery page has no way to turn it back on.
-- The desktop enables its Open Web UI menu item only when the server reports the WebUI as on, and the button in Desktop Retirement Notice's notice does what that item does.
+- The Operator page reads and writes the field, as its `webEnabled` checkbox, until the Operator retirement slice retires it.
 
 **Acceptance**
 
-- With the web runtime settings' `enabled` stored or posted as off, the server still serves the WebUI and `/runtime-config.json`, allows the WebUI's CORS origins, and, with remote connections and mDNS on, advertises over mDNS after a restart, and it reports `enabled` as on, in server tests that a stored or posted `enabled` of off is ignored and reported as on.
-- Neither the admin section nor the desktop Settings dialog shows an Enable Web UI switch, and `enabled` is still in OpenAPI, in a desktop test that the Settings dialog has no Enable Web UI switch.
+- With `enabled` stored as off in `core-settings.json`, the server still serves the WebUI and `/runtime-config.json`, allows the WebUI's CORS origins, and, with remote connections and mDNS on, advertises over mDNS after a restart, in server tests that a stored `enabled` of off is ignored.
+- The admin section shows no Enable Web UI switch, and `enabled` is gone from OpenAPI and the web runtime settings, in admin section UI tests and contract tests.
 - `dotnet test ReelRoulette.sln` passes.
 
 #### Release checks
 
 - Manual: With the WebUI files removed, the recovery page restarts, stops, shows logs, and applies an update, on Linux and Windows.
-
-#### Not included
-
-- Dropping the `enabled` field from the contract, which is Desktop Client Removal.
 
 ### M12p - Server Settings Robustness
 
@@ -1708,19 +2027,18 @@ Last milestone completed: M12i2
 **Scope**
 
 - Make the request fields of the refresh, backup, and web runtime settings posts nullable, with an omitted field left unchanged, as `devChannelEnabled` already is.
-- The change only relaxes what a request must send: the frozen desktop posts every field it knows and is unaffected.
+- The change only relaxes what a request must send, so a post with every field saves as before.
 - OpenAPI and the generated WebUI types carry the nullable fields.
 - This makes Admin Refresh, Backup, and Duplicate Review's settings saves safe to send in part.
 
 **Traps**
 
 - `CoreSettingsService.UpdateRefreshSettings`, `UpdateBackupSettings`, and `UpdateWebRuntimeSettings` assign every field from the posted snapshot, and the contract fields are not nullable, so a post that leaves out a field writes its default (for example `fingerprintScanMaxDegreeOfParallelism` back to 4).
-- The desktop's backup settings save posts its three fields (`MainWindow.axaml.cs`).
 
 **Acceptance**
 
 - A partial post to the refresh, backup, or web runtime settings changes only the fields it names, and leaves the other fields and the other settings sections unchanged on disk, in server tests that a partial post leaves the other fields and sections unchanged on disk.
-- A post with every field, as the desktop sends, saves as it does today, in server tests that a full post saves as before.
+- A post with every field saves as it does today, in server tests that a full post saves as before.
 - The nullable request fields are in OpenAPI, and `npm run verify:contracts` passes.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
@@ -1748,12 +2066,12 @@ Last milestone completed: M12i2
 
 #### Not included
 
-- The server's other robustness findings and the desktop's settings file, which is Server Robustness Findings.
+- The server's other robustness findings, which is Server Robustness Findings.
 
 ### M12q - Admin Refresh, Backup, and Duplicate Review
 
 - **Status**: ⏳ Planned
-- **Goal**: The admin section starts a refresh, edits refresh and backup settings, reviews and applies duplicates, and clears the whole library's playback stats, so none of these needs the desktop.
+- **Goal**: The admin section starts a refresh, edits refresh and backup settings, reviews and applies duplicates, and clears the whole library's playback stats, so each works from any device.
 - **Depends on**: WebUI Admin Section and Server Settings Robustness, so a settings save sends only the fields it changes, and Item Ratings, whose ratings duplicate review shows and Select Best compares.
 - **Design**: `docs/mockups/reelroulette/`.
 
@@ -1778,13 +2096,13 @@ Last milestone completed: M12i2
 
 - Refresh Now with the refresh status.
 - While a refresh runs, the Refresh card shows its stage and progress, and its result pops up as WebUI Notifications' Library refresh popup, a warning when it fails.
-- The refresh settings the desktop Settings dialog shows: auto-refresh and its interval (5–1440 minutes), forced loudness and duration rescans on the next refresh, and fingerprint scan parallelism (1–16).
-- Clear playback stats for the whole library, which the desktop offers from its Playback menu through `POST /api/playback/clear-stats`. It is an admin action, in the admin view's library section: a red Clear All Playback Stats… button under Playback stats in the Library refresh card.
+- The refresh settings: auto-refresh and its interval (5–1440 minutes), forced loudness and duration rescans on the next refresh, and fingerprint scan parallelism (1–16).
+- Clear playback stats for the whole library, which the desktop offered from its Playback menu through `POST /api/playback/clear-stats`. It is an admin action, in the admin view's library section: a red Clear All Playback Stats… button under Playback stats in the Library refresh card.
 - Clear All Playback Stats… asks "Clear the playback stats of every item in the library? Plays and last played go back to none." with a red Clear, and a Your actions popup then says "Cleared the library's playback stats.".
 
 **Traps**
 
-- Only the desktop calls `POST /api/refresh/start` and `/api/refresh/settings`. The routes exist, so this needs no contract change (measured).
+- Desktop Client Removal leaves `POST /api/refresh/start` and `/api/refresh/settings` with no caller. The routes exist, so this needs no contract change (measured before promotion).
 - The tray can also start a refresh (measured).
 - The interval and parallelism ranges are the ones the server already clamps to.
 - Before WebUI Multi-Select and Bulk Actions, which clears a selection's playback stats by ids, the WebUI never called `POST /api/playback/clear-stats` (measured).
@@ -1813,9 +2131,8 @@ Last milestone completed: M12i2
 
 **Traps**
 
-- Only the desktop calls `/api/backup/settings`. The route exists (measured).
+- Desktop Client Removal leaves `/api/backup/settings` with no caller. The route exists (measured before promotion).
 - The ranges for the time between backups and the number kept are the ones the server already clamps to.
-- The frozen desktop's backup settings save posts only its three fields (`MainWindow.axaml.cs`), so without the rule that a post without the days field keeps the stored value, each desktop save would reset the days.
 
 **Acceptance**
 
@@ -1838,7 +2155,7 @@ Last milestone completed: M12i2
 **Traps**
 
 - `DuplicateGroupItemResponse` carries each file's item id, full path, source id, favorite, blacklisted, play count, tag count, and last write time, and no rating.
-- Only the desktop calls `/api/duplicates/scan` today, and it ignores JSON fields it doesn't know.
+- Desktop Client Removal leaves `/api/duplicates/scan` with no caller.
 
 **Acceptance**
 
@@ -1850,15 +2167,15 @@ Last milestone completed: M12i2
 
 **Scope**
 
-- Scan the whole library or one source.
-- Show each group with thumbnails, the comparison details the desktop shows (file name, plays, tags, favorite, and blacklisted), and each file's rating.
+- Scan the whole library, all enabled sources, or one source.
+- Show each group with thumbnails, the comparison details the desktop showed (file name, plays, tags, favorite, and blacklisted), and each file's rating.
 - Choose Keep All or a file to keep per group.
 - Each group starts at Keep All or Select Best, from a per-device preference.
 - Select Best keeps the highest-rated file, an unrated file counting below any rating, then the one with the most plays, then the newest.
 - The preference is chosen in duplicate review rather than the Settings tab, since nothing else uses it. It starts at Keep All, as on the desktop, and survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
-- Apply deletes the files not kept from disk after a plain confirmation that says so and names the groups and files to delete, as the desktop's does, without the desktop's step of typing DELETE.
+- Apply deletes the files not kept from disk after a plain confirmation that says so and names the groups and files to delete, as the desktop's did, without its step of typing DELETE.
 - Duplicate review opens within the admin section's full-page view, not as a panel tab.
-- The Duplicates card has the scan's scope (the whole library or one source), Scan, and the default, labeled "Each group starts at".
+- The Duplicates card has the scan's scope (the whole library, all enabled sources, or one source), Scan, and the default, labeled "Each group starts at".
 - Review replaces the admin view's contents and has its own bar, with a back arrow to admin, the title Duplicate review, and the group count.
 - Each group, headed "Group {n} of {total}" with Keep All beside it, shows its files as cards with a thumbnail, the file name, its folder and size, its rating, plays with Favorite or Blacklisted, tags, and "Keep this one".
 - The kept file's card is outlined green, and the others red with a dimmed thumbnail.
@@ -1869,12 +2186,14 @@ Last milestone completed: M12i2
 
 **Traps**
 
-- Only the desktop calls `/api/duplicates/scan` and `/api/duplicates/apply`. The routes exist, so this slice needs no contract change beyond the Duplicate contract slice's rating (measured).
-- Select Best is decided only in the desktop today, in `DuplicateGroupViewModel` (`DuplicatesDialog.axaml.cs`): the file with the most plays, then the newest. The server and the WebUI have no keep rule.
+- Desktop Client Removal leaves `/api/duplicates/scan` and `/api/duplicates/apply` with no caller. The routes exist, so this slice needs no contract change beyond the Duplicate contract slice's rating (measured before promotion).
+- The scan request's `scope` already takes `CurrentSource`, `AllEnabledSources`, and `AllSources` (`DuplicateScanRequest`) (measured).
+- The desktop decided Select Best in `DuplicateGroupViewModel` (`DuplicatesDialog.axaml.cs`, in git history from before Desktop Client Removal): the file with the most plays, then the newest. The server and the WebUI have no keep rule.
 
 **Acceptance**
 
 - Duplicate review opens within the admin section, in admin section UI tests.
+- The Duplicates card scans the whole library, all enabled sources, or one source, sending that scope, in admin section UI tests of each scope.
 - Duplicate apply deletes only the files not kept, from disk, after a confirmation that names the groups and files to delete and asks for nothing to be typed, and Keep All deletes nothing in that group, in admin section UI tests.
 - The duplicate default is chosen in duplicate review, starts at Keep All, is kept per device, and survives a page refresh, in admin section UI tests.
 - Each file's card shows its rating, and Select Best keeps the highest-rated file, then the most played, then the newest, with an unrated file below any rating, in admin section UI tests.
@@ -1916,7 +2235,7 @@ Last milestone completed: M12i2
 
 **Traps**
 
-- The desktop Manage Sources dialog shows Rename and Remove buttons, but neither has a server route, so v0.14.0 hides them. The routes are still missing and the two buttons are still hidden.
+- No route renames or removes a source.
 - The path check is a new admin-only route, a contract change that only adds (inferred).
 - Only enabling or disabling a source publishes an event (`sourceStateChanged`), and `POST /api/sources/import` publishes nothing.
 
@@ -1932,7 +2251,7 @@ Last milestone completed: M12i2
 
 **Scope**
 
-- List sources with the statistics the desktop dialog shows: total media, videos, photos, total duration, and videos with and without audio.
+- List sources with the statistics the desktop dialog showed: total media, videos, photos, total duration, and videos with and without audio.
 - Add a folder, rename, remove, enable and disable, and refresh.
 - The list has one Refresh for all sources, not one per source, since the refresh route takes no source id.
 - Each source row has an enable switch, the source's name, path, and statistics, and an Edit button (`edit_note`, "Edit source").
@@ -1949,7 +2268,7 @@ Last milestone completed: M12i2
 - The per-source statistics already come from the `sources` list of `GET /api/library/stats`, so they need no contract change.
 - The refresh route takes no source id.
 - A browser folder picker returns paths on the browser's machine (inferred).
-- The desktop's Import Folder sends its own folder picker path to the server, so it only works on the server machine.
+- The desktop's Import Folder sent its own folder picker's path to the server, so it only worked on the server machine.
 
 **Acceptance**
 
@@ -1964,7 +2283,7 @@ Last milestone completed: M12i2
 
 **Scope**
 
-- On a source event, reload the loaded library window, keeping the scroll position as the desktop does, and refresh the Filter tab's source list.
+- On a source event, reload the loaded library window, keeping the scroll position as the desktop did, and refresh the Filter tab's source list.
 - Overlapping resyncs: keep one in flight and coalesce events that arrive meanwhile, since this milestone adds source events that reload every open WebUI.
 
 **Traps**
@@ -1976,7 +2295,7 @@ Last milestone completed: M12i2
 
 **Acceptance**
 
-- Adding, renaming, removing, enabling, or disabling a source from the admin section or the desktop updates every open WebUI's library window and Filter tab source list without a reload, in WebUI tests for source event handling.
+- Adding, renaming, removing, enabling, or disabling a source from the admin section updates every open WebUI's library window and Filter tab source list without a reload, in WebUI tests for source event handling.
 - Overlapping resync events cause one reload at a time, in WebUI tests for overlapping resyncs.
 - `npm run verify` passes, and one quick spot check of an admin section source toggle seen in another WebUI tab.
 
@@ -1986,7 +2305,6 @@ Last milestone completed: M12i2
 
 #### Not included
 
-- Showing the desktop's Rename and Remove buttons again; the frozen desktop keeps them hidden.
 - The item removal route and removing items from the library, which is WebUI Multi-Select and Bulk Actions.
 - Duplicate review, which is Admin Refresh, Backup, and Duplicate Review.
 - Moving source management behind admin accounts, which is Auth Cutover for API and Admin.
@@ -1996,7 +2314,7 @@ Last milestone completed: M12i2
 ### M12s - Admin Library Catalog Transfer
 
 - **Status**: ⏳ Planned
-- **Goal**: Export and import the library from the WebUI admin section, with the server applying the catalog, so catalog transfer does not need the desktop app.
+- **Goal**: Export and import the library from the WebUI admin section, with the server applying the catalog while it runs.
 - **Depends on**: WebUI Admin Section, Remove library.json Library Support, and Catalog Open and Backup Safety, so import can restore a library while the server runs without one, and Admin Source Management, whose server path check the remap fields use, and Admin Refresh, Backup, and Duplicate Review, whose daily retention marks the backups the restore list labels daily.
 - **Design**: `docs/mockups/reelroulette/`.
 
@@ -2044,9 +2362,8 @@ Last milestone completed: M12i2
 
 **Traps**
 
-- Export is already a server operation: `GET /api/library/catalog-checkpoint` writes a standalone checkpoint while the server has `library.db` open, and the desktop's Library Export saves that file.
+- Export is already a server operation: `GET /api/library/catalog-checkpoint` writes a standalone checkpoint while the server has `library.db` open, and the desktop's Library Export saved that file.
 - `GET /api/library/catalog-checkpoint` passes `library.db` to `Results.Stream` (`ServerHostComposition.cs`).
-- The desktop's Library Export is unaffected: it saves to the path its own save picker returns, which suggests `library.db` (`MainWindow.axaml.cs`).
 - A browser doesn't report when a download finishes (inferred).
 
 **Acceptance**
@@ -2061,13 +2378,13 @@ Last milestone completed: M12i2
 **Scope**
 
 - Import moves onto server operations and runs while the server is up.
-- Reuse the replace-and-recover protocol already in `LibraryCatalogStore` (incoming file, finished-file rename, recovery), which the desktop import uses today with the server stopped. What is new is replacing the database while the server's catalog session is open.
+- Reuse the replace-and-recover protocol already in `LibraryCatalogStore` (incoming file, finished-file rename, recovery), which the desktop import used with the server stopped. What is new is replacing the database while the server's catalog session is open.
 - The previous database stays aside until the new file is in place and opens.
 - A crash between those renames restores the previous file, or promotes the finished temporary file if that is the one that landed.
 - A file that is not a library database is rejected.
 - The import upload has its own limit and streams to the incoming file rather than buffering in memory.
 - `verify-linux-packaged-server-smoke.sh` uploads a file larger than 30 MB that isn't a library and gets the not-a-library answer, not a refusal for its size.
-- Import keeps the source folder remap the desktop import offers. Each remap field checks for a folder on the server, through the path check Admin Source Management adds; left empty, it keeps the old path.
+- Import keeps the source folder remap the desktop import offered, through `LibraryCatalogStore.RemapSources`. Each remap field checks for a folder on the server, through the path check Admin Source Management adds; left empty, it keeps the old path.
 - **Import Library…** in the admin section's library transfer card.
 - While an import uploads, a progress bar shows in the library transfer section, with "Uploading {file}: {n}%".
 - The file uploads first; the server then reads its source folders for the remap dialog, or rejects a file that isn't a library with the notice "{file} isn't a ReelRoulette library. The library wasn't changed."
@@ -2077,7 +2394,7 @@ Last milestone completed: M12i2
 
 **Traps**
 
-- Today import is desktop-only and needs the server stopped: `LibraryArchiveMigration.ImportDatabase` writes the server's `library.db` from the desktop process. This is the main blocker for removing the desktop.
+- Since Desktop Client Removal no client imports a catalog. The desktop's `LibraryArchiveMigration.ImportDatabase`, in git history, wrote the server's `library.db` from the desktop process with the server stopped, and only the Core tests call `LibraryCatalogStore`'s import API.
 - On a copy of the developer's catalog, `library.db` is 92.5 MB (92,520,448 bytes, no free pages) for 49,055 items (measured).
 - That is larger than ASP.NET Core's default request body limit of about 30 MB, the framework default (inferred).
 - The server raises the multipart form limit (`FormOptions.MultipartBodyLengthLimit`) to 512 MB, left from earlier library import work, but no route reads a form now and the request body limit itself is not raised.
@@ -2120,12 +2437,11 @@ Last milestone completed: M12i2
 
 #### Release checks
 
-- Manual: With no desktop app, export the library from the admin section and import it into a fresh server, on Linux and Windows.
+- Manual: Export the library from the admin section and import it into a fresh server, on Linux and Windows.
 
 #### Not included
 
 - A Save as dialog for the export, which is Desktop App Shell.
-- Removing the desktop's Library Export and Import menus, which is Desktop Client Removal.
 
 ### M12t - Testing Suite Overhaul
 
@@ -2187,10 +2503,6 @@ Last milestone completed: M12i2
 
 - Manual: Every testing suite scenario shows its expected WebUI message, and resetting it leaves the WebUI connected.
 
-#### Not included
-
-- The desktop's expected messages, since the desktop is frozen.
-
 ### M12u - WebUI Keyboard Navigation and Focus
 
 - **Status**: ⏳ Planned
@@ -2242,41 +2554,6 @@ Last milestone completed: M12i2
 #### Not included
 
 - Rebinding keys, which is Customizable Keyboard Shortcuts.
-
-### M12v - Desktop Retirement Notice
-
-- **Status**: ⏳ Planned
-- **Goal**: The last desktop build tells users the desktop app is retired and points them to the WebUI.
-- **Depends on**: New Logo and Icons, whose icon the notice shows, and Recovery Page and Operator Retirement, whose always-on WebUI keeps the desktop's Open Web UI item enabled.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Scope
-
-- On start, show a notice once per installed version, titled "The desktop app is retired".
-- Its text: "This is the last version of the ReelRoulette desktop app. It won't get more updates, and later versions of the server won't work with it." and "Use ReelRoulette in your browser instead. It does everything the desktop app did, on this computer and on your other devices, and it can be installed as an app."
-- Its buttons are Close and **Open ReelRoulette in your browser**, which does what the existing Open Web UI menu item does, so desktop users know where they're going. Either closes the notice for this version.
-- The Open Web UI menu item keeps its name, since the desktop is frozen.
-- The notice shows the new logo's icon beside its title, from a PNG in `assets/logo/png/` added to the desktop's resources.
-- The desktop otherwise keeps its old icons, as New Logo and Icons leaves them.
-
-#### Traps
-
-- The desktop's other changes in this release, outside bug fixes, are small ones matching server changes: Favorite and Blacklist Filter Modes' filter dropdowns and filter summary line, Recovery Page and Operator Retirement's removal of the Enable Web UI switch, and WebUI Multi-Select and Bulk Actions' reload on the bulk event.
-- After Desktop Client Removal no desktop update is published, so installed desktops stay on their last version, since the Velopack desktop feed stops getting releases (inferred).
-- Later servers stop working with the desktop from Desktop Client Removal in v0.16.0, which removes routes and fields it reads, such as `/api/library/item`, `/api/library-states`, and the filter state's old fields; the accounts release then removes pairing.
-- The desktop's Open Web UI menu item exists, and `release.yml` still packages the desktop.
-
-#### Acceptance
-
-- The notice appears on the first start of this version and not again after it is dismissed, in a headless desktop test that the notice shows once per version.
-- The notice shows the approved wording, which names ReelRoulette and never the WebUI, in the headless desktop test of the notice.
-- The notice's Open ReelRoulette in your browser does what the Open Web UI menu item does, in a headless desktop test that the button runs that item's action.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `dotnet test ReelRoulette.sln` passes, and one quick spot check.
-
-#### Release checks
-
-- Manual: After updating, the desktop shows the retirement notice once, and Open ReelRoulette in your browser opens ReelRoulette in the browser.
 
 ## Planned Milestones
 
@@ -2362,13 +2639,12 @@ Last milestone completed: M12i2
 
 - Media tokens get a time to live and a size cap, and are tied to the playback session.
 - Expired sessions are cleaned up.
-- Decides whether `GET /api/media/{idOrToken}` still accepts raw item ids once sessions exist.
 
 #### Traps
 
-- `POST /api/random` and `POST /api/play/{itemId}` already issue a media token, and `GET /api/media/{idOrToken}` streams it with range requests.
+- `POST /api/random` and `POST /api/play/{itemId}` already issue a media token, and `GET /api/media/{token}` streams it with range requests.
 - `ServerMediaTokenStore` has no expiry or eviction: every play adds a token that is never removed and stays valid until the server stops.
-- `GET /api/media/{idOrToken}` also accepts a raw item id, and the source access policy covers that path.
+- `GET /api/media/{token}` takes only tokens since Desktop Client Removal.
 
 #### Acceptance
 
@@ -2643,40 +2919,6 @@ Last milestone completed: M12i2
 #### Release checks
 
 - Manual: On the Windows VM, a casing difference between the stored path and the enumerated path does not remove the item or add a second one, in folder import and in refresh.
-
-### P25 - Per-Preset Preset Writes
-
-- **Status**: ⏳ Planned
-- **Goal**: Saving, renaming, reordering, or deleting a preset on one device changes only that preset on the server, so two devices editing presets do not overwrite each other.
-- **Depends on**: Desktop Client Removal, so only the WebUI moves to per-preset writes and the whole-list replace goes in the same change.
-
-#### Scope
-
-- Per-preset write routes (save, rename, reorder, delete), and the WebUI moves to them.
-- The whole-list replace is removed.
-- Tag rename and delete keep updating presets on the server.
-- A contract change, crossing server, OpenAPI, generated WebUI types, and WebUI.
-- Builds on the preset-equality fixture from Remove the Preset Match Route.
-
-#### Traps
-
-- The desktop and the WebUI both post the whole preset list to `POST /api/presets`, which replaces the server's preset catalog.
-- The last writer wins, so a preset saved on one client can be lost when the other client saves its older list.
-- The desktop posted its cached list not only on a preset save but on every header preset pick and every filter dialog Apply, with the cache refreshed only on connect, reconnect, resync, and filter dialog open, so just picking a preset on the desktop deleted any preset the WebUI had added since.
-- Favorite and Blacklist Filter Modes limits the desktop's post to an Apply that changed presets.
-- Both clients rebuild every posted preset from their typed filter model, so a field the posting client doesn't know is dropped from every preset.
-- On the desktop, that drop was seen with a probe against its build (measured).
-- This is the same client-held whole-catalog pattern as the tag sync routes removed in v0.13.0.
-- With the WebUI as the only client, two devices still overwrite each other the same way.
-- The WebUI's Filter tab keeps a preset list Apply hasn't saved while it is hidden and the panel is closed, for as long as the page stays open, and doesn't take the server's list while it holds one, so its Apply can overwrite preset changes another client made hours earlier (inferred).
-
-#### Acceptance
-
-- A preset saved on one device while another device has its preset list open is still present after the other device saves a different preset, in a two-session test of concurrent saves.
-- Rename, reorder, and delete change only the named preset, in server tests for each write.
-- Every open WebUI shows the same preset list after any device changes it.
-- The WebUI never posts the whole preset list, and the whole-list replace route is gone.
-- `npm run verify` passes.
 
 ### P27a - Structured Log Schema, Writer, and Ingestion
 
@@ -2966,7 +3208,7 @@ Last milestone completed: M12i2
 - The Log Viewer moves to structured entries:
   - The level checkboxes take one `lvl` value each, so several levels can be shown at once.
   - Next to them, a multi-select filter by category, one option per `cat` value, and a filter by component (`comp`).
-  - The source multi-select takes one option per `svc` value (`server` and `webui`; the desktop client is gone by this release).
+  - The source multi-select takes one option per `svc` value (`server` and `webui`).
 - Newest first by `ts`, tie-broken by `ingestReqId` and then a stable row sequence, with a versioned cursor and defined `from` and `to` bounds, so paging never repeats or skips rows.
 - The route reads from the end of the file and across rotated archives instead of walking every line on each request.
 - The admin section view keeps the design Log Viewer Redesign gives it: controls collapsed by default with active-filter chips, and auto-refresh that pauses while scrolled away from the newest rows, with a resume control.
@@ -3019,18 +3261,17 @@ Last milestone completed: M12i2
 #### Scope
 
 - One policy takes the request's session context and returns the sources it may see.
-- It is applied on every item path: library list query, random selection, item play, `GET /api/media/{idOrToken}` (tokens and raw ids), `GET /api/thumbnail/{itemId}`, `POST /api/library/item`, `POST /api/library-states`, the tag-editor model, auto-tag and duplicate scans, library stats, and `GET /api/sources`.
-- The default policy allows every enabled source, so behavior does not change, except that a raw item id of a disabled source no longer streams.
+- It is applied on every item path: library list query, random selection, item play, `GET /api/media/{token}`, `GET /api/thumbnail/{itemId}`, `POST /api/library/item`, the tag-editor model, auto-tag and duplicate scans, library stats, and `GET /api/sources`.
+- The default policy allows every enabled source, so behavior does not change.
 
 #### Traps
 
 - Source enabled state is applied by separate SQL conditions in list query, random selection, and item play.
-- Some paths skip it: `GET /api/media/{idOrToken}` streams any item by its raw id regardless of its source.
 
 #### Acceptance
 
 - Every listed path goes through the policy, and a test policy that denies a source hides that source's items on every one of them, in a denying-policy test per listed path.
-- Current behavior is unchanged with the default policy, except that disabled-source items no longer stream by raw id, in a raw-id media test for a disabled source.
+- Current behavior is unchanged with the default policy, in the existing tests of each listed path.
 - Docs separate implemented source state from future per-user access, checked by reading them.
 - `dotnet test ReelRoulette.sln` passes.
 
@@ -3139,7 +3380,7 @@ Last milestone completed: M12i2
 - `/api` routes still accept the API pairing token as a `token` query, and `GET /api/pair?token=` pairs with it, which puts the token in URLs and in the default request log.
 - v0.14.0 stopped accepting the control token in a query and made `/control/pair` POST-only, but left `/api` for this cutover.
 - `/api/web-runtime/settings` is on the API plane, so any LAN caller with the API pairing token, which `/runtime-config.json` hands to every browser, can turn WebUI auth off, change the port or remote connections, and read the shared token.
-- The desktop called `/api/web-runtime/settings` from other machines, so v0.14.0 did not move it behind the control token; the desktop is gone by this release.
+- `/api/web-runtime/settings` stayed on the API plane because the desktop called it from other machines, and Desktop Client Removal removed the desktop.
 - `OperatorTestingService` mutations are protected only by middleware policy.
 - Auth and secret fields in settings DTOs encourage credential leakage; `GET /control/settings` returns the admin token.
 - Pairing and control-token problems that go with those flows:
@@ -3294,7 +3535,7 @@ Last milestone completed: M12i2
 - Per-source, per-user access in the admin section's Manage Sources.
 - Grants are stored in the account store against account ids and catalog source ids.
 - A grant for a source id that is not in the catalog (for example after a catalog import) is ignored and shown as stale in the admin section.
-- Denied sources are enforced through the source access policy on every path it covers, including `GET /api/media/{idOrToken}`, `GET /api/thumbnail/{itemId}`, and `POST /api/play/{itemId}`.
+- Denied sources are enforced through the source access policy on every path it covers, including `GET /api/media/{token}`, `GET /api/thumbnail/{itemId}`, and `POST /api/play/{itemId}`.
 - WebUI Notifications' kept-source notice leaves out sources the session's source list doesn't include.
 - Admins and localhost connections see every source.
 
@@ -3380,9 +3621,6 @@ Last milestone completed: M12i2
 
 #### Scope
 
-- Settings, for the desktop's settings file:
-  - Corrupt JSON replaced by defaults: tell a missing file from an unreadable one in `JsonFileStorageService.Load`, and move an unreadable file aside before returning defaults.
-  - Non-atomic save fallback: use `File.Move(temp, path, overwrite: true)` as the fallback in `JsonFileStorageService.Save`.
 - Paths and processes:
   - Thumbnail path from an unchecked id: `RefreshPipelineService.GetThumbnailPath` accepts only the id format the server generates and checks that the full path stays under the thumbnail folder.
   - Unread process output: `RefreshPipelineService.VerifyFfmpegAsync` reads both of ffmpeg's streams or stops redirecting them.
@@ -3402,14 +3640,10 @@ Last milestone completed: M12i2
 - Storage:
   - Stalled source: the refresh stops working on a source whose storage stops responding, keeps that source's items as they are, and logs a warning, instead of crawling on. Decides the threshold and whether the rest of the run continues.
   - Two stats per file: the fingerprint stage's check loop stats each file once, or reuses the size and write time the walk already read.
-- The audio filter's handling of unscanned videos: decides whether a NULL `has_audio` counts as **With audio**, **Without audio**, or neither, then aligns `docs/api.md`, both clients' labels, and tests.
+- The audio filter's handling of unscanned videos: decides whether a NULL `has_audio` counts as **With audio**, **Without audio**, or neither, then aligns `docs/api.md`, the WebUI's labels, and tests.
 
 #### Traps
 
-- Settings, for the desktop's settings file:
-  - Corrupt JSON replaced by defaults: `JsonFileStorageService.Load` (used for `desktop-settings.json`) returns the default object on any read or parse error, and the next `Save` overwrites the file.
-  - Non-atomic save fallback: when `File.Replace` throws, `JsonFileStorageService.Save` falls back to `File.Copy` over the original and then `File.Delete`, which can leave a truncated file after a crash.
-  - The two `JsonFileStorageService` findings affect only the desktop's `desktop-settings.json`: no server or ServerApp code references the class (measured).
 - Paths and processes:
   - Thumbnail path from an unchecked id: `RefreshPipelineService.GetThumbnailPath` builds `Path.Combine(_thumbnailDir, $"{itemId}.jpg")` from the catalog item id, and an imported `library.db` can hold any id, including `..` segments, so a thumbnail write or delete could land outside the thumbnail folder.
   - Unread process output: `RefreshPipelineService.VerifyFfmpegAsync` redirects ffmpeg's standard output and error, reads neither, and waits for exit; enough output would fill a pipe and hang the check. The other ffmpeg and ffprobe calls already read stderr.
@@ -3448,7 +3682,6 @@ Last milestone completed: M12i2
 #### Not included
 
 - The server's own settings findings (partial posts, the non-atomic write, and the silent load failure), which is Server Settings Robustness, since the admin section saves server settings from any device.
-- Closing the two desktop settings findings by deleting `JsonFileStorageService` if it is still unused, which is Desktop Client Removal.
 - Logging slow sources and refresh durations, which is Server Instrumentation.
 - Telling a file the server can't read from a missing one in the media and play routes, which is Browser-Playable Filter.
 
@@ -3482,155 +3715,11 @@ Last milestone completed: M12i2
 
 #### Not included
 
-- The desktop's findings (unbounded event payload, ambiguous API results, an undisposed cancellation source, timers after close, plain HTTP to another machine, and undetected black video on Fedora), since the desktop is frozen to bug fixes.
 - The startup error markup finding, which is WebUI Preact Migration.
 - Overlapping resyncs, which is Admin Source Management, since it already changes that code.
 - Unchecked JSON, which is WebUI Notifications, since it already changes that code.
 - Favorite and blacklist after Next, which is WebUI Multi-Select and Bulk Actions, since it already changes that code.
 - The weak build check, which is New Logo and Icons, since it already changes that code.
-
----
-
-### P48 - Desktop Client Removal
-
-- **Status**: ⏳ Planned
-- **Goal**: The desktop client, its packaging, and its tests are gone, and the WebUI is the only client.
-- **Depends on**: WebUI Volume and Enhanced Audio, WebUI Loudness Normalization, WebUI Autoplay Modes, WebUI Player Controls, WebUI Keyboard Shortcuts, WebUI Stats Panel, WebUI Settings Panel, Admin Refresh, Backup, and Duplicate Review, Show in File Manager from the WebUI, Admin Source Management, Admin Library Catalog Transfer, WebUI Multi-Select and Bulk Actions, and Browser-Playable Filter.
-
-#### Decisions
-
-- These desktop features are dropped without a WebUI equivalent, because a browser cannot offer them:
-  - always-on-top (the closest is picture-in-picture, which the WebUI turns off with `disablepictureinpicture`),
-  - desktop self-update,
-  - the Linux dependency dialog,
-  - application menu registration,
-  - the FFmpeg log window, which has been empty since the server took over refresh.
-- These desktop Settings dialog entries are dropped as not useful in the WebUI:
-  - the desktop's own dev update channel (the server's is in the admin section),
-  - client settings backups (the WebUI's settings are a few values in browser storage),
-  - the core server base URL (the WebUI calls the server that served it),
-  - Force API playback (the WebUI always plays through `/api/media`),
-  - image scaling (it limits how large the desktop decodes photos, and the browser scales photos to fit by itself).
-
-#### Slices
-
-| Slice | Status | Delivers |
-| --- | --- | --- |
-| Code and tests | ⏳ Planned | The desktop projects, the Core code only the desktop uses, and their tests removed from the solution and the repository. |
-| Packaging | ⏳ Planned | A release that builds and publishes only the server, with no desktop references in the release scripts. |
-| Contract | ⏳ Planned | Routes and fields that no remaining caller uses removed, in OpenAPI and the generated WebUI types. |
-| Icons | ⏳ Planned | The old icons deleted. |
-| Fixture | ⏳ Planned | The former desktop fixtures kept as WebUI test data, with the WebUI-only cases joined to them. |
-| Docs | ⏳ Planned | Current-state docs, the testing checklist, and `AGENTS.md` without the desktop client. |
-
-#### Code and tests slice
-
-**Scope**
-
-- Remove `ReelRoulette.DesktopApp`, `ReelRoulette.LibraryArchive`, and `ReelRoulette.DesktopApp.Tests` from the solution and the repository.
-- Remove Core's `LibraryGridLayout` and its tests, which only the desktop uses.
-- Remove `JsonFileStorageService` and `CoreStorageServices` if nothing else uses them.
-
-**Traps**
-
-- The three projects are about 30,300 lines of C# and AXAML, including 3,267 test lines and 134 tests (measured).
-
-**Acceptance**
-
-- The solution has no desktop projects.
-- `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and `npm run verify` pass.
-
-#### Packaging slice
-
-**Scope**
-
-- Remove the `desktop` component from the `release.yml` matrix, including the Windows LibVLC relocation step and its legs' old `--icon`.
-- Stop publishing the desktop update feed.
-- Remove the desktop references in `set-release-version.ps1` and `verify-linux-packaged-server-smoke.sh`.
-
-**Traps**
-
-- CI has no desktop job: desktop tests run inside the solution test on the Ubuntu and Windows jobs, so `ci.yml` needs no change.
-
-**Acceptance**
-
-- `release.yml` builds and publishes only server packages and feeds, checked by reading it.
-- `./tools/scripts/verify-linux-packaged-server-smoke.sh` passes.
-
-#### Contract slice
-
-**Scope**
-
-- Remove routes and fields that no remaining caller uses, each checked against the WebUI and the admin section.
-- Remove the web runtime settings' `enabled` field, which the server has ignored and reported as on since Recovery Page and Operator Retirement.
-- Remove the filter state's old `favoritesOnly` and `excludeBlacklisted` fields, which Favorite and Blacklist Filter Modes keeps beside its new ones.
-- Candidates:
-  - `PresetResponse.summary`, which the server never fills,
-  - `/api/library-states`,
-  - `/api/library/item`,
-  - the full path kept in the random and play responses' `id` for the desktop,
-  - `itemTagsChanged.itemIds` and the auto-tag apply response's `changedItemPaths`, which the WebUI no longer reads beside their item id fields.
-- `/api/library/catalog-checkpoint` stays for the admin section's export.
-- OpenAPI and the generated WebUI types change with the routes and fields.
-
-**Traps**
-
-- The server keeps each preset's filter state as the JSON it was posted with.
-- A preset saved before Favorite and Blacklist Filter Modes and never saved again carries only the old fields, so removing them needs the parser to keep reading them in stored presets, or a catalog migration that writes the new fields into those presets (inferred).
-
-**Acceptance**
-
-- OpenAPI has no route or field that only the desktop used, including the web runtime settings' `enabled` field, checked by reading `shared/api/openapi.yaml`.
-- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
-
-#### Icons slice
-
-**Scope**
-
-- Delete the old icons `assets/HI.ico`, `assets/HI-256.png`, and `assets/HI-512.png` once nothing uses them.
-
-**Traps**
-
-- After New Logo and Icons only the desktop uses them: its `ApplicationIcon`, window icon (`MainWindow.axaml`), Avalonia resource, Linux menu registration (`LinuxAppImageRegistration.cs`), and its release legs' `--icon`.
-
-**Acceptance**
-
-- `assets/HI.ico`, `assets/HI-256.png`, and `assets/HI-512.png` are deleted, and nothing refers to them, checked by a search of the repository.
-
-#### Fixture slice
-
-**Scope**
-
-- `event-revision.json`, `library-tile-effect.json`, `preset-filter-equality.json`, and `sort-direction-labels.json` lose their C# readers and stay as WebUI test data.
-- `tag-name-order.json` and `filter-mode-resolution.json` stay, read by Core and the WebUI.
-- The WebUI-only cases that Browser-Playable Filter and Rating Filter and Sort keep beside `preset-filter-equality.json`, `library-tile-effect.json`, and `sort-direction-labels.json` join those fixtures.
-
-**Acceptance**
-
-- The four former desktop fixtures are read by WebUI tests.
-- The WebUI-only cases are in the shared fixtures, and no WebUI-only copy of them is left, in the WebUI tests of those fixtures.
-- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
-
-#### Docs slice
-
-**Scope**
-
-- `CONTEXT.md`, `docs/architecture.md`, `docs/domain-inventory.md`, `docs/api.md`, `docs/dev-setup.md`, and `README.md` (desktop install and the LibVLC prerequisite) no longer describe the desktop client.
-- The testing checklist loses its desktop Smoke item and the desktop in-app update item in Release Flow.
-- `AGENTS.md` loses the desktop freeze rule and the desktop test-isolation note, and keeps the shared-fixture rule for rules implemented in server C# and the WebUI.
-
-**Acceptance**
-
-- No current-state doc describes the desktop client as current, checked by a search of current-state docs for the desktop client.
-
-#### Release checks
-
-- Agent: On Linux and Windows, the release publishes only the server, checked in a dev-channel release run of `release.yml`.
-- Manual: On Linux and Windows, every former desktop workflow works in the WebUI, and an existing desktop install keeps its last version.
-
-#### Not included
-
-- Rewriting historical `CHANGELOG.md` sections and completed milestones, which keep their desktop references.
 
 ---
 
@@ -3655,6 +3744,11 @@ Last milestone completed: M12i2
 - In the app the Export Library button opens a dialog, so it gets an ellipsis.
 - Decides whether the app bundles the server or starts an installed one, and how it is packaged and updated beside the server's Velopack releases.
 
+#### Traps
+
+- Since Desktop Client Removal, `release.yml` builds and publishes only the server.
+- Desktops installed before Desktop Client Removal still poll the old desktop feed (`reelroulette/desktop{-dev}` on B2, channel `{os}-desktop{-dev}`, package `ReelRoulette.Desktop`), so an app published under them would reach those installs as an update (inferred).
+
 #### Acceptance
 
 - Launching the app with no server running starts one and opens the WebUI; with a server already running, it opens that one without starting another, in tests of the app.
@@ -3671,3 +3765,37 @@ Last milestone completed: M12i2
 #### Not included
 
 - Other native features the desktop client had, such as always-on-top; the bridge can offer them later.
+
+### P51 - WebUI Volume Boost
+
+- **Status**: ⏳ Planned
+- **Goal**: With Enhanced audio on, the volume slider goes above 100%, so a quiet video can play louder than the device's own volume allows.
+- **Depends on**: WebUI Loudness Normalization, whose limiter keeps a boost from clipping, and it starts only once the user has used loudness normalization and Enhanced audio for a while and decides a boost is still needed.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- With Enhanced audio on, the volume slider goes above 100%, through WebUI Volume and Enhanced Audio's gain stage.
+- How far it goes is settled in the mockup and approved before the app is built.
+- While the volume is above 100%, WebUI Loudness Normalization's limiter is in the chain, so a boost doesn't clip.
+- With Enhanced audio off, the slider stops at 100%.
+- The volume steps, the scroll wheel, a two-finger drag, and the [ and ] keys go as far as the slider does.
+
+#### Traps
+
+- The desktop's volume slider went to 200% (`MainWindow.axaml`) (measured).
+- WebUI Volume and Enhanced Audio's slider stops at 100%.
+- A media element's own volume stops at 100%, so only the gain stage can go above it (inferred).
+- A gain above 1 can clip a loud video (inferred).
+- WebUI Loudness Normalization puts its limiter in the chain only while normalization or Night mode is on.
+
+#### Acceptance
+
+- With Enhanced audio on, the slider sets a volume above 100% through the gain stage, up to the approved maximum, and with it off the slider stops at 100%, in WebUI tests of the volume above 100%.
+- While the volume is above 100%, the limiter is in the chain, in WebUI tests of the audio chain.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check on the user's own devices.
+
+#### Release checks
+
+- Manual: With Enhanced audio on, a quiet video played above 100% is louder without distortion, in Chrome, Firefox, and Safari on a desktop and on Android and iOS.

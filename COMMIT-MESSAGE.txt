@@ -19,8 +19,11 @@ Instructions:
 
 Commit Message:
 
-Chore: Install CI's Windows ffmpeg from the release's pinned build
+Docs: Plan the desktop client's removal as v0.15.0's next milestone
 
-- CI's Windows job downloads the pinned, hash-checked BtbN FFmpeg build that the Windows server release bundles and puts it on the PATH, in place of Chocolatey, whose feed answered 504 and left ffmpeg uninstalled while the step passed.
-- `ci.yml` and `release.yml` each note that their pinned release tag, asset, and SHA-256 must match.
-- Both CI jobs end their ffmpeg install with `ffmpeg -version`, so a failed install fails CI there instead of in the tests.
+- Desktop Client Removal becomes the next active milestone, M12i3, rescoped to remove everything only the desktop uses while keeping the routes the admin milestones will call, with its losses until the WebUI catches up recorded, and slices for code, packaging and license texts, contract, fixtures, mockup, and docs.
+- Per-Preset Preset Writes follows as M12i4, with stable preset ids, a preset event, and a catalog schema step that rewrites stored presets' old Favorites and Blacklisted fields, so Item Ratings and later i-group milestones move down two.
+- Desktop Retirement Notice is dropped, since no desktop build ships in v0.15.0, and the releases after it shift down: v0.15.1 structured log foundation, v0.16.0 accounts, v0.17.0 log migration, and v0.18.0 playback sessions.
+- Later entries lose the constraints that existed only for the desktop: additive-only contracts, keeping stored preset fields a posted preset leaves out, WebUI-only fixtures, and frozen-desktop traps, and request fields that hold only an item id become `itemId`.
+- WebUI Volume and Enhanced Audio moves Mute to the seek row, and WebUI Player Controls adds a Random button with a Jump or Insert Random behavior setting.
+- Admin duplicate review offers all enabled sources as a scan scope, and the backlog gains WebUI Volume Boost for volume above 100%.
