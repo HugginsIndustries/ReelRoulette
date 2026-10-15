@@ -26,9 +26,9 @@ function iconSpan(name, extraClass) {
 
 /**
  * Shows or hides one of the field validation pattern's icons, its tooltip, or a setting's saved check, fading it in and
- * out over FADE_MS on its opacity. It stays rendered while it fades out, so an icon that takes room, such as a held
- * action's, keeps its place until it has faded, and a tooltip stays where it was. With reduced motion it shows and
- * hides at once.
+ * out over FADE_MS on its opacity. It stays rendered while it fades out, so an icon that takes room, such as the one
+ * after a dropdown, keeps its place until it has faded, and a tooltip stays where it was. With reduced motion it shows
+ * and hides at once.
  */
 const FADE_MS = 250;
 const fades = new WeakMap();
@@ -228,10 +228,14 @@ class ValidatedField {
     this.listeners.forEach((listener) => listener());
   }
 
-  /** Moves the user to the field and shows what it expects. */
+  /**
+   * Moves the user to the field and shows what it expects. It runs within the press that asked for it, after the
+   * field's section shows, and focuses the field as a tap does, so the browser brings it into view, and above the
+   * on-screen keyboard once that opens. Scrolling it first would leave its body scrolled as far as it goes without the
+   * keyboard.
+   */
   reveal() {
-    this.wrap.scrollIntoView({ block: "center", behavior: "smooth" });
-    this.input.focus({ preventScroll: true });
+    this.input.focus();
     setTimeout(() => this.place(), 350);
   }
 
@@ -370,9 +374,11 @@ window.addEventListener("resize", placeAllTips);
  * - A field that may sit empty disables the action while it is empty: it dims, and pressing it does nothing. So does
  *   any problem in a field `beside()` returns: a field that sits right next to the action, such as a new name beside
  *   its Add button, or a field of the dialog the action is in, since the dialog has the user's attention. The field's
- *   own icon and tooltip say why. A field in `beside()` is also one of `fields()`. Disabling wins over holding.
- * - Otherwise a flagged field elsewhere holds it: the button's label dims, it reads as unavailable, and the red icon
- *   shows on its right. Pressing it does nothing but take the user to the first field that holds it.
+ *   own icon and tooltip say why. A field in `beside()` is also one of `fields()`. So does `idle()` returning true,
+ *   for an action with nothing to do, such as Apply with no changes. Disabling wins over holding.
+ * - Otherwise a flagged field elsewhere holds it: the button's label dims, it reads as unavailable, and the red badge
+ *   shows on its top-right corner. Pressing it does nothing but take the user to the first field that holds it.
+ * Call the returned `refresh()` when what `idle()` reads changes.
  */
 function holdAction(button, fields, options) {
   const opts = options || {};
@@ -383,6 +389,7 @@ function holdAction(button, fields, options) {
   button.after(describe);
 
   function disabled() {
+    if (opts.idle && opts.idle()) return true;
     return fields().some((field) => field.disables) || (opts.beside ? opts.beside().some((field) => field.holds) : false);
   }
 

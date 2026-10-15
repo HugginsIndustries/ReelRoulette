@@ -136,22 +136,23 @@ Last milestone completed: M12i2
 
 ### M12i3 - WebUI Tweaks
 
-- **Status**: ⏳ Planned
-- **Goal**: The modified marker and the unsaved-changes dots clear when changes are undone, and the Library tab's count line, held actions, and tag category headers read better, from daily use of the new UI.
+- **Status**: 🚧 In Progress
+- **Goal**: The modified marker and the unsaved-changes dots clear when changes are undone, and the Library tab's count line, held actions, tag category headers, and the Filter tab's footer read better, from daily use of the new UI.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
 
 - The held action's badge and the category headers are built as the user approves them in the Mockup slice's review, and neither app slice starts before that review.
 - The category headers change in the Tags tab and the Filter tab's Tags section alike, since both use one header (`TagCategory` in the WebUI, `categoryEl` in the mockup).
+- The Filter tab's Apply and Cancel tell whether there are changes from the Unsaved state slice's comparison of the tab with the applied filter and the saved presets, so the Display slice's footer lands after it.
 
 #### Slices
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Mockup | ⏳ Planned | The held action's badge, category headers that always show their count and dot, and the "{matching} / {total}" count line, approved by the user on a desktop browser, the iPad, and a phone. |
+| Mockup | ✅ Complete | The held action's and section tabs' badge, category headers that always show their count and dot, the "{matching} / {total}" count line, and the Filter tab's icon footer, approved by the user on a desktop browser, the iPad, and a phone. |
 | Unsaved state | ⏳ Planned | A modified marker and unsaved-changes dots that compare the current state with the saved one, so they clear when changes are undone. |
-| Display | ⏳ Planned | The count line, the held action's badge, and the category headers, as approved. |
+| Display | ⏳ Planned | The count line, the held action's and section tabs' badge, the category headers, and the Filter tab's icon footer, as approved. |
 
 #### Mockup slice
 
@@ -159,8 +160,14 @@ Last milestone completed: M12i2
 
 - The held action's red icon becomes a badge over the button's corner, so the button never changes width or wraps, on every held action in the mockup's main, validation, admin, and recovery pages.
 - The category headers, in the Tags tab and the Filter tab's Tags section, always show the count of their tags in use and the unsaved-changes dot, whether the category is expanded or collapsed. The Tags tab counts the item's tags in the category and the Filter tab the filter's, as today.
-- Whether a count of 0 shows is settled in the review.
+- A count of 0 stays hidden.
 - The Library tab's count line reads "{matching} / {total}", such as "615 / 49,106". The Filters line stays as it is.
+- The Filter tab's section tabs show a flagged section's problem with the held action's badge on the tab's corner, in place of the icon after the section's name.
+- The Filter tab's footer is icon buttons with tooltips, as the Tags tab's, as the Display slice describes.
+- The Filter tab's Tags section drops the "Local:" label before each category's match control, as the Display slice describes.
+- The Tags tab's Save shows the orange unsaved-changes dot while there are changes, as the Filter tab's Apply does.
+- The Library tab's selection bar shows Select all as an icon-only button with the `select_all` icon and Stop selecting with the `deselect` icon, for WebUI Multi-Select and Bulk Actions to build.
+- A held action's move to its field brings the field above the on-screen keyboard once it opens, as the Display slice describes.
 - Before the app is built, the user reviews them on a desktop browser, the iPad, and a phone.
 
 **Traps**
@@ -172,8 +179,20 @@ Last milestone completed: M12i2
 
 **Acceptance**
 
-- The mockup shows the badge, the category headers, and the count line as the user approved them, and `python3 docs/mockups/reelroulette/build/build_pages.py` and `node docs/mockups/reelroulette/build/check.mjs` pass, with checks that both tabs' headers show their count and dot while expanded and while collapsed and that the count line reads "{matching} / {total}".
+- The mockup shows the badge, the category headers, the count line, and the Filter tab's footer as the user approved them, and `python3 docs/mockups/reelroulette/build/build_pages.py` and `node docs/mockups/reelroulette/build/check.mjs` pass, with checks that both tabs' headers show their count and dot while expanded and while collapsed, that the count line reads "{matching} / {total}", that every badge sits on its corner out of its button's flow, that a held Apply turns its dot red, that Apply and Cancel are disabled without changes, including changes put back, that Clear all filters is disabled while the filter is the default one, that a duration typed, left, and emptied is no change, and that a held action's move shows the field's section and then focuses the field as a tap does.
 - The user has approved them on a desktop browser, the iPad, and a phone before the Unsaved state slice starts.
+
+**Evidence**
+
+- The user approved the mockup on a desktop browser, the iPad, and a phone after five review rounds, whose choices are in the Display and Unsaved state slices and in WebUI Multi-Select and Bulk Actions.
+- A held action's move that focuses its field as a tap does, after its section shows, brought the field above the keyboard on the user's phone and iPad (measured), where centering it first and focusing it with `preventScroll` left it under the keyboard (measured).
+- `python3 docs/mockups/reelroulette/build/build_font.py` added `cancel`, `filter_alt_off`, `select_all`, and `deselect` to the mockup's icons, and the filled icons kept their glyphs (measured).
+- `python3 docs/mockups/reelroulette/build/build_pages.py` and `node docs/mockups/reelroulette/build/check.mjs` pass, with 1163 checks, up from 1110.
+- Each check this slice added failed with the behavior it covers broken, in 26 mutations run once in copies of the mockup and restored. The one mutation the first pass missed, a tag change put back still counting, got its own check, which then failed with it.
+- The mockup's count line counted its total after the filter, unlike the app's, and now counts it before, as the server's search baseline does.
+- The admin page sized its held badges at 20 px with a rule for every icon in a button, and the rule now leaves the badge out.
+- A duration typed, left, and emptied left Apply enabled in the user's review, which the mockup's comparison didn't do (measured), and the app's version of it is recorded in the Unsaved state slice.
+- happy-dom keeps an element's computed style after an ancestor's class changes, so the checks read Apply's dot color from a fresh copy of the button (measured).
 
 #### Unsaved state slice
 
@@ -185,6 +204,8 @@ Last milestone completed: M12i2
 - Putting the General section's sources back as they were leaves the filter's source list as it was, so a preset that names every source matches again.
 - The unsaved-changes dots compare the current state with the saved one rather than tracking edits, so each clears when its changes are undone:
   - The Filter tab compares its working filter with the applied filter, as today, and its preset list with the saved list, by order, by name with case counting, and by filter with the preset comparison, in place of the `presetsChanged` flag. Refresh and Apply use the same comparison.
+  - The Filter tab also counts a preset chosen in its Presets section other than the applied one as a change, so Apply can make a preset active whose filter matches the applied filter.
+  - The Filter tab takes each duration as its field's text reads, so a duration typed, left, and then emptied is no limit again, as one emptied before it is left.
   - The Tags tab compares category names and order, tag names and categories, and the item's tags with the loaded catalog, in place of its held edits.
   - The panel button's dot follows the two tabs' dots.
 
@@ -198,6 +219,7 @@ Last milestone completed: M12i2
 - The Filter tab's `presetsChanged` is set by moving, renaming, adding, updating, and deleting a preset, and cleared only by Apply, Cancel, Clear all, and a preset dropdown pick, so moving a preset and back keeps the dot and Apply's star (measured).
 - Refresh keeps the tab's preset list only while `presetsChanged` is set (`takeRemote`), and Apply posts presets only then.
 - The server keeps a preset name's case, so a rename that changes only case is a real change.
+- `typeDuration` stores only a duration field's text, and leaving the field (`changeGeneral`) puts the duration into the working filter, which `view.unsaved` and `view.pending` compare. Emptying the field after that changes only the text, so the old duration keeps the dot and Apply's star on until the field is left again (inferred).
 - A duration still being typed counts as unsaved (`generalDurationsChanged`), and the Filter tab starts over when it opens only without unsaved changes.
 - Apply's star compares the working filter with the one the tab opened with or was cleared to, and the dots compare it with the applied filter.
 - The preset dropdown's marker is rebuilt only when presets load or a preset is picked, as after Apply (`syncHeaderPresets` in `src/state/appStore.ts`).
@@ -214,6 +236,8 @@ Last milestone completed: M12i2
 - A preset saved with a leftover AND entry matches the filter it describes, in a filter model test.
 - Each undo the Traps list clears the Filter tab's or the Tags tab's dot and the panel button's, and a real change still shows them, in Filter tab, Tags tab, and panel screen tests.
 - Refresh keeps a changed preset list and Apply saves it, and a list put back as it was is neither kept nor saved, in Filter tab tests.
+- Typing a minimum, leaving the field, coming back, and emptying it clears the Filter tab's dot and Apply's star before the field is left again, and so does the same with a maximum, in Filter tab tests of exactly that sequence.
+- Choosing a preset other than the applied one, whose filter matches the applied filter, shows the Filter tab's dot, and choosing the applied one again clears it, in Filter tab tests.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
@@ -222,8 +246,22 @@ Last milestone completed: M12i2
 **Scope**
 
 - The Library tab's count line reads "{matching} / {total}", such as "615 / 49,106", from the same two counts as today (`formatBrowseResultSummary` in `src/library/libraryBrowseModel.ts`).
-- The held action's red icon is a badge over the button's corner, as approved, on every held action (`HeldButton` in `src/ui/FieldValidation.tsx`).
-- The category headers in the Tags tab and the Filter tab's Tags section show their count and the unsaved-changes dot whether expanded or collapsed, as approved (`TagCategory` in `src/ui/TagCategory.tsx`), and the toggle's accessible name says both while they show.
+- Screen readers hear the count line in words, such as "615 of 49,106 items", while the numbers shown are hidden from them.
+- The held action's red icon is a badge on the button's top-right corner, out of its flow, on every held action but the Filter tab's Apply (`HeldButton` in `src/ui/FieldValidation.tsx`):
+  - It is the fields' outlined `error` icon at 18 px, 6 px past the corner on each side.
+  - It sits on a disc of `--surface-raised`, so the button's border doesn't run through it.
+- The Filter tab's section tabs show a flagged section's problem with the same badge on the tab's corner, in place of the icon after the section's name (`SectionProblemMark` in `src/ui/FilterDialog.tsx`).
+- The category headers in the Tags tab and the Filter tab's Tags section show their count and the unsaved-changes dot whether expanded or collapsed (`TagCategory` in `src/ui/TagCategory.tsx`), and the toggle's accessible name says both while they show.
+- A category's count of 0 stays hidden.
+- The Filter tab's footer is icon buttons, each with a tooltip, as the Tags tab's (`src/ui/FilterDialog.tsx`): Clear all filters is `filter_alt_off`, Cancel is `cancel`, and Apply is `save`.
+  - Apply turns orange and shows the unsaved-changes dot, as the panel's tabs do, in place of "Apply*", while the Filter tab has changes to apply.
+  - Apply and Cancel are disabled while the Filter tab has no changes, by the Unsaved state slice's comparison, as the Tags tab's Save is.
+  - While a field holds Apply, its dot turns red in place of the badge, its icon dims, and its reason is its tooltip, as now.
+  - Apply is the only held action with a dot, since the Tags tab's changes can't be held and Settings has no Save or Apply.
+  - Clear all filters is disabled while the working filter matches the default filter by the preset comparison, including right after pressing it and before Apply. Changes to the preset list alone don't enable it; Cancel drops them.
+- The Tags tab's Save shows the same orange dot while there are changes (`tag-editor-apply-btn` in `src/ui/TagEditor.tsx`).
+- The Filter tab's Tags section drops the "Local:" label before each category's match control, and the control's accessible name is "Match mode for {category}", such as "Match mode for People", and its tooltip is "Match mode" (`src/ui/FilterDialog.tsx`).
+- A held action moves to its field as a tap does, so the browser brings the field above the on-screen keyboard once it opens: within the press, after the field's section shows, it focuses the field without `preventScroll` and without scrolling it first (`src/ui/FieldValidation.tsx`).
 
 **Traps**
 
@@ -232,18 +270,37 @@ Last milestone completed: M12i2
 - `.held-action` is an inline flex with a 6 px gap, and `.btn-problem` a 22 px icon in its flow (`src/styles.css`), so the button widens when it shows.
 - A held button's reason is its title and accessible description, and its icon is hidden from screen readers.
 - `TagCategory` shows the count only while collapsed and above 0, and the dot only while collapsed, and names them in its toggle's label only then.
+- `SectionProblemMark` sits in the section tab's flow after its label, and `.section-problem` is a 20 px icon (`src/styles.css`).
+- The footer's Clear all filters and Cancel are text buttons, and Apply is a `HeldButton` that shows "Apply*" from `view.pending` (`src/ui/FilterDialog.tsx`).
+- `view.pending` compares the working filter with the one the tab opened with or was cleared to, and `view.unsaved` compares it with the applied filter, so after Clear all only `view.unsaved` shows a change while the applied filter isn't the default.
+- The WebUI's icon font is the full Material Symbols font and has `save`, `cancel`, and `filter_alt_off` (measured).
+- `clearAll` sets the working filter to `createDefaultFilterState()`, the chosen preset to none, and the preset list to the saved one (`src/filter/filterDialog.ts`).
+- Each category's match control is a `<select>` inside `<label class="filter-local">Local:`, which gives it its name today (`src/ui/FilterDialog.tsx`).
+- The Tags tab's Save is an icon button that turns orange with `has-pending` while `view.savePending`, and is disabled otherwise (`src/ui/TagEditor.tsx`).
+- The move to a field scrolls it to the middle of its scrolling body and then focuses it with `preventScroll` (`src/ui/FieldValidation.tsx`). In the mockup, doing that before the keyboard opened left the body scrolled as far as it goes without the keyboard, so the field stayed under it, while a tap on the field works because the browser pans the page itself (measured on the user's phone).
+- The app moves to the field in an effect after a reveal request renders (`reveal.reveal` in `src/filter/filterDialog.ts`, the `useEffect` in `src/ui/FieldValidation.tsx`), so its focus comes after the press, and iOS opens the keyboard only for a focus made within the press (inferred).
+- The Filter tab's sections stay rendered and hide with `display: none` (`panelStyle` in `src/ui/FilterDialog.tsx`), so the field's section has to show before the focus, within the same press (inferred).
+- In the mockup, a page rule sizing every icon in a button outranked the badge's size until it excluded the badge (measured); the WebUI's rules that size icons in buttons are in the notifications list and popups, which hold no held action.
 
 **Acceptance**
 
 - The count line reads "{matching} / {total}" with grouped numbers, in library tests.
 - A held action shows its badge over its corner, out of the button's flow, with its reason as before, in field validation component tests and by reading the stylesheet, and a spot check on the user's phone.
+- A flagged section's tab shows the badge on its corner and no icon after its name, in Filter screen tests.
+- The count line's screen reader text says "{matching} of {total} items", in library tests.
+- The Filter tab's footer shows the three icon buttons with their tooltips, Apply shows the dot and Apply and Cancel are enabled only while there are changes, including after a change is put back and after Clear all, and a held Apply shows its dot red with no badge, in Filter screen tests.
+- Clear all filters is disabled while the filter is the default one, including right after pressing it, and enabled otherwise, in Filter screen tests.
+- The Tags tab's Save shows the dot only while there are changes, in Tags screen tests.
+- Each Filter category's match control has no "Local:" label, is named "Match mode for {category}", and has the tooltip "Match mode", in Filter screen tests.
+- A held action's move shows the field's section and then focuses the field within the press, without `preventScroll` and with no scroll first, in field validation component tests and Filter screen tests, and the field comes above the keyboard on the user's phone and iPad, which is the real check.
 - The category headers in both tabs show their count and dot expanded and collapsed, with the toggle's name saying both, in Tags and Filter screen tests.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
 #### Release checks
 
-- Manual: On a phone 360 px wide, a held Apply shows its badge without the button changing width or its row wrapping.
+- Manual: On a phone and the iPad, pressing a held Apply with a minimum that is not valid brings the Min field above the keyboard.
+- Manual: On a phone 360 px wide, a held Add Preset and a flagged section's tab show their badges whole, without the button changing width or its row wrapping.
 
 #### Not included
 
@@ -1758,7 +1815,7 @@ Last milestone completed: M12i2
   - To screen readers the icon is a checkbox named "Select {file name}", and its tooltip reads "Select" or "Deselect".
 - Once selection is on, a click adds or removes a tile, and Shift+click adds the range from the last tile chosen. Ctrl or Cmd+click isn't used.
 - The grid's text isn't selectable, so Shift+click selects only tiles and doesn't also highlight text across them.
-- While selecting, a bar at the bottom of the Library tab shows Stop selecting (an X), "{n} selected", Select all, and Actions, whose menu the Bulk actions slice fills.
+- While selecting, a bar at the bottom of the Library tab shows Stop selecting (the `deselect` icon), "{n} selected", Select all (an icon-only button with the `select_all` icon and "Select all" as its tooltip), and Actions, whose menu the Bulk actions slice fills.
 - Selection starts only from a tile's check icon or, on a touch screen, a long press, and the Library tab has no Select button.
 - Deselecting the last tile ends selection.
 - Esc closes the Actions menu and then selection, after Auto Tag and before the panel, in the order WebUI Keyboard Shortcuts sets.
@@ -1768,12 +1825,14 @@ Last milestone completed: M12i2
 - The desktop's library grid selected several items with click, Ctrl+click, and Shift+click.
 - The WebUI library plays one item per click and has no selection.
 - Filled icons take `.material-symbol-icon.is-filled` (FILL 1, weight 700, optical size 20), and icons on a tile take the drop shadow from `.library-grid-tile .material-symbol-icon.is-filled` (`src/styles.css`).
+- The WebUI's icon font is the full Material Symbols font and has `select_all` and `deselect` (measured).
 - Every tile has the playing icon, which the stylesheet shows only on the tile with `is-playing`, and the grid controller moves that class between the tiles shown without rendering them again (`setPlayingItemId` in `libraryGridController.ts`).
 
 **Acceptance**
 
 - With a mouse, a tile's check icon shows faded on hover and selects the tile when clicked; during selection it shows on every tile, and a long press starts selection on a touch screen. A selected tile's icon is filled orange and its thumbnail shrinks inside the tile, in WebUI tests for selection.
 - The Library tab has no Select button, and deselecting the last tile ends selection, in WebUI tests for selection.
+- The selection bar shows Stop selecting with the `deselect` icon and Select all as an icon-only button with the `select_all` icon and its tooltip, in WebUI tests for selection.
 - Once selection is on, a click adds or removes a tile and Shift+click adds a range without highlighting text; Ctrl or Cmd+click doesn't select, in WebUI tests for selection.
 - Select all selects every item that matches the search and filters, including items not loaded, in WebUI tests for Select all over items not loaded.
 - Esc closes the Actions menu, then selection, after Auto Tag and before the panel, in WebUI tests for the Esc order.

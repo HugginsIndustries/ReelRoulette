@@ -318,20 +318,8 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
   background: var(--huggins-orange);
 }
 .panel-tabs-spacer { flex: 1; }
-/* A dot marks the Filter and Tags tabs, and the player's panel button, while they hold unsaved changes. */
-.unsaved-dot {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--huggins-orange);
-  box-shadow: 0 0 0 2px var(--surface);
-  pointer-events: none;
-}
 #panel-btn .unsaved-dot { top: 6px; right: 5px; box-shadow: 0 0 0 2px #000; }
-/* A collapsed tag category's header: its name, a count of its tags in use, and the unsaved-changes dot. */
+/* A tag category's header, expanded or collapsed: its name, a count of its tags in use, and the unsaved-changes dot. */
 .tag-category-toggle { display: flex; align-items: center; gap: 8px; }
 .tag-category-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .category-count { flex: 0 0 auto; min-width: 22px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--control-border); background: var(--control-bg); font-size: 0.78rem; font-weight: 600; line-height: 1.4; text-align: center; }
@@ -411,8 +399,8 @@ html.theme-light .lib-grid { background: #fff; }
 .filter-preset-row.is-dragging { background: var(--surface-raised); border-radius: 6px; }
 .filter-preset-name { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .new-preset-field { flex: 1 1 180px; }
-.filter-local { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; }
-.filter-local select { min-height: 36px; }
+/* A category's match mode, with no label of its own: its accessible name and its tooltip say what it is. */
+.filter-local { min-height: 36px; font-size: 0.85rem; }
 
 /* Tags tab. */
 .tags-body { border: 1px solid var(--surface-border); border-radius: 8px; padding: 10px; }
@@ -424,6 +412,8 @@ html.theme-light .lib-grid { background: #fff; }
 .tags-footer { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
 .tags-footer-row { display: flex; align-items: center; gap: 8px; }
 .tags-footer-row .ctl { flex: 1 1 auto; }
+/* Save shows the unsaved-changes dot while there are changes, as the Filter tab's Apply does. */
+.tags-footer .icon-btn { position: relative; }
 .tags-footer-row > .vfield { flex: 1 1 auto; }
 .placeholder-page { padding: 12px; }
 
@@ -900,9 +890,9 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         </div>
         <div id="lib-grid" class="lib-grid scroll-y themed-scrollbar"></div>
         <div id="bulk-bar" class="bulk-bar" hidden>
-          <button class="icon-btn" type="button" id="bulk-exit" aria-label="Stop selecting" title="Stop selecting"><span class="material-symbol-icon">close</span></button>
+          <button class="icon-btn" type="button" id="bulk-exit" aria-label="Stop selecting" title="Stop selecting"><span class="material-symbol-icon">deselect</span></button>
           <span id="bulk-count" class="grow" aria-live="polite">0 selected</span>
-          <button class="btn" type="button" id="bulk-all">Select all</button>
+          <button class="icon-btn" type="button" id="bulk-all" aria-label="Select all" title="Select all"><span class="material-symbol-icon">select_all</span></button>
           <button class="btn" type="button" id="bulk-actions" aria-haspopup="menu" aria-expanded="false" aria-controls="bulk-menu" disabled><span class="btn-label">Actions</span><span class="material-symbol-icon" style="font-size:22px">expand_more</span></button>
           <div id="bulk-menu" class="menu" role="menu" hidden>
             <button type="button" role="menuitem" data-bulk="fav-add">Add to favorites</button>
@@ -1016,9 +1006,9 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
           </div>
         </div>
         <div class="filter-footer">
-          <button class="btn" type="button" id="filter-clear">Clear all filters</button>
-          <button class="btn" type="button" id="filter-cancel">Cancel</button>
-          <button class="btn" type="button" id="filter-apply"><span class="btn-label" id="filter-apply-label">Apply</span><span class="btn-problem material-symbol-icon">error</span></button>
+          <button class="icon-btn" type="button" id="filter-clear" aria-label="Clear all filters" title="Clear all filters"><span class="material-symbol-icon">filter_alt_off</span></button>
+          <button class="icon-btn" type="button" id="filter-cancel" aria-label="Cancel" title="Cancel" disabled><span class="material-symbol-icon">cancel</span></button>
+          <button class="icon-btn" type="button" id="filter-apply" aria-label="Apply" title="Apply" disabled><span class="btn-label material-symbol-icon">save</span><span class="unsaved-dot" hidden></span></button>
         </div>
       </section>
 
@@ -1038,7 +1028,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
           <div class="tags-footer-row">
             <span class="vfield"><input class="ctl" type="text" id="tags-new-name" placeholder="New tag name" aria-label="New tag name" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
             <button class="icon-btn" type="button" id="tags-add-tag" aria-label="Add tag" title="Add tag"><span class="material-symbol-icon">add</span></button>
-            <button class="icon-btn" type="button" id="tags-save" aria-label="Save" title="Save" disabled><span class="material-symbol-icon">save</span></button>
+            <button class="icon-btn" type="button" id="tags-save" aria-label="Save" title="Save" disabled><span class="material-symbol-icon">save</span><span class="unsaved-dot" hidden></span></button>
           </div>
         </div>
       </section>
@@ -2886,14 +2876,26 @@ function libraryMessage() {
   if (libLoading) return { text: "Loading library…" };
   return null;
 }
+// The library's items that match the search and the filter, sorted, and the baseline the count line counts them
+// against, which, as the server counts it, is what matches the search before the filter.
 function visibleItems() {
-  let items = ITEMS.filter((item) => !item.removed && passesApplied(item));
-  const baseline = items.length;
+  let items = ITEMS.filter((item) => !item.removed);
   if (lib.search) items = items.filter((item) => item.name.toLowerCase().includes(lib.search.toLowerCase()));
+  const baseline = items.length;
+  items = items.filter((item) => passesApplied(item));
   const key = lib.sort === "Duration" ? (item) => item.duration : lib.sort === "Name" ? (item) => item.name : (item) => (item.id * 37) % 101;
   items.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
   if (lib.descending) items.reverse();
   return { items, baseline };
+}
+
+// The count line reads "{matching} / {total}"; screen readers hear it in words.
+function showSummary(matching, total) {
+  const summary = $("lib-summary");
+  const shown = Object.assign(document.createElement("span"), { textContent: `${matching.toLocaleString()} / ${total.toLocaleString()}` });
+  shown.setAttribute("aria-hidden", "true");
+  const spoken = Object.assign(document.createElement("span"), { className: "vh", textContent: `${matching.toLocaleString()} of ${total.toLocaleString()} items` });
+  summary.replaceChildren(shown, spoken);
 }
 
 // The WebUI's justified rows (buildRows), at the smaller tile size chosen with these mockups.
@@ -2946,7 +2948,7 @@ function layoutGrid(force) {
     return gridMessage(grid, message.text, message.error);
   }
   const { items, baseline } = visibleItems();
-  $("lib-summary").textContent = `Showing ${items.length.toLocaleString()} of ${baseline.toLocaleString()} items`;
+  showSummary(items.length, baseline);
   if (!items.length) return gridMessage(grid, "Nothing matches the search or filters.", false);
   for (const row of buildRows(items.map((item) => item.aspect), width, TILE_SIZE)) {
     const rowEl = document.createElement("div");
@@ -3128,7 +3130,7 @@ $("lib-preset").addEventListener("change", (event) => {
   saveLibState();
   $("filter-preset-select").value = lib.preset;
   loadPresetFilter(lib.preset);
-  filterPending = false;
+  presetUpdates.clear();
   takeSnapshot();
   saveFilterState();
   readApplied();
@@ -3149,7 +3151,13 @@ function checkPresetName(value, own) {
   }
   return null;
 }
-let filterPending = false;
+// Presets updated with the tab's filter since the presets were saved. The mockup's presets keep no filters of their
+// own, so an update counts as a change until Apply, Cancel, or Clear all.
+const presetUpdates = new Set();
+// The applied filter's inputs, the saved presets, and the applied tags, which Cancel puts back.
+let snapshot = null;
+let presetSnapshot = presets.slice();
+let tagSnapshot = new Map();
 // A preset chosen in the Presets section, and whether the filter changed after it, decide the preset Apply leaves
 // active: the chosen one, or a starred row once the filter differs from it.
 let presetPicked = false;
@@ -3191,20 +3199,45 @@ function resetUncheckedModes() {
   if (!$("filter-bl").checked) $("filter-bl-mode").value = "excluded";
 }
 
-// A duration still being typed isn't read into the filter until its field changes, so its text counts as an unsaved
-// change for the dots while it reads as another duration than the applied one, or as none, though Apply's star waits.
+// A duration still being typed isn't read into the filter until its field changes, so its text counts as a change for
+// Apply and the dots while it reads as another duration than the applied one, or as none.
 function durationTyped(field) {
   const applied = snapshot?.find(([el]) => el === field.input)?.[1] ?? "";
   const typed = parseDuration(field.input.value);
   return typed === "invalid" || typed !== parseDuration(applied);
 }
 
+// Whether the tab holds changes to apply, compared with the applied filter and the saved presets, so a change put back
+// is none: the General section's choices and typed durations, the tags, the preset list by order and name, an updated
+// preset, and a preset chosen in the Presets section other than the applied one. Without one, Apply and Cancel are
+// disabled; with one, Apply turns orange with the dot, as the tab and the panel button show it. Clear all is disabled
+// while the filter is the default one.
+function filterChanges() {
+  if (!snapshot) return false;
+  const general = snapshot.some(([el, value, checked]) => {
+    if (!el.closest('[data-subpanel="general"]')) return false;
+    if (el === minField.input) return durationTyped(minField);
+    if (el === maxField.input) return durationTyped(maxField);
+    if (el.type === "checkbox" || el.type === "radio") return el.checked !== checked;
+    // A mode dropdown holds no choice while its checkbox is off.
+    return !el.disabled && el.value !== value;
+  });
+  const tags = filterTagState.size !== tagSnapshot.size || [...filterTagState].some(([key, mode]) => tagSnapshot.get(key) !== mode);
+  const presetList = presets.length !== presetSnapshot.length || presets.some((name, i) => name !== presetSnapshot[i]);
+  const presetChoice = presetPicked && $("filter-preset-select").value !== lib.preset;
+  return general || tags || presetList || presetUpdates.size > 0 || presetChoice;
+}
+let applyHold = null;
 function renderApply() {
-  const apply = $("filter-apply");
-  $("filter-apply-label").textContent = filterPending ? "Apply*" : "Apply";
-  unsaved.filter = filterPending || [minField, maxField].some(durationTyped);
+  const changed = filterChanges();
+  unsaved.filter = changed;
   renderUnsaved();
-  apply.classList.toggle("has-pending", filterPending);
+  const apply = $("filter-apply");
+  apply.classList.toggle("has-pending", changed);
+  apply.querySelector(".unsaved-dot").hidden = !changed;
+  $("filter-cancel").disabled = !changed;
+  $("filter-clear").disabled = filterIsDefault();
+  applyHold?.refresh();
   const generalTab = document.querySelector('.filter-tab[data-sub="general"]');
   const generalProblem = flagModesField.flagged || minField.flagged || maxField.flagged;
   generalTab.classList.toggle("has-problem", generalProblem);
@@ -3221,7 +3254,8 @@ function generalReason(field, ending) {
   if (field === flagModesField) return `Change Favorites or Blacklisted ${ending}.`;
   return `Correct the ${field === minField ? "minimum" : "maximum"} duration ${ending}.`;
 }
-holdAction($("filter-apply"), () => [flagModesField, minField, maxField], {
+applyHold = holdAction($("filter-apply"), () => [flagModesField, minField, maxField], {
+  idle: () => !filterChanges(),
   reason: (field) => generalReason(field, "to apply"),
   beforeReveal: () => showSub("general")
 });
@@ -3247,13 +3281,9 @@ filterBody.addEventListener("change", (event) => {
   } else {
     filterEdited = true;
   }
-  filterPending = true;
   renderApply();
 });
 
-let snapshot = null;
-let presetSnapshot = presets.slice();
-let tagSnapshot = new Map();
 function takeSnapshot() {
   snapshot = [...filterBody.querySelectorAll("input, select")].map((el) => [el, el.value, el.checked, el.disabled]);
   presetSnapshot = presets.slice();
@@ -3302,7 +3332,7 @@ $("filter-apply").addEventListener("click", () => {
   }
   presetPicked = false;
   filterEdited = false;
-  filterPending = false;
+  presetUpdates.clear();
   resetUncheckedModes();
   takeSnapshot();
   saveFilterState();
@@ -3318,26 +3348,35 @@ $("filter-cancel").addEventListener("click", () => {
   restoreSnapshot();
   presetPicked = false;
   filterEdited = false;
-  filterPending = false;
+  presetUpdates.clear();
   renderLibPresets();
   renderApply();
   if (state.mode === "overlay") closePanel();
 });
-// The default filter: every source, Blacklisted excluded, and nothing else.
+// The default filter: every source, Blacklisted excluded, and nothing else. Each General checkbox and radio button's
+// default, and each mode dropdown's.
+function generalDefault(el) {
+  if (el.type === "checkbox") return el === $("filter-bl") || el.closest(".filter-section").querySelector("h3").textContent.startsWith("Sources");
+  if (el.type === "radio") return el === el.closest(".filter-stack").querySelector('input[type="radio"]');
+  return el === $("filter-bl-mode") ? "excluded" : "only";
+}
+function generalChoices() {
+  return [...filterBody.querySelectorAll('[data-subpanel="general"] input[type="checkbox"], [data-subpanel="general"] input[type="radio"], #filter-fav-mode, #filter-bl-mode')];
+}
 function resetGeneral() {
-  const general = filterBody.querySelector('[data-subpanel="general"]');
-  general.querySelectorAll('input[type="checkbox"]').forEach((box) => {
-    box.checked = box.closest(".filter-section").querySelector("h3").textContent.startsWith("Sources");
-  });
-  $("filter-bl").checked = true;
-  $("filter-bl-mode").value = "excluded";
-  $("filter-fav-mode").value = "only";
-  general.querySelectorAll('input[type="radio"]').forEach((radio) => {
-    radio.checked = radio === radio.closest(".filter-stack").querySelector('input[type="radio"]');
+  generalChoices().forEach((el) => {
+    if (el.tagName === "SELECT") el.value = generalDefault(el);
+    else el.checked = generalDefault(el);
   });
   [minField, maxField].forEach((field) => field.reset(""));
   filterTagState.clear();
   syncModeSelects();
+}
+// Whether the tab's filter is the default one, by the same comparison as Apply's, so Clear all has nothing to clear: a
+// mode dropdown counts only while its checkbox is on, and a duration typed counts unless it reads as none.
+function filterIsDefault() {
+  const general = generalChoices().every((el) => (el.tagName === "SELECT" ? el.disabled || el.value === generalDefault(el) : el.checked === generalDefault(el)));
+  return general && [minField, maxField].every((field) => parseDuration(field.input.value) === null) && filterTagState.size === 0;
 }
 // What a few of the mockup's presets hold; the others hold the default filter.
 const PRESET_FILTERS = {
@@ -3366,10 +3405,10 @@ function loadPresetFilter(name) {
 $("filter-clear").addEventListener("click", () => {
   resetGeneral();
   presets.splice(0, presets.length, ...presetSnapshot);
+  presetUpdates.clear();
   renderPresets();
   renderFilterTags();
   filterEdited = true;
-  filterPending = true;
   renderApply();
 });
 // Refresh reloads sources and tags and keeps unsaved preset changes.
@@ -3384,12 +3423,11 @@ $("filter-update-preset").addEventListener("click", () => {
   const chosen = $("filter-preset-select").value;
   if (!chosen) return void noticeDialog({ message: "Select a preset to update." });
   acknowledge(`Updated preset "${chosen}" locally — Apply to save.`, "filter");
-  filterPending = true;
+  presetUpdates.add(chosen);
   renderApply();
 });
 
 function presetsChanged() {
-  filterPending = true;
   renderPresets();
   nameField.update();
   renderApply();
@@ -3486,8 +3524,9 @@ function chipEl(name, buttons, stateClass) {
   return chip;
 }
 // Tag categories remember per device, separately in the Tags tab and the Filter tab's Tags section, which ones are
-// open; every other category, a new one included, starts collapsed. A collapsed category's header shows how many of its
-// tags are in use and, while it holds unsaved changes, the orange dot that marks unsaved changes everywhere.
+// open; every other category, a new one included, starts collapsed. A category's header, expanded or collapsed, shows
+// how many of its tags are in use and, while it holds unsaved changes, the orange dot that marks unsaved changes
+// everywhere.
 const expandedCategories = {
   tags: new Set(store.get("tagsExpanded", [])),
   filter: new Set(store.get("filterTagsExpanded", []))
@@ -3515,14 +3554,14 @@ function categoryEl(view, id, name, { handle: handleEl, controls, inUse = 0, inU
   const count = Object.assign(document.createElement("span"), { className: "category-count", textContent: String(inUse), title: inUseTitle });
   const dot = Object.assign(document.createElement("span"), { className: "unsaved-dot category-dot", title: "Unsaved changes" });
   toggle.append(label, count, dot);
+  count.hidden = !inUse;
+  dot.hidden = !unsaved;
+  toggle.setAttribute("aria-label", [name, !count.hidden && inUseTitle, !dot.hidden && "unsaved changes"].filter(Boolean).join(", "));
   const show = () => {
     const isCollapsed = !expandedCategories[view].has(id);
     grid.hidden = isCollapsed;
     section.classList.toggle("is-collapsed", isCollapsed);
-    count.hidden = !isCollapsed || !inUse;
-    dot.hidden = !isCollapsed || !unsaved;
     toggle.setAttribute("aria-expanded", String(!isCollapsed));
-    toggle.setAttribute("aria-label", [name, !count.hidden && inUseTitle, !dot.hidden && "unsaved changes"].filter(Boolean).join(", "));
     toggle.title = isCollapsed ? "Expand category" : "Collapse category";
   };
   toggle.addEventListener("click", () => {
@@ -3556,9 +3595,11 @@ function renderFilterTags() {
     return;
   }
   categories.forEach((category) => {
-    const local = document.createElement("label");
-    local.className = "filter-local";
-    local.innerHTML = 'Local: <select class="ctl"><option>ALL (AND)</option><option>ANY (OR)</option></select>';
+    const local = document.createElement("select");
+    local.className = "ctl filter-local";
+    local.setAttribute("aria-label", `Match mode for ${category.name}`);
+    local.title = "Match mode";
+    local.innerHTML = "<option>ALL (AND)</option><option>ANY (OR)</option>";
     const inUse = category.chips.filter((chip) => filterTagState.has(chip.key)).length;
     const unsaved = category.chips.some((chip) => (filterTagState.get(chip.key) || "") !== (tagSnapshot.get(chip.key) || ""));
     const { section, grid } = categoryEl("filter", category.id, category.name, {
@@ -3573,7 +3614,6 @@ function renderFilterTags() {
         if (mode === next) filterTagState.delete(chip.key);
         else filterTagState.set(chip.key, next);
         filterEdited = true;
-        filterPending = true;
         renderFilterTags();
         renderApply();
       };
@@ -3706,6 +3746,7 @@ function renderTags() {
   unsaved.tags = pending;
   renderUnsaved();
   $("tags-save").style.color = pending ? "var(--huggins-orange)" : "";
+  $("tags-save").querySelector(".unsaved-dot").hidden = !pending;
   const select = $("tags-category-select");
   const keep = select.value || UNCATEGORIZED;
   select.textContent = "";

@@ -149,6 +149,7 @@ body {
   border-radius: 8px;
 }
 .btn {
+  position: relative;
   padding: 8px 14px;
   cursor: pointer;
   display: inline-flex;
@@ -164,12 +165,38 @@ body {
 .ctl { padding: 0 10px; min-width: 0; }
 input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 
-/* An action that can't proceed: its label dims, and the red icon says a field is not valid. */
-.btn[aria-disabled="true"] { cursor: not-allowed; }
-.btn[aria-disabled="true"] .btn-label { opacity: 0.5; }
-.btn .btn-problem {
-  font-size: 22px;
+/* An action that can't proceed: its label, or an icon button's icon, dims, and a red badge on its top-right corner says
+   a field is not valid. The badge sits out of the button's flow, so the button keeps its width and its row never
+   wraps. A Filter section's tab shows the same badge while a field in it is flagged. The badge is the outlined icon the
+   fields use, on a disc that hides the border under it. The Filter tab's Apply, the one held action with a dot, turns
+   its dot red instead. */
+.btn[aria-disabled="true"],
+.icon-btn[aria-disabled="true"] { cursor: not-allowed; }
+.btn[aria-disabled="true"] .btn-label,
+.icon-btn[aria-disabled="true"] .btn-label { opacity: 0.5; }
+.btn-problem,
+.filter-tab .tab-problem {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  font-size: 18px;
   color: var(--error);
+  border-radius: 50%;
+  background: radial-gradient(circle closest-side, var(--surface-raised) 86%, transparent 90%);
+  pointer-events: none;
+}
+/* A dot marks the Filter and Tags tabs, the player's panel button, and the Filter tab's Apply while they hold unsaved
+   changes. */
+.unsaved-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--huggins-orange);
+  box-shadow: 0 0 0 2px var(--surface);
+  pointer-events: none;
 }
 
 /* The field validation pattern. */
@@ -226,12 +253,12 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 }
 .vfield-tip[data-place="above"]::after { bottom: -5px; }
 .vfield-tip[data-place="below"]::after { top: -5px; }
-/* The pattern's red icons, in a field, on a held action, and after a Filter section's name, its tooltip, and a setting's
-   saved check fade in and out on their opacity (`fadeShown`): each is rendered while shown or fading out, and opaque
-   while shown. */
+/* The pattern's red icons, in a field and on the corner of a held action or a Filter section's tab, its tooltip, and a
+   setting's saved check fade in and out on their opacity (`fadeShown`): each is rendered while shown or fading out,
+   and opaque while shown. */
 .vfield-icon,
 .vfield-saved,
-.btn .btn-problem,
+.btn-problem,
 .filter-tab .tab-problem,
 .vfield-tip {
   display: none;
@@ -240,19 +267,19 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 }
 .vfield-icon.fade-rendered,
 .vfield-saved.fade-rendered,
-.btn .btn-problem.fade-rendered,
+.btn-problem.fade-rendered,
 .filter-tab .tab-problem.fade-rendered { display: inline-flex; }
 .vfield-tip.fade-rendered { display: block; }
 .vfield-icon.fade-shown,
 .vfield-saved.fade-shown,
-.btn .btn-problem.fade-shown,
+.btn-problem.fade-shown,
 .filter-tab .tab-problem.fade-shown,
 .vfield-tip.fade-shown { opacity: 1; }
 .vfield-icon:not(.fade-shown) { pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
   .vfield-icon,
   .vfield-saved,
-  .btn .btn-problem,
+  .btn-problem,
   .filter-tab .tab-problem,
   .vfield-tip { transition: none; }
 }
@@ -268,15 +295,14 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
   color: var(--control-fg);
   cursor: pointer;
   font-size: 1rem;
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
 }
 .filter-tab.is-active {
   border-color: var(--huggins-orange);
   box-shadow: 0 0 0 1px var(--huggins-orange-soft-inset) inset;
 }
-.filter-tab .tab-problem { font-size: 20px; color: var(--error); }
 .filter-section { margin-bottom: 20px; }
 .filter-section h3 { margin: 0 0 8px; font-size: 0.95rem; font-weight: 600; }
 .filter-hint { font-size: 0.85rem; opacity: 0.75; margin: 0 0 8px; }
@@ -293,6 +319,16 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 .filter-row > label { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .duration-field { width: 14rem; max-width: 100%; }
 .filter-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+/* Its icon buttons, as the Tags tab's. Apply turns orange and shows the unsaved-changes dot while there are changes to
+   apply. While a field holds it, its dot turns red in place of the badge other held actions show, over the 250 ms the
+   red marks fade in, or at once with reduced motion. */
+.filter-footer .icon-btn { position: relative; }
+.icon-btn.has-pending { color: var(--huggins-orange); }
+.filter-footer .unsaved-dot { transition: background-color 250ms ease; }
+.shows-problem > .unsaved-dot { background: var(--error); }
+@media (prefers-reduced-motion: reduce) {
+  .filter-footer .unsaved-dot { transition: none; }
+}
 
 /* Tag categories: the header's name toggles it; the handle, Edit, and Local select keep their own actions. */
 .tag-category { margin-bottom: 12px; }

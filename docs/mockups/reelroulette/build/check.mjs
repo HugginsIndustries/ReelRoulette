@@ -28,6 +28,19 @@ function check(label, ok) {
   console.log(`${ok ? "PASS" : "FAIL"} ${label}`);
 }
 
+// Every red badge on a page, on a held action or a Filter section's tab, is the fields' outlined icon at 18 px on its
+// button's top-right corner, out of the button's flow, so the button keeps its width when it shows. Returns how many
+// there are, or 0 when one isn't.
+function cornerBadges(window) {
+  const badges = [...window.document.querySelectorAll(".btn-problem, .filter-tab .tab-problem")];
+  const onCorner = (badge) => {
+    const style = window.getComputedStyle(badge);
+    return window.getComputedStyle(badge.parentElement).position === "relative" && style.position === "absolute" && style.top === "-6px" &&
+      style.right === "-6px" && style.fontSize === "18px" && style.fontFamily.includes("Material Symbols Outlined");
+  };
+  return badges.every(onCorner) ? badges.length : 0;
+}
+
 // A stand-in for Web Audio, which happy-dom lacks: it records each gain node and its changes, and the media elements'
 // plays and pauses. A direct set of a gain's value is a jump, and a jump in level is a click.
 function standInAudio() {
@@ -150,12 +163,17 @@ for (const name of ["index", "validation", "recovery", "desktop-notice", "layout
   typed.dispatchEvent(new window.Event("input"));
   check("validation: correcting it clears aria-invalid and the description", !typed.hasAttribute("aria-invalid") && !typed.hasAttribute("aria-describedby"));
   const [jumpApply, other] = document.querySelectorAll("[data-apply]");
-  check("validation: one Apply, aria-disabled with the icon", !other && jumpApply.getAttribute("aria-disabled") === "true" && jumpApply.classList.contains("shows-problem") && !jumpApply.disabled);
+  // Apply, the one held action with a dot, turns its dot red in place of the badge.
+  const errorColor = window.getComputedStyle(document.documentElement).getPropertyValue("--error").trim();
+  const jumpDotColor = () => window.getComputedStyle(jumpApply.querySelector(".unsaved-dot")).backgroundColor;
+  check(`validation: one Apply, aria-disabled with its dot red and no badge (${jumpDotColor()}, ${errorColor})`,
+    !other && jumpApply.getAttribute("aria-disabled") === "true" && jumpApply.classList.contains("shows-problem") && !jumpApply.disabled &&
+    !!errorColor && jumpDotColor() === errorColor && !jumpApply.querySelector(".btn-problem"));
   const mini = document.querySelector('[data-mini="jump"]');
   mini.querySelector('[data-sub="tags"]').click();
   jumpApply.click();
   check("validation: Apply switches to General and focuses the field, applying nothing",
-    mini.querySelector('[data-sub="general"]').classList.contains("is-active") && document.activeElement === mini.querySelector("[data-min]") && !jumpApply.textContent.includes("Applied"));
+    mini.querySelector('[data-sub="general"]').classList.contains("is-active") && document.activeElement === mini.querySelector("[data-min]") && jumpApply.classList.contains("has-pending") && !jumpApply.disabled);
 
   const placeholders = (name) => [...document.querySelectorAll(`input[aria-label="${name} duration"]`)].map((field) => field.placeholder);
   const miniStack = document.querySelector('[data-mini="jump"] [data-min]').closest(".filter-stack");
@@ -196,7 +214,7 @@ for (const name of ["index", "validation", "recovery", "desktop-notice", "layout
   mini.querySelector('[data-sub="presets"]').click();
   jumpApply.click();
   check("validation: Apply held by the pair moves to the Blacklisted dropdown, applying nothing",
-    mini.querySelector('[data-sub="general"]').classList.contains("is-active") && document.activeElement === miniBlMode && !jumpApply.textContent.includes("Applied"));
+    mini.querySelector('[data-sub="general"]').classList.contains("is-active") && document.activeElement === miniBlMode && jumpApply.classList.contains("has-pending") && !jumpApply.disabled);
   // A setting's field saves only on Enter or when it is left, and then shows the value saved. A save that changes the
   // value shows the green check in the red icon's place and says "Saved"; going back from a value that is not valid,
   // or a save that leaves the value as it was, shows neither.
@@ -233,11 +251,11 @@ for (const name of ["index", "validation", "recovery", "desktop-notice", "layout
   check("validation: the check goes after about two seconds", !savedShown() && savedSaid() === "");
 
   // The red icons and the saved check fade in and out over 250 ms on their opacity: each stays rendered while it fades
-  // out, then goes. A held action's icon and a Filter section's keep their place while they fade.
+  // out, then goes. A dropdown's keeps its place while it fades.
   const iconFade = (icon) => (icon.classList.contains("fade-shown") ? "shown" : icon.classList.contains("fade-rendered") ? "fading" : "gone");
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  const fadeIcons = () => [jumpApply.querySelector(".btn-problem"), mini.querySelector('[data-sub="general"] .tab-problem'), miniBlMode.closest(".vfield").querySelector(".vfield-icon")].map(iconFade);
-  check(`validation: the held Apply's icon, General's, and the pair's show (${fadeIcons()})`, fadeIcons().every((state) => state === "shown"));
+  const fadeIcons = () => [mini.querySelector('[data-sub="general"] .tab-problem'), miniBlMode.closest(".vfield").querySelector(".vfield-icon")].map(iconFade);
+  check(`validation: General's badge and the pair's icon show (${fadeIcons()})`, fadeIcons().every((state) => state === "shown"));
   miniBlMode.value = "excluded";
   miniBlMode.dispatchEvent(new window.Event("change"));
   check(`validation: correcting the pair fades them out, each rendered while it fades (${fadeIcons()})`,
@@ -264,11 +282,52 @@ for (const name of ["index", "validation", "recovery", "desktop-notice", "layout
   await sleep(300);
   check("validation: and the tooltip is gone once faded", iconFade(settingTip) === "gone");
   const css = [...document.querySelectorAll("style")].map((style) => style.textContent).join("\n");
-  const iconSelectors = ".vfield-icon,\n.vfield-saved,\n.btn .btn-problem,\n.filter-tab .tab-problem,\n.vfield-tip";
+  const iconSelectors = ".vfield-icon,\n.vfield-saved,\n.btn-problem,\n.filter-tab .tab-problem,\n.vfield-tip";
   check("validation: the icons and the tooltip fade on opacity over 250 ms, and not with reduced motion",
     css.includes(`${iconSelectors} {\n  display: none;\n  opacity: 0;\n  transition: opacity 250ms ease;\n}`) &&
-    /@media \(prefers-reduced-motion: reduce\) \{\s*\.vfield-icon,\s*\.vfield-saved,\s*\.btn \.btn-problem,\s*\.filter-tab \.tab-problem,\s*\.vfield-tip \{ transition: none; \}/.test(css));
+    /@media \(prefers-reduced-motion: reduce\) \{\s*\.vfield-icon,\s*\.vfield-saved,\s*\.btn-problem,\s*\.filter-tab \.tab-problem,\s*\.vfield-tip \{ transition: none; \}/.test(css));
+  check(`validation: each held action's and section tab's badge sits on its corner, out of its flow (${cornerBadges(window)})`, cornerBadges(window) >= 8);
+  // The specimen's Apply applies its changes, leaving Apply and Cancel disabled until the next change.
+  const miniCancel = mini.querySelector("[data-cancel]");
+  const miniFooter = [...mini.querySelectorAll(".filter-footer button")].map((b) => b.querySelector(".material-symbol-icon").dataset.icon).join(",");
+  check(`validation: the specimen's footer is the Filter tab's icon buttons (${miniFooter})`, miniFooter === "filter_alt_off,cancel,save");
+  const miniType = (selector, value) => {
+    const field = mini.querySelector(selector);
+    field.value = value;
+    field.dispatchEvent(new window.Event("input", { bubbles: true }));
+  };
+  miniBlMode.value = "excluded";
+  miniBlMode.dispatchEvent(new window.Event("change", { bubbles: true }));
+  miniType("[data-min]", "2:00");
+  jumpApply.click();
+  check("validation: a valid Apply applies, disabling Apply and Cancel",
+    jumpApply.disabled && !jumpApply.classList.contains("has-pending") && jumpApply.querySelector(".unsaved-dot").hidden && miniCancel.disabled);
+  miniType("[data-max]", "5:00");
+  check("validation: and a change enables them again, with Apply's dot",
+    !jumpApply.disabled && jumpApply.classList.contains("has-pending") && !jumpApply.querySelector(".unsaved-dot").hidden && !miniCancel.disabled);
   check(`validation: no script errors after interaction ${errors.join("; ")}`, errors.length === 0);
+}
+
+{
+  // A held action moves to its field as a tap does: after its section shows, it focuses the field without
+  // preventScroll and scrolls nothing first, so the browser brings the field into view, and above the keyboard.
+  const { document, window, errors } = await load("validation", 390);
+  const mini = document.querySelector('[data-mini="jump"]');
+  const min = mini.querySelector("[data-min]");
+  const scrolled = [];
+  window.Element.prototype.scrollIntoView = function () {
+    scrolled.push(this);
+  };
+  const focusCalls = [];
+  const focus = min.focus.bind(min);
+  min.focus = (options) => {
+    focusCalls.push({ preventScroll: !!options?.preventScroll, generalShown: !mini.querySelector('[data-subpanel="general"]').hidden });
+    focus(options);
+  };
+  mini.querySelector('[data-sub="tags"]').click();
+  mini.querySelector("[data-apply]").click();
+  check(`validation: a held Apply shows General, then focuses its field as a tap does, with no scroll first (${JSON.stringify(focusCalls)}, ${scrolled.length})`,
+    document.activeElement === min && focusCalls.length === 1 && !focusCalls[0].preventScroll && focusCalls[0].generalShown && scrolled.length === 0 && errors.length === 0);
 }
 
 {
@@ -363,6 +422,7 @@ for (const width of [1280, 390]) {
   const playable = (item) => !item.missing && !item.removed && (item.type === "photo" || /\.(mp4|mkv)$/.test(item.name));
 
   check(`layout@${width}: no script errors on load ${errors.join("; ")}`, errors.length === 0);
+  check(`layout@${width}: each held action's and section tab's badge sits on its corner, out of its flow (${cornerBadges(window)})`, cornerBadges(window) >= 5);
   // Nothing plays until a tap or Play.
   check(`layout@${width}: nothing plays at first, and the player shows the start hint`,
     !$("empty-state").hidden && $("empty-state").textContent === "Tap to play, or open the panel to choose a preset or filter." && $("panel").hidden && $("np-name").parentElement.hidden && chip().includes("Nothing playing"));
@@ -425,7 +485,14 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: and the Tags tab's chips can't add or remove`,
     [...document.querySelectorAll('#tags-body [title="Add tag"], #tags-body [title="Remove tag"]')].every((b) => b.disabled) && $("tags-target").hidden);
   press("1");
-  check(`layout@${width}: the library loads its tiles`, tiles().length > 20 && $("lib-summary").textContent.startsWith("Showing"));
+  // The count line reads "{matching} / {total}", and screen readers hear it in words. The total counts the library
+  // before the filter, as the server's search baseline does.
+  const libraryTotal = () => window.mockup.items.filter((item) => !item.removed).length;
+  const summaryShown = () => $("lib-summary").querySelector('[aria-hidden="true"]')?.textContent;
+  const summarySpoken = () => $("lib-summary").querySelector(".vh")?.textContent;
+  const summarySays = (matching, total) => summaryShown() === `${matching} / ${total}` && summarySpoken() === `${matching} of ${total} items`;
+  check(`layout@${width}: the library loads its tiles, and the count line reads "{matching} / {total}" (${summaryShown()} | ${summarySpoken()})`,
+    tiles().length > 20 && summarySays(tiles().length, libraryTotal()));
   press("1");
   check(`layout@${width}: the open tab's key closes the panel`, $("panel").hidden);
   $("panel-btn").click();
@@ -626,12 +693,78 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: open state remembered`, window.localStorage.getItem("rr-mockup.open") === "true");
   check(`layout@${width}: Responsive Auto-Pause ${overlay ? "pauses" : "keeps playing"} (${chip()})`, chip().includes(overlay ? "Auto-Paused" : "Playing"));
   $("tab-btn-filter").click();
+  // The footer's icon buttons, as the Tags tab's, each with a tooltip. Apply and Cancel compare the tab with the applied
+  // filter and the saved presets: with no changes both are disabled, and a change put back is none.
+  const filterFooterButtons = [...document.querySelectorAll("#tab-filter .filter-footer button")];
+  const footerSays = filterFooterButtons.map((b) => `${b.querySelector(".material-symbol-icon").dataset.icon}:${b.getAttribute("aria-label")}:${b.title}`).join(",");
+  check(`layout@${width}: the Filter tab's footer is icon buttons with tooltips (${footerSays})`,
+    footerSays === "filter_alt_off:Clear all filters:Clear all filters,cancel:Cancel:Cancel,save:Apply:Apply" && filterFooterButtons.every((b) => b.classList.contains("icon-btn")));
+  const apply = $("filter-apply");
+  const applyDot = () => !apply.querySelector(".unsaved-dot").hidden;
+  const filterTabDot = () => !$("tab-btn-filter").querySelector(".unsaved-dot").hidden;
+  const changesShown = () => !apply.disabled && apply.classList.contains("has-pending") && applyDot() && !$("filter-cancel").disabled && filterTabDot();
+  const noChangesShown = () => apply.disabled && !apply.classList.contains("has-pending") && !applyDot() && $("filter-cancel").disabled && !filterTabDot();
+  // Clear all is disabled while the tab's filter is the default one, which the mockup starts with.
+  const clearOff = () => $("filter-clear").disabled;
+  check(`layout@${width}: with nothing to apply, Apply and Cancel are disabled and Apply shows no dot, and with the default filter so is Clear all`,
+    noChangesShown() && clearOff());
+  change($("filter-fav"), true);
+  check(`layout@${width}: a change turns Apply orange with the tabs' dot and enables Cancel and Clear all`, changesShown() && !clearOff());
+  change($("filter-fav"), false);
+  check(`layout@${width}: putting it back disables them again, and the tab's dot goes`, noChangesShown() && clearOff());
+  document.querySelector('[data-sub="presets"]').click();
+  const presetHandle = (index) => document.querySelectorAll(".filter-preset-row")[index].querySelector(".drag-handle");
+  key(presetHandle(0), "ArrowDown");
+  const presetMoved = changesShown();
+  key(presetHandle(1), "ArrowUp");
+  check(`layout@${width}: moving a preset is a change, and moving it back is none, and neither enables Clear all, which compares the filter`, presetMoved && noChangesShown() && clearOff());
+  const appliedPreset = $("filter-preset-select").value;
+  const presetsWithFilters = ["Favorites", "Short clips", "Photos only", "Long videos", "Not yet watched"];
+  const plainPreset = [...$("filter-preset-select").options].map((option) => option.value).find((name) => name && name !== appliedPreset && !presetsWithFilters.includes(name));
+  change($("filter-preset-select"), plainPreset);
+  check(`layout@${width}: choosing another preset that holds the same filter is a change to apply (${plainPreset})`, changesShown());
+  change($("filter-preset-select"), appliedPreset);
+  check(`layout@${width}: choosing the applied one again is none`, noChangesShown());
+  document.querySelector('[data-sub="tags"]').click();
+  // Each click redraws the chips, so the first chip's Include is looked up again.
+  const firstInclude = () => document.querySelector('#filter-tag-categories button[title="Include"]');
+  firstInclude().click();
+  const tagIncluded = changesShown();
+  firstInclude().click();
+  check(`layout@${width}: including a tag is a change, and removing it again is none`, tagIncluded && noChangesShown());
+  document.querySelector('[data-sub="general"]').click();
+  // A duration typed, left, then emptied is no limit again, as one emptied before it is left.
+  for (const field of [$("filter-min"), $("filter-max")]) {
+    field.focus();
+    input(field, "2:00");
+    field.dispatchEvent(new window.Event("change", { bubbles: true }));
+    field.blur();
+    const typedAndLeft = changesShown();
+    field.focus();
+    input(field, "");
+    check(`layout@${width}: a ${field.getAttribute("aria-label").toLowerCase()} typed, left, and emptied is no change, as one emptied before it is left`,
+      typedAndLeft && noChangesShown() && clearOff());
+    field.blur();
+  }
   const min = $("filter-min");
   input(min, "1:7x");
-  const apply = $("filter-apply");
   const applyKids = [...apply.children].map((c) => c.className.split(" ")[0]).join(",");
-  check(`layout@${width}: strict parser flags 1:7x; Apply held with its icon after the label (${applyKids})`,
-    min.getAttribute("aria-invalid") === "true" && apply.getAttribute("aria-disabled") === "true" && applyKids === "btn-label,btn-problem");
+  // happy-dom keeps an element's computed style after an ancestor's class changes, so the dot's color is read from a
+  // fresh copy of Apply.
+  const applyDotColor = () => {
+    const copy = apply.cloneNode(true);
+    apply.after(copy);
+    const color = window.getComputedStyle(copy.querySelector(".unsaved-dot")).backgroundColor;
+    copy.remove();
+    return color;
+  };
+  const heldDotColor = applyDotColor();
+  const errorColor = () => window.getComputedStyle(document.documentElement).getPropertyValue("--error").trim();
+  const heldIconOpacity = window.getComputedStyle(apply.querySelector(".btn-label")).opacity;
+  check(`layout@${width}: strict parser flags 1:7x; Apply is held, its icon dims, and its dot turns red, with no badge (${applyKids}; ${heldIconOpacity}, ${heldDotColor})`,
+    min.getAttribute("aria-invalid") === "true" && apply.getAttribute("aria-disabled") === "true" && !apply.disabled && applyKids === "btn-label,unsaved-dot" &&
+    applyDot() && !!errorColor() && heldDotColor === errorColor() && heldIconOpacity === "0.5" && apply.classList.contains("has-pending") &&
+    apply.title === "Correct the minimum duration to apply.");
   check(`layout@${width}: the tooltip sits inside the field`, min.closest(".vfield").contains(document.getElementById(min.getAttribute("aria-describedby"))));
   document.querySelector('[data-sub="presets"]').click();
   const messagesBeforeApply = messages.entries().length;
@@ -646,7 +779,7 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: the mockup has many presets (${document.querySelectorAll(".filter-preset-row").length})`, document.querySelectorAll(".filter-preset-row").length >= 12);
   key(document.querySelector(".filter-preset-row .drag-handle"), "ArrowDown");
   check(`layout@${width}: ArrowDown on a preset's handle moves it and keeps focus on it`,
-    presetNames().startsWith("Short clips,Favorites,Photos only,Long videos,") && document.activeElement?.closest(".filter-preset-row")?.dataset.key === "Favorites" && $("filter-apply-label").textContent === "Apply*");
+    presetNames().startsWith("Short clips,Favorites,Photos only,Long videos,") && document.activeElement?.closest(".filter-preset-row")?.dataset.key === "Favorites" && !apply.disabled && apply.classList.contains("has-pending"));
   document.querySelector('.filter-preset-row[data-key="Long videos"] [title="Edit preset"]').click();
   const presetDialog = topDialog();
   const presetName = presetDialog?.querySelector("input");
@@ -671,11 +804,11 @@ for (const width of [1280, 390]) {
     dot("tab-btn-filter") && dot("panel-btn") && !dot("tab-btn-tags") && $("tab-btn-filter").getAttribute("aria-label") === "Filter, unsaved changes" && $("panel-btn").getAttribute("aria-label").endsWith(", unsaved changes"));
   apply.click();
   check(`layout@${width}: Apply clears the dots`, !dot("tab-btn-filter") && !dot("panel-btn"));
-  // A duration still being typed is an unsaved change for the dots, as in the app, though Apply's star waits.
+  // A duration still being typed is a change for Apply and the dots.
   const appliedMin = min.value;
   input(min, "7:07");
-  check(`layout@${width}: a duration being typed marks the Filter tab and the panel button, without Apply's star`,
-    dot("tab-btn-filter") && dot("panel-btn") && $("filter-apply-label").textContent === "Apply");
+  check(`layout@${width}: a duration being typed marks the Filter tab, the panel button, and Apply`,
+    dot("tab-btn-filter") && dot("panel-btn") && !apply.disabled && apply.classList.contains("has-pending") && applyDot());
   input(min, appliedMin);
   check(`layout@${width}: the dots go once the typed duration is the applied one again`, !dot("tab-btn-filter") && !dot("panel-btn"));
   check(`layout@${width}: valid Apply applies${overlay ? " and closes the overlay" : " and stays open"}`,
@@ -736,19 +869,20 @@ for (const width of [1280, 390]) {
   // An icon fades out: it is rendered while it fades, then not.
   const iconFade = (icon) => (icon.classList.contains("fade-shown") ? "shown" : icon.classList.contains("fade-rendered") ? "fading" : "gone");
   const heldWithIcon = (id) => $(id).getAttribute("aria-disabled") === "true" && $(id).classList.contains("shows-problem") && iconFade($(id).querySelector(".btn-problem")) === "shown";
+  const heldWithRedDot = () => apply.getAttribute("aria-disabled") === "true" && apply.classList.contains("shows-problem") && applyDot() && applyDotColor() === errorColor();
   const disabledNoIconId = (id) => disabledNoIcon($(id));
   check(`layout@${width}: the pair holds Apply and Update Preset, and Add Preset stays disabled while its name is empty`,
-    heldWithIcon("filter-apply") && heldWithIcon("filter-update-preset") && disabledNoIconId("filter-add-preset") && $("filter-update-preset").title === "Change Favorites or Blacklisted first.");
+    heldWithRedDot() && heldWithIcon("filter-update-preset") && disabledNoIconId("filter-add-preset") && $("filter-update-preset").title === "Change Favorites or Blacklisted first.");
   document.querySelector('[data-sub="presets"]').click();
   const messagesBeforePair = messages.entries().length;
   $("filter-update-preset").click();
   check(`layout@${width}: held Update Preset goes to the Blacklisted dropdown and sends no message`,
     !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === $("filter-bl-mode") && messages.entries().length === messagesBeforePair);
   change($("filter-bl"), false);
-  const pairIcons = () => [$("filter-apply").querySelector(".btn-problem"), document.querySelector('.filter-tab[data-sub="general"] .tab-problem'), $("filter-bl-mode").closest(".vfield").querySelector(".vfield-icon")].map(iconFade);
-  check(`layout@${width}: turning Blacklisted off clears the pair and lets Apply proceed, and Apply's, General's, and the pair's icons fade out (${pairIcons()})`,
+  const pairIcons = () => [document.querySelector('.filter-tab[data-sub="general"] .tab-problem'), $("filter-bl-mode").closest(".vfield").querySelector(".vfield-icon")].map(iconFade);
+  check(`layout@${width}: turning Blacklisted off clears the pair and lets Apply proceed with its dot orange again, and General's and the pair's icons fade out (${pairIcons()})`,
     !$("filter-fav-mode").hasAttribute("aria-invalid") && !$("filter-bl-mode").hasAttribute("aria-invalid") && !$("filter-apply").hasAttribute("aria-disabled") &&
-    pairIcons().every((state) => state === "fading"));
+    applyDot() && applyDotColor() !== errorColor() && pairIcons().every((state) => state === "fading"));
   await new Promise((resolve) => setTimeout(resolve, 300));
   check(`layout@${width}: and are gone once faded (${pairIcons()})`, pairIcons().every((state) => state === "gone"));
   input($("filter-min"), "1:7x");
@@ -789,6 +923,17 @@ for (const width of [1280, 390]) {
   await tick();
   check(`layout@${width}: a typed minimum applies, read as the Filter tab shows it after a reload (${$("lib-filters").textContent})`,
     !$("lib-filters").hidden && $("lib-filters").textContent === "Filters: Min 02:00");
+  openTab("library");
+  await tick();
+  check(`layout@${width}: with a filter applied, the count line's total is still the whole library (${summaryShown()})`,
+    tiles().length > 0 && tiles().length < libraryTotal() && summarySays(tiles().length, libraryTotal()));
+  input($("lib-search"), "beach");
+  await tick();
+  const beachTotal = window.mockup.items.filter((item) => !item.removed && item.name.toLowerCase().includes("beach")).length;
+  check(`layout@${width}: and with a search typed too, the total is the search's matches (${summaryShown()})`,
+    beachTotal > 0 && beachTotal < libraryTotal() && summarySays(tiles().length, beachTotal));
+  input($("lib-search"), "");
+  await tick();
   openTab("filter");
   document.querySelector('[data-sub="general"]').click();
   input($("filter-min"), "");
@@ -839,7 +984,9 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: and tags in the plural, with one excluded tag (${$("lib-filters").textContent})`,
     $("lib-filters").textContent === "Filters: 2 of 3 sources · 2 tags · 1 tag excluded");
   openTab("filter");
+  check(`layout@${width}: with a filter applied that isn't the default, Clear all is enabled`, !clearOff() && apply.disabled);
   $("filter-clear").click();
+  check(`layout@${width}: right after Clear all, before Apply, Clear all is disabled and Apply has the change`, clearOff() && changesShown());
   $("filter-apply").click();
   await tick();
   check(`layout@${width}: Clear all filters then Apply hides the Filters line`, $("lib-filters").hidden);
@@ -874,6 +1021,7 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: its popup shows a problem icon, not the Connection kind's check (${browseIcon})`, browseIcon === "sync_problem");
   input($("lib-search"), "");
   openTab("filter");
+  change($("filter-fav"), true);
   $("filter-apply").click();
   check(`layout@${width}: Apply while reconnecting says it couldn't save the presets (${notice()})`, notice() === "Saving presets failed: Couldn't reach the server.");
   dismissNotices();
@@ -950,11 +1098,34 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: a collapsed category's header counts the item's tags in it (${usedBadge.textContent}, "${usedBadge.title}")`,
     !usedBadge.hidden && usedBadge.textContent === String(usedCount) && usedBadge.title === `${usedCount} ${usedCount === 1 ? "tag" : "tags"} on this item` &&
     tagSection(usedCategory.id).querySelector(".tag-category-toggle").getAttribute("aria-label").includes(usedBadge.title));
+  // Expanded, the header keeps the count, and shows the dot while the category holds unsaved changes.
+  const usedToggle = () => tagSection(usedCategory.id).querySelector(".tag-category-toggle");
+  const usedDot = () => tagSection(usedCategory.id).querySelector(".unsaved-dot");
+  usedToggle().click();
+  check(`layout@${width}: expanded, the header still counts the item's tags in it (${usedToggle().getAttribute("aria-label")})`,
+    !collapsedNow(tagSection(usedCategory.id)) && !tagSection(usedCategory.id).querySelector(".category-count").hidden &&
+    tagSection(usedCategory.id).querySelector(".category-count").textContent === String(usedCount) && usedToggle().getAttribute("aria-label").includes(usedBadge.title));
+  const usedChipAdd = () => tagSection(usedCategory.id).querySelector('.tag-chip [title="Add tag"]');
+  usedChipAdd().click();
+  check(`layout@${width}: and shows the dot while it holds an unsaved change, its name saying both (${usedToggle().getAttribute("aria-label")})`,
+    !collapsedNow(tagSection(usedCategory.id)) && !usedDot().hidden && usedToggle().getAttribute("aria-label").endsWith(", unsaved changes") &&
+    usedToggle().getAttribute("aria-label").includes(`${usedCount} ${usedCount === 1 ? "tag" : "tags"} on this item`));
+  usedChipAdd().click();
+  check(`layout@${width}: and loses the dot once the change is undone`, usedDot().hidden && !usedToggle().getAttribute("aria-label").includes("unsaved changes"));
+  usedToggle().click();
+  // A category none of whose tags are in use hides its count.
+  const unusedCategory = window.mockup.tags.find((category) => category.chips.length && !category.chips.some((chip) => playingItem.tags.has(chip.key)));
+  const unusedCount = () => tagSection(unusedCategory.id).querySelector(".category-count");
+  const unusedLabel = () => tagSection(unusedCategory.id).querySelector(".tag-category-toggle").getAttribute("aria-label");
+  check(`layout@${width}: a category with none of its tags in use hides its count, in both tabs (${unusedLabel()})`,
+    unusedCount().hidden && unusedLabel() === unusedCategory.name && filterSection(unusedCategory.id).querySelector(".category-count").hidden);
   const orderBefore = categoryOrder();
   key(document.querySelector('#tags-body [data-key="trips"] .drag-handle'), "ArrowDown");
   check(`layout@${width}: the last category can't move below Uncategorized`, categoryOrder() === orderBefore && categoryOrder().endsWith(",trips,uncategorized"));
   key(document.querySelector('#tags-body [data-key="events"] .drag-handle'), "ArrowUp");
-  check(`layout@${width}: ArrowUp moves a category (${categoryOrder().split(",").slice(0, 3)}) and Save turns on`, categoryOrder().startsWith("people,events,places,") && !$("tags-save").disabled);
+  const tagsSaveDot = () => !$("tags-save").querySelector(".unsaved-dot").hidden;
+  check(`layout@${width}: ArrowUp moves a category (${categoryOrder().split(",").slice(0, 3)}) and Save turns on, with the orange dot`,
+    categoryOrder().startsWith("people,events,places,") && !$("tags-save").disabled && tagsSaveDot());
   document.querySelector('#tags-body [data-key="places"] [title="Edit category"]').click();
   const categoryDialog = topDialog();
   const categoryName = categoryDialog.querySelector("input");
@@ -1049,7 +1220,7 @@ for (const width of [1280, 390]) {
     topDialog()?.textContent.includes("Discard changes?") && document.activeElement?.textContent.trim() === "Cancel" && !line.hidden);
   button(topDialog(), "Discard").click();
   await tick();
-  check(`layout@${width}: after discarding it follows and nothing is pending`, line.hidden && $("tags-save").disabled);
+  check(`layout@${width}: after discarding it follows and nothing is pending, and Save's dot goes`, line.hidden && $("tags-save").disabled && !tagsSaveDot());
   // A collapsed category with unsaved changes shows the dot; a category opens when a tag is added to it or moved into it.
   const weatherChip = tagSection("weather").querySelector(".tag-chip");
   weatherChip.querySelector('[title="Add tag"]').click();
@@ -1083,6 +1254,16 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: a collapsed Filter category counts the filter's tags in it and shows the dot while unapplied (${filterBadge.title})`,
     collapsedNow(filterSection("people")) && !filterBadge.hidden && filterBadge.textContent === "1" && filterBadge.title === "1 tag in the filter" &&
     !filterSection("people").querySelector(".unsaved-dot").hidden);
+  const filterToggle = () => filterSection("people").querySelector(".tag-category-toggle");
+  const peopleMatch = filterSection("people").querySelector(".tag-category-header select");
+  check(`layout@${width}: a Filter category's match control has no Local label, and its name and tooltip say what it is (${peopleMatch?.getAttribute("aria-label")}, ${peopleMatch?.title})`,
+    peopleMatch?.getAttribute("aria-label") === "Match mode for People" && peopleMatch.title === "Match mode" &&
+    !filterSection("people").querySelector(".tag-category-header").textContent.includes("Local"));
+  filterToggle().click();
+  check(`layout@${width}: expanded, the Filter category keeps its count and dot, its name saying both (${filterToggle().getAttribute("aria-label")})`,
+    !collapsedNow(filterSection("people")) && !filterSection("people").querySelector(".category-count").hidden && filterSection("people").querySelector(".category-count").textContent === "1" &&
+    !filterSection("people").querySelector(".unsaved-dot").hidden && filterToggle().getAttribute("aria-label") === "People, 1 tag in the filter, unsaved changes");
+  filterToggle().click();
   $("filter-cancel").click();
   check(`layout@${width}: Cancel clears both`, filterSection("people").querySelector(".category-count").hidden && filterSection("people").querySelector(".unsaved-dot").hidden);
   openTab("tags");
@@ -2015,6 +2196,11 @@ for (const width of [1280, 390]) {
   const picked = $("lib-grid").querySelector(`.lib-tile[data-id="${firstId}"]`);
   check(`layout@${width}: clicking a tile's check icon selects it and starts selection, and plays nothing (${$("bulk-count").textContent})`,
     picked.classList.contains("is-selected") && $("bulk-count").textContent === "1 selected" && !$("bulk-bar").hidden && np() === playingBefore);
+  const bulkIcon = (id) => $(id).querySelector(".material-symbol-icon").dataset.icon;
+  check(`layout@${width}: the bar's Stop selecting and Select all are icon buttons, deselect and select_all, with tooltips (${bulkIcon("bulk-exit")}, ${bulkIcon("bulk-all")})`,
+    bulkIcon("bulk-exit") === "deselect" && $("bulk-exit").title === "Stop selecting" && bulkIcon("bulk-all") === "select_all" &&
+    $("bulk-all").classList.contains("icon-btn") && $("bulk-all").textContent.trim() === $("bulk-all").querySelector(".material-symbol-icon").textContent &&
+    $("bulk-all").title === "Select all" && $("bulk-all").getAttribute("aria-label") === "Select all");
   const others = tiles().filter((tile) => tile !== picked);
   check(`layout@${width}: during selection every tile shows the icon, faded`,
     others.every((tile) => markShown(markOf(tile)) && freshStyle(markOf(tile)).opacity === "0.6"));
@@ -2706,6 +2892,7 @@ for (const width of [1280, 390]) {
   const topDialog = () => [...document.querySelectorAll("dialog.app-dialog")].at(-1);
   const button = (root, label) => [...root.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith(label));
   check(`admin@${width}: no script errors on load ${errors.join("; ")}`, errors.length === 0);
+  check(`admin@${width}: each held action's badge sits on its corner, out of its flow (${cornerBadges(window)})`, cornerBadges(window) >= 6);
   check(`admin@${width}: the header shows the logo, not the "ReelRoulette" text`, !!document.querySelector(".top-bar .brand img") && document.querySelector(".top-bar .brand").textContent.trim() === "");
   $("mock-remote").click();
   check(`admin@${width}: from another machine the token gate shows first`, !$("gate").hidden && $("admin").hidden);
@@ -2855,6 +3042,7 @@ for (const width of [1280, 390]) {
   const $ = (id) => document.getElementById(id);
   const topDialog = () => [...document.querySelectorAll("dialog.app-dialog")].at(-1);
   check(`recovery@${width}: no script errors on load ${errors.join("; ")}`, errors.length === 0);
+  check(`recovery@${width}: the held Continue's badge sits on its corner, out of its flow (${cornerBadges(window)})`, cornerBadges(window) === 1);
   check(`recovery@${width}: titled ReelRoulette Recovery, with restart, stop, updates, and the Log Viewer`,
     document.title === "ReelRoulette Recovery" && document.querySelector("h1").textContent === "ReelRoulette Recovery" && !!$("restart") && !!$("stop") && !!$("update-check") &&
     [...document.querySelectorAll("h2")].some((h) => h.textContent === "Log Viewer") && $("tail").textContent.split("\n").length === 7);

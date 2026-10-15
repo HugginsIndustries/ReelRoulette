@@ -19,9 +19,13 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan WebUI Tweaks and the player's volume and seek indicators
+Docs: Complete WebUI Tweaks' mockup of badges, category counts, the count line, and icon footers
 
-- WebUI Tweaks (M12i3) joins v0.15.0 before Desktop Client Removal, so Desktop Client Removal through WebUI Keyboard Shortcuts become M12i4 to M12i11: a modified marker and unsaved-changes dots that clear when changes are undone, a "{matching} / {total}" count line, a held action's badge over the button's corner, and tag category headers that always show their count and dot, with a mockup review before the app is built.
-- WebUI Volume and Enhanced Audio gains a volume indicator over the player for the scroll wheel and a two-finger drag.
-- WebUI Keyboard Shortcuts gains double-tap seeking on touch screens and a YouTube-style seek indicator for J, L, and double-taps, and its volume keys show the volume indicator.
-- Per-Preset Preset Writes keeps the remembered preset through a preset list that lacks it.
+- A held action's red icon is a badge on the button's top-right corner, out of its flow, so the button keeps its width and its row never wraps, on every page of the mockup. It is the fields' outlined icon, and a flagged Filter section's tab shows the same badge in place of the icon after its name.
+- Tag category headers, in the Tags tab and the Filter tab's Tags section, show their count and unsaved-changes dot whether expanded or collapsed, and a count of 0 stays hidden. The Filter tab's match controls drop their "Local:" label, with "Match mode" as their tooltip.
+- The Library tab's count line reads "{matching} / {total}", and screen readers hear it in words. Its total now counts the library before the filter, as the server does.
+- The Filter tab's footer is icon buttons with tooltips, as the Tags tab's. Apply turns orange with the unsaved-changes dot while there are changes, and its dot turns red while a field holds it. Apply and Cancel are disabled without changes, and Clear all while the filter is the default one. The Tags tab's Save shows the same dot.
+- A held action's move to its field focuses it as a tap does, after its section shows, so the browser brings it above the on-screen keyboard on the phone and the iPad.
+- The selection bar's Select all becomes an icon button and Stop selecting takes the deselect icon, recorded in WebUI Multi-Select and Bulk Actions.
+- The Unsaved state slice treats a duration typed, left, and emptied as no limit, and the Display slice records the app's move to a field, which focuses after the press.
+- The user approved the mockup on a desktop browser, the iPad, and a phone, completing WebUI Tweaks' (M12i3) Mockup slice.

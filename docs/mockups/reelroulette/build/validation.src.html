@@ -102,7 +102,7 @@ h1 { font-size: 1.4rem; margin: 0; }
 
   <section class="group">
     <h2>Disabled or held</h2>
-    <p class="group-note">A field that may sit empty, such as a name typed for an action, is never flagged while it is empty: the action that needs it is disabled, dimmed, and pressing it does nothing. A field that must always hold a value for the app to work, such as Advance after in Settings, is flagged when it is emptied, so the user sees it. Any other problem is flagged in its field, with the red icon and the tooltip. An action whose fields all sit right next to it, a field beside its button or the fields of the dialog it is in, is disabled while one of them has a problem, with no icon on the button, since the field says why. An action that uses a field elsewhere, such as Apply, is held instead: its label dims, the red icon shows on it, and pressing it moves to the field, as the last section shows. Each red icon, in a field, on a held action, or after a Filter section's name, and the tooltip fade in and out over about 250 ms, keeping their place while they fade out; with reduced motion they show and hide at once.</p>
+    <p class="group-note">A field that may sit empty, such as a name typed for an action, is never flagged while it is empty: the action that needs it is disabled, dimmed, and pressing it does nothing. A field that must always hold a value for the app to work, such as Advance after in Settings, is flagged when it is emptied, so the user sees it. Any other problem is flagged in its field, with the red icon and the tooltip. An action whose fields all sit right next to it, a field beside its button or the fields of the dialog it is in, is disabled while one of them has a problem, with no icon on the button, since the field says why. An action that uses a field elsewhere, such as Apply, is held instead: its label dims, a red badge shows on its top-right corner without changing its width, and pressing it moves to the field, as the last section shows. The Filter tab's Apply, an icon button and the one held action with an orange dot, dims its icon and turns its dot red instead of showing the badge. Each red icon, in a field or on the corner of a held action or a Filter section's tab, and the tooltip fade in and out, and Apply's dot changes color, over about 250 ms, the icons keeping their place while they fade out; with reduced motion they show and hide at once.</p>
   </section>
 
   <section class="group">
@@ -261,11 +261,11 @@ h1 { font-size: 1.4rem; margin: 0; }
 
   <section class="group">
     <h2>Apply while the field that is not valid is out of view</h2>
-    <p class="group-note">The minimum duration below is not valid and sits at the bottom of General, out of view. The General tab carries the red icon, so the problem can be found from Tags or Presets too.</p>
+    <p class="group-note">The minimum duration below is not valid and sits at the bottom of General, out of view. The General tab carries the red badge on its corner, so the problem can be found from Tags or Presets too.</p>
     <div class="minis">
       <div>
         <div class="mini" data-mini="jump"></div>
-        <p class="mini-caption">Apply's label dims and the red icon shows on its right. Pressing it applies nothing: it switches to General, scrolls the field into view, puts the cursor in it, and shows its tooltip.</p>
+        <p class="mini-caption">Apply's icon dims and its orange dot turns red. Pressing it applies nothing: it switches to General, scrolls the field into view, puts the cursor in it, and shows its tooltip.</p>
       </div>
     </div>
   </section>
@@ -318,9 +318,9 @@ h1 { font-size: 1.4rem; margin: 0; }
     <div data-subpanel="presets" hidden><p class="filter-hint">Presets as today.</p></div>
   </div>
   <div class="filter-footer">
-    <button class="btn" type="button">Clear all filters</button>
-    <button class="btn" type="button">Cancel</button>
-    <button class="btn has-pending" type="button" data-apply><span class="btn-label">Apply*</span><span class="btn-problem material-symbol-icon">error</span></button>
+    <button class="icon-btn" type="button" aria-label="Clear all filters" title="Clear all filters"><span class="material-symbol-icon">filter_alt_off</span></button>
+    <button class="icon-btn" type="button" aria-label="Cancel" title="Cancel" data-cancel><span class="material-symbol-icon">cancel</span></button>
+    <button class="icon-btn has-pending" type="button" aria-label="Apply" title="Apply" data-apply><span class="btn-label material-symbol-icon">save</span><span class="unsaved-dot"></span></button>
   </div>
 </template>
 
@@ -465,16 +465,30 @@ document.querySelectorAll("[data-mini]").forEach((mini) => {
   }
   [flagModesField, minField, maxField].forEach((field) => field.onChange(badge));
   badge();
+  // The specimen starts with changes to apply. Apply applies them, leaving Apply and Cancel disabled until the next
+  // change.
   const apply = mini.querySelector("[data-apply]");
-  holdAction(apply, () => [flagModesField, minField, maxField], {
+  const cancel = mini.querySelector("[data-cancel]");
+  let applied = false;
+  const hold = holdAction(apply, () => [flagModesField, minField, maxField], {
+    idle: () => applied,
     reason: (field) => (field === flagModesField ? "Change Favorites or Blacklisted to apply." : `Correct the ${field === minField ? "minimum" : "maximum"} duration to apply.`),
     beforeReveal: () => showSub("general")
   });
+  function showChanges() {
+    apply.classList.toggle("has-pending", !applied);
+    apply.querySelector(".unsaved-dot").hidden = applied;
+    cancel.disabled = applied;
+    hold.refresh();
+  }
   apply.addEventListener("click", () => {
-    apply.querySelector(".btn-label").textContent = "Applied ✓";
-    apply.classList.remove("has-pending");
-    setTimeout(() => (apply.querySelector(".btn-label").textContent = "Apply"), 1200);
+    applied = true;
+    showChanges();
   });
+  ["input", "change"].forEach((type) => body.addEventListener(type, () => {
+    applied = false;
+    showChanges();
+  }));
 });
 
 function syncThemeButtons() {
