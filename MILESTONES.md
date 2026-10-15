@@ -9,9 +9,9 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI is the only client on every device from v0.15.0, which removes the desktop client. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter, sort, and weight random picks. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12l1, M12l2, M12l3, M12m, M12n, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t, M12u.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter, sort, and weight random picks, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12l1, M12l2, M12l3, M12m, M12n1, M12n2, M12n3, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t, M12u.
 - **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
-- **v0.16.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access. P28b, P28c, P28d, P28e, P28f, P28g, P28h, P28j, P28k, P28l.
+- **v0.16.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access, and give each account its own favorites, ratings, history, tags, presets, and profiles. P28b, P28c, P28d, P28e, P28f, P28m, P28g, P28h, P28j, P28n, P28k, P28l.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
 - **v0.18.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for the WebUI. P2a, P2b, P2c, P2d, P2f, P2g, P2h.
 - **Unscheduled backlog**: P1, P4, P5, P6, P9a, P9b, P10, P33, P35, P36, P50, P51.
@@ -476,7 +476,7 @@ Last milestone completed: M12i2
 #### Decisions
 
 - A rating is ½ to 5 stars in half-star steps, or none. The catalog stores it as a whole number of half stars from 1 to 10, with no value for none and never 0, so "0 stars" and "not rated" can't both exist. The API gives it in stars, a multiple of 0.5 from 0.5 to 5.
-- Ratings are shared by every device, and by every account once accounts exist, as favorites and the blacklist are. Account Store keeps accounts out of the catalog, which per-account ratings would have to reference, and File Metadata Sync and Extended Metadata writes one rating into each file.
+- Ratings are shared by every device, as favorites and the blacklist are, until accounts exist; then each account has its own, as its favorites and blacklist are.
 - A rating is independent of favorite and blacklist: blacklisting an item keeps its rating, and rating an item changes neither flag.
 - A rating change publishes its own event, `itemRatingChanged`, with the item's id and path, its rating and previous rating, and the `clientId` of the request that made it. Reusing `itemStateChanged` would show a rating change as a favorite change on other devices.
 - The rating has its own line in the Current file section, under the path: the label Rating, five stars, and a Clear button while the item is rated.
@@ -636,7 +636,7 @@ Last milestone completed: M12i2
 - Rating several items at once, which is WebUI Multi-Select and Bulk Actions.
 - Ratings in duplicate review, which is Admin Refresh, Backup, and Duplicate Review.
 - Reading ratings from media files and writing them back, which is File Metadata Sync and Extended Metadata.
-- Ratings kept per account.
+- Ratings kept per account, which is Per-Account Library Data.
 
 ### M12i6 - WebUI Volume and Enhanced Audio
 
@@ -1093,6 +1093,7 @@ Last milestone completed: M12i2
 
 - Rebinding, which is Customizable Keyboard Shortcuts.
 - The Actions menu and selection in the Esc order, after Auto Tag and before the panel, which is WebUI Multi-Select and Bulk Actions.
+- The profile picker's key and its place in the Esc order, which is Library Profiles.
 
 ### M12j - Show in File Manager from the WebUI
 
@@ -1182,8 +1183,8 @@ Last milestone completed: M12i2
 
 #### Decisions
 
-- The server decides playability from one documented container profile, so browse, random play, and counts agree.
-  - The profile lists the playable video containers, starting with mp4, m4v, webm, and mkv.
+- The server decides playability from one documented container list, so browse, random play, and counts agree.
+  - The list names the playable video containers, starting with mp4, m4v, webm, and mkv.
   - Any other video container, including avi and wmv, is not browser-playable.
   - Photos are always playable.
 - A stored preset without the browser-playable field reads it as off.
@@ -1202,7 +1203,7 @@ Last milestone completed: M12i2
 
 - A browser-playable field in the FilterState schema that Favorite and Blacklist Filter Modes adds, applied by the server in the list query, its counts, and random selection.
 - OpenAPI and generated WebUI types.
-- The profile is documented in `docs/api.md`.
+- The container list is documented in `docs/api.md`.
 - `GET /api/media/{token}` and `POST /api/play/{itemId}` answer `503` when the file can't be read, such as on a stalled drive or share, and `404` only when it is missing.
 - The play route's `503` carries the code `play_media_unreadable`.
 - OpenAPI and the generated WebUI types document the new `503` reason on both routes and the new code.
@@ -1220,12 +1221,12 @@ Last milestone completed: M12i2
 
 **Acceptance**
 
-- With the option on, the list query, its counts, and random selection exclude videos outside the profile, and with it off, results are unchanged, in server tests for the option in the list query, counts, and random selection.
+- With the option on, the list query, its counts, and random selection exclude videos outside the container list, and with it off, results are unchanged, in server tests for the option in the list query, counts, and random selection.
 - A stored preset without the field filters with the option off, in server tests of a stored preset without it.
 - OpenAPI and the generated WebUI types carry the field, in contract tests.
 - The media and play routes answer `503` for a file whose read fails with an I/O error and `404` for a missing one, and the play route's `503` carries `play_media_unreadable`, in server tests of both routes with a missing and an unreadable file.
 - OpenAPI and the generated WebUI types carry the new `503` reason and code, in contract tests.
-- The profile is documented in `docs/api.md`, checked by reading it.
+- The container list is documented in `docs/api.md`, checked by reading it.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
 #### WebUI slice
@@ -1252,7 +1253,7 @@ Last milestone completed: M12i2
 
 - Say that the format is not supported in this browser when that is the cause, and "not found" only when the file is missing.
 - The format message reads "This video's format (.{ext}) isn't supported in this browser.".
-- The WebUI asks the server about the file with a one-byte range request to the item's media URL: a successful answer (`200` or `206`) means this browser can't play its format, and a `404` means it is missing. Comparing the container against the profile instead would call an mkv that Safari can't play missing, since the profile counts mkv as playable.
+- The WebUI asks the server about the file with a one-byte range request to the item's media URL: a successful answer (`200` or `206`) means this browser can't play its format, and a `404` means it is missing. Comparing the container against the container list instead would call an mkv that Safari can't play missing, since the list counts mkv as playable.
 - Any other answer, or none, such as a `503` when the server can't read the file, shows a couldn't-load message.
 - On the couldn't-load message the player stops instead of skipping, since the cause probably affects the next file too.
 - A library play answered with `503` and `play_media_unreadable` shows the couldn't-load message, mapped in `mapPlayItemErrorToStatus` in `src/library/libraryPlayModel.ts`, so the server's error text doesn't need to match it.
@@ -1710,7 +1711,7 @@ Last milestone completed: M12i2
 - Loudness normalization, which is WebUI Loudness Normalization.
 - Removing a source with its items, which is Admin Source Management.
 
-### M12n - WebUI Loop Range
+### M12n1 - WebUI Loop Range
 
 - **Status**: ⏳ Planned
 - **Goal**: With Loop on, the user can set a start and an end marker on a video's scrub bar, and the video repeats between them.
@@ -1748,11 +1749,356 @@ Last milestone completed: M12i2
 
 - Markers on a photo, whose scrub bar is its timer.
 
+### M12n2 - Library Profiles
+
+- **Status**: ⏳ Planned
+- **Goal**: Each device chooses a profile from a picker in the header, a named view of the library that shows only the sources picked for it.
+- **Depends on**: Per-Preset Preset Writes, whose preset ids each profile remembers its preset by, Item Ratings, whose rating event gains the item's source id, Rating Filter and Sort, whose catalog schema step comes before this one's, WebUI Keyboard Shortcuts, whose Esc order and shortcut reference the picker's key joins, and WebUI Multi-Select and Bulk Actions, whose ids-only query, selection, and bulk events follow the active profile.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- A profile is a view over the library's data. Favorites, the blacklist, ratings, play history, tags, tag categories, and presets aren't copied per profile, and a change made in any profile shows in every profile.
+- Until accounts exist, the library is one implicit account with several profiles.
+- A profile's sources are all of them, following newly added ones, or a chosen list.
+- The default profile always shows everything and can't be deleted. It is listed first, starts as "Main" in the brand orange (`#ef7f22`), takes the name and color the user sets, and its Edit Profile dialog has only the General tab.
+- Profiles are stored in `library.db`, since they refer to source ids, tag names, and preset ids that mean something only in one catalog, so they travel with catalog export, import, and backups.
+- Each request that lists, counts, or picks items names the active profile in an optional `profileId`. Without one, or with an id the catalog doesn't have, the server uses the default profile, so a device that was offline when its profile was deleted keeps working.
+- The server applies the active profile's sources to the library query and its counts, its ids-only option, random picks, library stats, and Auto Tag's scan, together with enabled sources and any filter or preset. A filter or preset naming a source the profile hides just leaves it out, and when nothing remains the library shows its usual empty message.
+- Item reads, library play, media, and thumbnails name no profile: the playing item, history, and queue carry on across a switch, and only the next random pick uses the new profile.
+- The event stream names no profile, and the WebUI applies its profile to the events it receives, since every event goes to every subscriber through one shared history and a stream per profile would have to reconnect on every switch.
+- Other devices popups, and the refresh's notice of kept folders, leave out items and folders in sources the active profile hides. The item events carry each item's `sourceId` for this.
+- The admin section ignores profiles and covers the whole library.
+- Each device remembers its active profile, and each profile remembers its last applied filter or preset on each device.
+- Switching while the Filter or Tags tab holds unsaved changes asks "Discard changes?" first.
+- U opens the picker, and the arrow keys and Enter choose a profile.
+- The picker hides with the header, in fullscreen and on a phone on its side, where the user turns the phone upright to switch.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ⏳ Planned | The whole profiles design, including the tag, category, and preset visibility that Profile Tag and Preset Visibility builds, approved on a desktop browser, the iPad, and an Android phone. |
+| Server | ⏳ Planned | Profiles and their sources in a new catalog schema step, the profile store, the profile's sources in the library query, its counts, random picks, library stats, and Auto Tag's scan, library stats without disabled sources, and `profilesChanged`. |
+| Contract | ⏳ Planned | The profile routes, `profileId` on the scoped requests, `sourceId` on the item events, and `profilesChanged`, in OpenAPI, the generated WebUI types, and `docs/api.md`. |
+| WebUI | ⏳ Planned | The header's profile button and picker, Add and Edit Profile's General and Sources tabs, switching, the per-device memory, the scoped tabs, and the profile rule for popups and notices. |
+
+#### Mockup slice
+
+**Scope**
+
+- The header's profile button, first in its right-hand group, before the admin icon: the active profile's colored circle with its first letter, in white or dark, whichever stays readable on the color.
+- Its picker, styled like the bell's list: the default profile first, then the others alphabetically, each with an edit icon, and Add Profile at the bottom.
+  - It closes on Escape, a press outside it, a choice, and the panel opening, but only when the panel covers the screen.
+  - It hides with the header in fullscreen and on a phone on its side.
+- Add Profile and Edit Profile, one tabbed in-app dialog:
+  - General: the name, under the field validation pattern, flagged when another profile has it, ignoring case, and the color, from a basic palette or a hex field, random when none is chosen.
+  - Sources: all of them, following newly added ones, or a chosen list.
+  - Tags: categories with their tags as checkboxes, a category's tags greyed while it is off.
+  - Presets: a checkbox for each preset.
+  - Edit Profile has a red Delete that asks first. The default profile's Edit Profile has only the General tab and no Delete.
+- The visibility design that Profile Tag and Preset Visibility builds: the "Only this profile" or "All profiles" question on creating a tag, category, or preset once a second profile exists, and Show in in Edit Tag, Edit Category, and Edit Preset.
+- The Library, Filter, Tags, and Stats tabs in a profile: the Filter tab's sources, the Filters line's source count, and the Stats tab's library cards cover only the profile's sources.
+- Switching: "Discard changes?" while the Filter or Tags tab holds unsaved changes, U and the arrow keys, the picker's place in the Esc order, and U's row in the shortcut reference.
+- A Mockup-tab button for another device deleting the active profile, after which this device shows the default profile.
+- Before the app is built, the user approves the design on a desktop browser, the iPad, and an Android phone.
+
+**Traps**
+
+- The mockup's header ends with a `.top-bar-end` group that holds the admin icon, `#header-admin` (`build/layout.src.html`).
+- The mockup's bell list is `initNotifications` in `common.js`, and its `.notify-list` styles in `common.css` can style the picker too.
+- No tabbed dialog exists in the app or the mockup; the Filter tab's section strip (`role="tablist"`) is the nearest model.
+- Add tag and Add Preset are inline fields, not dialogs, so the creation question is a new dialog with two choices.
+- The mockup's dialogs (`openDialog`, `confirmDialog`, and `nameDialog` in `common.js`) offer Cancel and one action, and `nameDialog` takes extra fields through its `extra(form)` hook.
+- New icons go in `ICONS` in `build_font.py`, and `check.mjs` fails for an icon the font subset lacks, a check Item Ratings adds.
+- `check.mjs` runs the pages in happy-dom with no layout, so the button's size and the picker's place at each width can only be judged on the devices.
+
+**Acceptance**
+
+- The mockup shows the profiles design as the user approved it, and `node docs/mockups/reelroulette/build/check.mjs` passes, with checks of the picker's order and what closes it, the dialog's tabs and fields, the creation question, Show in, "Discard changes?" on a switch, and U and the arrow keys.
+
+#### Server slice
+
+**Scope**
+
+- The catalog moves to schema version 8, with its own upgrade step from 7 that adds `profiles` (id, position, name, its folded form, color, and whether it follows all sources) and `profile_sources` (profile id and source id), and seeds the default profile under a fixed id as "Main" in `#ef7f22`. A new catalog has them too.
+- The catalog's required tables go by schema version, as its item columns do.
+- The profile store lists, creates, updates, and deletes profiles under the library operations lock.
+  - A name another profile has, ignoring case, is refused.
+  - The default profile can't be deleted or given a chosen list of sources.
+  - Deleting a profile deletes its source rows in the same transaction.
+- A profile that follows all sources includes a source added later, and a chosen list doesn't.
+- The server resolves the request's profile to its sources, and `BuildWhere` adds them as a condition outside the filter, so the library query's page, `totalCount`, `searchBaselineCount`, its ids-only option, and random picks keep only the profile's sources.
+- Auto Tag's scan keeps only the profile's sources: a full-library scan reads every item in them, and a scan with no path list their enabled ones.
+- Library stats count only enabled sources, as lists, counts, and random picks do: the totals and the baseline loudness leave disabled sources out, while each source's own row in the per-source list still counts its items, which Admin Source Management shows.
+- With a profile, the stats' totals count only its sources. The baseline loudness stays library-wide, since it is loudness normalization's target and isn't a count.
+- An unknown profile id is read as the default profile, and `last.log` gets one line per unknown id.
+- Each profile write publishes `profilesChanged` with the whole profile list and the request's `clientId`.
+
+**Traps**
+
+- Rating Filter and Sort moves the catalog to schema version 7, and none of 4 to 7 has shipped (inferred). A catalog already at 7, such as a development server's, would fail `HasRequiredCatalogSchema` and be moved aside as damaged if version 7 gained the tables, so they take their own step.
+- `HasRequiredCatalogSchema` checks one `CatalogTables` list at every version (`LibraryCatalogStore.cs`), so adding the new tables to it would make a catalog at 2 to 7 fail the check and be moved aside to `library.db.refused`.
+- `ItemColumnsBySchemaVersion` needs an entry for 8 even though `items` doesn't change, since both schema checks look the version up there.
+- `OlderSchemaVersions()` covers every version from 2 to the one before current, so `CatalogSeed` needs a schema 7 seed, and `CatalogSeedTests.DescribeSchema` compares an upgraded catalog with a new one table by table.
+- The catalog has no foreign keys.
+- `QueryList` calls `BuildWhere` three times and `QueryRandomCandidates` once (`LibraryCatalogListQuery.cs`, `LibraryCatalogSession.cs`), and `searchBaselineCount` is built without the filter, so a source condition inside `AppendFilter` would leave that count covering the whole library.
+- `FromClause` joins only enabled sources, and the filter's source list is an OR group inside `AppendFilter`, so a filter limited to a disabled source finds nothing (measured).
+- The list counts are cached by the WHERE text and its values until the next catalog write, 64 entries at most, all dropped when full, so each profile's counts are cached apart.
+- `ReadStatsGroups` is one `GROUP BY source_id, media_type` pass with no enabled condition, so the totals count a disabled source's items (measured), and `ReadBaselineLoudness` reads every item.
+- WebUI Loudness Normalization's Automatic target reads that baseline, so leaving disabled sources out shifts it a little (inferred).
+- Item Ratings counts the rated items in that grouped pass, so the rated count follows the profile with the others (inferred).
+- Auto Tag's scan has its own SQL, with its own enabled check only for a scan with no path list, and duplicate scan has another (`LibraryCatalogSession.cs`), which the admin section keeps covering the whole library.
+- Smart shuffle's bag is kept per `clientId` and `sessionId` and built again when the eligible ids change (`LibraryPlaybackService.cs`, `RandomSelectionEngineCore.cs`), so a switch starts it over as a filter change does.
+- `ImportSourceFolder` gives a new source a new GUID and keeps an existing root's id, and the catalog import's source remap rewrites only paths, so a profile's source ids survive an import.
+- Route handlers pass their parameters to the services, and nothing carries per-request data into them.
+
+**Acceptance**
+
+- A catalog at each version from 2 to 7 opens upgraded and imports upgraded with the profile tables and the default profile, matches a new catalog's schema, and isn't moved aside, in the catalog upgrade tests.
+- Profiles are listed, created, updated, and deleted, a taken name is refused ignoring case, and the default profile can't be deleted or limited, in profile store tests.
+- A profile that follows all sources includes a newly imported source, and a chosen list doesn't, in profile store tests.
+- The library query's page, both counts, its ids-only option, and random picks keep only the profile's sources, a filter naming only sources it hides finds nothing, and a request without a profile or with an unknown one sees every source, in server tests of the profile's sources.
+- Auto Tag's scan keeps only the profile's sources, in server tests of the scan.
+- Library stats' totals and baseline leave disabled sources out while each source's row keeps its own counts, and with a profile the totals count only its sources, in server tests of library stats.
+- Each profile write publishes `profilesChanged`, in server tests of each write.
+- `dotnet test ReelRoulette.sln` passes.
+
+#### Contract slice
+
+**Scope**
+
+- `GET /api/profiles` lists the profiles, and POST routes, like the other write routes, create, update, and delete one.
+- An optional `profileId` on `POST /api/library/query`, its ids-only option included, `POST /api/random`, and `POST /api/autotag/scan`, and as a query parameter on `GET /api/library/stats`.
+- `profilesChanged` with the whole profile list and `clientId`.
+- `sourceId` on `itemStateChanged` and `itemRatingChanged`, and each item's source id on the bulk favorite and blacklist event and the bulk rating event.
+- OpenAPI, the generated WebUI types, and `docs/api.md`, which describes the routes, the field, and the events.
+
+**Traps**
+
+- CORS allows only `Content-Type`, `Authorization`, and `Last-Event-ID` (`Program.cs` in `ReelRoulette.Server` and `ReelRoulette.ServerApp`), and EventSource can't send headers, so a header naming the profile would need a CORS change and still wouldn't reach the event stream.
+- `Spec_ListsEveryMappedApiAndControlRoute` fails for a route the server maps that the spec doesn't list, and for one the spec lists that the server doesn't serve.
+- `OpenApiSpec.AssertMatchesSchema` needs a payload's fields and its schema's to be the same set, so each event's schema and payload type change together.
+- `npm run verify:contracts` only checks that the generated types match the OpenAPI file.
+
+**Acceptance**
+
+- The profile routes, `profileId`, and the events match their schemas, in contract tests, and `npm run verify:contracts` passes.
+- Each request with `profileId` keeps only that profile's sources, in server tests of each request.
+- The item events carry each item's source id, in server tests of each event.
+- `docs/api.md` describes the routes, `profileId`, and the events, checked by reading it.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### WebUI slice
+
+**Scope**
+
+- The header's profile button and its picker, as the Decisions and the approved mockup describe, first in a right-hand group that the admin icon later joins.
+- U opens the picker with focus on the active profile, the arrow keys move between profiles, and Enter chooses one. U does nothing while the header hides or focus is in a text field.
+- Escape closes the picker first, before the bell's list, the panel, and pseudo-fullscreen, and gives focus back to the button. The shortcut reference lists U.
+- Add Profile and Edit Profile with their General and Sources tabs, and Delete. Profile Tag and Preset Visibility adds the Tags and Presets tabs.
+- The per-device store keeps the active profile as `profiles.active`, and each profile's applied filter, its preset, and its None hold as `filter.appliedByProfile`, which replaces `filter.applied` with no carry-over.
+- Every request the Decisions scope sends the active profile's `profileId`.
+- A switch, after "Discard changes?" when the Filter or Tags tab holds unsaved changes:
+  - sets the new profile's applied filter, preset, and None hold together, and applies its remembered preset again as the server has it now;
+  - starts the Library tab's query and the Filter tab over, and loads the Stats tab again;
+  - clears Auto Tag's kept scan, ends a selection, and closes the picker;
+  - leaves the playing item and history as they are.
+- A device whose active profile is gone, deleted on another device or removed by a catalog import or a backup restore, falls back to the default profile once `profilesChanged` or the profile list says so.
+- The Filter tab lists only the profile's sources, the Filters line counts them out of the profile's sources, and a source list that names none of the profile's sources is not read as every source.
+- The Stats tab's library cards come from the profile's stats.
+- Other devices popups, the bulk ones included, leave out items in sources the profile hides, and a bulk popup counts only the items it shows. The refresh's kept-folder notice leaves out folders the profile hides.
+
+**Traps**
+
+- The header renders only the logo, the pairing prompt, and now playing (`src/ui/Header.tsx`), with no right-hand group; the admin icon comes with WebUI Admin Section.
+- The header sits outside the fullscreen stage, and `body.short-screen .top-bar:not(.is-pairing)` hides it on a phone on its side (`src/styles.css`).
+- The bell's list (`NotificationList` in `src/ui/Notifications.tsx`) has its placement, outside press, Escape, and focus written for the bell alone, and no popover primitive exists in `src/ui`, though WebUI Multi-Select and Bulk Actions' Actions menu may add one (inferred).
+- The panel opening closes the bell's list in every mode (`src/state/appServices.ts`), while the picker closes only when the panel covers the screen, which is `panel.mode` `"overlay"` (`src/panel/panelHost.ts`).
+- `filter.applied` holds the filter, its preset, and the None hold, and an effect writes it only once presets have loaded and the record has changed (`src/state/appStore.ts`). A switch that doesn't set the applied filter, the preset, and the None hold in one batch, as `pickHeaderPreset` does, writes the old profile's record under the new profile's key (inferred).
+- Applying the remembered preset again as the server has it now runs only on the first preset load (`presetsLoaded` in `src/state/appStore.ts`).
+- The Stats tab loads again on events and a new playing item, never on a preset pick (`src/stats/statsTab.ts`), so a switch needs its own trigger.
+- `filterWithGeneralDraft` writes an empty source list when every listed source is checked (`src/filter/filterDialogModel.ts`), and an empty list means every source.
+- Requests go through `createServerRequester` in `src/state/appApi.ts`, except the library play in `src/api/coreApi.ts`, which names no profile.
+- `src/events/sseClient.ts` listens only to the event types registered with it.
+
+**Acceptance**
+
+- The button shows the active profile's circle and first letter in a readable color, the picker lists the default profile first and the others alphabetically, and it closes as the Decisions describe, in Header screen tests.
+- U opens the picker, the arrow keys and Enter choose, U does nothing while the header hides or in a text field, and Escape closes the picker first, in keyboard tests.
+- Add Profile and Edit Profile create, change, and delete a profile, a taken name is flagged with the field validation pattern, and the default profile's dialog has only the General tab, in profile dialog tests.
+- Each scoped request sends `profileId`, in WebUI tests of each request.
+- A switch asks "Discard changes?" while the Filter or Tags tab holds unsaved changes, applies the new profile's remembered filter or preset, loads the Library and Stats tabs again, starts the Filter tab over, ends a selection, and leaves the playing item playing, in WebUI tests of switching.
+- After a page refresh, the device is on its active profile with that profile's filter, in a test for a page refresh keeping both.
+- A device whose profile is deleted elsewhere falls back to the default profile, in WebUI tests of `profilesChanged`.
+- The Filter tab, the Filters line, and the Stats tab cover only the profile's sources, in Filter, Library, and Stats screen tests.
+- Other devices popups and the kept-folder notice leave out hidden sources' items and folders, and a bulk popup counts only the items it shows, in WebUI tests of the popups.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check on the user's phone.
+
+#### Release checks
+
+- Manual: On two devices on two profiles, each one's library, random picks, and Stats tab show only its profile's sources, and an Other devices popup for an item in a source one profile hides doesn't show there.
+- Manual: On the iPad and an Android phone, the picker opens, switches profiles, and adds and edits a profile.
+
+#### Not included
+
+- Showing tags, categories, and presets in only some profiles, which is Profile Tag and Preset Visibility.
+- Favorites, ratings, history, tags, presets, and profiles kept per account, which is Per-Account Library Data.
+- Switching accounts from the picker, which is Account and Profile Picker.
+- Keyboard focus rings and Tab order for the picker and its dialog, which is WebUI Keyboard Navigation and Focus.
+- Switching profiles on a phone on its side, where the header hides.
+- Profiles in the admin section, which covers the whole library.
+
+### M12n3 - Profile Tag and Preset Visibility
+
+- **Status**: ⏳ Planned
+- **Goal**: Each profile shows only the tags, categories, and presets chosen for it, and in a profile a filter or preset leaves out its conditions on the tags the profile hides.
+- **Depends on**: Library Profiles, and Per-Preset Preset Writes, whose preset ids and per-preset routes a preset's visibility and update use.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- Each tag, category, and preset shows either in every profile, "All profiles", or only in the profiles chosen for it, and a profile can differ from that choice. It is stored as whether new profiles show it and which profiles differ.
+- A new profile shows only the tags, categories, and presets marked "All profiles".
+- Unchecking an "All profiles" tag, category, or preset in one profile leaves it "All profiles" with that profile left out, so profiles added later still show it.
+- Creating a tag, category, or preset asks "Only this profile" or "All profiles", only once a second profile exists. "Only this profile" means that profile and the default, which the question doesn't say.
+- Anything created without a profile choice counts as "All profiles", such as a tag Auto Tag applies or a tag added to an item by a new name, and so does a tag whose record a rename merge loses, so it shows everywhere rather than vanishing.
+- The default profile shows every tag, category, and preset.
+- Hiding a category hides its tags.
+- Edit Tag, Edit Category, and Edit Preset get a Show in choice of the non-default profiles, saved with the dialog's other changes by the Tags tab's Save or the Filter tab's Apply.
+- Uncategorized has no Edit Category, so it is shown or hidden only from the profile dialog's Tags tab.
+- In a profile, a filter or preset leaves out its conditions on hidden tags, and no hidden tag appears in the Filter tab. The server and the WebUI apply this one rule, locked by `shared/fixtures/profile-filter-projection.json`.
+- Sources are never left out of a filter this way, since dropping a hidden source's id would turn a list of only hidden sources into every source.
+- Updating a preset in a profile keeps its stored conditions on the tags, categories, and sources the profile hides, decided one tag, category, and source at a time. An empty source list, stored or saved, means every source, and a result that names every source is stored as an empty list.
+- The "modified" marker ignores the conditions on hidden tags and hidden sources.
+- Presets are account-wide: Update Preset changes the preset everywhere it shows.
+- Editing an item's tags leaves its hidden tags untouched.
+- Auto Tag and the Stats tab see only the profile's visible tags.
+- Reordering categories or presets in a profile moves them only among the places the visible ones held, and hidden ones keep their places.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Server | ⏳ Planned | Visibility in a new catalog schema step, kept through tag, category, preset, and profile writes, hidden tags left out of the library query, its counts, random picks, and Auto Tag's scan, and a preset update that keeps its conditions on what the profile hides. |
+| Contract | ⏳ Planned | The creation choice, the visibility writes, each profile's visibility in the profile list, and `profileId` on the preset update, in OpenAPI, the generated WebUI types, and `docs/api.md`. |
+| WebUI | ⏳ Planned | Add and Edit Profile's Tags and Presets tabs, the creation question, Show in, hiding in every tab, the modified marker, and reordering in a profile. |
+
+#### Server slice
+
+**Scope**
+
+- The catalog moves to schema version 9, with its own upgrade step from 8 that adds whether new profiles show it to `tags`, `categories`, and `presets`, on by default and last in each table, and three tables of the profiles that differ, keyed by the tag's folded name, the category's id, and the preset's id. A new catalog has them too.
+- Visibility changes in the same transaction as the write that causes it:
+  - a tag rename moves the tag's rows to its new name;
+  - a rename that merges into another tag leaves the result "All profiles", with no profile differing;
+  - deleting a tag, a category, a preset, or a profile deletes its rows, and a deleted category's tags keep their own.
+- After parsing a filter, and before the library query, its counts, and random picks read it, the server leaves out its selected and excluded tags that the profile hides, directly or through their category, and its match modes for hidden categories.
+- Auto Tag's scan uses only the profile's visible tags.
+- The per-preset update, given a profile, keeps the stored preset's conditions on what the profile hides, as the Decisions describe.
+- Every visibility change publishes `profilesChanged`.
+- Core tests read `shared/fixtures/profile-filter-projection.json`.
+
+**Traps**
+
+- Library Profiles moves the catalog to schema version 8, which hasn't shipped (inferred), so visibility takes its own step, for the reason Library Profiles' Server slice gives.
+- Tags are identified by their folded name, `name_fold`, and `item_tags` refers to them by it. Categories have a string id that the client gives, and Uncategorized is seeded with `sort_order` `int.MaxValue` (`LibraryCatalogStore.cs`, `LibraryCatalogSession.cs`).
+- `RenameTag` updates the renamed tag's row in place and, when the new name is taken, deletes the other row (`LibraryCatalogSession.cs`).
+- `InsertCatalogTagIfMissing` creates tags without a request of their own, from item-tag adds and Auto Tag apply.
+- `AppendSelectedTags` groups selected tags by category, with each category's match mode and the global one, and `AppendExcludedTags` leaves out items holding an excluded tag (`LibraryCatalogListQuery.cs`).
+- Leaving out a tag changes the WHERE text, so the list counts are cached apart (inferred).
+- A preset's filter is stored as the JSON it was saved with, and an empty `includedSourceIds` means every enabled source.
+- The WebUI saves an empty source list when every listed source is checked, so keeping hidden sources by joining the two lists would turn every source into only the hidden ones (inferred).
+
+**Acceptance**
+
+- A catalog at each version from 2 to 8 opens upgraded and imports upgraded with visibility, every existing tag, category, and preset showing in every profile, and matches a new catalog's schema, in the catalog upgrade tests.
+- A tag rename keeps its visibility, a merge leaves it "All profiles", and deleting a tag, category, preset, or profile removes its rows, in server tests of each write.
+- In a profile, the library query, its counts, and random picks ignore conditions on hidden tags, directly or through their category, as the shared fixture's cases say, in Core tests of the fixture and server tests of each read.
+- Auto Tag's scan uses only visible tags, in server tests of the scan.
+- A preset updated in a profile keeps its conditions on the tags, categories, and sources the profile hides, empty source lists included, in server tests of the preset update.
+- `dotnet test ReelRoulette.sln` passes.
+
+#### Contract slice
+
+**Scope**
+
+- `POST /api/tag-editor/upsert-tag`, `POST /api/tag-editor/upsert-category`, and the per-preset create route take an optional profile, for "Only this profile".
+- A route sets a tag's, category's, or preset's visibility: whether new profiles show it and which profiles differ.
+- A profile's create and update take which tags, categories, and presets it shows.
+- The profile list and `profilesChanged` carry each tag's, category's, and preset's visibility.
+- The per-preset update takes an optional `profileId`.
+- OpenAPI, the generated WebUI types, and `docs/api.md`.
+
+**Traps**
+
+- `tagCatalogChanged` carries the whole tag and category lists to every client.
+- Per-Preset Preset Writes publishes `presetCatalogChanged` with the changed preset's id and the request's `clientId`.
+- `Spec_ListsEveryMappedApiAndControlRoute` fails for a route the server maps that the spec doesn't list, and `OpenApiSpec.AssertMatchesSchema` needs a payload's fields and its schema's to be the same set.
+
+**Acceptance**
+
+- The creation choice, the visibility route, and the profile list's visibility match their schemas, in contract tests, and `npm run verify:contracts` passes.
+- A tag, category, or preset created with a profile shows only in it and the default profile, in server tests of each create.
+- `docs/api.md` describes the creation choice, the visibility route, and `profileId` on the preset update, checked by reading it.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### WebUI slice
+
+**Scope**
+
+- Add and Edit Profile's Tags tab, with categories and their tags as checkboxes and a category's tags greyed while it is off, and its Presets tab, with a checkbox for each preset. Add Profile starts with the "All profiles" ones checked.
+- The creation question, a dialog with two choices, after Add tag, New Category, and Add Preset once a second profile exists.
+- Show in in Edit Tag, Edit Category, and Edit Preset.
+- In a profile, hidden tags, categories, and presets don't show:
+  - in the Filter tab's tags and presets, where conditions on hidden tags stay out of its block of tags the catalog doesn't have;
+  - in the Tags tab, an item's hidden tags included;
+  - in the Library tab's preset dropdown, where a remembered preset the profile hides shows **None\*** with its filter kept, as a deleted one does, and in the Filters line's tag counts;
+  - in Auto Tag and the Stats tab's tag chips.
+- Applying a filter or preset in a profile leaves out its conditions on hidden tags, as the shared fixture says.
+- The "modified" marker compares a preset with its conditions on hidden tags and sources left out.
+- A new tag, category, or preset name is checked against the whole catalog, hidden ones included, as the approved mockup words it.
+- Reordering in a profile, as the Decisions describe.
+- WebUI tests read `shared/fixtures/profile-filter-projection.json`.
+
+**Traps**
+
+- The shared tag catalog signal (`src/tags/tagCatalog.ts`) feeds only the Stats tab; the Filter and Tags tabs render from their own models, so each one leaves out hidden tags itself.
+- The Filter tab lists a selected or excluded tag the catalog doesn't have in an Uncategorized block (`src/filter/filterDialogModel.ts`).
+- A category reorder sends each changed category's place in the list shown as its `sortOrder` (`src/library/tagSave.ts`), which would collide with hidden categories' places.
+- New tag and category names are checked against what the editor shows (`src/tags/tagEditorModel.ts`), and the server merges a tag given a taken name, so a new tag named like a hidden one would merge into it.
+- Edit Tag allows another tag's name on purpose, since the server merges the two.
+- The in-app confirmation offers Cancel and one action (`src/dialogs/dialogs.ts`).
+- The Tags tab's Save sends adds and removes through `apply-item-tags`, never an item's whole tag list.
+
+**Acceptance**
+
+- The Tags and Presets tabs show and change which tags, categories, and presets a profile shows, with a category's tags greyed while it is off, and Add Profile starts with the "All profiles" ones checked, in profile dialog tests.
+- The creation question shows only once a second profile exists, and each answer creates the tag, category, or preset as it says, in Tags and Filter screen tests.
+- Show in changes a tag's, category's, or preset's profiles with the dialog's Save or Apply, in Tags and Filter screen tests.
+- Hidden tags, categories, and presets show in no tab, a filter's conditions on hidden tags stay out of the Filter tab, and a remembered preset the profile hides shows **None\***, in Filter, Tags, Library, and Stats screen tests.
+- Applying a filter or preset leaves out conditions on hidden tags as the shared fixture says, in WebUI tests of the fixture.
+- The "modified" marker ignores hidden tags and sources, in WebUI preset matching tests.
+- A name a hidden tag, category, or preset has is flagged, in Tags and Filter screen tests.
+- A reorder in a profile keeps hidden categories and presets in their places, in WebUI tests of reordering.
+- Saving an item's tags in a profile leaves its hidden tags on it, in Tags screen tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check on the user's phone.
+
+#### Release checks
+
+- Manual: In a profile that hides a tag and a preset, neither shows in any tab, a preset updated there keeps its condition on the hidden tag in the default profile, and a tag created "Only this profile" doesn't show in another profile.
+
+#### Not included
+
+- Tags, categories, and presets kept per account, which is Per-Account Library Data.
+
 ### M12o1 - WebUI Admin Section
 
 - **Status**: ⏳ Planned
 - **Goal**: Everything the Operator page does, apart from its logs, moves into a full-page admin section of the WebUI.
-- **Depends on**: WebUI Responsive Layout and Panels, whose header holds the admin icon, and WebUI Auto-Pause and Photo Scrub Bar, whose Auto-Pause the admin view follows, and WebUI In-App Dialogs, whose confirmation the control token change uses, and WebUI Field Validation Pattern, whose pattern its settings fields use, and Catalog Open and Backup Safety, whose library state and message the admin section shows, and WebUI Notifications, whose bell and popups the admin view uses, and WebUI Multi-Select and Bulk Actions, whose control-token prompt its gate reuses.
+- **Depends on**: WebUI Responsive Layout and Panels, whose header the admin icon joins, and Library Profiles, whose profile button the admin icon follows, and WebUI Auto-Pause and Photo Scrub Bar, whose Auto-Pause the admin view follows, and WebUI In-App Dialogs, whose confirmation the control token change uses, and WebUI Field Validation Pattern, whose pattern its settings fields use, and Catalog Open and Backup Safety, whose library state and message the admin section shows, and WebUI Notifications, whose bell and popups the admin view uses, and WebUI Multi-Select and Bulk Actions, whose control-token prompt its gate reuses.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Slices
@@ -1782,6 +2128,8 @@ Last milestone completed: M12i2
 **Scope**
 
 - Admin is a full-page view opened from the header's admin icon, not a panel tab. The icon is always visible.
+- The admin icon sits after the profile button, at the end of the header's right-hand group.
+- The admin section ignores profiles: its header shows no profile button, and its requests name no profile, so it covers the whole library.
 - The view keeps the Operator page's responsive layout, restyled to match the rest of the WebUI.
 - Its layout: a bar with a back arrow ("Back to the player"), the title Admin, and at its right end the notifications bell; a row of jump links to its sections; and cards, each titled with its icon, in this order: Server (`dns`), Web access (`lan`), Control (`key`), Library refresh (`sync`), Library transfer (`swap_vert`), Backups (`storage`), Sources (`folder`), Duplicates (`content_paste`), Testing suite (`bug_report`), Connected clients (`group`), Log Viewer (`article`), and API events (`description`).
 - Sources, Duplicates, the Log Viewer, and API events take the full width, and on a wide screen the others take half.
@@ -2208,7 +2556,7 @@ Last milestone completed: M12i2
 
 - **Status**: ⏳ Planned
 - **Goal**: Manage sources from the WebUI admin section, with server routes for what no client can do today, and every open WebUI follows source changes without a reload.
-- **Depends on**: WebUI Admin Section and WebUI Multi-Select and Bulk Actions, whose item removal route it uses.
+- **Depends on**: WebUI Admin Section, WebUI Multi-Select and Bulk Actions, whose item removal route it uses, and Library Profiles, whose profiles' source lists a removed source leaves.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -2231,6 +2579,8 @@ Last milestone completed: M12i2
 - Server routes to rename a source and remove a source (its items leave the catalog; files stay on disk).
 - An admin-only route that checks a typed path: a folder on the server that is not already a source. A contract change that only adds.
 - Source changes publish events so connected clients update. Import gets an event too.
+- Removing a source also removes it from every profile's chosen list of sources in the same transaction, and publishes `profilesChanged` when a profile changed.
+- A source added later joins only the profiles that follow all sources, as Library Profiles sets out.
 - OpenAPI and generated WebUI types for the new routes.
 
 **Traps**
@@ -2238,10 +2588,12 @@ Last milestone completed: M12i2
 - No route renames or removes a source.
 - The path check is a new admin-only route, a contract change that only adds (inferred).
 - Only enabling or disabling a source publishes an event (`sourceStateChanged`), and `POST /api/sources/import` publishes nothing.
+- Library Profiles keeps a profile's chosen sources in `profile_sources`, and the catalog has no foreign keys, so removing a source doesn't remove its rows there by itself.
 
 **Acceptance**
 
 - Removing a source removes its items from the catalog and leaves its files, in server tests of the route.
+- Removing a source removes it from every profile's chosen list and publishes `profilesChanged`, in server tests of the route.
 - The path check route flags a typed path that is not a folder on the server, or is already a source, in server tests of the route.
 - Adding, renaming, removing, enabling, and disabling a source each publish an event, in server tests of the event each source change publishes.
 - New routes are in OpenAPI, and `npm run verify:contracts` passes.
@@ -2283,7 +2635,7 @@ Last milestone completed: M12i2
 
 **Scope**
 
-- On a source event, reload the loaded library window, keeping the scroll position as the desktop did, and refresh the Filter tab's source list.
+- On a source event, reload the loaded library window, keeping the scroll position as the desktop did, and refresh the Filter tab's source list and the profile dialog's Sources tab.
 - Overlapping resyncs: keep one in flight and coalesce events that arrive meanwhile, since this milestone adds source events that reload every open WebUI.
 
 **Traps**
@@ -2295,7 +2647,7 @@ Last milestone completed: M12i2
 
 **Acceptance**
 
-- Adding, renaming, removing, enabling, or disabling a source from the admin section updates every open WebUI's library window and Filter tab source list without a reload, in WebUI tests for source event handling.
+- Adding, renaming, removing, enabling, or disabling a source from the admin section updates every open WebUI's library window, Filter tab source list, and profile dialog's Sources tab without a reload, in WebUI tests for source event handling.
 - Overlapping resync events cause one reload at a time, in WebUI tests for overlapping resyncs.
 - `npm run verify` passes, and one quick spot check of an admin section source toggle seen in another WebUI tab.
 
@@ -2321,7 +2673,7 @@ Last milestone completed: M12i2
 #### Decisions
 
 - Everything this milestone adds is gated like the rest of the admin section.
-- Settings and backups are not part of the transfer. Presets and thumbnail revision and dimensions travel with `library.db`. JPEG files stay in the local thumbnail directory.
+- Settings and backups are not part of the transfer. Presets, profiles, and thumbnail revision and dimensions travel with `library.db`. JPEG files stay in the local thumbnail directory.
 - Import also works while the server runs without a library, and can import one of the server's own backups, which is how the admin section restores a backup.
 - Before it replaces the library, an import or a restore takes a catalog backup of the current one, even with server backups off and whatever the backup gap, so a mistaken import or restore can be undone from the restore list.
 - That backup is listed first in the restore list, labeled by when it was made and what it came before, such as "Today 14:32 (before import)" or "Today 14:32 (before restore)".
@@ -2339,7 +2691,7 @@ Last milestone completed: M12i2
 
 **Scope**
 
-- List every holder of catalog state and connections in the server, such as the catalog session and its SQLite connection pool, the cached list counts, the random shuffle bag, refresh stages, catalog backups, duplicate and auto-tag scans, and the event revision, and how each is stopped, cleared, or reloaded for a replace.
+- List every holder of catalog state and connections in the server, such as the catalog session and its SQLite connection pool, the cached list counts, the random shuffle bag, the profiles, refresh stages, catalog backups, duplicate and auto-tag scans, and the event revision, and how each is stopped, cleared, or reloaded for a replace.
 - Include how SQLite connections are closed before the rename on Windows.
 - Decide whether an import waits for or refuses a running refresh.
 
@@ -2358,7 +2710,7 @@ Last milestone completed: M12i2
 - The export route suggests `library-{date}.db` as the download's name (its `Content-Disposition` file name) in place of `library.db`, dated by the server's local date, such as `library-2026-10-08.db`. Only the suggested name changes.
 - **Export Library** in the admin section uses the same route, `GET /api/library/catalog-checkpoint`. Export is a plain download in every browser, with no save picker, so it has no ellipsis.
 - A Your actions popup says "Downloading {file}." as the download starts.
-- The library transfer card's hint reads "Export saves the whole library: items, tags, presets, and stats. Import replaces it while the server runs; the current library is kept aside until the new one opens."
+- The library transfer card's hint reads "Export saves the whole library: items, tags, presets, profiles, and stats. Import replaces it while the server runs; the current library is kept aside until the new one opens."
 
 **Traps**
 
@@ -2405,7 +2757,7 @@ Last milestone completed: M12i2
 - The admin section can import a `library.db` while the server is running, in server tests for running-server import and admin section UI tests for import.
 - An interrupted import leaves the previous catalog or the finished incoming file, never a partial database or an empty catalog, in server tests for interrupted-replace recovery.
 - Import rejects a file that is not a library database and does not replace the live catalog, in server tests for its rejection.
-- Import replaces the catalog, including presets and thumbnail revision and dimensions, while settings and backups stay where they are and JPEG files stay in the local thumbnail directory, in server tests for running-server import.
+- Import replaces the catalog, including presets, profiles, and thumbnail revision and dimensions, while settings and backups stay where they are and JPEG files stay in the local thumbnail directory, in server tests for running-server import.
 - Connected clients resync after an import, in server tests for running-server import.
 - Before an import replaces the library, a catalog backup of the current one is taken, even with server backups off, in server tests for the backup taken before a replace.
 - An import while a refresh, backup, or scan runs does what the report decided, and never leaves a partial catalog, in server tests for an import during a refresh.
@@ -2507,7 +2859,7 @@ Last milestone completed: M12i2
 
 - **Status**: ⏳ Planned
 - **Goal**: Every part of the WebUI works from the keyboard alone, and keyboard focus is always visible, in the brand orange.
-- **Depends on**: WebUI In-App Dialogs, WebUI Drag Reordering, WebUI Responsive Layout and Panels, WebUI Library Tab, WebUI Tags and Filter Tabs, WebUI Auto-Pause and Photo Scrub Bar, WebUI Notifications, WebUI Settings Panel, WebUI Admin Section, Log Viewer Redesign, Recovery Page and Operator Retirement, Admin Refresh, Backup, and Duplicate Review, Admin Source Management, Admin Library Catalog Transfer, WebUI Stats Panel, WebUI Ambient Mode, WebUI Volume and Enhanced Audio, WebUI Player Controls, WebUI Keyboard Shortcuts, Testing Suite Overhaul, WebUI Grid Row Reuse, WebUI Multi-Select and Bulk Actions, Item Ratings, WebUI Player Rating, Rating Filter and Sort, and WebUI Loop Range, whose markers can be set from the keyboard.
+- **Depends on**: WebUI In-App Dialogs, WebUI Drag Reordering, WebUI Responsive Layout and Panels, WebUI Library Tab, WebUI Tags and Filter Tabs, WebUI Auto-Pause and Photo Scrub Bar, WebUI Notifications, WebUI Settings Panel, WebUI Admin Section, Log Viewer Redesign, Recovery Page and Operator Retirement, Admin Refresh, Backup, and Duplicate Review, Admin Source Management, Admin Library Catalog Transfer, WebUI Stats Panel, WebUI Ambient Mode, WebUI Volume and Enhanced Audio, WebUI Player Controls, WebUI Keyboard Shortcuts, Testing Suite Overhaul, WebUI Grid Row Reuse, WebUI Multi-Select and Bulk Actions, Item Ratings, WebUI Player Rating, Rating Filter and Sort, WebUI Loop Range, whose markers can be set from the keyboard, Library Profiles, whose picker and profile dialog it reaches, and Profile Tag and Preset Visibility, whose Show in and profile dialog tabs it reaches.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
@@ -2524,7 +2876,7 @@ Last milestone completed: M12i2
 - Tab from a tile reaches its check icon, which shows as hovering shows it, and Space or Enter toggles it, starting selection as a click does, with focus staying on it. Tab again leaves the grid.
 - Enter or Space on a tile still chooses it.
 - Selection updates the tiles in place, as WebUI Grid Row Reuse patches a tile, so focus is never lost to a redraw.
-- Every other screen works from the keyboard, each control in a sensible Tab order and with an accessible name: the player's controls and seek bar; the notifications bell, its list with Clear, Close, and Notification settings, and the popups' Dismiss; the panel button and tab row, where the arrow keys, Home, and End move between tabs; the Library controls; the Filter tab and its sections; the Tags tab, its chips, category headers, and drag handles, and Auto Tag; the Stats tab; the Settings tab, including the Ambient mode settings section and its sliders and the Keyboard shortcuts section; the in-app dialogs; the admin view, its sections, the Log Viewer, duplicate review, and the control-token gate; and the recovery page.
+- Every other screen works from the keyboard, each control in a sensible Tab order and with an accessible name: the player's controls and seek bar; the notifications bell, its list with Clear, Close, and Notification settings, and the popups' Dismiss; the panel button and tab row, where the arrow keys, Home, and End move between tabs; the header's profile button and its picker, and Add and Edit Profile, whose tab row the arrow keys, Home, and End move along as the panel's do, with its color palette and its Tags and Presets checkboxes, and Show in in Edit Tag, Edit Category, and Edit Preset; the Library controls; the Filter tab and its sections; the Tags tab, its chips, category headers, and drag handles, and Auto Tag; the Stats tab; the Settings tab, including the Ambient mode settings section and its sliders and the Keyboard shortcuts section; the in-app dialogs; the admin view, its sections, the Log Viewer, duplicate review, and the control-token gate; and the recovery page.
 - What covers the page keeps Tab inside it while open and returns focus where it was on close: the panel as a full-screen overlay, as Auto Tag and the in-app dialogs already do.
 - The keyboard shortcuts stay as WebUI Keyboard Shortcuts binds them.
 - Where the arrow keys have a local job, in the grid, the tab row, sliders, and on a focused drag handle, they keep it instead of playing the previous or next item.
@@ -2765,11 +3117,13 @@ Last milestone completed: M12i2
   - Export writes half stars to formats that hold fractions and rounds them for formats that hold whole stars, in a direction this milestone decides.
   - Clearing a rating removes it from the file on export.
 - Metadata shows in library browse and filters, with batch metadata edit through the API.
+- Tags it imports have no profile choice, so they count as "All profiles", as Profile Tag and Preset Visibility sets out.
+- Decides whose rating and tags it reads from and writes to a file once each account has its own, as Per-Account Library Data sets out.
 - Unsupported formats, read-only or locked files, and network paths are handled, with result summaries and structured logs.
 
 #### Traps
 
-- The catalog is at schema version 4 today. Item Ratings moves it to 5, and Rating Filter and Sort to 6.
+- The catalog is at schema version 4 today. Per-Preset Preset Writes moves it to 5, Item Ratings to 6, Rating Filter and Sort to 7, Library Profiles to 8, and Profile Tag and Preset Visibility to 9.
 - No metadata library is referenced today.
 - Item Ratings stores a rating as 1 to 10 half stars, with no value for unrated.
 - XMP's `xmp:Rating` is a real number from −1 to 5, where 0 is unrated and −1 rejected; Matroska's RATING tag allows decimals from 0 to 5; and Windows' Rating property is a 1–99 percentage that it shows as whole stars (inferred).
@@ -2817,7 +3171,8 @@ Last milestone completed: M12i2
 - Date ranges (`7d`, `30d`, `90d`, `1y`, `all`) and optional grouping.
 - Charts and summary panels in the WebUI stats panel, a date-range selector, and image and CSV or JSON export.
 - The server computes analytics; clients only render.
-- Decides whether history is per account.
+- History is kept per account once accounts exist, as Per-Account Library Data sets out.
+- Analytics cover the active profile's sources, as the Stats tab's library cards do.
 
 #### Traps
 
@@ -3257,16 +3612,19 @@ Last milestone completed: M12i2
 
 - **Status**: ⏳ Planned
 - **Goal**: Every path that reads or serves library items asks one server-side source access policy, which allows everything until per-user permissions exist.
+- **Depends on**: Library Profiles, whose source condition in the library query the policy joins.
 
 #### Scope
 
 - One policy takes the request's session context and returns the sources it may see.
 - It is applied on every item path: library list query, random selection, item play, `GET /api/media/{token}`, `GET /api/thumbnail/{itemId}`, `POST /api/library/item`, the tag-editor model, auto-tag and duplicate scans, library stats, and `GET /api/sources`.
 - The default policy allows every enabled source, so behavior does not change.
+- A request's sources are those the policy allows and its profile shows, so a profile can only narrow what the policy allows.
 
 #### Traps
 
 - Source enabled state is applied by separate SQL conditions in list query, random selection, and item play.
+- Library Profiles adds the active profile's sources as one condition in `BuildWhere`, outside the filter, which the list query, its counts, and random selection share, and Auto Tag's scan has a copy of it.
 
 #### Acceptance
 
@@ -3294,17 +3652,18 @@ Last milestone completed: M12i2
   - Catalog import replaces the catalog and leaves accounts as they are.
   - Catalog backups do not contain accounts.
   - The account store keeps its own backup copies on the catalog backup schedule, in separate files that a catalog restore does not touch.
-- Account records: stable id, name, level (admin or user), and a bcrypt or Argon2 PIN hash.
+- The catalog refers to accounts by id, since Per-Account Library Data keeps each account's library data in `library.db`, while account records and PIN hashes stay in this store.
+- Account records: stable id, name, color, level (admin or user), and a bcrypt or Argon2 PIN hash.
 - No custom, fast, or reversible PIN storage.
 - Multiple admins are allowed.
 - No default account is seeded. A store with no accounts is the first-run setup state.
 - Per-account, per-device failed attempts, with a one-hour lockout after 10 failures.
 - There is no guest account.
-- The schema keeps account identity stable across name and PIN changes, since source permissions will reference account ids here and source ids in the catalog.
+- The schema keeps account identity stable across name and PIN changes, since source permissions will reference account ids here and source ids in the catalog, and the catalog's per-account data will reference account ids.
 
 #### Acceptance
 
-- Accounts persist in their own store with stable id, name, level, and a bcrypt or Argon2 hash, and no plaintext PIN, in store tests for creation, hashing, and levels.
+- Accounts persist in their own store with stable id, name, color, level, and a bcrypt or Argon2 hash, and no plaintext PIN, in store tests for creation, hashing, and levels.
 - A new store has no accounts, and no default account or PIN exists, in a store test of an empty new store.
 - Catalog export contains no account data, catalog import leaves accounts unchanged, and catalog backups contain no account data, in tests that a catalog export, import, and backup neither contain nor change accounts.
 - The account store has its own backups, and a catalog restore does not touch them, in store tests for backups.
@@ -3441,7 +3800,7 @@ Last milestone completed: M12i2
 
 - **Status**: ⏳ Planned
 - **Goal**: Admins create and maintain accounts in the admin section.
-- **Depends on**: Admin First-Run Setup.
+- **Depends on**: Admin First-Run Setup and Per-Account Library Data, whose first account it protects.
 
 #### Scope
 
@@ -3452,13 +3811,16 @@ Last milestone completed: M12i2
   - resets a PIN,
   - removes accounts.
 - The last admin cannot be removed or demoted.
-- Admins change their own name and PIN through the same self-service flow as users.
+- The first account, which owns the library's data from before accounts and which a direct localhost connection uses, cannot be removed or demoted.
+- A new account gets a random color.
+- Admins change their own PIN through Self-Service PIN Change, and their own name and color through Account and Profile Picker, as users do.
 
 #### Acceptance
 
 - Admins can list, add, edit, reset PINs for, and remove accounts, in server tests of account changes and PIN resets, and admin section UI tests for the section.
 - User-level accounts cannot reach account administration, in server tests.
 - The last admin cannot be deleted or demoted, in server tests of last-admin protection, and admin section UI tests for its errors.
+- The first account cannot be deleted or demoted, in server tests of first-account protection.
 - Changes persist across restart and apply to later logins, in server tests of account changes and level changes.
 
 ### P28h - Self-Service PIN Change
@@ -3484,7 +3846,7 @@ Last milestone completed: M12i2
 
 #### Not included
 
-- Profile editing beyond name and PIN.
+- Changing the account's own name and color, which is Account and Profile Picker.
 
 ### P28j - WebUI Login Gate
 
@@ -3496,7 +3858,7 @@ Last milestone completed: M12i2
 
 - Opened from localhost, the WebUI is trusted and shows no login.
 - Otherwise, an account tile grid shows before the shell, library, player, or random controls.
-- Tiles use `admin_panel_settings` for admins and `account_circle` for users, with names below.
+- Each tile shows the account's colored circle with its first letter, in white or dark, whichever stays readable, as the profile picker shows a profile, with the account's name below.
 - Selecting a tile shows a PIN prompt.
 - Server-unavailable messages offer a retry.
 - The gate also has a setup-incomplete message.
@@ -3506,7 +3868,7 @@ Last milestone completed: M12i2
 #### Acceptance
 
 - From another device, no library, random, or player surface is reachable before login; from localhost, no login is shown, in WebUI tests for gating.
-- Tiles use the required icons and names at desktop and mobile widths, in WebUI tests for login.
+- Tiles show each account's colored circle, first letter, and name at desktop and mobile widths, in WebUI tests for login.
 - Failed PINs and lockouts show clear errors, including the remaining lockout time, in WebUI tests for wrong PIN and lockout.
 - Before first-run setup is done, the gate shows the setup-incomplete message, in WebUI tests for setup incomplete.
 - Reloading or reopening needs a new login, in WebUI tests for reload.
@@ -3523,6 +3885,7 @@ Last milestone completed: M12i2
 - Remember-me sessions.
 - Remembered accounts.
 - Biometrics.
+- Switching accounts and signing out from the header, which is Account and Profile Picker.
 
 ### P28k - Per-User Source Permissions
 
@@ -3538,6 +3901,7 @@ Last milestone completed: M12i2
 - Denied sources are enforced through the source access policy on every path it covers, including `GET /api/media/{token}`, `GET /api/thumbnail/{itemId}`, and `POST /api/play/{itemId}`.
 - WebUI Notifications' kept-source notice leaves out sources the session's source list doesn't include.
 - Admins and localhost connections see every source.
+- A profile's sources are cut to the sources its account may see: a source the account loses stays in the profile's chosen list, and the policy hides it.
 
 #### Acceptance
 
@@ -3547,6 +3911,7 @@ Last milestone completed: M12i2
 - The kept-source notice leaves out a kept source missing from the session's source list, in a WebUI test of the notice.
 - Permission changes reach active sessions through events or requery, in server tests.
 - Grants survive account and source renames, and a catalog import leaves grants for missing sources inert, in server tests, including a catalog-import test for stale grants.
+- A profile's library, counts, and random picks leave out a source its account may not see, even when the profile lists it, in policy tests with a profile.
 
 #### Not included
 
@@ -3563,6 +3928,7 @@ Last milestone completed: M12i2
 #### Scope
 
 - WebUI source lists, library browse, random playback, and item playback rely only on what the server returns for the session.
+- The profile dialog's Sources tab lists only the sources the server returns for the session.
 - The header's admin icon, always visible before accounts, shows only to admins, including localhost, which is trusted as admin.
 - The admin section is reachable only by admins.
 - Messages for a user with no visible sources and for an item that becomes inaccessible.
@@ -3570,7 +3936,7 @@ Last milestone completed: M12i2
 
 #### Acceptance
 
-- The WebUI never shows denied sources or plays denied items, in WebUI tests for hidden sources and inaccessible items.
+- The WebUI never shows denied sources or plays denied items, and the profile dialog's Sources tab lists only the session's sources, in WebUI tests for hidden sources and inaccessible items.
 - Permission changes made in the admin section reach open WebUI sessions through events or requery, in WebUI tests.
 - Client filtering cannot widen what the server returns, in WebUI tests.
 - Users without admin rights do not see the admin icon and cannot open the admin section, in WebUI tests for the admin icon's and admin section's visibility.
@@ -3584,6 +3950,85 @@ Last milestone completed: M12i2
 - Client requests for source access.
 - Approval workflows.
 - External sharing.
+
+### P28m - Per-Account Library Data
+
+- **Status**: ⏳ Planned
+- **Goal**: Each account has its own favorites, blacklist, ratings, play history, tags, categories, presets, and profiles, and the library's data from before accounts belongs to the first account.
+- **Depends on**: Account Store, Auth Cutover for API and Admin, so every request and event stream names its account, Admin First-Run Setup, whose first admin account takes the existing data, Library Profiles, and Profile Tag and Preset Visibility.
+
+#### Scope
+
+- A catalog schema step moves the library's existing favorites, blacklist, ratings, play counts and last played, item tags, tags, categories, presets, and profiles, with their sources and visibility, to the first account.
+- Favorites, the blacklist, ratings, play counts, and last played move out of `items` into rows per account and item.
+- No global tags or presets remain: each account has its own.
+- The catalog refers to accounts by id, and account records and PIN hashes stay in the account store, as Account Store keeps them.
+- The step gives the existing data a reserved first-account id, since a catalog upgrades when the server starts, before setup has created any account, and the first admin account that setup creates takes that id.
+- The first account is always an admin, and a direct localhost connection, which PIN Login API and Sessions trusts as admin, uses it.
+- The first account takes the default profile's name and color, and from then on each account's default profile has the account's name and color.
+- A new account starts with no favorites, ratings, history, tags, categories, or presets, and with one default profile.
+- Item-state, rating, playback, tag, preset, and profile events, and Other devices popups, go only to the same account's devices.
+- Random picks, Smart shuffle, rating-weighted picks, library stats, and Auto Tag use the account's own data.
+- A profile's sources come from those its account may see.
+- Decides what a catalog import or a backup restore does with data for account ids the account store doesn't have.
+- Decides whose favorites, ratings, plays, and tags duplicate review shows and Select Best compares.
+
+#### Traps
+
+- Favorite, blacklist, play count, and last played are columns of `items`, and Item Ratings adds the rating there too.
+- `item_tags` refers to tags by their folded name.
+- Every event goes to every subscriber through one shared history of 256 events (`ServerStateService.cs`), so sending events per account needs a filter per subscriber.
+- Smart shuffle's bag is kept per client and session (`LibraryPlaybackService.cs`).
+- Account Store keeps accounts out of `library.db`, so catalog export carries no PIN hashes and import doesn't replace accounts.
+
+#### Acceptance
+
+- A catalog from before accounts opens upgraded with all its data under the reserved first-account id, and the first admin account setup creates owns it, in catalog upgrade tests and server tests of setup.
+- Two accounts' favorites, blacklist, ratings, history, tags, categories, presets, and profiles stay apart, in server tests for each kind of data.
+- A new account starts with only a default profile, in server tests of account creation.
+- A direct localhost connection uses the first account, in server tests of localhost requests.
+- Events and Other devices popups reach only the same account's devices, in server tests of the event stream and WebUI tests of the popups.
+- Random picks and library stats use the account's own play history and ratings, in server tests of random selection and library stats.
+- A catalog import or a backup restore handles data for unknown account ids as this entry decides, in server tests of import and restore.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Not included
+
+- Switching accounts from the header, which is Account and Profile Picker.
+
+### P28n - Account and Profile Picker
+
+- **Status**: ⏳ Planned
+- **Goal**: The header's profile picker also switches accounts, opening another account with its PIN.
+- **Depends on**: Library Profiles, whose picker it extends, Per-Account Library Data, and WebUI Login Gate, whose PIN prompt it opens.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- The picker shows the active account at the top with its profiles below, set apart visually, then every other account alphabetically.
+- Another account opens with its PIN, at the profile it last used on that device, and its profiles stay hidden until then.
+- Sign out sits under the active account.
+- The default profile's name and color are the account's, and its Edit Profile's General tab changes them.
+- Each device remembers each account's last-used profile.
+- Before the app is built, the design is settled in the mockup and approved on a desktop browser, the iPad, and an Android phone.
+
+#### Traps
+
+- Library Profiles' picker lists the default profile first and the others alphabetically, with Add Profile at the bottom.
+- WebUI Login Gate keeps no session, so the user logs in on every open and reload.
+
+#### Acceptance
+
+- The picker shows the active account with its profiles, then the other accounts alphabetically, as the approved mockup shows, in Header screen tests.
+- Choosing another account asks for its PIN and opens it at its last-used profile on that device, and a wrong PIN or a lockout shows as WebUI Login Gate's do, in WebUI tests of switching accounts.
+- Sign out ends the session and shows the login gate, in WebUI tests of signing out.
+- The default profile's General tab changes the account's name and color, in profile dialog tests and server tests of the account's name and color.
+- The mockup shows the picker as approved and matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+#### Release checks
+
+- Manual: On two devices, switching between two accounts from the picker asks for each PIN and shows only that account's library data and profiles.
 
 ---
 

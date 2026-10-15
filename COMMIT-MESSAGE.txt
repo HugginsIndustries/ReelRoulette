@@ -19,11 +19,10 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan the desktop client's removal as v0.15.0's next milestone
+Docs: Plan profiles for v0.15.0 and per-account library data for v0.16.0
 
-- Desktop Client Removal becomes the next active milestone, M12i3, rescoped to remove everything only the desktop uses while keeping the routes the admin milestones will call, with its losses until the WebUI catches up recorded, and slices for code, packaging and license texts, contract, fixtures, mockup, and docs.
-- Per-Preset Preset Writes follows as M12i4, with stable preset ids, a preset event, and a catalog schema step that rewrites stored presets' old Favorites and Blacklisted fields, so Item Ratings and later i-group milestones move down two.
-- Desktop Retirement Notice is dropped, since no desktop build ships in v0.15.0, and the releases after it shift down: v0.15.1 structured log foundation, v0.16.0 accounts, v0.17.0 log migration, and v0.18.0 playback sessions.
-- Later entries lose the constraints that existed only for the desktop: additive-only contracts, keeping stored preset fields a posted preset leaves out, WebUI-only fixtures, and frozen-desktop traps, and request fields that hold only an item id become `itemId`.
-- WebUI Volume and Enhanced Audio moves Mute to the seek row, and WebUI Player Controls adds a Random button with a Jump or Insert Random behavior setting.
-- Admin duplicate review offers all enabled sources as a scan scope, and the backlog gains WebUI Volume Boost for volume above 100%.
+- Library Profiles (M12n2) and Profile Tag and Preset Visibility (M12n3) join v0.15.0 before the admin section, so WebUI Loop Range becomes M12n1: a header picker of named library views, each showing its own sources, tags, categories, and presets, built mockup-first.
+- Library stats stop counting items in disabled sources, as lists, counts, and random picks already do, in Library Profiles' server slice.
+- v0.16.0 gains Per-Account Library Data (P28m), which gives each account its own favorites, ratings, history, tags, presets, and profiles, and Account and Profile Picker (P28n), which switches accounts from the header.
+- Item Ratings keeps ratings per account once accounts exist, and the admin, keyboard navigation, metadata sync, analytics, and accounts entries follow profiles: the catalog refers to accounts by id, the first account can't be removed or demoted, and the login gate's tiles show each account's colored circle.
+- Browser-Playable Filter calls its playable containers a container list, WebUI Admin Section's responsive-layout dependency no longer says the header holds the admin icon, and File Metadata Sync's schema numbers follow the current order.
