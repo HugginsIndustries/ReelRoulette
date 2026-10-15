@@ -19,10 +19,9 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan profiles for v0.15.0 and per-account library data for v0.16.0
+Docs: Plan WebUI Tweaks and the player's volume and seek indicators
 
-- Library Profiles (M12n2) and Profile Tag and Preset Visibility (M12n3) join v0.15.0 before the admin section, so WebUI Loop Range becomes M12n1: a header picker of named library views, each showing its own sources, tags, categories, and presets, built mockup-first.
-- Library stats stop counting items in disabled sources, as lists, counts, and random picks already do, in Library Profiles' server slice.
-- v0.16.0 gains Per-Account Library Data (P28m), which gives each account its own favorites, ratings, history, tags, presets, and profiles, and Account and Profile Picker (P28n), which switches accounts from the header.
-- Item Ratings keeps ratings per account once accounts exist, and the admin, keyboard navigation, metadata sync, analytics, and accounts entries follow profiles: the catalog refers to accounts by id, the first account can't be removed or demoted, and the login gate's tiles show each account's colored circle.
-- Browser-Playable Filter calls its playable containers a container list, WebUI Admin Section's responsive-layout dependency no longer says the header holds the admin icon, and File Metadata Sync's schema numbers follow the current order.
+- WebUI Tweaks (M12i3) joins v0.15.0 before Desktop Client Removal, so Desktop Client Removal through WebUI Keyboard Shortcuts become M12i4 to M12i11: a modified marker and unsaved-changes dots that clear when changes are undone, a "{matching} / {total}" count line, a held action's badge over the button's corner, and tag category headers that always show their count and dot, with a mockup review before the app is built.
+- WebUI Volume and Enhanced Audio gains a volume indicator over the player for the scroll wheel and a two-finger drag.
+- WebUI Keyboard Shortcuts gains double-tap seeking on touch screens and a YouTube-style seek indicator for J, L, and double-taps, and its volume keys show the volume indicator.
+- Per-Preset Preset Writes keeps the remembered preset through a preset list that lacks it.

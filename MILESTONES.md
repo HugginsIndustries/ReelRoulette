@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI is the only client on every device from v0.15.0, which removes the desktop client. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter, sort, and weight random picks, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12l1, M12l2, M12l3, M12m, M12n1, M12n2, M12n3, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t, M12u.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter, sort, and weight random picks, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12i11, M12j, M12k1, M12k2, M12k3, M12l1, M12l2, M12l3, M12m, M12n1, M12n2, M12n3, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t, M12u.
 - **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.16.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access, and give each account its own favorites, ratings, history, tags, presets, and profiles. P28b, P28c, P28d, P28e, P28f, P28m, P28g, P28h, P28j, P28n, P28k, P28l.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
@@ -134,7 +134,122 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 Last milestone completed: M12i2
 
-### M12i3 - Desktop Client Removal
+### M12i3 - WebUI Tweaks
+
+- **Status**: ⏳ Planned
+- **Goal**: The modified marker and the unsaved-changes dots clear when changes are undone, and the Library tab's count line, held actions, and tag category headers read better, from daily use of the new UI.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- The held action's badge and the category headers are built as the user approves them in the Mockup slice's review, and neither app slice starts before that review.
+- The category headers change in the Tags tab and the Filter tab's Tags section alike, since both use one header (`TagCategory` in the WebUI, `categoryEl` in the mockup).
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ⏳ Planned | The held action's badge, category headers that always show their count and dot, and the "{matching} / {total}" count line, approved by the user on a desktop browser, the iPad, and a phone. |
+| Unsaved state | ⏳ Planned | A modified marker and unsaved-changes dots that compare the current state with the saved one, so they clear when changes are undone. |
+| Display | ⏳ Planned | The count line, the held action's badge, and the category headers, as approved. |
+
+#### Mockup slice
+
+**Scope**
+
+- The held action's red icon becomes a badge over the button's corner, so the button never changes width or wraps, on every held action in the mockup's main, validation, admin, and recovery pages.
+- The category headers, in the Tags tab and the Filter tab's Tags section, always show the count of their tags in use and the unsaved-changes dot, whether the category is expanded or collapsed. The Tags tab counts the item's tags in the category and the Filter tab the filter's, as today.
+- Whether a count of 0 shows is settled in the review.
+- The Library tab's count line reads "{matching} / {total}", such as "615 / 49,106". The Filters line stays as it is.
+- Before the app is built, the user reviews them on a desktop browser, the iPad, and a phone.
+
+**Traps**
+
+- `.btn .btn-problem` in `build/common.css` sits in the button's flow after its label, so the button widens when it shows and a row of buttons can wrap (inferred).
+- `categoryEl` in `layout.src.html` builds both tabs' headers, hides the count and the dot while the category is expanded, and hides the count at 0.
+- `check.mjs` checks that the count line starts with "Showing".
+- `check.mjs` runs the pages in happy-dom, which lays nothing out, so whether a button keeps its width is judged on the devices.
+
+**Acceptance**
+
+- The mockup shows the badge, the category headers, and the count line as the user approved them, and `python3 docs/mockups/reelroulette/build/build_pages.py` and `node docs/mockups/reelroulette/build/check.mjs` pass, with checks that both tabs' headers show their count and dot while expanded and while collapsed and that the count line reads "{matching} / {total}".
+- The user has approved them on a desktop browser, the iPad, and a phone before the Unsaved state slice starts.
+
+#### Unsaved state slice
+
+**Scope**
+
+- The modified marker ("Preset*"), in the Filter tab's heading and the preset dropdown, clears when the filter is put back to match its preset, and so does Apply's star.
+- A category's Local match mode set back to ALL (AND) leaves no entry in the filter, and a filter read from the server or the device drops its AND entries, since a category without one filters as AND. A filter put back then matches its preset, including a preset saved with a leftover entry.
+- The shared fixture `preset-filter-equality.json` and the desktop's comparer stay as they are.
+- Putting the General section's sources back as they were leaves the filter's source list as it was, so a preset that names every source matches again.
+- The unsaved-changes dots compare the current state with the saved one rather than tracking edits, so each clears when its changes are undone:
+  - The Filter tab compares its working filter with the applied filter, as today, and its preset list with the saved list, by order, by name with case counting, and by filter with the preset comparison, in place of the `presetsChanged` flag. Refresh and Apply use the same comparison.
+  - The Tags tab compares category names and order, tag names and categories, and the item's tags with the loaded catalog, in place of its held edits.
+  - The panel button's dot follows the two tabs' dots.
+
+**Traps**
+
+- `setLocalMatch` in `src/filter/filterDialog.ts` writes a category's mode and never removes it, and the preset comparison (`comparablePresetSnapshot` in `src/filter/filterStateModel.ts`) keeps a non-empty map, so a Local match mode set to OR and back leaves "Preset*", Apply's star, and the dot on, and after Apply the remembered filter keeps the entry (measured).
+- The server filters a category without a local mode as AND (`LibraryCatalogListQuery.cs`), and the Filter tab shows ALL (AND) for both.
+- The fixture's case "category local mode differs from none" locks the comparison, and the desktop's `LibraryPresetSelection.FiltersEqual` reads the same fixture until Desktop Client Removal moves it.
+- `filterWithGeneralDraft` in `src/filter/filterDialogModel.ts` turns every source checked into an empty source list, and the fixture's case "source inclusion differs from all sources" keeps a full list unequal to none, so a preset that names every source gets a star after any General change and back (measured).
+- A tag included and removed, a tag excluded then included, Global match set to OR and back, and a typed duration cleared already compare equal once put back (measured).
+- The Filter tab's `presetsChanged` is set by moving, renaming, adding, updating, and deleting a preset, and cleared only by Apply, Cancel, Clear all, and a preset dropdown pick, so moving a preset and back keeps the dot and Apply's star (measured).
+- Refresh keeps the tab's preset list only while `presetsChanged` is set (`takeRemote`), and Apply posts presets only then.
+- The server keeps a preset name's case, so a rename that changes only case is a real change.
+- A duration still being typed counts as unsaved (`generalDurationsChanged`), and the Filter tab starts over when it opens only without unsaved changes.
+- Apply's star compares the working filter with the one the tab opened with or was cleared to, and the dots compare it with the applied filter.
+- The preset dropdown's marker is rebuilt only when presets load or a preset is picked, as after Apply (`syncHeaderPresets` in `src/state/appStore.ts`).
+- The Tags tab's dot is `orderChanged || selections.size > 0 || hasPendingTagEdits(pending)` (`hasChanges` in `src/tags/tagEditor.ts`).
+- Moving a category and back, renaming a category or a tag and back, moving a tag to another category and back, adding a tag or a category and deleting it, and adding a tag the item already has each leave the Tags tab's dot on (measured).
+- The Tags tab's category dots already compare with the loaded catalog (`tagCategoryRows` in `src/tags/tagEditorModel.ts`), and cleared in each of those cases (measured).
+- `planTagEditorSave` in `src/library/tagSave.ts` passes held upserts, renames, and deletes through as they are, so it can't serve as the comparison.
+- `tagEditor.test.ts`'s "says there is nothing to save when the changes cancel out" expects the dot to stay on before Save says "No tag changes to save."
+- The tabs' dots come from `unsaved` in `src/state/appServices.ts`, which `src/ui/Panel.tsx` and the panel button in `src/ui/Player.tsx` read.
+
+**Acceptance**
+
+- A filter put back to match its preset, through a Local match mode or the General section's sources, loses its star in the Filter tab's heading and on Apply, and in the preset dropdown once applied, in Filter tab tests of each.
+- A preset saved with a leftover AND entry matches the filter it describes, in a filter model test.
+- Each undo the Traps list clears the Filter tab's or the Tags tab's dot and the panel button's, and a real change still shows them, in Filter tab, Tags tab, and panel screen tests.
+- Refresh keeps a changed preset list and Apply saves it, and a list put back as it was is neither kept nor saved, in Filter tab tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+#### Display slice
+
+**Scope**
+
+- The Library tab's count line reads "{matching} / {total}", such as "615 / 49,106", from the same two counts as today (`formatBrowseResultSummary` in `src/library/libraryBrowseModel.ts`).
+- The held action's red icon is a badge over the button's corner, as approved, on every held action (`HeldButton` in `src/ui/FieldValidation.tsx`).
+- The category headers in the Tags tab and the Filter tab's Tags section show their count and the unsaved-changes dot whether expanded or collapsed, as approved (`TagCategory` in `src/ui/TagCategory.tsx`), and the toggle's accessible name says both while they show.
+
+**Traps**
+
+- The count line's second number is the query's `searchBaselineCount`, counted after the search and before the filter, so while a search is typed it is the search's matches.
+- `library.test.ts` and `libraryQuerySession.test.ts` expect "Showing N of M items".
+- `.held-action` is an inline flex with a 6 px gap, and `.btn-problem` a 22 px icon in its flow (`src/styles.css`), so the button widens when it shows.
+- A held button's reason is its title and accessible description, and its icon is hidden from screen readers.
+- `TagCategory` shows the count only while collapsed and above 0, and the dot only while collapsed, and names them in its toggle's label only then.
+
+**Acceptance**
+
+- The count line reads "{matching} / {total}" with grouped numbers, in library tests.
+- A held action shows its badge over its corner, out of the button's flow, with its reason as before, in field validation component tests and by reading the stylesheet, and a spot check on the user's phone.
+- The category headers in both tabs show their count and dot expanded and collapsed, with the toggle's name saying both, in Tags and Filter screen tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+#### Release checks
+
+- Manual: On a phone 360 px wide, a held Apply shows its badge without the button changing width or its row wrapping.
+
+#### Not included
+
+- Moving the remembered preset to its id, and keeping it through a preset list that lacks it, which is Per-Preset Preset Writes.
+
+### M12i4 - Desktop Client Removal
 
 - **Status**: ⏳ Planned
 - **Goal**: The desktop client, its packaging, its tests, and everything only it used are gone, and the WebUI is the only client.
@@ -361,7 +476,7 @@ Last milestone completed: M12i2
 - Library export, import, and backup restore in the admin section, which is Admin Library Catalog Transfer.
 - Volume above 100%, which is WebUI Volume Boost.
 
-### M12i4 - Per-Preset Preset Writes
+### M12i5 - Per-Preset Preset Writes
 
 - **Status**: ⏳ Planned
 - **Goal**: Saving, renaming, reordering, or deleting a preset on one device changes only that preset on the server, so two devices editing presets do not overwrite each other.
@@ -443,6 +558,7 @@ Last milestone completed: M12i2
 - The Filter tab keeps its Save and Apply, which send one write for each preset it changed and never the whole list.
 - On `presetCatalogChanged` from another device, the preset list updates without a reload. While the Filter tab holds unsaved preset changes, presets it hasn't changed take the server's version, and its own changes stay until saved or discarded.
 - The WebUI remembers its active preset by id.
+- The remembered preset survives a preset list that lacks it, such as an empty reply.
 - `resolveFlagModes` and the WebUI's readers of `filter-mode-resolution.json` go, and so does `filter-state-written.json`'s half of a filter written with the old fields.
 - Builds on the preset-equality fixture from Remove the Preset Match Route.
 
@@ -453,12 +569,14 @@ Last milestone completed: M12i2
 - The WebUI loads presets when the server's version check passes (`src/state/serverConnection.ts`) and has no preset event to follow.
 - `filterStateFromApiObject` reads the old fields through `resolveFlagModes` (`src/filter/filterStateModel.ts`).
 - The WebUI remembers its active preset by name on each device (`activePresetName` in `src/state/appStore.ts`).
+- A preset load whose list lacks the active preset sets the link to null (`showPresetList` in `src/state/appStore.ts`), and the remembered record then keeps `preset: null` for good, so a later list that has the preset shows "None*" (measured).
 
 **Acceptance**
 
 - A preset saved on one device while another device has its preset list open is still present after the other device saves a different preset, in a two-session test of concurrent saves.
 - Every open WebUI shows the same preset list after any device changes it, and unsaved changes in the Filter tab stay, in WebUI tests of the preset event.
 - The WebUI never posts the whole preset list, in WebUI tests of each preset write.
+- A modified preset still shows "Preset*" after a preset load whose list lacks it is followed by one that has it, in WebUI tests of the remembered filter.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
@@ -466,7 +584,7 @@ Last milestone completed: M12i2
 
 - Manual: On two devices, saving, renaming, reordering, and deleting a preset on one shows on the other without a reload, and neither overwrites the other's changes.
 
-### M12i5 - Item Ratings
+### M12i6 - Item Ratings
 
 - **Status**: ⏳ Planned
 - **Goal**: Library items have a 5-star rating with half stars, set from the Stats tab's Current file section and shared by every device.
@@ -638,7 +756,7 @@ Last milestone completed: M12i2
 - Reading ratings from media files and writing them back, which is File Metadata Sync and Extended Metadata.
 - Ratings kept per account, which is Per-Account Library Data.
 
-### M12i6 - WebUI Volume and Enhanced Audio
+### M12i7 - WebUI Volume and Enhanced Audio
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI has a volume control on every device, by slider, scroll wheel, and two-finger drag, through an Enhanced audio gain stage that also gives iPhone and iPad an in-app volume.
@@ -656,7 +774,7 @@ Last milestone completed: M12i2
 | --- | --- | --- |
 | Audio spike | ⏳ Planned | A report on a real video routed through the gain stage in each target browser and device. |
 | Server | ⏳ Planned | Cross-origin headers on media responses, and `crossorigin` on the player's media elements, so media from another origin in development isn't silent through Web Audio. |
-| Volume | ⏳ Planned | The Enhanced audio gain stage and setting, the volume slider, Mute in the seek row, scroll wheel and two-finger drag volume, the volume steps, and their per-device settings. |
+| Volume | ⏳ Planned | The Enhanced audio gain stage and setting, the volume slider, Mute in the seek row, scroll wheel and two-finger drag volume with a volume indicator, the volume steps, and their per-device settings. |
 
 #### Audio spike slice
 
@@ -704,7 +822,7 @@ Last milestone completed: M12i2
   - It is 84 px wide on every screen, keeping its width on a phone, where the mockup used to narrow it to 60 px, and sits the seek row's 12 px gap from Mute.
   - It goes from 0 to 100%.
 - Mute moves from the transport row to the seek row, between the time and the volume slider.
-- The mockup shows Mute in the seek row, and the user judges the seek row on a phone in the mockup review, before the app is built.
+- The mockup shows Mute in the seek row and the volume indicator, and the user judges the seek row on a phone and the volume indicator in the mockup review, before the app is built.
 - `check.mjs` confirms the scrub bar keeps a minimum usable width, set in the mockup review, at 320 and 360 px wide.
 - Only where the scrub bar would fall below that minimum does the volume slider open from Mute instead of sitting in the seek row.
 - The Settings tab offers volume steps of 1, 2, or 5 percent, used by the scroll wheel, a two-finger drag, and the [ and ] keys that WebUI Keyboard Shortcuts binds.
@@ -716,6 +834,10 @@ Last milestone completed: M12i2
   - On a photo it sets the next video's level, as the slider does, and over the player the page never scrolls.
 - On a touch screen, dragging up or down with two fingers on the player changes the volume the same way, on a photo too, a step per 30 px in the mockup, and shows the controls.
   - The player claims its touches (`touch-action: none`) and turns away Safari's own pinch gesture, so the browser doesn't zoom there.
+- A volume indicator, centered over the player, shows the volume as a percentage while the scroll wheel or a two-finger drag changes it, on a photo too. The slider doesn't show it.
+  - It is on its own layer, apart from the controls, so it shows while they're hidden.
+  - It fades in and out quickly, at a lowish opacity, and fades out shortly after the volume stops changing. With reduced motion it shows and hides at once.
+  - Its look is settled in the mockup review.
 - On iOS, the gain stage gives the app its own volume relative to the system volume.
 - The gain stage starts on the first tap, since Web Audio needs one. On iOS the volume slider shows once it runs, so the slider, the scroll wheel, and a two-finger drag all work there.
 - Enhanced audio, a per-device setting in the Settings tab's Audio section, on by default.
@@ -738,6 +860,8 @@ Last milestone completed: M12i2
 - In the mockup, stepping the volume crackled and play and pause popped, on every device (measured).
 - An element routed through Web Audio stays routed (inferred).
 - iOS suspends the audio context while the page is in the background, so the next tap resumes it (inferred).
+- The player's indicator (`.player-indicator`), at the top center, holds one lasting state at a time, and some states hide with the controls (`follows-controls` in `src/styles.css`), so the volume indicator is an element of its own.
+- The controls hide through the media container's `controls-visible` class, which shows `#overlay-controls`, so an element outside `#overlay-controls` stays shown while they're hidden.
 
 **Acceptance**
 
@@ -746,6 +870,7 @@ Last milestone completed: M12i2
 - On a photo the volume slider stays enabled, and the next video plays at the level set there, in a WebUI test that a volume set on a photo applies to the next video.
 - The scroll wheel over the player changes the volume by the volume step, one step per notch with a trackpad's small deltas added up, without scrolling the page; on a touch screen a two-finger drag does too, without zooming. Each shows the controls, and on a photo each sets the next video's level. Shown by wheel tests for notches, added-up trackpad deltas, and a photo, and two-finger drag tests, a photo's among them.
 - Changing the volume sends no notification, in WebUI tests.
+- The volume indicator shows the volume centered over the player for the scroll wheel and a two-finger drag, on a photo too and while the controls are hidden, not for the slider, and fades out after the volume stops changing, in wheel, two-finger drag, and slider tests with fake timers.
 - With Enhanced audio on, every device plays through the gain stage, which starts on the first tap. On iOS the volume slider shows once it runs, and the slider, scroll wheel, and two-finger drag set the gain. Shown by a test that the gain stage starts on the first tap and the slider then shows.
 - The gain glides to each new level and fades in on play and out on pause, so nothing crackles or pops, in tests that the gain only glides and that play and pause fade it in and out.
 - With Enhanced audio off, audio plays directly, and on iOS the volume controls hide. If the gain stage can't start, the notice's **Turn off Enhanced audio** turns it off for the device. Shown by tests for Enhanced audio on and off and for the notice when the gain stage can't start.
@@ -765,7 +890,7 @@ Last milestone completed: M12i2
 - The [ and ] volume keys, which is WebUI Keyboard Shortcuts.
 - Volume above 100%, which is WebUI Volume Boost.
 
-### M12i7 - WebUI Loudness Normalization
+### M12i8 - WebUI Loudness Normalization
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI evens out loudness between videos toward a target the user picks, without clipping, and its Night mode evens out loudness within a video, in every browser the WebUI supports.
@@ -941,7 +1066,7 @@ Last milestone completed: M12i2
 - Peak measurement and the loudness rescan, which is WebUI Stats Panel.
 - Night mode settings beyond on and off.
 
-### M12i8 - WebUI Player Controls
+### M12i9 - WebUI Player Controls
 
 - **Status**: ⏳ Planned
 - **Goal**: The player's controls can hide after a time with no activity, and a Random button picks a new item from anywhere in the history.
@@ -986,7 +1111,7 @@ Last milestone completed: M12i2
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and a spot check on the user's own browsers and phone, without the VM.
 
-### M12i9 - WebUI Player Rating
+### M12i10 - WebUI Player Rating
 
 - **Status**: ⏳ Planned
 - **Goal**: The player shows the playing item's rating and sets it without opening the Stats tab.
@@ -1020,11 +1145,11 @@ Last milestone completed: M12i2
 
 - Manual: On the iPad and an Android phone, in both orientations, the player's rating shows the playing item's rating and sets one by touch.
 
-### M12i10 - WebUI Keyboard Shortcuts
+### M12i11 - WebUI Keyboard Shortcuts
 
 - **Status**: ⏳ Planned
-- **Goal**: The WebUI has the desktop's keyboard shortcuts wherever a browser allows them, plus seek-step and frame-step keys and a shortcut reference.
-- **Depends on**: WebUI Settings Panel, WebUI Stats Panel, so every panel tab exists, and WebUI Volume and Enhanced Audio, whose volume its keys step, and WebUI Autoplay Modes, whose autoplay it toggles, and WebUI Player Controls, whose controls show on a key press and whose Random button R presses, and Item Ratings, whose rating its keys set.
+- **Goal**: The WebUI has the desktop's keyboard shortcuts wherever a browser allows them, plus seek-step and frame-step keys, double-tap seeking with a seek indicator, and a shortcut reference.
+- **Depends on**: WebUI Settings Panel, WebUI Stats Panel, so every panel tab exists, and WebUI Volume and Enhanced Audio, whose volume its keys step and whose volume indicator they show, and WebUI Autoplay Modes, whose autoplay it toggles, and WebUI Player Controls, whose controls show on a key press and whose Random button R presses, and Item Ratings, whose rating its keys set.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
@@ -1040,12 +1165,20 @@ Last milestone completed: M12i2
   - P shows or hides the panel.
 - Shift+F enters and leaves fullscreen, since F stays Favorite.
 - Space plays or pauses as K does, and pauses and resumes a photo's timer, except while focus is on something Space already activates, such as a button or a library tile.
-- [ and ] step the volume by the volume step from WebUI Volume and Enhanced Audio. The desktop stepped volume with comma and period, which step frames here instead.
+- [ and ] step the volume by the volume step from WebUI Volume and Enhanced Audio, and show its volume indicator. The desktop stepped volume with comma and period, which step frames here instead.
 - J and L seek by a seek step preference. The Settings tab offers the desktop's seek steps: 1, 5, or 10 seconds.
+- On a touch screen, double-tapping the left or right half of the player seeks back or forward by the seek step, on a video, and leaves the controls as they were.
+  - A single tap shows or hides the controls once no second tap has come. With nothing playing or on a photo, where a double-tap does nothing, a tap acts at once.
+- A seek indicator, as YouTube shows it, for J, L, and double-taps, not for dragging the scrub bar:
+  - A forward seek shows it on the right side of the player, reading "+ 10" with a chevron (›) to its right, and a back seek on the left side, reading "− 10" with a chevron (‹) to its left, so the chevron always sits on the side toward the screen's edge.
+  - Its text is white, on its own layer apart from the controls, so it shows while they're hidden.
+  - It fades in and out, and as it fades in the chevron slides from beside the number out toward the edge and settles there. With reduced motion it shows and hides at once, without the slide.
+  - Consecutive seeks add up, and the total starts over after about a second without another seek, or with a seek the other way.
+- The mockup shows double-tap seeking and the seek indicator.
 - Frame stepping, as YouTube does it: while a video is paused, comma steps one frame back and period one frame forward.
   - It uses the browser's frame timings (`requestVideoFrameCallback`) where the browser provides them, and, where it doesn't, an assumed frame rate that this milestone decides.
   - It replaces the desktop's Frame seek step (Shift and the arrow keys), which LibVLC drove.
-- J, L, and a frame step are seeks: while Timer mode repeats a stretch, each starts the stretch where it lands, as a seek by the scrub bar does, which the mockup shows.
+- J, L, a double-tap, and a frame step are seeks: while Timer mode repeats a stretch, each starts the stretch where it lands, as a seek by the scrub bar does, which the mockup shows.
 - Rating keys set the playing item's rating as Item Ratings' control does, with its popups, and do nothing while nothing plays:
   - Shift+1 to Shift+5 set 1 to 5 stars, and Shift+0 clears the rating.
   - `-` and `=` step the rating down and up by half a star.
@@ -1065,6 +1198,11 @@ Last milestone completed: M12i2
 - The desktop bound K play or pause, J and L seek, Left and Right previous and next, R random, F favorite, B blacklist, A autoplay, M mute, comma and period volume, T tags, P player view, S settings, O import folder, Q quit, F11 fullscreen, and 1 to 5 to show or hide parts of the window. It also swallowed 6 to 8 and Space, which did nothing (measured).
 - The browser keeps Ctrl+Q, Ctrl+O, and F11, for its own fullscreen (inferred).
 - Auto Tag is already an in-app dialog (`src/ui/AutoTag.tsx`): Esc does what its X does and waits while a scan runs, and the stage's Escape handler leaves Esc to any open dialog (`src/ui/Stage.tsx`), so the Esc order needs nothing for it (measured).
+- A tap on the player shows or hides the controls at once (`toggleControls` in `src/playback/mediaGestures.ts`, `onAreaClick` in `src/ui/Player.tsx`), so a single tap must wait to rule out a double-tap.
+- The browser follows a touch with a click, which the media area ignores after a tap the gestures handled (`takeFollowingClick`).
+- The gestures skip touches that start inside `#overlay-controls` (`src/ui/Player.tsx`), so a tap on a control never counts toward a double-tap.
+- The player sets no `touch-action`, and without one Safari can zoom the page on a double-tap (inferred). WebUI Volume and Enhanced Audio gives the player `touch-action: none`.
+- The player's indicator (`.player-indicator`), at the top center, holds one lasting state at a time, and some states hide with the controls, so the seek indicator is an element of its own, as the volume indicator is.
 
 #### Acceptance
 
@@ -1072,10 +1210,12 @@ Last milestone completed: M12i2
 - 1 to 5 open the panel on Library, Filter, Tags, Stats, and Settings, T and S on Tags and Settings, and the open tab's key closes the panel; P shows or hides the panel. Shown by keyboard tests per binding.
 - Esc closes the bell's list, the panel, and pseudo-fullscreen, in that order, in tests of the Esc order.
 - Shortcuts are ignored while a text field has focus, in keyboard tests per binding.
-- [ and ] change the volume by the volume step, and do nothing on a photo, in keyboard tests per binding.
+- [ and ] change the volume by the volume step and show the volume indicator, and do nothing on a photo, in keyboard tests per binding.
 - J and L seek by the seek step, and the Settings tab offers the desktop's seek step choices, in keyboard tests per binding.
+- A double-tap on the left or right half of a playing video seeks back or forward by the seek step and leaves the controls as they were, and a single tap shows or hides them once the double-tap window passes, or at once with nothing playing or on a photo, in gesture tests with fake timers.
+- The seek indicator shows on the right with "+ {n}" and › for a forward seek and on the left with "− {n}" and ‹ for a back seek, for J, L, and double-taps and not for the scrub bar, adds up consecutive seeks, starts over after about a second or with a seek the other way, shows while the controls are hidden, and shows without the slide with reduced motion, in seek indicator tests with fake timers.
 - While a video is paused, comma and period step one frame back and forward; while it plays, they do nothing. Shown by frame stepping tests with and without the browser's frame timings.
-- While Timer mode repeats a stretch, J, L, and a frame step start it where they land, in keyboard tests per binding.
+- While Timer mode repeats a stretch, J, L, a double-tap, and a frame step start it where they land, in keyboard and gesture tests.
 - Shift+1 to Shift+5 set 1 to 5 stars, Shift+0 clears the rating, and `-` and `=` step it by half a star, on the playing item with Item Ratings' popups, and they do nothing while nothing plays, in keyboard tests per binding.
 - While Item Ratings' star control has focus, the arrow keys change its rating and not the playing item, in keyboard tests per binding.
 - Shift+F enters and leaves fullscreen, in keyboard tests per binding.
@@ -1088,10 +1228,12 @@ Last milestone completed: M12i2
 #### Release checks
 
 - Manual: In Chrome, Firefox, and Safari on a desktop, every listed shortcut works in normal view, with a panel open, and in fullscreen, and does nothing while typing in a text field.
+- Manual: On the iPad and an Android phone, double-tapping either side of a playing video seeks by the seek step with the seek indicator, a single tap still shows or hides the controls, and the page doesn't zoom.
 
 #### Not included
 
 - Rebinding, which is Customizable Keyboard Shortcuts.
+- Seeking by double-click with a mouse, since double-tap seeking is for touch screens.
 - The Actions menu and selection in the Esc order, after Auto Tag and before the panel, which is WebUI Multi-Select and Bulk Actions.
 - The profile picker's key and its place in the Esc order, which is Library Profiles.
 
