@@ -149,12 +149,12 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
 - **Since**: v0.9.0.
 - **Where**: `tools/scripts/run-server-rebuild.ps1`.
 
-### Four scripts ignore a switch they don't take
+### Five scripts ignore a switch they don't take
 
-- **What goes wrong**: `cut-changelog.ps1`, `reset-checklist.ps1`, `check-milestones.ps1`, and `run-server.ps1` have no `[CmdletBinding()]`, so a switch they don't take, such as a typo, is silently ignored and the script runs as if it weren't given, instead of being refused.
-- **How to make it happen**: Pass any of them a switch it doesn't take, such as `-Bogus`: `check-milestones.ps1` runs its checks, `reset-checklist.ps1` resets the checklist, and `cut-changelog.ps1` goes on to its own checks (measured, the last two on scratch copies). `run-server.ps1` declares its parameters the same way (inferred).
+- **What goes wrong**: `cut-changelog.ps1`, `reset-checklist.ps1`, `check-milestones.ps1`, `run-server.ps1`, and `verify-web-deploy.ps1` have no `[CmdletBinding()]`, so a switch they don't take, such as a typo, is silently ignored and the script runs as if it weren't given, instead of being refused.
+- **How to make it happen**: Pass any of them a switch it doesn't take, such as `-Bogus`: `check-milestones.ps1` runs its checks, `reset-checklist.ps1` resets the checklist, and `cut-changelog.ps1` goes on to its own checks (measured, the last two on scratch copies). `run-server.ps1` and `verify-web-deploy.ps1` declare their parameters the same way (inferred).
 - **How much it matters**: Low. A mistyped switch, such as `-Stagged` for `check-milestones.ps1`, quietly gives a different run than asked for, but the usual commands in the docs and skills are spelled right.
-- **Since**: v0.9.0 for `run-server.ps1`, v0.10.0 for `reset-checklist.ps1`, and v0.14.0 for `cut-changelog.ps1` and `check-milestones.ps1`. None of them has ever had `[CmdletBinding()]`.
+- **Since**: v0.9.0 for `run-server.ps1` and `verify-web-deploy.ps1`, v0.10.0 for `reset-checklist.ps1`, and v0.14.0 for `cut-changelog.ps1` and `check-milestones.ps1`. None of them has ever had `[CmdletBinding()]`.
 - **Where**:
-  - The `param()` blocks of `tools/scripts/cut-changelog.ps1`, `tools/scripts/reset-checklist.ps1`, `tools/scripts/check-milestones.ps1`, and `tools/scripts/run-server.ps1`. `set-release-version.ps1` already has `[CmdletBinding()]`.
-  - With it, every caller must pass only switches the script takes, so a fix checks each caller first: `run-server-rebuild.ps1` calls `run-server.ps1`; `tools/scripts/tests/test-scripts.ps1` calls the other three; and the plan-from-report, pre-release, promote-milestones, and review-staged skills call `check-milestones.ps1`, `cut-changelog.ps1`, or `reset-checklist.ps1`.
+  - The `param()` blocks of `tools/scripts/cut-changelog.ps1`, `tools/scripts/reset-checklist.ps1`, `tools/scripts/check-milestones.ps1`, `tools/scripts/run-server.ps1`, and `tools/scripts/verify-web-deploy.ps1`. `set-release-version.ps1` already has `[CmdletBinding()]`, and `stage-webui-assets.ps1`'s `[Parameter(Mandatory = $true)]` already makes it refuse an unknown switch (measured).
+  - With it, every caller must pass only switches the script takes, so a fix checks each caller first: `run-server-rebuild.ps1` calls `run-server.ps1`; `set-release-version.ps1` calls `verify-web-deploy.ps1` with no parameters; `tools/scripts/tests/test-scripts.ps1` calls the other three; and the plan-from-report, pre-release, promote-milestones, and review-staged skills call `check-milestones.ps1`, `cut-changelog.ps1`, or `reset-checklist.ps1`.

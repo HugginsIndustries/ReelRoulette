@@ -19,13 +19,10 @@ Instructions:
 
 Commit Message:
 
-M12i4: Remove the desktop client, its tests, and its release packages
+Docs: Plan Dev Script Cleanup after Desktop Client Removal
 
-- The desktop app, its library archive helper, and their tests leave the solution and the repository, with the Core code only they used: the grid layout and the JSON settings storage with its interfaces. Core's tests no longer compile the desktop's API client.
-- Comments and test data in Core, the server, and their tests that named the desktop as a client are reworded, apart from those the Contract slice changes.
-- `release.yml` builds and publishes only the server, so the desktop's installers, update feeds, and `ReelRoulette.Desktop` assets stop, along with the LibVLC relocation step and the unread `stage_native`.
-- The Windows server package ships FFmpeg's GPL-3.0 license text as `FFmpeg-LICENSE.txt` beside `ffmpeg.exe`, and the release step fails without it; the bundled build is configured with `--enable-gpl --enable-version3`.
-- `set-release-version.ps1` no longer updates the desktop projects or takes `-NoUpdateDesktopVersion`, and with `[CmdletBinding()]` it refuses a switch it doesn't take instead of ignoring it; ISSUES.md records the four other scripts that still ignore one.
-- The old `HI` icons and the LGPL text, which only LibVLC needed, are deleted, and README's Third-Party Components names FFmpeg's license and build.
-- README's Quick Start offers only the server's downloads, the packaging and release sections of README, dev-setup, architecture, CONTEXT, and the domain inventory describe the server-only release and the script, and no doc gives a command to run the desktop or describes Core's grid layout.
-- The changelog records the removal and the license fix, and M12i4's Code and tests and Packaging slices land; the rest of the docs' desktop descriptions wait for its Docs slice.
+- MILESTONES.md adds Dev Script Cleanup as M12i5, which merges `run-server-rebuild.ps1` into `run-server.ps1` so one command installs the WebUI's packages when they're out of date, rebuilds the WebUI, and runs the server, and updates every reference to the old script.
+- It fixes two ISSUES.md issues: "run-server-rebuild builds without installing packages", with an `npm ci` that runs only when `node_modules` is missing or older than `package-lock.json`, and "Five scripts ignore a switch they don't take", with `[CmdletBinding()]`.
+- ISSUES.md's switch issue adds `verify-web-deploy.ps1`, which also ignores a switch it doesn't take.
+- The entry's Traps carry both issues' facts and the scripts' callers, including that agents must not run `run-server.ps1`, which uses the user's real settings.
+- The seven active milestones after it are renumbered M12i6 through M12i12, and the Planned Releases outline lists the new milestone.

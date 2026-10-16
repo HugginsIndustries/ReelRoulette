@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI is the only client on every device from v0.15.0, which removes the desktop client. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter, sort, and weight random picks, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12i11, M12j, M12k1, M12k2, M12k3, M12l1, M12l2, M12l3, M12m, M12n1, M12n2, M12n3, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t, M12u.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter, sort, and weight random picks, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12i11, M12i12, M12j, M12k1, M12k2, M12k3, M12l1, M12l2, M12l3, M12m, M12n1, M12n2, M12n3, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t, M12u.
 - **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.16.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access, and give each account its own favorites, ratings, history, tags, presets, and profiles. P28b, P28c, P28d, P28e, P28f, P28m, P28g, P28h, P28j, P28n, P28k, P28l.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
@@ -389,7 +389,73 @@ Last milestone completed: M12i3
 - Library export, import, and backup restore in the admin section, which is Admin Library Catalog Transfer.
 - Volume above 100%, which is WebUI Volume Boost.
 
-### M12i5 - Per-Preset Preset Writes
+### M12i5 - Dev Script Cleanup
+
+- **Status**: ⏳ Planned
+- **Goal**: One command, `run-server.ps1`, installs the WebUI's packages when they're out of date, rebuilds the WebUI, and runs the server from the repo, and the five scripts that ignored a switch they don't take refuse it.
+
+#### Scope
+
+- `tools/scripts/run-server.ps1` builds the WebUI on every run, with `npm run build` in `src/clients/web/ReelRoulette.WebUI`, then starts the server with `dotnet run`.
+- Before the build, it installs the WebUI's packages when `node_modules` or `node_modules/.package-lock.json` is missing, or when `package-lock.json` is newer than `node_modules/.package-lock.json`, and otherwise skips the install.
+- It installs with `npm ci`, which installs exactly what the lockfile lists without rewriting it, so a dev run never changes a tracked file.
+- It prints whether it installs the packages or skips the install, beside the settings it prints today.
+- When the install or the build fails, or the build leaves no `dist`, it stops with an error and doesn't start the server.
+- It always serves the WebUI from that build's `dist`, so it no longer keeps a `ServerApp__WebUiStaticRootPath` already set.
+- It keeps its parameters and their defaults: `-Port`, `-RequireAuth`, `-DisableLocalhostTrust`, `-Framework`, and `-PairingToken`.
+- It stays a dev-run helper on the user's real settings, as `AGENTS.md` requires of dev-run helpers, and is never isolated.
+- Delete `tools/scripts/run-server-rebuild.ps1`.
+- Every reference to `run-server-rebuild.ps1` goes or names `run-server.ps1` instead:
+  - `README.md`'s Helper Scripts gives one command to build the WebUI and run the server.
+  - `docs/dev-setup.md`'s Run ServerApp says the script installs the packages when needed and rebuilds the WebUI first, its Run ServerApp with WebUI rebuild section goes, and its Troubleshooting item for WebUI changes not appearing no longer names the old script.
+  - `CONTEXT.md`'s `tools/scripts/` line and Working Commands.
+  - `docs/domain-inventory.md`'s Runtime scripts.
+  - The Auth Cutover for API and Admin entry's Scope and Traps, which name the `-PairingToken` parameter of both scripts.
+- This milestone fixes the issue "run-server-rebuild builds without installing packages" in `ISSUES.md`, with the install before the build.
+- This milestone fixes the issue "Five scripts ignore a switch they don't take" in `ISSUES.md`: `cut-changelog.ps1`, `reset-checklist.ps1`, `check-milestones.ps1`, `run-server.ps1`, and `verify-web-deploy.ps1` get `[CmdletBinding()]` on their `param()` blocks, once every caller is checked.
+- `tools/scripts/tests/test-scripts.ps1` gets a case for each of `check-milestones.ps1`, `cut-changelog.ps1`, and `reset-checklist.ps1` given an unknown switch.
+- Both issues are deleted from `ISSUES.md` when this milestone lands.
+
+#### Traps
+
+- `run-server-rebuild.ps1` builds with `npm run build` without installing packages, checks that `dist` exists, sets `ServerApp__WebUiStaticRootPath` to it, and runs `run-server.ps1` in a child `pwsh` with `-Port`, `-Framework`, `-PairingToken`, and the two switches.
+- Without an install, a clone with no `node_modules` fails to build the WebUI, and a pulled change to `package-lock.json` builds with stale packages.
+- `run-server.ps1` keeps a `ServerApp__WebUiStaticRootPath` already set, and otherwise uses the same `dist`, which is how `run-server-rebuild.ps1` hands it the build.
+- `run-server-rebuild.ps1` always passes the OS's framework, `net10.0-windows` or `net10.0`, and takes no `-Framework` of its own.
+- `dotnet run` builds the server before starting it, so the install and the WebUI build are the only steps the merge adds.
+- npm writes `node_modules/.package-lock.json`, its hidden lockfile, after `package-lock.json` at the end of an install: after the WebUI's last install, `package-lock.json` is 9 ms older, with npm 12.2.0 (measured, from the files' times).
+- `npm ci` writes the hidden lockfile and leaves `package-lock.json` alone, so the run after an install skips the next one (inferred).
+- A pull or checkout that changes `package-lock.json` writes it with the current time, so the next run installs, and one that leaves it unchanged keeps its time (inferred).
+- `npm ci` deletes `node_modules` before it installs, and fails when `package.json` and `package-lock.json` disagree.
+- `stage-webui-assets.ps1` and `verify-web-deploy.ps1` run `npm install` on every run, and CI's WebUI job runs `npm ci`.
+- `README.md`, `CONTEXT.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, `ISSUES.md`, and the Auth Cutover for API and Admin entry name `run-server-rebuild.ps1`, and so do `CHANGELOG.md`'s released sections and `MILESTONES-COMPLETED.md`, which keep it as history (measured, by a search).
+- `AGENTS.md`, the skills, the testing checklist, and the active entries' spot checks don't name `run-server-rebuild.ps1` (measured, by a search).
+- `AGENTS.md` names `run-server.ps1` as the dev-run helper that uses real settings, which stays true of the merged script.
+- `run-server.ps1` runs the server on the user's real settings, catalog, and library, so agents must not run it, and the spot check is the user's.
+- The script tests must not call `run-server.ps1`, since a run that doesn't refuse the switch would start a server on the user's real settings (inferred).
+- The script tests don't call `verify-web-deploy.ps1` either, since a run that doesn't refuse the switch builds the WebUI and starts a server, isolated but slow (inferred). `AGENTS.md` lets agents run it.
+- None of the five scripts has `[CmdletBinding()]`, so a switch it doesn't take is ignored: `check-milestones.ps1` runs its checks, `reset-checklist.ps1` resets the checklist, and `cut-changelog.ps1` goes on to its own checks (measured).
+- `run-server.ps1` and `verify-web-deploy.ps1` declare their parameters the same way, so they ignore an unknown switch too (inferred).
+- With `[CmdletBinding()]`, an unknown switch fails before the script runs, with "A parameter cannot be found that matches parameter name 'Bogus'.", and `pwsh -File` exits 1 (measured, on a scratch copy of `check-milestones.ps1`).
+- `Invoke-Tool` in `test-scripts.ps1` runs a script as `& $Script @Parameters` and turns a thrown error into exit code 1 with its message, so a refused switch reads as code 1 with that message (measured).
+- `test-scripts.ps1` passes the three scripts it tests only parameters they declare.
+- The skills run `check-milestones.ps1` with `-BaseRef HEAD` or `-Staged -BaseRef HEAD`, `cut-changelog.ps1` with `-Version` and `-Name`, and `reset-checklist.ps1` with none.
+- `set-release-version.ps1` calls `verify-web-deploy.ps1` with no parameters, and so do the commands in `AGENTS.md`, `README.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, and the testing checklist.
+- The commands in `README.md`, `docs/dev-setup.md`, and the testing checklist use only switches the scripts declare.
+- Once `run-server-rebuild.ps1` is gone, nothing in the repo calls `run-server.ps1`.
+- `[CmdletBinding()]` also accepts the common parameters, such as `-Verbose` and `-ErrorAction`.
+- `set-release-version.ps1` already has `[CmdletBinding()]`, and `stage-webui-assets.ps1`'s `[Parameter(Mandatory = $true)]` already makes it refuse an unknown switch (measured).
+
+#### Acceptance
+
+- `check-milestones.ps1`, `cut-changelog.ps1`, and `reset-checklist.ps1` each refuse an unknown switch with exit code 1, and `cut-changelog.ps1` and `reset-checklist.ps1` leave their file unchanged when they do, in the new cases of `pwsh ./tools/scripts/tests/test-scripts.ps1`, which passes.
+- `pwsh ./tools/scripts/verify-web-deploy.ps1 -Bogus` exits 1 before it builds anything, and `pwsh ./tools/scripts/verify-web-deploy.ps1` passes.
+- `run-server.ps1` and `verify-web-deploy.ps1` have `[CmdletBinding()]`, `run-server.ps1` installs the packages by the rule in Scope and builds the WebUI before it starts the server, and `run-server-rebuild.ps1` is gone, checked by reading `tools/scripts/`.
+- No file refers to `run-server-rebuild.ps1` apart from this milestone's entry, its commit message, `CHANGELOG.md`, and `MILESTONES-COMPLETED.md`, checked by `git grep run-server-rebuild`.
+- `pwsh ./tools/scripts/check-milestones.ps1` passes.
+- A quick spot check: the user runs `pwsh ./tools/scripts/run-server.ps1`, which skips the install, rebuilds the WebUI, and starts the server, and the WebUI loads from it; then, after `touch src/clients/web/ReelRoulette.WebUI/package-lock.json`, runs it again and sees it install the packages first.
+
+### M12i6 - Per-Preset Preset Writes
 
 - **Status**: ⏳ Planned
 - **Goal**: Saving, renaming, reordering, or deleting a preset on one device changes only that preset on the server, so two devices editing presets do not overwrite each other.
@@ -515,7 +581,7 @@ Last milestone completed: M12i3
 
 - A preset holding the default filter, which a tag delete, the desktop's Add Preset, or the WebUI's Add Preset before v0.15.0 can leave, and which the server keeps and the WebUI shows as None, the known issue "A tag delete can leave a preset that shows as None" in `ISSUES.md`, which no milestone takes.
 
-### M12i6 - Item Ratings
+### M12i7 - Item Ratings
 
 - **Status**: ⏳ Planned
 - **Goal**: Library items have a 5-star rating with half stars, set from the Stats tab's Current file section and shared by every device.
@@ -687,7 +753,7 @@ Last milestone completed: M12i3
 - Reading ratings from media files and writing them back, which is File Metadata Sync and Extended Metadata.
 - Ratings kept per account, which is Per-Account Library Data.
 
-### M12i7 - WebUI Volume and Enhanced Audio
+### M12i8 - WebUI Volume and Enhanced Audio
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI has a volume control on every device, by slider, scroll wheel, and two-finger drag, through an Enhanced audio gain stage that also gives iPhone and iPad an in-app volume.
@@ -821,7 +887,7 @@ Last milestone completed: M12i3
 - The [ and ] volume keys, which is WebUI Keyboard Shortcuts.
 - Volume above 100%, which is WebUI Volume Boost.
 
-### M12i8 - WebUI Loudness Normalization
+### M12i9 - WebUI Loudness Normalization
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI evens out loudness between videos toward a target the user picks, without clipping, and its Night mode evens out loudness within a video, in every browser the WebUI supports.
@@ -997,7 +1063,7 @@ Last milestone completed: M12i3
 - Peak measurement and the loudness rescan, which is WebUI Stats Panel.
 - Night mode settings beyond on and off.
 
-### M12i9 - WebUI Player Controls
+### M12i10 - WebUI Player Controls
 
 - **Status**: ⏳ Planned
 - **Goal**: The player's controls can hide after a time with no activity, and a Random button picks a new item from anywhere in the history.
@@ -1042,7 +1108,7 @@ Last milestone completed: M12i3
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and a spot check on the user's own browsers and phone, without the VM.
 
-### M12i10 - WebUI Player Rating
+### M12i11 - WebUI Player Rating
 
 - **Status**: ⏳ Planned
 - **Goal**: The player shows the playing item's rating and sets it without opening the Stats tab.
@@ -1076,7 +1142,7 @@ Last milestone completed: M12i3
 
 - Manual: On the iPad and an Android phone, in both orientations, the player's rating shows the playing item's rating and sets one by touch.
 
-### M12i11 - WebUI Keyboard Shortcuts
+### M12i12 - WebUI Keyboard Shortcuts
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI has the desktop's keyboard shortcuts wherever a browser allows them, plus seek-step and frame-step keys, double-tap seeking with a seek indicator, and a shortcut reference.
