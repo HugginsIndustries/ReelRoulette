@@ -129,12 +129,12 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
         <button aria-describedby="P0-2" aria-label="Reorder Places" class="drag-handle" title="Drag to reorder" type="button">
           <span class="material-symbol-icon">
             "drag_indicator"
-        <button aria-controls="tag-grid-cat-places" aria-expanded="true" aria-label="Places" class="tag-category-toggle" title="Collapse category" type="button">
+        <button aria-controls="tag-grid-cat-places" aria-expanded="true" aria-label="Places, 1 tag on this item, unsaved changes" class="tag-category-toggle" title="Collapse category" type="button">
           <span class="tag-category-name">
             "Places"
-          <span class="category-count" hidden="" title="1 tag on this item">
+          <span class="category-count" title="1 tag on this item">
             "1"
-          <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
+          <span class="unsaved-dot category-dot" title="Unsaved changes">
         <button aria-label="Edit category Places" class="icon-btn" title="Edit category" type="button">
           <span class="material-symbol-icon">
             "edit_note"
@@ -195,12 +195,12 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
         <button aria-describedby="P0-2" aria-label="Reorder People" class="drag-handle" title="Drag to reorder" type="button">
           <span class="material-symbol-icon">
             "drag_indicator"
-        <button aria-controls="tag-grid-cat-people" aria-expanded="true" aria-label="People" class="tag-category-toggle" title="Collapse category" type="button">
+        <button aria-controls="tag-grid-cat-people" aria-expanded="true" aria-label="People, 1 tag on this item, unsaved changes" class="tag-category-toggle" title="Collapse category" type="button">
           <span class="tag-category-name">
             "People"
-          <span class="category-count" hidden="" title="1 tag on this item">
+          <span class="category-count" title="1 tag on this item">
             "1"
-          <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
+          <span class="unsaved-dot category-dot" title="Unsaved changes">
         <button aria-label="Edit category People" class="icon-btn" title="Edit category" type="button">
           <span class="material-symbol-icon">
             "edit_note"
@@ -279,5 +279,6 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
       <button aria-label="Save" class="icon-btn has-pending" id="tag-editor-apply-btn" title="Save" type="button">
         <span class="material-symbol-icon">
           "save"
+        <span class="unsaved-dot">
 "
 `;

@@ -341,7 +341,7 @@ describe("panel host", () => {
       expect(tabs.calls).toEqual(["leave tags"]);
     });
 
-    it("closes for a tile, Apply, or Cancel only as the overlay", async () => {
+    it("closes for a tile or Apply only as the overlay", async () => {
       const { panel, viewport } = setup({ width: 1200 });
       await panel.showTab("library");
       await panel.closeIfOverlay();

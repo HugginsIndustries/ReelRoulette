@@ -6,11 +6,11 @@ export interface TagCategoryProps {
   /** The id of its tags' grid, which its toggle controls. */
   gridId: string;
   collapsed: boolean;
-  /** How many of its tags are in use, shown while it is collapsed and above 0. */
+  /** How many of its tags are in use, shown while above 0. */
   inUse: number;
   /** Says what `inUse` counts, such as "2 tags on this item". */
   inUseTitle: string;
-  /** It holds unsaved changes, which the orange dot shows while it is collapsed. */
+  /** It holds unsaved changes, which the orange dot shows. */
   unsaved: boolean;
   onToggle: () => void;
   /** Its drag handle, before its name. */
@@ -26,15 +26,16 @@ export interface TagCategoryProps {
 /**
  * A tag category, in the Tags tab and the Filter tab's Tags section: a header whose name toggles it, as does a tap on
  * the header's own padding, and its tags. Its drag handle and its controls keep their own actions, and a press on them
- * let go elsewhere on the header doesn't toggle it. While it is collapsed, the header shows how many of its tags are
- * in use and the orange dot while it holds unsaved changes, and its toggle's name says both.
+ * let go elsewhere on the header doesn't toggle it. Expanded or collapsed, the header shows how many of its tags are
+ * in use while any are, and the orange dot while it holds unsaved changes, and its toggle's name says both while they
+ * show.
  */
 export function TagCategory(props: TagCategoryProps) {
   const { collapsed, inUse, unsaved } = props;
   /** Whether the last press on the header started on the header itself, or null before any press. */
   const pressOnHeader = useRef<boolean | null>(null);
-  const showCount = collapsed && inUse > 0;
-  const showDot = collapsed && unsaved;
+  const showCount = inUse > 0;
+  const showDot = unsaved;
   const label = [props.name, showCount ? props.inUseTitle : null, showDot ? "unsaved changes" : null].filter(Boolean).join(", ");
   const classes = ["tag-category", collapsed ? "is-collapsed" : null, props.class].filter(Boolean).join(" ");
   return (

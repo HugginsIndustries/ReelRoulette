@@ -111,7 +111,7 @@ export interface FilterTagCategory {
   collapsed: boolean;
   localMode: TagMatchMode;
   chips: FilterTagChip[];
-  /** How many of its tags the filter includes or excludes, which its header shows while it is collapsed. */
+  /** How many of its tags the filter includes or excludes, which its header shows while above 0. */
   inUse: number;
   /** One of its tags is included or excluded differently from the applied filter, until Apply. */
   unsaved: boolean;

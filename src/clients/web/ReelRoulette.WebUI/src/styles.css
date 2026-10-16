@@ -205,12 +205,16 @@ input, progress, meter { accent-color: var(--huggins-orange); }
 .vfield-tip[data-place="below"]::after {
   top: -5px;
 }
-/* An action a field holds: its label dims, and the red icon says a field is not valid. */
+/* An action a field holds: its label, or an icon button's icon, dims, and a red badge on its top-right corner says a
+   field is not valid. The badge sits out of the button's flow, so the button keeps its width and its row never wraps.
+   A Filter section's tab shows the same badge while a field in it is flagged. The badge is the outlined icon the fields
+   use, on a disc that hides the border under it. The Filter tab's Apply, the one held action with a dot, turns its dot
+   red instead, over the 250 ms the red marks fade in. */
 .held-action {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
 }
 .held-action[aria-disabled="true"] {
   cursor: not-allowed;
@@ -218,14 +222,22 @@ input, progress, meter { accent-color: var(--huggins-orange); }
 .held-action[aria-disabled="true"] .btn-label {
   opacity: 0.5;
 }
-.btn-problem {
-  font-size: 22px;
-  color: var(--error);
-}
-/* The red icon after a section's name while a field in it is flagged. */
+.btn-problem,
 .section-problem {
-  font-size: 20px;
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  font-size: 18px;
   color: var(--error);
+  border-radius: 50%;
+  background: radial-gradient(circle closest-side, var(--surface-raised) 86%, transparent 90%);
+  pointer-events: none;
+}
+.held-action > .unsaved-dot {
+  transition: background-color 250ms ease;
+}
+.shows-problem > .unsaved-dot {
+  background: var(--error);
 }
 /* A setting's field that has just saved a new value shows a green check in the red icon's place. */
 .vfield-saved {
@@ -265,7 +277,8 @@ input, progress, meter { accent-color: var(--huggins-orange); }
   .vfield-saved,
   .btn-problem,
   .section-problem,
-  .vfield-tip.is-shown {
+  .vfield-tip.is-shown,
+  .held-action > .unsaved-dot {
     animation: none;
     transition: none;
   }
@@ -1110,9 +1123,11 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
 .tag-editor-footer-row { display: flex; align-items: center; gap: 8px; }
 .tag-editor-footer-row > .ctl,
 .tag-editor-footer-row > .vfield { flex: 1 1 auto; }
+/* Save shows the unsaved-changes dot while there are changes. */
+.tag-editor-footer .icon-btn { position: relative; }
 
 /* Tag categories, in the Tags tab and the Filter tab's Tags section: the header's name toggles it; the handle, Edit,
-   and Local select keep their own actions. */
+   and the match mode keep their own actions. */
 .tag-category { margin-bottom: 12px; }
 .tag-category.is-collapsed { margin-bottom: 8px; }
 .tag-category-header {
@@ -1148,7 +1163,7 @@ html.theme-light .tag-category-header { background: #e4e6ec; border-color: #c8ce
 }
 .tag-category-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .tag-category-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* A collapsed category's header: a count of its tags in use, and the unsaved-changes dot. */
+/* A category's header, expanded or collapsed: a count of its tags in use, and the unsaved-changes dot. */
 .category-count {
   flex: 0 0 auto;
   min-width: 22px;
@@ -1193,9 +1208,9 @@ html.theme-light .tag-category-header { background: #e4e6ec; border-color: #c8ce
   cursor: pointer;
   font-size: 1rem;
   font-family: inherit;
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
 }
 .filter-tab.is-active {
   border-color: var(--huggins-orange);
@@ -1228,8 +1243,8 @@ html.theme-light .tag-category-header { background: #e4e6ec; border-color: #c8ce
 .grow { flex: 1 1 auto; min-width: 0; }
 .duration-field { width: 14rem; max-width: 100%; }
 .new-preset-field { flex: 1 1 180px; }
-.filter-local { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; }
-.filter-local select { min-height: 36px; }
+.filter-local-mode { min-height: 36px; font-size: 0.85rem; }
+/* Its icon buttons, as the Tags tab's: Apply turns orange and shows the unsaved-changes dot while there are changes. */
 .filter-dialog-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; flex: 0 0 auto; }
 .filter-preset-list { border: 1px solid var(--panel-border); border-radius: 8px; padding: 4px 8px 4px 4px; }
 .filter-preset-row { display: flex; align-items: center; gap: 2px; padding: 2px 0; border-bottom: 1px solid var(--surface-border); background: var(--surface); }
@@ -1707,7 +1722,8 @@ html.theme-light .panel {
   align-items: center;
   justify-content: center;
 }
-/* A dot marks the Filter and Tags tabs, and the player's panel button, while they hold unsaved changes. */
+/* A dot marks the Filter and Tags tabs, the player's panel button, the Filter tab's Apply, and the Tags tab's Save while
+   they hold unsaved changes. */
 .unsaved-dot {
   position: absolute;
   top: 6px;

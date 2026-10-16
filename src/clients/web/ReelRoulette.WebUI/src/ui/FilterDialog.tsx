@@ -82,6 +82,21 @@ function panelStyle(shown: FilterDialogTab | null, panel: (typeof TABS)[number])
 }
 
 /**
+ * Shows the section `shown` and hides the others, with the styles the next render gives them. A held action moves to
+ * its field within the press, since iOS opens the on-screen keyboard only for a focus made within the press, but
+ * Preact renders the section the action chose only after the click handler returns, and a field in a hidden section
+ * can't take focus.
+ */
+function showSection(shown: FilterDialogTab | null): void {
+  for (const panel of TABS) {
+    const element = document.getElementById(`filter-panel-${panel.tab}`);
+    if (element) {
+      element.style.display = panelStyle(shown, panel)?.display ?? "";
+    }
+  }
+}
+
+/**
  * The Filter tab, which the panel shows and hides. It keeps its sections while hidden, and they are empty until the
  * tab first loads. Edit Preset renders after it rather than inside it, so the dialog's own styles apply and not the
  * Filter tab's.
@@ -92,6 +107,7 @@ export function FilterDialog() {
   const shown = filterDialog.tab.value;
   const active = shown ?? "general";
   const [general, tags, presets] = TABS;
+  const apply = heldAction(view, "apply");
   return (
     <>
       <div id="filter-dialog" class="filter-dialog">
@@ -116,9 +132,9 @@ export function FilterDialog() {
           <div id="filter-panel-presets" class="filter-panel" style={panelStyle(shown, presets!)}>{view ? <PresetsPanel view={view} /> : null}</div>
         </div>
         <div class="filter-dialog-footer">
-          <button id="filter-clear-all-btn" class="btn" type="button" onClick={() => filterDialog.clearAll()}>Clear all filters</button>
-          <button id="filter-cancel-btn" class="btn" type="button" onClick={() => filterDialog.cancel()}>Cancel</button>
-          <HeldButton id="filter-apply-btn" class={view?.pending ? "btn has-pending" : "btn"} {...heldAction(view, "apply")} onClick={() => void filterDialog.apply()}>{view?.pending ? "Apply*" : "Apply"}</HeldButton>
+          <button id="filter-clear-all-btn" class="icon-btn" type="button" title="Clear all filters" aria-label="Clear all filters" disabled={!view || view.defaultFilter} onClick={() => filterDialog.clearAll()}><span class="material-symbol-icon">filter_alt_off</span></button>
+          <button id="filter-discard-btn" class="icon-btn" type="button" title="Discard changes" aria-label="Discard changes" disabled={!view?.unsaved} onClick={() => filterDialog.discardChanges()}><span class="material-symbol-icon">undo</span></button>
+          <HeldButton id="filter-apply-btn" class={view?.unsaved ? "icon-btn has-pending" : "icon-btn"} label="Apply" dot={!!view?.unsaved} {...apply} disabled={!view?.unsaved || apply.disabled} onClick={() => void filterDialog.apply()}><span class="material-symbol-icon">save</span></HeldButton>
         </div>
       </div>
       {view?.presetEdit ? <EditPresetDialog view={view} /> : null}
@@ -226,7 +242,7 @@ function FlagFilterRows({ view }: { view: FilterDialogView }) {
   const pair = useFieldValidation<HTMLSelectElement, FilterField>({
     problem: view.problems.flagModes,
     flagged: view.flagged.flagModes,
-    reveal: { from: filterDialog.reveal, field: "flagModes" }
+    reveal: { from: filterDialog.reveal, field: "flagModes", show: () => showSection(filterDialog.tab.peek()) }
   });
   const [favorites, blacklisted] = FLAG_FILTERS;
   return (
@@ -291,8 +307,8 @@ function FlagFilterRow({
 
 /**
  * A duration field, where empty means no limit, as its placeholder says. The field's text follows each keystroke,
- * which flags a duration that is not valid as it is typed, and the working filter takes it when the field changes,
- * so Apply's star appears when the user leaves the field.
+ * which flags a duration that is not valid as it is typed and counts as a change as it reads, and the working filter
+ * takes it when the field changes.
  */
 function DurationRow({ which, view }: { which: "min" | "max"; view: FilterDialogView }) {
   const { filterDialog } = useApp();
@@ -303,7 +319,7 @@ function DurationRow({ which, view }: { which: "min" | "max"; view: FilterDialog
   return (
     <div class="filter-row">
       <span style="min-width:3rem">{min ? "Min" : "Max"}</span>
-      <ValidatedField class="duration-field" problem={view.problems[field]} flagged={view.flagged[field]} reveal={{ from: filterDialog.reveal, field }}>
+      <ValidatedField class="duration-field" problem={view.problems[field]} flagged={view.flagged[field]} reveal={{ from: filterDialog.reveal, field, show: () => showSection(filterDialog.tab.peek()) }}>
         {(control) => (
           <input
             {...control}
@@ -354,7 +370,7 @@ function TagsPanel({ view }: { view: FilterDialogView }) {
   );
 }
 
-/** A tag category, which its header toggles, with its Local match mode, which keeps its own action. */
+/** A tag category, which its header toggles, with its match mode, which keeps its own action. */
 function TagCategory({ category }: { category: FilterTagCategory }) {
   const { filterDialog } = useApp();
   const categoryId = category.id ?? "";
@@ -368,12 +384,10 @@ function TagCategory({ category }: { category: FilterTagCategory }) {
       unsaved={category.unsaved}
       onToggle={() => filterDialog.toggleCategory(category.collapseKey)}
       controls={
-        <label class="filter-local">Local:
-          <select class="ctl filter-local-mode" data-cat-id={categoryId} value={String(category.localMode)} onChange={(event) => filterDialog.setLocalMatch(categoryId, Number.parseInt(event.currentTarget.value, 10) === TAG_MATCH_MODE.Or ? TAG_MATCH_MODE.Or : TAG_MATCH_MODE.And)}>
-            <option value={String(TAG_MATCH_MODE.And)}>ALL (AND)</option>
-            <option value={String(TAG_MATCH_MODE.Or)}>ANY (OR)</option>
-          </select>
-        </label>
+        <select class="ctl filter-local-mode" data-cat-id={categoryId} aria-label={`Match mode for ${category.name}`} title="Match mode" value={String(category.localMode)} onChange={(event) => filterDialog.setLocalMatch(categoryId, Number.parseInt(event.currentTarget.value, 10) === TAG_MATCH_MODE.Or ? TAG_MATCH_MODE.Or : TAG_MATCH_MODE.And)}>
+          <option value={String(TAG_MATCH_MODE.And)}>ALL (AND)</option>
+          <option value={String(TAG_MATCH_MODE.Or)}>ANY (OR)</option>
+        </select>
       }
     >
       {category.chips.map((chip) => (
@@ -426,7 +440,7 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
       <div class="filter-section">
         <h3>Create New Preset From Current Filter</h3>
         <div class="filter-row">
-          <ValidatedField class="new-preset-field" problem={view.problems.newPresetName} flagged={view.flagged.newPresetName} reveal={{ from: filterDialog.reveal, field: "newPresetName" }}>
+          <ValidatedField class="new-preset-field" problem={view.problems.newPresetName} flagged={view.flagged.newPresetName} reveal={{ from: filterDialog.reveal, field: "newPresetName", show: () => showSection(filterDialog.tab.peek()) }}>
             {(control) => (
               <input {...control} type="text" id="filter-new-preset-name" class="ctl" aria-label="New preset name" placeholder="Enter preset name" autocomplete="off" value={view.newPresetName} onInput={(event) => filterDialog.typeNewPresetName(event.currentTarget.value)} />
             )}

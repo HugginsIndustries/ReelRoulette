@@ -6,6 +6,235 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12i3 - WebUI Tweaks
+
+- **Status**: ✅ Complete
+- **Goal**: The modified marker and the Filter tab's unsaved-changes dot clear when changes are undone, and the Library tab's count line, held actions, tag category headers, and the Filter tab's footer read better, from daily use of the new UI.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- The held action's badge and the category headers are built as the user approves them in the Mockup slice's review, and neither app slice starts before that review.
+- The category headers change in the Tags tab and the Filter tab's Tags section alike, since both use one header (`TagCategory` in the WebUI, `categoryEl` in the mockup).
+- The Filter tab's Apply and Discard changes tell whether there are changes from the Unsaved state slice's comparison of the tab with the applied filter and the saved presets, so the Display slice's footer lands after it.
+- No preset may hold exactly the default filter, by the user's choice: **None** stands for the default filter, so the preset dropdown's None hold goes. A preset holding the default filter, which a tag delete, the desktop's Add Preset, or the WebUI's Add Preset before v0.15.0 can leave, shows as None and gets no other handling, the known issue "A tag delete can leave a preset that shows as None" in `ISSUES.md`.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ✅ Complete | The held action's and section tabs' badge, category headers that always show their count and dot, the "{matching} / {total}" count line, and the Filter tab's icon footer, approved by the user on a desktop browser, the iPad, and a phone. |
+| Unsaved state | ✅ Complete | A modified marker and the Filter tab's unsaved-changes dot that compare the current state with the applied filter and the saved presets, so they clear when changes are undone, and presets that need a filter other than the default one. |
+| Display | ✅ Complete | The count line, the held action's and section tabs' badge, the category headers, and the Filter tab's icon footer, as approved. |
+
+#### Mockup slice
+
+**Scope**
+
+- The held action's red icon becomes a badge over the button's corner, so the button never changes width or wraps, on every held action in the mockup's main, validation, admin, and recovery pages.
+- The category headers, in the Tags tab and the Filter tab's Tags section, always show the count of their tags in use and the unsaved-changes dot, whether the category is expanded or collapsed. The Tags tab counts the item's tags in the category and the Filter tab the filter's, as today.
+- A count of 0 stays hidden.
+- The Library tab's count line reads "{matching} / {total}", such as "615 / 49,106". The Filters line stays as it is.
+- The Filter tab's section tabs show a flagged section's problem with the held action's badge on the tab's corner, in place of the icon after the section's name.
+- The Filter tab's footer is icon buttons with tooltips, as the Tags tab's, as the Display slice describes.
+- The Filter tab's Tags section drops the "Local:" label before each category's match control, as the Display slice describes.
+- The Tags tab's Save shows the orange unsaved-changes dot while there are changes, as the Filter tab's Apply does.
+- The Library tab's selection bar shows Select all as an icon-only button with the `select_all` icon and Stop selecting with the `deselect` icon, for WebUI Multi-Select and Bulk Actions to build.
+- A held action's move to its field brings the field above the on-screen keyboard once it opens, as the Display slice describes.
+- Before the app is built, the user reviews them on a desktop browser, the iPad, and a phone.
+
+**Traps**
+
+- `.btn .btn-problem` in `build/common.css` sits in the button's flow after its label, so the button widens when it shows and a row of buttons can wrap (inferred).
+- `categoryEl` in `layout.src.html` builds both tabs' headers, hides the count and the dot while the category is expanded, and hides the count at 0.
+- `check.mjs` checks that the count line starts with "Showing".
+- `check.mjs` runs the pages in happy-dom, which lays nothing out, so whether a button keeps its width is judged on the devices.
+
+**Acceptance**
+
+- The mockup shows the badge, the category headers, the count line, and the Filter tab's footer as the user approved them, and `python3 docs/mockups/reelroulette/build/build_pages.py` and `node docs/mockups/reelroulette/build/check.mjs` pass, with checks that both tabs' headers show their count and dot while expanded and while collapsed, that the count line reads "{matching} / {total}", that every badge sits on its corner out of its button's flow, that a held Apply turns its dot red, that Apply and Cancel are disabled without changes, including changes put back, that Clear all filters is disabled while the filter is the default one, that a duration typed, left, and emptied is no change, and that a held action's move shows the field's section and then focuses the field as a tap does.
+- The user has approved them on a desktop browser, the iPad, and a phone before the Unsaved state slice starts.
+
+**Evidence**
+
+- The user approved the mockup on a desktop browser, the iPad, and a phone after five review rounds, whose choices are in the Display and Unsaved state slices and in WebUI Multi-Select and Bulk Actions.
+- A held action's move that focuses its field as a tap does, after its section shows, brought the field above the keyboard on the user's phone and iPad (measured), where centering it first and focusing it with `preventScroll` left it under the keyboard (measured).
+- `python3 docs/mockups/reelroulette/build/build_font.py` added `cancel`, `filter_alt_off`, `select_all`, and `deselect` to the mockup's icons, and the filled icons kept their glyphs (measured).
+- `python3 docs/mockups/reelroulette/build/build_pages.py` and `node docs/mockups/reelroulette/build/check.mjs` pass, with 1163 checks, up from 1110.
+- Each check this slice added failed with the behavior it covers broken, in 26 mutations run once in copies of the mockup and restored. The one mutation the first pass missed, a tag change put back still counting, got its own check, which then failed with it.
+- The mockup's count line counted its total after the filter, unlike the app's, and now counts it before, as the server's search baseline does.
+- The admin page sized its held badges at 20 px with a rule for every icon in a button, and the rule now leaves the badge out.
+- A duration typed, left, and emptied left Apply enabled in the user's review, which the mockup's comparison didn't do (measured), and the app's version of it is recorded in the Unsaved state slice.
+- happy-dom keeps an element's computed style after an ancestor's class changes, so the checks read Apply's dot color from a fresh copy of the button (measured).
+
+#### Unsaved state slice
+
+**Scope**
+
+- The modified marker ("Preset*"), in the Filter tab's heading and the preset dropdown, clears when the filter is put back to match its preset, and so does Apply's star.
+- A category's Local match mode set back to ALL (AND) leaves no entry in the filter, and a filter read from the server or the device drops its AND entries, since a category without one filters as AND. A filter put back then matches its preset, including a preset saved with a leftover entry.
+- The AND entries drop in one step after `filterStateFromApiObject`, at each place the WebUI reads a filter for its own use, and `filterStateFromApiObject` stays as `filter-enum-values.json` locks it.
+- The shared fixture `preset-filter-equality.json` and the desktop's comparer stay as they are.
+- Putting the General section's sources back as they were leaves the filter's source list as it was, so a preset that names every source matches again.
+- The Filter tab's unsaved-changes dot compares the current state with the saved one rather than tracking edits, so it clears when its changes are undone, and so does the panel button's while the Tags tab holds no changes:
+  - The Filter tab compares its working filter with the applied filter, as today, and its preset list with the saved list, by order, by name with case counting, and by filter with the preset comparison, in place of the `presetsChanged` flag. Refresh and Apply use the same comparison.
+  - The preset list's comparison uses a saved copy of the list that the tab keeps, set when it opens or starts over, when Refresh takes the server's list, and after Apply saves.
+  - The Filter tab takes each duration as its field's text reads, for the heading's star as for the dot and Apply's star, so a duration typed, left, and then emptied is no limit again, as one emptied before it is left. The heading keeps naming the working filter's preset, so text passed through while typing doesn't change it.
+- Add Preset and Update Preset are disabled while the Filter tab's filter, with each duration as its field reads, is the default one, with "Choose a filter to save as a preset." as their tooltip and accessible description.
+- **None** names the default filter, before any preset whose filter matches it, and the None hold goes from the preset dropdown, the device's remembered filter, and the Filter tab.
+
+**Traps**
+
+- `setLocalMatch` in `src/filter/filterDialog.ts` writes a category's mode and never removes it, and the preset comparison (`comparablePresetSnapshot` in `src/filter/filterStateModel.ts`) keeps a non-empty map, so a Local match mode set to OR and back leaves "Preset*", Apply's star, and the dot on, and after Apply the remembered filter keeps the entry (measured).
+- The server filters a category without a local mode as AND (`LibraryCatalogListQuery.cs`), and the Filter tab shows ALL (AND) for both.
+- The fixture's case "category local mode differs from none" locks the comparison, and the desktop's `LibraryPresetSelection.FiltersEqual` reads the same fixture until Desktop Client Removal moves it.
+- `filterWithGeneralDraft` in `src/filter/filterDialogModel.ts` turns every source checked into an empty source list, and the fixture's case "source inclusion differs from all sources" keeps a full list unequal to none, so a preset that names every source gets a star after any General change and back (measured).
+- A tag included and removed, a tag excluded then included, Global match set to OR and back, and a typed duration cleared already compare equal once put back (measured).
+- The Filter tab's `presetsChanged` is set by moving, renaming, adding, updating, and deleting a preset, and cleared only by Apply, Cancel, Clear all, and a preset dropdown pick, so moving a preset and back keeps the dot and Apply's star (measured).
+- Refresh keeps the tab's preset list only while `presetsChanged` is set (`takeRemote`), and Apply posts presets only then.
+- The server keeps a preset name's case, so a rename that changes only case is a real change.
+- `typeDuration` stores only a duration field's text, and leaving the field (`changeGeneral`) puts the duration into the working filter, which `view.unsaved` and `view.pending` compare. Emptying the field after that changes only the text, so the old duration keeps the dot and Apply's star on until the field is left again (inferred).
+- A duration still being typed counts as unsaved (`generalDurationsChanged`), and the Filter tab starts over when it opens only without unsaved changes.
+- Apply's star compares the working filter with the one the tab opened with, which Clear all keeps, and the dots compare it with the applied filter.
+- The preset dropdown's marker is rebuilt only when presets load or a preset is picked, as after Apply (`syncHeaderPresets` in `src/state/appStore.ts`).
+- `filterStateFromApiObject` keeps AND entries, as `filter-enum-values.json` locks it for the WebUI and the server's parser (`FilterStateTests.cs`), and the WebUI's reader of `preset-filter-equality.json` goes through it.
+- The WebUI reads filters through `filterStateFromApiObject` in `createAppStore` (the remembered applied filter), `presetRowsFromApi`, `presetRowsFromHeaderPresets`, `filterStateForHeaderPresetSelection`, and `randomPickRequest`.
+- The Filter tab's heading, the preset dropdown, and Apply name the first preset whose filter matches (`presetAnchorForDisplay` and `dialogPresetBase` in `src/filter/filterStateModel.ts`), so choosing a preset whose filter equals an earlier one's shows the earlier one (measured).
+- The None hold is `headerExplicitNone` in `src/state/appStore.ts`, remembered as `holdNone` in `filter.applied`, the `holdNone` argument of `presetAnchorForDisplay` and `headerPresetListForFilter`, and the Filter tab's `holdNone`.
+- The Filter tab's heading reads the working filter, which a duration still being typed isn't in, so it keeps a duration's star until the field is left, while the mockup's heading follows the text (measured).
+- `store.presets` takes the server's list on every preset load, including the tab's own loads, the server becoming ready, and `resyncRequired`, so it can't stand for the saved list the tab compares with (`loadRemote` in `src/filter/filterDialog.ts`, `src/state/serverConnection.ts`).
+- Every General change rewrites the working filter's sources and both durations through `filterWithGeneralDraft`, not only a source check.
+- `view.pending` never reads the General draft, so Apply's star waits for a typed duration's field to be left, which `filterDialog.test.ts`'s "counts a duration still being typed as an unsaved change, without Apply's star" and "keeps a typed duration out of the working filter until the field changes" expect.
+- The tabs' dots come from `unsaved` in `src/state/appServices.ts`, which `src/ui/Panel.tsx` and the panel button in `src/ui/Player.tsx` read.
+
+**Acceptance**
+
+- A filter put back to match its preset, through a Local match mode or the General section's sources, loses its star in the Filter tab's heading and on Apply, and in the preset dropdown once applied, in Filter tab tests of each.
+- A preset saved with a leftover AND entry matches the filter it describes, in a filter model test.
+- Each undo the Traps list clears the Filter tab's dot and the panel button's, and a real change still shows them, in Filter tab and panel screen tests.
+- Refresh keeps a changed preset list and Apply saves it, and a list put back as it was is neither kept nor saved, in Filter tab tests.
+- Typing a minimum, leaving the field, coming back, and emptying it clears the heading's star, the Filter tab's dot, and Apply's star before the field is left again, and so does the same with a maximum, in Filter tab tests of exactly that sequence.
+- The heading's star follows a duration as its field reads, and stars one that isn't valid, while the heading keeps naming the working filter's preset, so Long's minimum backspaced to empty and typed again ends as "Long*", in Filter tab tests.
+- Add Preset and Update Preset are disabled, with their tooltip, while the filter is the default one, a duration typed included, and enabled with no tooltip otherwise, in Filter tab and Filter screen tests.
+- A filter read from the server or the device has no AND entries, and the shared fixtures' tests pass unchanged, in filter model tests and, for the device, `appStore.test.ts`.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+**Evidence**
+
+- `npm run verify` passes, with 1469 tests in 71 files, the typecheck, the build, and its output check. `dotnet test ReelRoulette.sln` and the Core SystemChecks pass.
+- Each new Filter test failed with the fix it covers broken and the file restored from a copy under `artifacts/scratch/`, in breaks of the Filter tab's AND entries, read sites, sources, saved preset list, and durations, and the panel test's with typed durations ignored (measured).
+- The Filter screen tests of each undo check the panel button's dot as well as the Filter tab's, and each failed with the panel button ignoring the Filter tab's changes (measured).
+- The tests of Add Preset and Update Preset with the default filter, and of the heading's star following a typed duration, failed before the change (measured).
+- The test of Long's minimum backspaced to empty and typed again, which ends as "Long*", failed before the heading kept naming the working filter's preset, and the test of a tag renamed and deleted in a saved preset failed with the saved copy left unrevised (measured).
+- Each test of the Filter tab's sources kept through loads failed with its fix undone (measured).
+- `node docs/mockups/reelroulette/build/check.mjs` passes, with 1173 checks, up from 1163, and each new check failed in runs of mutations in copies of the mockup, except those of the heading while a duration is typed: Short clips' maximum backspaced and typed again passes with either heading, and a maximum typed through Short clips' filter failed before the heading kept naming the working filter's preset (measured).
+- The Filter tab keeps the source list its General fields were filled from through the tab showing again and Refresh.
+- A duration that isn't valid now counts for Apply's star as well as the dots, so a held Apply reads "Apply*", and the heading stars it, as the mockup's does.
+- In the user's review, presets were barred from holding the default filter, in place of comparing the None hold, and the None hold went. The device's remembered filter no longer has `holdNone`, and one written before is read without it.
+- A tag deleted elsewhere that was a preset's only filter leaves the preset with the default filter, which then shows as None, in Library and Tags screen tests (measured), the known issue "A tag delete can leave a preset that shows as None" in `ISSUES.md`.
+- The mockup's Filter tab names the working filter's preset as the app does, None for the default filter and otherwise the first preset whose filter matches, stars it live as a duration is typed, and keeps the filter when None is chosen. Its presets each hold a filter other than the default one, Add Preset and Update Preset are disabled with their tooltip for the default filter, and its match modes and Update Preset keep their state.
+- When Apply saves the preset list, the WebUI posts its presets without AND entries, so a desktop whose applied filter holds one shows its preset starred after that save, since the desktop's comparer, kept as decided, counts the entry. Server filtering is unaffected, and the desktop's removal is the next milestone (inferred).
+- `CONTEXT.md` and `docs/domain-inventory.md` describe the comparisons, the stored filters without AND entries, and the presets that need a filter, `CHANGELOG.md`'s Fixed section the star that clears, and its Changed section the presets that need a filter.
+
+#### Display slice
+
+**Scope**
+
+- The Library tab's count line reads "{matching} / {total}", such as "615 / 49,106", from the same two counts as today (`formatBrowseResultSummary` in `src/library/libraryBrowseModel.ts`).
+- Screen readers hear the count line in words, such as "615 of 49,106 items", while the numbers shown are hidden from them.
+- The held action's red icon is a badge on the button's top-right corner, out of its flow, on every held action but the Filter tab's Apply (`HeldButton` in `src/ui/FieldValidation.tsx`):
+  - It is the fields' outlined `error` icon at 18 px, 6 px past the corner on each side.
+  - It sits on a disc of `--surface-raised`, so the button's border doesn't run through it.
+- The Filter tab's section tabs show a flagged section's problem with the same badge on the tab's corner, in place of the icon after the section's name (`SectionProblemMark` in `src/ui/FilterDialog.tsx`).
+- The category headers in the Tags tab and the Filter tab's Tags section show their count and the unsaved-changes dot whether expanded or collapsed (`TagCategory` in `src/ui/TagCategory.tsx`), and the toggle's accessible name says both while they show.
+- A category's count of 0 stays hidden.
+- The Filter tab's footer is icon buttons, each with a tooltip, as the Tags tab's (`src/ui/FilterDialog.tsx`): Clear all filters is `filter_alt_off`, Discard changes is `undo`, and Apply is `save`.
+  - Apply turns orange and shows the unsaved-changes dot, as the panel's tabs do, in place of "Apply*", while the Filter tab has changes to apply.
+  - Discard changes, in place of Cancel, puts back the applied filter and the saved presets at once and never closes the panel, in the overlay too, since it no longer cancels out of anything; its tooltip and accessible name are "Discard changes". Apply still closes the overlay.
+  - Apply and Discard changes are disabled while the Filter tab has no changes, by the Unsaved state slice's comparison, as the Tags tab's Save is.
+  - While a field holds Apply, its dot turns red in place of the badge, its icon dims, and its reason is its tooltip, as now.
+  - Apply is the only held action with a dot, since the Tags tab's changes can't be held and Settings has no Save or Apply.
+  - Clear all filters is disabled while the working filter matches the default filter by the preset comparison, including right after pressing it and before Apply. Changes to the preset list alone don't enable it; Discard changes drops them.
+- The Tags tab's Save shows the same orange dot while there are changes (`tag-editor-apply-btn` in `src/ui/TagEditor.tsx`).
+- The Filter tab's Tags section drops the "Local:" label before each category's match control, and the control's accessible name is "Match mode for {category}", such as "Match mode for People", and its tooltip is "Match mode" (`src/ui/FilterDialog.tsx`).
+- A held action moves to its field as a tap does, so the browser brings the field above the on-screen keyboard once it opens: within the press, after the field's section shows, it focuses the field without `preventScroll` and without scrolling it first (`src/ui/FieldValidation.tsx`).
+- The mockup's Filter tab clears its categories' unsaved-changes dots on Apply, as the Tags tab's do on Save, and a Filter screen test locks the app's, with the category collapsed and expanded.
+
+**Traps**
+
+- The count line's second number is the query's `searchBaselineCount`, counted after the search and before the filter, so while a search is typed it is the search's matches.
+- `library.test.ts` and `libraryQuerySession.test.ts` expect "Showing N of M items".
+- `.held-action` is an inline flex with a 6 px gap, and `.btn-problem` a 22 px icon in its flow (`src/styles.css`), so the button widens when it shows.
+- A held button's reason is its title and accessible description, and its icon is hidden from screen readers.
+- `TagCategory` shows the count only while collapsed and above 0, and the dot only while collapsed, and names them in its toggle's label only then.
+- `SectionProblemMark` sits in the section tab's flow after its label, and `.section-problem` is a 20 px icon (`src/styles.css`).
+- The footer's Clear all filters and Cancel are text buttons, and Apply is a `HeldButton` that shows "Apply*" from `view.pending` (`src/ui/FilterDialog.tsx`).
+- `view.pending` compares the working filter, with each duration as its field reads, with the one the tab opened with, which Clear all keeps, and `view.unsaved` compares it with the applied filter, so after Clear all both show a change while the applied filter isn't the default.
+- The WebUI's icon font is the full Material Symbols font and has `save`, `undo`, and `filter_alt_off` (measured). The mockup's icon subset had no `undo` (measured), and once the footer shows `undo`, no mockup page shows `cancel`.
+- `clearAll` sets the working filter to `createDefaultFilterState()`, the chosen preset to none, and the preset list to the saved one (`src/filter/filterDialog.ts`).
+- `cancel` in `src/filter/filterDialog.ts` starts the tab over and closes the panel as the overlay.
+- The mockup's Apply takes the applied tags as its snapshot without drawing the Filter tab's categories again, so their dots stay until something else draws them (measured).
+- Each category's match control is a `<select>` inside `<label class="filter-local">Local:`, which gives it its name today (`src/ui/FilterDialog.tsx`).
+- The Tags tab's Save is an icon button that turns orange with `has-pending` while `view.savePending`, and is disabled otherwise (`src/ui/TagEditor.tsx`).
+- The move to a field scrolls it to the middle of its scrolling body and then focuses it with `preventScroll` (`src/ui/FieldValidation.tsx`). In the mockup, doing that before the keyboard opened left the body scrolled as far as it goes without the keyboard, so the field stayed under it, while a tap on the field works because the browser pans the page itself (measured on the user's phone).
+- The app moves to the field in an effect after a reveal request renders (`reveal.reveal` in `src/filter/filterDialog.ts`, the `useEffect` in `src/ui/FieldValidation.tsx`), so its focus comes after the press, and iOS opens the keyboard only for a focus made within the press (inferred).
+- The Filter tab's sections stay rendered and hide with `display: none` (`panelStyle` in `src/ui/FilterDialog.tsx`), so the field's section has to show before the focus, within the same press (inferred).
+- In the mockup, a page rule sizing every icon in a button outranked the badge's size until it excluded the badge (measured); the WebUI's rules that size icons in buttons are in the notifications list and popups, which hold no held action.
+
+**Acceptance**
+
+- The count line reads "{matching} / {total}" with grouped numbers, in library tests.
+- A held action shows its badge over its corner, out of the button's flow, with its reason as before, in field validation component tests and by reading the stylesheet, and a spot check on the user's phone.
+- A flagged section's tab shows the badge on its corner and no icon after its name, in Filter screen tests.
+- The count line's screen reader text says "{matching} of {total} items", in library tests.
+- The Filter tab's footer shows the three icon buttons with their tooltips, Apply shows the dot and Apply and Discard changes are enabled only while there are changes, including after a change is put back and after Clear all, and a held Apply shows its dot red with no badge, in Filter screen tests.
+- Clear all filters is disabled while the filter is the default one, including right after pressing it, and enabled otherwise, in Filter screen tests.
+- Discard changes discards the tab's changes and leaves the panel open, beside the player and as the overlay, in Filter screen tests and the mockup's checks.
+- Apply clears the dot of a category whose tags changed, with the category collapsed and expanded, in Filter screen tests and the mockup's checks.
+- The Tags tab's Save shows the dot only while there are changes, in Tags screen tests.
+- Each Filter category's match control has no "Local:" label, is named "Match mode for {category}", and has the tooltip "Match mode", in Filter screen tests.
+- A held action's move shows the field's section and then focuses the field within the press, without `preventScroll` and with no scroll first, in field validation component tests and Filter screen tests, and the field comes above the keyboard on the user's phone and iPad, which is the real check.
+- The category headers in both tabs show their count and dot expanded and collapsed, with the toggle's name saying both, in Tags and Filter screen tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+**Evidence**
+
+- `npm run verify` passes, with 1490 tests in 72 files, the typecheck, the build, and its output check.
+- `node docs/mockups/reelroulette/build/check.mjs` passes, with 1185 checks, up from 1173.
+- Each new test and check failed with the behavior it covers broken, in copies under `artifacts/scratch/`, then restored (measured):
+  - The count line's shown and spoken text, and its numbers hidden from screen readers.
+  - The badge's position and size, and its button's and tab's positioning.
+  - Apply's dot, red while held and with no badge, and Apply and Discard changes enabled without changes.
+  - Clear all filters always enabled, enabled by a preset list change alone, and enabled before the tab loads.
+  - The move with `preventScroll`, with a scroll first, focusing before its section shows, and with a stale `show`.
+  - Category counts and dots only while collapsed, and a count of 0 shown.
+  - Save's dot, and the match select's name and tooltip.
+  - Discard changes closing the overlay, in the app and the mockup, and the mockup's Apply leaving its category dots.
+- Keeping the badge's fade out of a button with a dot failed no test, since that button never renders the badge, so the guard went.
+- The user's spot check passed on a phone and the iPad: the badges show whole without a row changing, a held Apply brings Min above the keyboard, and Discard changes leaves the panel open (measured).
+- In the user's review, Cancel became Discard changes, `undo`, which discards at once and never closes the panel, in the overlay too. The model's `cancel` is `discardChanges`, and its button `filter-discard-btn`.
+- The app already cleared a Filter category's dot on Apply, collapsed and expanded (measured). The mockup kept the dot until something drew its categories again, and now draws them on Apply.
+- `view.pending` and the state's `original`, which only "Apply*" read, are gone, and `filterDialogHasPendingChanges` is `filterDialogHasUnsavedChanges`.
+- Three Filter screen tests that applied with no changes make a change first, since Apply is disabled without one.
+- `python3 docs/mockups/reelroulette/build/build_font.py` swapped `cancel` for `undo` in the mockup's icons, since no page shows `cancel` anymore.
+- `npx vitest run -u` before the test files takes the first file as its value and skips it, so `-u` goes after them (measured).
+- On the iPad, a duration typed, left with a tap, and erased still counts as a change, while Filter screen tests and mockup checks replaying a browser's events for those steps pass (measured), the known issue "Erasing a duration on the iPad leaves the Filter tab's changes" in `ISSUES.md`.
+- `CONTEXT.md`, `docs/domain-inventory.md`, and `CHANGELOG.md`'s [Unreleased] describe the count line, the badges, the footer, the dots, and the match select.
+
+#### Release checks
+
+- Manual: On a phone and the iPad, pressing a held Apply with a minimum that is not valid brings the Min field above the keyboard.
+- Manual: On a phone 360 px wide, a held Add Preset and a flagged section's tab show their badges whole, without the button changing width or its row wrapping.
+
+#### Not included
+
+- Moving the remembered preset to its id, and keeping it through a preset list that lacks it, which is Per-Preset Preset Writes.
+- Telling apart two presets with equal filters, which is Per-Preset Preset Writes.
+- The server refusing a preset that holds the default filter, which is Per-Preset Preset Writes.
+- The Tags tab's unsaved-changes dot keeps tracking edits rather than comparing with what's saved, by the user's choice, and no milestone takes it.
+
 ### M12i2 - WebUI Autoplay Modes
 
 - **Status**: ✅ Complete

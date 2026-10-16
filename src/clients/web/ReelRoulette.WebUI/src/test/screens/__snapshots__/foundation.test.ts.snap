@@ -105,6 +105,8 @@ exports[`page structure > keeps the starting markup 1`] = `
             <h2>
               "Library"
             <p aria-live="polite" class="library-overlay-summary" hidden="" id="library-overlay-summary">
+              <span aria-hidden="true">
+              <span class="visually-hidden">
             <button aria-controls="library-filter-summary library-controls" aria-expanded="true" aria-label="Hide library controls and filters" class="icon-glyph-base icon-glyph-button library-controls-toggle" id="library-controls-toggle" title="Hide controls & filters" type="button">
               <span aria-hidden="true" class="material-symbol-icon">
                 "unfold_less"
@@ -163,13 +165,17 @@ exports[`page structure > keeps the starting markup 1`] = `
             <div class="filter-panel" id="filter-panel-tags" style="display: none">
             <div class="filter-panel" id="filter-panel-presets" style="display: none">
           <div class="filter-dialog-footer">
-            <button class="btn" id="filter-clear-all-btn" type="button">
-              "Clear all filters"
-            <button class="btn" id="filter-cancel-btn" type="button">
-              "Cancel"
-            <button class="held-action btn" id="filter-apply-btn" type="button">
+            <button aria-label="Clear all filters" class="icon-btn" disabled="" id="filter-clear-all-btn" title="Clear all filters" type="button">
+              <span class="material-symbol-icon">
+                "filter_alt_off"
+            <button aria-label="Discard changes" class="icon-btn" disabled="" id="filter-discard-btn" title="Discard changes" type="button">
+              <span class="material-symbol-icon">
+                "undo"
+            <button aria-label="Apply" class="held-action icon-btn" disabled="" id="filter-apply-btn" title="Apply" type="button">
               <span class="btn-label">
-                "Apply"
+                <span class="material-symbol-icon">
+                  "save"
+              <span class="unsaved-dot" hidden="">
       <section aria-labelledby="panel-tab-tags" class="panel-page" hidden="" id="panel-page-tags" role="tabpanel">
         <div class="tag-editor" id="tag-editor">
           <div class="tag-editor-header">
@@ -198,6 +204,7 @@ exports[`page structure > keeps the starting markup 1`] = `
               <button aria-label="Save" class="icon-btn" id="tag-editor-apply-btn" title="Save" type="button">
                 <span class="material-symbol-icon">
                   "save"
+                <span class="unsaved-dot" hidden="">
       <section aria-labelledby="panel-tab-stats" class="panel-page" hidden="" id="panel-page-stats" role="tabpanel">
         <div class="stats-tab" id="stats-tab">
           <div class="stats-tab-header">

@@ -77,7 +77,7 @@ export interface TagCategoryRow {
   uncategorized: boolean;
   collapsed: boolean;
   chips: TagChipRow[];
-  /** How many of its tags the items being edited have, which its header shows while it is collapsed. */
+  /** How many of its tags the items being edited have, which its header shows while above 0. */
   inUse: number;
   /**
    * It holds unsaved changes: a held add or remove on one of its tags, or a name or tags that differ from the saved

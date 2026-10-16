@@ -218,6 +218,14 @@ function summary(): HTMLElement {
   return document.getElementById("library-overlay-summary") as HTMLElement;
 }
 
+/** The count line as it shows, hidden from screen readers, and the words they hear in its place. */
+function countLine(): { shown: string; spoken: string } {
+  const [shown, spoken] = Array.from(summary().children);
+  expect(shown?.getAttribute("aria-hidden")).toBe("true");
+  expect(spoken?.classList.contains("visually-hidden")).toBe(true);
+  return { shown: shown?.textContent ?? "", spoken: spoken?.textContent ?? "" };
+}
+
 /** The controls show, not collapsed. They show while the library loads, is empty, or fails too. */
 function controlsShown(): boolean {
   return !(document.getElementById("library-controls") as HTMLElement).classList.contains("is-collapsed");
@@ -398,7 +406,7 @@ describe("first page", () => {
 
     await openLibrary();
     expect(summary().hidden).toBe(false);
-    expect(summary().textContent).toBe("Showing 3 of 3 items");
+    expect(countLine()).toEqual({ shown: "3 / 3", spoken: "3 of 3 items" });
     expect(controlsShown()).toBe(true);
     expect(tileNames()).toEqual(["clip 1.mp4", "clip 2.mp4", "clip 3.mp4"]);
     expect(library.queries()).toHaveLength(1);
@@ -417,7 +425,7 @@ describe("first page", () => {
     await library.release();
     expect(within(overlay()).queryByText("Loading library…")).toBeNull();
     expect(tileNames()).toEqual(["clip 1.mp4", "clip 2.mp4"]);
-    expect(summary().textContent).toBe("Showing 2 of 2 items");
+    expect(countLine()).toEqual({ shown: "2 / 2", spoken: "2 of 2 items" });
     expect(controlsShown()).toBe(true);
   });
 
@@ -560,7 +568,7 @@ describe("first page", () => {
     await openLibrary();
 
     expect(within(overlay()).getByText("Nothing matches the search or filters.")).toBeTruthy();
-    expect(summary().textContent).toBe("Showing 0 of 5 items");
+    expect(countLine()).toEqual({ shown: "0 / 5", spoken: "0 of 5 items" });
     expect(controlsShown()).toBe(true);
   });
 });
@@ -584,7 +592,7 @@ describe("search and sort", () => {
     expect(library.queries()).toHaveLength(2);
     expect(library.queries()[1]).toMatchObject({ search: "hol", sortMode: "Name", offset: 0, limit: 200 });
     expect(within(overlay()).getByText("Nothing matches the search or filters.")).toBeTruthy();
-    expect(summary().textContent).toBe("Showing 0 of 3 items");
+    expect(countLine()).toEqual({ shown: "0 / 3", spoken: "0 of 3 items" });
     expect(searchBox().value).toBe("hol");
   });
 
@@ -658,7 +666,7 @@ describe("fill on scroll", () => {
     await waitFor(() => expect(library.queries()).toHaveLength(2));
     expect(library.queries()[1]).toMatchObject({ offset: 200, limit: 200 });
     await flush();
-    expect(summary().textContent).toBe("Showing 450 of 450 items");
+    expect(countLine()).toEqual({ shown: "450 / 450", spoken: "450 of 450 items" });
 
     await scrollGridTo(600);
     expect(library.queries()).toHaveLength(2);
@@ -704,7 +712,7 @@ describe("fill on scroll", () => {
     await scrollGridTo(1_000_100);
     await flush();
     expect(library.queries().slice(3).map((query) => query.offset)).toEqual([400, 600]);
-    expect(summary().textContent).toBe("Showing 650 of 650 items");
+    expect(countLine()).toEqual({ shown: "650 / 650", spoken: "650 of 650 items" });
   });
 
   it("hiding and showing keeps the tiles and the scroll position without querying", async () => {
@@ -786,7 +794,7 @@ describe("fill on scroll", () => {
     expect(body()).toBe(host);
     expect(gridScroll()).toBe(scroller);
     expect(gridScroll().scrollTop).toBe(600);
-    expect(summary().textContent).toBe("Showing 449 of 449 items");
+    expect(countLine()).toEqual({ shown: "449 / 449", spoken: "449 of 449 items" });
   });
 });
 
@@ -796,13 +804,13 @@ describe("starting over", () => {
       server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
     });
     await openLibrary();
-    expect(summary().textContent).toBe("Showing 3 of 3 items");
+    expect(countLine()).toEqual({ shown: "3 / 3", spoken: "3 of 3 items" });
 
     library.items = [libraryItem(2, { isFavorite: true })];
     library.searchBaselineCount = 3;
     await pickPreset("preset-favorites");
     expect(library.queries()[1]).toMatchObject({ filterState: { favoritesOnly: true }, offset: 0, limit: 200 });
-    expect(summary().textContent).toBe("Showing 1 of 3 items");
+    expect(countLine()).toEqual({ shown: "1 / 3", spoken: "1 of 3 items" });
     expect(tileNames()).toEqual(["clip 2.mp4"]);
   });
 
@@ -862,7 +870,7 @@ describe("live updates", () => {
     expect(library.queries()).toHaveLength(3);
     expect(library.queries()[2]).toMatchObject({ filterState: { favoritesOnly: true }, offset: 0, limit: 3 });
     expect(tileNames()).toEqual(["clip 2.mp4", "clip 3.mp4"]);
-    expect(summary().textContent).toBe("Showing 2 of 2 items");
+    expect(countLine()).toEqual({ shown: "2 / 2", spoken: "2 of 2 items" });
   });
 
   it("a playback event patches the tiles under Name and reloads them under Play count", async () => {

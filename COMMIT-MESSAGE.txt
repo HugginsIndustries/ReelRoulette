@@ -19,9 +19,13 @@ Instructions:
 
 Commit Message:
 
-Docs: Track known bugs in ISSUES.md, apart from the milestones
+M12i3: Show the WebUI's count as matching / total, held badges on corners, and the Filter tab's icon footer
 
-- ISSUES.md holds known issues, things that behave wrong, each with what goes wrong, how to make it happen, how much it matters, the release it's in since, and where in the code, and an issue is deleted once a milestone that names it or a Bugfix: commit fixes it.
-- It starts with the Tags tab's Save failing with 409 for a tag added and deleted before it, a new tag named after a just-renamed tag being lost, and a tag delete leaving a preset that shows as None, which WebUI Tweaks and Per-Preset Preset Writes now point to.
-- The known bugs among Server Robustness Findings and Client Robustness Findings move there, one issue per finding, except an unchecked thumbnail path and a weak eligible-set signature, which are too unlikely to track and are dropped. Server Robustness Findings keeps the stalled source and the needless work, and Client Robustness Findings the client and session ids.
-- AGENTS.md, CLAUDE.md, MILESTONES.md's rules, the testing checklist, the doc maps, and the implement, plan-from-report, review-fix, and pre-release skills send bugs to ISSUES.md, recorded only when the user asks, and improvements to MILESTONES.md.
+- The Library tab's count line reads "{matching} / {total}", such as "615 / 49,106", which screen readers hear as "615 of 49,106 items".
+- A held action's red mark is a badge on its top-right corner, out of its flow, so the button keeps its width, and a Filter section's tab shows the same badge in place of the icon after its name.
+- The Filter tab's footer is icon buttons: Clear all filters, disabled at the default filter; Discard changes, in place of Cancel, which discards at once and leaves the tab open, in the overlay too; and Apply, orange with the unsaved-changes dot, red while a field holds it. Apply and Discard changes wait for a change.
+- A held action focuses its field within the press, after its Filter section shows, as a tap does, so a phone or tablet opens the keyboard with the field above it.
+- Tag category headers show their count and dot expanded or collapsed, the Tags tab's Save shows the dot, and each Filter category's match select is named "Match mode for {category}" without the "Local:" label.
+- The mockup's Discard changes leaves the panel open, and its Apply clears the Filter tab's category dots, with checks for both; its icon subset swaps `cancel` for `undo`.
+- A duration typed, left, and erased is no change, now also tested with a browser's events in the app and the mockup; on the iPad, left with a tap, it still counts as one, recorded in ISSUES.md.
+- CONTEXT.md, the domain inventory, the changelog, and the testing checklist describe the new display, M12i3 moves to MILESTONES-COMPLETED.md, and WebUI Keyboard Navigation and Focus plans moving focus somewhere sensible from a button that disables itself when pressed, such as Discard changes or the Tags tab's Save.

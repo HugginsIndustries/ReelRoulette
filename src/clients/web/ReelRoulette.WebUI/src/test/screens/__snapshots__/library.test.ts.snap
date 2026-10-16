@@ -6,6 +6,8 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
     <h2>
       "Library"
     <p aria-live="polite" class="library-overlay-summary" hidden="" id="library-overlay-summary">
+      <span aria-hidden="true">
+      <span class="visually-hidden">
     <button aria-controls="library-filter-summary library-controls" aria-expanded="true" aria-label="Hide library controls and filters" class="icon-glyph-base icon-glyph-button library-controls-toggle" id="library-controls-toggle" title="Hide controls & filters" type="button">
       <span aria-hidden="true" class="material-symbol-icon">
         "unfold_less"
@@ -55,6 +57,8 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
     <h2>
       "Library"
     <p aria-live="polite" class="library-overlay-summary" hidden="" id="library-overlay-summary">
+      <span aria-hidden="true">
+      <span class="visually-hidden">
     <button aria-controls="library-filter-summary library-controls" aria-expanded="true" aria-label="Hide library controls and filters" class="icon-glyph-base icon-glyph-button library-controls-toggle" id="library-controls-toggle" title="Hide controls & filters" type="button">
       <span aria-hidden="true" class="material-symbol-icon">
         "unfold_less"
@@ -104,7 +108,10 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
     <h2>
       "Library"
     <p aria-live="polite" class="library-overlay-summary" id="library-overlay-summary">
-      "Showing 3 of 3 items"
+      <span aria-hidden="true">
+        "3 / 3"
+      <span class="visually-hidden">
+        "3 of 3 items"
     <button aria-controls="library-filter-summary library-controls" aria-expanded="true" aria-label="Hide library controls and filters" class="icon-glyph-base icon-glyph-button library-controls-toggle" id="library-controls-toggle" title="Hide controls & filters" type="button">
       <span aria-hidden="true" class="material-symbol-icon">
         "unfold_less"

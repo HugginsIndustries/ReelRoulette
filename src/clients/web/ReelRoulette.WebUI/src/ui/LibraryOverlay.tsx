@@ -14,7 +14,7 @@ function tileItemId(target: EventTarget | null): string | null {
 }
 
 /**
- * The Library tab: its header with the summary and the collapse button, the Filters line, the controls (preset,
+ * The Library tab: its header with the count line and the collapse button, the Filters line, the controls (preset,
  * randomization mode, sort with its direction, and search), and the body with the grid or a message. The controls and
  * the Filters line collapse together. The panel shows and hides the tab's page.
  */
@@ -39,7 +39,10 @@ export function LibraryOverlay() {
     <div id="library-overlay" class={settings.tileNames.value ? "library-overlay show-tile-names" : "library-overlay"}>
       <div class="library-overlay-header">
         <h2>Library</h2>
-        <p id="library-overlay-summary" class="library-overlay-summary" aria-live="polite" hidden={summary === null}>{summary}</p>
+        <p id="library-overlay-summary" class="library-overlay-summary" aria-live="polite" hidden={summary === null}>
+          <span aria-hidden="true">{summary?.shown}</span>
+          <span class="visually-hidden">{summary?.spoken}</span>
+        </p>
         <button
           id="library-controls-toggle"
           class="icon-glyph-base icon-glyph-button library-controls-toggle"

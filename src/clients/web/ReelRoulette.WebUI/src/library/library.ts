@@ -21,6 +21,7 @@ import {
   createDefaultBrowseControls,
   getSortDirectionLabel,
   isDefaultDescendingForSortMode,
+  type BrowseResultSummary,
   type LibraryBrowseControls,
   type LibrarySortMode
 } from "./libraryBrowseModel";
@@ -94,8 +95,8 @@ export interface Library {
   readonly controlsCollapsed: ReadonlySignal<boolean>;
   /** The applied filters as the Filters line names them, empty when no filter applies. */
   readonly filterSummary: ReadonlySignal<string[]>;
-  /** The tab's "Showing N of M items", or null while it is hidden. */
-  readonly summary: ReadonlySignal<string | null>;
+  /** The tab's count line, "{matching} / {total}", or null while it is hidden. */
+  readonly summary: ReadonlySignal<BrowseResultSummary | null>;
   /** The sort direction button's label. It changes when a page in the new order arrives. */
   readonly directionLabel: ReadonlySignal<string>;
   readonly body: ReadonlySignal<LibraryBody>;
@@ -173,7 +174,7 @@ export function createLibrary(options: LibraryOptions): Library {
   const controls = signal(initialControls);
   const controlsCollapsed = signal(device.read(CONTROLS_COLLAPSED_KEY, false, isBoolean));
   const filterSummary = computed(() => filterSummaryParts(store.appliedFilter.value, store.sources.value));
-  const summary = signal<string | null>(null);
+  const summary = signal<BrowseResultSummary | null>(null);
   const directionLabel = signal(getSortDirectionLabel(initialControls.sortMode, initialControls.sortDescending));
   const body = signal<LibraryBody>({ kind: "blank" });
 
@@ -240,7 +241,7 @@ export function createLibrary(options: LibraryOptions): Library {
     }
     const current = controls.peek();
     directionLabel.value = getSortDirectionLabel(current.sortMode, current.sortDescending);
-    summary.value = snap.summaryText || null;
+    summary.value = snap.summary;
   }
 
   /** Gives the grid the loaded tiles, or keeps the scroll reset for the grid about to be created. */

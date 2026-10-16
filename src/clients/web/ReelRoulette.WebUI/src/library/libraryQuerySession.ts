@@ -3,6 +3,7 @@ import { cloneFilterState, createDefaultFilterState, serializeFilterStateForApi 
 import {
   createDefaultBrowseControls,
   formatBrowseResultSummary,
+  type BrowseResultSummary,
   type LibraryBrowseControls,
   type LibrarySortMode
 } from "./libraryBrowseModel";
@@ -45,7 +46,8 @@ export interface LibraryQuerySessionSnapshot {
   errorMessage: string | null;
   /** The failed load's HTTP status, when the error carried one, such as 408 from a server stalled on its storage. */
   errorStatus: number | null;
-  summaryText: string | null;
+  /** The count line, while the window is ready. */
+  summary: BrowseResultSummary | null;
   searchQuery: string;
   overlayVisible: boolean;
   scrollTop: number;
@@ -320,7 +322,7 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       phase,
       errorMessage,
       errorStatus,
-      summaryText: phase === "ready" ? formatBrowseResultSummary(totalCount, searchBaselineCount) : null,
+      summary: phase === "ready" ? formatBrowseResultSummary(totalCount, searchBaselineCount) : null,
       searchQuery: controls.searchQuery,
       overlayVisible,
       scrollTop,

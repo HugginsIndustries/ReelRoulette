@@ -287,10 +287,10 @@ for (const name of ["index", "validation", "recovery", "desktop-notice", "layout
     css.includes(`${iconSelectors} {\n  display: none;\n  opacity: 0;\n  transition: opacity 250ms ease;\n}`) &&
     /@media \(prefers-reduced-motion: reduce\) \{\s*\.vfield-icon,\s*\.vfield-saved,\s*\.btn-problem,\s*\.filter-tab \.tab-problem,\s*\.vfield-tip \{ transition: none; \}/.test(css));
   check(`validation: each held action's and section tab's badge sits on its corner, out of its flow (${cornerBadges(window)})`, cornerBadges(window) >= 8);
-  // The specimen's Apply applies its changes, leaving Apply and Cancel disabled until the next change.
-  const miniCancel = mini.querySelector("[data-cancel]");
+  // The specimen's Apply applies its changes, leaving Apply and Discard changes disabled until the next change.
+  const miniDiscard = mini.querySelector("[data-discard]");
   const miniFooter = [...mini.querySelectorAll(".filter-footer button")].map((b) => b.querySelector(".material-symbol-icon").dataset.icon).join(",");
-  check(`validation: the specimen's footer is the Filter tab's icon buttons (${miniFooter})`, miniFooter === "filter_alt_off,cancel,save");
+  check(`validation: the specimen's footer is the Filter tab's icon buttons (${miniFooter})`, miniFooter === "filter_alt_off,undo,save");
   const miniType = (selector, value) => {
     const field = mini.querySelector(selector);
     field.value = value;
@@ -300,11 +300,11 @@ for (const name of ["index", "validation", "recovery", "desktop-notice", "layout
   miniBlMode.dispatchEvent(new window.Event("change", { bubbles: true }));
   miniType("[data-min]", "2:00");
   jumpApply.click();
-  check("validation: a valid Apply applies, disabling Apply and Cancel",
-    jumpApply.disabled && !jumpApply.classList.contains("has-pending") && jumpApply.querySelector(".unsaved-dot").hidden && miniCancel.disabled);
+  check("validation: a valid Apply applies, disabling Apply and Discard changes",
+    jumpApply.disabled && !jumpApply.classList.contains("has-pending") && jumpApply.querySelector(".unsaved-dot").hidden && miniDiscard.disabled);
   miniType("[data-max]", "5:00");
   check("validation: and a change enables them again, with Apply's dot",
-    !jumpApply.disabled && jumpApply.classList.contains("has-pending") && !jumpApply.querySelector(".unsaved-dot").hidden && !miniCancel.disabled);
+    !jumpApply.disabled && jumpApply.classList.contains("has-pending") && !jumpApply.querySelector(".unsaved-dot").hidden && !miniDiscard.disabled);
   check(`validation: no script errors after interaction ${errors.join("; ")}`, errors.length === 0);
 }
 
@@ -693,23 +693,23 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: open state remembered`, window.localStorage.getItem("rr-mockup.open") === "true");
   check(`layout@${width}: Responsive Auto-Pause ${overlay ? "pauses" : "keeps playing"} (${chip()})`, chip().includes(overlay ? "Auto-Paused" : "Playing"));
   $("tab-btn-filter").click();
-  // The footer's icon buttons, as the Tags tab's, each with a tooltip. Apply and Cancel compare the tab with the applied
-  // filter and the saved presets: with no changes both are disabled, and a change put back is none.
+  // The footer's icon buttons, as the Tags tab's, each with a tooltip. Apply and Discard changes compare the tab with the
+  // applied filter and the saved presets: with no changes both are disabled, and a change put back is none.
   const filterFooterButtons = [...document.querySelectorAll("#tab-filter .filter-footer button")];
   const footerSays = filterFooterButtons.map((b) => `${b.querySelector(".material-symbol-icon").dataset.icon}:${b.getAttribute("aria-label")}:${b.title}`).join(",");
   check(`layout@${width}: the Filter tab's footer is icon buttons with tooltips (${footerSays})`,
-    footerSays === "filter_alt_off:Clear all filters:Clear all filters,cancel:Cancel:Cancel,save:Apply:Apply" && filterFooterButtons.every((b) => b.classList.contains("icon-btn")));
+    footerSays === "filter_alt_off:Clear all filters:Clear all filters,undo:Discard changes:Discard changes,save:Apply:Apply" && filterFooterButtons.every((b) => b.classList.contains("icon-btn")));
   const apply = $("filter-apply");
   const applyDot = () => !apply.querySelector(".unsaved-dot").hidden;
   const filterTabDot = () => !$("tab-btn-filter").querySelector(".unsaved-dot").hidden;
-  const changesShown = () => !apply.disabled && apply.classList.contains("has-pending") && applyDot() && !$("filter-cancel").disabled && filterTabDot();
-  const noChangesShown = () => apply.disabled && !apply.classList.contains("has-pending") && !applyDot() && $("filter-cancel").disabled && !filterTabDot();
+  const changesShown = () => !apply.disabled && apply.classList.contains("has-pending") && applyDot() && !$("filter-discard").disabled && filterTabDot();
+  const noChangesShown = () => apply.disabled && !apply.classList.contains("has-pending") && !applyDot() && $("filter-discard").disabled && !filterTabDot();
   // Clear all is disabled while the tab's filter is the default one, which the mockup starts with.
   const clearOff = () => $("filter-clear").disabled;
-  check(`layout@${width}: with nothing to apply, Apply and Cancel are disabled and Apply shows no dot, and with the default filter so is Clear all`,
+  check(`layout@${width}: with nothing to apply, Apply and Discard changes are disabled and Apply shows no dot, and with the default filter so is Clear all`,
     noChangesShown() && clearOff());
   change($("filter-fav"), true);
-  check(`layout@${width}: a change turns Apply orange with the tabs' dot and enables Cancel and Clear all`, changesShown() && !clearOff());
+  check(`layout@${width}: a change turns Apply orange with the tabs' dot and enables Discard changes and Clear all`, changesShown() && !clearOff());
   change($("filter-fav"), false);
   check(`layout@${width}: putting it back disables them again, and the tab's dot goes`, noChangesShown() && clearOff());
   document.querySelector('[data-sub="presets"]').click();
@@ -763,6 +763,24 @@ for (const width of [1280, 390]) {
     check(`layout@${width}: a ${field.getAttribute("aria-label").toLowerCase()} typed, left, and emptied is no change, as one emptied before it is left`,
       typedAndLeft && noChangesShown() && clearOff());
     field.blur();
+  }
+  // The same with a browser's events: an input event per keystroke as it is typed, its change event and blur as it is
+  // left, and an input event per character as it is erased, a valid duration and one that isn't, for both fields.
+  for (const field of [$("filter-min"), $("filter-max")]) {
+    for (const text of ["1:00", "abc"]) {
+      field.focus();
+      for (let length = 1; length <= text.length; length++) input(field, text.slice(0, length));
+      field.dispatchEvent(new window.Event("change", { bubbles: true }));
+      field.blur();
+      const typedAndLeft = changesShown();
+      field.focus();
+      for (let length = text.length - 1; length >= 0; length--) input(field, text.slice(0, length));
+      const erasedInField = noChangesShown() && clearOff();
+      field.dispatchEvent(new window.Event("change", { bubbles: true }));
+      field.blur();
+      check(`layout@${width}: a ${field.getAttribute("aria-label").toLowerCase()} of "${text}" typed a key at a time, left, and erased is no change, in the field and after leaving it`,
+        typedAndLeft && erasedInField && noChangesShown() && clearOff());
+    }
   }
   const min = $("filter-min");
   input(min, "1:7x");
@@ -1036,8 +1054,9 @@ for (const width of [1280, 390]) {
   change($("filter-preset-select"), "Favorites");
   document.querySelector('[data-sub="general"]').click();
   check(`layout@${width}: choosing a preset in the Filter tab loads its filter into the tab`, $("filter-fav").checked && $("filter-fav-mode").value === "only" && $("filter-heading").textContent === "Preset: Favorites");
-  $("filter-cancel").click();
-  check(`layout@${width}: and Cancel puts the applied filter back`, !$("filter-fav").checked);
+  $("filter-discard").click();
+  check(`layout@${width}: and Discard changes puts the applied filter back, leaving the Filter tab open (${overlay ? "overlay" : "side panel"})`,
+    !$("filter-fav").checked && !$("panel").hidden && !$("tab-filter").hidden);
   // The heading names the working filter's preset, which a duration still being typed isn't in, and only its star
   // follows the text, so text passed through on the way, an emptied field or one that reads as another preset's filter,
   // doesn't change the preset.
@@ -1062,14 +1081,14 @@ for (const width of [1280, 390]) {
   typeDuration($("filter-max"), ["02:", "02", "0", "", "3", "3:", "3:0", "3:00"]);
   check(`layout@${width}: Short clips' maximum backspaced to empty and typed again stays on Short clips, starred (${[...new Set(typedHeadings)].join(", ")})`,
     shortHeading === "Preset: Short clips" && typedHeadings.every((heading) => heading === "Preset: Short clips*"));
-  $("filter-cancel").click();
+  $("filter-discard").click();
   typedHeadings.length = 0;
   const photosHeading = choosePresetInTab("Photos only");
   change(document.querySelectorAll('input[name="media"]')[1], true);
   typeDuration($("filter-max"), ["2:00", "2:0", "2:", "2", ""]);
   check(`layout@${width}: a maximum typed that reads as Short clips' filter on the way keeps Photos only, starred (${[...new Set(typedHeadings)].join(", ")})`,
     photosHeading === "Preset: Photos only" && typedHeadings.every((heading) => heading === "Preset: Photos only*"));
-  $("filter-cancel").click();
+  $("filter-discard").click();
   // While the server is unreachable, a browse keeps the tiles already loaded and Apply can't save the presets.
   situation("reconnecting");
   openTab("library");
@@ -1084,7 +1103,7 @@ for (const width of [1280, 390]) {
   $("filter-apply").click();
   check(`layout@${width}: Apply while reconnecting says it couldn't save the presets (${notice()})`, notice() === "Saving presets failed: Couldn't reach the server.");
   dismissNotices();
-  $("filter-cancel").click();
+  $("filter-discard").click();
   situation("connected");
   openTab("library");
 
@@ -1323,8 +1342,25 @@ for (const width of [1280, 390]) {
     !collapsedNow(filterSection("people")) && !filterSection("people").querySelector(".category-count").hidden && filterSection("people").querySelector(".category-count").textContent === "1" &&
     !filterSection("people").querySelector(".unsaved-dot").hidden && filterToggle().getAttribute("aria-label") === "People, 1 tag in the filter, unsaved changes");
   filterToggle().click();
-  $("filter-cancel").click();
-  check(`layout@${width}: Cancel clears both`, filterSection("people").querySelector(".category-count").hidden && filterSection("people").querySelector(".unsaved-dot").hidden);
+  $("filter-discard").click();
+  check(`layout@${width}: Discard changes clears both`, filterSection("people").querySelector(".category-count").hidden && filterSection("people").querySelector(".unsaved-dot").hidden);
+  // Apply makes the tab's tags the applied ones, so a category's dot goes, collapsed or expanded, and its count follows
+  // the filter.
+  const peopleDot = () => !filterSection("people").querySelector(".unsaved-dot").hidden;
+  const peopleCount = () => filterSection("people").querySelector(".category-count");
+  filterSection("people").querySelector('[title="Include"]').click();
+  $("filter-apply").click();
+  openTab("filter");
+  check(`layout@${width}: after Apply, a collapsed Filter category's dot goes and its count stays`,
+    collapsedNow(filterSection("people")) && !peopleDot() && !peopleCount().hidden && peopleCount().textContent === "1");
+  filterToggle().click();
+  filterSection("people").querySelector('[title="Include"]').click();
+  const expandedDot = peopleDot();
+  $("filter-apply").click();
+  openTab("filter");
+  check(`layout@${width}: after Apply, an expanded Filter category's dot goes too`,
+    expandedDot && !collapsedNow(filterSection("people")) && !peopleDot() && peopleCount().hidden);
+  filterToggle().click();
   openTab("tags");
   check(`layout@${width}: no browser dialog was used (${nativeCalls.join(",")})`, nativeCalls.length === 0);
 

@@ -193,8 +193,12 @@ describe("a phone on its side", () => {
     expect(currentStyle(tab("Library")).height).toBe("40px");
     expect(currentStyle(document.getElementById("library-search-input")!).minHeight).toBe("38px");
     await click(tab("Filter"));
-    expect(currentStyle(document.getElementById("filter-cancel-btn")!).minHeight).toBe("38px");
     expect(currentStyle(document.querySelector(".filter-tab")!).minHeight).toBe("38px");
+    // The footer's icon buttons keep their size.
+    for (const id of ["filter-clear-all-btn", "filter-discard-btn", "filter-apply-btn"]) {
+      expect(currentStyle(document.getElementById(id)!).height, id).toBe("44px");
+      expect(currentStyle(document.getElementById(id)!).minHeight, id).not.toBe("38px");
+    }
     await click(tab("Tags"));
     expect(currentStyle(document.getElementById("tag-editor-category-select")!).minHeight).toBe("38px");
 
@@ -260,7 +264,7 @@ describe("a phone on its side", () => {
     await click(panelButton());
     expect(currentStyle(tab("Library")).height).toBe("44px");
     await click(tab("Filter"));
-    expect(currentStyle(document.getElementById("filter-cancel-btn")!).minHeight).toBe("44px");
+    expect(currentStyle(document.querySelector(".filter-tab")!).minHeight).toBe("44px");
 
     await click(screen.getByRole("button", { name: "Play/Pause" }));
     expect(currentStyle(topDialog()!).maxHeight).toBe("calc(100dvh - 32px)");

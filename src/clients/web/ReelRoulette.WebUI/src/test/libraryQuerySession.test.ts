@@ -92,7 +92,7 @@ describe("libraryQuerySession", () => {
     });
     expect(calls[0]?.filterState.excludeBlacklisted).toBe(true);
     const snap = session.snapshot();
-    expect(snap.summaryText).toBe("Showing 10 of 25 items");
+    expect(snap.summary).toEqual({ shown: "10 / 25", spoken: "10 of 25 items" });
     expect(snap.items).toHaveLength(1);
     expect(snap.phase).toBe("ready");
   });

@@ -152,6 +152,14 @@ function applyButton(): HTMLButtonElement {
   return document.getElementById("filter-apply-btn") as HTMLButtonElement;
 }
 
+/** Whether the Filter tab's Apply shows changes to apply: orange, with its unsaved-changes dot, and enabled. */
+function applyShowsChanges(): boolean {
+  const changes = applyButton().classList.contains("has-pending");
+  expect(applyButton().querySelector<HTMLElement>(".unsaved-dot")!.hidden).toBe(!changes);
+  expect(applyButton().disabled).toBe(!changes);
+  return changes;
+}
+
 function neverPlayed(): HTMLInputElement {
   return within(panel()).getByLabelText("Only never played") as HTMLInputElement;
 }
@@ -372,7 +380,7 @@ describe("breakpoints", () => {
     await click(panelButton());
     await click(tab("Filter"));
     await click(neverPlayed());
-    expect(applyButton().textContent).toBe("Apply*");
+    expect(applyShowsChanges()).toBe(true);
 
     setViewport({ width: 600, height: 800 });
     await settle();
@@ -383,7 +391,7 @@ describe("breakpoints", () => {
     expect(coversPage()).toBe(false);
     expect(shownPages()).toEqual(["Filter"]);
     expect(neverPlayed().checked).toBe(true);
-    expect(applyButton().textContent).toBe("Apply*");
+    expect(applyShowsChanges()).toBe(true);
   });
 });
 
@@ -533,7 +541,7 @@ describe("choosing a tile", () => {
   });
 });
 
-describe("Filter tab's Apply and Cancel", () => {
+describe("Filter tab's Apply and Discard changes", () => {
   async function openFilter(): Promise<MountedPage> {
     const page = await mount();
     await click(panelButton());
@@ -553,22 +561,23 @@ describe("Filter tab's Apply and Cancel", () => {
     expect(page.server.requests("POST", "/api/library/query").at(-1)!.body.filterState.onlyNeverPlayed).toBe(true);
     expect(isOpen()).toBe(true);
     expect(shownPages()).toEqual(["Filter"]);
-    expect(applyButton().textContent).toBe("Apply");
+    expect(applyShowsChanges()).toBe(false);
   });
 
-  it("Cancel puts back the applied filter and leaves the panel open beside the player", async () => {
+  it("Discard changes puts back the applied filter and leaves the panel open beside the player", async () => {
     await openFilter();
-    expect(applyButton().textContent).toBe("Apply*");
+    expect(applyShowsChanges()).toBe(true);
 
-    await click(within(panel()).getByRole("button", { name: "Cancel" }));
+    await click(within(panel()).getByRole("button", { name: "Discard changes" }));
 
     expect(neverPlayed().checked).toBe(false);
-    expect(applyButton().textContent).toBe("Apply");
+    expect(applyShowsChanges()).toBe(false);
     expect(isOpen()).toBe(true);
     expect(shownPages()).toEqual(["Filter"]);
   });
 
-  it("Apply and Cancel each close the overlay", async () => {
+  it("Apply closes the overlay, and Discard changes leaves it open", async () => {
+    useStylesheet();
     setViewport({ width: 600, height: 800 });
     const page = await openFilter();
     await click(applyButton());
@@ -578,8 +587,12 @@ describe("Filter tab's Apply and Cancel", () => {
     await click(panelButton());
     expect(shownPages()).toEqual(["Filter"]);
     await click(neverPlayed());
-    await click(within(panel()).getByRole("button", { name: "Cancel" }));
-    expect(isOpen()).toBe(false);
+    await click(within(panel()).getByRole("button", { name: "Discard changes" }));
+    expect(isOpen()).toBe(true);
+    expect(coversPage()).toBe(true);
+    // Apply applied it checked.
+    expect(neverPlayed().checked).toBe(true);
+    expect(applyShowsChanges()).toBe(false);
   });
 
   it("Refresh loads the tab when it failed to load when it showed", async () => {
@@ -667,7 +680,7 @@ describe("unsaved changes", () => {
     return { dot: !!dot && !dot.hidden, name: element.getAttribute("aria-label") ?? "", title: element.title };
   }
 
-  it("mark the Filter tab and the panel button with a dot, and their names say so, until Apply or Cancel", async () => {
+  it("mark the Filter tab and the panel button with a dot, and their names say so, until Apply or Discard changes", async () => {
     await mount();
     await click(panelButton());
     expect(marked(tab("Filter"))).toEqual({ dot: false, name: "Filter", title: "Filter" });
@@ -690,7 +703,7 @@ describe("unsaved changes", () => {
 
     await click(neverPlayed());
     expect(marked(tab("Filter")).dot).toBe(true);
-    await click(within(panel()).getByRole("button", { name: "Cancel" }));
+    await click(within(panel()).getByRole("button", { name: "Discard changes" }));
     expect(marked(tab("Filter")).dot).toBe(false);
     expect(marked(panelButton()).dot).toBe(false);
   });

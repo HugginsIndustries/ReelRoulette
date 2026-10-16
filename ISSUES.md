@@ -52,6 +52,19 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
   - `resolvePresetAnchor` in `src/clients/web/ReelRoulette.WebUI/src/filter/filterStateModel.ts` names the default filter None.
   - The server keeps such a preset. Per-Preset Preset Writes makes the preset routes refuse one, which a tag delete doesn't go through.
 
+## Filter tab
+
+### Erasing a duration on the iPad leaves the Filter tab's changes
+
+- **What goes wrong**: An emptied Min or Max duration still counts as a change. The Filter tab's heading stays "Preset: None*", the orange dot stays, and Apply and Discard changes stay enabled, while the field shows no red icon. An empty duration should be no limit (measured, on the user's iPad).
+- **How to make it happen**: On the iPad, in Safari or the installed app, type a duration in Min or Max, such as "1:00" or "abc", leave the field by tapping elsewhere, tap the field again, and erase it. Leaving with the keyboard's hide button instead works correctly, and so do other devices and other General changes put back (measured, on the user's devices).
+- **How much it matters**: Low. It takes a duration typed, left with a tap, and erased on the iPad, and Discard changes puts the filter back (inferred).
+- **Since**: v0.15.0, not yet released, where the Filter tab's dot compares the tab with the applied filter.
+- **Where**:
+  - `DurationRow` in `src/clients/web/ReelRoulette.WebUI/src/ui/FilterDialog.tsx` reads each keystroke with `typeDuration` and the field's change event with `changeGeneral`.
+  - `filterWithTypedDurations` in `src/clients/web/ReelRoulette.WebUI/src/filter/filterDialogModel.ts` reads each duration as its field's text for the dot, the heading's star, and Apply.
+  - The Filter screen tests "a minimum of "1:00" typed, left, and erased with a browser's events…", for both fields and both texts, and the mockup's matching checks replay a browser's events for these steps and pass (measured). The cause is likely how iPadOS orders its events when focus moves by a tap (inferred).
+
 ## Server
 
 ### The ffmpeg check can hang on its own output

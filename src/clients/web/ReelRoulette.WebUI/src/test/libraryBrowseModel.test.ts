@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   createDefaultBrowseControls,
+  formatBrowseResultSummary,
   getSortDirectionLabel,
   isDefaultDescendingForSortMode,
   LIBRARY_SORT_MODES,
@@ -38,5 +39,11 @@ describe("libraryBrowseModel", () => {
       expect(covered.has(`${mode}:true`)).toBe(true);
       expect(covered.has(`${mode}:false`)).toBe(true);
     }
+  });
+
+  it("reads the count line as matching / total with grouped numbers, which screen readers hear in words", () => {
+    const total = (49106).toLocaleString();
+    expect(formatBrowseResultSummary(615, 49106)).toEqual({ shown: `615 / ${total}`, spoken: `615 of ${total} items` });
+    expect(formatBrowseResultSummary(0, 0)).toEqual({ shown: "0 / 0", spoken: "0 of 0 items" });
   });
 });

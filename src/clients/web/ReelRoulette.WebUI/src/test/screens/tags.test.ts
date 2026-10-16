@@ -308,11 +308,14 @@ function saveButton(): HTMLButtonElement {
   return byId<HTMLButtonElement>("tag-editor-apply-btn");
 }
 
-/** Save is enabled and marked while there is something to save. */
+/** Save is enabled, orange, and shows its unsaved-changes dot while there is something to save. */
 function savePending(): boolean {
   const pending = saveButton().classList.contains("has-pending");
   if (pending === saveButton().disabled) {
     throw new Error("Save is marked pending but disabled, or the reverse.");
+  }
+  if (pending === saveButton().querySelector<HTMLElement>(".unsaved-dot")!.hidden) {
+    throw new Error("Save is marked pending without its dot, or the reverse.");
   }
   return pending;
 }
@@ -752,6 +755,25 @@ describe("opening and closing", () => {
     expect(tags.modelRequests()).toHaveLength(4);
   });
 
+  it("Save shows the unsaved-changes dot, as the panel's tabs do, only while there are changes", async () => {
+    await mountTags();
+    await openEditor();
+    const saveDot = () => saveButton().querySelector<HTMLElement>(".unsaved-dot")!;
+    expect(saveButton().getAttribute("aria-label")).toBe("Save");
+    expect(saveDot().hidden).toBe(true);
+
+    await click(chipButton("Calm", "Add tag"));
+    expect(saveDot().hidden).toBe(false);
+    await click(chipButton("Calm", "Add tag"));
+    expect(chipState("Calm").pending).toBe(null);
+    expect(saveDot().hidden).toBe(true);
+
+    await click(chipButton("Calm", "Add tag"));
+    await save();
+    await expectSaved();
+    expect(saveDot().hidden).toBe(true);
+  });
+
   it("stays open and says why when the tags cannot load", async () => {
     const { server, tags } = await mountTags({ setup: (_server, fake) => (fake.modelStatus = 500) });
     await openEditor();
@@ -1114,7 +1136,7 @@ describe("Edit Tags", () => {
     expect(categoryGrid("Uncategorized").hidden).toBe(false);
   });
 
-  it("show, while collapsed, how many of their tags the item has, and the dot while they hold unsaved changes", async () => {
+  it("show, expanded and collapsed, how many of their tags the item has, and the dot while they hold unsaved changes", async () => {
     await mountTags();
     await openEditor();
     const count = (title: string) => category(title).querySelector<HTMLElement>(".category-count")!;
@@ -1125,16 +1147,23 @@ describe("Edit Tags", () => {
     expect(count("Mood").hidden).toBe(true);
     expect(dot("Mood").hidden).toBe(true);
     expect(categoryToggle("Places").getAttribute("aria-label")).toBe("Places, 1 tag on this item");
+    await click(categoryToggle("Places"));
+    expect(categoryGrid("Places").hidden).toBe(false);
+    expect([count("Places").hidden, count("Places").textContent]).toEqual([false, "1"]);
+    expect(categoryToggle("Places").getAttribute("aria-label")).toBe("Places, 1 tag on this item");
+    await click(categoryToggle("Places"));
 
-    // A held add marks its category with the dot, which shows only while it is collapsed.
+    // A held add marks its category with the dot, which shows expanded and collapsed, and a count of 0 stays hidden.
     await click(chipButton("Calm", "Add tag"));
     expect(dot("Mood").hidden).toBe(false);
     expect(dot("Mood").title).toBe("Unsaved changes");
     expect(count("Mood").hidden).toBe(true);
     expect(categoryToggle("Mood").getAttribute("aria-label")).toBe("Mood, unsaved changes");
     await click(categoryToggle("Mood"));
-    expect(dot("Mood").hidden).toBe(true);
-    expect(categoryToggle("Mood").getAttribute("aria-label")).toBe("Mood");
+    expect(categoryGrid("Mood").hidden).toBe(false);
+    expect(dot("Mood").hidden).toBe(false);
+    expect(count("Mood").hidden).toBe(true);
+    expect(categoryToggle("Mood").getAttribute("aria-label")).toBe("Mood, unsaved changes");
     await click(categoryToggle("Mood"));
 
     // A renamed category, and the categories a tag moves between, hold unsaved changes too; a new order alone doesn't.

@@ -37,12 +37,30 @@ describe("field validation", () => {
     expect(actionBlock(["name", "min"], otherOnly, ["name"])).toEqual({ disabled: false, heldBy: "min" });
   });
 
-  it("makes each request to move to a field a new one, even for the same field", () => {
+  it("runs the move attached for a field at once, each time it is asked, and none for a field without one", () => {
     const reveal = createFieldReveal<"min" | "max">();
-    expect(reveal.request.value).toBeNull();
+    const moves: string[] = [];
+    reveal.reveal("min");
+    const detachMin = reveal.attach("min", () => moves.push("min"));
+    reveal.attach("max", () => moves.push("max"));
     reveal.reveal("min");
     reveal.reveal("min");
-    expect(reveal.request.value).toEqual({ field: "min", count: 2 });
+    reveal.reveal("max");
+    expect(moves).toEqual(["min", "min", "max"]);
+
+    detachMin();
+    reveal.reveal("min");
+    expect(moves).toEqual(["min", "min", "max"]);
+  });
+
+  it("keeps a move attached since in place when an earlier one for the same field is removed", () => {
+    const reveal = createFieldReveal<"min">();
+    const moves: string[] = [];
+    const detachFirst = reveal.attach("min", () => moves.push("first"));
+    reveal.attach("min", () => moves.push("second"));
+    detachFirst();
+    reveal.reveal("min");
+    expect(moves).toEqual(["second"]);
   });
 });
 

@@ -319,7 +319,7 @@ h1 { font-size: 1.4rem; margin: 0; }
   </div>
   <div class="filter-footer">
     <button class="icon-btn" type="button" aria-label="Clear all filters" title="Clear all filters"><span class="material-symbol-icon">filter_alt_off</span></button>
-    <button class="icon-btn" type="button" aria-label="Cancel" title="Cancel" data-cancel><span class="material-symbol-icon">cancel</span></button>
+    <button class="icon-btn" type="button" aria-label="Discard changes" title="Discard changes" data-discard><span class="material-symbol-icon">undo</span></button>
     <button class="icon-btn has-pending" type="button" aria-label="Apply" title="Apply" data-apply><span class="btn-label material-symbol-icon">save</span><span class="unsaved-dot"></span></button>
   </div>
 </template>
@@ -465,10 +465,10 @@ document.querySelectorAll("[data-mini]").forEach((mini) => {
   }
   [flagModesField, minField, maxField].forEach((field) => field.onChange(badge));
   badge();
-  // The specimen starts with changes to apply. Apply applies them, leaving Apply and Cancel disabled until the next
-  // change.
+  // The specimen starts with changes to apply. Apply applies them, leaving Apply and Discard changes disabled until the
+  // next change.
   const apply = mini.querySelector("[data-apply]");
-  const cancel = mini.querySelector("[data-cancel]");
+  const discard = mini.querySelector("[data-discard]");
   let applied = false;
   const hold = holdAction(apply, () => [flagModesField, minField, maxField], {
     idle: () => applied,
@@ -478,7 +478,7 @@ document.querySelectorAll("[data-mini]").forEach((mini) => {
   function showChanges() {
     apply.classList.toggle("has-pending", !applied);
     apply.querySelector(".unsaved-dot").hidden = applied;
-    cancel.disabled = applied;
+    discard.disabled = applied;
     hold.refresh();
   }
   apply.addEventListener("click", () => {

@@ -45,26 +45,31 @@ export function actionBlock<F extends string>(
   return { disabled, heldBy: disabled ? null : (fields.find((field) => problems[field] !== null) ?? null) };
 }
 
-/** A request to move to a field. Each one is new, so asking for the same field again moves to it again. */
-export interface RevealRequest<F extends string = string> {
-  field: F;
-  count: number;
-}
-
-/** Moves to a field: the field's component scrolls it into view and focuses it, which shows its tooltip. */
+/**
+ * Moves to a field when an action it holds is pressed. The field's component attaches its move, which shows the
+ * field's section and focuses its control, and `reveal` runs it at once, within the press, since a phone opens its
+ * on-screen keyboard only for a focus made within the press, and then brings the focused field above it.
+ */
 export interface FieldReveal<F extends string = string> {
-  readonly request: ReadonlySignal<RevealRequest<F> | null>;
+  /** Runs the move attached for `field`, at once; nothing while none is attached. */
   reveal(field: F): void;
+  /** Attaches `field`'s move and returns its removal, which leaves a move attached for the field since in place. */
+  attach(field: F, move: () => void): () => void;
 }
 
 export function createFieldReveal<F extends string>(): FieldReveal<F> {
-  const request = signal<RevealRequest<F> | null>(null);
-  let count = 0;
+  const moves = new Map<F, () => void>();
   return {
-    request,
     reveal(field) {
-      count += 1;
-      request.value = { field, count };
+      moves.get(field)?.();
+    },
+    attach(field, move) {
+      moves.set(field, move);
+      return () => {
+        if (moves.get(field) === move) {
+          moves.delete(field);
+        }
+      };
     }
   };
 }

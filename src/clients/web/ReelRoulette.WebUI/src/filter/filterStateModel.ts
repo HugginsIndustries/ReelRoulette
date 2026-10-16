@@ -583,13 +583,12 @@ export function filterStatesEqualForPresetMatch(a: FilterState, b: FilterState):
   return comparablePresetSnapshot(a) === comparablePresetSnapshot(b);
 }
 
-/** Filter dialog Apply pending: the working filter differs from the one the dialog opened with, or a preset changed. */
-export function filterDialogHasPendingChanges(
-  working: FilterState,
-  original: FilterState,
-  presetCatalogDirty: boolean
-): boolean {
-  return !filterStatesEqualForPresetMatch(working, original) || presetCatalogDirty;
+/**
+ * The Filter tab holds unsaved changes: its working filter differs from the applied filter by the preset comparison,
+ * or its preset list differs from the saved one (`presetsChanged`).
+ */
+export function filterDialogHasUnsavedChanges(working: FilterState, applied: FilterState, presetsChanged: boolean): boolean {
+  return !filterStatesEqualForPresetMatch(working, applied) || presetsChanged;
 }
 
 export interface PresetRow {

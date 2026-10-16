@@ -62,8 +62,11 @@ export interface FieldValidationOptions<F extends string = string, T extends HTM
   problem: FieldProblem | null;
   /** Whether the field shows its problem, from `isFlagged`. */
   flagged: boolean;
-  /** Moves to the field, scrolling to and focusing its control, when a request names `field`. */
-  reveal?: { from: FieldReveal<F>; field: F };
+  /**
+   * Moves to the field when `from` reveals `field`: `show`, when given, shows the field's section, and then its
+   * control takes focus, at once, so the browser brings it into view, above a phone's on-screen keyboard once it opens.
+   */
+  reveal?: { from: FieldReveal<F>; field: F; show?: () => void };
   /** The control's ref, when its component needs one of its own. */
   controlRef?: RefObject<T | null>;
 }
@@ -147,19 +150,20 @@ export function useFieldValidation<T extends HTMLElement, F extends string = str
   const iconFade = useFadeOut(flagged && problem !== null);
   const tipFade = useFadeOut(shown);
 
-  // A request made before the field rendered was for an earlier view of it.
-  const request = reveal ? reveal.from.request.value : null;
-  const handled = useRef(request?.count ?? 0);
-  useEffect(() => {
-    if (!request || request.count === handled.current) {
+  // The move runs within the press of the action the field holds, as a tap on the field does, so a phone opens its
+  // keyboard and pans the field above it itself. Scrolling it first, or focusing it without scrolling, left it under
+  // the keyboard. The latest render's `show` is the one it runs.
+  const show = useRef(reveal?.show);
+  show.current = reveal?.show;
+  useLayoutEffect(() => {
+    if (!reveal) {
       return;
     }
-    handled.current = request.count;
-    if (request.field === reveal?.field) {
-      control.current?.scrollIntoView({ block: "center" });
-      control.current?.focus({ preventScroll: true });
-    }
-  }, [request]);
+    return reveal.from.attach(reveal.field, () => {
+      show.current?.();
+      control.current?.focus();
+    });
+  }, [reveal?.from, reveal?.field]);
 
   // The icon goes away under the pointer when the field is corrected, so no leave event comes.
   useEffect(() => {
@@ -326,6 +330,13 @@ export function SettingTextField(props: SettingTextFieldProps) {
 export interface HeldButtonProps {
   id: string;
   class?: string;
+  /** An icon button's accessible name, and its title while no reason shows. */
+  label?: string;
+  /**
+   * Whether the unsaved-changes dot shows, for an action that has one: it turns red in place of the red icon while a
+   * field holds the action. Without it, the button has no dot.
+   */
+  dot?: boolean;
   /**
    * A field that may sit empty, while it is empty, or any problem in a field right next to the action, disables it,
    * from `actionBlock`. The field says why, so the button shows nothing more, unless `disabledReason` does.
@@ -341,14 +352,15 @@ export interface HeldButtonProps {
 
 /**
  * An action that uses fields of the pattern. While it is disabled, it dims and pressing it does nothing. While a
- * field elsewhere holds it, its label dims, it reads as unavailable, the red icon shows on its right, and its click
+ * field elsewhere holds it, its label, or an icon button's icon, dims, it reads as unavailable, the red icon shows as a
+ * badge on its top-right corner, out of its flow, or its unsaved-changes dot turns red when it has one, and its click
  * handler moves to that field instead of acting.
  */
-export function HeldButton({ id, class: extraClass, disabled, heldReason, disabledReason, onClick, children }: HeldButtonProps) {
+export function HeldButton({ id, class: extraClass, label, dot, disabled, heldReason, disabledReason, onClick, children }: HeldButtonProps) {
   const describedId = useId();
   const held = !disabled && heldReason !== null;
   const reason = held ? heldReason : disabled ? (disabledReason ?? null) : null;
-  // Only the icon fades out; the button's state and its description change at once.
+  // Only the icon fades out; the button's state and its description change at once. A button with a dot shows none.
   const iconFade = useFadeOut(held);
   const classes = ["held-action", extraClass, held ? "shows-problem" : null].filter(Boolean).join(" ");
   return (
@@ -360,11 +372,14 @@ export function HeldButton({ id, class: extraClass, disabled, heldReason, disabl
         disabled={disabled}
         aria-disabled={held ? "true" : undefined}
         aria-describedby={reason !== null ? describedId : undefined}
-        title={reason ?? undefined}
+        aria-label={label}
+        title={reason ?? label}
         onClick={onClick}
       >
         <span class="btn-label">{children}</span>
-        {iconFade.rendered ? (
+        {dot !== undefined ? (
+          <span class="unsaved-dot" hidden={!dot}></span>
+        ) : iconFade.rendered ? (
           <span class={fadeClasses("btn-problem material-symbol-icon", iconFade.leaving)} aria-hidden="true">
             error
           </span>
@@ -380,8 +395,8 @@ export function HeldButton({ id, class: extraClass, disabled, heldReason, disabl
 }
 
 /**
- * The red icon after a section's name while a field in it is flagged, `shown`, so the field can be found from another
- * section. It fades in and out.
+ * The red icon on a section tab's top-right corner, as a held action's badge, while a field in the section is flagged,
+ * `shown`, so the field can be found from another section. It fades in and out.
  */
 export function SectionProblemMark({ shown }: { shown: boolean }) {
   const fade = useFadeOut(shown);

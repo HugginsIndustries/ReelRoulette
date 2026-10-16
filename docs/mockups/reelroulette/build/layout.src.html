@@ -1007,7 +1007,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         </div>
         <div class="filter-footer">
           <button class="icon-btn" type="button" id="filter-clear" aria-label="Clear all filters" title="Clear all filters"><span class="material-symbol-icon">filter_alt_off</span></button>
-          <button class="icon-btn" type="button" id="filter-cancel" aria-label="Cancel" title="Cancel" disabled><span class="material-symbol-icon">cancel</span></button>
+          <button class="icon-btn" type="button" id="filter-discard" aria-label="Discard changes" title="Discard changes" disabled><span class="material-symbol-icon">undo</span></button>
           <button class="icon-btn" type="button" id="filter-apply" aria-label="Apply" title="Apply" disabled><span class="btn-label material-symbol-icon">save</span><span class="unsaved-dot" hidden></span></button>
         </div>
       </section>
@@ -3173,10 +3173,11 @@ const PRESET_FILTERS = {
   Winter: { include: ["weather-snow"] },
   Summer: { include: ["weather-sunny"] }
 };
-// The tab's presets' filters, and the saved ones, which Cancel and Clear all put back.
+// The tab's presets' filters, and the saved ones, which Discard changes and Clear all put back.
 let presetFilters = new Map(presets.map((name) => [name, { ...DEFAULT_FILTER, ...PRESET_FILTERS[name] }]));
 let savedPresetFilters = new Map(presetFilters);
-// The applied filter, its fields, the saved presets, the applied tags, and the applied match modes, which Cancel puts back.
+// The applied filter, its fields, the saved presets, the applied tags, and the applied match modes, which Discard changes
+// puts back.
 let appliedValue = null;
 let snapshot = null;
 let presetSnapshot = presets.slice();
@@ -3314,8 +3315,8 @@ const filterIsDefault = () => sameFilter(filterValue(), DEFAULT_FILTER);
 
 // Whether the tab holds changes to apply, compared with the applied filter and the saved presets, so a change put back
 // is none: its filter, typed durations included, and its preset list by order, name, and filter. Without one, Apply and
-// Cancel are disabled; with one, Apply turns orange with the dot, as the tab and the panel button show it. Clear all is
-// disabled while the filter is the default one, and so are Add Preset and Update Preset, which say why.
+// Discard changes are disabled; with one, Apply turns orange with the dot, as the tab and the panel button show it. Clear
+// all is disabled while the filter is the default one, and so are Add Preset and Update Preset, which say why.
 function filterChanges() {
   if (!appliedValue) return false;
   const value = filterValue();
@@ -3333,7 +3334,7 @@ function renderApply() {
   const apply = $("filter-apply");
   apply.classList.toggle("has-pending", changed);
   apply.querySelector(".unsaved-dot").hidden = !changed;
-  $("filter-cancel").disabled = !changed;
+  $("filter-discard").disabled = !changed;
   $("filter-clear").disabled = filterIsDefault();
   applyHold?.refresh();
   addPresetHold?.refresh();
@@ -3451,6 +3452,8 @@ $("filter-apply").addEventListener("click", () => {
   resetUncheckedModes();
   takeSnapshot();
   startOver();
+  // The categories' dots compare the tab's tags with the applied ones, which these now are.
+  renderFilterTags();
   saveFilterState();
   saveLibState();
   renderApply();
@@ -3460,11 +3463,11 @@ $("filter-apply").addEventListener("click", () => {
   acknowledge("Filters applied.", "filter");
   if (state.mode === "overlay") closePanel();
 });
-$("filter-cancel").addEventListener("click", () => {
+// Discard changes puts back the applied filter and the saved presets at once, and the tab stays open, in the overlay too.
+$("filter-discard").addEventListener("click", () => {
   restoreSnapshot();
   renderLibPresets();
   renderApply();
-  if (state.mode === "overlay") closePanel();
 });
 // Clear all filters returns to the default filter and the saved presets, as today.
 $("filter-clear").addEventListener("click", () => {

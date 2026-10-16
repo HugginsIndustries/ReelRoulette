@@ -122,19 +122,17 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
           "Tags Filter"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-cat-places" aria-expanded="true" aria-label="Places" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-controls="filter-tag-grid-cat-places" aria-expanded="true" aria-label="Places, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "Places"
-              <span class="category-count" hidden="" title="1 tag in the filter">
+              <span class="category-count" title="1 tag in the filter">
                 "1"
               <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
-            <label class="filter-local">
-              "Local:"
-              <select class="ctl filter-local-mode" data-cat-id="cat-places">
-                <option selected="true" value="0">
-                  "ALL (AND)"
-                <option selected="false" value="1">
-                  "ANY (OR)"
+            <select aria-label="Match mode for Places" class="ctl filter-local-mode" data-cat-id="cat-places" title="Match mode">
+              <option selected="true" value="0">
+                "ALL (AND)"
+              <option selected="false" value="1">
+                "ANY (OR)"
           <div class="tag-grid" id="filter-tag-grid-cat-places">
             <div class="tag-chip">
               <span class="tag-chip-label">
@@ -162,13 +160,11 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
               <span class="category-count" hidden="" title="0 tags in the filter">
                 "0"
               <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
-            <label class="filter-local">
-              "Local:"
-              <select class="ctl filter-local-mode" data-cat-id="cat-mood">
-                <option selected="true" value="0">
-                  "ALL (AND)"
-                <option selected="false" value="1">
-                  "ANY (OR)"
+            <select aria-label="Match mode for Mood" class="ctl filter-local-mode" data-cat-id="cat-mood" title="Match mode">
+              <option selected="true" value="0">
+                "ALL (AND)"
+              <option selected="false" value="1">
+                "ANY (OR)"
           <div class="tag-grid" hidden="" id="filter-tag-grid-cat-mood">
             <div class="tag-chip">
               <span class="tag-chip-label">
@@ -181,19 +177,17 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
                   "remove"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-cat-people" aria-expanded="true" aria-label="People" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-controls="filter-tag-grid-cat-people" aria-expanded="true" aria-label="People, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "People"
-              <span class="category-count" hidden="" title="1 tag in the filter">
+              <span class="category-count" title="1 tag in the filter">
                 "1"
               <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
-            <label class="filter-local">
-              "Local:"
-              <select class="ctl filter-local-mode" data-cat-id="cat-people">
-                <option selected="false" value="0">
-                  "ALL (AND)"
-                <option selected="true" value="1">
-                  "ANY (OR)"
+            <select aria-label="Match mode for People" class="ctl filter-local-mode" data-cat-id="cat-people" title="Match mode">
+              <option selected="false" value="0">
+                "ALL (AND)"
+              <option selected="true" value="1">
+                "ANY (OR)"
           <div class="tag-grid" id="filter-tag-grid-cat-people">
             <div class="tag-chip">
               <span class="tag-chip-label">
@@ -215,19 +209,17 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
                   "remove"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-__filter_uncategorized__" aria-expanded="true" aria-label="Uncategorized" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-controls="filter-tag-grid-__filter_uncategorized__" aria-expanded="true" aria-label="Uncategorized, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "Uncategorized"
-              <span class="category-count" hidden="" title="1 tag in the filter">
+              <span class="category-count" title="1 tag in the filter">
                 "1"
               <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
-            <label class="filter-local">
-              "Local:"
-              <select class="ctl filter-local-mode" data-cat-id="">
-                <option selected="true" value="0">
-                  "ALL (AND)"
-                <option selected="false" value="1">
-                  "ANY (OR)"
+            <select aria-label="Match mode for Uncategorized" class="ctl filter-local-mode" data-cat-id="" title="Match mode">
+              <option selected="true" value="0">
+                "ALL (AND)"
+              <option selected="false" value="1">
+                "ANY (OR)"
           <div class="tag-grid" id="filter-tag-grid-__filter_uncategorized__">
             <div class="tag-chip state-all">
               <span class="tag-chip-label">
@@ -288,13 +280,17 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
           "Drag to reorder, or press the up and down arrow keys."
         <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">
-    <button class="btn" id="filter-clear-all-btn" type="button">
-      "Clear all filters"
-    <button class="btn" id="filter-cancel-btn" type="button">
-      "Cancel"
-    <button class="held-action btn" id="filter-apply-btn" type="button">
+    <button aria-label="Clear all filters" class="icon-btn" id="filter-clear-all-btn" title="Clear all filters" type="button">
+      <span class="material-symbol-icon">
+        "filter_alt_off"
+    <button aria-label="Discard changes" class="icon-btn" disabled="" id="filter-discard-btn" title="Discard changes" type="button">
+      <span class="material-symbol-icon">
+        "undo"
+    <button aria-label="Apply" class="held-action icon-btn" disabled="" id="filter-apply-btn" title="Apply" type="button">
       <span class="btn-label">
-        "Apply"
+        <span class="material-symbol-icon">
+          "save"
+      <span class="unsaved-dot" hidden="">
 "
 `;
 
@@ -420,19 +416,17 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
           "Tags Filter"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-cat-places" aria-expanded="true" aria-label="Places" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-controls="filter-tag-grid-cat-places" aria-expanded="true" aria-label="Places, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "Places"
-              <span class="category-count" hidden="" title="1 tag in the filter">
+              <span class="category-count" title="1 tag in the filter">
                 "1"
               <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
-            <label class="filter-local">
-              "Local:"
-              <select class="ctl filter-local-mode" data-cat-id="cat-places">
-                <option selected="true" value="0">
-                  "ALL (AND)"
-                <option selected="false" value="1">
-                  "ANY (OR)"
+            <select aria-label="Match mode for Places" class="ctl filter-local-mode" data-cat-id="cat-places" title="Match mode">
+              <option selected="true" value="0">
+                "ALL (AND)"
+              <option selected="false" value="1">
+                "ANY (OR)"
           <div class="tag-grid" id="filter-tag-grid-cat-places">
             <div class="tag-chip">
               <span class="tag-chip-label">
@@ -460,13 +454,11 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
               <span class="category-count" hidden="" title="0 tags in the filter">
                 "0"
               <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
-            <label class="filter-local">
-              "Local:"
-              <select class="ctl filter-local-mode" data-cat-id="cat-mood">
-                <option selected="true" value="0">
-                  "ALL (AND)"
-                <option selected="false" value="1">
-                  "ANY (OR)"
+            <select aria-label="Match mode for Mood" class="ctl filter-local-mode" data-cat-id="cat-mood" title="Match mode">
+              <option selected="true" value="0">
+                "ALL (AND)"
+              <option selected="false" value="1">
+                "ANY (OR)"
           <div class="tag-grid" hidden="" id="filter-tag-grid-cat-mood">
             <div class="tag-chip">
               <span class="tag-chip-label">
@@ -479,19 +471,17 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
                   "remove"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-cat-people" aria-expanded="true" aria-label="People" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-controls="filter-tag-grid-cat-people" aria-expanded="true" aria-label="People, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "People"
-              <span class="category-count" hidden="" title="1 tag in the filter">
+              <span class="category-count" title="1 tag in the filter">
                 "1"
               <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
-            <label class="filter-local">
-              "Local:"
-              <select class="ctl filter-local-mode" data-cat-id="cat-people">
-                <option selected="false" value="0">
-                  "ALL (AND)"
-                <option selected="true" value="1">
-                  "ANY (OR)"
+            <select aria-label="Match mode for People" class="ctl filter-local-mode" data-cat-id="cat-people" title="Match mode">
+              <option selected="false" value="0">
+                "ALL (AND)"
+              <option selected="true" value="1">
+                "ANY (OR)"
           <div class="tag-grid" id="filter-tag-grid-cat-people">
             <div class="tag-chip">
               <span class="tag-chip-label">
@@ -513,19 +503,17 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
                   "remove"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-__filter_uncategorized__" aria-expanded="true" aria-label="Uncategorized" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-controls="filter-tag-grid-__filter_uncategorized__" aria-expanded="true" aria-label="Uncategorized, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "Uncategorized"
-              <span class="category-count" hidden="" title="1 tag in the filter">
+              <span class="category-count" title="1 tag in the filter">
                 "1"
               <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
-            <label class="filter-local">
-              "Local:"
-              <select class="ctl filter-local-mode" data-cat-id="">
-                <option selected="true" value="0">
-                  "ALL (AND)"
-                <option selected="false" value="1">
-                  "ANY (OR)"
+            <select aria-label="Match mode for Uncategorized" class="ctl filter-local-mode" data-cat-id="" title="Match mode">
+              <option selected="true" value="0">
+                "ALL (AND)"
+              <option selected="false" value="1">
+                "ANY (OR)"
           <div class="tag-grid" id="filter-tag-grid-__filter_uncategorized__">
             <div class="tag-chip state-all">
               <span class="tag-chip-label">
@@ -586,13 +574,17 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
           "Drag to reorder, or press the up and down arrow keys."
         <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">
-    <button class="btn" id="filter-clear-all-btn" type="button">
-      "Clear all filters"
-    <button class="btn" id="filter-cancel-btn" type="button">
-      "Cancel"
-    <button class="held-action btn" id="filter-apply-btn" type="button">
+    <button aria-label="Clear all filters" class="icon-btn" id="filter-clear-all-btn" title="Clear all filters" type="button">
+      <span class="material-symbol-icon">
+        "filter_alt_off"
+    <button aria-label="Discard changes" class="icon-btn" disabled="" id="filter-discard-btn" title="Discard changes" type="button">
+      <span class="material-symbol-icon">
+        "undo"
+    <button aria-label="Apply" class="held-action icon-btn" disabled="" id="filter-apply-btn" title="Apply" type="button">
       <span class="btn-label">
-        "Apply"
+        <span class="material-symbol-icon">
+          "save"
+      <span class="unsaved-dot" hidden="">
 "
 `;
 
@@ -718,19 +710,17 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
           "Tags Filter"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-cat-places" aria-expanded="true" aria-label="Places" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-controls="filter-tag-grid-cat-places" aria-expanded="true" aria-label="Places, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "Places"
-              <span class="category-count" hidden="" title="1 tag in the filter">
+              <span class="category-count" title="1 tag in the filter">
                 "1"
               <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
-            <label class="filter-local">
-              "Local:"
-              <select class="ctl filter-local-mode" data-cat-id="cat-places">
-                <option selected="true" value="0">
-                  "ALL (AND)"
-                <option selected="false" value="1">
-                  "ANY (OR)"
+            <select aria-label="Match mode for Places" class="ctl filter-local-mode" data-cat-id="cat-places" title="Match mode">
+              <option selected="true" value="0">
+                "ALL (AND)"
+              <option selected="false" value="1">
+                "ANY (OR)"
           <div class="tag-grid" id="filter-tag-grid-cat-places">
             <div class="tag-chip">
               <span class="tag-chip-label">
@@ -758,13 +748,11 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
               <span class="category-count" hidden="" title="0 tags in the filter">
                 "0"
               <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
-            <label class="filter-local">
-              "Local:"
-              <select class="ctl filter-local-mode" data-cat-id="cat-mood">
-                <option selected="true" value="0">
-                  "ALL (AND)"
-                <option selected="false" value="1">
-                  "ANY (OR)"
+            <select aria-label="Match mode for Mood" class="ctl filter-local-mode" data-cat-id="cat-mood" title="Match mode">
+              <option selected="true" value="0">
+                "ALL (AND)"
+              <option selected="false" value="1">
+                "ANY (OR)"
           <div class="tag-grid" hidden="" id="filter-tag-grid-cat-mood">
             <div class="tag-chip">
               <span class="tag-chip-label">
@@ -777,19 +765,17 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
                   "remove"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-cat-people" aria-expanded="true" aria-label="People" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-controls="filter-tag-grid-cat-people" aria-expanded="true" aria-label="People, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "People"
-              <span class="category-count" hidden="" title="1 tag in the filter">
+              <span class="category-count" title="1 tag in the filter">
                 "1"
               <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
-            <label class="filter-local">
-              "Local:"
-              <select class="ctl filter-local-mode" data-cat-id="cat-people">
-                <option selected="false" value="0">
-                  "ALL (AND)"
-                <option selected="true" value="1">
-                  "ANY (OR)"
+            <select aria-label="Match mode for People" class="ctl filter-local-mode" data-cat-id="cat-people" title="Match mode">
+              <option selected="false" value="0">
+                "ALL (AND)"
+              <option selected="true" value="1">
+                "ANY (OR)"
           <div class="tag-grid" id="filter-tag-grid-cat-people">
             <div class="tag-chip">
               <span class="tag-chip-label">
@@ -811,19 +797,17 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
                   "remove"
         <section class="tag-category">
           <div class="tag-category-header">
-            <button aria-controls="filter-tag-grid-__filter_uncategorized__" aria-expanded="true" aria-label="Uncategorized" class="tag-category-toggle" title="Collapse category" type="button">
+            <button aria-controls="filter-tag-grid-__filter_uncategorized__" aria-expanded="true" aria-label="Uncategorized, 1 tag in the filter" class="tag-category-toggle" title="Collapse category" type="button">
               <span class="tag-category-name">
                 "Uncategorized"
-              <span class="category-count" hidden="" title="1 tag in the filter">
+              <span class="category-count" title="1 tag in the filter">
                 "1"
               <span class="unsaved-dot category-dot" hidden="" title="Unsaved changes">
-            <label class="filter-local">
-              "Local:"
-              <select class="ctl filter-local-mode" data-cat-id="">
-                <option selected="true" value="0">
-                  "ALL (AND)"
-                <option selected="false" value="1">
-                  "ANY (OR)"
+            <select aria-label="Match mode for Uncategorized" class="ctl filter-local-mode" data-cat-id="" title="Match mode">
+              <option selected="true" value="0">
+                "ALL (AND)"
+              <option selected="false" value="1">
+                "ANY (OR)"
           <div class="tag-grid" id="filter-tag-grid-__filter_uncategorized__">
             <div class="tag-chip state-all">
               <span class="tag-chip-label">
@@ -884,12 +868,16 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
           "Drag to reorder, or press the up and down arrow keys."
         <div aria-live="polite" class="visually-hidden">
   <div class="filter-dialog-footer">
-    <button class="btn" id="filter-clear-all-btn" type="button">
-      "Clear all filters"
-    <button class="btn" id="filter-cancel-btn" type="button">
-      "Cancel"
-    <button class="held-action btn" id="filter-apply-btn" type="button">
+    <button aria-label="Clear all filters" class="icon-btn" id="filter-clear-all-btn" title="Clear all filters" type="button">
+      <span class="material-symbol-icon">
+        "filter_alt_off"
+    <button aria-label="Discard changes" class="icon-btn" disabled="" id="filter-discard-btn" title="Discard changes" type="button">
+      <span class="material-symbol-icon">
+        "undo"
+    <button aria-label="Apply" class="held-action icon-btn" disabled="" id="filter-apply-btn" title="Apply" type="button">
       <span class="btn-label">
-        "Apply"
+        <span class="material-symbol-icon">
+          "save"
+      <span class="unsaved-dot" hidden="">
 "
 `;

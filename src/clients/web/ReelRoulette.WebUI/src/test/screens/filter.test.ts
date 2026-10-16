@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { statusLogLine } from "../../logging/relayLogLines";
 import {
   closeNotices,
@@ -21,6 +21,7 @@ import {
   pointerUp,
   pressKey,
   resetPage,
+  currentStyle,
   scrollOnFocus,
   selectedPresetLabel,
   setViewport,
@@ -206,7 +207,32 @@ function dialogButton(name: string | RegExp): HTMLButtonElement {
 }
 
 function applyButton(): HTMLButtonElement {
-  return dialogButton(/^Apply\*?$/);
+  return dialogButton("Apply");
+}
+
+function discardButton(): HTMLButtonElement {
+  return dialogButton("Discard changes");
+}
+
+function clearAllButton(): HTMLButtonElement {
+  return dialogButton("Clear all filters");
+}
+
+/** Apply's unsaved-changes dot. */
+function applyDot(): HTMLElement {
+  return applyButton().querySelector<HTMLElement>(".unsaved-dot")!;
+}
+
+/**
+ * Whether Apply shows that the tab has changes to apply: orange, with its unsaved-changes dot, and enabled, as Discard
+ * changes is. Without changes, it shows neither, and both are disabled.
+ */
+function applyShowsChanges(): boolean {
+  const changes = applyButton().classList.contains("has-pending");
+  expect(applyDot().hidden).toBe(!changes);
+  expect(applyButton().disabled).toBe(!changes);
+  expect(discardButton().disabled).toBe(!changes);
+  return changes;
 }
 
 async function apply(): Promise<void> {
@@ -251,14 +277,18 @@ function tooltipShown(field: HTMLElement): boolean {
   return !!tip && tip.classList.contains("is-shown") && !tip.classList.contains("is-fading-out");
 }
 
-/** An action's label, without its red icon. */
-function label(button: HTMLButtonElement): string {
-  return button.querySelector(".btn-label")?.textContent ?? "";
-}
-
-/** Whether a field holds the action, and whether the action shows the red icon of a flagged field, not one fading out. */
-function heldState(button: HTMLButtonElement): { held: boolean; icon: boolean } {
-  return { held: button.getAttribute("aria-disabled") === "true", icon: button.querySelector(".btn-problem:not(.is-fading-out)") !== null };
+/**
+ * Whether a field holds the action, and whether the action shows it: the red badge of a flagged field, not one fading
+ * out, or, for Apply, which has no badge, its unsaved-changes dot turned red.
+ */
+function heldState(button: HTMLButtonElement): { held: boolean; marked: boolean } {
+  const held = button.getAttribute("aria-disabled") === "true";
+  const dot = button.querySelector<HTMLElement>(".unsaved-dot");
+  if (dot) {
+    expect(button.querySelector(".btn-problem")).toBeNull();
+    return { held, marked: !dot.hidden && button.classList.contains("shows-problem") };
+  }
+  return { held, marked: button.querySelector(".btn-problem:not(.is-fading-out)") !== null };
 }
 
 function heading(): string {
@@ -354,6 +384,11 @@ function chipNames(title: string): string[] {
 
 function categoryGrid(title: string): HTMLElement {
   return category(title).querySelector(".tag-grid") as HTMLElement;
+}
+
+/** A category's match mode, by its accessible name. */
+function matchMode(title: string): HTMLSelectElement {
+  return within(category(title)).getByRole("combobox", { name: `Match mode for ${title}`, hidden: true }) as HTMLSelectElement;
 }
 
 function categoryToggle(title: string): HTMLButtonElement {
@@ -518,8 +553,76 @@ describe("opening and closing", () => {
     expect(byId("filter-panel-general").style.display).toBe("block");
     expect(byId("filter-panel-tags").style.display).toBe("none");
     expect(byId("filter-panel-presets").style.display).toBe("none");
-    expect(applyButton().textContent).toBe("Apply");
-    expect(applyButton().classList.contains("has-pending")).toBe(false);
+    expect(applyShowsChanges()).toBe(false);
+  });
+
+  it("has Clear all filters, Discard changes, and Apply as icon buttons, each with its tooltip", async () => {
+    await mountFilter();
+    await openDialog();
+    const footer = dialog().querySelector(".filter-dialog-footer")!;
+    expect(
+      Array.from(footer.querySelectorAll("button")).map((button) => [
+        button.id,
+        button.className.split(" ").includes("icon-btn"),
+        button.getAttribute("aria-label"),
+        button.title,
+        button.querySelector(".material-symbol-icon")?.textContent
+      ])
+    ).toEqual([
+      ["filter-clear-all-btn", true, "Clear all filters", "Clear all filters", "filter_alt_off"],
+      ["filter-discard-btn", true, "Discard changes", "Discard changes", "undo"],
+      ["filter-apply-btn", true, "Apply", "Apply", "save"]
+    ]);
+    // Only Apply has a dot.
+    expect(footer.querySelectorAll(".unsaved-dot")).toHaveLength(1);
+    expect(applyDot().parentElement).toBe(applyButton());
+  });
+
+  it("enables Apply and Discard changes, with Apply orange and its dot, only while there are changes, after a change put back and after Clear all too", async () => {
+    await mountFilter([RICH_PRESET]);
+    await pickPreset("preset-rich");
+    await openDialog();
+    expect(applyShowsChanges()).toBe(false);
+
+    await click(box("Only never played"));
+    expect(applyShowsChanges()).toBe(true);
+    await click(box("Only never played"));
+    expect(applyShowsChanges()).toBe(false);
+
+    // Rich is applied, so the default filter is a change.
+    await click(clearAllButton());
+    expect(applyShowsChanges()).toBe(true);
+    await click(discardButton());
+    expect(applyShowsChanges()).toBe(false);
+    expect(heading()).toBe("Preset: Rich");
+    expect(box("Videos only").checked).toBe(true);
+  });
+
+  it("disables Clear all filters while the filter is the default one, right after pressing it too, and not for a change to the preset list alone", async () => {
+    await mountFilter([RICH_PRESET, FAVORITES_PRESET]);
+    await openDialog();
+    expect(clearAllButton().disabled).toBe(true);
+
+    // A duration counts as its field reads, before the field is left, and text that isn't valid is a change.
+    const min = byId<HTMLInputElement>("filter-min-dur-text");
+    for (const [text, disabled] of [["1:30", false], ["1:7x", false], ["", true]] as const) {
+      fireEvent.input(min, { target: { value: text } });
+      await settle();
+      expect(clearAllButton().disabled, text).toBe(disabled);
+    }
+
+    await click(box("Only never played"));
+    expect(clearAllButton().disabled).toBe(false);
+    await click(clearAllButton());
+    expect(clearAllButton().disabled).toBe(true);
+    expect(box("Only never played").checked).toBe(false);
+
+    await showTab("Presets");
+    await pressKey(presetHandle("Rich"), "ArrowDown");
+    expect(applyShowsChanges()).toBe(true);
+    expect(clearAllButton().disabled).toBe(true);
+    await chooseInDialog("Favorites");
+    expect(clearAllButton().disabled).toBe(false);
   });
 
   it("switches tabs, showing the Presets panel as a flex column", async () => {
@@ -556,7 +659,7 @@ describe("opening and closing", () => {
       await openDialog();
       expect(selectedTab(), way).toBe("Presets");
       expect(presetRows(), way).toEqual(["Beach days", "Favorites", "Draft"]);
-      expect(applyButton().textContent, way).toBe("Apply*");
+      expect(applyShowsChanges(), way).toBe(true);
       await showTab("General");
       expect(flagRow("Favorites").checked, way).toBe(true);
       await showTab("Presets");
@@ -567,46 +670,39 @@ describe("opening and closing", () => {
     expect((await nextPick(server)).filterState.favoritesOnly).toBe(false);
   });
 
-  it("Cancel drops its changes, beside the player and as the overlay, and it shows the applied filter and the saved presets again", async () => {
+  it("Discard changes drops its changes at once, without asking, and stays open, beside the player and as the overlay, showing the applied filter and the saved presets again", async () => {
     const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET, RECENT_PRESET]);
     const queries = libraryQueries(server).length;
-    const cancel: Array<[string, () => Promise<void>]> = [
-      [
-        "Cancel beside the player",
-        async () => {
-          await click(dialogButton("Cancel"));
-          expect(isOpen()).toBe(true);
-          expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
-          expect(presetRows()).toEqual(presets.list.map((preset) => preset.name));
-          expect(applyButton().textContent).toBe("Apply");
-          await closePanel();
-        }
-      ],
-      [
-        "Cancel as the overlay",
-        async () => {
-          setViewport({ width: 600, height: 800 });
-          await settle();
-          await click(dialogButton("Cancel"));
-          expect(panel().hidden).toBe(true);
-          setViewport(DEFAULT_VIEWPORT);
-          await settle();
-        }
-      ]
-    ];
 
-    for (const [way, cancelTab] of cancel) {
+    for (const [way, viewport] of [
+      ["beside the player", DEFAULT_VIEWPORT],
+      ["as the overlay", { width: 600, height: 800 }]
+    ] as const) {
       await openDialog();
+      await showTab("General");
+      expect(discardButton().disabled, way).toBe(true);
       await click(box("Favorites"));
-      expect(applyButton().textContent, way).toBe("Apply*");
+      expect(applyShowsChanges(), way).toBe(true);
       await showTab("Presets");
       expect(presetRows(), way).toEqual(["Favorites", "Beach days", "Recent"]);
       await addPreset("Draft");
       await pressKey(presetHandle("Favorites"), "ArrowDown");
       await deletePreset("Recent");
-      expect(presetRows()).toEqual(["Beach days", "Favorites", "Draft"]);
-      await cancelTab();
-      expect(isOpen(), way).toBe(false);
+      expect(presetRows(), way).toEqual(["Beach days", "Favorites", "Draft"]);
+      setViewport(viewport);
+      await settle();
+
+      await click(discardButton());
+      expect(appDialogs(), way).toEqual([]);
+      expect(isOpen(), way).toBe(true);
+      expect(selectedTab(), way).toBe("Presets");
+      expect(presetRows(), way).toEqual(presets.list.map((preset) => preset.name));
+      expect(applyShowsChanges(), way).toBe(false);
+      await showTab("General");
+      expect(flagRow("Favorites"), way).toEqual(FAVORITES_DEFAULT);
+      await closePanel();
+      setViewport(DEFAULT_VIEWPORT);
+      await settle();
     }
 
     expect(presets.saves()).toHaveLength(0);
@@ -614,7 +710,7 @@ describe("opening and closing", () => {
     expect((await nextPick(server)).filterState.favoritesOnly).toBe(false);
     await openDialog();
     expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
-    expect(applyButton().textContent).toBe("Apply");
+    expect(applyShowsChanges()).toBe(false);
     await showTab("Presets");
     expect(presetRows()).toEqual(presets.list.map((preset) => preset.name));
   });
@@ -632,6 +728,9 @@ describe("opening and closing", () => {
     expect(server.requests("GET", "/api/sources")).toHaveLength(0);
     expect(server.requests("POST", "/api/tag-editor/model")).toHaveLength(0);
     expect(dialog().querySelector("input")).toBeNull();
+    // Before the tab first loads, its footer has nothing to act on.
+    expect([clearAllButton(), discardButton(), applyButton()].map((button) => button.disabled)).toEqual([true, true, true]);
+    expect(applyDot().hidden).toBe(true);
   });
 
   it("shows but loads nothing while the server runs without a library, nor on Refresh, with no notice", async () => {
@@ -763,18 +862,16 @@ describe("General tab", () => {
     expect(byId<HTMLInputElement>("filter-max-dur-text").value).toBe("01:01:40");
   });
 
-  it("marks Apply as pending after a change, and not once the change is undone", async () => {
+  it("shows Apply's changes after a change, and not once the change is undone", async () => {
     await mountFilter();
     await openDialog();
 
     await click(box("Favorites"));
-    expect(applyButton().textContent).toBe("Apply*");
-    expect(applyButton().classList.contains("has-pending")).toBe(true);
+    expect(applyShowsChanges()).toBe(true);
     expect(heading()).toBe("Preset: None*");
 
     await click(box("Favorites"));
-    expect(applyButton().textContent).toBe("Apply");
-    expect(applyButton().classList.contains("has-pending")).toBe(false);
+    expect(applyShowsChanges()).toBe(false);
     expect(heading()).toBe("Preset: None");
   });
 
@@ -814,7 +911,7 @@ describe("General tab", () => {
     await type(min, "");
     expect(min.hasAttribute("aria-invalid")).toBe(false);
     expect(heldState(applyButton()).held).toBe(false);
-    expect(label(applyButton())).toBe("Apply*");
+    expect(applyShowsChanges()).toBe(true);
     const applied = await applyAndWait(server);
     expect(applied.minDuration).toBeUndefined();
     expect(applied.maxDuration).toBe("01:01:40");
@@ -858,14 +955,15 @@ describe("General tab", () => {
     return !element ? "gone" : element.classList.contains("is-fading-out") ? "fading" : "shown";
   }
 
-  /** The minimum duration's icon and shown tooltip, General's icon, and Apply's icon. */
+  /** The minimum duration's icon and shown tooltip, General's badge, and Update Preset's badge. */
   function minimumMarks(min: HTMLInputElement): Array<"shown" | "fading" | "gone"> {
     const field = min.closest(".vfield")!;
     const general = within(dialog()).getByRole("tab", { name: "General" });
-    return [field.querySelector(".vfield-icon"), field.querySelector(".vfield-tip.is-shown"), general.querySelector(".section-problem"), applyButton().querySelector(".btn-problem")].map(fade);
+    const update = byId("filter-update-preset-btn");
+    return [field.querySelector(".vfield-icon"), field.querySelector(".vfield-tip.is-shown"), general.querySelector(".section-problem"), update.querySelector(".btn-problem")].map(fade);
   }
 
-  it("fades a corrected duration's icon and tooltip, General's icon, and Apply's icon out, rendered until they have faded", async () => {
+  it("fades a corrected duration's icon and tooltip, General's badge, and a held action's badge out, rendered until they have faded", async () => {
     await mountFilter();
     await openDialog();
     const min = byId<HTMLInputElement>("filter-min-dur-text");
@@ -876,7 +974,7 @@ describe("General tab", () => {
     // Only the look lingers: the field and Apply change at once, and the tooltip keeps the problem it said.
     await type(min, "1:07");
     expect(minimumMarks(min)).toEqual(["fading", "fading", "fading", "fading"]);
-    expect([min.hasAttribute("aria-invalid"), min.hasAttribute("aria-describedby"), heldState(applyButton()).held, tabMarked("General")]).toEqual([false, false, false, false]);
+    expect([min.hasAttribute("aria-invalid"), min.hasAttribute("aria-describedby"), heldState(byId<HTMLButtonElement>("filter-update-preset-btn")).held, tabMarked("General")]).toEqual([false, false, false, false]);
     expect(min.closest(".vfield")!.querySelector(".vfield-tip")!.textContent).toBe("Use MM:SS, HH:MM:SS, or seconds.");
 
     // Flagged again while they fade, they show again.
@@ -886,7 +984,7 @@ describe("General tab", () => {
     await waitFor(() => expect(minimumMarks(min)).toEqual(["gone", "gone", "gone", "gone"]));
   });
 
-  it("with reduced motion, takes a corrected duration's icon and tooltip, General's icon, and Apply's icon away at once", async () => {
+  it("with reduced motion, takes a corrected duration's icon and tooltip, General's badge, and a held action's badge away at once", async () => {
     stubReducedMotion();
     await mountFilter();
     await openDialog();
@@ -936,8 +1034,8 @@ describe("General tab", () => {
 
     await type(min, "abc");
     // A duration that isn't valid is a change, which Apply holds.
-    expect(label(applyButton())).toBe("Apply*");
-    expect(heldState(applyButton())).toEqual({ held: true, icon: true });
+    expect(applyShowsChanges()).toBe(true);
+    expect(heldState(applyButton())).toEqual({ held: true, marked: true });
     expect(applyButton().title).toBe("Correct the minimum duration to apply.");
     expect(document.getElementById(applyButton().getAttribute("aria-describedby")!)?.textContent).toBe("Correct the minimum duration to apply.");
     await showTab("Tags");
@@ -948,7 +1046,7 @@ describe("General tab", () => {
     expect(min.value).toBe("abc");
 
     await click(box("Only never played"));
-    expect(label(applyButton())).toBe("Apply*");
+    expect(applyShowsChanges()).toBe(true);
     await type(max, "1:75");
     await type(min, "90");
     expect(applyButton().title).toBe("Correct the maximum duration to apply.");
@@ -960,11 +1058,80 @@ describe("General tab", () => {
     expect(server.logLines().slice(logsBefore)).toEqual([]);
 
     await type(max, "");
-    expect(heldState(applyButton())).toEqual({ held: false, icon: false });
-    expect(applyButton().title).toBe("");
+    expect(heldState(applyButton())).toEqual({ held: false, marked: false });
+    expect(applyButton().title).toBe("Apply");
+    expect(applyButton().hasAttribute("aria-describedby")).toBe(false);
     const applied = await applyAndWait(server);
     expect(applied.minDuration).toBe("00:01:30");
     expect(applied.maxDuration).toBeUndefined();
+  });
+
+  it("a held Apply shows its dot red, with no badge, and its reason as its tooltip and description", async () => {
+    await mountFilter();
+    await openDialog();
+    useStylesheet();
+    await type(byId("filter-min-dur-text"), "abc");
+
+    expect(applyButton().classList.contains("shows-problem")).toBe(true);
+    expect(applyButton().querySelector(".btn-problem")).toBeNull();
+    expect(applyDot().hidden).toBe(false);
+    expect(currentStyle(applyDot()).backgroundColor).toBe(currentStyle(document.documentElement).getPropertyValue("--error").trim());
+    expect(applyButton().title).toBe("Correct the minimum duration to apply.");
+    expect(applyButton().getAttribute("aria-label")).toBe("Apply");
+
+    await type(byId("filter-min-dur-text"), "1:30");
+    expect(applyButton().classList.contains("shows-problem")).toBe(false);
+    expect(currentStyle(applyDot()).backgroundColor).toBe(currentStyle(document.documentElement).getPropertyValue("--huggins-orange").trim());
+  });
+
+  it("a held Apply moves to its field within the press, showing its section before it focuses the field, without preventScroll or a scroll first", async () => {
+    await mountFilter();
+    await openDialog();
+    const min = byId<HTMLInputElement>("filter-min-dur-text");
+    await type(min, "abc");
+    await showTab("Tags");
+    expect(byId("filter-panel-general").style.display).toBe("none");
+
+    /** Each focus call, with whether it asked not to scroll and how General's section showed at that moment. */
+    const focuses: Array<{ element: HTMLElement; preventScroll: boolean; general: string }> = [];
+    const focus = HTMLElement.prototype.focus;
+    vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(function (this: HTMLElement, options?: FocusOptions) {
+      focuses.push({ element: this, preventScroll: options?.preventScroll === true, general: byId("filter-panel-general").style.display });
+      focus.call(this, options);
+    });
+    const scrolls = vi.spyOn(Element.prototype, "scrollIntoView");
+    try {
+      // A browser's click, which no test helper wraps, so nothing renders between the press and its focus.
+      applyButton().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      expect(document.activeElement).toBe(min);
+      expect(focuses).toEqual([{ element: min, preventScroll: false, general: "block" }]);
+      expect(scrolls).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+    }
+
+    await settle();
+    expect(selectedTab()).toBe("General");
+    expect(byId("filter-panel-tags").style.display).toBe("none");
+    expect(tooltipShown(min)).toBe(true);
+  });
+
+  it("marks a flagged section's tab with the badge on its top-right corner, out of its flow, and nothing after its name", async () => {
+    await mountFilter();
+    await openDialog();
+    useStylesheet();
+    await type(byId("filter-min-dur-text"), "abc");
+    await showTab("Tags");
+
+    const tab = within(dialog()).getByRole("tab", { name: "General" });
+    expect(tabMarked("General")).toBe(true);
+    const badge = tab.querySelector<HTMLElement>(".section-problem")!;
+    const style = currentStyle(badge);
+    expect(currentStyle(tab).position).toBe("relative");
+    expect([style.position, style.top, style.right, style.fontSize]).toEqual(["absolute", "-6px", "-6px", "18px"]);
+    expect(style.fontFamily).toContain("Material Symbols Outlined");
+    expect(badge.getAttribute("aria-hidden")).toBe("true");
+    expect(selectedTab()).toBe("Tags");
   });
 
   it("loads a preset whose durations the server sends with fractional seconds as before", async () => {
@@ -982,6 +1149,8 @@ describe("General tab", () => {
     expect(heldState(applyButton()).held).toBe(false);
     expect(heading()).toBe("Preset: Fraction");
 
+    // Apply needs a change, and the durations go with it as they were loaded.
+    await click(box("Only never played"));
     const applied = await applyAndWait(server);
     expect(applied).toMatchObject({ minDuration: "00:01:30", maxDuration: "01:00:00" });
   });
@@ -1053,12 +1222,12 @@ describe("Favorites and Blacklisted filters", () => {
     await chooseFlag("Favorites", "excluded");
     await click(box("Favorites"));
     expect(flagRow("Favorites")).toEqual({ checked: false, choice: "excluded", disabled: true });
-    expect(applyButton().textContent).toBe("Apply");
+    expect(applyShowsChanges()).toBe(false);
 
     await chooseFlag("Blacklisted", "only");
     await click(box("Blacklisted"));
     expect(flagRow("Blacklisted")).toEqual({ checked: false, choice: "only", disabled: true });
-    expect(applyButton().textContent).toBe("Apply*");
+    expect(applyShowsChanges()).toBe(true);
 
     await click(box("Favorites"));
     await click(box("Blacklisted"));
@@ -1074,6 +1243,9 @@ describe("Favorites and Blacklisted filters", () => {
       const expected = name === "Favorites" ? written(mode, "excluded") : written("off", mode);
       await openDialog();
 
+      // Apply needs a change, and a preset a filter other than the default one, which Favorites off and Blacklisted
+      // excluded are.
+      await click(box("Only never played"));
       // Set another mode first, so each mode is reached from a different one.
       await setFlag(name, mode === "only" ? "excluded" : "only");
       await setFlag(name, mode);
@@ -1081,8 +1253,6 @@ describe("Favorites and Blacklisted filters", () => {
       expect((await nextPick(server)).filterState).toMatchObject(expected);
 
       await openDialog();
-      // A preset needs a filter other than the default one.
-      await click(box("Only never played"));
       await showTab("Presets");
       await addPreset("Flags");
       await applyAndWait(server);
@@ -1097,11 +1267,11 @@ describe("Favorites and Blacklisted filters", () => {
     await setFlag("Favorites", "excluded");
     await setFlag("Blacklisted", "only");
 
-    await click(dialogButton("Clear all filters"));
+    await click(clearAllButton());
     expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
     expect(flagRow("Blacklisted")).toEqual(BLACKLISTED_DEFAULT);
     // The applied filter is the default, so there is nothing to apply.
-    expect(applyButton().textContent).toBe("Apply");
+    expect(applyShowsChanges()).toBe(false);
   });
 
   it("choosing a preset shows its modes, with the default choice for a filter that is off", async () => {
@@ -1141,7 +1311,7 @@ describe("Favorites and Blacklisted filters", () => {
     expect(flagRow("Favorites")).toEqual({ checked: true, choice: "excluded", disabled: false });
     expect(flagRow("Blacklisted")).toEqual({ checked: true, choice: "only", disabled: false });
     expect(box("Only never played").checked).toBe(true);
-    expect(applyButton().textContent).toBe("Apply");
+    expect(applyShowsChanges()).toBe(false);
   });
 });
 
@@ -1168,7 +1338,7 @@ describe("Favorites only with Blacklisted only", () => {
     expect(tabMarked("General")).toBe(true);
     const presetButton = (name: string) => within(dialog()).getByRole("button", { name, hidden: true }) as HTMLButtonElement;
     for (const button of [applyButton(), presetButton("Add Preset"), presetButton("Update Preset")]) {
-      expect(heldState(button), label(button)).toEqual({ held: true, icon: true });
+      expect(heldState(button), button.id).toEqual({ held: true, marked: true });
     }
     expect(presetButton("Update Preset").title).toBe("Change Favorites or Blacklisted first.");
 
@@ -1230,12 +1400,12 @@ describe("Tags tab", () => {
 
     await includeTag("Beach");
     expect(chipState("Beach")).toBe("include");
-    expect(applyButton().textContent).toBe("Apply*");
+    expect(applyShowsChanges()).toBe(true);
     await excludeTag("Beach");
     expect(chipState("Beach")).toBe("exclude");
     await excludeTag("Beach");
     expect(chipState("Beach")).toBe("none");
-    expect(applyButton().textContent).toBe("Apply");
+    expect(applyShowsChanges()).toBe(false);
 
     await includeTag("Alice");
     await excludeTag("Calm");
@@ -1254,8 +1424,8 @@ describe("Tags tab", () => {
 
     fireEvent.change(byId("filter-global-match"), { target: { value: "or" } });
     await settle();
-    expect(applyButton().textContent).toBe("Apply*");
-    fireEvent.change(category("People").querySelector("select.filter-local-mode")!, { target: { value: "1" } });
+    expect(applyShowsChanges()).toBe(true);
+    fireEvent.change(matchMode("People"), { target: { value: "1" } });
     await settle();
 
     const applied = await applyAndWait(server);
@@ -1265,8 +1435,8 @@ describe("Tags tab", () => {
     await openDialog();
     await showTab("Tags");
     expect(byId<HTMLSelectElement>("filter-global-match").value).toBe("or");
-    expect(category("People").querySelector<HTMLSelectElement>("select.filter-local-mode")!.value).toBe("1");
-    expect(category("Places").querySelector<HTMLSelectElement>("select.filter-local-mode")!.value).toBe("0");
+    expect(matchMode("People").value).toBe("1");
+    expect(matchMode("Places").value).toBe("0");
   });
 
   it("shows filter tags missing from the catalog under Uncategorized", async () => {
@@ -1281,7 +1451,7 @@ describe("Tags tab", () => {
     expect(chipState("Beach")).toBe("include");
     expect(chipState("Bob")).toBe("exclude");
 
-    fireEvent.change(category("Uncategorized").querySelector("select.filter-local-mode")!, { target: { value: "1" } });
+    fireEvent.change(matchMode("Uncategorized"), { target: { value: "1" } });
     await settle();
     await excludeTag("Ghost");
     expect(chipState("Ghost")).toBe("exclude");
@@ -1295,7 +1465,7 @@ describe("Tags tab", () => {
     expect(categoryTitles()).toEqual(["Places", "Mood", "People"]);
   });
 
-  it("start collapsed, and the header's name or padding expands and collapses one, with no arrows, while its Local select keeps its own action", async () => {
+  it("start collapsed, and the header's name or padding expands and collapses one, with no arrows, while its match mode keeps its own action", async () => {
     await mountFilter([RICH_PRESET]);
     await pickPreset("preset-rich");
     await openDialog();
@@ -1315,13 +1485,12 @@ describe("Tags tab", () => {
     await click(category("Places").querySelector(".tag-category-header")!);
     expect(categoryGrid("Places").hidden).toBe(true);
 
-    const local = category("People").querySelector<HTMLSelectElement>(".filter-local-mode")!;
-    await click(local);
-    await click(local.closest("label")!);
-    fireEvent.change(local, { target: { value: "0" } });
+    const mode = matchMode("People");
+    await click(mode);
+    fireEvent.change(mode, { target: { value: "0" } });
     await settle();
     expect(categoryGrid("People").hidden).toBe(true);
-    expect(applyButton().textContent).toBe("Apply*");
+    expect(applyShowsChanges()).toBe(true);
   });
 
   it("remember on this device which are expanded, apart from the Tags tab's, after a page refresh too", async () => {
@@ -1349,13 +1518,15 @@ describe("Tags tab", () => {
     expect(categoryGrid("Mood").hidden).toBe(true);
   });
 
-  it("show, while collapsed, how many of their tags the filter uses, and the dot while that differs from the applied filter", async () => {
-    const { server } = await mountFilter([RICH_PRESET]);
+  /** A category's count of its tags in use, and its unsaved-changes dot. */
+  const count = (title: string) => category(title).querySelector<HTMLElement>(".category-count")!;
+  const dot = (title: string) => category(title).querySelector<HTMLElement>(".category-dot")!;
+
+  it("show, expanded and collapsed, how many of their tags the filter uses, and the dot while that differs from the applied filter", async () => {
+    await mountFilter([RICH_PRESET]);
     await pickPreset("preset-rich");
     await openDialog();
     await showTab("Tags");
-    const count = (title: string) => category(title).querySelector<HTMLElement>(".category-count")!;
-    const dot = (title: string) => category(title).querySelector<HTMLElement>(".category-dot")!;
     // Rich includes Beach and excludes Bob.
     expect([count("Places").hidden, count("Places").textContent, count("Places").title]).toEqual([false, "1", "1 tag in the filter"]);
     expect(count("Mood").hidden).toBe(true);
@@ -1363,19 +1534,63 @@ describe("Tags tab", () => {
     expect(categoryToggle("Places").getAttribute("aria-label")).toBe("Places, 1 tag in the filter");
 
     await click(categoryToggle("Places"));
+    expect(categoryGrid("Places").hidden).toBe(false);
+    expect([count("Places").hidden, count("Places").textContent]).toEqual([false, "1"]);
+    expect(categoryToggle("Places").getAttribute("aria-label")).toBe("Places, 1 tag in the filter");
     await includeTag("alps");
-    expect(count("Places").hidden).toBe(true);
-    expect(dot("Places").hidden).toBe(true);
-    await click(categoryToggle("Places"));
     expect([count("Places").hidden, count("Places").textContent, count("Places").title]).toEqual([false, "2", "2 tags in the filter"]);
     expect(dot("Places").hidden).toBe(false);
     expect(dot("Places").title).toBe("Unsaved changes");
     expect(categoryToggle("Places").getAttribute("aria-label")).toBe("Places, 2 tags in the filter, unsaved changes");
+
+    await click(categoryToggle("Places"));
+    expect(categoryGrid("Places").hidden).toBe(true);
+    expect([count("Places").hidden, count("Places").textContent]).toEqual([false, "2"]);
+    expect(dot("Places").hidden).toBe(false);
+    expect(categoryToggle("Places").getAttribute("aria-label")).toBe("Places, 2 tags in the filter, unsaved changes");
     expect(dot("People").hidden).toBe(true);
 
-    await applyAndWait(server);
-    expect(dot("Places").hidden).toBe(true);
-    expect(count("Places").textContent).toBe("2");
+    // A count of 0 stays hidden, and out of the toggle's name, expanded too.
+    await click(categoryToggle("Mood"));
+    expect(categoryGrid("Mood").hidden).toBe(false);
+    expect(count("Mood").hidden).toBe(true);
+    expect(categoryToggle("Mood").getAttribute("aria-label")).toBe("Mood");
+  });
+
+  for (const state of ["collapsed", "expanded"] as const) {
+    it(`clear a category's dot once Apply applies its change, with the category ${state}`, async () => {
+      const { server } = await mountFilter();
+      await openDialog();
+      await showTab("Tags");
+      await click(categoryToggle("Places"));
+      await includeTag("Beach");
+      if (state === "collapsed") {
+        await click(categoryToggle("Places"));
+      }
+      expect(categoryGrid("Places").hidden).toBe(state === "collapsed");
+      expect(dot("Places").hidden).toBe(false);
+
+      await applyAndWait(server);
+      expect(categoryGrid("Places").hidden).toBe(state === "collapsed");
+      expect(dot("Places").hidden).toBe(true);
+      expect([count("Places").hidden, count("Places").textContent]).toEqual([false, "1"]);
+      expect(categoryToggle("Places").getAttribute("aria-label")).toBe("Places, 1 tag in the filter");
+    });
+  }
+
+  it("name each category's match mode for its category, with Match mode as its tooltip, and no Local label", async () => {
+    await mountFilter([RICH_PRESET]);
+    await pickPreset("preset-rich");
+    await openDialog();
+    await showTab("Tags");
+    expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
+    for (const title of categoryTitles()) {
+      const mode = matchMode(title);
+      expect(mode.title, title).toBe("Match mode");
+      expect(mode.closest("label"), title).toBeNull();
+      expect(mode.classList.contains("filter-local-mode"), title).toBe(true);
+    }
+    expect(dialog().textContent).not.toContain("Local");
   });
 });
 
@@ -1394,7 +1609,7 @@ describe("Presets tab", () => {
     expect(heading()).toBe("Preset: Beach days");
     expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
     expect(chipState("Beach")).toBe("include");
-    expect(applyButton().textContent).toBe("Apply*");
+    expect(applyShowsChanges()).toBe(true);
 
     await click(box("Favorites"));
     expect(heading()).toBe("Preset: Beach days*");
@@ -1437,7 +1652,7 @@ describe("Presets tab", () => {
     const addButton = () => dialogButton("Add Preset");
     const disabledWithoutIcon = () => {
       expect(addButton().disabled).toBe(true);
-      expect(heldState(addButton())).toEqual({ held: false, icon: false });
+      expect(heldState(addButton())).toEqual({ held: false, marked: false });
       expect(addButton().classList.contains("shows-problem")).toBe(false);
       expect(addButton().title).toBe("");
     };
@@ -1472,7 +1687,7 @@ describe("Presets tab", () => {
     await type(max, "1:75");
     await showTab("Presets");
     expect(addButton().disabled).toBe(false);
-    expect(heldState(addButton())).toEqual({ held: true, icon: true });
+    expect(heldState(addButton())).toEqual({ held: true, marked: true });
     expect(addButton().title).toBe("Correct the maximum duration first.");
     expect(tabMarked("Presets")).toBe(false);
     await click(addButton());
@@ -1519,7 +1734,7 @@ describe("Presets tab", () => {
     );
     expect(server.logLines().some((line) => line.includes("Favorites"))).toBe(false);
     expect(heading()).toBe("Preset: Favorites");
-    expect(applyButton().textContent).toBe("Apply*");
+    expect(applyShowsChanges()).toBe(true);
 
     await applyAndWait(server);
     expect(presets.saves()[0][0]).toMatchObject({
@@ -1566,7 +1781,7 @@ describe("Presets tab", () => {
     expect(presetRows()).toEqual(["Beach days", "Favorites", "Recent"]);
     expect(document.activeElement).toBe(presetHandle("Favorites"));
     expect(presetAnnouncement()).toBe("Favorites moved to position 2 of 3.");
-    expect(applyButton().textContent).toBe("Apply*");
+    expect(applyShowsChanges()).toBe(true);
     expect(await pressKey(presetHandle("Recent"), "ArrowUp")).toBe(false);
     expect(presetRows()).toEqual(["Beach days", "Recent", "Favorites"]);
     expect(presetAnnouncement()).toBe("Recent moved to position 2 of 3.");
@@ -1628,7 +1843,7 @@ describe("Presets tab", () => {
       await pointerMove(5);
       expect(transforms()).toEqual(["translateY(40px)", "translateY(40px)", "translateY(-80px)"]);
       expect(presetRows()).toEqual(["Favorites", "Beach days", "Recent"]);
-      expect(applyButton().textContent).toBe("Apply");
+      expect(applyShowsChanges()).toBe(false);
 
       await pointerUp();
       expect(presetRows()).toEqual(["Recent", "Favorites", "Beach days"]);
@@ -1636,7 +1851,7 @@ describe("Presets tab", () => {
       expect(presetRow("Recent").classList.contains("is-dragging")).toBe(false);
       expect(document.activeElement).toBe(presetHandle("Recent"));
       expect(presetAnnouncement()).toBe("Recent moved to position 1 of 3.");
-      expect(applyButton().textContent).toBe("Apply*");
+      expect(applyShowsChanges()).toBe(true);
       expect(presets.saves()).toHaveLength(0);
 
       await applyAndWait(server);
@@ -1705,7 +1920,7 @@ describe("Presets tab", () => {
       expect(presetRows()).toEqual(["Favorites", "Beach days", "Recent"]);
       expect(transforms()).toEqual(["", "", ""]);
       expect(presetAnnouncement()).toBe("");
-      expect(applyButton().textContent).toBe("Apply");
+      expect(applyShowsChanges()).toBe(false);
     });
   });
 
@@ -1748,7 +1963,7 @@ describe("Presets tab", () => {
     expect(heading()).toBe("Preset: None*");
     expect(presetSelectInDialog().value).toBe("");
     expect(chipState("Beach")).toBe("include");
-    expect(applyButton().textContent).toBe("Apply*");
+    expect(applyShowsChanges()).toBe(true);
 
     await applyAndWait(server);
     expect(presets.saves()[0].map((preset: any) => preset.name)).toEqual(["Favorites"]);
@@ -1763,7 +1978,7 @@ describe("Presets tab", () => {
     let edit = await editPreset("Beach days");
     await press(byId("filter-preset-edit-save-btn"));
     expect(appDialogs()).toEqual([]);
-    expect(label(applyButton())).toBe("Apply");
+    expect(applyShowsChanges()).toBe(false);
     edit = await editPreset("Beach days");
     fireEvent.input(byId("filter-preset-edit-name"), { target: { value: "Other" } });
     fireEvent.keyDown(document.activeElement!, { key: "Escape" });
@@ -1892,7 +2107,7 @@ describe("preset dropdown, refresh, and clear all", () => {
     await mountFilter([FAVORITES_PRESET]);
     await openDialog();
     await click(box("Only never played"));
-    expect(applyButton().textContent).toBe("Apply*");
+    expect(applyShowsChanges()).toBe(true);
     expect(panelTab("Filter").getAttribute("aria-label")).toBe("Filter, unsaved changes");
 
     // The pick is made on the Library tab, while the Filter tab is hidden, and drops its changes then.
@@ -1902,7 +2117,7 @@ describe("preset dropdown, refresh, and clear all", () => {
     expect(flagRow("Favorites")).toEqual({ checked: true, choice: "only", disabled: false });
     expect(box("Only never played").checked).toBe(false);
     expect(heading()).toBe("Preset: Favorites");
-    expect(applyButton().textContent).toBe("Apply");
+    expect(applyShowsChanges()).toBe(false);
     await showTab("Presets");
     expect(presetSelectInDialog().value).toBe("Favorites");
   });
@@ -1926,7 +2141,7 @@ describe("preset dropdown, refresh, and clear all", () => {
     await waitFor(() => expect(relayed(server, "Filter data refreshed.")).toBe(true));
     expect(box("Phone (E:\\phone)").checked).toBe(true);
     expect(box("Only never played").checked).toBe(true);
-    expect(applyButton().textContent).toBe("Apply*");
+    expect(applyShowsChanges()).toBe(true);
     await showTab("Tags");
     expect(chipNames("Places")).toEqual(["alps", "Beach", "Snow"]);
     await showTab("Presets");
@@ -1939,7 +2154,7 @@ describe("preset dropdown, refresh, and clear all", () => {
     expect(isOpen()).toBe(true);
   });
 
-  it("Refresh keeps unsaved preset changes and Apply's star, and Apply then saves them", async () => {
+  it("Refresh keeps unsaved preset changes and Apply's changes, and Apply then saves them", async () => {
     const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
     await showTab("Presets");
@@ -1950,7 +2165,7 @@ describe("preset dropdown, refresh, and clear all", () => {
     await click(dialogButton("Refresh"));
     await waitFor(() => expect(relayed(server, "Filter data refreshed.")).toBe(true));
     expect(presetRows()).toEqual(["Beach days", "Favorites"]);
-    expect(label(applyButton())).toBe("Apply*");
+    expect(applyShowsChanges()).toBe(true);
 
     await applyAndWait(server);
     expect(presets.saves()).toHaveLength(1);
@@ -1964,10 +2179,11 @@ describe("preset dropdown, refresh, and clear all", () => {
     await showTab("Presets");
     await addPreset("Temporary");
 
-    await click(dialogButton("Clear all filters"));
+    await click(clearAllButton());
     expect(heading()).toBe("Preset: None");
-    // Rich is applied, so Apply has the default filter to apply.
-    expect(applyButton().textContent).toBe("Apply*");
+    // Rich is applied, so Apply has the default filter to apply, and Clear all has nothing more to clear.
+    expect(applyShowsChanges()).toBe(true);
+    expect(clearAllButton().disabled).toBe(true);
     expect(presetRows()).toEqual(["Rich", "Favorites"]);
     expect(presetSelectInDialog().value).toBe("");
     expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
@@ -1987,12 +2203,12 @@ describe("preset dropdown, refresh, and clear all", () => {
     await waitFor(() => expect(selectedPresetLabel()).toBe("None"));
   });
 
-  it("Clear all is kept, with its dots and Apply's star, through another tab until Apply", async () => {
+  it("Clear all is kept, with its dots and Apply's changes, through another tab until Apply", async () => {
     const { server } = await mountFilter([RICH_PRESET]);
     await pickPreset("preset-rich");
     await openDialog();
-    await click(dialogButton("Clear all filters"));
-    expect(applyButton().textContent).toBe("Apply*");
+    await click(clearAllButton());
+    expect(applyShowsChanges()).toBe(true);
     expect(panelTab("Filter").getAttribute("aria-label")).toBe("Filter, unsaved changes");
     await showTab("Tags");
     // Rich includes Beach, which Clear all took out.
@@ -2000,7 +2216,7 @@ describe("preset dropdown, refresh, and clear all", () => {
 
     await click(panelTab("Library"));
     await openDialog();
-    expect(applyButton().textContent).toBe("Apply*");
+    expect(applyShowsChanges()).toBe(true);
     expect(chipState("Beach")).toBe("none");
     await showTab("General");
     expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
@@ -2035,13 +2251,13 @@ describe("unsaved state", () => {
     return byId("panel-btn").getAttribute("aria-label")!.endsWith(", unsaved changes");
   }
 
-  /** The heading, Apply's label, and the Filter tab's and the panel button's dots. */
-  function marks(): { heading: string; apply: string; dot: boolean; panelDot: boolean } {
-    return { heading: heading(), apply: label(applyButton()), dot: dotted(), panelDot: panelDotted() };
+  /** The heading, whether Apply shows changes to apply, and the Filter tab's and the panel button's dots. */
+  function marks(): { heading: string; apply: boolean; dot: boolean; panelDot: boolean } {
+    return { heading: heading(), apply: applyShowsChanges(), dot: dotted(), panelDot: panelDotted() };
   }
 
   async function setLocalMode(title: string, value: "0" | "1"): Promise<void> {
-    fireEvent.change(category(title).querySelector("select.filter-local-mode")!, { target: { value } });
+    fireEvent.change(matchMode(title), { target: { value } });
     await settle();
   }
 
@@ -2052,21 +2268,21 @@ describe("unsaved state", () => {
     expect((await nextPick(server)).presetId).toBe("preset-beach");
     await openDialog();
     await showTab("Tags");
-    expect(marks()).toEqual({ heading: "Preset: Beach days", apply: "Apply", dot: false, panelDot: false });
+    expect(marks()).toEqual({ heading: "Preset: Beach days", apply: false, dot: false, panelDot: false });
 
     await setLocalMode("Places", "1");
-    expect(marks()).toEqual({ heading: "Preset: Beach days*", apply: "Apply*", dot: true, panelDot: true });
+    expect(marks()).toEqual({ heading: "Preset: Beach days*", apply: true, dot: true, panelDot: true });
     await setLocalMode("Places", "0");
-    expect(marks()).toEqual({ heading: "Preset: Beach days", apply: "Apply", dot: false, panelDot: false });
+    expect(marks()).toEqual({ heading: "Preset: Beach days", apply: false, dot: false, panelDot: false });
 
     await setLocalMode("People", "1");
     expect((await applyAndWait(server)).categoryLocalMatchModes).toEqual({ "cat-people": 1 });
     await waitFor(() => expect(selectedPresetLabel()).toBe("Beach days*"));
     await setLocalMode("People", "0");
-    expect(marks()).toEqual({ heading: "Preset: Beach days", apply: "Apply*", dot: true, panelDot: true });
+    expect(marks()).toEqual({ heading: "Preset: Beach days", apply: true, dot: true, panelDot: true });
     expect((await applyAndWait(server)).categoryLocalMatchModes).toBeUndefined();
     await waitFor(() => expect(selectedPresetLabel()).toBe("Beach days"));
-    expect(marks()).toEqual({ heading: "Preset: Beach days", apply: "Apply", dot: false, panelDot: false });
+    expect(marks()).toEqual({ heading: "Preset: Beach days", apply: false, dot: false, panelDot: false });
     expect((await nextPick(server)).presetId).toBe("preset-beach");
   });
 
@@ -2074,15 +2290,15 @@ describe("unsaved state", () => {
     const { server } = await mountFilter([EVERY_SOURCE_PRESET]);
     await pickPreset("preset-every");
     await openDialog();
-    expect(marks()).toEqual({ heading: "Preset: Every source", apply: "Apply", dot: false, panelDot: false });
+    expect(marks()).toEqual({ heading: "Preset: Every source", apply: false, dot: false, panelDot: false });
 
     await click(box("Movies (C:\\media\\movies)"));
-    expect(marks()).toEqual({ heading: "Preset: Every source*", apply: "Apply*", dot: true, panelDot: true });
+    expect(marks()).toEqual({ heading: "Preset: Every source*", apply: true, dot: true, panelDot: true });
     await click(box("Movies (C:\\media\\movies)"));
-    expect(marks()).toEqual({ heading: "Preset: Every source", apply: "Apply", dot: false, panelDot: false });
+    expect(marks()).toEqual({ heading: "Preset: Every source", apply: false, dot: false, panelDot: false });
     await click(box("Only never played"));
     await click(box("Only never played"));
-    expect(marks()).toEqual({ heading: "Preset: Every source", apply: "Apply", dot: false, panelDot: false });
+    expect(marks()).toEqual({ heading: "Preset: Every source", apply: false, dot: false, panelDot: false });
 
     await click(box("C:\\media\\photos"));
     expect((await applyAndWait(server)).includedSourceIds).toEqual(["source-1", "source-3"]);
@@ -2090,17 +2306,17 @@ describe("unsaved state", () => {
     await click(box("C:\\media\\photos"));
     expect((await applyAndWait(server)).includedSourceIds).toEqual(["source-1", "source-2", "source-3"]);
     await waitFor(() => expect(selectedPresetLabel()).toBe("Every source"));
-    expect(marks()).toEqual({ heading: "Preset: Every source", apply: "Apply", dot: false, panelDot: false });
+    expect(marks()).toEqual({ heading: "Preset: Every source", apply: false, dot: false, panelDot: false });
   });
 
-  it("each change put back clears the dot and Apply's star, and a real change still shows them", async () => {
+  it("each change put back clears the dot and Apply's changes, and a real change still shows them", async () => {
     await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
-    const clear = { heading: "Preset: None", apply: "Apply", dot: false, panelDot: false };
+    const clear = { heading: "Preset: None", apply: false, dot: false, panelDot: false };
 
     await showTab("Tags");
     await includeTag("Beach");
-    expect(marks()).toEqual({ heading: "Preset: Beach days", apply: "Apply*", dot: true, panelDot: true });
+    expect(marks()).toEqual({ heading: "Preset: Beach days", apply: true, dot: true, panelDot: true });
     await includeTag("Beach");
     expect(marks()).toEqual(clear);
     await excludeTag("Bob");
@@ -2122,7 +2338,7 @@ describe("unsaved state", () => {
     await showTab("Presets");
     await pressKey(presetHandle("Favorites"), "ArrowDown");
     expect(presetRows()).toEqual(["Beach days", "Favorites"]);
-    expect(marks()).toEqual({ ...clear, apply: "Apply*", dot: true, panelDot: true });
+    expect(marks()).toEqual({ ...clear, apply: true, dot: true, panelDot: true });
     await pressKey(presetHandle("Favorites"), "ArrowUp");
     expect(presetRows()).toEqual(["Favorites", "Beach days"]);
     expect(marks()).toEqual(clear);
@@ -2133,23 +2349,78 @@ describe("unsaved state", () => {
     await settle();
     await press(byId("filter-preset-edit-save-btn"));
     expect(presetRows()).toEqual(["favorites", "Beach days"]);
-    expect(marks()).toEqual({ ...clear, apply: "Apply*", dot: true, panelDot: true });
+    expect(marks()).toEqual({ ...clear, apply: true, dot: true, panelDot: true });
   });
 
   for (const which of ["min", "max"] as const) {
-    it(`a ${which}imum typed, left, and emptied clears the heading's star, the dot, and Apply's star before the field is left again`, async () => {
+    it(`a ${which}imum typed, left, and emptied clears the heading's star, the dot, and Apply's changes before the field is left again`, async () => {
       await mountFilter();
       await openDialog();
       const field = byId<HTMLInputElement>(`filter-${which}-dur-text`);
 
       await type(field, "1:30");
-      expect(marks()).toEqual({ heading: "Preset: None*", apply: "Apply*", dot: true, panelDot: true });
+      expect(marks()).toEqual({ heading: "Preset: None*", apply: true, dot: true, panelDot: true });
       field.focus();
       fireEvent.input(field, { target: { value: "" } });
       await settle();
       expect(document.activeElement).toBe(field);
-      expect(marks()).toEqual({ heading: "Preset: None", apply: "Apply", dot: false, panelDot: false });
+      expect(marks()).toEqual({ heading: "Preset: None", apply: false, dot: false, panelDot: false });
     });
+  }
+
+  /**
+   * The events a browser fires as the user types into a focused field, one input event per keystroke, each in a task
+   * of its own, with nothing wrapping them.
+   */
+  async function keystrokes(field: HTMLInputElement, texts: readonly string[]): Promise<void> {
+    for (const text of texts) {
+      field.value = text;
+      field.dispatchEvent(new InputEvent("input", { bubbles: true }));
+      await settle();
+    }
+  }
+
+  /** Each shorter text as the user erases `text` a character at a time, down to empty. */
+  function erasing(text: string): string[] {
+    return Array.from({ length: text.length }, (_, index) => text.slice(0, text.length - index - 1));
+  }
+
+  /** Each longer text as the user types `text` a character at a time. */
+  function typing(text: string): string[] {
+    return Array.from({ length: text.length }, (_, index) => text.slice(0, index + 1));
+  }
+
+  /** Leaving a field the user changed, as a browser does: its change event, then blur. */
+  async function leave(field: HTMLInputElement): Promise<void> {
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+    field.blur();
+    await settle();
+  }
+
+  for (const which of ["min", "max"] as const) {
+    for (const text of ["1:00", "abc"]) {
+      it(`a ${which}imum of "${text}" typed, left, and erased with a browser's events has no changes, in the field and after leaving it`, async () => {
+        await mountFilter();
+        await openDialog();
+        const field = byId<HTMLInputElement>(`filter-${which}-dur-text`);
+        const clear = { heading: "Preset: None", apply: false, dot: false, panelDot: false };
+
+        field.focus();
+        await keystrokes(field, typing(text));
+        await leave(field);
+        expect(marks()).toEqual({ heading: "Preset: None*", apply: true, dot: true, panelDot: true });
+
+        field.focus();
+        await keystrokes(field, erasing(text));
+        expect(document.activeElement).toBe(field);
+        expect(field.value).toBe("");
+        expect(marks()).toEqual(clear);
+
+        await leave(field);
+        expect(field.value).toBe("");
+        expect(marks()).toEqual(clear);
+      });
+    }
   }
 
   it("Refresh takes the server's list for a preset list put back as it was, and Apply saves none", async () => {
@@ -2163,9 +2434,11 @@ describe("unsaved state", () => {
     await click(dialogButton("Refresh"));
     await waitFor(() => expect(relayed(server, "Filter data refreshed.")).toBe(true));
     expect(presetRows()).toEqual(["Favorites", "Beach days", "Recent"]);
-    expect(label(applyButton())).toBe("Apply");
+    expect(applyShowsChanges()).toBe(false);
     expect(dotted()).toBe(false);
 
+    await showTab("General");
+    await click(box("Only never played"));
     await applyAndWait(server);
     expect(presets.saves()).toHaveLength(0);
   });
@@ -2186,7 +2459,7 @@ describe("presets need a filter", () => {
       expect(button.disabled).toBe(true);
       expect(button.title).toBe(REASON);
       expect(document.getElementById(button.getAttribute("aria-describedby")!)?.textContent).toBe(REASON);
-      expect(heldState(button)).toEqual({ held: false, icon: false });
+      expect(heldState(button)).toEqual({ held: false, marked: false });
     }
 
     await showTab("General");

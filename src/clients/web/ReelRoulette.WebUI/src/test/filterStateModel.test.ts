@@ -7,7 +7,7 @@ import {
   filterStateFromApiObject,
   buildHeaderPresetOptions,
   dialogPresetBase,
-  filterDialogHasPendingChanges,
+  filterDialogHasUnsavedChanges,
   filterStateForHeaderPresetSelection,
   filterStatesEqualForPresetMatch,
   headerPresetListAfterPick,
@@ -161,17 +161,17 @@ describe("filterStateModel", () => {
     expect(resolvePresetAnchor(current, [{ name: "Web OR", filterState: webPreset }], null).label).toBe("Web OR");
   });
 
-  it("filter dialog Apply is not pending after switching the global mode away and back from an unset opening filter", () => {
-    const original = filterStateFromApiObject(JSON.parse('{"selectedTags":["Ann","Bob"],"globalMatchMode":null}'));
-    const working = cloneFilterState(original);
+  it("the Filter tab has no unsaved changes after switching the global mode away and back from an unset applied filter", () => {
+    const applied = filterStateFromApiObject(JSON.parse('{"selectedTags":["Ann","Bob"],"globalMatchMode":null}'));
+    const working = cloneFilterState(applied);
 
-    expect(filterDialogHasPendingChanges(working, original, false)).toBe(false);
+    expect(filterDialogHasUnsavedChanges(working, applied, false)).toBe(false);
     working.globalMatchMode = false;
-    expect(filterDialogHasPendingChanges(working, original, false)).toBe(true);
+    expect(filterDialogHasUnsavedChanges(working, applied, false)).toBe(true);
     working.globalMatchMode = true;
-    expect(filterDialogHasPendingChanges(working, original, false)).toBe(false);
-    expect(filterDialogHasPendingChanges(working, original, true)).toBe(true);
-    expect(original.globalMatchMode).toBeNull();
+    expect(filterDialogHasUnsavedChanges(working, applied, false)).toBe(false);
+    expect(filterDialogHasUnsavedChanges(working, applied, true)).toBe(true);
+    expect(applied.globalMatchMode).toBeNull();
   });
 
   it("presetsToPostBody wraps filterState", () => {

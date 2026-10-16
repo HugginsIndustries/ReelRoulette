@@ -262,7 +262,7 @@ describe("library window", () => {
     t.showTab();
     expect(t.library.isOpen()).toBe(true);
     expect(t.library.body.peek()).toEqual({ kind: "grid" });
-    expect(t.library.summary.peek()).toBe("Showing 3 of 3 items");
+    expect(t.library.summary.peek()).toEqual({ shown: "3 / 3", spoken: "3 of 3 items" });
     const grid = t.mountGrid();
     expect(grid.contents).toEqual([{ ids: ["item-1", "item-2", "item-3"], resetScroll: false }]);
     expect(t.queries()).toHaveLength(1);
@@ -386,7 +386,7 @@ describe("library window", () => {
     t.fakeLibrary.failures.push(503);
     await t.library.commitQuery();
     expect(t.library.body.peek()).toEqual({ kind: "grid" });
-    expect(t.library.summary.peek()).toBe("Showing 3 of 3 items");
+    expect(t.library.summary.peek()).toEqual({ shown: "3 / 3", spoken: "3 of 3 items" });
     expect(t.statuses).toEqual(["Library load failed: HTTP 503"]);
 
     t.showTab();
@@ -408,7 +408,7 @@ describe("library window", () => {
     t.emit("refreshCompleted");
     await settle();
     expect(grid.contents.at(-1)).toEqual({ ids: ["item-1", "item-2"], resetScroll: false });
-    expect(t.library.summary.peek()).toBe("Showing 2 of 2 items");
+    expect(t.library.summary.peek()).toEqual({ shown: "2 / 2", spoken: "2 of 2 items" });
 
     t.showTab();
     expect(grid.flushes).toEqual(["shown"]);
