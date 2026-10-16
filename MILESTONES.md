@@ -137,7 +137,7 @@ Last milestone completed: M12i2
 ### M12i3 - WebUI Tweaks
 
 - **Status**: 🚧 In Progress
-- **Goal**: The modified marker and the unsaved-changes dots clear when changes are undone, and the Library tab's count line, held actions, tag category headers, and the Filter tab's footer read better, from daily use of the new UI.
+- **Goal**: The modified marker and the Filter tab's unsaved-changes dot clear when changes are undone, and the Library tab's count line, held actions, tag category headers, and the Filter tab's footer read better, from daily use of the new UI.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -145,13 +145,14 @@ Last milestone completed: M12i2
 - The held action's badge and the category headers are built as the user approves them in the Mockup slice's review, and neither app slice starts before that review.
 - The category headers change in the Tags tab and the Filter tab's Tags section alike, since both use one header (`TagCategory` in the WebUI, `categoryEl` in the mockup).
 - The Filter tab's Apply and Cancel tell whether there are changes from the Unsaved state slice's comparison of the tab with the applied filter and the saved presets, so the Display slice's footer lands after it.
+- No preset may hold exactly the default filter, by the user's choice: **None** stands for the default filter, so the preset dropdown's None hold goes. A preset holding the default filter, which a tag delete, the desktop's Add Preset, or the WebUI's Add Preset before v0.15.0 can leave, shows as None and gets no other handling, a known issue.
 
 #### Slices
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Mockup | ✅ Complete | The held action's and section tabs' badge, category headers that always show their count and dot, the "{matching} / {total}" count line, and the Filter tab's icon footer, approved by the user on a desktop browser, the iPad, and a phone. |
-| Unsaved state | ⏳ Planned | A modified marker and unsaved-changes dots that compare the current state with the saved one, so they clear when changes are undone. |
+| Unsaved state | ✅ Complete | A modified marker and the Filter tab's unsaved-changes dot that compare the current state with the applied filter and the saved presets, so they clear when changes are undone, and presets that need a filter other than the default one. |
 | Display | ⏳ Planned | The count line, the held action's and section tabs' badge, the category headers, and the Filter tab's icon footer, as approved. |
 
 #### Mockup slice
@@ -200,14 +201,15 @@ Last milestone completed: M12i2
 
 - The modified marker ("Preset*"), in the Filter tab's heading and the preset dropdown, clears when the filter is put back to match its preset, and so does Apply's star.
 - A category's Local match mode set back to ALL (AND) leaves no entry in the filter, and a filter read from the server or the device drops its AND entries, since a category without one filters as AND. A filter put back then matches its preset, including a preset saved with a leftover entry.
+- The AND entries drop in one step after `filterStateFromApiObject`, at each place the WebUI reads a filter for its own use, and `filterStateFromApiObject` stays as `filter-enum-values.json` locks it.
 - The shared fixture `preset-filter-equality.json` and the desktop's comparer stay as they are.
 - Putting the General section's sources back as they were leaves the filter's source list as it was, so a preset that names every source matches again.
-- The unsaved-changes dots compare the current state with the saved one rather than tracking edits, so each clears when its changes are undone:
+- The Filter tab's unsaved-changes dot compares the current state with the saved one rather than tracking edits, so it clears when its changes are undone, and so does the panel button's while the Tags tab holds no changes:
   - The Filter tab compares its working filter with the applied filter, as today, and its preset list with the saved list, by order, by name with case counting, and by filter with the preset comparison, in place of the `presetsChanged` flag. Refresh and Apply use the same comparison.
-  - The Filter tab also counts a preset chosen in its Presets section other than the applied one as a change, so Apply can make a preset active whose filter matches the applied filter.
-  - The Filter tab takes each duration as its field's text reads, so a duration typed, left, and then emptied is no limit again, as one emptied before it is left.
-  - The Tags tab compares category names and order, tag names and categories, and the item's tags with the loaded catalog, in place of its held edits.
-  - The panel button's dot follows the two tabs' dots.
+  - The preset list's comparison uses a saved copy of the list that the tab keeps, set when it opens or starts over, when Refresh takes the server's list, and after Apply saves.
+  - The Filter tab takes each duration as its field's text reads, for the heading's star as for the dot and Apply's star, so a duration typed, left, and then emptied is no limit again, as one emptied before it is left. The heading keeps naming the working filter's preset, so text passed through while typing doesn't change it.
+- Add Preset and Update Preset are disabled while the Filter tab's filter, with each duration as its field reads, is the default one, with "Choose a filter to save as a preset." as their tooltip and accessible description.
+- **None** names the default filter, before any preset whose filter matches it, and the None hold goes from the preset dropdown, the device's remembered filter, and the Filter tab.
 
 **Traps**
 
@@ -221,25 +223,47 @@ Last milestone completed: M12i2
 - The server keeps a preset name's case, so a rename that changes only case is a real change.
 - `typeDuration` stores only a duration field's text, and leaving the field (`changeGeneral`) puts the duration into the working filter, which `view.unsaved` and `view.pending` compare. Emptying the field after that changes only the text, so the old duration keeps the dot and Apply's star on until the field is left again (inferred).
 - A duration still being typed counts as unsaved (`generalDurationsChanged`), and the Filter tab starts over when it opens only without unsaved changes.
-- Apply's star compares the working filter with the one the tab opened with or was cleared to, and the dots compare it with the applied filter.
+- Apply's star compares the working filter with the one the tab opened with, which Clear all keeps, and the dots compare it with the applied filter.
 - The preset dropdown's marker is rebuilt only when presets load or a preset is picked, as after Apply (`syncHeaderPresets` in `src/state/appStore.ts`).
-- The Tags tab's dot is `orderChanged || selections.size > 0 || hasPendingTagEdits(pending)` (`hasChanges` in `src/tags/tagEditor.ts`).
-- Moving a category and back, renaming a category or a tag and back, moving a tag to another category and back, adding a tag or a category and deleting it, and adding a tag the item already has each leave the Tags tab's dot on (measured).
-- The Tags tab's category dots already compare with the loaded catalog (`tagCategoryRows` in `src/tags/tagEditorModel.ts`), and cleared in each of those cases (measured).
-- `planTagEditorSave` in `src/library/tagSave.ts` passes held upserts, renames, and deletes through as they are, so it can't serve as the comparison.
-- `tagEditor.test.ts`'s "says there is nothing to save when the changes cancel out" expects the dot to stay on before Save says "No tag changes to save."
+- `filterStateFromApiObject` keeps AND entries, as `filter-enum-values.json` locks it for the WebUI and the server's parser (`FilterStateTests.cs`), and the WebUI's reader of `preset-filter-equality.json` goes through it.
+- The WebUI reads filters through `filterStateFromApiObject` in `createAppStore` (the remembered applied filter), `presetRowsFromApi`, `presetRowsFromHeaderPresets`, `filterStateForHeaderPresetSelection`, and `randomPickRequest`.
+- The Filter tab's heading, the preset dropdown, and Apply name the first preset whose filter matches (`presetAnchorForDisplay` and `dialogPresetBase` in `src/filter/filterStateModel.ts`), so choosing a preset whose filter equals an earlier one's shows the earlier one (measured).
+- The None hold is `headerExplicitNone` in `src/state/appStore.ts`, remembered as `holdNone` in `filter.applied`, the `holdNone` argument of `presetAnchorForDisplay` and `headerPresetListForFilter`, and the Filter tab's `holdNone`.
+- The Filter tab's heading reads the working filter, which a duration still being typed isn't in, so it keeps a duration's star until the field is left, while the mockup's heading follows the text (measured).
+- `store.presets` takes the server's list on every preset load, including the tab's own loads, the server becoming ready, and `resyncRequired`, so it can't stand for the saved list the tab compares with (`loadRemote` in `src/filter/filterDialog.ts`, `src/state/serverConnection.ts`).
+- Every General change rewrites the working filter's sources and both durations through `filterWithGeneralDraft`, not only a source check.
+- `view.pending` never reads the General draft, so Apply's star waits for a typed duration's field to be left, which `filterDialog.test.ts`'s "counts a duration still being typed as an unsaved change, without Apply's star" and "keeps a typed duration out of the working filter until the field changes" expect.
 - The tabs' dots come from `unsaved` in `src/state/appServices.ts`, which `src/ui/Panel.tsx` and the panel button in `src/ui/Player.tsx` read.
 
 **Acceptance**
 
 - A filter put back to match its preset, through a Local match mode or the General section's sources, loses its star in the Filter tab's heading and on Apply, and in the preset dropdown once applied, in Filter tab tests of each.
 - A preset saved with a leftover AND entry matches the filter it describes, in a filter model test.
-- Each undo the Traps list clears the Filter tab's or the Tags tab's dot and the panel button's, and a real change still shows them, in Filter tab, Tags tab, and panel screen tests.
+- Each undo the Traps list clears the Filter tab's dot and the panel button's, and a real change still shows them, in Filter tab and panel screen tests.
 - Refresh keeps a changed preset list and Apply saves it, and a list put back as it was is neither kept nor saved, in Filter tab tests.
-- Typing a minimum, leaving the field, coming back, and emptying it clears the Filter tab's dot and Apply's star before the field is left again, and so does the same with a maximum, in Filter tab tests of exactly that sequence.
-- Choosing a preset other than the applied one, whose filter matches the applied filter, shows the Filter tab's dot, and choosing the applied one again clears it, in Filter tab tests.
+- Typing a minimum, leaving the field, coming back, and emptying it clears the heading's star, the Filter tab's dot, and Apply's star before the field is left again, and so does the same with a maximum, in Filter tab tests of exactly that sequence.
+- The heading's star follows a duration as its field reads, and stars one that isn't valid, while the heading keeps naming the working filter's preset, so Long's minimum backspaced to empty and typed again ends as "Long*", in Filter tab tests.
+- Add Preset and Update Preset are disabled, with their tooltip, while the filter is the default one, a duration typed included, and enabled with no tooltip otherwise, in Filter tab and Filter screen tests.
+- A filter read from the server or the device has no AND entries, and the shared fixtures' tests pass unchanged, in filter model tests and, for the device, `appStore.test.ts`.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
+
+**Evidence**
+
+- `npm run verify` passes, with 1469 tests in 71 files, the typecheck, the build, and its output check. `dotnet test ReelRoulette.sln` and the Core SystemChecks pass.
+- Each new Filter test failed with the fix it covers broken and the file restored from a copy under `artifacts/scratch/`, in breaks of the Filter tab's AND entries, read sites, sources, saved preset list, and durations, and the panel test's with typed durations ignored (measured).
+- The Filter screen tests of each undo check the panel button's dot as well as the Filter tab's, and each failed with the panel button ignoring the Filter tab's changes (measured).
+- The tests of Add Preset and Update Preset with the default filter, and of the heading's star following a typed duration, failed before the change (measured).
+- The test of Long's minimum backspaced to empty and typed again, which ends as "Long*", failed before the heading kept naming the working filter's preset, and the test of a tag renamed and deleted in a saved preset failed with the saved copy left unrevised (measured).
+- Each test of the Filter tab's sources kept through loads failed with its fix undone (measured).
+- `node docs/mockups/reelroulette/build/check.mjs` passes, with 1173 checks, up from 1163, and each new check failed in runs of mutations in copies of the mockup, except those of the heading while a duration is typed: Short clips' maximum backspaced and typed again passes with either heading, and a maximum typed through Short clips' filter failed before the heading kept naming the working filter's preset (measured).
+- The Filter tab keeps the source list its General fields were filled from through the tab showing again and Refresh.
+- A duration that isn't valid now counts for Apply's star as well as the dots, so a held Apply reads "Apply*", and the heading stars it, as the mockup's does.
+- In the user's review, presets were barred from holding the default filter, in place of comparing the None hold, and the None hold went. The device's remembered filter no longer has `holdNone`, and one written before is read without it.
+- A tag deleted elsewhere that was a preset's only filter leaves the preset with the default filter, which then shows as None, in Library and Tags screen tests (measured).
+- The mockup's Filter tab names the working filter's preset as the app does, None for the default filter and otherwise the first preset whose filter matches, stars it live as a duration is typed, and keeps the filter when None is chosen. Its presets each hold a filter other than the default one, Add Preset and Update Preset are disabled with their tooltip for the default filter, and its match modes and Update Preset keep their state.
+- When Apply saves the preset list, the WebUI posts its presets without AND entries, so a desktop whose applied filter holds one shows its preset starred after that save, since the desktop's comparer, kept as decided, counts the entry. Server filtering is unaffected, and the desktop's removal is the next milestone (inferred).
+- `CONTEXT.md` and `docs/domain-inventory.md` describe the comparisons, the stored filters without AND entries, and the presets that need a filter, `CHANGELOG.md`'s Fixed section the star that clears, and its Changed section the presets that need a filter.
 
 #### Display slice
 
@@ -272,7 +296,7 @@ Last milestone completed: M12i2
 - `TagCategory` shows the count only while collapsed and above 0, and the dot only while collapsed, and names them in its toggle's label only then.
 - `SectionProblemMark` sits in the section tab's flow after its label, and `.section-problem` is a 20 px icon (`src/styles.css`).
 - The footer's Clear all filters and Cancel are text buttons, and Apply is a `HeldButton` that shows "Apply*" from `view.pending` (`src/ui/FilterDialog.tsx`).
-- `view.pending` compares the working filter with the one the tab opened with or was cleared to, and `view.unsaved` compares it with the applied filter, so after Clear all only `view.unsaved` shows a change while the applied filter isn't the default.
+- `view.pending` compares the working filter, with each duration as its field reads, with the one the tab opened with, which Clear all keeps, and `view.unsaved` compares it with the applied filter, so after Clear all both show a change while the applied filter isn't the default.
 - The WebUI's icon font is the full Material Symbols font and has `save`, `cancel`, and `filter_alt_off` (measured).
 - `clearAll` sets the working filter to `createDefaultFilterState()`, the chosen preset to none, and the preset list to the saved one (`src/filter/filterDialog.ts`).
 - Each category's match control is a `<select>` inside `<label class="filter-local">Local:`, which gives it its name today (`src/ui/FilterDialog.tsx`).
@@ -305,6 +329,9 @@ Last milestone completed: M12i2
 #### Not included
 
 - Moving the remembered preset to its id, and keeping it through a preset list that lacks it, which is Per-Preset Preset Writes.
+- Telling apart two presets with equal filters, which is Per-Preset Preset Writes.
+- The server refusing a preset that holds the default filter, which is Per-Preset Preset Writes.
+- The Tags tab's unsaved-changes dot keeps tracking edits rather than comparing with what's saved, by the user's choice, and no milestone takes it.
 
 ### M12i4 - Desktop Client Removal
 
@@ -545,6 +572,9 @@ Last milestone completed: M12i2
 - Each preset has a stable id, kept across renames, which the preset routes, the random request's `presetId`, and the preset event use.
 - The catalog moves to schema version 5, with its own upgrade step from 4 that adds the preset id column, gives each stored preset an id, and rewrites each stored filter state's old `favoritesOnly` and `excludeBlacklisted` into its Favorites and Blacklisted modes, so every stored preset has one shape.
 - Once stored presets are rewritten, the server and the WebUI stop reading the old fields.
+- The preset routes refuse a preset that holds the default filter, which no preset may hold, as the WebUI's Filter tab already keeps from saving one.
+- Core and the WebUI tell whether a filter is the default one by one rule, which a new shared fixture, `default-filter.json`, locks for both.
+- A category's AND match mode counts as no entry when the server tells whether a filter is the default one, as the WebUI drops it from every filter it reads.
 
 #### Slices
 
@@ -562,6 +592,8 @@ Last milestone completed: M12i2
 - The step rewrites the old fields with `FlagFilterModes.ResolveFavorites` and `ResolveBlacklisted`, and removes the old keys.
 - Create, update, rename, reorder, and delete one preset in the catalog under the library operations lock. Reorder takes the ids in their new order and changes no preset's filter.
 - Tag rename and delete keep updating presets on the server.
+- Create and update refuse a preset whose filter is the default one.
+- Core's rule for the default filter, a category's AND entry counting as none, reads `default-filter.json` under `shared/fixtures/` in its tests.
 - Each preset change publishes `presetCatalogChanged` with the changed preset's id and the request's `clientId`.
 - `LibraryListFilterParser` no longer reads the old fields.
 - `filter-mode-resolution.json` moves to the Core tests, which keep locking the step's rule, and leaves `shared/fixtures/`.
@@ -577,6 +609,8 @@ Last milestone completed: M12i2
 - No release contains the Favorites and Blacklisted modes, so every preset a release saved has only the old fields (measured).
 - A WebUI preset save writes every preset with its modes, so only presets nobody saved since keep only the old fields (inferred).
 - The server publishes no event when presets change.
+- The server compares no filters: the preset comparison is the desktop's `LibraryPresetSelection.FiltersEqual` and the WebUI's `filterStatesEqualForPresetMatch`, which `preset-filter-equality.json` locks.
+- `LibraryListFilterParser` keeps a category's AND entry, as `filter-enum-values.json` locks it, while the WebUI drops AND entries from every filter it reads (`withoutAndLocalModes` in `src/filter/filterStateModel.ts`).
 
 **Acceptance**
 
@@ -584,6 +618,8 @@ Last milestone completed: M12i2
 - A stored preset with only the old fields filters the same after the step, with its modes written and the old keys gone, in catalog upgrade tests of stored presets.
 - Each per-preset write changes only the preset it names, and reorder changes only the order, in server tests for each write.
 - Each preset change publishes `presetCatalogChanged` with the preset's id and the request's `clientId`, in server tests of each write.
+- Create and update refuse a preset whose filter is the default one, in server tests of each.
+- Core's rule for the default filter agrees with every case of `default-filter.json`, in Core tests of the fixture.
 - `dotnet test ReelRoulette.sln` passes.
 
 #### Contract slice
@@ -616,7 +652,9 @@ Last milestone completed: M12i2
 - On `presetCatalogChanged` from another device, the preset list updates without a reload. While the Filter tab holds unsaved preset changes, presets it hasn't changed take the server's version, and its own changes stay until saved or discarded.
 - The WebUI remembers its active preset by id.
 - The remembered preset survives a preset list that lacks it, such as an empty reply.
+- A chosen preset stays chosen, by its id, even when an earlier preset has the same filter, so two presets with equal filters can be told apart in the Filter tab's heading, the preset dropdown, and the remembered preset.
 - `resolveFlagModes` and the WebUI's readers of `filter-mode-resolution.json` go, and so does `filter-state-written.json`'s half of a filter written with the old fields.
+- The WebUI's `isDefaultFilter` (`src/filter/filterStateModel.ts`) reads `default-filter.json` in its tests, each case read as the WebUI reads a filter.
 - Builds on the preset-equality fixture from Remove the Preset Match Route.
 
 **Traps**
@@ -625,6 +663,7 @@ Last milestone completed: M12i2
 - The WebUI's Filter tab keeps a preset list Apply hasn't saved while it is hidden and the panel is closed, for as long as the page stays open, and doesn't take the server's list while it holds one, so its Apply can overwrite preset changes another device made hours earlier (inferred).
 - The WebUI loads presets when the server's version check passes (`src/state/serverConnection.ts`) and has no preset event to follow.
 - `filterStateFromApiObject` reads the old fields through `resolveFlagModes` (`src/filter/filterStateModel.ts`).
+- The Filter tab's heading, the preset dropdown, and Apply name the first preset whose filter matches (`resolvePresetAnchor` and `dialogPresetBase` in `src/filter/filterStateModel.ts`), so choosing a preset whose filter equals an earlier one's shows the earlier one (measured).
 - The WebUI remembers its active preset by name on each device (`activePresetName` in `src/state/appStore.ts`).
 - A preset load whose list lacks the active preset sets the link to null (`showPresetList` in `src/state/appStore.ts`), and the remembered record then keeps `preset: null` for good, so a later list that has the preset shows "None*" (measured).
 
@@ -634,12 +673,18 @@ Last milestone completed: M12i2
 - Every open WebUI shows the same preset list after any device changes it, and unsaved changes in the Filter tab stay, in WebUI tests of the preset event.
 - The WebUI never posts the whole preset list, in WebUI tests of each preset write.
 - A modified preset still shows "Preset*" after a preset load whose list lacks it is followed by one that has it, in WebUI tests of the remembered filter.
+- Choosing either of two presets with equal filters keeps it chosen in the Filter tab's heading and the preset dropdown, and after a reload, in WebUI tests.
+- `isDefaultFilter` agrees with every case of `default-filter.json`, in WebUI tests of the fixture.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
 #### Release checks
 
 - Manual: On two devices, saving, renaming, reordering, and deleting a preset on one shows on the other without a reload, and neither overwrites the other's changes.
+
+#### Not included
+
+- A preset holding the default filter, which a tag delete, the desktop's Add Preset, or the WebUI's Add Preset before v0.15.0 can leave, and which the server keeps and the WebUI shows as None, a known issue that no milestone takes.
 
 ### M12i6 - Item Ratings
 
@@ -2098,10 +2143,10 @@ Last milestone completed: M12i2
 - U opens the picker with focus on the active profile, the arrow keys move between profiles, and Enter chooses one. U does nothing while the header hides or focus is in a text field.
 - Escape closes the picker first, before the bell's list, the panel, and pseudo-fullscreen, and gives focus back to the button. The shortcut reference lists U.
 - Add Profile and Edit Profile with their General and Sources tabs, and Delete. Profile Tag and Preset Visibility adds the Tags and Presets tabs.
-- The per-device store keeps the active profile as `profiles.active`, and each profile's applied filter, its preset, and its None hold as `filter.appliedByProfile`, which replaces `filter.applied` with no carry-over.
+- The per-device store keeps the active profile as `profiles.active`, and each profile's applied filter and its preset as `filter.appliedByProfile`, which replaces `filter.applied` with no carry-over.
 - Every request the Decisions scope sends the active profile's `profileId`.
 - A switch, after "Discard changes?" when the Filter or Tags tab holds unsaved changes:
-  - sets the new profile's applied filter, preset, and None hold together, and applies its remembered preset again as the server has it now;
+  - sets the new profile's applied filter and preset together, and applies its remembered preset again as the server has it now;
   - starts the Library tab's query and the Filter tab over, and loads the Stats tab again;
   - clears Auto Tag's kept scan, ends a selection, and closes the picker;
   - leaves the playing item and history as they are.
@@ -2116,7 +2161,7 @@ Last milestone completed: M12i2
 - The header sits outside the fullscreen stage, and `body.short-screen .top-bar:not(.is-pairing)` hides it on a phone on its side (`src/styles.css`).
 - The bell's list (`NotificationList` in `src/ui/Notifications.tsx`) has its placement, outside press, Escape, and focus written for the bell alone, and no popover primitive exists in `src/ui`, though WebUI Multi-Select and Bulk Actions' Actions menu may add one (inferred).
 - The panel opening closes the bell's list in every mode (`src/state/appServices.ts`), while the picker closes only when the panel covers the screen, which is `panel.mode` `"overlay"` (`src/panel/panelHost.ts`).
-- `filter.applied` holds the filter, its preset, and the None hold, and an effect writes it only once presets have loaded and the record has changed (`src/state/appStore.ts`). A switch that doesn't set the applied filter, the preset, and the None hold in one batch, as `pickHeaderPreset` does, writes the old profile's record under the new profile's key (inferred).
+- `filter.applied` holds the filter and its preset, and an effect writes it only once presets have loaded and the record has changed (`src/state/appStore.ts`). A switch that doesn't set the applied filter and the preset in one batch, as `pickHeaderPreset` does, writes the old profile's record under the new profile's key (inferred).
 - Applying the remembered preset again as the server has it now runs only on the first preset load (`presetsLoaded` in `src/state/appStore.ts`).
 - The Stats tab loads again on events and a new playing item, never on a preset pick (`src/stats/statsTab.ts`), so a switch needs its own trigger.
 - `filterWithGeneralDraft` writes an empty source list when every listed source is checked (`src/filter/filterDialogModel.ts`), and an empty list means every source.

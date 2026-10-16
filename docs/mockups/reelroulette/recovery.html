@@ -1045,10 +1045,12 @@ window.addEventListener("resize", placeAllTips);
  *   any problem in a field `beside()` returns: a field that sits right next to the action, such as a new name beside
  *   its Add button, or a field of the dialog the action is in, since the dialog has the user's attention. The field's
  *   own icon and tooltip say why. A field in `beside()` is also one of `fields()`. So does `idle()` returning true,
- *   for an action with nothing to do, such as Apply with no changes. Disabling wins over holding.
+ *   for an action with nothing to do, such as Apply with no changes. So does `unavailable()` returning a reason, for
+ *   an action that can't be used now when no field says why, such as Add Preset with the default filter; the reason is
+ *   its tooltip and accessible description. Disabling wins over holding.
  * - Otherwise a flagged field elsewhere holds it: the button's label dims, it reads as unavailable, and the red badge
  *   shows on its top-right corner. Pressing it does nothing but take the user to the first field that holds it.
- * Call the returned `refresh()` when what `idle()` reads changes.
+ * Call the returned `refresh()` when what `idle()` or `unavailable()` reads changes.
  */
 function holdAction(button, fields, options) {
   const opts = options || {};
@@ -1058,8 +1060,11 @@ function holdAction(button, fields, options) {
   describe.id = (button.id || "action") + "-held";
   button.after(describe);
 
+  const unavailable = () => (opts.unavailable ? opts.unavailable() : null);
+
   function disabled() {
     if (opts.idle && opts.idle()) return true;
+    if (unavailable()) return true;
     return fields().some((field) => field.disables) || (opts.beside ? opts.beside().some((field) => field.holds) : false);
   }
 
@@ -1071,6 +1076,7 @@ function holdAction(button, fields, options) {
     button.disabled = disabled();
     const field = blocker();
     const held = !!field;
+    const why = unavailable();
     button.classList.toggle("shows-problem", held);
     fadeShown(button.querySelector(".btn-problem"), held);
     if (held) {
@@ -1078,6 +1084,11 @@ function holdAction(button, fields, options) {
       describe.textContent = opts.reason ? opts.reason(field) : "Correct the field first.";
       button.setAttribute("aria-describedby", describe.id);
       button.title = describe.textContent;
+    } else if (why) {
+      button.removeAttribute("aria-disabled");
+      describe.textContent = why;
+      button.setAttribute("aria-describedby", describe.id);
+      button.title = why;
     } else {
       button.removeAttribute("aria-disabled");
       button.removeAttribute("aria-describedby");

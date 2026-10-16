@@ -328,11 +328,13 @@ export interface HeldButtonProps {
   class?: string;
   /**
    * A field that may sit empty, while it is empty, or any problem in a field right next to the action, disables it,
-   * from `actionBlock`. The field says why, so the button shows nothing more.
+   * from `actionBlock`. The field says why, so the button shows nothing more, unless `disabledReason` does.
    */
   disabled: boolean;
   /** Why a flagged field elsewhere holds the action, its title and accessible description, or null while none does. */
   heldReason: string | null;
+  /** Why the action is disabled when no field says why, its title and accessible description while it is disabled. */
+  disabledReason?: string | null;
   onClick: () => void;
   children: ComponentChildren;
 }
@@ -342,9 +344,10 @@ export interface HeldButtonProps {
  * field elsewhere holds it, its label dims, it reads as unavailable, the red icon shows on its right, and its click
  * handler moves to that field instead of acting.
  */
-export function HeldButton({ id, class: extraClass, disabled, heldReason, onClick, children }: HeldButtonProps) {
+export function HeldButton({ id, class: extraClass, disabled, heldReason, disabledReason, onClick, children }: HeldButtonProps) {
   const describedId = useId();
   const held = !disabled && heldReason !== null;
+  const reason = held ? heldReason : disabled ? (disabledReason ?? null) : null;
   // Only the icon fades out; the button's state and its description change at once.
   const iconFade = useFadeOut(held);
   const classes = ["held-action", extraClass, held ? "shows-problem" : null].filter(Boolean).join(" ");
@@ -356,8 +359,8 @@ export function HeldButton({ id, class: extraClass, disabled, heldReason, onClic
         class={classes}
         disabled={disabled}
         aria-disabled={held ? "true" : undefined}
-        aria-describedby={held ? describedId : undefined}
-        title={held ? heldReason : undefined}
+        aria-describedby={reason !== null ? describedId : undefined}
+        title={reason ?? undefined}
         onClick={onClick}
       >
         <span class="btn-label">{children}</span>
@@ -367,9 +370,9 @@ export function HeldButton({ id, class: extraClass, disabled, heldReason, onClic
           </span>
         ) : null}
       </button>
-      {held ? (
+      {reason !== null ? (
         <span id={describedId} class="visually-hidden">
-          {heldReason}
+          {reason}
         </span>
       ) : null}
     </>

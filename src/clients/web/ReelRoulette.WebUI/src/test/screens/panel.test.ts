@@ -719,6 +719,24 @@ describe("unsaved changes", () => {
     expect(marked(panelButton()).dot).toBe(false);
   });
 
+  it("clear the dots on the Filter tab and the panel button when a change is put back", async () => {
+    await mount();
+    await click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
+    await waitFor(() => expect(videoSrc()).toContain("/api/media/item-1"));
+    await click(panelButton());
+    await click(tab("Filter"));
+    // A minimum typed and left is a change, and emptied again it is none, before the field is left again.
+    const minimum = document.getElementById("filter-min-dur-text") as HTMLInputElement;
+    fireEvent.input(minimum, { target: { value: "1:30" } });
+    fireEvent.change(minimum);
+    await settle();
+    expect(marked(panelButton()).dot).toBe(true);
+    fireEvent.input(minimum, { target: { value: "" } });
+    await settle();
+    expect(marked(tab("Filter")).dot).toBe(false);
+    expect(marked(panelButton()).dot).toBe(false);
+  });
+
   it("show the dot on the panel button while either tab holds changes", async () => {
     await mount();
     await click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));

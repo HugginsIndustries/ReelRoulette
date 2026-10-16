@@ -8,11 +8,6 @@ const FAVORITES = {
   name: "Favorites",
   filterState: { ...createDefaultFilterState(), favoritesMode: "only" as const }
 };
-const EVERYTHING = {
-  id: "preset-everything",
-  name: "Everything",
-  filterState: serializeFilterStateForApi(createDefaultFilterState())
-};
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial));
@@ -220,26 +215,6 @@ describe("createAppStore", () => {
     expect(changed).not.toHaveBeenCalled();
   });
 
-  it("holds None after it is picked, even when a preset has the default filter, until the filter changes", () => {
-    const { store } = setup();
-    store.presets.value = [EVERYTHING];
-    store.syncHeaderPresets();
-    expect(store.selectedPresetValue()).toBe("preset-everything");
-
-    store.pickHeaderPreset("");
-    expect(store.headerExplicitNone.value).toBe(true);
-    expect(store.selectedPresetValue()).toBe("");
-    store.syncHeaderPresets();
-    expect(store.selectedPresetValue()).toBe("");
-
-    store.appliedFilter.value = { ...createDefaultFilterState(), favoritesMode: "only" };
-    store.syncHeaderPresets();
-    expect(store.headerExplicitNone.value).toBe(false);
-    store.appliedFilter.value = createDefaultFilterState();
-    store.syncHeaderPresets();
-    expect(store.selectedPresetValue()).toBe("preset-everything");
-  });
-
   it("shows one message in place of the presets", () => {
     const { store } = setup();
     store.presets.value = [FAVORITES];
@@ -303,7 +278,6 @@ describe("remembered filter", () => {
     return JSON.stringify({
       filter: serializeFilterStateForApi({ ...createDefaultFilterState(), ...filter }),
       preset,
-      holdNone: false,
       unchanged
     });
   }
@@ -332,7 +306,7 @@ describe("remembered filter", () => {
     };
     first.store.appliedFilter.value = full;
     first.store.syncHeaderPresets();
-    expect(remembered(first.storage)).toMatchObject({ preset: null, holdNone: false, unchanged: false });
+    expect(remembered(first.storage)).toMatchObject({ preset: null, unchanged: false });
 
     const again = setup({ saved: Object.fromEntries(first.storage.values) });
     expect(again.store.appliedFilter.value).toEqual(full);
@@ -355,11 +329,11 @@ describe("remembered filter", () => {
 
     store.pickHeaderPreset(FAVORITES.id);
     expect(writes()).toBe(1);
-    expect(remembered(storage)).toMatchObject({ preset: "Favorites", holdNone: false, unchanged: true });
+    expect(remembered(storage)).toMatchObject({ preset: "Favorites", unchanged: true });
 
     store.pickHeaderPreset("");
     expect(writes()).toBe(2);
-    expect(remembered(storage)).toMatchObject({ preset: null, holdNone: true, unchanged: false });
+    expect(remembered(storage)).toMatchObject({ preset: null, unchanged: false });
   });
 
   it("keeps the remembered preset to apply again on a later load when presets never load", () => {
@@ -374,17 +348,30 @@ describe("remembered filter", () => {
     expect(again.store.selectedPresetValue()).toBe("Beach");
   });
 
-  it("restores a held None, and reads a record it can't use as the default filter on None", () => {
-    const held = setup({ saved: { [KEY]: JSON.stringify({ ...JSON.parse(record({}, null, false)), holdNone: true }) } });
-    held.store.presets.value = [EVERYTHING];
-    held.store.presetsLoaded();
-    expect(held.store.selectedPresetValue()).toBe("");
-
-    for (const raw of ["{", "[]", JSON.stringify({ filter: {}, preset: 3, holdNone: false, unchanged: true })]) {
+  it("reads a record it can't use as the default filter on None", () => {
+    for (const raw of ["{", "[]", JSON.stringify({ filter: {}, preset: 3, unchanged: true })]) {
       const { store } = setup({ saved: { [KEY]: raw } });
       expect(store.appliedFilter.value).toEqual(createDefaultFilterState());
       expect(store.activePresetName.value).toBeNull();
     }
+  });
+
+  it("reads a remembered filter and a picked preset without AND match modes, so a preset saved with a leftover one shows unchanged", () => {
+    const { store } = setup({
+      saved: { [KEY]: record({ selectedTags: ["Beach"], categoryLocalMatchModes: { "cat-places": 0, "cat-mood": 1 } }, null, false) }
+    });
+    expect(store.appliedFilter.value.categoryLocalMatchModes).toEqual({ "cat-mood": 1 });
+
+    const leftover = {
+      ...BEACH,
+      filterState: { ...BEACH.filterState, categoryLocalMatchModes: { "cat-places": 0 } }
+    };
+    store.presets.value = [leftover];
+    store.presetsLoaded();
+    store.pickHeaderPreset("Beach");
+    expect(store.appliedFilter.value.categoryLocalMatchModes).toBeNull();
+    expect(store.presetMenu.value.entries.map((entry) => entry.label)).toEqual(["None", "Beach"]);
+    expect(store.selectedPresetValue()).toBe("Beach");
   });
 
   it("applies a remembered preset's own filter again as the server has it now, so a tag renamed elsewhere follows", () => {

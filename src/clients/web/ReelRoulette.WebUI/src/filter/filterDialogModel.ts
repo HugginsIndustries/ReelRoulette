@@ -8,6 +8,7 @@ import {
   filterStateFromApiObject,
   formatDurationForDisplay,
   parseTypedDuration,
+  withoutAndLocalModes,
   type ApiFilterState,
   type AudioFilterMode,
   type FilterState,
@@ -85,6 +86,11 @@ export interface GeneralDraft {
   maxText: string;
   /** Whether each source is checked, in the order of the sources list. */
   sourceChecked: boolean[];
+  /**
+   * The filter's source list the fields were filled from. While the same sources are checked again, the working
+   * filter keeps this list as it was, so a preset that names every source still matches.
+   */
+  startSourceIds: string[];
 }
 
 export type TagChipAction = "include" | "exclude";
@@ -157,10 +163,14 @@ export function generalDraftFromFilter(filter: FilterState, sources: readonly Fi
     audioFilter: filter.audioFilter,
     minText: filter.minDurationSeconds != null ? formatDurationForDisplay(filter.minDurationSeconds) : "",
     maxText: filter.maxDurationSeconds != null ? formatDurationForDisplay(filter.maxDurationSeconds) : "",
-    sourceChecked: sources.map(
-      (source) => filter.includedSourceIds.length === 0 || containsIgnoringCase(filter.includedSourceIds, source.id)
-    )
+    sourceChecked: sourcesChecked(filter.includedSourceIds, sources),
+    startSourceIds: [...filter.includedSourceIds]
   };
+}
+
+/** Whether each source is checked for a filter's source list. An empty list checks every source. */
+function sourcesChecked(sourceIds: readonly string[], sources: readonly FilterSource[]): boolean[] {
+  return sources.map((source) => sourceIds.length === 0 || containsIgnoringCase(sourceIds, source.id));
 }
 
 /**
@@ -172,7 +182,10 @@ function draftDuration(text: string): number | null {
   return seconds === "invalid" ? null : seconds;
 }
 
-/** The working filter with the General tab's fields read into it. When every source is checked, none is stored. */
+/**
+ * The working filter with the General tab's fields read into it. Sources checked as they were filled keep the list
+ * they were filled from; otherwise, when every source is checked, none is stored.
+ */
 export function filterWithGeneralDraft(
   filter: FilterState,
   draft: GeneralDraft,
@@ -188,29 +201,28 @@ export function filterWithGeneralDraft(
   next.audioFilter = draft.audioFilter;
   next.minDurationSeconds = draftDuration(draft.minText);
   next.maxDurationSeconds = draftDuration(draft.maxText);
+  const startChecked = sourcesChecked(draft.startSourceIds, sources);
+  if (startChecked.every((checked, index) => checked === !!draft.sourceChecked[index])) {
+    next.includedSourceIds = [...draft.startSourceIds];
+    return next;
+  }
   const checked = sources.filter((_, index) => draft.sourceChecked[index]).map((source) => source.id);
   next.includedSourceIds = checked.length === sources.length ? [] : checked;
   return next;
 }
 
 /**
- * Whether a duration field's text differs from the filter's duration: it reads as another duration, or isn't a valid
- * one. Text that reads as the same duration, such as "90" for 01:30, is no change.
+ * The filter with each duration as its General field's text reads, so a duration still being typed, which typing
+ * doesn't read into the working filter, counts as it shows: empty text is no limit. Null while either text isn't a
+ * valid duration, which differs from every filter.
  */
-function durationTextChanged(text: string, seconds: number | null): boolean {
-  if (text === (seconds != null ? formatDurationForDisplay(seconds) : "")) {
-    return false;
+export function filterWithTypedDurations(filter: FilterState, draft: GeneralDraft): FilterState | null {
+  const min = parseTypedDuration(draft.minText);
+  const max = parseTypedDuration(draft.maxText);
+  if (min === "invalid" || max === "invalid") {
+    return null;
   }
-  const typed = parseTypedDuration(text);
-  return typed === "invalid" || typed !== seconds;
-}
-
-/**
- * Whether the General tab's duration fields differ from the filter's durations. Typing doesn't read them into the
- * working filter, so this is how a duration still being typed counts as an unsaved change.
- */
-export function generalDurationsChanged(draft: GeneralDraft, filter: FilterState): boolean {
-  return durationTextChanged(draft.minText, filter.minDurationSeconds) || durationTextChanged(draft.maxText, filter.maxDurationSeconds);
+  return { ...cloneFilterState(filter), minDurationSeconds: min, maxDurationSeconds: max };
 }
 
 /**
@@ -251,6 +263,9 @@ export const DURATION_PROBLEM = "Use MM:SS, HH:MM:SS, or seconds.";
 
 /** A preset name another preset has, ignoring case. */
 export const PRESET_NAME_PROBLEM = "Use a name no other preset has.";
+
+/** Why Add Preset and Update Preset are disabled while the filter is the default one, which no preset may hold. */
+export const DEFAULT_FILTER_PRESET_REASON = "Choose a filter to save as a preset.";
 
 /** Favorites only with Blacklisted only matches nothing, since the app never lets an item be both. */
 export const FLAG_MODES_PROBLEM = "Nothing is both a favorite and blacklisted. Use excluded for one of them.";
@@ -397,7 +412,7 @@ export function presetRowsFromApi(
   return (Array.isArray(presets) ? presets : [])
     .map((preset) => ({
       name: String(preset.name || preset.id || "").trim() || String(preset.id || ""),
-      filterState: filterStateFromApiObject(preset.filterState)
+      filterState: withoutAndLocalModes(filterStateFromApiObject(preset.filterState))
     }))
     .filter((row) => row.name);
 }

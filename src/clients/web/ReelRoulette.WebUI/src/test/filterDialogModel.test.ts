@@ -10,6 +10,7 @@ import {
   filterFieldProblems,
   filterHeldReason,
   filterWithGeneralDraft,
+  filterWithTypedDurations,
   generalDraftFromFilter,
   presetRowsFromApi,
   sourceLabel,
@@ -143,6 +144,44 @@ describe("filterWithGeneralDraft", () => {
       "source-3"
     ]);
     expect(filterWithGeneralDraft(filter({ includedSourceIds: ["x"] }), draft({ sourceChecked: [true, true, true] }), SOURCES).includedSourceIds).toEqual([]);
+  });
+
+  it("keeps the source list it was filled from while the same sources are checked again, as after any General change", () => {
+    const every = filter({ includedSourceIds: ["source-3", "Source-1", "source-2", "gone"] });
+    const shown = generalDraftFromFilter(every, SOURCES);
+    expect(shown.sourceChecked).toEqual([true, true, true]);
+    expect(filterWithGeneralDraft(every, { ...shown, onlyNeverPlayed: true }, SOURCES).includedSourceIds).toEqual([
+      "source-3",
+      "Source-1",
+      "source-2",
+      "gone"
+    ]);
+    const unchecked = filterWithGeneralDraft(every, { ...shown, sourceChecked: [false, true, true] }, SOURCES);
+    expect(unchecked.includedSourceIds).toEqual(["source-2", "source-3"]);
+    const checkedAgain = filterWithGeneralDraft(unchecked, { ...shown, sourceChecked: [true, true, true] }, SOURCES);
+    expect(checkedAgain.includedSourceIds).toEqual(["source-3", "Source-1", "source-2", "gone"]);
+
+    const partial = filter({ includedSourceIds: ["source-2"] });
+    const partialShown = generalDraftFromFilter(partial, SOURCES);
+    expect(filterWithGeneralDraft(partial, partialShown, SOURCES).includedSourceIds).toEqual(["source-2"]);
+    expect(filterWithGeneralDraft(partial, { ...partialShown, sourceChecked: [true, true, true] }, SOURCES).includedSourceIds).toEqual([]);
+  });
+});
+
+describe("filterWithTypedDurations", () => {
+  it("reads each duration as its field's text, empty as no limit, and nothing while either text isn't valid", () => {
+    const applied = filter({ minDurationSeconds: 90, maxDurationSeconds: 600 });
+    expect(filterWithTypedDurations(applied, draft({ minText: "", maxText: "" }))).toMatchObject({
+      minDurationSeconds: null,
+      maxDurationSeconds: null
+    });
+    expect(filterWithTypedDurations(filter(), draft({ minText: "90", maxText: "10:00" }))).toMatchObject({
+      minDurationSeconds: 90,
+      maxDurationSeconds: 600
+    });
+    expect(filterWithTypedDurations(filter(), draft({ minText: "abc" }))).toBeNull();
+    expect(filterWithTypedDurations(filter(), draft({ maxText: "1:75" }))).toBeNull();
+    expect(applied).toMatchObject({ minDurationSeconds: 90, maxDurationSeconds: 600 });
   });
 });
 
@@ -330,6 +369,14 @@ describe("presets and sources", () => {
     ]);
     expect(rows.map((row) => row.name)).toEqual(["Favorites", "p2"]);
     expect(rows[0]!.filterState.favoritesMode).toBe("only");
+  });
+
+  it("reads preset rows without AND match modes, keeping OR ones", () => {
+    const rows = presetRowsFromApi([
+      { name: "Mixed", filterState: { categoryLocalMatchModes: { places: 0, people: 1 } } },
+      { name: "And", filterState: { categoryLocalMatchModes: { places: 0 } } }
+    ]);
+    expect(rows.map((row) => row.filterState.categoryLocalMatchModes)).toEqual([{ people: 1 }, null]);
   });
 
   it("labels a source by its display name and its folder, or whichever it has, then its id", () => {

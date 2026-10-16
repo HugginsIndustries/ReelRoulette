@@ -60,7 +60,6 @@ const TAG_MODEL = {
 const FAVORITES_PRESET = { id: "preset-favorites", name: "Favorites", filterState: { favoritesOnly: true } };
 const BEACH_PRESET = { id: "preset-beach", name: "Beach days", filterState: { selectedTags: ["Beach"] } };
 const RECENT_PRESET = { id: "preset-recent", name: "Recent", filterState: { onlyNeverPlayed: true } };
-const EVERYTHING_PRESET = { id: "preset-everything", name: "Everything", filterState: {} };
 
 /** One filter as the desktop writes it, with Favorites excluded and Blacklisted only. The desktop's tests read it too. */
 const DESKTOP_WRITTEN_FILTER = JSON.parse(
@@ -936,7 +935,8 @@ describe("General tab", () => {
     const max = byId<HTMLInputElement>("filter-max-dur-text");
 
     await type(min, "abc");
-    expect(label(applyButton())).toBe("Apply");
+    // A duration that isn't valid is a change, which Apply holds.
+    expect(label(applyButton())).toBe("Apply*");
     expect(heldState(applyButton())).toEqual({ held: true, icon: true });
     expect(applyButton().title).toBe("Correct the minimum duration to apply.");
     expect(document.getElementById(applyButton().getAttribute("aria-describedby")!)?.textContent).toBe("Correct the minimum duration to apply.");
@@ -1081,6 +1081,8 @@ describe("Favorites and Blacklisted filters", () => {
       expect((await nextPick(server)).filterState).toMatchObject(expected);
 
       await openDialog();
+      // A preset needs a filter other than the default one.
+      await click(box("Only never played"));
       await showTab("Presets");
       await addPreset("Flags");
       await applyAndWait(server);
@@ -1502,6 +1504,7 @@ describe("Presets tab", () => {
   it("Update Preset saves the working filter into the chosen preset", async () => {
     const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
+    await click(box("Only never played"));
     await showTab("Presets");
 
     await click(dialogButton("Update Preset"));
@@ -1534,6 +1537,7 @@ describe("Presets tab", () => {
     it(`Add Preset pressed with ${how} moves to the new preset's drag handle`, async () => {
       await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
       await openDialog();
+      await click(box("Only never played"));
       await showTab("Presets");
       fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Draft" } });
       await activate(dialogButton("Add Preset"));
@@ -1544,6 +1548,7 @@ describe("Presets tab", () => {
     it(`Add Preset pressed with ${how} moves to the new preset's drag handle when it is the only preset`, async () => {
       await mountFilter();
       await openDialog();
+      await click(box("Only never played"));
       await showTab("Presets");
       fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Draft" } });
       await activate(dialogButton("Add Preset"));
@@ -1881,35 +1886,6 @@ describe("presets save answered with 401", () => {
 });
 
 describe("preset dropdown, refresh, and clear all", () => {
-  it("opens on None while the preset dropdown holds None, and a preset chosen in the dialog ends the hold", async () => {
-    const { server } = await mountFilter([EVERYTHING_PRESET, FAVORITES_PRESET]);
-    await waitFor(() => expect(selectedPresetLabel()).toBe("Everything"));
-    await openDialog();
-    expect(heading()).toBe("Preset: Everything");
-    await closePanel();
-
-    await pickPreset("");
-    expect(selectedPresetLabel()).toBe("None");
-    await openDialog();
-    expect(heading()).toBe("Preset: None");
-    await showTab("Presets");
-    expect(presetSelectInDialog().value).toBe("");
-    await apply();
-    expect(isOpen()).toBe(true);
-    await waitFor(() => expect(relayed(server, "Filters applied.")).toBe(true));
-    expect(selectedPresetLabel()).toBe("None");
-
-    await closePanel();
-    await openDialog();
-    expect(heading()).toBe("Preset: None");
-    await showTab("Presets");
-    await chooseInDialog("Everything");
-    expect(heading()).toBe("Preset: Everything");
-    await chooseInDialog("");
-    expect(heading()).toBe("Preset: Everything");
-    await applyAndWait(server);
-    await waitFor(() => expect(selectedPresetLabel()).toBe("Everything"));
-  });
 
   // The tab shows the applied filter again after a preset is picked in the Library tab, which it leaves for that.
   it("shows a preset picked in the Library tab when it shows again, without the changes it was left with", async () => {
@@ -2033,6 +2009,193 @@ describe("preset dropdown, refresh, and clear all", () => {
     const applied = await applyAndWait(server);
     expect(applied).toMatchObject({ favoritesOnly: false, selectedTags: [] });
     expect(panelTab("Filter").getAttribute("aria-label")).toBe("Filter");
+  });
+});
+
+describe("unsaved state", () => {
+  /** Beach days, saved with an AND entry for its category, which says nothing. */
+  const BEACH_LEFTOVER_PRESET = {
+    id: "preset-beach",
+    name: "Beach days",
+    filterState: { selectedTags: ["Beach"], categoryLocalMatchModes: { "cat-places": 0 } }
+  };
+  const EVERY_SOURCE_PRESET = {
+    id: "preset-every",
+    name: "Every source",
+    filterState: { includedSourceIds: ["source-1", "source-2", "source-3"] }
+  };
+
+  /** Whether the Filter tab shows its unsaved-changes dot. */
+  function dotted(): boolean {
+    return panelTab("Filter").getAttribute("aria-label") === "Filter, unsaved changes";
+  }
+
+  /** Whether the panel button shows its unsaved-changes dot, which follows the Filter tab's while the Tags tab has none. */
+  function panelDotted(): boolean {
+    return byId("panel-btn").getAttribute("aria-label")!.endsWith(", unsaved changes");
+  }
+
+  /** The heading, Apply's label, and the Filter tab's and the panel button's dots. */
+  function marks(): { heading: string; apply: string; dot: boolean; panelDot: boolean } {
+    return { heading: heading(), apply: label(applyButton()), dot: dotted(), panelDot: panelDotted() };
+  }
+
+  async function setLocalMode(title: string, value: "0" | "1"): Promise<void> {
+    fireEvent.change(category(title).querySelector("select.filter-local-mode")!, { target: { value } });
+    await settle();
+  }
+
+  it("a Local match mode set back to ALL matches the preset again, a preset saved with a leftover AND entry included, and once applied too", async () => {
+    const { server } = await mountFilter([BEACH_LEFTOVER_PRESET]);
+    await pickPreset("preset-beach");
+    expect(selectedPresetLabel()).toBe("Beach days");
+    expect((await nextPick(server)).presetId).toBe("preset-beach");
+    await openDialog();
+    await showTab("Tags");
+    expect(marks()).toEqual({ heading: "Preset: Beach days", apply: "Apply", dot: false, panelDot: false });
+
+    await setLocalMode("Places", "1");
+    expect(marks()).toEqual({ heading: "Preset: Beach days*", apply: "Apply*", dot: true, panelDot: true });
+    await setLocalMode("Places", "0");
+    expect(marks()).toEqual({ heading: "Preset: Beach days", apply: "Apply", dot: false, panelDot: false });
+
+    await setLocalMode("People", "1");
+    expect((await applyAndWait(server)).categoryLocalMatchModes).toEqual({ "cat-people": 1 });
+    await waitFor(() => expect(selectedPresetLabel()).toBe("Beach days*"));
+    await setLocalMode("People", "0");
+    expect(marks()).toEqual({ heading: "Preset: Beach days", apply: "Apply*", dot: true, panelDot: true });
+    expect((await applyAndWait(server)).categoryLocalMatchModes).toBeUndefined();
+    await waitFor(() => expect(selectedPresetLabel()).toBe("Beach days"));
+    expect(marks()).toEqual({ heading: "Preset: Beach days", apply: "Apply", dot: false, panelDot: false });
+    expect((await nextPick(server)).presetId).toBe("preset-beach");
+  });
+
+  it("sources checked back as they were match a preset that names every source again, and once applied too", async () => {
+    const { server } = await mountFilter([EVERY_SOURCE_PRESET]);
+    await pickPreset("preset-every");
+    await openDialog();
+    expect(marks()).toEqual({ heading: "Preset: Every source", apply: "Apply", dot: false, panelDot: false });
+
+    await click(box("Movies (C:\\media\\movies)"));
+    expect(marks()).toEqual({ heading: "Preset: Every source*", apply: "Apply*", dot: true, panelDot: true });
+    await click(box("Movies (C:\\media\\movies)"));
+    expect(marks()).toEqual({ heading: "Preset: Every source", apply: "Apply", dot: false, panelDot: false });
+    await click(box("Only never played"));
+    await click(box("Only never played"));
+    expect(marks()).toEqual({ heading: "Preset: Every source", apply: "Apply", dot: false, panelDot: false });
+
+    await click(box("C:\\media\\photos"));
+    expect((await applyAndWait(server)).includedSourceIds).toEqual(["source-1", "source-3"]);
+    await waitFor(() => expect(selectedPresetLabel()).toBe("Every source*"));
+    await click(box("C:\\media\\photos"));
+    expect((await applyAndWait(server)).includedSourceIds).toEqual(["source-1", "source-2", "source-3"]);
+    await waitFor(() => expect(selectedPresetLabel()).toBe("Every source"));
+    expect(marks()).toEqual({ heading: "Preset: Every source", apply: "Apply", dot: false, panelDot: false });
+  });
+
+  it("each change put back clears the dot and Apply's star, and a real change still shows them", async () => {
+    await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
+    await openDialog();
+    const clear = { heading: "Preset: None", apply: "Apply", dot: false, panelDot: false };
+
+    await showTab("Tags");
+    await includeTag("Beach");
+    expect(marks()).toEqual({ heading: "Preset: Beach days", apply: "Apply*", dot: true, panelDot: true });
+    await includeTag("Beach");
+    expect(marks()).toEqual(clear);
+    await excludeTag("Bob");
+    await includeTag("Bob");
+    expect(dotted()).toBe(true);
+    await includeTag("Bob");
+    expect(marks()).toEqual(clear);
+    fireEvent.change(byId("filter-global-match"), { target: { value: "or" } });
+    await settle();
+    expect(dotted()).toBe(true);
+    fireEvent.change(byId("filter-global-match"), { target: { value: "and" } });
+    await settle();
+    expect(marks()).toEqual(clear);
+    await setLocalMode("People", "1");
+    expect(dotted()).toBe(true);
+    await setLocalMode("People", "0");
+    expect(marks()).toEqual(clear);
+
+    await showTab("Presets");
+    await pressKey(presetHandle("Favorites"), "ArrowDown");
+    expect(presetRows()).toEqual(["Beach days", "Favorites"]);
+    expect(marks()).toEqual({ ...clear, apply: "Apply*", dot: true, panelDot: true });
+    await pressKey(presetHandle("Favorites"), "ArrowUp");
+    expect(presetRows()).toEqual(["Favorites", "Beach days"]);
+    expect(marks()).toEqual(clear);
+
+    // The server keeps a name's case, so a rename that changes only case is a change.
+    await editPreset("Favorites");
+    fireEvent.input(byId("filter-preset-edit-name"), { target: { value: "favorites" } });
+    await settle();
+    await press(byId("filter-preset-edit-save-btn"));
+    expect(presetRows()).toEqual(["favorites", "Beach days"]);
+    expect(marks()).toEqual({ ...clear, apply: "Apply*", dot: true, panelDot: true });
+  });
+
+  for (const which of ["min", "max"] as const) {
+    it(`a ${which}imum typed, left, and emptied clears the heading's star, the dot, and Apply's star before the field is left again`, async () => {
+      await mountFilter();
+      await openDialog();
+      const field = byId<HTMLInputElement>(`filter-${which}-dur-text`);
+
+      await type(field, "1:30");
+      expect(marks()).toEqual({ heading: "Preset: None*", apply: "Apply*", dot: true, panelDot: true });
+      field.focus();
+      fireEvent.input(field, { target: { value: "" } });
+      await settle();
+      expect(document.activeElement).toBe(field);
+      expect(marks()).toEqual({ heading: "Preset: None", apply: "Apply", dot: false, panelDot: false });
+    });
+  }
+
+  it("Refresh takes the server's list for a preset list put back as it was, and Apply saves none", async () => {
+    const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
+    await openDialog();
+    await showTab("Presets");
+    await pressKey(presetHandle("Favorites"), "ArrowDown");
+    await pressKey(presetHandle("Favorites"), "ArrowUp");
+
+    presets.list = [...presets.list, RECENT_PRESET];
+    await click(dialogButton("Refresh"));
+    await waitFor(() => expect(relayed(server, "Filter data refreshed.")).toBe(true));
+    expect(presetRows()).toEqual(["Favorites", "Beach days", "Recent"]);
+    expect(label(applyButton())).toBe("Apply");
+    expect(dotted()).toBe(false);
+
+    await applyAndWait(server);
+    expect(presets.saves()).toHaveLength(0);
+  });
+});
+
+describe("presets need a filter", () => {
+  const REASON = "Choose a filter to save as a preset.";
+  const addButton = () => byId<HTMLButtonElement>("filter-add-preset-btn");
+  const updateButton = () => byId<HTMLButtonElement>("filter-update-preset-btn");
+
+  it("Add Preset and Update Preset are unavailable while the filter is the default, with why as their tooltip", async () => {
+    await mountFilter([FAVORITES_PRESET]);
+    await openDialog();
+    await showTab("Presets");
+    fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Mine" } });
+    await settle();
+    for (const button of [addButton(), updateButton()]) {
+      expect(button.disabled).toBe(true);
+      expect(button.title).toBe(REASON);
+      expect(document.getElementById(button.getAttribute("aria-describedby")!)?.textContent).toBe(REASON);
+      expect(heldState(button)).toEqual({ held: false, icon: false });
+    }
+
+    await showTab("General");
+    await click(box("Only never played"));
+    for (const button of [addButton(), updateButton()]) {
+      expect(button.disabled).toBe(false);
+      expect(button.title).toBe("");
+      expect(button.hasAttribute("aria-describedby")).toBe(false);
+    }
   });
 });
 

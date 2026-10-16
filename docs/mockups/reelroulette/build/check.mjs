@@ -718,13 +718,19 @@ for (const width of [1280, 390]) {
   const presetMoved = changesShown();
   key(presetHandle(1), "ArrowUp");
   check(`layout@${width}: moving a preset is a change, and moving it back is none, and neither enables Clear all, which compares the filter`, presetMoved && noChangesShown() && clearOff());
-  const appliedPreset = $("filter-preset-select").value;
-  const presetsWithFilters = ["Favorites", "Short clips", "Photos only", "Long videos", "Not yet watched"];
-  const plainPreset = [...$("filter-preset-select").options].map((option) => option.value).find((name) => name && name !== appliedPreset && !presetsWithFilters.includes(name));
-  change($("filter-preset-select"), plainPreset);
-  check(`layout@${width}: choosing another preset that holds the same filter is a change to apply (${plainPreset})`, changesShown());
-  change($("filter-preset-select"), appliedPreset);
-  check(`layout@${width}: choosing the applied one again is none`, noChangesShown());
+  // No preset may hold the default filter, which the mockup starts with: Add Preset, even with a name, and Update Preset
+  // are disabled and say why, and a filter enables them.
+  const presetReason = "Choose a filter to save as a preset.";
+  const saysWhy = (id) => $(id).disabled && $(id).title === presetReason && !$(id).classList.contains("shows-problem") &&
+    document.getElementById($(id).getAttribute("aria-describedby") || "none")?.textContent === presetReason;
+  const enabledQuietly = (id) => !$(id).disabled && !$(id).title && !$(id).hasAttribute("aria-describedby");
+  input($("filter-new-preset"), "Mine");
+  check(`layout@${width}: with the default filter, Add Preset and Update Preset are disabled and say why (${$("filter-heading").textContent}, ${$("filter-add-preset").title})`,
+    $("filter-heading").textContent === "Preset: None" && clearOff() && saysWhy("filter-add-preset") && saysWhy("filter-update-preset"));
+  change($("filter-fav"), true);
+  check(`layout@${width}: a filter enables them, with no reason left`, enabledQuietly("filter-add-preset") && enabledQuietly("filter-update-preset"));
+  change($("filter-fav"), false);
+  input($("filter-new-preset"), "");
   document.querySelector('[data-sub="tags"]').click();
   // Each click redraws the chips, so the first chip's Include is looked up again.
   const firstInclude = () => document.querySelector('#filter-tag-categories button[title="Include"]');
@@ -732,6 +738,18 @@ for (const width of [1280, 390]) {
   const tagIncluded = changesShown();
   firstInclude().click();
   check(`layout@${width}: including a tag is a change, and removing it again is none`, tagIncluded && noChangesShown());
+  // A category's match mode and the Combine setting are part of the filter: ANY (OR) is a change, and ALL (AND) again is
+  // none.
+  const peopleMode = () => document.querySelector('#filter-tag-categories select[aria-label="Match mode for People"]');
+  change(peopleMode(), "OR");
+  const localChanged = changesShown();
+  change(peopleMode(), "AND");
+  const localBack = noChangesShown();
+  change($("filter-global"), "OR");
+  const globalChanged = changesShown();
+  change($("filter-global"), "AND");
+  check(`layout@${width}: a match mode set to ANY (OR) is a change, and ALL (AND) again is none, for a category and the combination`,
+    localChanged && localBack && globalChanged && noChangesShown() && $("filter-heading").textContent === "Preset: None");
   document.querySelector('[data-sub="general"]').click();
   // A duration typed, left, then emptied is no limit again, as one emptied before it is left.
   for (const field of [$("filter-min"), $("filter-max")]) {
@@ -1001,6 +1019,15 @@ for (const width of [1280, 390]) {
   await applyFilter(true, "only", true, "excluded");
   check(`layout@${width}: changing its filter stars it (${$("lib-preset").selectedOptions[0]?.textContent}, ${$("filter-heading").textContent})`,
     $("lib-preset").value === "*" && $("lib-preset").selectedOptions[0].textContent === "Photos only*" && $("filter-heading").textContent === "Preset: Photos only*");
+  openTab("filter");
+  change($("filter-fav"), false);
+  check(`layout@${width}: putting the filter back to match its preset clears the star in the heading at once (${$("filter-heading").textContent})`,
+    $("filter-heading").textContent === "Preset: Photos only" && !$("filter-apply").disabled);
+  $("filter-apply").click();
+  await tick();
+  check(`layout@${width}: and in the dropdown once applied (${$("lib-preset").selectedOptions[0]?.textContent})`,
+    $("lib-preset").value === "Photos only" && ![...$("lib-preset").options].some((option) => option.value === "*"));
+  openTab("library");
   choosePreset("");
   await tick();
   check(`layout@${width}: None goes back to the default filter`, $("lib-filters").hidden && !$("filter-fav").checked);
@@ -1011,6 +1038,38 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: choosing a preset in the Filter tab loads its filter into the tab`, $("filter-fav").checked && $("filter-fav-mode").value === "only" && $("filter-heading").textContent === "Preset: Favorites");
   $("filter-cancel").click();
   check(`layout@${width}: and Cancel puts the applied filter back`, !$("filter-fav").checked);
+  // The heading names the working filter's preset, which a duration still being typed isn't in, and only its star
+  // follows the text, so text passed through on the way, an emptied field or one that reads as another preset's filter,
+  // doesn't change the preset.
+  const typedHeadings = [];
+  const typeDuration = (field, texts) => {
+    field.focus();
+    for (const text of texts) {
+      input(field, text);
+      typedHeadings.push($("filter-heading").textContent);
+    }
+    field.dispatchEvent(new window.Event("change", { bubbles: true }));
+    typedHeadings.push($("filter-heading").textContent);
+    field.blur();
+  };
+  const choosePresetInTab = (name) => {
+    document.querySelector('[data-sub="presets"]').click();
+    change($("filter-preset-select"), name);
+    document.querySelector('[data-sub="general"]').click();
+    return $("filter-heading").textContent;
+  };
+  const shortHeading = choosePresetInTab("Short clips");
+  typeDuration($("filter-max"), ["02:", "02", "0", "", "3", "3:", "3:0", "3:00"]);
+  check(`layout@${width}: Short clips' maximum backspaced to empty and typed again stays on Short clips, starred (${[...new Set(typedHeadings)].join(", ")})`,
+    shortHeading === "Preset: Short clips" && typedHeadings.every((heading) => heading === "Preset: Short clips*"));
+  $("filter-cancel").click();
+  typedHeadings.length = 0;
+  const photosHeading = choosePresetInTab("Photos only");
+  change(document.querySelectorAll('input[name="media"]')[1], true);
+  typeDuration($("filter-max"), ["2:00", "2:0", "2:", "2", ""]);
+  check(`layout@${width}: a maximum typed that reads as Short clips' filter on the way keeps Photos only, starred (${[...new Set(typedHeadings)].join(", ")})`,
+    photosHeading === "Preset: Photos only" && typedHeadings.every((heading) => heading === "Preset: Photos only*"));
+  $("filter-cancel").click();
   // While the server is unreachable, a browse keeps the tiles already loaded and Apply can't save the presets.
   situation("reconnecting");
   openTab("library");

@@ -19,14 +19,15 @@ import {
   type FieldReveal
 } from "../validation/fieldValidation";
 import {
+  DEFAULT_FILTER_PRESET_REASON,
   FILTER_ACTION_BESIDE,
   FILTER_ACTION_FIELDS,
   FILTER_FIELD_SECTION,
   editPresetNameProblem,
   filterFieldProblems,
   filterWithGeneralDraft,
+  filterWithTypedDurations,
   generalDraftFromFilter,
-  generalDurationsChanged,
   namesEqualIgnoringCase,
   presetRowsFromApi,
   toggleFilterTag,
@@ -43,10 +44,12 @@ import {
   createDefaultFilterState,
   dialogPresetBase,
   filterDialogHasPendingChanges,
-  filterStatesEqualForPresetMatch,
-  presetAnchorForDisplay,
+  isDefaultFilter,
+  presetAnchorForFilter,
   presetHeading,
+  presetListsEqual,
   presetsToPostBody,
+  withoutAndLocalModes,
   type FilterState,
   type PresetRow,
   type TagMatchMode
@@ -59,18 +62,22 @@ export type FilterDialogTab = "general" | "tags" | "presets";
 /** The dialog's working copy, without what is worked out from it after each change. */
 interface FilterDialogState {
   working: FilterState;
-  /** The filter the dialog opened with or was cleared to. Apply is pending while the working filter differs. */
+  /**
+   * The filter the dialog started from, or last applied, which Clear all keeps. Apply is pending while the working
+   * filter differs.
+   */
   original: FilterState;
   general: GeneralDraft;
   sources: FilterSource[];
   tagModel: FilterTagModel | null;
   presets: PresetRow[];
-  /** A preset was added, changed, moved, renamed, or deleted, so Apply saves the list. */
-  presetsChanged: boolean;
+  /**
+   * The saved preset list the tab's list compares with: taken when the tab starts over, when Refresh takes the
+   * server's list, and after Apply saves it.
+   */
+  savedPresets: PresetRow[];
   /** The preset the dialog's preset list shows, or null for None. */
   presetName: string | null;
-  /** A copy of the preset dropdown's None hold, which a preset chosen in the dialog ends. */
-  holdNone: boolean;
   /** The tag categories expanded in the Tags section, which this device remembers; every other one is collapsed. */
   expanded: ReadonlySet<string>;
   newPresetName: string;
@@ -78,17 +85,31 @@ interface FilterDialogState {
   presetEdit: { index: number; name: string } | null;
 }
 
+/**
+ * An action's state, and why it is disabled when no field says why: Add Preset and Update Preset while the filter is
+ * the default one, which no preset may hold.
+ */
+export interface FilterActionBlock extends ActionBlock<GeneralField> {
+  reason?: string;
+}
+
 /** What the dialog shows. Each change replaces it. */
 export interface FilterDialogView extends FilterDialogState {
+  /**
+   * The working filter's preset, as the preset dropdown will name it once applied, starred while the filter, with each
+   * duration as its field reads, differs from that preset's.
+   */
   heading: string;
+  /** The preset list differs from the saved one, so Apply saves it. */
+  presetsChanged: boolean;
   /** Apply shows a star while there is something to apply. */
   pending: boolean;
   /** The applied filter, which the unsaved-changes dots compare the working filter against. */
   applied: FilterState;
   /**
-   * The tab holds unsaved changes: a working filter or a duration still being typed that differs from the applied
-   * filter, as after Clear all, or a changed preset list. Its tab and the panel button show a dot, and it keeps them
-   * when it shows again.
+   * The tab holds unsaved changes: a working filter, with its durations as their fields read, that differs from the
+   * applied filter, as after Clear all, or a preset list that differs from the saved one. Its tab and the panel button
+   * show a dot, and it keeps them when it shows again.
    */
   unsaved: boolean;
   /** Each field's problem, or null while its value is valid. */
@@ -99,7 +120,7 @@ export interface FilterDialogView extends FilterDialogState {
    * Whether each action is disabled, or the first General field that holds it. The new preset name sits beside Add
    * Preset, so it disables it rather than holding it.
    */
-  actions: Record<FilterAction, ActionBlock<GeneralField>>;
+  actions: Record<FilterAction, FilterActionBlock>;
   /** The problem of the name typed in Edit Preset, or null while it is valid or closed. Any problem disables Save. */
   presetEditProblem: FieldProblem | null;
   presetEditFlagged: boolean;
@@ -131,15 +152,15 @@ export interface FilterDialog {
   close(): void;
   showTab(tab: FilterDialogTab): void;
   /**
-   * Loads the sources, tags, and presets again, keeping the working filter, and the preset list while it has
-   * changes Apply hasn't saved. Before they have loaded once, it loads them as showing the tab does. It does nothing
+   * Loads the sources, tags, and presets again, keeping the working filter, and the preset list while it differs
+   * from the saved one. Before they have loaded once, it loads them as showing the tab does. It does nothing
    * while the server fails the compatibility check or runs without a library.
    */
   refresh(): Promise<void>;
   /**
-   * Saves a changed preset list, applies the working filter, closes the panel as the overlay, and starts the library
-   * over. While a field it uses is not valid, it moves to that field instead. A save that fails keeps the tab as it is
-   * and applies nothing.
+   * Saves a preset list that differs from the saved one, applies the working filter, closes the panel as the overlay,
+   * and starts the library over. While a field it uses is not valid, it moves to that field instead. A save that fails
+   * keeps the tab as it is and applies nothing.
    */
   apply(): Promise<void>;
   /** Puts back the applied filter and the saved presets, and closes the panel as the overlay. */
@@ -147,7 +168,7 @@ export interface FilterDialog {
   /** Goes back to the default filter and the saved presets, which Apply then applies. */
   clearAll(): void;
   /** Takes General tab fields the user changed. An empty duration means no limit. */
-  changeGeneral(change: Partial<Omit<GeneralDraft, "sourceChecked">>): void;
+  changeGeneral(change: Partial<Omit<GeneralDraft, "sourceChecked" | "startSourceIds">>): void;
   checkSource(index: number, checked: boolean): void;
   /** Takes a duration's text while it is typed. The working filter takes it when the field changes. */
   typeDuration(which: "min" | "max", text: string): void;
@@ -187,8 +208,8 @@ export interface FilterDialog {
    */
   deleteEditedPreset(): Promise<void>;
   /**
-   * A tag was renamed or deleted: `revise` changes the tag lists of the working copy, the filter it started from, and
-   * the preset list, which may hold changes Apply hasn't made, so Apply doesn't put the old name back.
+   * A tag was renamed or deleted: `revise` changes the tag lists of the working copy, the filter it started from, the
+   * preset list, which may hold changes Apply hasn't made, so Apply doesn't put the old name back, and its saved copy.
    */
   reviseTags(revise: (selected: string[], excluded: string[]) => void): void;
 }
@@ -219,25 +240,33 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
   const reveal = createFieldReveal<FilterField>();
 
   /**
-   * Works out the heading, Apply's star, and the fields' problems. The dialog's preset follows the working filter:
-   * a saved preset with the same filter, None for the default filter, or else the last preset with a star.
+   * Works out the heading, Apply's star, the unsaved changes, and the fields' and actions' problems. The dialog's
+   * preset follows the working filter: None for the default filter, a saved preset with the same filter, or else the
+   * last preset. The heading stars it while the filter, with each duration as its field reads, differs from its filter,
+   * as while a duration's text isn't valid.
    */
   function settled(state: FilterDialogState): FilterDialogView {
-    const holdNone = state.holdNone && filterStatesEqualForPresetMatch(state.working, createDefaultFilterState());
-    const presetName = holdNone ? null : dialogPresetBase(state.working, state.presets, state.presetName);
     const problems = filterFieldProblems(state.general, state.newPresetName, state.presets);
     const edit = state.presetEdit;
     const presetEditProblem = edit ? editPresetNameProblem(edit.name, state.presets, edit.index) : null;
     const applied = store.appliedFilter.peek();
+    const presetsChanged = !presetListsEqual(state.presets, state.savedPresets);
+    // A duration still being typed isn't in the working filter yet, so it counts as its field reads. Text that isn't
+    // valid differs from every filter.
+    const typed = filterWithTypedDurations(state.working, state.general);
+    // The preset follows the working filter, so text passed through while typing, such as an emptied field, doesn't
+    // change it; only the heading's star follows the text.
+    const presetName = dialogPresetBase(state.working, state.presets, state.presetName);
+    const differsFrom = (filter: FilterState): boolean => !typed || filterDialogHasPendingChanges(typed, filter, presetsChanged);
+    const isDefault = !!typed && isDefaultFilter(typed);
     return {
       ...state,
-      holdNone,
       presetName,
-      heading: presetHeading(presetAnchorForDisplay(state.working, state.presets, presetName, holdNone)),
-      pending: filterDialogHasPendingChanges(state.working, state.original, state.presetsChanged),
+      heading: presetHeading(presetAnchorForFilter(typed, state.presets, presetName)),
+      presetsChanged,
+      pending: differsFrom(state.original),
       applied,
-      // A duration still being typed isn't in the working filter yet, so its text counts as an unsaved change too.
-      unsaved: filterDialogHasPendingChanges(state.working, applied, state.presetsChanged) || generalDurationsChanged(state.general, applied),
+      unsaved: differsFrom(applied),
       problems,
       flagged: {
         flagModes: isFlagged(problems.flagModes),
@@ -246,16 +275,20 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         newPresetName: isFlagged(problems.newPresetName)
       },
       actions: {
-        apply: blockOf("apply", problems),
-        addPreset: blockOf("addPreset", problems),
-        updatePreset: blockOf("updatePreset", problems)
+        apply: blockOf("apply", problems, false),
+        addPreset: blockOf("addPreset", problems, isDefault),
+        updatePreset: blockOf("updatePreset", problems, isDefault)
       },
       presetEditProblem,
       presetEditFlagged: isFlagged(presetEditProblem)
     };
   }
 
-  function blockOf(action: FilterAction, problems: Record<FilterField, FieldProblem | null>): ActionBlock<GeneralField> {
+  /** An action's state. One that saves the filter as a preset is disabled while it is the default, which says why. */
+  function blockOf(action: FilterAction, problems: Record<FilterField, FieldProblem | null>, defaultFilter: boolean): FilterActionBlock {
+    if (defaultFilter) {
+      return { disabled: true, heldBy: null, reason: DEFAULT_FILTER_PRESET_REASON };
+    }
     const block = actionBlock(FILTER_ACTION_FIELDS[action], problems, FILTER_ACTION_BESIDE[action]);
     // A field beside the action disables it, so only a General field can hold it.
     return { disabled: block.disabled, heldBy: block.heldBy as GeneralField | null };
@@ -310,25 +343,27 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
   }
 
   /** Starts the dialog over from the applied filter and the preset dropdown's preset. */
-  function workingFromHeader(): Pick<FilterDialogState, "working" | "original" | "presetName" | "holdNone"> {
+  function workingFromHeader(): Pick<FilterDialogState, "working" | "original" | "presetName"> {
     const working = cloneFilterState(store.appliedFilter.peek());
     return {
       working,
       original: cloneFilterState(working),
-      presetName: store.activePresetName.peek(),
-      holdNone: store.headerExplicitNone.peek()
+      presetName: store.activePresetName.peek()
     };
   }
 
   /**
    * Takes loaded sources, tags, and presets, keeping the working filter, the General fields as they are, such as a
-   * duration still being typed, with only their sources checked again, and the preset list while Apply hasn't saved it.
+   * duration still being typed, with only their sources checked again for the loaded sources, and the source list they
+   * were filled from, and the preset list while it differs from the saved one. Otherwise the loaded list is the saved
+   * one.
    */
   function takeRemote(current: FilterDialogView, remote: Awaited<ReturnType<typeof loadRemote>>): void {
     update({
       sources: remote.sources,
       tagModel: remote.tagModel,
       presets: current.presetsChanged ? current.presets : remote.presets,
+      savedPresets: current.presetsChanged ? current.savedPresets : remote.presets,
       general: { ...current.general, sourceChecked: generalDraftFromFilter(current.working, remote.sources).sourceChecked }
     });
   }
@@ -362,7 +397,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       sources: remote.sources,
       tagModel: remote.tagModel,
       presets: remote.presets,
-      presetsChanged: false,
+      savedPresets: remote.presets,
       expanded: readExpanded(),
       newPresetName: "",
       presetEdit: null
@@ -387,11 +422,12 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       return;
     }
     const begin = workingFromHeader();
+    const presets = presetRowsFromApi(store.presets.peek());
     update({
       ...begin,
       general: generalDraftFromFilter(begin.working, current.sources),
-      presets: presetRowsFromApi(store.presets.peek()),
-      presetsChanged: false,
+      presets,
+      savedPresets: presets,
       newPresetName: "",
       presetEdit: null
     });
@@ -464,10 +500,10 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
             void dialogs.notice(`Saving presets failed (${response.status}).`);
             return;
           }
-          update({ presetsChanged: false });
           const presets = await api.getJson("/api/presets");
           store.presets.value = Array.isArray(presets) ? presets : [];
-          update({ presets: presetRowsFromApi(store.presets.peek()) });
+          const saved = presetRowsFromApi(store.presets.peek());
+          update({ presets: saved, savedPresets: saved });
         } catch (saveError) {
           // A 401 shows only the pairing prompt, which the request has asked for.
           if (!(saveError instanceof UnauthorizedError)) {
@@ -479,13 +515,9 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
 
       const current = view.peek()!;
       const working = readGeneral(current);
-      const appliedDefault = filterStatesEqualForPresetMatch(working, createDefaultFilterState());
       // One batch, so the device's memory takes the applied filter and its preset once.
       batch(() => {
-        store.headerExplicitNone.value = current.holdNone && appliedDefault;
-        store.activePresetName.value = store.headerExplicitNone.peek()
-          ? null
-          : dialogPresetBase(working, current.presets, current.presetName);
+        store.activePresetName.value = dialogPresetBase(working, current.presets, current.presetName);
         store.appliedFilter.value = cloneFilterState(working);
       });
       update({ working, original: cloneFilterState(working), presetName: store.activePresetName.peek() });
@@ -511,8 +543,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         working,
         general: generalDraftFromFilter(working, current.sources),
         presetName: null,
-        presets: presetRowsFromApi(store.presets.peek()),
-        presetsChanged: false
+        presets: current.savedPresets
       });
     },
 
@@ -561,8 +592,11 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     setLocalMatch(categoryId, mode) {
       const current = view.peek();
       if (current) {
-        const working = cloneFilterState(current.working);
-        working.categoryLocalMatchModes = { ...working.categoryLocalMatchModes, [categoryId]: mode };
+        // A category without a mode filters as AND, so AND leaves no entry, and the filter can match its preset again.
+        const working = withoutAndLocalModes({
+          ...cloneFilterState(current.working),
+          categoryLocalMatchModes: { ...current.working.categoryLocalMatchModes, [categoryId]: mode }
+        });
         update({ working });
       }
     },
@@ -593,7 +627,8 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       update({
         working: revised(current.working),
         original: revised(current.original),
-        presets: current.presets.map((preset) => ({ ...preset, filterState: revised(preset.filterState) }))
+        presets: current.presets.map((preset) => ({ ...preset, filterState: revised(preset.filterState) })),
+        savedPresets: current.savedPresets.map((preset) => ({ ...preset, filterState: revised(preset.filterState) }))
       });
     },
 
@@ -603,14 +638,13 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         return;
       }
       if (!name) {
-        const stillDefault = filterStatesEqualForPresetMatch(current.working, createDefaultFilterState());
-        update({ presetName: null, holdNone: current.holdNone && stillDefault });
+        update({ presetName: null });
         return;
       }
       const preset = current.presets.find((row) => row.name === name);
       if (preset) {
         const working = cloneFilterState(preset.filterState);
-        update({ working, presetName: name, holdNone: false, general: generalDraftFromFilter(working, current.sources) });
+        update({ working, presetName: name, general: generalDraftFromFilter(working, current.sources) });
       }
     },
 
@@ -639,7 +673,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         key: "filter",
         logText: "Updated preset locally — Apply to save."
       });
-      update({ working, presets, presetsChanged: true });
+      update({ working, presets });
     },
 
     typeNewPresetName(text) {
@@ -656,7 +690,6 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       update({
         working,
         presets: [...current.presets, { name, filterState: cloneFilterState(working) }],
-        presetsChanged: true,
         newPresetName: ""
       });
       tab.value = "presets";
@@ -669,7 +702,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       if (!current || from === to || from < 0 || from >= count || to < 0 || to >= count) {
         return;
       }
-      update({ presets: moveEntry(current.presets, from, to), presetsChanged: true });
+      update({ presets: moveEntry(current.presets, from, to) });
     },
 
     editPreset(index) {
@@ -701,7 +734,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       const presets = current.presets.slice();
       presets[edit.index] = { ...row, name };
       const chosen = current.presetName && namesEqualIgnoringCase(current.presetName, row.name);
-      update({ presets, presetsChanged: true, presetName: chosen ? name : current.presetName, presetEdit: null });
+      update({ presets, presetName: chosen ? name : current.presetName, presetEdit: null });
     },
 
     cancelPresetEdit() {
@@ -723,7 +756,6 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       const chosen = current.presetName && namesEqualIgnoringCase(current.presetName, removed.name);
       update({
         presets: current.presets.filter((_, rowIndex) => rowIndex !== edit.index),
-        presetsChanged: true,
         presetName: chosen ? null : current.presetName,
         presetEdit: null
       });

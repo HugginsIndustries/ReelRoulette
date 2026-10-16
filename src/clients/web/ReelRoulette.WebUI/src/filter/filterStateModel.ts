@@ -56,6 +56,11 @@ export function createDefaultFilterState(): FilterState {
   };
 }
 
+/** Whether a filter is the default one, by the preset comparison: None stands for it, and no preset may hold it. */
+export function isDefaultFilter(filter: FilterState): boolean {
+  return filterStatesEqualForPresetMatch(filter, createDefaultFilterState());
+}
+
 /** The preset dropdown. None selects the default filter; a named preset selects that preset's filter. */
 export function filterStateForHeaderPresetSelection(
   preset: { filterState?: ApiFilterState | null } | null | undefined
@@ -63,7 +68,7 @@ export function filterStateForHeaderPresetSelection(
   if (!preset) {
     return createDefaultFilterState();
   }
-  return filterStateFromApiObject(preset.filterState);
+  return withoutAndLocalModes(filterStateFromApiObject(preset.filterState));
 }
 
 export const HEADER_PRESET_NONE_LABEL = "None";
@@ -110,33 +115,21 @@ function describePresetAnchor(baseName: string | null, starred: boolean): Preset
   };
 }
 
-/** None, a named preset, or a starred unsaved row. A server match is not consulted here. */
+/**
+ * None for the default filter, which no preset may hold; otherwise the first preset whose filter matches, or else the
+ * previous preset, or None, with a star. A server match is not consulted here.
+ */
 export function resolvePresetAnchor(
   current: FilterState,
   presets: readonly { name: string; filterState: FilterState }[],
   previousBase: string | null | undefined
 ): PresetAnchor {
-  return presetAnchorForDisplay(current, presets, previousBase, false);
-}
-
-/**
- * While holdNone is set, the default filter stays on None even when a saved preset has that same filter.
- */
-export function presetAnchorForDisplay(
-  current: FilterState,
-  presets: readonly { name: string; filterState: FilterState }[],
-  previousBase: string | null | undefined,
-  holdNone: boolean
-): PresetAnchor {
-  if (holdNone && filterStatesEqualForPresetMatch(current, createDefaultFilterState())) {
+  if (isDefaultFilter(current)) {
     return describePresetAnchor(null, false);
   }
   const match = presets.find((preset) => filterStatesEqualForPresetMatch(preset.filterState, current));
   if (match?.name) {
     return describePresetAnchor(match.name, false);
-  }
-  if (filterStatesEqualForPresetMatch(current, createDefaultFilterState())) {
-    return describePresetAnchor(null, false);
   }
   const base = String(previousBase || "").trim();
   const existing = base ? presets.find((preset) => presetNamesEqual(preset.name, base)) : undefined;
@@ -144,6 +137,23 @@ export function presetAnchorForDisplay(
     return describePresetAnchor(existing.name, true);
   }
   return describePresetAnchor(null, true);
+}
+
+/**
+ * The named preset, or None for null, starred while the filter differs from that preset's filter, or from the default
+ * filter for None. A null filter, such as one whose duration text isn't valid, differs from every filter.
+ */
+export function presetAnchorForFilter(
+  filter: FilterState | null,
+  presets: readonly { name: string; filterState: FilterState }[],
+  baseName: string | null
+): PresetAnchor {
+  const matches =
+    !!filter &&
+    (baseName === null
+      ? isDefaultFilter(filter)
+      : presets.some((preset) => preset.name === baseName && filterStatesEqualForPresetMatch(preset.filterState, filter)));
+  return describePresetAnchor(baseName, !matches);
 }
 
 export function presetHeading(anchor: PresetAnchor): string {
@@ -211,7 +221,7 @@ function presetRowsFromHeaderPresets(
     if (!name) {
       continue;
     }
-    rows.push({ name, filterState: filterStateFromApiObject(preset.filterState) });
+    rows.push({ name, filterState: withoutAndLocalModes(filterStateFromApiObject(preset.filterState)) });
   }
   return rows;
 }
@@ -219,10 +229,9 @@ function presetRowsFromHeaderPresets(
 export function headerPresetListForFilter(
   filter: FilterState,
   presets: readonly { id: string; name: string; filterState?: ApiFilterState | null }[],
-  previousBase: string | null | undefined,
-  holdNone = false
+  previousBase: string | null | undefined
 ): HeaderPresetList {
-  const anchor = presetAnchorForDisplay(filter, presetRowsFromHeaderPresets(presets), previousBase, holdNone);
+  const anchor = resolvePresetAnchor(filter, presetRowsFromHeaderPresets(presets), previousBase);
   const options = buildHeaderPresetOptions(anchor, presets);
   return {
     filter: cloneFilterState(filter),
@@ -241,7 +250,7 @@ export function headerPresetListAfterPick(
 ): HeaderPresetList {
   const pick = headerPresetPick(pickedValue);
   if (pick === "default") {
-    return headerPresetListForFilter(createDefaultFilterState(), presets, null, true);
+    return headerPresetListForFilter(createDefaultFilterState(), presets, null);
   }
   if (pick === "named") {
     const preset = presets.find((candidate) => candidate.id === pickedValue);
@@ -529,6 +538,20 @@ export function filterStateFromApiObject(raw: ApiFilterState | null | undefined)
   return base;
 }
 
+/**
+ * The filter without its categories' AND match modes, as the WebUI keeps a filter it reads for its own use: a category
+ * without a mode filters as AND, so its entry says nothing, and a filter put back to AND then matches its preset. A
+ * map left empty reads as none.
+ */
+export function withoutAndLocalModes(filter: FilterState): FilterState {
+  const modes = filter.categoryLocalMatchModes;
+  if (!modes) {
+    return filter;
+  }
+  const kept = Object.fromEntries(Object.entries(modes).filter(([, mode]) => mode !== TAG_MATCH_MODE.And));
+  return { ...filter, categoryLocalMatchModes: Object.keys(kept).length > 0 ? kept : null };
+}
+
 /** Sorted, de-duplicated values compared by UTF-16 code unit, matching ordinal order in C#. */
 function sortedUnique(values: string[]): string[] {
   return [...new Set(values)].sort();
@@ -572,6 +595,14 @@ export function filterDialogHasPendingChanges(
 export interface PresetRow {
   name: string;
   filterState: FilterState;
+}
+
+/** Whether two preset lists are the same: in the same order, each with the same name, case counting, and filter. */
+export function presetListsEqual(a: readonly PresetRow[], b: readonly PresetRow[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((row, index) => row.name === b[index]!.name && filterStatesEqualForPresetMatch(row.filterState, b[index]!.filterState))
+  );
 }
 
 export function presetsToPostBody(rows: PresetRow[]): components["schemas"]["FilterPresetSnapshot"][] {

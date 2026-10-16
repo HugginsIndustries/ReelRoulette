@@ -3,6 +3,7 @@ import {
   filterStatesEqualForPresetMatch,
   headerPresetPick,
   serializeFilterStateForApi,
+  withoutAndLocalModes,
   type ApiFilterState,
   type FilterState
 } from "../filter/filterStateModel";
@@ -32,7 +33,10 @@ export function randomPickRequest(inputs: RandomPickInputs): RandomPickRequest {
       ? inputs.presets.find((preset) => preset.id === inputs.selectedPresetValue)
       : undefined;
   const presetStillMatches = selectedPreset
-    ? filterStatesEqualForPresetMatch(filterStateFromApiObject(selectedPreset.filterState), inputs.appliedFilter)
+    ? filterStatesEqualForPresetMatch(
+        withoutAndLocalModes(filterStateFromApiObject(selectedPreset.filterState)),
+        inputs.appliedFilter
+      )
     : false;
   const presetId = presetStillMatches ? String(selectedPreset?.id || "").trim() : "";
   const body: RandomPickRequest = {

@@ -2031,12 +2031,13 @@ describe("saving", () => {
     await expectSaved();
     expect(libraryQueries(server)).toHaveLength(before + 1);
     expect(libraryQueries(server)[before].filterState.selectedTags).toEqual([]);
-    expect(selectedPresetLabel()).toBe("Beach days");
+    // The preset is left with the default filter, which is None.
+    expect(selectedPresetLabel()).toBe("None");
     expect((document.getElementById("library-filter-summary") as HTMLElement).hidden).toBe(true);
     expect(JSON.parse(localStorage.getItem("rr_device.filter.applied")!).filter.selectedTags).toEqual([]);
     const pick = await nextPick(server);
     expect(pick.filterState.selectedTags).toEqual([]);
-    expect(pick.presetId).toBe("preset-beach");
+    expect(pick.presetId).toBeUndefined();
   });
 
   it("another client's rename is applied to the filter, its preset, and the library", async () => {

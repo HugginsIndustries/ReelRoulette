@@ -15,6 +15,7 @@ import {
   headerPresetPick,
   HEADER_PRESET_STARRED_VALUE,
   presetHeading,
+  presetListsEqual,
   resolvePresetAnchor,
   formatDurationForDisplay,
   parseServerDuration,
@@ -23,6 +24,8 @@ import {
   serializeFilterStateForApi,
   MEDIA_TYPE_FILTER,
   TAG_MATCH_MODE,
+  isPresetOwnFilter,
+  withoutAndLocalModes,
   type ApiFilterState,
   type FilterState,
   type FlagFilterMode
@@ -254,22 +257,6 @@ describe("filterStateModel", () => {
     expect(none.selectedValue).toBe("");
     expect(none.entries.some((entry) => entry.value === HEADER_PRESET_STARRED_VALUE)).toBe(false);
 
-    const everything = {
-      id: "all",
-      name: "Everything",
-      filterState: serializeFilterStateForApi(createDefaultFilterState())
-    };
-    const heldNone = headerPresetListAfterPick(dirty, [everything], null, "");
-    expect(heldNone.baseName).toBeNull();
-    expect(heldNone.selectedValue).toBe("");
-    expect(heldNone.filter).toEqual(createDefaultFilterState());
-    const stillHeld = headerPresetListForFilter(createDefaultFilterState(), [everything], null, true);
-    expect(stillHeld.selectedValue).toBe("");
-    expect(stillHeld.baseName).toBeNull();
-    const released = headerPresetListForFilter(createDefaultFilterState(), [everything], null);
-    expect(released.baseName).toBe("Everything");
-    expect(released.selectedValue).toBe("all");
-
     const kept = headerPresetListAfterPick(dirty, [youtube], "YouTube", HEADER_PRESET_STARRED_VALUE);
     expect(kept.filter.onlyNeverPlayed).toBe(true);
     expect(kept.baseName).toBe("YouTube");
@@ -384,5 +371,44 @@ describe("filter state written shared fixture", () => {
     expect(read.favoritesMode).toBe(favoritesMode);
     expect(read.blacklistedMode).toBe(blacklistedMode);
     expect(filterStatesEqualForPresetMatch(read, { ...writtenFixtureFilter(), favoritesMode, blacklistedMode })).toBe(true);
+  });
+});
+
+describe("AND match modes read for use", () => {
+  it("drops a category's AND entry, keeping its OR entries, and an emptied map reads as none", () => {
+    const read = filterStateFromApiObject({ categoryLocalMatchModes: { places: 0, people: 1 } });
+    expect(read.categoryLocalMatchModes).toEqual({ places: 0, people: 1 });
+    expect(withoutAndLocalModes(read).categoryLocalMatchModes).toEqual({ people: 1 });
+    expect(withoutAndLocalModes(filterStateFromApiObject({ categoryLocalMatchModes: { places: "And" } })).categoryLocalMatchModes).toBeNull();
+    expect(withoutAndLocalModes(createDefaultFilterState()).categoryLocalMatchModes).toBeNull();
+    expect(read.categoryLocalMatchModes).toEqual({ places: 0, people: 1 });
+  });
+
+  it("reads a preset from the server without AND entries, so a preset saved with a leftover one matches the filter it describes", () => {
+    const leftover = { id: "p-beach", name: "Beach", filterState: { selectedTags: ["Beach"], categoryLocalMatchModes: { places: 0 } } };
+    const described: FilterState = { ...createDefaultFilterState(), selectedTags: ["Beach"] };
+
+    expect(filterStateForHeaderPresetSelection(leftover).categoryLocalMatchModes).toBeNull();
+    expect(isPresetOwnFilter(described, [leftover], "Beach")).toBe(true);
+    const list = headerPresetListForFilter(described, [leftover], "Beach");
+    expect(list).toMatchObject({ baseName: "Beach", selectedValue: "p-beach" });
+    expect(list.entries.map((entry) => entry.label)).toEqual(["None", "Beach"]);
+    const picked = headerPresetListAfterPick(createDefaultFilterState(), [leftover], null, "p-beach");
+    expect(picked.filter.categoryLocalMatchModes).toBeNull();
+  });
+});
+
+describe("presetListsEqual", () => {
+  const favorites = { name: "Favorites", filterState: { ...createDefaultFilterState(), favoritesMode: "only" as const } };
+  const recent = { name: "Recent", filterState: { ...createDefaultFilterState(), onlyNeverPlayed: true } };
+
+  it("compares by order, by name with case counting, and by filter as presets match", () => {
+    expect(presetListsEqual([favorites, recent], [favorites, recent])).toBe(true);
+    expect(presetListsEqual([favorites, recent], [recent, favorites])).toBe(false);
+    expect(presetListsEqual([favorites, recent], [favorites])).toBe(false);
+    expect(presetListsEqual([favorites], [{ ...favorites, name: "favorites" }])).toBe(false);
+    expect(presetListsEqual([favorites], [{ ...favorites, filterState: createDefaultFilterState() }])).toBe(false);
+    const sameFilter = { ...favorites, filterState: { ...favorites.filterState, globalMatchMode: null } };
+    expect(presetListsEqual([favorites], [sameFilter])).toBe(true);
   });
 });

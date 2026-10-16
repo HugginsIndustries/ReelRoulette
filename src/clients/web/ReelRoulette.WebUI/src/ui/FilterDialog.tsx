@@ -63,12 +63,13 @@ function sectionFlagged(view: FilterDialogView | null, section: FilterDialogTab)
   return !!view && fields.some((field) => FILTER_FIELD_SECTION[field] === section && view.flagged[field]);
 }
 
-/** An action's state for its button: disabled, or held by a field elsewhere. */
+/** An action's state for its button: disabled, with why when no field says it, or held by a field elsewhere. */
 function heldAction(view: FilterDialogView | null, action: FilterAction) {
   const block = view?.actions[action];
   return {
     disabled: block?.disabled ?? false,
-    heldReason: block?.heldBy ? filterHeldReason(action, block.heldBy) : null
+    heldReason: block?.heldBy ? filterHeldReason(action, block.heldBy) : null,
+    disabledReason: block?.reason ?? null
   };
 }
 

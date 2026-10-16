@@ -1409,20 +1409,6 @@ describe("memory", () => {
     expect(pick).toMatchObject({ presetId: "preset-favorites", randomizationMode: "SpreadMode", filterState: { favoritesOnly: true } });
   });
 
-  it("keeps None, held over a preset with the default filter, after a page refresh", async () => {
-    const everything = { id: "preset-everything", name: "Everything", filterState: { selectedTags: [], excludedTags: [] } };
-    const presets = (server: FakeServer) => server.on("GET", "/api/presets", () => json([everything]));
-    const { page } = await mountLibrary(libraryItems(3), presets);
-    await openLibrary();
-    await waitFor(() => expect(selectedPresetLabel()).toBe("Everything"));
-    await pickPreset("");
-    expect(selectedPresetLabel()).toBe("None");
-
-    await refresh(page, libraryItems(3), presets);
-    await waitFor(() => expect(presetSelect().disabled).toBe(false));
-    expect(selectedPresetLabel()).toBe("None");
-  });
-
   it("shows a remembered preset renamed elsewhere by its new name, and one deleted as None*, keeping its filter", async () => {
     const { page } = await mountLibrary(libraryItems(3), (server) => {
       server.on("GET", "/api/presets", () => json([ALL_FAVORITES_PRESET]));
@@ -1459,7 +1445,8 @@ describe("memory", () => {
     const emptied = { ...BEACH_PRESET, filterState: { ...BEACH_PRESET.filterState, selectedTags: [] } };
     const third = await refresh(second.page, libraryItems(3), (server) => server.on("GET", "/api/presets", () => json([emptied])));
     await waitFor(() => expect(third.library.queries().at(-1)!.filterState.selectedTags).toEqual([]));
-    expect(selectedPresetLabel()).toBe("Beach");
+    // The preset is left with the default filter, which is None.
+    expect(selectedPresetLabel()).toBe("None");
   });
 
   it("keeps a changed filter's tags as remembered, starred, as the open page keeps a tag no item held", async () => {
@@ -1468,7 +1455,6 @@ describe("memory", () => {
       JSON.stringify({
         filter: { selectedTags: ["Beach"], excludedTags: [], includedSourceIds: [], onlyNeverPlayed: true },
         preset: "Beach",
-        holdNone: false,
         unchanged: false
       })
     );
@@ -1484,7 +1470,6 @@ describe("memory", () => {
       JSON.stringify({
         filter: { selectedTags: [], excludedTags: [], includedSourceIds: ["source-gone"] },
         preset: null,
-        holdNone: false,
         unchanged: false
       })
     );
@@ -1548,7 +1533,6 @@ describe("kept sources", () => {
       JSON.stringify({
         filter: { selectedTags: [], excludedTags: [], includedSourceIds: ["source-1"] },
         preset: null,
-        holdNone: false,
         unchanged: false
       })
     );
@@ -1577,7 +1561,6 @@ describe("kept sources", () => {
       JSON.stringify({
         filter: { selectedTags: [], excludedTags: [], includedSourceIds: ["source-2"] },
         preset: null,
-        holdNone: false,
         unchanged: false
       })
     );

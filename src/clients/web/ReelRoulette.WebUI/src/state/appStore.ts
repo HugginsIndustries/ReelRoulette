@@ -8,9 +8,9 @@ import {
   findPresetByName,
   headerPresetListAfterPick,
   headerPresetListForFilter,
-  headerPresetPick,
   isPresetOwnFilter,
   serializeFilterStateForApi,
+  withoutAndLocalModes,
   type ApiFilterState,
   type FilterState,
   type HeaderPresetList,
@@ -68,8 +68,6 @@ interface RememberedFilter {
   filter: ApiFilterState;
   /** The preset it came from, or null for None. */
   preset: string | null;
-  /** None held while the filter is the default, even when a saved preset has the default filter. */
-  holdNone: boolean;
   /** The filter was the preset's own, unchanged, so the next page load applies the preset as the server has it then. */
   unchanged: boolean;
 }
@@ -84,7 +82,6 @@ function isRememberedFilter(value: unknown): value is RememberedFilter {
     typeof record.filter === "object" &&
     !Array.isArray(record.filter) &&
     (record.preset === null || typeof record.preset === "string") &&
-    typeof record.holdNone === "boolean" &&
     typeof record.unchanged === "boolean"
   );
 }
@@ -145,8 +142,6 @@ export interface AppStore {
   readonly appliedFilter: Signal<FilterState>;
   /** The saved preset the applied filter came from, or null for None. */
   readonly activePresetName: Signal<string | null>;
-  /** The preset dropdown stays on None until the applied filter changes, even when a saved preset has the default filter. */
-  readonly headerExplicitNone: Signal<boolean>;
   readonly randomizationMode: Signal<string>;
   /**
    * The Settings tab's Advance after, in seconds, kept on this device: how long a photo shows, and the timer of Timer
@@ -257,7 +252,6 @@ function rememberedFilterOf(store: AppStore): RememberedFilter {
   return {
     filter: serializeFilterStateForApi(filter),
     preset,
-    holdNone: store.headerExplicitNone.value,
     unchanged: isPresetOwnFilter(filter, store.presets.value, preset)
   };
 }
@@ -272,7 +266,7 @@ export function createAppStore(options: AppStoreOptions): AppStore {
   let lastRelayedStatus = "";
   let lastRelayedStatusAtMs = 0;
   const remembered = options.device.read<RememberedFilter | null>(APPLIED_FILTER_KEY, null, isRememberedFilter);
-  const restoredFilter = remembered ? filterStateFromApiObject(remembered.filter) : createDefaultFilterState();
+  const restoredFilter = remembered ? withoutAndLocalModes(filterStateFromApiObject(remembered.filter)) : createDefaultFilterState();
   /** The remembered preset that applies again once presets load, unless the filter changes first. */
   let reapplyPreset = remembered?.unchanged ? remembered.preset : null;
   /** Presets have loaded once, so whether the filter is a preset's own can be told, and the filter is remembered. */
@@ -300,7 +294,6 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     presetMenu: signal<PresetMenu>({ entries: [{ label: PRESET_MENU_LOADING, value: "" }], selectedValue: "", message: true }),
     appliedFilter: signal(restoredFilter),
     activePresetName: signal<string | null>(remembered?.preset ?? null),
-    headerExplicitNone: signal(remembered?.holdNone ?? false),
     randomizationMode: signal(readRandomizationMode(options.storage)),
     advanceAfterSeconds,
     autoplayMode,
@@ -329,19 +322,7 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     },
 
     syncHeaderPresets() {
-      const applied = store.appliedFilter.peek();
-      const stillDefault = filterStatesEqualForPresetMatch(applied, createDefaultFilterState());
-      if (store.headerExplicitNone.peek() && !stillDefault) {
-        store.headerExplicitNone.value = false;
-      }
-      showPresetList(
-        headerPresetListForFilter(
-          applied,
-          store.presets.peek(),
-          store.activePresetName.peek(),
-          store.headerExplicitNone.peek() && stillDefault
-        )
-      );
+      showPresetList(headerPresetListForFilter(store.appliedFilter.peek(), store.presets.peek(), store.activePresetName.peek()));
     },
 
     presetsLoaded() {
@@ -366,12 +347,6 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     pickHeaderPreset(value) {
       // One batch, so the device's memory takes the pick's result once, not each step on the way.
       const changed = batch(() => {
-        const pick = headerPresetPick(value);
-        if (pick === "default") {
-          store.headerExplicitNone.value = true;
-        } else if (pick === "named") {
-          store.headerExplicitNone.value = false;
-        }
         const applied = store.appliedFilter.peek();
         const list = headerPresetListAfterPick(applied, store.presets.peek(), store.activePresetName.peek(), value);
         const filterChanged = !filterStatesEqualForPresetMatch(list.filter, applied);

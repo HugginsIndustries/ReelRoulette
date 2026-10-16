@@ -1565,7 +1565,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
               <h3>Category Combination</h3>
               <p class="filter-hint">AND = all categories must match. OR = any category can match.</p>
               <label class="filter-row">Combine categories using:
-                <select class="ctl"><option>AND</option><option>OR</option></select>
+                <select class="ctl" id="filter-global"><option value="AND">AND</option><option value="OR">OR</option></select>
               </label>
             </div>
             <div class="filter-section">
@@ -2325,10 +2325,12 @@ window.addEventListener("resize", placeAllTips);
  *   any problem in a field `beside()` returns: a field that sits right next to the action, such as a new name beside
  *   its Add button, or a field of the dialog the action is in, since the dialog has the user's attention. The field's
  *   own icon and tooltip say why. A field in `beside()` is also one of `fields()`. So does `idle()` returning true,
- *   for an action with nothing to do, such as Apply with no changes. Disabling wins over holding.
+ *   for an action with nothing to do, such as Apply with no changes. So does `unavailable()` returning a reason, for
+ *   an action that can't be used now when no field says why, such as Add Preset with the default filter; the reason is
+ *   its tooltip and accessible description. Disabling wins over holding.
  * - Otherwise a flagged field elsewhere holds it: the button's label dims, it reads as unavailable, and the red badge
  *   shows on its top-right corner. Pressing it does nothing but take the user to the first field that holds it.
- * Call the returned `refresh()` when what `idle()` reads changes.
+ * Call the returned `refresh()` when what `idle()` or `unavailable()` reads changes.
  */
 function holdAction(button, fields, options) {
   const opts = options || {};
@@ -2338,8 +2340,11 @@ function holdAction(button, fields, options) {
   describe.id = (button.id || "action") + "-held";
   button.after(describe);
 
+  const unavailable = () => (opts.unavailable ? opts.unavailable() : null);
+
   function disabled() {
     if (opts.idle && opts.idle()) return true;
+    if (unavailable()) return true;
     return fields().some((field) => field.disables) || (opts.beside ? opts.beside().some((field) => field.holds) : false);
   }
 
@@ -2351,6 +2356,7 @@ function holdAction(button, fields, options) {
     button.disabled = disabled();
     const field = blocker();
     const held = !!field;
+    const why = unavailable();
     button.classList.toggle("shows-problem", held);
     fadeShown(button.querySelector(".btn-problem"), held);
     if (held) {
@@ -2358,6 +2364,11 @@ function holdAction(button, fields, options) {
       describe.textContent = opts.reason ? opts.reason(field) : "Correct the field first.";
       button.setAttribute("aria-describedby", describe.id);
       button.title = describe.textContent;
+    } else if (why) {
+      button.removeAttribute("aria-disabled");
+      describe.textContent = why;
+      button.setAttribute("aria-describedby", describe.id);
+      button.title = why;
     } else {
       button.removeAttribute("aria-disabled");
       button.removeAttribute("aria-describedby");
@@ -4474,8 +4485,7 @@ const lib = {
   sort: store.get("libSort", "Name"),
   descending: store.get("libDescending", false),
   search: "",
-  preset: store.get("libPreset", ""),
-  presetModified: store.get("libPresetModified", false)
+  preset: store.get("libPreset", "")
 };
 const DIRECTION_LABELS = {
   Name: ["A–Z", "Z–A"],
@@ -4490,7 +4500,6 @@ function saveLibState() {
   store.set("libSort", lib.sort);
   store.set("libDescending", lib.descending);
   store.set("libPreset", lib.preset);
-  store.set("libPresetModified", lib.presetModified);
 }
 // What the grid says in place of tiles: today's messages, and the server's own when it fails the compatibility check
 // or runs without a library. While the server asks for pairing, its load answers 401 and the grid shows nothing.
@@ -4732,8 +4741,8 @@ $("lib-dir").addEventListener("click", () => {
   reloadGrid();
 });
 // The preset menu, as the Library tab's preset dropdown shows it: "Loading..." until presets arrive, "Error loading
-// presets" when they can't load, and a starred row, such as "Favorites*", once the applied filter differs from the
-// chosen preset.
+// presets" when they can't load, and the applied filter's preset as the app names it, with a starred row, such as
+// "Favorites*", while it matches no preset and isn't the default filter.
 function renderLibPresets() {
   const select = $("lib-preset");
   select.textContent = "";
@@ -4745,21 +4754,22 @@ function renderLibPresets() {
   if (state.situation === "nolibrary") return add("", "Running without a library");
   if (presetsLoading) return add("", "Loading...");
   select.disabled = false;
-  if (lib.preset && lib.presetModified) add("*", `${lib.preset}*`);
+  const anchor = presetAnchor(appliedValue || DEFAULT_FILTER, lib.preset, presetSnapshot, savedPresetFilters);
+  if (anchor.starred) add("*", anchorLabel(anchor));
   add("", "None");
   presetSnapshot.forEach((name) => add(name, name));
-  select.value = lib.preset && lib.presetModified ? "*" : lib.preset;
-  $("filter-heading").textContent = `Preset: ${lib.preset ? lib.preset + (lib.presetModified ? "*" : "") : "None"}`;
+  select.value = anchor.starred ? "*" : anchor.name;
 }
 $("lib-preset").addEventListener("change", (event) => {
   if (event.target.value === "*") return;
   lib.preset = event.target.value;
-  lib.presetModified = false;
   saveLibState();
-  $("filter-preset-select").value = lib.preset;
-  loadPresetFilter(lib.preset);
-  presetUpdates.clear();
+  presets.splice(0, presets.length, ...presetSnapshot);
+  presetFilters = new Map(savedPresetFilters);
+  applyFilterValue(lib.preset ? savedPresetFilters.get(lib.preset) : DEFAULT_FILTER);
   takeSnapshot();
+  startOver();
+  renderPresets();
   saveFilterState();
   readApplied();
   renderApply();
@@ -4779,19 +4789,55 @@ function checkPresetName(value, own) {
   }
   return null;
 }
-// Presets updated with the tab's filter since the presets were saved. The mockup's presets keep no filters of their
-// own, so an update counts as a change until Apply, Cancel, or Clear all.
-const presetUpdates = new Set();
-// The applied filter's inputs, the saved presets, and the applied tags, which Cancel puts back.
+// A filter as the app compares it, read from the tab's fields: a duration as its field's text reads it, one that is not
+// valid reading as "invalid", and only the categories matched with ANY (OR), since one without an entry matches ALL.
+const DEFAULT_FILTER = { fav: null, bl: "excluded", basic: [false, false, false, false], media: "all", audio: "all", sources: null, min: null, max: null, include: [], exclude: [], global: "AND", local: {} };
+const sameFilter = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+// Each preset's filter, none of them the default one, which no preset may hold.
+const PRESET_FILTERS = {
+  Favorites: { fav: "only" },
+  "Short clips": { media: "videos", max: 120 },
+  "Photos only": { media: "photos" },
+  "Long videos": { media: "videos", min: 600 },
+  "Beach days": { include: ["places-beach"] },
+  Family: { include: ["people-alice"] },
+  "Not yet watched": { basic: [true, false, false, false] },
+  "Night shots": { include: ["time-night"] },
+  "Trips abroad": { include: ["trips-japan-2019"] },
+  "Drone footage": { include: ["camera-drone"] },
+  Concerts: { include: ["events-concert"] },
+  Kids: { include: ["events-birthday"] },
+  Cooking: { include: ["activities-cooking"] },
+  Timelapses: { include: ["activities-timelapse"] },
+  Winter: { include: ["weather-snow"] },
+  Summer: { include: ["weather-sunny"] }
+};
+// The tab's presets' filters, and the saved ones, which Cancel and Clear all put back.
+let presetFilters = new Map(presets.map((name) => [name, { ...DEFAULT_FILTER, ...PRESET_FILTERS[name] }]));
+let savedPresetFilters = new Map(presetFilters);
+// The applied filter, its fields, the saved presets, the applied tags, and the applied match modes, which Cancel puts back.
+let appliedValue = null;
 let snapshot = null;
 let presetSnapshot = presets.slice();
 let tagSnapshot = new Map();
-// A preset chosen in the Presets section, and whether the filter changed after it, decide the preset Apply leaves
-// active: the chosen one, or a starred row once the filter differs from it.
-let presetPicked = false;
-let filterEdited = false;
-// Tag filters: each tag included or excluded, by key.
+let localSnapshot = new Map();
+// Tag filters: each tag included or excluded, by key; and the categories matched with ANY (OR).
 const filterTagState = new Map();
+let filterLocalModes = new Map();
+// The preset the tab works from, which Apply makes the dropdown's. It starts over from the dropdown's.
+let tabBase = lib.preset;
+function startOver() {
+  tabBase = lib.preset;
+}
+// The preset a filter is named for, as the app names it: None for the default filter; otherwise the first preset whose
+// filter matches; otherwise the preset it came from, or None, starred.
+function presetAnchor(value, base, names, filters) {
+  if (sameFilter(value, DEFAULT_FILTER)) return { name: "", starred: false };
+  const match = names.find((name) => sameFilter(filters.get(name), value));
+  if (match) return { name: match, starred: false };
+  return { name: names.includes(base) ? base : "", starred: true };
+}
+const anchorLabel = (anchor) => `${anchor.name || "None"}${anchor.starred ? "*" : ""}`;
 
 function showSub(sub) {
   document.querySelectorAll(".filter-tab").forEach((tab) => {
@@ -4809,6 +4855,29 @@ document.querySelectorAll(".filter-tab").forEach((tab) => tab.addEventListener("
 
 const minField = new ValidatedField($("filter-min"), checkDuration);
 const maxField = new ValidatedField($("filter-max"), checkDuration);
+// The app reads a duration into its working filter when its field changes, so text still being typed isn't in it yet:
+// the working filter keeps each duration's text as last read, when its field changes or is left, or when the tab sets
+// it.
+const durationKeys = new Map([[minField.input, "min"], [maxField.input, "max"]]);
+const durationsTyped = new Set();
+const durationsRead = new Map();
+filterBody.addEventListener("input", (event) => {
+  if (durationKeys.has(event.target)) durationsTyped.add(event.target);
+}, true);
+filterBody.addEventListener("change", (event) => durationsTyped.delete(event.target), true);
+filterBody.addEventListener("focusout", (event) => {
+  if (durationsTyped.delete(event.target)) renderApply();
+}, true);
+// The tab's working filter: its filter with each duration as last read, one that isn't valid as no limit.
+function workingValue() {
+  const value = filterValue();
+  durationKeys.forEach((key, input) => {
+    if (!durationsTyped.has(input)) durationsRead.set(input, input.value);
+    const seconds = parseDuration(durationsRead.get(input) ?? "");
+    value[key] = seconds === "invalid" ? null : seconds;
+  });
+  return value;
+}
 const nameField = new ValidatedField($("filter-new-preset"), (value) => checkPresetName(value, null));
 const flagModesField = flagPairField($("filter-fav"), $("filter-fav-mode"), $("filter-bl"), $("filter-bl-mode"));
 // An empty duration field means no limit, and its placeholder says so.
@@ -4827,35 +4896,75 @@ function resetUncheckedModes() {
   if (!$("filter-bl").checked) $("filter-bl-mode").value = "excluded";
 }
 
-// A duration still being typed isn't read into the filter until its field changes, so its text counts as a change for
-// Apply and the dots while it reads as another duration than the applied one, or as none.
-function durationTyped(field) {
-  const applied = snapshot?.find(([el]) => el === field.input)?.[1] ?? "";
-  const typed = parseDuration(field.input.value);
-  return typed === "invalid" || typed !== parseDuration(applied);
+// The tab's filter, as the comparisons read it. A mode dropdown holds no choice while its checkbox is off.
+function generalSection(heading) {
+  return [...filterBody.querySelectorAll('[data-subpanel="general"] .filter-section')].find((section) => section.querySelector("h3").textContent.startsWith(heading));
+}
+const sourceRoot = (box) => /\(([^)]+)\)/.exec(box.parentElement.textContent)[1];
+function filterValue() {
+  const general = filterBody.querySelector('[data-subpanel="general"]');
+  const chosen = (name) => Math.max(0, [...general.querySelectorAll(`input[name="${name}"]`)].findIndex((radio) => radio.checked));
+  const boxes = [...generalSection("Sources").querySelectorAll('input[type="checkbox"]')];
+  const on = boxes.filter((box) => box.checked);
+  const duration = (field) => parseDuration(field.input.value);
+  const tagged = (mode) => [...filterTagState].filter(([, value]) => value === mode).map(([key]) => key).sort();
+  return {
+    fav: $("filter-fav").checked ? $("filter-fav-mode").value : null,
+    bl: $("filter-bl").checked ? $("filter-bl-mode").value : null,
+    basic: [...generalSection("Basic Filters").querySelectorAll(".filter-stack > label input")].map((box) => box.checked),
+    media: ["all", "videos", "photos"][chosen("media")],
+    audio: ["all", "with", "without"][chosen("audio")],
+    sources: on.length < boxes.length ? on.map(sourceRoot).sort() : null,
+    min: duration(minField),
+    max: duration(maxField),
+    include: tagged("inc"),
+    exclude: tagged("exc"),
+    global: $("filter-global").value,
+    local: Object.fromEntries([...filterLocalModes].sort())
+  };
+}
+// Puts a filter into the tab's fields, tags, and match modes.
+function applyFilterValue(value) {
+  durationsTyped.clear();
+  const general = filterBody.querySelector('[data-subpanel="general"]');
+  $("filter-fav").checked = !!value.fav;
+  $("filter-fav-mode").value = value.fav || "only";
+  $("filter-bl").checked = !!value.bl;
+  $("filter-bl-mode").value = value.bl || "excluded";
+  generalSection("Basic Filters").querySelectorAll(".filter-stack > label input").forEach((box, i) => (box.checked = !!value.basic[i]));
+  const choose = (name, index) => general.querySelectorAll(`input[name="${name}"]`).forEach((radio, i) => (radio.checked = i === index));
+  choose("media", ["all", "videos", "photos"].indexOf(value.media));
+  choose("audio", ["all", "with", "without"].indexOf(value.audio));
+  generalSection("Sources").querySelectorAll('input[type="checkbox"]').forEach((box) => (box.checked = !value.sources || value.sources.includes(sourceRoot(box))));
+  minField.reset(value.min === null ? "" : formatDuration(value.min));
+  maxField.reset(value.max === null ? "" : formatDuration(value.max));
+  filterTagState.clear();
+  value.include.forEach((key) => filterTagState.set(key, "inc"));
+  value.exclude.forEach((key) => filterTagState.set(key, "exc"));
+  $("filter-global").value = value.global;
+  filterLocalModes = new Map(Object.entries(value.local));
+  syncModeSelects();
+  renderFilterTags();
 }
 
+// The default filter: every source, Blacklisted excluded, and nothing else, with no tags and every category matched with
+// ALL (AND). Clear all has nothing to clear while the tab's filter is the default one, which no preset may hold.
+const filterIsDefault = () => sameFilter(filterValue(), DEFAULT_FILTER);
+
 // Whether the tab holds changes to apply, compared with the applied filter and the saved presets, so a change put back
-// is none: the General section's choices and typed durations, the tags, the preset list by order and name, an updated
-// preset, and a preset chosen in the Presets section other than the applied one. Without one, Apply and Cancel are
-// disabled; with one, Apply turns orange with the dot, as the tab and the panel button show it. Clear all is disabled
-// while the filter is the default one.
+// is none: its filter, typed durations included, and its preset list by order, name, and filter. Without one, Apply and
+// Cancel are disabled; with one, Apply turns orange with the dot, as the tab and the panel button show it. Clear all is
+// disabled while the filter is the default one, and so are Add Preset and Update Preset, which say why.
 function filterChanges() {
-  if (!snapshot) return false;
-  const general = snapshot.some(([el, value, checked]) => {
-    if (!el.closest('[data-subpanel="general"]')) return false;
-    if (el === minField.input) return durationTyped(minField);
-    if (el === maxField.input) return durationTyped(maxField);
-    if (el.type === "checkbox" || el.type === "radio") return el.checked !== checked;
-    // A mode dropdown holds no choice while its checkbox is off.
-    return !el.disabled && el.value !== value;
-  });
-  const tags = filterTagState.size !== tagSnapshot.size || [...filterTagState].some(([key, mode]) => tagSnapshot.get(key) !== mode);
-  const presetList = presets.length !== presetSnapshot.length || presets.some((name, i) => name !== presetSnapshot[i]);
-  const presetChoice = presetPicked && $("filter-preset-select").value !== lib.preset;
-  return general || tags || presetList || presetUpdates.size > 0 || presetChoice;
+  if (!appliedValue) return false;
+  const value = filterValue();
+  const presetList = presets.length !== presetSnapshot.length ||
+    presets.some((name, i) => name !== presetSnapshot[i] || !sameFilter(presetFilters.get(name), savedPresetFilters.get(name)));
+  return !sameFilter(value, appliedValue) || presetList;
 }
 let applyHold = null;
+let addPresetHold = null;
+let updatePresetHold = null;
 function renderApply() {
   const changed = filterChanges();
   unsaved.filter = changed;
@@ -4866,6 +4975,15 @@ function renderApply() {
   $("filter-cancel").disabled = !changed;
   $("filter-clear").disabled = filterIsDefault();
   applyHold?.refresh();
+  addPresetHold?.refresh();
+  updatePresetHold?.refresh();
+  // The heading names the working filter's preset, as the dropdown will once it applies, and stars it while the tab's
+  // filter, with each duration as its field reads, differs from that preset's, so text passed through while typing
+  // doesn't change the preset.
+  const anchor = presetAnchor(workingValue(), tabBase, presets, presetFilters);
+  tabBase = anchor.name;
+  const named = anchor.name ? presetFilters.get(anchor.name) : DEFAULT_FILTER;
+  $("filter-heading").textContent = `Preset: ${anchorLabel({ name: anchor.name, starred: !sameFilter(filterValue(), named) })}`;
   const generalTab = document.querySelector('.filter-tab[data-sub="general"]');
   const generalProblem = flagModesField.flagged || minField.flagged || maxField.flagged;
   generalTab.classList.toggle("has-problem", generalProblem);
@@ -4887,12 +5005,17 @@ applyHold = holdAction($("filter-apply"), () => [flagModesField, minField, maxFi
   reason: (field) => generalReason(field, "to apply"),
   beforeReveal: () => showSub("general")
 });
-holdAction($("filter-add-preset"), () => [nameField, flagModesField, minField, maxField], {
+// No preset may hold the default filter, so Add Preset and Update Preset are disabled while the tab's filter is the
+// default one, saying why.
+const defaultFilterReason = () => (filterIsDefault() ? "Choose a filter to save as a preset." : null);
+addPresetHold = holdAction($("filter-add-preset"), () => [nameField, flagModesField, minField, maxField], {
   beside: () => [nameField],
+  unavailable: defaultFilterReason,
   reason: (field) => generalReason(field, "first"),
   beforeReveal: () => showSub("general")
 });
-holdAction($("filter-update-preset"), () => [flagModesField, minField, maxField], {
+updatePresetHold = holdAction($("filter-update-preset"), () => [flagModesField, minField, maxField], {
+  unavailable: defaultFilterReason,
   reason: (field) => generalReason(field, "first"),
   beforeReveal: () => showSub("general")
 });
@@ -4901,13 +5024,11 @@ holdAction($("filter-update-preset"), () => [flagModesField, minField, maxField]
 filterBody.addEventListener("change", (event) => {
   if (event.target.closest('[data-subpanel="presets"]') && event.target.id !== "filter-preset-select") return;
   if (event.target.id === "filter-preset-select") {
-    // Choosing a preset loads its filter into the tab, as today; Apply then makes it active.
-    loadPresetFilter(event.target.value);
-    presetPicked = true;
-    filterEdited = false;
-    $("filter-heading").textContent = `Preset: ${event.target.value || "None"}`;
-  } else {
-    filterEdited = true;
+    // Choosing a preset loads its filter into the tab; choosing None keeps the filter. Apply then makes the choice the
+    // dropdown's.
+    const name = event.target.value;
+    if (name) applyFilterValue(presetFilters.get(name));
+    tabBase = name;
   }
   renderApply();
 });
@@ -4915,17 +5036,24 @@ filterBody.addEventListener("change", (event) => {
 function takeSnapshot() {
   snapshot = [...filterBody.querySelectorAll("input, select")].map((el) => [el, el.value, el.checked, el.disabled]);
   presetSnapshot = presets.slice();
+  savedPresetFilters = new Map(presetFilters);
   tagSnapshot = new Map(filterTagState);
+  localSnapshot = new Map(filterLocalModes);
+  appliedValue = filterValue();
 }
 function restoreSnapshot() {
+  durationsTyped.clear();
   snapshot.forEach(([el, value, checked, disabled]) => {
     el.value = value;
     el.checked = checked;
     el.disabled = disabled;
   });
   presets.splice(0, presets.length, ...presetSnapshot);
+  presetFilters = new Map(savedPresetFilters);
   filterTagState.clear();
   tagSnapshot.forEach((value, key) => filterTagState.set(key, value));
+  filterLocalModes = new Map(localSnapshot);
+  startOver();
   renderPresets();
   renderFilterTags();
   [flagModesField, minField, maxField, nameField].forEach((field) => field.reset());
@@ -4934,8 +5062,11 @@ function restoreSnapshot() {
 function saveFilterState() {
   store.set("filterInputs", [...filterBody.querySelectorAll('[data-subpanel="general"] input, [data-subpanel="general"] select')].map((el) => [el.value, el.checked]));
   store.set("filterTags", [...filterTagState]);
+  store.set("filterGlobal", $("filter-global").value);
+  store.set("filterLocal", [...filterLocalModes]);
 }
 function restoreFilterState() {
+  durationsTyped.clear();
   const inputs = store.get("filterInputs", null);
   const elements = [...filterBody.querySelectorAll('[data-subpanel="general"] input, [data-subpanel="general"] select')];
   if (inputs && inputs.length === elements.length) {
@@ -4945,6 +5076,8 @@ function restoreFilterState() {
     });
   }
   store.get("filterTags", []).forEach(([key, value]) => filterTagState.set(key, value));
+  $("filter-global").value = store.get("filterGlobal", "AND");
+  filterLocalModes = new Map(store.get("filterLocal", []));
   syncModeSelects();
   [flagModesField, minField, maxField].forEach((field) => field.update());
 }
@@ -4952,17 +5085,11 @@ function restoreFilterState() {
 $("filter-apply").addEventListener("click", () => {
   if (state.situation === "reconnecting") return void noticeDialog({ message: "Saving presets failed: Couldn't reach the server." });
   if (state.pairing || heldBack()) return;
-  if (presetPicked) {
-    lib.preset = $("filter-preset-select").value;
-    lib.presetModified = false;
-  } else if (lib.preset && filterEdited) {
-    lib.presetModified = true;
-  }
-  presetPicked = false;
-  filterEdited = false;
-  presetUpdates.clear();
+  // The dropdown takes the preset the tab names.
+  lib.preset = presetAnchor(filterValue(), tabBase, presets, presetFilters).name;
   resetUncheckedModes();
   takeSnapshot();
+  startOver();
   saveFilterState();
   saveLibState();
   renderApply();
@@ -4974,69 +5101,17 @@ $("filter-apply").addEventListener("click", () => {
 });
 $("filter-cancel").addEventListener("click", () => {
   restoreSnapshot();
-  presetPicked = false;
-  filterEdited = false;
-  presetUpdates.clear();
   renderLibPresets();
   renderApply();
   if (state.mode === "overlay") closePanel();
 });
-// The default filter: every source, Blacklisted excluded, and nothing else. Each General checkbox and radio button's
-// default, and each mode dropdown's.
-function generalDefault(el) {
-  if (el.type === "checkbox") return el === $("filter-bl") || el.closest(".filter-section").querySelector("h3").textContent.startsWith("Sources");
-  if (el.type === "radio") return el === el.closest(".filter-stack").querySelector('input[type="radio"]');
-  return el === $("filter-bl-mode") ? "excluded" : "only";
-}
-function generalChoices() {
-  return [...filterBody.querySelectorAll('[data-subpanel="general"] input[type="checkbox"], [data-subpanel="general"] input[type="radio"], #filter-fav-mode, #filter-bl-mode')];
-}
-function resetGeneral() {
-  generalChoices().forEach((el) => {
-    if (el.tagName === "SELECT") el.value = generalDefault(el);
-    else el.checked = generalDefault(el);
-  });
-  [minField, maxField].forEach((field) => field.reset(""));
-  filterTagState.clear();
-  syncModeSelects();
-}
-// Whether the tab's filter is the default one, by the same comparison as Apply's, so Clear all has nothing to clear: a
-// mode dropdown counts only while its checkbox is on, and a duration typed counts unless it reads as none.
-function filterIsDefault() {
-  const general = generalChoices().every((el) => (el.tagName === "SELECT" ? el.disabled || el.value === generalDefault(el) : el.checked === generalDefault(el)));
-  return general && [minField, maxField].every((field) => parseDuration(field.input.value) === null) && filterTagState.size === 0;
-}
-// What a few of the mockup's presets hold; the others hold the default filter.
-const PRESET_FILTERS = {
-  Favorites: { fav: "only" },
-  "Short clips": { media: 1, max: "2:00" },
-  "Photos only": { media: 2 },
-  "Long videos": { media: 1, min: "10:00" },
-  "Not yet watched": { neverPlayed: true }
-};
-function loadPresetFilter(name) {
-  const preset = PRESET_FILTERS[name] || {};
-  const general = filterBody.querySelector('[data-subpanel="general"]');
-  resetGeneral();
-  if (preset.fav) {
-    $("filter-fav").checked = true;
-    $("filter-fav-mode").value = preset.fav;
-  }
-  if (preset.media) general.querySelectorAll('input[name="media"]')[preset.media].checked = true;
-  if (preset.neverPlayed) general.querySelector(".filter-stack > label input").checked = true;
-  if (preset.min) minField.reset(preset.min);
-  if (preset.max) maxField.reset(preset.max);
-  syncModeSelects();
-  renderFilterTags();
-}
 // Clear all filters returns to the default filter and the saved presets, as today.
 $("filter-clear").addEventListener("click", () => {
-  resetGeneral();
+  applyFilterValue(DEFAULT_FILTER);
   presets.splice(0, presets.length, ...presetSnapshot);
-  presetUpdates.clear();
+  presetFilters = new Map(savedPresetFilters);
+  tabBase = "";
   renderPresets();
-  renderFilterTags();
-  filterEdited = true;
   renderApply();
 });
 // Refresh reloads sources and tags and keeps unsaved preset changes.
@@ -5051,7 +5126,7 @@ $("filter-update-preset").addEventListener("click", () => {
   const chosen = $("filter-preset-select").value;
   if (!chosen) return void noticeDialog({ message: "Select a preset to update." });
   acknowledge(`Updated preset "${chosen}" locally — Apply to save.`, "filter");
-  presetUpdates.add(chosen);
+  presetFilters.set(chosen, filterValue());
   renderApply();
 });
 
@@ -5114,11 +5189,16 @@ function openEditPreset(index) {
     check: (value) => checkPresetName(value, own),
     onSave: (name) => {
       presets[presets.indexOf(own)] = name;
+      presetFilters.set(name, presetFilters.get(own));
+      if (name !== own) presetFilters.delete(own);
+      if (tabBase === own) tabBase = name;
       presetsChanged();
     },
     deleteMessage: () => `Delete preset "${own}"?`,
     onDelete: () => {
       presets.splice(presets.indexOf(own), 1);
+      presetFilters.delete(own);
+      if (tabBase === own) tabBase = "";
       presetsChanged();
     }
   });
@@ -5126,6 +5206,7 @@ function openEditPreset(index) {
 // Add Preset adds the preset last and moves to its drag handle: a button, so no on-screen keyboard opens.
 $("filter-add-preset").addEventListener("click", () => {
   presets.push(nameField.input.value.trim());
+  presetFilters.set(presets.at(-1), filterValue());
   nameField.reset("");
   presetsChanged();
   $("filter-preset-list").lastElementChild?.querySelector(".drag-handle")?.focus();
@@ -5223,11 +5304,17 @@ function renderFilterTags() {
     return;
   }
   categories.forEach((category) => {
+    // ALL (AND) leaves no entry, as a category without one matches all its tags.
     const local = document.createElement("select");
     local.className = "ctl filter-local";
     local.setAttribute("aria-label", `Match mode for ${category.name}`);
     local.title = "Match mode";
-    local.innerHTML = "<option>ALL (AND)</option><option>ANY (OR)</option>";
+    local.innerHTML = '<option value="AND">ALL (AND)</option><option value="OR">ANY (OR)</option>';
+    local.value = filterLocalModes.get(category.id) || "AND";
+    local.addEventListener("change", () => {
+      if (local.value === "OR") filterLocalModes.set(category.id, "OR");
+      else filterLocalModes.delete(category.id);
+    });
     const inUse = category.chips.filter((chip) => filterTagState.has(chip.key)).length;
     const unsaved = category.chips.some((chip) => (filterTagState.get(chip.key) || "") !== (tagSnapshot.get(chip.key) || ""));
     const { section, grid } = categoryEl("filter", category.id, category.name, {
@@ -5241,7 +5328,6 @@ function renderFilterTags() {
       const set = (next) => () => {
         if (mode === next) filterTagState.delete(chip.key);
         else filterTagState.set(chip.key, next);
-        filterEdited = true;
         renderFilterTags();
         renderApply();
       };
