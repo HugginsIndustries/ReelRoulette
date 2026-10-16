@@ -10,7 +10,10 @@ namespace ReelRoulette.Server.Services;
 // and move business-rule expansion to ReelRoulette.Core services as migrations continue.
 public sealed class ServerStateService
 {
-    private static readonly string[] SupportedApiVersions = ["1", "0"];
+    // Version 2 names items only by id on every route that takes an item id, and makes clearing every item's
+    // playback stats explicit, so clients written for version 1, such as the retired desktop app, refuse a server
+    // that reports it.
+    private static readonly string[] SupportedApiVersions = ["2"];
     private static readonly string[] Capabilities =
     [
         "auth.sessionCookie",
@@ -69,9 +72,9 @@ public sealed class ServerStateService
     public VersionResponse GetVersion()
     {
         return ApiContractMapper.MapVersion(
-            "1",
+            "2",
             assetsVersion: "0.15.0-dev.1",
-            minimumCompatibleApiVersion: "0",
+            minimumCompatibleApiVersion: "2",
             supportedApiVersions: SupportedApiVersions,
             capabilities: Capabilities);
     }

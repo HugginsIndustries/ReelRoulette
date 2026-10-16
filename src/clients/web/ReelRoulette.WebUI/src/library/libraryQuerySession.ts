@@ -117,8 +117,8 @@ export interface LibraryQuerySession {
   resync(): Promise<void>;
 }
 
-export function createAutoTagScanRequest(scanFullLibrary: boolean): { scanFullLibrary: boolean; itemIds: string[] } {
-  return { scanFullLibrary, itemIds: [] };
+export function createAutoTagScanRequest(scanFullLibrary: boolean): { scanFullLibrary: boolean } {
+  return { scanFullLibrary };
 }
 
 export function isEmptyLibraryResult(totalCount: number, searchBaselineCount: number, searchQuery: string): boolean {
@@ -163,7 +163,7 @@ export function libraryQueryReloadWindows(loadedCount: number): Array<{ offset: 
 /**
  * Reload the loaded window only when the change can alter what it shows or its order. A loaded tile reloads
  * when a changed field is in the filter or sort and can take it out or move it. An item that is not loaded
- * reloads only when the change could bring it into the window. Locked to shared/fixtures/library-tile-effect.json.
+ * reloads only when the change could bring it into the window. Locked to src/test/fixtures/library-tile-effect.json.
  */
 export function libraryQueryTileEffect(
   change: LibraryTileChange,

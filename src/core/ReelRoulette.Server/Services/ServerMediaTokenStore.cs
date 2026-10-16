@@ -15,14 +15,14 @@ public sealed class ServerMediaTokenStore
         return token;
     }
 
-    public bool TryResolve(string tokenOrId, out string fullPath)
+    public bool TryResolve(string token, out string fullPath)
     {
-        if (string.IsNullOrWhiteSpace(tokenOrId))
+        if (string.IsNullOrWhiteSpace(token))
         {
             fullPath = string.Empty;
             return false;
         }
 
-        return _tokenToPath.TryGetValue(tokenOrId, out fullPath!);
+        return _tokenToPath.TryGetValue(token, out fullPath!);
     }
 }

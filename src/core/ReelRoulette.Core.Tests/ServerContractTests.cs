@@ -86,10 +86,10 @@ public sealed class ServerContractTests
         var service = new ServerStateService();
         var version = service.GetVersion();
 
-        Assert.Equal("1", version.ApiVersion);
-        Assert.Equal("0", version.MinimumCompatibleApiVersion);
-        Assert.Contains("1", version.SupportedApiVersions);
-        Assert.Contains("0", version.SupportedApiVersions);
+        // Version 2 refuses clients written for version 1, which named items by path.
+        Assert.Equal("2", version.ApiVersion);
+        Assert.Equal("2", version.MinimumCompatibleApiVersion);
+        Assert.Equal(["2"], version.SupportedApiVersions);
         Assert.Contains("auth.sessionCookie", version.Capabilities);
         Assert.Contains("identity.sessionId", version.Capabilities);
         Assert.Contains("events.refreshStatusChanged", version.Capabilities);

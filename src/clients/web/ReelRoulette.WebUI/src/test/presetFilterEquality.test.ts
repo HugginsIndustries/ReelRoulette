@@ -9,12 +9,11 @@ interface PresetEqualityCase {
   same: boolean;
 }
 
-// The desktop preset comparison reads the same fixture.
 const cases: PresetEqualityCase[] = JSON.parse(
-  readFileSync(new URL("../../../../../../shared/fixtures/preset-filter-equality.json", import.meta.url), "utf8")
+  readFileSync(new URL("./fixtures/preset-filter-equality.json", import.meta.url), "utf8")
 );
 
-describe("filterStatesEqualForPresetMatch shared fixture", () => {
+describe("filterStatesEqualForPresetMatch fixture", () => {
   it.each(cases)("$name", ({ left, right, same }) => {
     const a = filterStateFromApiObject(left);
     const b = filterStateFromApiObject(right);

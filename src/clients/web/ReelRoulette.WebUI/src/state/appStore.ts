@@ -183,7 +183,7 @@ export interface AppStore {
 
   /**
    * Relays a message's text to the server log as a `status=` line: a popup's, a notice's, a lasting state's, and the
-   * texts that show nothing, such as "Ready (API 1)". A repeat within a second is relayed once.
+   * texts that show nothing, such as "Ready (API 2)". A repeat within a second is relayed once.
    */
   relayStatus(logText: string): void;
   /** Rebuilds the preset dropdown from the presets and the applied filter. */

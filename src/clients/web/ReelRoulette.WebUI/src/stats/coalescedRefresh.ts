@@ -1,4 +1,4 @@
-/** How long a refresh request waits, so a burst of events shares one refresh, as the desktop's stats refresh waits. */
+/** How long a refresh request waits, so a burst of events shares one refresh. */
 export const REFRESH_GATHER_MS = 250;
 
 export interface CoalescedRefresh {
@@ -7,7 +7,7 @@ export interface CoalescedRefresh {
 }
 
 /**
- * Coalesces refreshes as the desktop's stats refresh does: a request waits a short time so a burst of requests shares
+ * Coalesces refreshes: a request waits a short time so a burst of requests shares
  * one `run`, one `run` goes at a time, and requests made during one get exactly one more after it. `run` reports its
  * own failures; one that throws still lets the next run go.
  */

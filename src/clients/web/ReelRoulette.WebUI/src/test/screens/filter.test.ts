@@ -62,10 +62,13 @@ const FAVORITES_PRESET = { id: "preset-favorites", name: "Favorites", filterStat
 const BEACH_PRESET = { id: "preset-beach", name: "Beach days", filterState: { selectedTags: ["Beach"] } };
 const RECENT_PRESET = { id: "preset-recent", name: "Recent", filterState: { onlyNeverPlayed: true } };
 
-/** One filter as the desktop writes it, with Favorites excluded and Blacklisted only. The desktop's tests read it too. */
-const DESKTOP_WRITTEN_FILTER = JSON.parse(
-  readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../../../shared/fixtures/filter-state-written.json"), "utf8")
-).desktop as Record<string, unknown>;
+/**
+ * One filter as a release saved it before the modes, with only the old fields, reading as Favorites only and Blacklisted
+ * off.
+ */
+const OLD_FIELDS_FILTER = JSON.parse(
+  readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../fixtures/filter-state-written.json"), "utf8")
+).oldFields as Record<string, unknown>;
 
 /** A preset that sets something in every part of the dialog, with "Ghost", a tag the catalog does not have. */
 const RICH_PRESET = {
@@ -667,7 +670,7 @@ describe("opening and closing", () => {
 
     expect(presets.saves()).toHaveLength(0);
     expect(libraryQueries(server)).toHaveLength(queries);
-    expect((await nextPick(server)).filterState.favoritesOnly).toBe(false);
+    expect((await nextPick(server)).filterState.favoritesMode).toBe("off");
   });
 
   it("Discard changes drops its changes at once, without asking, and stays open, beside the player and as the overlay, showing the applied filter and the saved presets again", async () => {
@@ -707,7 +710,7 @@ describe("opening and closing", () => {
 
     expect(presets.saves()).toHaveLength(0);
     expect(libraryQueries(server)).toHaveLength(queries);
-    expect((await nextPick(server)).filterState.favoritesOnly).toBe(false);
+    expect((await nextPick(server)).filterState.favoritesMode).toBe("off");
     await openDialog();
     expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
     expect(applyShowsChanges()).toBe(false);
@@ -885,7 +888,7 @@ describe("General tab", () => {
     await click(box("Only videos with audio"));
     const applied = await applyAndWait(server);
 
-    const expected = { favoritesMode: "only", favoritesOnly: true, onlyNeverPlayed: true, mediaTypeFilter: 2, audioFilter: 1 };
+    const expected = { favoritesMode: "only", onlyNeverPlayed: true, mediaTypeFilter: 2, audioFilter: 1 };
     expect(applied).toMatchObject(expected);
     expect(libraryQueries(server).at(-1)).toMatchObject({ offset: 0, search: "" });
     const pick = await nextPick(server);
@@ -1184,14 +1187,9 @@ describe("Favorites and Blacklisted filters", () => {
   const MODES: readonly FlagMode[] = ["off", "only", "excluded"];
   const FILTERS: readonly FlagFilterName[] = ["Favorites", "Blacklisted"];
 
-  /** The mode fields and their older booleans, as both clients write them. */
+  /** The mode fields, as the WebUI writes them. */
   function written(favorites: FlagMode, blacklisted: FlagMode) {
-    return {
-      favoritesMode: favorites,
-      favoritesOnly: favorites === "only",
-      blacklistedMode: blacklisted,
-      excludeBlacklisted: blacklisted === "excluded"
-    };
+    return { favoritesMode: favorites, blacklistedMode: blacklisted };
   }
 
   it("shows each as a checkbox and an only-or-excluded dropdown, Favorites off and Blacklisted excluded", async () => {
@@ -1302,14 +1300,14 @@ describe("Favorites and Blacklisted filters", () => {
     }
   });
 
-  it("shows a preset the desktop saved with Favorites excluded and Blacklisted only", async () => {
-    await mountFilter([{ id: "preset-desktop", name: "Desktop", filterState: DESKTOP_WRITTEN_FILTER }]);
-    await pickPreset("preset-desktop");
+  it("shows a preset saved before the modes, with only the old fields, as Favorites only and Blacklisted off", async () => {
+    await mountFilter([{ id: "preset-old-fields", name: "Old fields", filterState: OLD_FIELDS_FILTER }]);
+    await pickPreset("preset-old-fields");
     await openDialog();
 
-    expect(heading()).toBe("Preset: Desktop");
-    expect(flagRow("Favorites")).toEqual({ checked: true, choice: "excluded", disabled: false });
-    expect(flagRow("Blacklisted")).toEqual({ checked: true, choice: "only", disabled: false });
+    expect(heading()).toBe("Preset: Old fields");
+    expect(flagRow("Favorites")).toEqual({ checked: true, choice: "only", disabled: false });
+    expect(flagRow("Blacklisted")).toEqual({ checked: false, choice: "excluded", disabled: true });
     expect(box("Only never played").checked).toBe(true);
     expect(applyShowsChanges()).toBe(false);
   });
@@ -1710,8 +1708,8 @@ describe("Presets tab", () => {
     expect(applied.onlyNeverPlayed).toBe(true);
     expect(presets.saves()).toHaveLength(1);
     expect(presets.saves()[0].map((preset: any) => preset.name)).toEqual(["Favorites", "Beach days", "Unplayed"]);
-    expect(presets.saves()[0][2].filterState).toMatchObject({ onlyNeverPlayed: true, favoritesOnly: false });
-    expect(presets.saves()[0][0].filterState).toMatchObject({ favoritesOnly: true });
+    expect(presets.saves()[0][2].filterState).toMatchObject({ onlyNeverPlayed: true, favoritesMode: "off" });
+    expect(presets.saves()[0][0].filterState).toMatchObject({ favoritesMode: "only" });
     await waitFor(() => expect(selectedPresetLabel()).toBe("Unplayed"));
     expect((await nextPick(server)).presetId).toBe("saved-3");
   });
@@ -1739,7 +1737,7 @@ describe("Presets tab", () => {
     await applyAndWait(server);
     expect(presets.saves()[0][0]).toMatchObject({
       name: "Favorites",
-      filterState: { favoritesMode: "only", favoritesOnly: true, blacklistedMode: "off", excludeBlacklisted: false }
+      filterState: { favoritesMode: "only", blacklistedMode: "off" }
     });
     expect(presets.saves()[0][1]).toMatchObject({ name: "Beach days", filterState: { selectedTags: ["Beach"] } });
     await waitFor(() => expect(selectedPresetLabel()).toBe("Favorites"));
@@ -2197,7 +2195,7 @@ describe("preset dropdown, refresh, and clear all", () => {
     expect(byId<HTMLSelectElement>("filter-global-match").value).toBe("and");
 
     const applied = await applyAndWait(server);
-    expect(applied).toMatchObject({ favoritesOnly: false, mediaTypeFilter: 0, selectedTags: [], includedSourceIds: [] });
+    expect(applied).toMatchObject({ favoritesMode: "off", mediaTypeFilter: 0, selectedTags: [], includedSourceIds: [] });
     expect(applied.minDuration).toBeUndefined();
     expect(presets.saves()).toHaveLength(0);
     await waitFor(() => expect(selectedPresetLabel()).toBe("None"));
@@ -2223,7 +2221,7 @@ describe("preset dropdown, refresh, and clear all", () => {
     expect(byId<HTMLInputElement>("filter-min-dur-text").value).toBe("");
 
     const applied = await applyAndWait(server);
-    expect(applied).toMatchObject({ favoritesOnly: false, selectedTags: [] });
+    expect(applied).toMatchObject({ favoritesMode: "off", selectedTags: [] });
     expect(panelTab("Filter").getAttribute("aria-label")).toBe("Filter");
   });
 });

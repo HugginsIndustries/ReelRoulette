@@ -208,7 +208,7 @@ describe("startup and connection", () => {
     await waitFor(() => expect(indicatorState()).toBeNull());
     await waitFor(() => expect(server.requests("GET", "/api/presets")).toHaveLength(1));
     // The check that finds it ready runs after the stream opens, and ends Reconnecting….
-    expect(server.logLines()).toContain(statusLogLine("Ready (API 1)", null, 0));
+    expect(server.logLines()).toContain(statusLogLine("Ready (API 2)", null, 0));
     await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Reconnected.", null, 0)));
   });
 
@@ -346,7 +346,7 @@ describe("message relay", () => {
     const page = mountPage();
     await vi.advanceTimersByTimeAsync(0);
     expect(page.server.logLines()).toEqual(
-      expect.arrayContaining(["status=Ready hasCurrent=false attempt=0", "status=Ready (API 1) hasCurrent=false attempt=0"])
+      expect.arrayContaining(["status=Ready hasCurrent=false attempt=0", "status=Ready (API 2) hasCurrent=false attempt=0"])
     );
 
     const idle = { snapshot: { isRunning: false, stages: [] } };
@@ -377,25 +377,25 @@ describe("preset dropdown", () => {
 
     await pickPreset("preset-favorites");
     await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(2));
-    expect(server.requests("POST", "/api/library/query")[1]!.body.filterState.favoritesOnly).toBe(true);
+    expect(server.requests("POST", "/api/library/query")[1]!.body.filterState.favoritesMode).toBe("only");
     expect(selectedLabel(presetSelect())).toBe("Favorites");
 
     await startRandomPick();
     const pick = server.requests("POST", "/api/random")[0]!.body;
     expect(pick.presetId).toBe("preset-favorites");
-    expect(pick.filterState.favoritesOnly).toBe(true);
+    expect(pick.filterState.favoritesMode).toBe("only");
     expect(pick.randomizationMode).toBe("SmartShuffle");
 
     await pickPreset("");
     await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(3));
-    expect(server.requests("POST", "/api/library/query")[2]!.body.filterState.favoritesOnly).toBe(false);
+    expect(server.requests("POST", "/api/library/query")[2]!.body.filterState.favoritesMode).toBe("off");
     await waitFor(() => expect(selectedLabel(presetSelect())).toBe("None"));
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await settle();
     const next = server.requests("POST", "/api/random")[1]!.body;
     expect(next.presetId).toBeUndefined();
-    expect(next.filterState.favoritesOnly).toBe(false);
+    expect(next.filterState.favoritesMode).toBe("off");
   });
 
   it("shows Loading... until presets arrive and an error entry when they cannot load, with nothing to choose", async () => {
@@ -619,9 +619,9 @@ describe("server compatibility", () => {
 
   it("names an unsupported API version and a minimum client version above this one", async () => {
     const server = new FakeServer();
-    server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, apiVersion: "2" }));
+    server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, apiVersion: "3" }));
     mountPage({ server });
-    await waitFor(() => expect(server.logLines()).toContain("status=Unsupported server API version: 2. hasCurrent=false attempt=0"));
+    await waitFor(() => expect(server.logLines()).toContain("status=Unsupported server API version: 3. hasCurrent=false attempt=0"));
 
     resetPage();
     const newer = new FakeServer();

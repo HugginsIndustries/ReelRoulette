@@ -32,11 +32,7 @@ const STATS = {
     totalMedia: 1230,
     favorites: 4,
     blacklisted: 2,
-    uniquePlayedVideos: 880,
-    uniquePlayedPhotos: 20,
     uniquePlayedMedia: 900,
-    neverPlayedVideos: 320,
-    neverPlayedPhotos: 10,
     neverPlayedMedia: 330,
     totalPlays: 15000,
     videosWithAudio: 1100,
@@ -267,7 +263,7 @@ describe("Stats tab", () => {
     await waitFor(() => expect(tagChips()).toEqual(["Beach", "Calm"]));
 
     items.set("item-other", { ...items.get("item-other")!, playCount: 8 });
-    emit(page, "playbackRecorded", { itemId: "item-other", path: OTHER_VIDEO.id, playCount: 8, previousLastPlayedUtc: null });
+    emit(page, "playbackRecorded", { itemId: "item-other", playCount: 8, previousLastPlayedUtc: null });
     await waitFor(() => expect(rows().Plays).toBe("8"));
   });
 
@@ -296,11 +292,11 @@ describe("Stats tab", () => {
     // Until the play's event comes, the item's own time stands in, which this play has already moved to now.
     await waitFor(() => expect(rows()["Last played"]).toBe("Just now"));
 
-    emit(page, "playbackRecorded", { itemId: "item-video", path: VIDEO.id, playCount: 1, previousLastPlayedUtc: new Date(Date.now() - 3 * DAY).toISOString() });
+    emit(page, "playbackRecorded", { itemId: "item-video", playCount: 1, previousLastPlayedUtc: new Date(Date.now() - 3 * DAY).toISOString() });
     await waitFor(() => expect(rows()["Last played"]).toBe("3 days ago"));
 
     // A library play's event comes before its answer, so before the item plays.
-    emit(page, "playbackRecorded", { itemId: "item-other", path: OTHER_VIDEO.id, playCount: 1, previousLastPlayedUtc: new Date(Date.now() - 2 * DAY).toISOString() });
+    emit(page, "playbackRecorded", { itemId: "item-other", playCount: 1, previousLastPlayedUtc: new Date(Date.now() - 2 * DAY).toISOString() });
     await settle();
     await playNext(OTHER_VIDEO);
     await waitFor(() => expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("beach day.mp4"));

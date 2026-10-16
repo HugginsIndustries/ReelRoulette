@@ -27,8 +27,8 @@ export const REQUIRED_CAPABILITIES = [
 ];
 
 export const COMPATIBLE_VERSION = {
-  apiVersion: "1",
-  minimumCompatibleApiVersion: "1",
+  apiVersion: "2",
+  minimumCompatibleApiVersion: "2",
   capabilities: REQUIRED_CAPABILITIES
 };
 

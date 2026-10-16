@@ -32,7 +32,7 @@ interface TileEffectCase {
 }
 
 const tileEffectCases = JSON.parse(
-  readFileSync(new URL("../../../../../../shared/fixtures/library-tile-effect.json", import.meta.url), "utf8")
+  readFileSync(new URL("./fixtures/library-tile-effect.json", import.meta.url), "utf8")
 ) as TileEffectCase[];
 
 function item(id: string, overrides: Partial<LibraryProjectionItem> = {}): LibraryProjectionItem {
@@ -90,7 +90,7 @@ describe("libraryQuerySession", () => {
       offset: 0,
       limit: LIBRARY_QUERY_WINDOW_SIZE
     });
-    expect(calls[0]?.filterState.excludeBlacklisted).toBe(true);
+    expect(calls[0]?.filterState.blacklistedMode).toBe("excluded");
     const snap = session.snapshot();
     expect(snap.summary).toEqual({ shown: "10 / 25", spoken: "10 of 25 items" });
     expect(snap.items).toHaveLength(1);
@@ -197,10 +197,10 @@ describe("libraryQuerySession", () => {
   });
 
   it("requeries from the first page when the filter changes while hidden", async () => {
-    const calls: Array<{ offset: number; favoritesOnly: unknown }> = [];
+    const calls: Array<{ offset: number; favoritesMode: unknown }> = [];
     const session = createLibraryQuerySession(async (request) => {
-      calls.push({ offset: request.offset, favoritesOnly: request.filterState.favoritesOnly });
-      return page([item(request.filterState.favoritesOnly ? "fav" : "all")], 1, 4);
+      calls.push({ offset: request.offset, favoritesMode: request.filterState.favoritesMode });
+      return page([item(request.filterState.favoritesMode === "only" ? "fav" : "all")], 1, 4);
     });
     await session.ensureLoaded(createDefaultFilterState(), controls());
     session.setOverlayVisible(false);
@@ -209,7 +209,7 @@ describe("libraryQuerySession", () => {
     await session.resetQuery({ ...createDefaultFilterState(), favoritesMode: "only" }, controls());
     session.setOverlayVisible(true);
 
-    expect(calls.map((call) => call.favoritesOnly)).toEqual([false, true]);
+    expect(calls.map((call) => call.favoritesMode)).toEqual(["off", "only"]);
     expect(calls[1]?.offset).toBe(0);
     expect(session.snapshot().items.map((entry) => entry.id)).toEqual(["fav"]);
     expect(session.snapshot().scrollTop).toBe(0);
@@ -241,7 +241,7 @@ describe("libraryQuerySession", () => {
     await session.ensureLoaded(createDefaultFilterState(), controls());
 
     await session.applyFavorite({ itemId: "a", path: "/media/a.mp4", isFavorite: true, isBlacklisted: false });
-    await session.applyPlayback({ itemId: "b", path: "/media/b.mp4", playCount: 1 });
+    await session.applyPlayback({ itemId: "b", playCount: 1 });
 
     expect(calls).toBe(1);
     expect(session.snapshot().items[0]?.isFavorite).toBe(true);
@@ -332,7 +332,7 @@ describe("libraryQuerySession", () => {
       previousIsFavorite: false,
       previousIsBlacklisted: false
     });
-    await session.applyPlayback({ itemId: "id-lower", path: "/media/clip.mp4", playCount: 2 });
+    await session.applyPlayback({ itemId: "id-lower", playCount: 2 });
     await session.applyTags({ resolvedItemIds: ["id-lower"], addedTags: ["Night"], removedTags: [] });
 
     const [upper, lower] = session.snapshot().items;
@@ -351,13 +351,13 @@ describe("libraryQuerySession", () => {
     await session.ensureLoaded(createDefaultFilterState(), controls());
     session.setOverlayVisible(false);
 
-    await session.applyPlayback({ itemId: "a", path: "/media/a.mp4", playCount: 3 });
+    await session.applyPlayback({ itemId: "a", playCount: 3 });
     expect(calls).toBe(1);
     expect(session.snapshot().items[0]?.playCount).toBe(3);
 
     await session.resetQuery(createDefaultFilterState(), controls({ sortMode: "PlayCount", sortDescending: true }));
     const afterSort = calls;
-    await session.applyPlayback({ itemId: "a", path: "/media/a.mp4", playCount: 4 });
+    await session.applyPlayback({ itemId: "a", playCount: 4 });
     expect(calls).toBe(afterSort + 1);
     expect(session.snapshot().scrollTop).toBe(0);
   });
@@ -404,7 +404,7 @@ describe("libraryQuerySession", () => {
     await Promise.resolve();
     expect(calls).toContain(LIBRARY_QUERY_WINDOW_SIZE);
 
-    const reloading = session.applyPlayback({ itemId: "kept-0", path: "/media/kept-0.mp4", playCount: 2 });
+    const reloading = session.applyPlayback({ itemId: "kept-0", playCount: 2 });
     await reloading;
     releaseAppend(page([item("stale-append")], 450, 450));
     await filling;
@@ -598,7 +598,7 @@ describe("libraryQuerySession", () => {
 });
 
 describe("library query decisions", () => {
-  it.each(tileEffectCases.map((entry) => [entry.name, entry] as const))("matches the shared fixture: %s", (_name, entry) => {
+  it.each(tileEffectCases.map((entry) => [entry.name, entry] as const))("matches the fixture: %s", (_name, entry) => {
     const change: LibraryTileChange = {
       kind: entry.event,
       loaded: entry.loaded,
@@ -653,8 +653,8 @@ describe("library query decisions", () => {
     expect(session.snapshot().items).toHaveLength(5_000);
   });
 
-  it("sends scoped auto-tag with no path list", () => {
-    expect(createAutoTagScanRequest(false)).toEqual({ scanFullLibrary: false, itemIds: [] });
-    expect(createAutoTagScanRequest(true)).toEqual({ scanFullLibrary: true, itemIds: [] });
+  it("sends auto-tag scan with only its scope", () => {
+    expect(createAutoTagScanRequest(false)).toEqual({ scanFullLibrary: false });
+    expect(createAutoTagScanRequest(true)).toEqual({ scanFullLibrary: true });
   });
 });

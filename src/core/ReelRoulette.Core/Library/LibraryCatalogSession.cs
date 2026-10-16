@@ -9,7 +9,7 @@ namespace ReelRoulette.Core.Library;
 
 public sealed class LibraryCatalogSession
 {
-    private const int ItemStatePathChunk = 500;
+    private const int ItemIdChunk = 500;
     private const double DefaultBaselineLoudnessLufs = -18.0;
     private const int ListCountCacheCapacity = 64;
 
@@ -271,67 +271,6 @@ public sealed class LibraryCatalogSession
         return stats;
     }
 
-    public IReadOnlyList<CatalogItemState> ReadItemStates(IReadOnlyList<string>? paths)
-    {
-        var folds = new List<string>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var path in paths ?? [])
-        {
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                continue;
-            }
-
-            var fold = LibraryCatalogStore.Fold(path);
-            if (seen.Add(fold))
-            {
-                folds.Add(fold);
-            }
-        }
-
-        if (folds.Count == 0)
-        {
-            return [];
-        }
-
-        using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
-        var items = new List<CatalogItemState>();
-        for (var offset = 0; offset < folds.Count; offset += ItemStatePathChunk)
-        {
-            var count = Math.Min(ItemStatePathChunk, folds.Count - offset);
-            using var command = connection.CreateCommand();
-            var parameters = new string[count];
-            for (var index = 0; index < count; index++)
-            {
-                var name = "$p" + index.ToString(CultureInfo.InvariantCulture);
-                parameters[index] = name;
-                command.Parameters.AddWithValue(name, folds[offset + index]);
-            }
-
-            command.CommandText = $"""
-                SELECT id, full_path, is_favorite, is_blacklisted, play_count, last_played_utc
-                FROM items
-                WHERE full_path_fold IN ({string.Join(", ", parameters)});
-                """;
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                items.Add(new CatalogItemState
-                {
-                    Id = reader.GetString(0),
-                    FullPath = reader.GetString(1),
-                    IsFavorite = reader.GetInt64(2) != 0,
-                    IsBlacklisted = reader.GetInt64(3) != 0,
-                    PlayCount = Convert.ToInt32(reader.GetInt64(4), CultureInfo.InvariantCulture),
-                    LastPlayedUtc = LibraryCatalogStore.ReadUtc(reader, 5)
-                });
-            }
-        }
-
-        items.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.FullPath, right.FullPath));
-        return items;
-    }
-
     public IReadOnlyList<string> ReadAutoTagNames()
     {
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
@@ -350,43 +289,32 @@ public sealed class LibraryCatalogSession
         return names;
     }
 
-    public IReadOnlyList<CatalogAutoTagScanItem> ReadAutoTagScanItems(CatalogAutoTagScanScope scope, IReadOnlyList<string>? paths)
+    public IReadOnlyList<CatalogAutoTagScanItem> ReadAutoTagScanItems(CatalogAutoTagScanScope scope)
     {
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
-        List<CatalogAutoTagScanItem> items;
-        if (scope == CatalogAutoTagScanScope.Paths)
-        {
-            items = ReadAutoTagItemsByPaths(connection, paths);
-        }
-        else
-        {
-            using var command = connection.CreateCommand();
-            command.CommandText = scope == CatalogAutoTagScanScope.EnabledSources
-                ? """
-                  SELECT items.id, items.full_path, items.relative_path, items.file_name
-                  FROM items
-                  WHERE EXISTS (
-                      SELECT 1 FROM sources
-                      WHERE sources.is_enabled != 0
-                        AND sources.id = items.source_id COLLATE NOCASE)
-                  ORDER BY items.position
-                  """
-                : """
-                  SELECT id, full_path, relative_path, file_name
-                  FROM items
-                  ORDER BY position
-                  """;
-            items = ReadAutoTagItems(command);
-        }
-
+        using var command = connection.CreateCommand();
+        command.CommandText = scope == CatalogAutoTagScanScope.EnabledSources
+            ? """
+              SELECT items.id, items.full_path, items.relative_path, items.file_name
+              FROM items
+              WHERE EXISTS (
+                  SELECT 1 FROM sources
+                  WHERE sources.is_enabled != 0
+                    AND sources.id = items.source_id COLLATE NOCASE)
+              ORDER BY items.position
+              """
+            : """
+              SELECT id, full_path, relative_path, file_name
+              FROM items
+              ORDER BY position
+              """;
+        var items = ReadAutoTagItems(command);
         if (items.Count == 0)
         {
             return items;
         }
 
-        var tags = scope == CatalogAutoTagScanScope.Paths
-            ? ReadTagsForItems(connection, items.Select(item => item.Id).ToList())
-            : ReadAllItemTags(connection);
+        var tags = ReadAllItemTags(connection);
         foreach (var item in items)
         {
             if (tags.TryGetValue(item.Id, out var names))
@@ -473,9 +401,9 @@ public sealed class LibraryCatalogSession
 
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
         var rows = new List<(int Position, CatalogStoredItem Item)>();
-        for (var offset = 0; offset < requested.Count; offset += ItemStatePathChunk)
+        for (var offset = 0; offset < requested.Count; offset += ItemIdChunk)
         {
-            var count = Math.Min(ItemStatePathChunk, requested.Count - offset);
+            var count = Math.Min(ItemIdChunk, requested.Count - offset);
             using var command = connection.CreateCommand();
             var parameters = new string[count];
             for (var index = 0; index < count; index++)
@@ -1157,25 +1085,22 @@ public sealed class LibraryCatalogSession
         return committed ? recorded : null;
     }
 
-    public int ClearPlaybackStats(IReadOnlyCollection<string>? identifiers)
+    /// <summary>Clears the playback stats of the named items only. No ids clears nothing.</summary>
+    public int ClearPlaybackStats(IReadOnlyCollection<string> itemIds)
     {
-        var requested = (identifiers ?? [])
+        var requested = itemIds
             .Where(identifier => !string.IsNullOrWhiteSpace(identifier))
             .Select(identifier => identifier.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        if (requested.Length == 0)
+        {
+            return 0;
+        }
+
         var cleared = 0;
         var committed = Commit((connection, transaction) =>
         {
-            if (requested.Length == 0)
-            {
-                cleared = LibraryCatalogStore.Execute(
-                    connection,
-                    transaction,
-                    "UPDATE items SET play_count = 0, last_played_utc = NULL WHERE play_count != 0 OR last_played_utc IS NOT NULL;");
-                return cleared > 0;
-            }
-
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var identifier in requested)
             {
@@ -1192,6 +1117,21 @@ public sealed class LibraryCatalogSession
                     ("$id", id));
             }
 
+            return cleared > 0;
+        });
+        return committed ? cleared : 0;
+    }
+
+    /// <summary>Clears every item's playback stats.</summary>
+    public int ClearAllPlaybackStats()
+    {
+        var cleared = 0;
+        var committed = Commit((connection, transaction) =>
+        {
+            cleared = LibraryCatalogStore.Execute(
+                connection,
+                transaction,
+                "UPDATE items SET play_count = 0, last_played_utc = NULL WHERE play_count != 0 OR last_played_utc IS NOT NULL;");
             return cleared > 0;
         });
         return committed ? cleared : 0;
@@ -1234,7 +1174,7 @@ public sealed class LibraryCatalogSession
 
     /// <summary>
     /// The same fields as <see cref="ReadPlaybackItem"/> for an item id exactly as stored, without
-    /// resolving a path or another casing and without taking the write lock.
+    /// resolving another casing and without taking the write lock.
     /// </summary>
     public CatalogPlaybackItem? ReadPlaybackItemById(string id)
     {
@@ -1757,9 +1697,6 @@ public sealed class LibraryCatalogSession
 
     public CatalogAutoTagApplyResult ApplyAutoTagAssignments(IReadOnlyList<CatalogAutoTagAssignment> assignments)
     {
-        var added = 0;
-        var paths = new List<string>();
-        var ids = new List<string>();
         var applied = new List<CatalogAutoTagAppliedAssignment>();
         var committed = Commit((connection, transaction) =>
         {
@@ -1773,7 +1710,6 @@ public sealed class LibraryCatalogSession
 
                 var tagName = assignment.TagName.Trim();
                 changed |= InsertCatalogTagIfMissing(connection, transaction, tagName);
-                var changedPaths = new List<string>();
                 var changedIds = new List<string>();
                 var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var itemPath in assignment.ItemPaths)
@@ -1795,20 +1731,14 @@ public sealed class LibraryCatalogSession
                     }
 
                     changed = true;
-                    added++;
-                    var path = itemPath.Trim();
-                    changedPaths.Add(path);
-                    paths.Add(path);
                     changedIds.Add(itemId);
-                    ids.Add(itemId);
                 }
 
-                if (changedPaths.Count > 0)
+                if (changedIds.Count > 0)
                 {
                     applied.Add(new CatalogAutoTagAppliedAssignment
                     {
                         TagName = tagName,
-                        ChangedItemPaths = changedPaths,
                         ChangedItemIds = changedIds
                     });
                 }
@@ -1823,9 +1753,6 @@ public sealed class LibraryCatalogSession
 
         return new CatalogAutoTagApplyResult
         {
-            AssignmentsAdded = added,
-            ChangedItemPaths = paths.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
-            ChangedItemIds = ids.Distinct(StringComparer.Ordinal).ToList(),
             Applied = applied
         };
     }
@@ -1925,19 +1852,14 @@ public sealed class LibraryCatalogSession
         string FileName,
         int MediaType);
 
+    /// <summary>The item with this catalog id, in any casing. A full path names no item.</summary>
     private static string? ResolveItemId(SqliteConnection connection, SqliteTransaction transaction, string identifier)
     {
-        var byId = ScalarString(
+        return ScalarString(
             connection,
             transaction,
             "SELECT id FROM items WHERE id = $id COLLATE NOCASE LIMIT 1;",
             ("$id", identifier.Trim()));
-        if (byId != null)
-        {
-            return byId;
-        }
-
-        return ResolveItemByPath(connection, transaction, identifier);
     }
 
     private static string? ResolveItemByPath(SqliteConnection connection, SqliteTransaction transaction, string fullPath)
@@ -2305,53 +2227,6 @@ public sealed class LibraryCatalogSession
         return value is long count ? (int)count : Convert.ToInt32(value, CultureInfo.InvariantCulture);
     }
 
-    private static List<CatalogAutoTagScanItem> ReadAutoTagItemsByPaths(SqliteConnection connection, IReadOnlyList<string>? paths)
-    {
-        var folds = new List<string>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var path in paths ?? [])
-        {
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                continue;
-            }
-
-            var fold = LibraryCatalogStore.Fold(path);
-            if (seen.Add(fold))
-            {
-                folds.Add(fold);
-            }
-        }
-
-        var rows = new List<(int Position, CatalogAutoTagScanItem Item)>();
-        for (var offset = 0; offset < folds.Count; offset += ItemStatePathChunk)
-        {
-            var count = Math.Min(ItemStatePathChunk, folds.Count - offset);
-            using var command = connection.CreateCommand();
-            var parameters = new string[count];
-            for (var index = 0; index < count; index++)
-            {
-                var name = "$p" + index.ToString(CultureInfo.InvariantCulture);
-                parameters[index] = name;
-                command.Parameters.AddWithValue(name, folds[offset + index]);
-            }
-
-            command.CommandText = $"""
-                SELECT id, full_path, relative_path, file_name, position
-                FROM items
-                WHERE full_path_fold IN ({string.Join(", ", parameters)});
-                """;
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                rows.Add((reader.GetInt32(4), ReadAutoTagItem(reader)));
-            }
-        }
-
-        rows.Sort((left, right) => left.Position.CompareTo(right.Position));
-        return rows.Select(row => row.Item).ToList();
-    }
-
     private static List<CatalogAutoTagScanItem> ReadAutoTagItems(SqliteCommand command)
     {
         using var reader = command.ExecuteReader();
@@ -2380,36 +2255,6 @@ public sealed class LibraryCatalogSession
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT item_id, name FROM item_tags ORDER BY item_id, position;";
         return ReadTagGroups(command);
-    }
-
-    private static Dictionary<string, List<string>> ReadTagsForItems(SqliteConnection connection, IReadOnlyList<string> itemIds)
-    {
-        var tags = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        for (var offset = 0; offset < itemIds.Count; offset += ItemStatePathChunk)
-        {
-            var count = Math.Min(ItemStatePathChunk, itemIds.Count - offset);
-            using var command = connection.CreateCommand();
-            var parameters = new string[count];
-            for (var index = 0; index < count; index++)
-            {
-                var name = "$p" + index.ToString(CultureInfo.InvariantCulture);
-                parameters[index] = name;
-                command.Parameters.AddWithValue(name, itemIds[offset + index]);
-            }
-
-            command.CommandText = $"""
-                SELECT item_id, name
-                FROM item_tags
-                WHERE item_id IN ({string.Join(", ", parameters)})
-                ORDER BY item_id, position;
-                """;
-            foreach (var pair in ReadTagGroups(command))
-            {
-                tags[pair.Key] = pair.Value;
-            }
-        }
-
-        return tags;
     }
 
     private static Dictionary<string, List<string>> ReadTagGroups(SqliteCommand command)
@@ -2677,8 +2522,7 @@ public sealed class LibraryCatalogSession
         var photos = groups.Where(group => group.IsPhoto).ToList();
         var totalVideos = ToCount(videos.Sum(group => group.Total));
         var totalPhotos = ToCount(photos.Sum(group => group.Total));
-        var uniquePlayedVideos = ToCount(videos.Sum(group => group.Played));
-        var uniquePlayedPhotos = ToCount(photos.Sum(group => group.Played));
+        var uniquePlayedMedia = ToCount(groups.Sum(group => group.Played));
         return new CatalogGlobalStats
         {
             TotalVideos = totalVideos,
@@ -2686,12 +2530,8 @@ public sealed class LibraryCatalogSession
             TotalMedia = totalVideos + totalPhotos,
             Favorites = ToCount(groups.Sum(group => group.Favorites)),
             Blacklisted = ToCount(groups.Sum(group => group.Blacklisted)),
-            UniquePlayedVideos = uniquePlayedVideos,
-            UniquePlayedPhotos = uniquePlayedPhotos,
-            UniquePlayedMedia = uniquePlayedVideos + uniquePlayedPhotos,
-            NeverPlayedVideos = Math.Max(0, totalVideos - uniquePlayedVideos),
-            NeverPlayedPhotos = Math.Max(0, totalPhotos - uniquePlayedPhotos),
-            NeverPlayedMedia = Math.Max(0, totalVideos + totalPhotos - uniquePlayedVideos - uniquePlayedPhotos),
+            UniquePlayedMedia = uniquePlayedMedia,
+            NeverPlayedMedia = Math.Max(0, totalVideos + totalPhotos - uniquePlayedMedia),
             TotalPlays = ToCount(groups.Sum(group => group.Plays)),
             VideosWithAudio = ToCount(videos.Sum(group => group.WithAudio)),
             VideosWithoutAudio = ToCount(videos.Sum(group => group.WithoutAudio)),
@@ -2817,11 +2657,7 @@ public sealed class CatalogGlobalStats
     public int TotalMedia { get; init; }
     public int Favorites { get; init; }
     public int Blacklisted { get; init; }
-    public int UniquePlayedVideos { get; init; }
-    public int UniquePlayedPhotos { get; init; }
     public int UniquePlayedMedia { get; init; }
-    public int NeverPlayedVideos { get; init; }
-    public int NeverPlayedPhotos { get; init; }
     public int NeverPlayedMedia { get; init; }
     public int TotalPlays { get; init; }
     public int VideosWithAudio { get; init; }
@@ -2870,8 +2706,7 @@ public sealed class CatalogPlaybackItem
 public enum CatalogAutoTagScanScope
 {
     All,
-    EnabledSources,
-    Paths
+    EnabledSources
 }
 
 public enum CatalogDuplicateScanScope
@@ -2963,15 +2798,11 @@ public sealed class CatalogAutoTagAssignment
 public sealed class CatalogAutoTagAppliedAssignment
 {
     public string TagName { get; init; } = string.Empty;
-    public List<string> ChangedItemPaths { get; init; } = [];
     public List<string> ChangedItemIds { get; init; } = [];
 }
 
 public sealed class CatalogAutoTagApplyResult
 {
-    public int AssignmentsAdded { get; init; }
-    public List<string> ChangedItemPaths { get; init; } = [];
-    public List<string> ChangedItemIds { get; init; } = [];
     public List<CatalogAutoTagAppliedAssignment> Applied { get; init; } = [];
 }
 

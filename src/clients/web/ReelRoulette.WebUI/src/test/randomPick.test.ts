@@ -162,7 +162,7 @@ describe("randomPickRequest", () => {
       randomizationMode: "WeightedRandom",
       presetId: "preset-favorites"
     });
-    expect(body.filterState?.favoritesOnly).toBe(true);
+    expect(body.filterState?.favoritesMode).toBe("only");
     expect(Object.keys(body)).toEqual(["clientId", "sessionId", "includeVideos", "includePhotos", "randomizationMode", "filterState", "presetId"]);
   });
 

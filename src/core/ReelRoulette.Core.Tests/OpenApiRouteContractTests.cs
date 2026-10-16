@@ -26,6 +26,14 @@ public sealed class OpenApiRouteContractTests : IDisposable
         @"\(element, ""([^""]+)""",
         RegexOptions.Compiled);
 
+    // The fields presets stored before the flag modes carry. The parser still reads them, but no client writes them,
+    // so the FilterState schema leaves them out. They go once Per-Preset Preset Writes rewrites stored presets.
+    private static readonly string[] OldFieldsReadButNotSpecified =
+    [
+        "favoritesOnly",
+        "excludeBlacklisted"
+    ];
+
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), "reelroulette-openapi-contract-tests", Guid.NewGuid().ToString("N"));
 
     [Fact]
@@ -52,10 +60,20 @@ public sealed class OpenApiRouteContractTests : IDisposable
         Assert.Contains("favoritesOnly", read);
         Assert.Contains("categoryLocalMatchModes", read);
 
-        var specified = OpenApiSpec.ReadSchemaProperties("FilterState");
+        var notReadOldFields = OldFieldsReadButNotSpecified.Except(read).ToList();
+        Assert.True(
+            notReadOldFields.Count == 0,
+            $"Listed as old fields the parser reads, but the parser no longer reads: [{string.Join(", ", notReadOldFields)}]. Remove them from the list.");
 
-        var missingFromSpec = read.Except(specified).ToList();
-        var notRead = specified.Except(read).ToList();
+        var specified = OpenApiSpec.ReadSchemaProperties("FilterState");
+        var specifiedOldFields = OldFieldsReadButNotSpecified.Intersect(specified).ToList();
+        Assert.True(
+            specifiedOldFields.Count == 0,
+            $"Listed as old fields left out of FilterState, but FilterState names them: [{string.Join(", ", specifiedOldFields)}].");
+
+        var expected = read.Except(OldFieldsReadButNotSpecified).ToList();
+        var missingFromSpec = expected.Except(specified).ToList();
+        var notRead = specified.Except(expected).ToList();
         Assert.True(
             missingFromSpec.Count == 0 && notRead.Count == 0,
             $"Read by the filter parser but missing from FilterState: [{string.Join(", ", missingFromSpec)}]. In FilterState but not read: [{string.Join(", ", notRead)}].");

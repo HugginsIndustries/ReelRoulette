@@ -396,7 +396,7 @@ describe("first page", () => {
     const { library } = await mountLibrary(libraryItems(3));
     expect(library.queries()).toHaveLength(1);
     expect(library.queries()[0]).toMatchObject({
-      filterState: { favoritesOnly: false, excludeBlacklisted: true, selectedTags: [], excludedTags: [] },
+      filterState: { favoritesMode: "off", blacklistedMode: "excluded", selectedTags: [], excludedTags: [] },
       search: "",
       sortMode: "Name",
       sortDescending: false,
@@ -784,7 +784,7 @@ describe("fill on scroll", () => {
     });
     await flush();
     expect(library.queries()).toHaveLength(6);
-    expect(library.queries()[5]).toMatchObject({ filterState: { favoritesOnly: true }, offset: 0, limit: 400 });
+    expect(library.queries()[5]).toMatchObject({ filterState: { favoritesMode: "only" }, offset: 0, limit: 400 });
     expect(within(overlay()).queryByText("Loading library…")).toBeNull();
     await library.release();
 
@@ -809,7 +809,7 @@ describe("starting over", () => {
     library.items = [libraryItem(2, { isFavorite: true })];
     library.searchBaselineCount = 3;
     await pickPreset("preset-favorites");
-    expect(library.queries()[1]).toMatchObject({ filterState: { favoritesOnly: true }, offset: 0, limit: 200 });
+    expect(library.queries()[1]).toMatchObject({ filterState: { favoritesMode: "only" }, offset: 0, limit: 200 });
     expect(countLine()).toEqual({ shown: "1 / 3", spoken: "1 of 3 items" });
     expect(tileNames()).toEqual(["clip 2.mp4"]);
   });
@@ -828,7 +828,7 @@ describe("starting over", () => {
     await click(screen.getByRole("button", { name: /^Apply/ }));
 
     await waitFor(() => expect(library.queries()).toHaveLength(2));
-    expect(library.queries()[1]).toMatchObject({ filterState: { favoritesMode: "only", favoritesOnly: true }, search: "", offset: 0, limit: 200 });
+    expect(library.queries()[1]).toMatchObject({ filterState: { favoritesMode: "only" }, search: "", offset: 0, limit: 200 });
   });
 });
 
@@ -868,7 +868,7 @@ describe("live updates", () => {
     await flush();
 
     expect(library.queries()).toHaveLength(3);
-    expect(library.queries()[2]).toMatchObject({ filterState: { favoritesOnly: true }, offset: 0, limit: 3 });
+    expect(library.queries()[2]).toMatchObject({ filterState: { favoritesMode: "only" }, offset: 0, limit: 3 });
     expect(tileNames()).toEqual(["clip 2.mp4", "clip 3.mp4"]);
     expect(countLine()).toEqual({ shown: "2 / 2", spoken: "2 of 2 items" });
   });
@@ -900,7 +900,6 @@ describe("live updates", () => {
 
     library.items = library.items.slice(1);
     page.stream().emit("itemTagsChanged", 2, {
-      itemIds: ["C:\\media\\clip 1.mp4"],
       resolvedItemIds: ["item-1"],
       addedTags: [],
       removedTags: ["Beach"]
@@ -1399,7 +1398,7 @@ describe("memory", () => {
 
     const { server, library } = await refresh(page, libraryItems(3), presets);
     expect(library.queries()[0]).toMatchObject({
-      filterState: { favoritesOnly: true },
+      filterState: { favoritesMode: "only" },
       search: "",
       sortMode: "Duration",
       sortDescending: false
@@ -1414,7 +1413,7 @@ describe("memory", () => {
 
     await click(screen.getByRole("button", { name: "Play/Pause" }));
     const pick = server.requests("POST", "/api/random")[0]!.body;
-    expect(pick).toMatchObject({ presetId: "preset-favorites", randomizationMode: "SpreadMode", filterState: { favoritesOnly: true } });
+    expect(pick).toMatchObject({ presetId: "preset-favorites", randomizationMode: "SpreadMode", filterState: { favoritesMode: "only" } });
   });
 
   it("shows a remembered preset renamed elsewhere by its new name, and one deleted as None*, keeping its filter", async () => {
@@ -1426,11 +1425,11 @@ describe("memory", () => {
     const renamed = { ...ALL_FAVORITES_PRESET, id: "Faves", name: "Faves" };
     const second = await refresh(page, libraryItems(3), (server) => server.on("GET", "/api/presets", () => json([renamed])));
     await waitFor(() => expect(selectedPresetLabel()).toBe("Faves"));
-    expect(second.library.queries().at(-1)).toMatchObject({ filterState: { favoritesOnly: true } });
+    expect(second.library.queries().at(-1)).toMatchObject({ filterState: { favoritesMode: "only" } });
 
     const third = await refresh(second.page, libraryItems(3), (server) => server.on("GET", "/api/presets", () => json([])));
     await waitFor(() => expect(selectedPresetLabel()).toBe("None*"));
-    expect(third.library.queries().at(-1)).toMatchObject({ filterState: { favoritesOnly: true } });
+    expect(third.library.queries().at(-1)).toMatchObject({ filterState: { favoritesMode: "only" } });
   });
 
   it("takes a tag renamed or deleted elsewhere into a remembered preset's own filter, as the open page does", async () => {

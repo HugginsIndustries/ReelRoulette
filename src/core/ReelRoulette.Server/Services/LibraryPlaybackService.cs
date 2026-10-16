@@ -257,22 +257,10 @@ public sealed class LibraryPlaybackService
         return $"{client}\u001f{sessionId.Trim()}";
     }
 
-    public bool TryResolveMediaPath(string idOrToken, out string fullPath)
+    /// <summary>The file a token from the random or play route names. An item id or a full path is not a token.</summary>
+    public bool TryResolveMediaPath(string token, out string fullPath)
     {
-        if (_tokenStore.TryResolve(idOrToken, out fullPath))
-        {
-            return true;
-        }
-
-        var match = _catalog.Session.ReadPlaybackItem(idOrToken);
-        if (match == null || string.IsNullOrWhiteSpace(match.FullPath))
-        {
-            fullPath = string.Empty;
-            return false;
-        }
-
-        fullPath = match.FullPath;
-        return true;
+        return _tokenStore.TryResolve(token, out fullPath);
     }
 
     private static FilterPresetSnapshot? ResolvePreset(IReadOnlyList<FilterPresetSnapshot> presets, string presetId)

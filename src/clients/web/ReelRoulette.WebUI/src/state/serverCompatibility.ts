@@ -1,7 +1,9 @@
 import type { ServerVersion } from "./appStore";
 
-const WEBUI_API_VERSION = "1";
-const SUPPORTED_SERVER_API_VERSIONS = new Set(["1", "0"]);
+// Version 2 names items only by id on every route that takes an item id, and makes clearing every item's playback
+// stats explicit.
+const WEBUI_API_VERSION = "2";
+const SUPPORTED_SERVER_API_VERSIONS = new Set(["2"]);
 const REQUIRED_SERVER_CAPABILITIES = [
   "auth.sessionCookie",
   "identity.sessionId",

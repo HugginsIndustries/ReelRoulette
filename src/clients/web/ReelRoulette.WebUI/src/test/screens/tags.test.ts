@@ -191,10 +191,7 @@ function serveTags(server: FakeServer): FakeTags {
       if (path === "/api/autotag/apply") {
         const assignments: Array<{ tagName: string; itemPaths: string[] }> = call.body?.assignments ?? [];
         return json({
-          assignmentsAdded: assignments.length,
-          changedItemPaths: [],
-          changedItemIds: [],
-          applied: assignments.map((assignment) => ({ tagName: assignment.tagName, changedItemPaths: assignment.itemPaths, changedItemIds: [] }))
+          applied: assignments.map((assignment) => ({ tagName: assignment.tagName, changedItemIds: [] }))
         });
       }
       return json({});
@@ -1969,7 +1966,7 @@ describe("saving", () => {
     await click(chipButton("Calm", "Add tag"));
     await save();
     await expectSaved();
-    const echo = { itemIds: ["item-video"], resolvedItemIds: ["item-video"], addedTags: ["Calm"], removedTags: [] };
+    const echo = { resolvedItemIds: ["item-video"], addedTags: ["Calm"], removedTags: [] };
     page.stream().emit("itemTagsChanged", 2, echo);
     await settle();
     expect(libraryQueries(server)).toHaveLength(queriesWithoutFilter);
@@ -2080,7 +2077,6 @@ describe("saving", () => {
     const before = libraryQueries(server).length;
 
     page.stream().emit("itemTagsChanged", 2, {
-      itemIds: ["item-video", "item-2"],
       resolvedItemIds: ["item-video", "item-2"],
       addedTags: ["Shore"],
       removedTags: ["Beach"],
@@ -2153,11 +2149,11 @@ describe("Auto Tag", () => {
     expect(autoTagBox("Scan full library").checked).toBe(false);
 
     await scan();
-    expect(tags.scans()).toEqual([{ scanFullLibrary: false, itemIds: [] }]);
+    expect(tags.scans()).toEqual([{ scanFullLibrary: false }]);
     await click(autoTagBox("Scan full library"));
     expect(localStorage.getItem("rr_autoTagScanFullLibrary")).toBe("true");
     await scan();
-    expect(tags.scans()[1]).toEqual({ scanFullLibrary: true, itemIds: [] });
+    expect(tags.scans()[1]).toEqual({ scanFullLibrary: true });
     await click(autoTagBox("Scan full library"));
     expect(localStorage.getItem("rr_autoTagScanFullLibrary")).toBe("false");
   });

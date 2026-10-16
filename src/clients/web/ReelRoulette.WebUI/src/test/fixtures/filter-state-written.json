@@ -1,8 +1,6 @@
 {
-  "desktop": {
-    "favoritesMode": "excluded",
-    "favoritesOnly": false,
-    "blacklistedMode": "only",
+  "oldFields": {
+    "favoritesOnly": true,
     "excludeBlacklisted": false,
     "onlyNeverPlayed": true,
     "audioFilter": 1,
@@ -19,9 +17,7 @@
   },
   "webui": {
     "favoritesMode": "excluded",
-    "favoritesOnly": false,
     "blacklistedMode": "only",
-    "excludeBlacklisted": false,
     "onlyNeverPlayed": true,
     "onlyKnownDuration": false,
     "onlyKnownLoudness": false,

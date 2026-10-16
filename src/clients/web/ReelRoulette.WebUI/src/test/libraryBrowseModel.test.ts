@@ -15,9 +15,8 @@ interface SortDirectionLabelCase {
   label: string;
 }
 
-// The desktop sort labels read the same fixture.
 const sortLabelCases: SortDirectionLabelCase[] = JSON.parse(
-  readFileSync(new URL("../../../../../../shared/fixtures/sort-direction-labels.json", import.meta.url), "utf8")
+  readFileSync(new URL("./fixtures/sort-direction-labels.json", import.meta.url), "utf8")
 );
 
 describe("libraryBrowseModel", () => {

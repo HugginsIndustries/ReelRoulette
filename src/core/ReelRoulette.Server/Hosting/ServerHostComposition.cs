@@ -379,8 +379,8 @@ public static class ServerHostComposition
 
         app.MapPost("/api/play/{itemId}", PlayItem);
 
-        app.MapGet("/api/media/{idOrToken}", (HttpContext context, string idOrToken, LibraryPlaybackService playback, OperatorTestingService testingService, IHostApplicationLifetime lifetime) =>
-            ServeMedia(context, idOrToken, playback, testingService, lifetime.ApplicationStopping));
+        app.MapGet("/api/media/{token}", (HttpContext context, string token, LibraryPlaybackService playback, OperatorTestingService testingService, IHostApplicationLifetime lifetime) =>
+            ServeMedia(context, token, playback, testingService, lifetime.ApplicationStopping));
 
         app.MapPost("/api/favorite", SetFavorite);
 
@@ -388,27 +388,7 @@ public static class ServerHostComposition
 
         app.MapPost("/api/record-playback", RecordPlayback);
 
-        app.MapPost("/api/playback/clear-stats", (ClearPlaybackStatsRequest request, LibraryOperationsService operations, ServerStateService state) =>
-        {
-            var response = operations.ClearPlaybackStats(request);
-            if (response.ClearedCount > 0)
-            {
-                state.PublishExternal("resyncRequired", new
-                {
-                    reason = "playbackStatsCleared"
-                });
-            }
-
-            return Results.Ok(response);
-        });
-
-        app.MapPost("/api/library-states", (LibraryStatesRequest request, LibraryOperationsService operations) =>
-        {
-            request.ClientId = NormalizeOptionalIdentity(request.ClientId);
-            request.SessionId = NormalizeOptionalIdentity(request.SessionId);
-            var states = operations.GetLibraryStates(request);
-            return Results.Ok(states);
-        });
+        app.MapPost("/api/playback/clear-stats", ClearPlaybackStats);
 
         app.MapPost("/api/tag-editor/model", (TagEditorModelRequest request, LibraryOperationsService operations) =>
         {
@@ -496,7 +476,6 @@ public static class ServerHostComposition
             {
                 state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
                 {
-                    ItemIds = changedItemIds,
                     ResolvedItemIds = changedItemIds,
                     AddedTags = [newName],
                     RemovedTags = [oldName],
@@ -539,7 +518,6 @@ public static class ServerHostComposition
             {
                 state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
                 {
-                    ItemIds = changedItemIds,
                     ResolvedItemIds = changedItemIds,
                     AddedTags = [],
                     RemovedTags = [request.Name.Trim()],
@@ -693,7 +671,6 @@ public static class ServerHostComposition
         state.PublishExternal("playbackRecorded", new PlaybackRecordedPayload
         {
             ItemId = recorded.ItemId,
-            Path = recorded.FullPath,
             ClientId = body.ClientId,
             SessionId = body.SessionId,
             PlayCount = recorded.PlayCount,
@@ -731,23 +708,23 @@ public static class ServerHostComposition
 
     internal static IResult SetFavorite(FavoriteRequest request, ServerStateService state, LibraryOperationsService operations)
     {
-        if (string.IsNullOrWhiteSpace(request.Path))
+        if (string.IsNullOrWhiteSpace(request.ItemId))
         {
-            return Results.BadRequest(new { error = "path is required" });
+            return Results.BadRequest(new { error = "itemId is required" });
         }
 
-        var persisted = operations.SetFavorite(request.Path, request.IsFavorite, out var previous);
+        var persisted = operations.SetFavorite(request.ItemId, request.IsFavorite, out var previous);
         return PublishItemState(state, persisted, previous, request.ClientId);
     }
 
     internal static IResult SetBlacklist(BlacklistRequest request, ServerStateService state, LibraryOperationsService operations)
     {
-        if (string.IsNullOrWhiteSpace(request.Path))
+        if (string.IsNullOrWhiteSpace(request.ItemId))
         {
-            return Results.BadRequest(new { error = "path is required" });
+            return Results.BadRequest(new { error = "itemId is required" });
         }
 
-        var persisted = operations.SetBlacklist(request.Path, request.IsBlacklisted, out var previous);
+        var persisted = operations.SetBlacklist(request.ItemId, request.IsBlacklisted, out var previous);
         return PublishItemState(state, persisted, previous, request.ClientId);
     }
 
@@ -759,7 +736,7 @@ public static class ServerHostComposition
     {
         if (persisted == null || previous == null)
         {
-            return Results.NotFound(new { error = "path not found in library" });
+            return Results.NotFound(new { error = "item not found in library" });
         }
 
         var envelope = state.PublishExternal("itemStateChanged", new ItemStateChangedPayload
@@ -776,26 +753,53 @@ public static class ServerHostComposition
         return Results.Ok(persisted);
     }
 
+    /// <summary>
+    /// Clears every item's playback stats only when the request says <c>allItems</c>, so a request that names no
+    /// items, such as one with a field this server doesn't read, clears nothing.
+    /// </summary>
+    internal static IResult ClearPlaybackStats(ClearPlaybackStatsRequest request, LibraryOperationsService operations, ServerStateService state)
+    {
+        var namesItems = request.ItemIds?.Any(id => !string.IsNullOrWhiteSpace(id)) == true;
+        if (request.AllItems && namesItems)
+        {
+            return Results.BadRequest(new { error = "Send allItems or itemIds, not both" });
+        }
+
+        if (!request.AllItems && !namesItems)
+        {
+            return Results.BadRequest(new { error = "itemIds is required, or allItems to clear every item" });
+        }
+
+        var response = operations.ClearPlaybackStats(request);
+        if (response.ClearedCount > 0)
+        {
+            state.PublishExternal("resyncRequired", new
+            {
+                reason = "playbackStatsCleared"
+            });
+        }
+
+        return Results.Ok(response);
+    }
+
     internal static IResult RecordPlayback(RecordPlaybackRequest request, ServerStateService state, LibraryOperationsService operations)
     {
-        if (string.IsNullOrWhiteSpace(request.Path))
+        if (string.IsNullOrWhiteSpace(request.ItemId))
         {
-            return Results.BadRequest(new { error = "path is required" });
+            return Results.BadRequest(new { error = "itemId is required" });
         }
 
         request.ClientId = NormalizeOptionalIdentity(request.ClientId);
         request.SessionId = NormalizeOptionalIdentity(request.SessionId);
-        var recorded = operations.RecordPlayback(request.Path);
+        var recorded = operations.RecordPlayback(request.ItemId);
         if (!recorded.Found)
         {
-            return Results.NotFound(new { error = "path not found in library" });
+            return Results.NotFound(new { error = "item not found in library" });
         }
 
-        // The path is the catalog's, so the event names the file by path even when the request named it by id.
         var envelope = state.PublishExternal("playbackRecorded", new PlaybackRecordedPayload
         {
             ItemId = recorded.ItemId,
-            Path = recorded.FullPath,
             ClientId = request.ClientId,
             SessionId = request.SessionId,
             PlayCount = recorded.PlayCount,
@@ -826,7 +830,6 @@ public static class ServerHostComposition
 
         var itemTagsEnvelope = state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
         {
-            ItemIds = request.ItemIds,
             ResolvedItemIds = resolvedItemIds,
             AddedTags = request.AddTags,
             RemovedTags = request.RemoveTags
@@ -856,18 +859,13 @@ public static class ServerHostComposition
     internal static IResult ApplyAutoTags(AutoTagApplyRequest request, LibraryOperationsService operations, ServerStateService state)
     {
         var response = operations.ApplyAutoTags(request, out var applied);
-        if (response.AssignmentsAdded > 0)
+        // Each applied entry is a tag that gained at least one file.
+        if (applied.Count > 0)
         {
             foreach (var assignment in applied)
             {
-                if (assignment.ChangedItemPaths.Count == 0)
-                {
-                    continue;
-                }
-
                 state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
                 {
-                    ItemIds = assignment.ChangedItemPaths,
                     ResolvedItemIds = assignment.ChangedItemIds,
                     AddedTags = [assignment.TagName],
                     RemovedTags = []
@@ -914,7 +912,7 @@ public static class ServerHostComposition
 
     internal static IResult ServeMedia(
         HttpContext context,
-        string idOrToken,
+        string token,
         LibraryPlaybackService playback,
         OperatorTestingService testingService,
         CancellationToken serverStopping)
@@ -925,7 +923,7 @@ public static class ServerHostComposition
             return Results.NotFound(new { error = "Media not found" });
         }
 
-        if (!playback.TryResolveMediaPath(idOrToken, out var fullPath) || !File.Exists(fullPath))
+        if (!playback.TryResolveMediaPath(token, out var fullPath) || !File.Exists(fullPath))
         {
             return Results.NotFound(new { error = "Media not found" });
         }

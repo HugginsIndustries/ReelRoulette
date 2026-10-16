@@ -716,7 +716,7 @@ describe("Diagnostics", () => {
         Session: page.sessionId(),
         "Client type": clientType,
         "Device name": `${prefix} (${navigator.platform}; ${userAgent.slice(0, 40)})`,
-        Server: "0.15.0-dev.1 (API 1)",
+        Server: "0.15.0-dev.1 (API 2)",
         ReelRoulette: RELEASE_VERSION
       });
       expect(page.clientId()).toMatch(/^[0-9a-f-]{36}$/);
@@ -729,16 +729,16 @@ describe("Diagnostics", () => {
     server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, appVersion: "0.14.2.0" }));
     await mount(server);
     await openSettings();
-    expect(diagnostics().Server).toBe("0.14.2.0 (API 1)");
+    expect(diagnostics().Server).toBe("0.14.2.0 (API 2)");
 
     resetPage();
     const incompatible = new FakeServer();
-    incompatible.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, apiVersion: "2", assetsVersion: "0.16.0" }));
+    incompatible.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, apiVersion: "3", assetsVersion: "0.16.0" }));
     mountPage({ server: incompatible });
     await waitFor(() => expect(incompatible.requests("GET", "/api/version").length).toBeGreaterThan(0));
     await settle();
     await openSettings();
-    expect(diagnostics().Server).toBe("0.16.0 (API 2)");
+    expect(diagnostics().Server).toBe("0.16.0 (API 3)");
   });
 
   it("says the server's version is unknown until a version check answers", async () => {

@@ -52,12 +52,12 @@ public sealed class PlayItemOrchestrationTests : IDisposable
         Assert.True(playback.TryPlayItem("orch-item", false, out var playResponse, out _, out _, out _));
         Assert.NotNull(playResponse);
 
-        var recorded = operations.RecordPlayback(playResponse!.Id);
+        var recorded = operations.RecordPlayback(playResponse!.ItemId);
         Assert.True(recorded.Found);
 
         state.PublishExternal("playbackRecorded", new PlaybackRecordedPayload
         {
-            Path = playResponse.Id,
+            ItemId = recorded.ItemId,
             ClientId = "client-a",
             SessionId = "session-b",
             PlayCount = recorded.PlayCount,
@@ -68,7 +68,7 @@ public sealed class PlayItemOrchestrationTests : IDisposable
         var envelope = Assert.Single(replay.Events);
         Assert.Equal("playbackRecorded", envelope.EventType);
         var payload = Assert.IsType<PlaybackRecordedPayload>(envelope.Payload);
-        Assert.Equal(playResponse.Id, payload.Path);
+        Assert.Equal("orch-item", payload.ItemId);
         Assert.Equal("client-a", payload.ClientId);
         Assert.Equal("session-b", payload.SessionId);
         Assert.NotNull(payload.PlayCount);

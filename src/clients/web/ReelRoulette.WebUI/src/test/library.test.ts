@@ -248,7 +248,7 @@ describe("library window", () => {
     expect(t.queries()).toEqual([
       expect.objectContaining({ search: "", sortMode: "Name", sortDescending: false, offset: 0, limit: 200 })
     ]);
-    expect(t.queries()[0].filterState).toMatchObject({ favoritesOnly: false, excludeBlacklisted: true });
+    expect(t.queries()[0].filterState).toMatchObject({ favoritesMode: "off", blacklistedMode: "excluded" });
     expect(t.library.body.peek()).toEqual({ kind: "blank" });
     expect(t.library.summary.peek()).toBeNull();
     expect(t.grids).toHaveLength(0);
@@ -514,7 +514,7 @@ describe("fill", () => {
 
     t.emit("serverReady");
     await settle();
-    expect(t.queries()).toEqual([expect.objectContaining({ filterState: expect.objectContaining({ favoritesOnly: true }), sortMode: "Duration" })]);
+    expect(t.queries()).toEqual([expect.objectContaining({ filterState: expect.objectContaining({ favoritesMode: "only" }), sortMode: "Duration" })]);
 
     t.store.compatibilityBlocked.value = true;
     await t.library.commitQuery();
@@ -839,7 +839,7 @@ describe("events", () => {
     t.store.presets.value = [{ id: "fav", name: "Favorites", filterState: { favoritesOnly: true } }];
     t.store.pickHeaderPreset("fav");
     await settle();
-    expect(t.queries().at(-1)).toMatchObject({ filterState: { favoritesOnly: true }, offset: 0, limit: 200 });
+    expect(t.queries().at(-1)).toMatchObject({ filterState: { favoritesMode: "only" }, offset: 0, limit: 200 });
     const sent = t.queries().length;
 
     t.emit("itemStateChanged", { itemId: "item-1", isFavorite: false, isBlacklisted: false, previousIsFavorite: true, previousIsBlacklisted: false });

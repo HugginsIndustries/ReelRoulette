@@ -1142,7 +1142,7 @@ describe("Auto Tag", () => {
     editor.setScanFullLibrary(true);
     expect(localStorage.values.get("rr_autoTagScanFullLibrary")).toBe("true");
     await editor.scan();
-    expect(server.posts.at(-1)).toEqual({ path: "/api/autotag/scan", body: { scanFullLibrary: true, itemIds: [] } });
+    expect(server.posts.at(-1)).toEqual({ path: "/api/autotag/scan", body: { scanFullLibrary: true } });
     expect(context.view().autoTag.status).toBe("Scan complete: 1 matching tags, 1 matches, 0/1 selected changes.");
     expect(context.view().autoTagApplyPending).toBe(false);
 
@@ -1170,7 +1170,7 @@ describe("Auto Tag", () => {
     await openOn(context);
     expect(context.view().autoTag.scanFull).toBe(true);
     await context.editor.scan();
-    expect(context.server.posts.at(-1)).toEqual({ path: "/api/autotag/scan", body: { scanFullLibrary: true, itemIds: [] } });
+    expect(context.server.posts.at(-1)).toEqual({ path: "/api/autotag/scan", body: { scanFullLibrary: true } });
   });
 
   it("puts the rows back when the server refuses Apply, unless a new scan replaced them", async () => {

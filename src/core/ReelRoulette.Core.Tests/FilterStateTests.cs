@@ -37,35 +37,6 @@ public sealed class FilterStateTests : IDisposable
         };
     }
 
-    // The clients write these fields; the server writes none, so Core's projection is what the desktop calls.
-    [Fact]
-    public void FlagModes_WriteEachPairing_AsTheSharedFixtureSays()
-    {
-        using var fixture = JsonDocument.Parse(File.ReadAllText(OpenApiSpec.RepoPath("shared", "fixtures", "filter-mode-projection.json")));
-        var cases = fixture.RootElement.EnumerateArray().ToList();
-        Assert.Equal(9, cases.Count);
-        foreach (var testCase in cases)
-        {
-            var name = testCase.GetProperty("name").GetString();
-            var favorites = FlagFilterModes.Parse(testCase.GetProperty("favoritesMode").GetString())!.Value;
-            var blacklisted = FlagFilterModes.Parse(testCase.GetProperty("blacklistedMode").GetString())!.Value;
-            var expected = testCase.GetProperty("written").GetRawText();
-            var written = JsonSerializer.Serialize(new Dictionary<string, object>
-            {
-                ["favoritesMode"] = FlagFilterModes.Name(favorites),
-                ["favoritesOnly"] = FlagFilterModes.FavoritesOnly(favorites),
-                ["blacklistedMode"] = FlagFilterModes.Name(blacklisted),
-                ["excludeBlacklisted"] = FlagFilterModes.ExcludeBlacklisted(blacklisted)
-            });
-            Assert.True(JsonElement.DeepEquals(JsonDocument.Parse(expected).RootElement, JsonDocument.Parse(written).RootElement),
-                $"{name}: expected {expected}, got {written}.");
-
-            // What a client writes reads back as the same pairing.
-            Assert.True(LibraryListFilterParser.TryParse(JsonDocument.Parse(written).RootElement, out var parsed, out _));
-            Assert.Equal((favorites, blacklisted), (parsed!.FavoritesMode, parsed.BlacklistedMode));
-        }
-    }
-
     [Fact]
     public void Parser_ReadsEnumFields_AsTheSharedFixtureSays()
     {

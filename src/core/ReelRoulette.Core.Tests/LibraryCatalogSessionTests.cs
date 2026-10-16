@@ -370,7 +370,7 @@ public sealed class LibraryCatalogSessionTests
     }
 
     [Fact]
-    public void TagEdits_PersistByIdOrPath_WithoutBuildingTheCatalogDocument()
+    public void TagEdits_PersistById_WithoutBuildingTheCatalogDocument()
     {
         using var dir = new TempDirectory();
         var session = CatalogOpen.Open(dir.Path).Session!;
@@ -389,7 +389,7 @@ public sealed class LibraryCatalogSessionTests
         Assert.True(session.UpsertCategory("people", "People", 1));
         Assert.True(session.UpsertTag("Old", "people"));
 
-        Assert.True(session.ApplyItemTagEdits(["item-1", "/clips/two.mp4"], ["New"], ["Old"], out var catalogChanged));
+        Assert.True(session.ApplyItemTagEdits(["item-1", "ITEM-2"], ["New"], ["Old"], out var catalogChanged));
         Assert.True(catalogChanged);
         Assert.True(session.RenameTag("New", "Fresh", "people"));
         Assert.True(session.DeleteTag("Fresh"));
@@ -399,9 +399,8 @@ public sealed class LibraryCatalogSessionTests
             new CatalogAutoTagAssignment { TagName = "Auto", ItemPaths = ["/clips/one.mp4"] }
         ]);
 
-        Assert.Equal(1, applied.AssignmentsAdded);
-        Assert.Equal(["/clips/one.mp4"], applied.ChangedItemPaths);
-        var model = session.ReadTagEditor(["/clips/one.mp4"]);
+        Assert.Equal(["item-1"], Assert.Single(applied.Applied).ChangedItemIds);
+        var model = session.ReadTagEditor(["item-1"]);
         Assert.Equal(["Auto"], Assert.Single(model.Items).Tags);
     }
 
@@ -439,7 +438,7 @@ public sealed class LibraryCatalogSessionTests
     }
 
     [Fact]
-    public void ApplyAutoTagAssignments_ReportsChangedPathsPerTag()
+    public void ApplyAutoTagAssignments_ReportsChangedItemIdsPerTag()
     {
         using var dir = new TempDirectory();
         var session = CatalogOpen.Open(dir.Path).Session!;
@@ -455,7 +454,7 @@ public sealed class LibraryCatalogSessionTests
             FullPath = "/clips/two.mp4",
             FileName = "two.mp4"
         }));
-        Assert.True(session.ApplyItemTagEdits(["/clips/one.mp4"], ["Cat"], [], out _));
+        Assert.True(session.ApplyItemTagEdits(["item-1"], ["Cat"], [], out _));
 
         var applied = session.ApplyAutoTagAssignments(
         [
@@ -463,16 +462,15 @@ public sealed class LibraryCatalogSessionTests
             new CatalogAutoTagAssignment { TagName = "Dog", ItemPaths = ["/clips/two.mp4"] }
         ]);
 
-        Assert.Equal(2, applied.AssignmentsAdded);
-        Assert.Equal(["/clips/two.mp4"], applied.ChangedItemPaths);
+        Assert.Equal(2, applied.Applied.Count);
         var cat = Assert.Single(applied.Applied, row => row.TagName == "Cat");
-        Assert.Equal(["/clips/two.mp4"], cat.ChangedItemPaths);
+        Assert.Equal(["item-2"], cat.ChangedItemIds);
         var dog = Assert.Single(applied.Applied, row => row.TagName == "Dog");
-        Assert.Equal(["/clips/two.mp4"], dog.ChangedItemPaths);
+        Assert.Equal(["item-2"], dog.ChangedItemIds);
     }
 
     [Fact]
-    public void FavoriteBlacklistAndPlayback_PersistByIdOrPath_WithoutBuildingTheCatalogDocument()
+    public void FavoriteBlacklistAndPlayback_PersistById_WithoutBuildingTheCatalogDocument()
     {
         using var dir = new TempDirectory();
         var session = CatalogOpen.Open(dir.Path).Session!;
@@ -515,18 +513,18 @@ public sealed class LibraryCatalogSessionTests
         }));
         var revision = session.Revision;
 
-        Assert.True(session.SetFavorite("/CLIPS/A.MP4", true));
+        Assert.True(session.SetFavorite("item-a", true));
         var favorited = session.ReadItemState("item-a");
         Assert.NotNull(favorited);
         Assert.True(favorited!.IsFavorite);
         Assert.False(favorited.IsBlacklisted);
         Assert.Equal(revision + 1, session.Revision);
-        Assert.False(session.SetFavorite("/clips/a.mp4", true));
+        Assert.False(session.SetFavorite("ITEM-A", true));
         Assert.False(session.SetFavorite("missing", true));
         Assert.Equal(revision + 1, session.Revision);
 
         Assert.True(session.SetBlacklist("ITEM-B", true));
-        var blacklisted = session.ReadItemState("/clips/b.mp4");
+        var blacklisted = session.ReadItemState("item-b");
         Assert.NotNull(blacklisted);
         Assert.True(blacklisted!.IsBlacklisted);
         Assert.False(blacklisted.IsFavorite);
@@ -552,7 +550,7 @@ public sealed class LibraryCatalogSessionTests
         Assert.Equal(playedAt, firstPlay.PreviousLastPlayedUtc);
         Assert.NotNull(firstPlay.LastPlayedUtc);
         Assert.InRange(firstPlay.LastPlayedUtc!.Value, beforePlay.AddSeconds(-1), afterPlay.AddSeconds(1));
-        var secondPlay = session.RecordPlayback("/clips/b.mp4");
+        var secondPlay = session.RecordPlayback("item-b");
         Assert.Equal(6, secondPlay!.PlayCount);
         Assert.Equal(firstPlay.LastPlayedUtc, secondPlay.PreviousLastPlayedUtc);
         var saturated = session.RecordPlayback("ITEM-MAX");
@@ -567,7 +565,7 @@ public sealed class LibraryCatalogSessionTests
         Assert.Equal(6, session.ReadItemState("item-b")!.PlayCount);
         Assert.NotNull(session.ReadItemState("item-time")!.LastPlayedUtc);
 
-        Assert.Equal(1, session.ClearPlaybackStats(["/clips/b.mp4", "item-b", "missing"]));
+        Assert.Equal(1, session.ClearPlaybackStats(["ITEM-B", "item-b", "missing"]));
         var clearedB = session.ReadItemState("item-b");
         Assert.Equal(0, clearedB!.PlayCount);
         Assert.Null(clearedB.LastPlayedUtc);
@@ -575,7 +573,14 @@ public sealed class LibraryCatalogSessionTests
         Assert.NotNull(session.ReadItemState("item-time")!.LastPlayedUtc);
         Assert.Equal(0, session.ReadItemState("item-clean")!.PlayCount);
 
-        Assert.Equal(3, session.ClearPlaybackStats(null));
+        // No ids clears nothing, even while items have stats; only the explicit call clears them all.
+        var revisionBeforeClearAll = session.Revision;
+        Assert.Equal(0, session.ClearPlaybackStats([]));
+        Assert.Equal(0, session.ClearPlaybackStats(["  "]));
+        Assert.Equal(revisionBeforeClearAll, session.Revision);
+        Assert.Equal(int.MaxValue, session.ReadItemState("item-max")!.PlayCount);
+
+        Assert.Equal(3, session.ClearAllPlaybackStats());
         Assert.Equal(0, session.ReadItemState("item-max")!.PlayCount);
         Assert.Null(session.ReadItemState("item-max")!.LastPlayedUtc);
         Assert.Equal(0, session.ReadItemState("item-time")!.PlayCount);
@@ -584,8 +589,41 @@ public sealed class LibraryCatalogSessionTests
         Assert.Equal(0, session.ReadItemState("item-clean")!.PlayCount);
 
         var revisionAfterClear = session.Revision;
-        Assert.Equal(0, session.ClearPlaybackStats([]));
+        Assert.Equal(0, session.ClearAllPlaybackStats());
         Assert.Equal(revisionAfterClear, session.Revision);
+    }
+
+    [Fact]
+    public void ItemLookups_FindNoItemByItsFullPath()
+    {
+        using var dir = new TempDirectory();
+        var session = CatalogOpen.Open(dir.Path).Session!;
+        const string path = "/clips/one.mp4";
+        Assert.True(session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "item-1",
+            FullPath = path,
+            FileName = "one.mp4",
+            PlayCount = 2,
+            Tags = ["Night"]
+        }));
+        var revision = session.Revision;
+
+        Assert.Null(session.ReadListedItem(path));
+        Assert.Null(session.ReadItemState(path));
+        Assert.Null(session.ReadPlaybackItem(path));
+        Assert.Empty(Assert.Single(session.ReadTagEditor([path]).Items).Tags);
+        Assert.False(session.SetFavorite(path, true));
+        Assert.False(session.SetBlacklist(path, true));
+        Assert.Null(session.RecordPlayback(path));
+        Assert.Equal(0, session.ClearPlaybackStats([path]));
+        Assert.False(session.ApplyItemTagEdits([path], [], ["Night"], out _, out var resolved));
+        Assert.Empty(resolved);
+
+        Assert.Equal(revision, session.Revision);
+        var item = session.ReadListedItem("item-1")!;
+        Assert.Equal((false, false, 2), (item.IsFavorite, item.IsBlacklisted, item.PlayCount));
+        Assert.Equal(["Night"], item.Tags);
     }
 
     [Fact]

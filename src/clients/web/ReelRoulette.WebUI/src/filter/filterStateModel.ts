@@ -1,5 +1,5 @@
 /**
- * WebUI filter state aligned with desktop FilterState JSON and the server list filter parser.
+ * WebUI filter state aligned with the server's FilterState JSON and its list filter parser.
  * Enums use numeric values (System.Text.Json default for C# enums).
  */
 
@@ -274,7 +274,7 @@ export function cloneFilterState(source: FilterState): FilterState {
   };
 }
 
-/** Desktop FilterDialog.FormatTimeSpan */
+/** A duration as the Filter tab shows it: `MM:SS`, or `HH:MM:SS` from one hour. */
 export function formatDurationForDisplay(totalSeconds: number): string {
   if (!Number.isFinite(totalSeconds) || totalSeconds < 0) {
     return "";
@@ -291,7 +291,7 @@ export function formatDurationForDisplay(totalSeconds: number): string {
 
 /**
  * Serialize duration for `filterState` JSON sent to the server.
- * Always `HH:MM:SS` so `TimeSpan.TryParse` (InvariantCulture) matches desktop `TimeSpan` JSON;
+ * Always `HH:MM:SS` so the server's `TimeSpan.TryParse` (InvariantCulture) reads it as written;
  * two-part strings are parsed as hours:minutes on the server, not minutes:seconds.
  */
 export function formatDurationForApi(totalSeconds: number): string {
@@ -329,7 +329,7 @@ export function parseTypedDuration(text: string): number | null | "invalid" {
 
 /**
  * A duration from a preset or filter the server sent, in seconds, null if empty, or "invalid". It reads each part's
- * leading number, so the fractional seconds the desktop can write, such as "00:01:30.5000000", read as 90.
+ * leading number, so fractional seconds in a stored preset, such as "00:01:30.5000000", read as 90.
  */
 export function parseServerDuration(text: string): number | null | "invalid" {
   const raw = String(text || "").trim();
@@ -377,16 +377,13 @@ function durationToApiValue(seconds: number): string {
 }
 
 /**
- * Serialize for POST /api/random and preset snapshots (matches desktop JsonSerializer shape). Each flag filter is
- * written as its mode and as the older boolean projected from it, so a reader that knows only the booleans sees a
- * wider set of files, never a narrower one.
+ * Serialize for POST /api/random and preset snapshots. Each flag filter is written as its mode only; the older
+ * `favoritesOnly` and `excludeBlacklisted` booleans are only read, from presets stored before the modes.
  */
 export function serializeFilterStateForApi(state: FilterState): ApiFilterState {
   const out: ApiFilterState = {
     favoritesMode: state.favoritesMode,
-    favoritesOnly: state.favoritesMode === "only",
     blacklistedMode: state.blacklistedMode,
-    excludeBlacklisted: state.blacklistedMode === "excluded",
     onlyNeverPlayed: state.onlyNeverPlayed,
     onlyKnownDuration: state.onlyKnownDuration,
     onlyKnownLoudness: state.onlyKnownLoudness,
@@ -470,8 +467,8 @@ function readFlagMode(value: unknown): FlagFilterMode | null {
 /**
  * Each flag filter resolves on its own: a known mode decides, and otherwise its older boolean does. Without a mode,
  * `favoritesOnly` true is only and anything else is off, and `excludeBlacklisted` false is off and anything else,
- * including none, is excluded. Core's FlagFilterModes is the C# copy. Locked to
- * shared/fixtures/filter-mode-resolution.json and filter-mode-projection.json.
+ * including none, is excluded, so a preset stored before the modes reads as it filtered. Core's FlagFilterModes is
+ * the C# copy. Locked to shared/fixtures/filter-mode-resolution.json.
  */
 function resolveFlagModes(o: Record<string, unknown>): { favoritesMode: FlagFilterMode; blacklistedMode: FlagFilterMode } {
   return {
@@ -563,8 +560,6 @@ function comparablePresetSnapshot(state: FilterState): string {
       ...state,
       globalMatchMode: state.globalMatchMode ?? true,
       // Tag names compare case-insensitively, as the catalog and filtering treat them.
-      // Matches the desktop copy only for ASCII names: toUpperCase and .NET ToUpperInvariant differ on some
-      // non-ASCII letters, for example "ß".
       selectedTags: sortedUnique(state.selectedTags.map((tag) => tag.toUpperCase())),
       excludedTags: sortedUnique(state.excludedTags.map((tag) => tag.toUpperCase())),
       includedSourceIds: sortedUnique(state.includedSourceIds),

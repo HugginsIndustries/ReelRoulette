@@ -255,14 +255,14 @@ export function createPlayer(options: PlayerOptions): Player {
   }
 
   /**
-   * Records the play on start, as the desktop does, so random picks and filters use fresh play counts. Nothing is
+   * Records the play on start, so random picks and filters use fresh play counts. Nothing is
    * recorded while the server fails the compatibility check or runs without a library.
    */
   function notifyPlaybackStarted(item: PlayingItem): void {
     if (!item?.itemId || store.heldBack.peek()) return;
     void api
       .post("/api/record-playback", {
-        path: item.itemId,
+        itemId: item.itemId,
         clientId: store.identity.clientId,
         sessionId: store.identity.sessionId
       })
@@ -698,7 +698,7 @@ export function createPlayer(options: PlayerOptions): Player {
     try {
       // The client id comes back on the change's event, so this device can tell its own change from another's.
       response = await api.post(isFavorite ? "/api/favorite" : "/api/blacklist", {
-        path: item.itemId,
+        itemId: item.itemId,
         [flag]: nextValue,
         clientId: store.identity.clientId
       });
@@ -738,8 +738,8 @@ export function createPlayer(options: PlayerOptions): Player {
     if (applyItemStateToCurrent(store.current.peek(), payload)) {
       showToggles();
     }
-    // This device's own change already said so, as Your actions. An event without a client id, such as one from the
-    // desktop, counts as another device's.
+    // This device's own change already said so, as Your actions. An event without a client id counts as another
+    // device's.
     if (payload.clientId && payload.clientId === store.identity.clientId) {
       return;
     }

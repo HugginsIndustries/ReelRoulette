@@ -51,7 +51,7 @@ describe("libraryProjectionSync", () => {
     ];
 
     applyItemStateChanged(items, { itemId: "id-lower", path: "/media/clip.mp4", isFavorite: true, isBlacklisted: false });
-    applyPlaybackRecorded(items, { itemId: "id-lower", path: "/media/clip.mp4", playCount: 3, lastPlayedUtc: 5000 });
+    applyPlaybackRecorded(items, { itemId: "id-lower", playCount: 3, lastPlayedUtc: 5000 });
 
     expect(items.map((entry) => entry.isFavorite)).toEqual([false, true]);
     expect(items.map((entry) => entry.playCount)).toEqual([0, 3]);
@@ -84,7 +84,6 @@ describe("libraryProjectionSync", () => {
     const lastPlayedUtc = "2024-06-01T00:00:00.000Z";
     const result = applyPlaybackRecorded(items, {
       itemId: "i1",
-      path: "/media/videos/clip.mp4",
       playCount: 5,
       lastPlayedUtc
     });
@@ -95,7 +94,7 @@ describe("libraryProjectionSync", () => {
 
   it("applyPlaybackRecorded leaves playCount and lastPlayedUtc when those fields are missing", () => {
     const items = [item({ playCount: 2, lastPlayedUtcMs: 1000 })];
-    const result = applyPlaybackRecorded(items, { itemId: "i1", path: "/media/videos/clip.mp4" });
+    const result = applyPlaybackRecorded(items, { itemId: "i1" });
     expect(result.changed).toBe(false);
     expect(items[0]?.playCount).toBe(2);
     expect(items[0]?.lastPlayedUtcMs).toBe(1000);

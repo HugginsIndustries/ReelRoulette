@@ -324,7 +324,7 @@ public sealed class LibraryListQueryTests
     }
 
     [Fact]
-    public void ReadPlaybackItem_ReadsThatItemAndSource_ByIdOrPath_WithoutBuildingTheCatalogDocument()
+    public void ReadPlaybackItem_ReadsThatItemAndSource_ById_WithoutBuildingTheCatalogDocument()
     {
         using var dir = new TempDirectory();
         var session = Open(dir);
@@ -341,8 +341,7 @@ public sealed class LibraryListQueryTests
         Assert.True(byId.IsSourceEnabled);
         Assert.Equal(TimeSpan.FromSeconds(12).Ticks, byId.DurationTicks);
 
-        var byPath = session.ReadPlaybackItem("/MEDIA/keep.mp4");
-        Assert.Equal("keep", byPath!.Id);
+        Assert.Null(session.ReadPlaybackItem("/media/keep.mp4"));
         Assert.False(session.ReadPlaybackItem("hidden")!.IsSourceEnabled);
         Assert.True(session.ReadPlaybackItem("ghost")!.IsSourceEnabled);
         Assert.Null(session.ReadPlaybackItem("missing"));
@@ -959,8 +958,7 @@ public sealed class LibraryListQueryTests
         Assert.Equal(-14.0, byId.IntegratedLoudness);
         Assert.Equal(["Ann"], byId.Tags);
 
-        var byPath = session.ReadListedItem("/MEDIA/keep.mp4");
-        Assert.Equal("keep", byPath!.Id);
+        Assert.Null(session.ReadListedItem("/media/keep.mp4"));
         Assert.Null(session.ReadListedItem("missing"));
 
         var host = LibraryCatalogHost.Open(dir.Path);

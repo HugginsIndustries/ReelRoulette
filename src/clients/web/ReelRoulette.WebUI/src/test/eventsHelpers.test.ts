@@ -50,7 +50,7 @@ describe("event helpers", () => {
     expect(refreshOutcome({ isRunning: false, trigger: "manual", stages: [] })).toEqual({ result: "idle" });
   });
 
-  it("builds desktop-parity refresh complete summary segments from stage messages", () => {
+  it("builds refresh complete summary segments from stage messages", () => {
     const outcome = refreshOutcome({
       isRunning: false,
       trigger: "manual",

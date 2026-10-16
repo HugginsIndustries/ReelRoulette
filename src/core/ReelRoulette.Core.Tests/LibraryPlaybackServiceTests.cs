@@ -585,8 +585,8 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         Assert.Null(error);
         Assert.Equal(mediaPath, first!.Id);
 
-        Assert.NotNull(operations.SetFavorite(mediaPath, true));
-        Assert.True(operations.RecordPlayback(mediaPath).Found);
+        Assert.NotNull(operations.SetFavorite("kept", true));
+        Assert.True(operations.RecordPlayback("kept").Found);
         Assert.True(operations.ApplyItemTags(new ApplyItemTagsRequest
         {
             ItemIds = ["kept"],
@@ -600,10 +600,11 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         Assert.Null(playError);
         Assert.Null(code);
         Assert.Equal(mediaPath, played!.Id);
-        Assert.True(playback.TryResolveMediaPath("kept", out var byId));
-        Assert.Equal(mediaPath, byId);
-        Assert.True(playback.TryResolveMediaPath(mediaPath, out var byPath));
-        Assert.Equal(mediaPath, byPath);
+        Assert.StartsWith("/api/media/", played.MediaUrl, StringComparison.Ordinal);
+        Assert.True(playback.TryResolveMediaPath(played.MediaUrl["/api/media/".Length..], out var byToken));
+        Assert.Equal(mediaPath, byToken);
+        Assert.False(playback.TryResolveMediaPath("kept", out _));
+        Assert.False(playback.TryResolveMediaPath(mediaPath, out _));
     }
 
     [Fact]

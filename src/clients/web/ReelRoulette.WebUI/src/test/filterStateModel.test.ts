@@ -32,18 +32,18 @@ import {
 } from "../filter/filterStateModel";
 
 describe("filterStateModel", () => {
-  it("default state serializes core booleans and enums", () => {
+  it("default state serializes core modes and enums", () => {
     const s = createDefaultFilterState();
     const json = serializeFilterStateForApi(s);
-    expect(json.favoritesOnly).toBe(false);
-    expect(json.excludeBlacklisted).toBe(true);
+    expect(json.favoritesMode).toBe("off");
+    expect(json.blacklistedMode).toBe("excluded");
     expect(json.audioFilter).toBe(AUDIO_FILTER.PlayAll);
     expect(json.selectedTags).toEqual([]);
     expect(json).not.toHaveProperty("minDuration");
     expect(json).not.toHaveProperty("maxDuration");
   });
 
-  it("formats duration like desktop (MM:SS under 1h)", () => {
+  it("formats a duration under an hour as MM:SS", () => {
     expect(formatDurationForDisplay(65)).toBe("01:05");
   });
 
@@ -70,7 +70,7 @@ describe("filterStateModel", () => {
     }
   });
 
-  it("reads a server duration's leading numbers, so the desktop's fractional seconds read as whole seconds", () => {
+  it("reads a server duration's leading numbers, so a stored preset's fractional seconds read as whole seconds", () => {
     expect(parseServerDuration("00:01:30.5000000")).toBe(90);
     expect(parseServerDuration("00:01:30")).toBe(90);
     expect(parseServerDuration("01:05")).toBe(65);
@@ -133,32 +133,32 @@ describe("filterStateModel", () => {
     expect(filterStatesEqualForPresetMatch(a, b)).toBe(false);
   });
 
-  it("treats an unset global mode as AND, so a desktop preset saved with null matches an explicit AND but not OR", () => {
-    const desktopPreset = filterStateFromApiObject(JSON.parse('{"selectedTags":["Ann","Bob"],"globalMatchMode":null}'));
+  it("treats an unset global mode as AND, so a preset saved with null matches an explicit AND but not OR", () => {
+    const storedPreset = filterStateFromApiObject(JSON.parse('{"selectedTags":["Ann","Bob"],"globalMatchMode":null}'));
     const and = { ...createDefaultFilterState(), selectedTags: ["Ann", "Bob"], globalMatchMode: true };
     const or = { ...and, globalMatchMode: false };
 
-    expect(desktopPreset.globalMatchMode).toBeNull();
-    expect(filterStatesEqualForPresetMatch(desktopPreset, and)).toBe(true);
-    expect(filterStatesEqualForPresetMatch(and, desktopPreset)).toBe(true);
-    expect(filterStatesEqualForPresetMatch(desktopPreset, or)).toBe(false);
-    expect(resolvePresetAnchor(and, [{ name: "Desktop", filterState: desktopPreset }], null).label).toBe("Desktop");
-    expect(desktopPreset.globalMatchMode).toBeNull();
+    expect(storedPreset.globalMatchMode).toBeNull();
+    expect(filterStatesEqualForPresetMatch(storedPreset, and)).toBe(true);
+    expect(filterStatesEqualForPresetMatch(and, storedPreset)).toBe(true);
+    expect(filterStatesEqualForPresetMatch(storedPreset, or)).toBe(false);
+    expect(resolvePresetAnchor(and, [{ name: "Stored", filterState: storedPreset }], null).label).toBe("Stored");
+    expect(storedPreset.globalMatchMode).toBeNull();
   });
 
-  it("ignores tagMatchMode in saved preset text, so desktop and WebUI presets with the same filter match", () => {
-    const webPreset = filterStateFromApiObject(
+  it("ignores tagMatchMode in saved preset text, so presets saved with different values and the same filter match", () => {
+    const orTextPreset = filterStateFromApiObject(
       JSON.parse('{"selectedTags":["Ann","Bob"],"globalMatchMode":false,"tagMatchMode":1}')
     );
-    const desktopPreset = filterStateFromApiObject(
+    const andTextPreset = filterStateFromApiObject(
       JSON.parse('{"selectedTags":["Ann","Bob"],"globalMatchMode":false,"tagMatchMode":0}')
     );
     const current = { ...createDefaultFilterState(), selectedTags: ["Ann", "Bob"], globalMatchMode: false };
 
-    expect(serializeFilterStateForApi(webPreset)).not.toHaveProperty("tagMatchMode");
-    expect(filterStatesEqualForPresetMatch(webPreset, desktopPreset)).toBe(true);
-    expect(filterStatesEqualForPresetMatch(current, webPreset)).toBe(true);
-    expect(resolvePresetAnchor(current, [{ name: "Web OR", filterState: webPreset }], null).label).toBe("Web OR");
+    expect(serializeFilterStateForApi(orTextPreset)).not.toHaveProperty("tagMatchMode");
+    expect(filterStatesEqualForPresetMatch(orTextPreset, andTextPreset)).toBe(true);
+    expect(filterStatesEqualForPresetMatch(current, orTextPreset)).toBe(true);
+    expect(resolvePresetAnchor(current, [{ name: "Web OR", filterState: orTextPreset }], null).label).toBe("Web OR");
   });
 
   it("the Filter tab has no unsaved changes after switching the global mode away and back from an unset applied filter", () => {
@@ -179,7 +179,7 @@ describe("filterStateModel", () => {
     const body = presetsToPostBody(rows);
     expect(body).toHaveLength(1);
     expect(body[0].name).toBe("P1");
-    expect(body[0].filterState.excludeBlacklisted).toBe(true);
+    expect(body[0].filterState.blacklistedMode).toBe("excluded");
   });
 
   it("the preset dropdown's None selects the default filter and a named preset selects that filter", () => {
@@ -279,13 +279,6 @@ interface FlagModeResolutionCase {
   blacklistedMode: FlagFilterMode;
 }
 
-interface FlagModeProjectionCase {
-  name: string;
-  favoritesMode: FlagFilterMode;
-  blacklistedMode: FlagFilterMode;
-  written: Pick<ApiFilterState, "favoritesMode" | "favoritesOnly" | "blacklistedMode" | "excludeBlacklisted">;
-}
-
 interface EnumValuesCase {
   name: string;
   filter: ApiFilterState;
@@ -294,9 +287,8 @@ interface EnumValuesCase {
   categoryLocalMatchModes: Record<string, number>;
 }
 
-// Core and the desktop read the same fixtures.
+// Core reads the same fixtures.
 const resolutionCases = readFixture<FlagModeResolutionCase[]>("filter-mode-resolution.json");
-const projectionCases = readFixture<FlagModeProjectionCase[]>("filter-mode-projection.json");
 const enumCases = readFixture<EnumValuesCase[]>("filter-enum-values.json");
 
 describe("flag filter mode resolution shared fixture", () => {
@@ -307,19 +299,25 @@ describe("flag filter mode resolution shared fixture", () => {
   });
 });
 
-describe("flag filter mode projection shared fixture", () => {
-  it.each(projectionCases)("$name", ({ favoritesMode, blacklistedMode, written }) => {
-    const json = serializeFilterStateForApi({ ...createDefaultFilterState(), favoritesMode, blacklistedMode });
-    expect({
-      favoritesMode: json.favoritesMode,
-      favoritesOnly: json.favoritesOnly,
-      blacklistedMode: json.blacklistedMode,
-      excludeBlacklisted: json.excludeBlacklisted
-    }).toEqual(written);
-    const read = filterStateFromApiObject(json);
-    expect(read.favoritesMode).toBe(favoritesMode);
-    expect(read.blacklistedMode).toBe(blacklistedMode);
-  });
+const FLAG_MODES: readonly FlagFilterMode[] = ["off", "only", "excluded"];
+const flagModeCombinations = FLAG_MODES.flatMap((favoritesMode) =>
+  FLAG_MODES.map((blacklistedMode) => ({ favoritesMode, blacklistedMode }))
+);
+
+describe("flag filter modes written", () => {
+  it.each(flagModeCombinations)(
+    "writes Favorites $favoritesMode and Blacklisted $blacklistedMode as the modes only, and reads them back",
+    ({ favoritesMode, blacklistedMode }) => {
+      const json = serializeFilterStateForApi({ ...createDefaultFilterState(), favoritesMode, blacklistedMode });
+      expect(json.favoritesMode).toBe(favoritesMode);
+      expect(json.blacklistedMode).toBe(blacklistedMode);
+      expect(json).not.toHaveProperty("favoritesOnly");
+      expect(json).not.toHaveProperty("excludeBlacklisted");
+      const read = filterStateFromApiObject(json);
+      expect(read.favoritesMode).toBe(favoritesMode);
+      expect(read.blacklistedMode).toBe(blacklistedMode);
+    }
+  );
 });
 
 describe("filter enum values shared fixture", () => {
@@ -333,12 +331,14 @@ describe("filter enum values shared fixture", () => {
 });
 
 interface WrittenFilterFixture {
-  desktop: ApiFilterState;
+  oldFields: ApiFilterState;
   webui: ApiFilterState;
 }
 
-// One filter as each client writes it in full. The desktop's tests read the same fixture.
-const writtenFilters = readFixture<WrittenFilterFixture>("filter-state-written.json");
+// One filter as the WebUI writes it in full, and as a release saved it before the Favorites and Blacklisted modes.
+const writtenFilters = JSON.parse(
+  readFileSync(new URL("./fixtures/filter-state-written.json", import.meta.url), "utf8")
+) as WrittenFilterFixture;
 
 /** The fixture's filter: Favorites excluded, Blacklisted only, and a value in every other field. */
 function writtenFixtureFilter(): FilterState {
@@ -361,16 +361,18 @@ function writtenFixtureFilter(): FilterState {
   };
 }
 
-describe("filter state written shared fixture", () => {
+describe("filter state written fixture", () => {
   it("writes the filter as its webui entry", () => {
     expect(serializeFilterStateForApi(writtenFixtureFilter())).toEqual(writtenFilters.webui);
   });
 
-  it.each(projectionCases)("reads its desktop entry with $name", ({ favoritesMode, blacklistedMode, written }) => {
-    const read = filterStateFromApiObject({ ...writtenFilters.desktop, ...written });
-    expect(read.favoritesMode).toBe(favoritesMode);
-    expect(read.blacklistedMode).toBe(blacklistedMode);
-    expect(filterStatesEqualForPresetMatch(read, { ...writtenFixtureFilter(), favoritesMode, blacklistedMode })).toBe(true);
+  it("reads its oldFields entry, saved before the modes, as Favorites only and Blacklisted off", () => {
+    const read = filterStateFromApiObject(writtenFilters.oldFields);
+    expect(read.favoritesMode).toBe("only");
+    expect(read.blacklistedMode).toBe("off");
+    expect(
+      filterStatesEqualForPresetMatch(read, { ...writtenFixtureFilter(), favoritesMode: "only", blacklistedMode: "off" })
+    ).toBe(true);
   });
 });
 

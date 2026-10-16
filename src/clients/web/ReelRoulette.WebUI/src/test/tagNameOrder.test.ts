@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { compareTagNames } from "../library/tagNameOrder";
 
+// Core reads the same fixture.
 const expected: string[] = JSON.parse(
   readFileSync(new URL("../../../../../../shared/fixtures/tag-name-order.json", import.meta.url), "utf8")
 );

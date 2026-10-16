@@ -13,7 +13,6 @@ export interface ItemStateChangedPayload {
 
 export interface PlaybackRecordedPayload {
   itemId?: string | null;
-  path?: string | null;
   playCount?: number | null;
   lastPlayedUtc?: string | number | null;
 }

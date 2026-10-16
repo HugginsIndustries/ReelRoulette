@@ -43,6 +43,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 ### Removed
 
 - **Desktop app:** The desktop app is no longer built or released, and its installers and update feeds stop. ReelRoulette in the browser, installed as an app or not, is the only client on every device.
+- **Desktop-only API:** The routes and fields only the desktop used are gone, and requests name files only by catalog id, except auto-tag apply, which still takes full paths. Clearing every file's playback stats must be asked for explicitly. Filters no longer carry the older `favoritesOnly` and `excludeBlacklisted` fields, though presets saved with them still read. The server's API version is now 2, so an installed desktop app no longer connects to it.
 
 ### Fixed
 

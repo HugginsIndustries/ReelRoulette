@@ -39,7 +39,7 @@ interface RevisionCase {
 }
 
 const revisionCases = JSON.parse(
-  readFileSync(new URL("../../../../../../shared/fixtures/event-revision.json", import.meta.url), "utf8")
+  readFileSync(new URL("./fixtures/event-revision.json", import.meta.url), "utf8")
 ) as RevisionCase[];
 
 const EVENT_TYPES = ["itemStateChanged", "playbackRecorded", "itemTagsChanged", "refreshStatusChanged", "resyncRequired"];
@@ -103,7 +103,7 @@ describe("sseClient", () => {
     const { client, sources, latest, received, onError } = setup();
     client.connect();
     latest().emit("itemStateChanged", 41, { path: "a.mp4", isFavorite: true });
-    latest().emit("playbackRecorded", 42, { path: "b.mp4", playCount: 3 });
+    latest().emit("playbackRecorded", 42, { itemId: "item-b", playCount: 3 });
     const first = latest();
     first.fail();
 
@@ -113,10 +113,10 @@ describe("sseClient", () => {
     expect(sources).toHaveLength(2);
     expect(new URL(latest().url).searchParams.get("lastEventId")).toBe("42");
 
-    latest().emit("itemTagsChanged", 43, { itemIds: ["c.mp4"], addedTags: ["Beach"], removedTags: [] });
+    latest().emit("itemTagsChanged", 43, { resolvedItemIds: ["item-c"], addedTags: ["Beach"], removedTags: [] });
     latest().emit("itemStateChanged", 44, { path: "a.mp4", isFavorite: false });
     expect(received.slice(2)).toEqual([
-      { eventType: "itemTagsChanged", payload: { itemIds: ["c.mp4"], addedTags: ["Beach"], removedTags: [] } },
+      { eventType: "itemTagsChanged", payload: { resolvedItemIds: ["item-c"], addedTags: ["Beach"], removedTags: [] } },
       { eventType: "itemStateChanged", payload: { path: "a.mp4", isFavorite: false } }
     ]);
     expect(client.lastRevision()).toBe(44);
@@ -132,7 +132,7 @@ describe("sseClient", () => {
     expect(new URL(latest().url).searchParams.get("lastEventId")).toBe("500");
 
     latest().emit("resyncRequired", 4, { reason: "revisionGap", lastEventId: 500, currentRevision: 3 });
-    latest().emit("playbackRecorded", 5, { path: "b.mp4" });
+    latest().emit("playbackRecorded", 5, { itemId: "item-b" });
     expect(received.map((entry) => entry.eventType)).toEqual(["itemStateChanged", "resyncRequired", "playbackRecorded"]);
     latest().fail();
     vi.advanceTimersByTime(SSE_RECONNECT_DELAY_MS);

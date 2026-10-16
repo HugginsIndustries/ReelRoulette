@@ -216,11 +216,7 @@ public sealed class LibraryOperationsService
                     TotalMedia = stats.Global.TotalMedia,
                     Favorites = stats.Global.Favorites,
                     Blacklisted = stats.Global.Blacklisted,
-                    UniquePlayedVideos = stats.Global.UniquePlayedVideos,
-                    UniquePlayedPhotos = stats.Global.UniquePlayedPhotos,
                     UniquePlayedMedia = stats.Global.UniquePlayedMedia,
-                    NeverPlayedVideos = stats.Global.NeverPlayedVideos,
-                    NeverPlayedPhotos = stats.Global.NeverPlayedPhotos,
                     NeverPlayedMedia = stats.Global.NeverPlayedMedia,
                     TotalPlays = stats.Global.TotalPlays,
                     VideosWithAudio = stats.Global.VideosWithAudio,
@@ -247,60 +243,43 @@ public sealed class LibraryOperationsService
         }
     }
 
-    public LibraryStateResponse? SetFavorite(string path, bool isFavorite)
+    public LibraryStateResponse? SetFavorite(string itemId, bool isFavorite)
     {
-        return SetFavorite(path, isFavorite, out _);
+        return SetFavorite(itemId, isFavorite, out _);
     }
 
     /// <summary><paramref name="previous"/> is the item's favorite and blacklist before this change.</summary>
-    public LibraryStateResponse? SetFavorite(string path, bool isFavorite, out LibraryStateResponse? previous)
+    public LibraryStateResponse? SetFavorite(string itemId, bool isFavorite, out LibraryStateResponse? previous)
     {
         previous = null;
-        if (string.IsNullOrWhiteSpace(path))
+        if (string.IsNullOrWhiteSpace(itemId))
         {
             return null;
         }
 
         lock (_lock)
         {
-            return UpdateItemFlag(path, () => _catalog.Session.SetFavorite(path, isFavorite), out previous);
+            return UpdateItemFlag(itemId, () => _catalog.Session.SetFavorite(itemId, isFavorite), out previous);
         }
     }
 
-    public LibraryStateResponse? SetBlacklist(string path, bool isBlacklisted)
+    public LibraryStateResponse? SetBlacklist(string itemId, bool isBlacklisted)
     {
-        return SetBlacklist(path, isBlacklisted, out _);
+        return SetBlacklist(itemId, isBlacklisted, out _);
     }
 
     /// <summary><paramref name="previous"/> is the item's favorite and blacklist before this change.</summary>
-    public LibraryStateResponse? SetBlacklist(string path, bool isBlacklisted, out LibraryStateResponse? previous)
+    public LibraryStateResponse? SetBlacklist(string itemId, bool isBlacklisted, out LibraryStateResponse? previous)
     {
         previous = null;
-        if (string.IsNullOrWhiteSpace(path))
+        if (string.IsNullOrWhiteSpace(itemId))
         {
             return null;
         }
 
         lock (_lock)
         {
-            return UpdateItemFlag(path, () => _catalog.Session.SetBlacklist(path, isBlacklisted), out previous);
-        }
-    }
-
-    public IReadOnlyList<LibraryStateResponse> GetLibraryStates(LibraryStatesRequest? request)
-    {
-        lock (_lock)
-        {
-            return _catalog.Session.ReadItemStates(request?.Paths)
-                .Select(item => new LibraryStateResponse
-                {
-                    ItemId = item.Id,
-                    Path = item.FullPath,
-                    IsFavorite = item.IsFavorite,
-                    IsBlacklisted = item.IsBlacklisted,
-                    Revision = 0
-                })
-                .ToList();
+            return UpdateItemFlag(itemId, () => _catalog.Session.SetBlacklist(itemId, isBlacklisted), out previous);
         }
     }
 
@@ -469,21 +448,23 @@ public sealed class LibraryOperationsService
         {
             return new ClearPlaybackStatsResponse
             {
-                ClearedCount = _catalog.Session.ClearPlaybackStats(request.ItemPaths)
+                ClearedCount = request.AllItems
+                    ? _catalog.Session.ClearAllPlaybackStats()
+                    : _catalog.Session.ClearPlaybackStats(request.ItemIds ?? [])
             };
         }
     }
 
-    public RecordPlaybackResult RecordPlayback(string path)
+    public RecordPlaybackResult RecordPlayback(string itemId)
     {
-        if (string.IsNullOrWhiteSpace(path))
+        if (string.IsNullOrWhiteSpace(itemId))
         {
             return new RecordPlaybackResult { Found = false };
         }
 
         lock (_lock)
         {
-            var recorded = _catalog.Session.RecordPlayback(path);
+            var recorded = _catalog.Session.RecordPlayback(itemId);
             if (recorded == null)
             {
                 return new RecordPlaybackResult { Found = false };
@@ -493,7 +474,6 @@ public sealed class LibraryOperationsService
             {
                 Found = true,
                 ItemId = recorded.Id,
-                FullPath = recorded.FullPath,
                 PlayCount = recorded.PlayCount,
                 LastPlayedUtc = recorded.LastPlayedUtc,
                 PreviousLastPlayedUtc = recorded.PreviousLastPlayedUtc
@@ -640,22 +620,9 @@ public sealed class LibraryOperationsService
                 .OrderBy(name => name, TagNameComparer.Instance)
                 .ToList();
 
-            var selectedPaths = (request.ItemIds ?? [])
-                .Where(path => !string.IsNullOrWhiteSpace(path))
-                .ToList();
-            IReadOnlyList<CatalogAutoTagScanItem> scanItems;
-            if (request.ScanFullLibrary)
-            {
-                scanItems = _catalog.Session.ReadAutoTagScanItems(CatalogAutoTagScanScope.All, null);
-            }
-            else if (selectedPaths.Count == 0)
-            {
-                scanItems = _catalog.Session.ReadAutoTagScanItems(CatalogAutoTagScanScope.EnabledSources, null);
-            }
-            else
-            {
-                scanItems = _catalog.Session.ReadAutoTagScanItems(CatalogAutoTagScanScope.Paths, selectedPaths);
-            }
+            var scanItems = _catalog.Session.ReadAutoTagScanItems(request.ScanFullLibrary
+                ? CatalogAutoTagScanScope.All
+                : CatalogAutoTagScanScope.EnabledSources);
 
             var response = new AutoTagScanResponse();
             foreach (var tagName in tags)
@@ -724,14 +691,10 @@ public sealed class LibraryOperationsService
                     ItemPaths = assignment.ItemPaths
                 })
                 .ToList());
-            response.AssignmentsAdded = result.AssignmentsAdded;
-            response.ChangedItemPaths = result.ChangedItemPaths;
-            response.ChangedItemIds = result.ChangedItemIds;
             response.Applied = result.Applied
                 .Select(row => new AutoTagAppliedAssignment
                 {
                     TagName = row.TagName,
-                    ChangedItemPaths = row.ChangedItemPaths,
                     ChangedItemIds = row.ChangedItemIds
                 })
                 .ToList();

@@ -7,7 +7,7 @@ import { createPlayerIndicator } from "../state/lastingStates";
 import { createServerConnection, VERSION_CHECK_TIMEOUT_MS, VERSION_RECHECK_MS } from "../state/serverConnection";
 
 const COMPATIBLE_VERSION = {
-  apiVersion: "1",
+  apiVersion: "2",
   capabilities: [
     "auth.sessionCookie",
     "identity.sessionId",
@@ -152,7 +152,7 @@ describe("createServerConnection", () => {
 
     // The presets wait for the check, since a server that fails it, or has no library, can't give them.
     expect(requests.filter((request) => request !== "POST /api/logs/client")).toEqual(["GET /api/version", "GET /api/presets"]);
-    expect(statuses).toEqual(["Ready", "Ready (API 1)"]);
+    expect(statuses).toEqual(["Ready", "Ready (API 2)"]);
     expect(ready).toHaveBeenCalledTimes(1);
     expect(store.presetMenu.value.entries.map((entry) => entry.label)).toEqual(["None", "Favorites"]);
   });
@@ -618,7 +618,7 @@ describe("createServerConnection", () => {
     expect(count("GET /api/version")).toBe(4);
     expect(ready).toHaveBeenCalledTimes(1);
     expect(count("GET /api/presets")).toBe(1);
-    expect(statuses.filter((status) => status === "Ready (API 1)")).toHaveLength(1);
+    expect(statuses.filter((status) => status === "Ready (API 2)")).toHaveLength(1);
   });
 
   it("loads presets when the version check passes on the event stream opening after it failed at start", async () => {
@@ -685,7 +685,7 @@ describe("createServerConnection", () => {
     expect(ready).toHaveBeenCalledTimes(1);
     expect(count("GET /api/presets")).toBe(1);
     expect(store.presetMenu.value.message).toBe(false);
-    expect(statuses).toContain("Ready (API 1)");
+    expect(statuses).toContain("Ready (API 2)");
   });
 
   it("is not ready again after a check finds no library, until one finds the library ready", async () => {
@@ -709,7 +709,7 @@ describe("createServerConnection", () => {
     await settle();
     expect(ready).toHaveBeenCalledTimes(2);
     expect(count("GET /api/presets")).toBe(2);
-    expect(statuses.filter((status) => status === "Ready (API 1)")).toHaveLength(2);
+    expect(statuses.filter((status) => status === "Ready (API 2)")).toHaveLength(2);
   });
 
   it("pairs with the config token on start, only relaying Paired., then checks the version and reconnects, without the server ready again", async () => {
@@ -759,7 +759,7 @@ describe("createServerConnection", () => {
     await settle();
     expect(ready).toHaveBeenCalledTimes(1);
     expect(count("GET /api/presets")).toBe(1);
-    expect(statuses.filter((status) => status === "Ready (API 1)")).toHaveLength(1);
+    expect(statuses.filter((status) => status === "Ready (API 2)")).toHaveLength(1);
   });
 
   it("sends serverReady and loads presets again once when pairing follows a version check answered with 401", async () => {

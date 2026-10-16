@@ -243,7 +243,7 @@ describe("createPlayer", () => {
     expect(page.player.muted.value).toBe(true);
     await vi.waitFor(() =>
       expect(page.requests("/api/record-playback").map((request) => request.body)).toEqual([
-        { path: "item-video", clientId: "client-1", sessionId: "session-1" }
+        { itemId: "item-video", clientId: "client-1", sessionId: "session-1" }
       ])
     );
     expect(page.relayed).toContain("playback=start attempt=1 hasCurrent=true mediaType=video");
@@ -592,7 +592,7 @@ describe("createPlayer", () => {
     expect(video.paused).toBe(true);
     expect(video.plays).toHaveLength(2);
     expect(page.store.playAttemptId.value).toBe(2);
-    expect(page.requests("/api/record-playback").map((request) => request.body.path)).toEqual(["item-video", "item-other"]);
+    expect(page.requests("/api/record-playback").map((request) => request.body.itemId)).toEqual(["item-video", "item-other"]);
   });
 
   it("disables the scrub bar before anything plays, with the time at 0:00 / 0:00", () => {
@@ -865,11 +865,11 @@ describe("createPlayer", () => {
     page.play(VIDEO);
 
     await page.player.toggleFavorite();
-    expect(page.requests("/api/favorite")[0]!.body).toEqual({ path: "item-video", isFavorite: true, clientId: "client-1" });
+    expect(page.requests("/api/favorite")[0]!.body).toEqual({ itemId: "item-video", isFavorite: true, clientId: "client-1" });
     expect(page.player.favorite.value).toBe(true);
 
     await page.player.toggleBlacklist();
-    expect(page.requests("/api/blacklist")[0]!.body).toEqual({ path: "item-video", isBlacklisted: true, clientId: "client-1" });
+    expect(page.requests("/api/blacklist")[0]!.body).toEqual({ itemId: "item-video", isBlacklisted: true, clientId: "client-1" });
     expect([page.player.favorite.value, page.player.blacklisted.value]).toEqual([false, true]);
 
     page.play(VIDEO);
@@ -950,7 +950,7 @@ describe("createPlayer", () => {
       page.emit("itemStateChanged", { itemId: "item-video", path: "C:\\media\\clip.mp4", isFavorite: false, isBlacklisted: false, ...before });
     change({ previousIsFavorite: false, previousIsBlacklisted: true });
     change({ previousIsFavorite: true, previousIsBlacklisted: false });
-    // A desktop event that doesn't say reads as leaving the favorites, as before.
+    // An event that doesn't say reads as leaving the favorites, as before.
     change({});
     expect(page.notified.map((request) => [request.text, request.detail])).toEqual([
       ["Removed from blacklist on another device", "clip.mp4"],

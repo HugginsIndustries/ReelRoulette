@@ -65,13 +65,12 @@ public sealed class ItemIdContractTests : IDisposable
         Assert.Equal("item-1", Assert.IsType<RandomResponse>(Value(result)).ItemId);
         var payload = Assert.IsType<PlaybackRecordedPayload>(SingleEvent(state, "playbackRecorded").Payload);
         Assert.Equal("item-1", payload.ItemId);
-        Assert.Equal(mediaPath, payload.Path);
         Assert.Equal(1, payload.PlayCount);
         OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(payload), "PlaybackRecordedPayload");
     }
 
     [Fact]
-    public void RecordPlayback_ByItemId_RecordsThatItem_AndNamesItsPath_WhenTwoPathsDifferOnlyInCase()
+    public void RecordPlayback_ByItemId_RecordsThatItem_WhenTwoPathsDifferOnlyInCase()
     {
         var upperPath = Path.Combine(_tempDir, "Clip.mp4");
         var lowerPath = Path.Combine(_tempDir, "clip.mp4");
@@ -85,14 +84,13 @@ public sealed class ItemIdContractTests : IDisposable
         var host = CatalogOpen.Host(_tempDir);
         var state = new ServerStateService();
 
-        var result = ServerHostComposition.RecordPlayback(new RecordPlaybackRequest { Path = "id-lower" }, state, CreateOperations(host));
+        var result = ServerHostComposition.RecordPlayback(new RecordPlaybackRequest { ItemId = "id-lower" }, state, CreateOperations(host));
 
         var response = Assert.IsType<RecordPlaybackResponse>(Value(result));
         Assert.Equal("id-lower", response.ItemId);
         OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(response), "RecordPlaybackResponse");
         var payload = Assert.IsType<PlaybackRecordedPayload>(SingleEvent(state, "playbackRecorded").Payload);
         Assert.Equal("id-lower", payload.ItemId);
-        Assert.Equal(lowerPath, payload.Path);
         OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(payload), "PlaybackRecordedPayload");
         Assert.Equal(0, host.Session.ReadItemState("id-upper")!.PlayCount);
         Assert.Equal(1, host.Session.ReadItemState("id-lower")!.PlayCount);
@@ -106,11 +104,11 @@ public sealed class ItemIdContractTests : IDisposable
         var operations = CreateOperations(CatalogOpen.Host(_tempDir));
         var state = new ServerStateService();
 
-        ServerHostComposition.SetFavorite(new FavoriteRequest { Path = "item-1", IsFavorite = true, ClientId = " client-a " }, state, operations);
-        ServerHostComposition.SetBlacklist(new BlacklistRequest { Path = "item-1", IsBlacklisted = true, ClientId = "client-b" }, state, operations);
-        // A client that names none, such as the desktop, gets an event that names none.
-        ServerHostComposition.SetFavorite(new FavoriteRequest { Path = "item-1", IsFavorite = true }, state, operations);
-        ServerHostComposition.SetBlacklist(new BlacklistRequest { Path = "item-1", IsBlacklisted = true, ClientId = " " }, state, operations);
+        ServerHostComposition.SetFavorite(new FavoriteRequest { ItemId = "item-1", IsFavorite = true, ClientId = " client-a " }, state, operations);
+        ServerHostComposition.SetBlacklist(new BlacklistRequest { ItemId = "item-1", IsBlacklisted = true, ClientId = "client-b" }, state, operations);
+        // A request that names no client, or only a blank one, gets an event that names none.
+        ServerHostComposition.SetFavorite(new FavoriteRequest { ItemId = "item-1", IsFavorite = true }, state, operations);
+        ServerHostComposition.SetBlacklist(new BlacklistRequest { ItemId = "item-1", IsBlacklisted = true, ClientId = " " }, state, operations);
 
         var events = state.GetReplayAfter(0).Events
             .Select(envelope => Assert.IsType<ItemStateChangedPayload>(envelope.Payload))
@@ -129,23 +127,136 @@ public sealed class ItemIdContractTests : IDisposable
     }
 
     [Fact]
-    public void ApplyItemTags_PublishesTheResolvedItemIds_AndKeepsTheRequestedIdentifiers()
+    public void FavoriteBlacklistRecordPlaybackAndPlay_FindNoItemByItsFullPath()
     {
-        var firstPath = Path.Combine(_tempDir, "first.mp4");
+        var path = Path.Combine(_tempDir, "clip.mp4");
+        File.WriteAllBytes(path, [0x01]);
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items: [new SeedItem("item-1", path) { SourceId = "s1", FileName = "clip.mp4" }]);
+        var host = CatalogOpen.Host(_tempDir);
+        var operations = CreateOperations(host);
+        var state = new ServerStateService();
+
+        var results = new[]
+        {
+            ServerHostComposition.SetFavorite(new FavoriteRequest { ItemId = path, IsFavorite = true }, state, operations),
+            ServerHostComposition.SetBlacklist(new BlacklistRequest { ItemId = path, IsBlacklisted = true }, state, operations),
+            ServerHostComposition.RecordPlayback(new RecordPlaybackRequest { ItemId = path }, state, operations),
+            ServerHostComposition.PlayItem(path, null, CreatePlayback(host), operations, state, new OperatorTestingService())
+        };
+
+        Assert.All(results, result => Assert.Equal(StatusCodes.Status404NotFound, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode));
+        Assert.Empty(state.GetReplayAfter(0).Events);
+        var item = host.Session.ReadItemState("item-1")!;
+        Assert.Equal((false, false, 0), (item.IsFavorite, item.IsBlacklisted, item.PlayCount));
+    }
+
+    [Fact]
+    public void FavoriteBlacklistAndRecordPlayback_ReadTheItemIdField_AndClearStatsReadsItemIds()
+    {
         CatalogSeed.Write(
             _tempDir,
             items:
             [
-                new SeedItem("item-1", firstPath),
+                new SeedItem("item-1", Path.Combine(_tempDir, "first.mp4")) { PlayCount = 3 },
+                new SeedItem("item-2", Path.Combine(_tempDir, "second.mp4")) { PlayCount = 5 }
+            ]);
+        var host = CatalogOpen.Host(_tempDir);
+        var operations = CreateOperations(host);
+        var state = new ServerStateService();
+
+        var favorite = Request<FavoriteRequest>("""{"itemId":"item-1","isFavorite":true}""");
+        var blacklist = Request<BlacklistRequest>("""{"itemId":"item-2","isBlacklisted":true}""");
+        var record = Request<RecordPlaybackRequest>("""{"itemId":"item-1"}""");
+        var clear = Request<ClearPlaybackStatsRequest>("""{"itemIds":["item-2"]}""");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(favorite), "FavoriteRequest");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(blacklist), "BlacklistRequest");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(record), "RecordPlaybackRequest");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(clear), "ClearPlaybackStatsRequest");
+
+        Assert.IsType<LibraryStateResponse>(Value(ServerHostComposition.SetFavorite(favorite, state, operations)));
+        Assert.IsType<LibraryStateResponse>(Value(ServerHostComposition.SetBlacklist(blacklist, state, operations)));
+        Assert.IsType<RecordPlaybackResponse>(Value(ServerHostComposition.RecordPlayback(record, state, operations)));
+        Assert.Equal(1, operations.ClearPlaybackStats(clear).ClearedCount);
+
+        var first = host.Session.ReadItemState("item-1")!;
+        var second = host.Session.ReadItemState("item-2")!;
+        Assert.Equal((true, false, 4), (first.IsFavorite, first.IsBlacklisted, first.PlayCount));
+        Assert.Equal((false, true, 0), (second.IsFavorite, second.IsBlacklisted, second.PlayCount));
+
+        // The old field names no longer bind, so a request that sends them names no item.
+        var oldFavorite = Request<FavoriteRequest>("""{"path":"item-1","isFavorite":false}""");
+        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsAssignableFrom<IStatusCodeHttpResult>(
+            ServerHostComposition.SetFavorite(oldFavorite, state, operations)).StatusCode);
+        Assert.Null(Request<ClearPlaybackStatsRequest>("""{"itemPaths":["item-1"]}""").ItemIds);
+    }
+
+    [Fact]
+    public void ClearPlaybackStats_WithAllItems_ClearsEveryItem()
+    {
+        var (host, operations, state) = SeedPlayedItems();
+        var request = Request<ClearPlaybackStatsRequest>("""{"allItems":true}""");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(request), "ClearPlaybackStatsRequest");
+
+        var response = Assert.IsType<ClearPlaybackStatsResponse>(Value(ServerHostComposition.ClearPlaybackStats(request, operations, state)));
+
+        Assert.Equal(2, response.ClearedCount);
+        Assert.Equal((0, 0), (host.Session.ReadItemState("item-1")!.PlayCount, host.Session.ReadItemState("item-2")!.PlayCount));
+        SingleEvent(state, "resyncRequired");
+    }
+
+    [Fact]
+    public void ClearPlaybackStats_WithItemIds_ClearsOnlyThoseItems()
+    {
+        var (host, operations, state) = SeedPlayedItems();
+        var request = Request<ClearPlaybackStatsRequest>("""{"itemIds":["item-2"]}""");
+
+        var response = Assert.IsType<ClearPlaybackStatsResponse>(Value(ServerHostComposition.ClearPlaybackStats(request, operations, state)));
+
+        Assert.Equal(1, response.ClearedCount);
+        Assert.Equal((3, 0), (host.Session.ReadItemState("item-1")!.PlayCount, host.Session.ReadItemState("item-2")!.PlayCount));
+        SingleEvent(state, "resyncRequired");
+    }
+
+    // A request that names no items is refused rather than read as every item, so an old client that sends
+    // `itemPaths`, which this server doesn't read, can't clear the whole library.
+    [Theory]
+    [InlineData("""{}""")]
+    [InlineData("""{"allItems":false}""")]
+    [InlineData("""{"itemIds":null}""")]
+    [InlineData("""{"itemIds":[]}""")]
+    [InlineData("""{"itemIds":["  "]}""")]
+    [InlineData("""{"itemPaths":["item-1"]}""")]
+    [InlineData("""{"allItems":true,"itemIds":["item-1"]}""")]
+    public void ClearPlaybackStats_WithoutExactlyOneOfAllItemsOrItemIds_IsRefusedAndClearsNothing(string json)
+    {
+        var (host, operations, state) = SeedPlayedItems();
+
+        var result = ServerHostComposition.ClearPlaybackStats(Request<ClearPlaybackStatsRequest>(json), operations, state);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+        Assert.Equal((3, 5), (host.Session.ReadItemState("item-1")!.PlayCount, host.Session.ReadItemState("item-2")!.PlayCount));
+        Assert.Empty(state.GetReplayAfter(0).Events);
+    }
+
+    [Fact]
+    public void ApplyItemTags_PublishesTheItemIdsInTheCatalog()
+    {
+        CatalogSeed.Write(
+            _tempDir,
+            items:
+            [
+                new SeedItem("item-1", Path.Combine(_tempDir, "first.mp4")),
                 new SeedItem("item-2", Path.Combine(_tempDir, "second.mp4"))
             ]);
         var state = new ServerStateService();
-        var request = new ApplyItemTagsRequest { ItemIds = [firstPath, "item-2", "missing"], AddTags = ["Night"] };
+        var request = new ApplyItemTagsRequest { ItemIds = ["ITEM-1", "item-2", "missing"], AddTags = ["Night"] };
 
         ServerHostComposition.ApplyItemTags(request, state, CreateOperations(CatalogOpen.Host(_tempDir)));
 
         var payload = Assert.IsType<ItemTagsChangedPayload>(SingleEvent(state, "itemTagsChanged").Payload);
-        Assert.Equal([firstPath, "item-2", "missing"], payload.ItemIds);
         Assert.Equal(["item-1", "item-2"], payload.ResolvedItemIds);
         OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(payload), "ItemTagsChangedPayload");
     }
@@ -177,14 +288,13 @@ public sealed class ItemIdContractTests : IDisposable
             state);
 
         var response = Assert.IsType<AutoTagApplyResponse>(Value(result));
-        Assert.Equal(["item-1"], response.ChangedItemIds);
         var applied = Assert.Single(response.Applied);
         Assert.Equal(["item-1"], applied.ChangedItemIds);
         OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(response), "AutoTagApplyResponse");
         OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(applied), "AutoTagAppliedAssignment");
         var payload = Assert.IsType<ItemTagsChangedPayload>(SingleEvent(state, "itemTagsChanged").Payload);
-        Assert.Equal([catPath], payload.ItemIds);
         Assert.Equal(["item-1"], payload.ResolvedItemIds);
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(payload), "ItemTagsChangedPayload");
     }
 
     [Fact]
@@ -289,9 +399,27 @@ public sealed class ItemIdContractTests : IDisposable
         return Assert.IsAssignableFrom<IValueHttpResult>(result).Value;
     }
 
+    private static T Request<T>(string json)
+    {
+        return System.Text.Json.JsonSerializer.Deserialize<T>(json, OpenApiSpec.ServerJsonOptions)!;
+    }
+
     private static ServerEventEnvelope SingleEvent(ServerStateService state, string eventType)
     {
         return Assert.Single(state.GetReplayAfter(0).Events, envelope => envelope.EventType == eventType);
+    }
+
+    private (LibraryCatalogHost Host, LibraryOperationsService Operations, ServerStateService State) SeedPlayedItems()
+    {
+        CatalogSeed.Write(
+            _tempDir,
+            items:
+            [
+                new SeedItem("item-1", Path.Combine(_tempDir, "first.mp4")) { PlayCount = 3 },
+                new SeedItem("item-2", Path.Combine(_tempDir, "second.mp4")) { PlayCount = 5 }
+            ]);
+        var host = CatalogOpen.Host(_tempDir);
+        return (host, CreateOperations(host), new ServerStateService());
     }
 
     private LibraryOperationsService CreateOperations(LibraryCatalogHost host)

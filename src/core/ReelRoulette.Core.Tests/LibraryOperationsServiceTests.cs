@@ -57,7 +57,7 @@ public sealed class LibraryOperationsServiceTests
             SetBackupTimestampUtc(leftover, DateTime.UtcNow.AddHours(-12));
 
             var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
-            Assert.True(service.RecordPlayback(@"C:\media\movie.mp4").Found);
+            Assert.True(service.RecordPlayback("item-1").Found);
 
             var backupFiles = Directory.GetFiles(backupDir, "other.backup.*");
             Assert.Equal(leftover, Assert.Single(backupFiles));
@@ -92,7 +92,7 @@ public sealed class LibraryOperationsServiceTests
 
             var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var before = DateTime.UtcNow;
-            var result = service.RecordPlayback(@"C:\media\movie.mp4");
+            var result = service.RecordPlayback("item-1");
             var after = DateTime.UtcNow;
 
             Assert.True(result.Found);
@@ -116,7 +116,7 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
-    public void RecordPlayback_ShouldReturnNotFound_WhenPathMissing()
+    public void RecordPlayback_ShouldReturnNotFound_WhenItemMissing()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -125,7 +125,7 @@ public sealed class LibraryOperationsServiceTests
             CatalogSeed.Write(appDataRoot);
 
             var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
-            var result = service.RecordPlayback(@"C:\media\missing.mp4");
+            var result = service.RecordPlayback("missing");
 
             Assert.False(result.Found);
             Assert.Equal(0, result.PlayCount);
@@ -159,7 +159,7 @@ public sealed class LibraryOperationsServiceTests
                 ]);
 
             var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
-            var updated = service.SetFavorite(@"C:\media\movie.mp4", isFavorite: true);
+            var updated = service.SetFavorite("item-1", isFavorite: true);
 
             Assert.NotNull(updated);
             Assert.True(updated!.IsFavorite);
@@ -207,13 +207,13 @@ public sealed class LibraryOperationsServiceTests
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var revision = host.Session.Revision;
 
-            var favorited = service.SetFavorite(@"C:\MEDIA\MOVIE.MP4", isFavorite: true);
+            var favorited = service.SetFavorite("ITEM-1", isFavorite: true);
             Assert.NotNull(favorited);
             Assert.Equal("item-1", favorited!.ItemId);
             Assert.Equal(@"C:\media\movie.mp4", favorited.Path);
             Assert.True(favorited.IsFavorite);
             Assert.False(favorited.IsBlacklisted);
-            var unchanged = service.SetFavorite(@"C:\media\movie.mp4", isFavorite: true);
+            var unchanged = service.SetFavorite("item-1", isFavorite: true);
             Assert.NotNull(unchanged);
             Assert.True(unchanged!.IsFavorite);
             Assert.False(unchanged.IsBlacklisted);
@@ -238,7 +238,7 @@ public sealed class LibraryOperationsServiceTests
 
             var selected = service.ClearPlaybackStats(new ClearPlaybackStatsRequest
             {
-                ItemPaths = [@"C:\media\other.mp4", "missing"]
+                ItemIds = ["item-2", "missing"]
             });
             Assert.Equal(1, selected.ClearedCount);
             Assert.Equal(3, host.Session.ReadItemState("item-1")!.PlayCount);
@@ -246,14 +246,14 @@ public sealed class LibraryOperationsServiceTests
             Assert.Null(host.Session.ReadItemState("item-2")!.LastPlayedUtc);
             Assert.Equal(0, host.Session.ReadItemState("item-3")!.PlayCount);
 
-            var all = service.ClearPlaybackStats(new ClearPlaybackStatsRequest());
+            var all = service.ClearPlaybackStats(new ClearPlaybackStatsRequest { AllItems = true });
             Assert.Equal(1, all.ClearedCount);
             Assert.Equal(0, host.Session.ReadItemState("item-1")!.PlayCount);
             Assert.Null(host.Session.ReadItemState("item-1")!.LastPlayedUtc);
             Assert.Equal(0, host.Session.ReadItemState("item-3")!.PlayCount);
 
             var revisionAfterClear = host.Session.Revision;
-            var none = service.ClearPlaybackStats(new ClearPlaybackStatsRequest { ItemPaths = [] });
+            var none = service.ClearPlaybackStats(new ClearPlaybackStatsRequest { ItemIds = [] });
             Assert.Equal(0, none.ClearedCount);
             Assert.Equal(revisionAfterClear, host.Session.Revision);
         }
@@ -268,7 +268,7 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
-    public void ApplyItemTags_ShouldPersistTagChanges_ForItemIdAndPathInputs()
+    public void ApplyItemTags_ShouldPersistTagChanges_ForItemIdsInAnyCase()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -291,7 +291,7 @@ public sealed class LibraryOperationsServiceTests
             var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var changed = service.ApplyItemTags(new ReelRoulette.Server.Contracts.ApplyItemTagsRequest
             {
-                ItemIds = ["item-1", @"C:\media\two.mp4"],
+                ItemIds = ["item-1", "ITEM-2"],
                 AddTags = ["newTag"],
                 RemoveTags = ["old"]
             });
@@ -466,7 +466,7 @@ public sealed class LibraryOperationsServiceTests
 
             var changed = service.ApplyItemTags(new ApplyItemTagsRequest
             {
-                ItemIds = ["item-1", "/media/two.mp4"],
+                ItemIds = ["item-1", "ITEM-2"],
                 AddTags = ["Fresh"],
                 RemoveTags = ["Old"]
             }, out var catalogChanged);
@@ -479,14 +479,12 @@ public sealed class LibraryOperationsServiceTests
             {
                 Assignments = [new AutoTagAssignment { TagName = "Auto", ItemPaths = ["/media/two.mp4"] }]
             });
-            Assert.Equal(1, applied.AssignmentsAdded);
-            Assert.Equal(["/media/two.mp4"], applied.ChangedItemPaths);
             var appliedRow = Assert.Single(applied.Applied);
             Assert.Equal("Auto", appliedRow.TagName);
-            Assert.Equal(["/media/two.mp4"], appliedRow.ChangedItemPaths);
+            Assert.Equal(["item-2"], appliedRow.ChangedItemIds);
 
-            var model = service.GetTagEditorModel(new TagEditorModelRequest { ItemIds = ["/media/one.mp4", "missing"] });
-            var item = Assert.Single(model.Items, candidate => candidate.ItemId == "/media/one.mp4");
+            var model = service.GetTagEditorModel(new TagEditorModelRequest { ItemIds = ["ITEM-1", "missing"] });
+            var item = Assert.Single(model.Items, candidate => candidate.ItemId == "ITEM-1");
             Assert.Equal(["Newer"], item.Tags);
             Assert.Contains(model.Categories, category => category.Id == "places" && category.Name == "Places");
             Assert.Contains(model.Tags, tag => tag.Name == "Newer" && tag.CategoryId == "places");
@@ -607,11 +605,7 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal(3, stats.Global.TotalMedia);
             Assert.Equal(1, stats.Global.Favorites);
             Assert.Equal(1, stats.Global.Blacklisted);
-            Assert.Equal(1, stats.Global.UniquePlayedVideos);
-            Assert.Equal(1, stats.Global.UniquePlayedPhotos);
             Assert.Equal(2, stats.Global.UniquePlayedMedia);
-            Assert.Equal(1, stats.Global.NeverPlayedVideos);
-            Assert.Equal(0, stats.Global.NeverPlayedPhotos);
             Assert.Equal(1, stats.Global.NeverPlayedMedia);
             Assert.Equal(3, stats.Global.TotalPlays);
             Assert.Equal(1, stats.Global.VideosWithAudio);
@@ -740,7 +734,7 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
-    public void GetLibraryStatsAndItemStates_MatchCurrentFiguresWithoutBuildingTheCatalogDocument()
+    public void GetLibraryStats_MatchesCurrentFiguresWithoutBuildingTheCatalogDocument()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -780,39 +774,14 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal(3, stats.Global.TotalMedia);
             Assert.Equal(0, stats.Global.VideosWithAudio);
             Assert.Equal(1, stats.Global.VideosWithoutAudio);
-            Assert.Equal(1, stats.Global.UniquePlayedVideos);
-            Assert.Equal(0, stats.Global.UniquePlayedPhotos);
+            Assert.Equal(1, stats.Global.UniquePlayedMedia);
             Assert.Equal(4, stats.Global.TotalPlays);
-            Assert.Equal(1, stats.Global.NeverPlayedVideos);
+            Assert.Equal(2, stats.Global.NeverPlayedMedia);
             var source = Assert.Single(stats.Sources);
             Assert.Equal(2, source.TotalVideos);
             Assert.Equal(1, source.TotalPhotos);
             Assert.Equal(180, source.TotalDurationSeconds);
             Assert.Equal(90, source.AverageDurationSeconds);
-
-            var states = service.GetLibraryStates(new ReelRoulette.Server.Contracts.LibraryStatesRequest
-            {
-                Paths = [@"C:\MEDIA\A\FRACTION.MP4", @"C:\media\missing.mp4"]
-            });
-            var state = Assert.Single(states);
-            Assert.Equal("video-fraction", state.ItemId);
-            Assert.Equal(@"C:\media\a\fraction.mp4", state.Path);
-
-            Assert.Empty(service.GetLibraryStates(null));
-            Assert.Empty(service.GetLibraryStates(new ReelRoulette.Server.Contracts.LibraryStatesRequest()));
-            Assert.Empty(service.GetLibraryStates(new ReelRoulette.Server.Contracts.LibraryStatesRequest
-            {
-                Paths = [" ", ""]
-            }));
-
-            var ordered = service.GetLibraryStates(new ReelRoulette.Server.Contracts.LibraryStatesRequest
-            {
-                Paths = [@"C:\media\a\whole.mp4", @"C:\media\a\fraction.mp4"]
-            });
-            Assert.Equal(
-                [@"C:\media\a\fraction.mp4", @"C:\media\a\whole.mp4"],
-                ordered.Select(item => item.Path).ToArray());
-            Assert.DoesNotContain(ordered, item => item.ItemId == "photo-odd");
 
         }
         finally
@@ -856,7 +825,7 @@ public sealed class LibraryOperationsServiceTests
 
             var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var before = Directory.GetFiles(backupDir, "other.backup.*").OrderBy(path => path).ToArray();
-            _ = service.RecordPlayback(@"C:\media\movie.mp4");
+            _ = service.RecordPlayback("item-1");
             var after = Directory.GetFiles(backupDir, "other.backup.*").OrderBy(path => path).ToArray();
 
             Assert.Equal(before, after);
@@ -892,7 +861,7 @@ public sealed class LibraryOperationsServiceTests
             var backupDir = Path.Combine(appDataRoot, "backups");
             var before = Assert.Single(Directory.GetFiles(backupDir, "library.db.backup.*"));
             var bytes = File.ReadAllBytes(before);
-            _ = service.RecordPlayback(@"C:\media\movie.mp4");
+            _ = service.RecordPlayback("item-1");
             LibraryCatalogBackup.WaitForPending();
             var after = Assert.Single(Directory.GetFiles(backupDir, "library.db.backup.*"));
             Assert.Equal(before, after);
@@ -943,7 +912,7 @@ public sealed class LibraryOperationsServiceTests
                 SetBackupTimestampUtc(existing, DateTime.UtcNow.AddHours(-3));
             }
 
-            _ = service.RecordPlayback(@"C:\media\movie.mp4");
+            _ = service.RecordPlayback("item-1");
             LibraryCatalogBackup.WaitForPending();
             var after = Directory.GetFiles(backupDir, "other.backup.*").OrderBy(path => path).ToArray();
 
@@ -989,12 +958,12 @@ public sealed class LibraryOperationsServiceTests
                 SetBackupTimestampUtc(existing, DateTime.UtcNow.AddMinutes(-90));
             }
 
-            _ = service.RecordPlayback(@"C:\media\movie.mp4");
+            _ = service.RecordPlayback("item-1");
             LibraryCatalogBackup.WaitForPending();
             Assert.Single(ListCatalogBackupFiles(backupDir));
 
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 60, numberOfBackups: 8);
-            _ = service.RecordPlayback(@"C:\media\movie.mp4");
+            _ = service.RecordPlayback("item-1");
             LibraryCatalogBackup.WaitForPending();
             var checkpoint = ListCatalogBackupFiles(backupDir)
                 .OrderBy(File.GetLastWriteTimeUtc)
@@ -1039,9 +1008,9 @@ public sealed class LibraryOperationsServiceTests
             var databasePath = Path.Combine(appDataRoot, "library.db");
             using (LibraryCatalogBackup.Defer(databasePath))
             {
-                _ = service.RecordPlayback(@"C:\media\movie.mp4");
+                _ = service.RecordPlayback("item-1");
                 LibraryCatalogBackup.WaitForPending();
-                _ = service.RecordPlayback(@"C:\media\movie.mp4");
+                _ = service.RecordPlayback("item-1");
                 LibraryCatalogBackup.WaitForPending();
                 var during = ListCatalogBackupFiles(backupDir)
                     .OrderBy(File.GetLastWriteTimeUtc)
@@ -1102,7 +1071,7 @@ public sealed class LibraryOperationsServiceTests
             SetBackupTimestampUtc(blocked, DateTime.UtcNow);
             File.SetUnixFileMode(blocked, UnixFileMode.None);
 
-            _ = service.RecordPlayback(@"C:\media\movie.mp4");
+            _ = service.RecordPlayback("item-1");
             LibraryCatalogBackup.WaitForPending();
             Assert.True(File.Exists(blocked));
             var checkpoint = ListCatalogBackupFiles(backupDir)
@@ -1361,14 +1330,11 @@ public sealed class LibraryOperationsServiceTests
             var items = LoadLibrary(appDataRoot).Items;
             Assert.Equal(["keep-1", "missing-1"], items.Select(item => item.Id).ToArray());
 
-            var states = service.GetLibraryStates(new ReelRoulette.Server.Contracts.LibraryStatesRequest
-            {
-                Paths = [keepPath, removePath]
-            });
-            var keptState = Assert.Single(states);
-            Assert.Equal(keepPath, keptState.Path);
+            var keptState = host.Session.ReadItemState("keep-1")!;
+            Assert.Equal(keepPath, keptState.FullPath);
             Assert.True(keptState.IsFavorite);
             Assert.False(keptState.IsBlacklisted);
+            Assert.Null(host.Session.ReadItemState("remove-1"));
         }
         finally
         {
@@ -1543,7 +1509,8 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal(2, gone.PlayCount);
             Assert.Equal(["Keep"], gone.Tags);
 
-            var fresh = host.Session.ReadListedItem(freshPath);
+            var stored = LibraryCatalogStore.Read(host.Session.DatabasePath).Items;
+            var fresh = host.Session.ReadListedItem(Assert.Single(stored, item => item.FullPath == freshPath).Id);
             Assert.NotNull(fresh);
             Assert.NotEqual("kept-1", fresh!.Id);
             Assert.NotEqual("gone-1", fresh.Id);
@@ -1559,7 +1526,7 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal("SHA-256", fresh.FingerprintAlgorithm);
             Assert.Equal(1, fresh.FingerprintVersion);
             Assert.Equal(0, fresh.FingerprintStatus);
-            Assert.Null(host.Session.ReadListedItem(Path.Combine(mediaRoot, "notes.txt")));
+            Assert.DoesNotContain(stored, item => item.FileName == "notes.txt");
 
             var source = Assert.Single(service.GetLibraryStats().Sources);
             Assert.Equal("src-clips", source.SourceId);
@@ -1689,7 +1656,7 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
-    public void ScanAutoTags_ScopeFollowsFullLibraryFlagAndPathList()
+    public void ScanAutoTags_ScopeFollowsFullLibraryFlag()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -1730,7 +1697,7 @@ public sealed class LibraryOperationsServiceTests
 
             var host = LibraryCatalogHost.Open(appDataRoot);
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
-            var enabledOnly = service.ScanAutoTags(new AutoTagScanRequest { ScanFullLibrary = false, ItemIds = [] });
+            var enabledOnly = service.ScanAutoTags(new AutoTagScanRequest { ScanFullLibrary = false });
             var enabledFiles = Assert.Single(enabledOnly.Rows).Files;
             Assert.Equal(
                 ["/media/on/Holiday-a.mp4", "/media/on/Holiday-kept.mp4", "/media/on/plain.mp4"],
@@ -1741,19 +1708,7 @@ public sealed class LibraryOperationsServiceTests
             Assert.Equal(3, enabledRow.TotalMatchedCount);
             Assert.Equal(2, enabledRow.WouldChangeCount);
 
-            var listed = service.ScanAutoTags(new AutoTagScanRequest
-            {
-                ScanFullLibrary = false,
-                ItemIds = ["/MEDIA/OFF/Holiday-b.mp4"]
-            });
-            var listedPaths = listed.Rows.SelectMany(row => row.Files).Select(file => file.FullPath).ToList();
-            Assert.Equal(["/media/off/Holiday-b.mp4"], listedPaths);
-
-            var full = service.ScanAutoTags(new AutoTagScanRequest
-            {
-                ScanFullLibrary = true,
-                ItemIds = ["/media/off/Holiday-b.mp4"]
-            });
+            var full = service.ScanAutoTags(new AutoTagScanRequest { ScanFullLibrary = true });
             var fullPaths = full.Rows.SelectMany(row => row.Files).Select(file => file.FullPath).ToList();
             Assert.Equal(
                 [
@@ -1776,7 +1731,7 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
-    public void ScanAutoTags_WhenNoEnabledSourcesAndNoList_ScansNothing()
+    public void ScanAutoTags_WhenNoEnabledSources_ScansNothing()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -1795,7 +1750,7 @@ public sealed class LibraryOperationsServiceTests
 
             var host = LibraryCatalogHost.Open(appDataRoot);
             var service = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, appDataRoot);
-            var response = service.ScanAutoTags(new AutoTagScanRequest { ScanFullLibrary = false, ItemIds = [] });
+            var response = service.ScanAutoTags(new AutoTagScanRequest { ScanFullLibrary = false });
             Assert.Empty(response.Rows);
         }
         finally

@@ -4,7 +4,7 @@ import { parseUtcMs } from "../library/libraryProjectionModel";
  * When the playing item was last played before this play. Only a playback event carries it, so an event for the item
  * playing sets it, and one for an item that isn't playing yet, as a library play's can be, since the server sends its
  * event before it answers, is held until that item starts. Until an event says, the item's own last-played time
- * stands in. The desktop's Stats panel follows the same rules.
+ * stands in.
  */
 export interface LastPlayedBeforePlay {
   /** The playing item changed, to `itemId` or to nothing. Playing the same item again keeps what an event said. */

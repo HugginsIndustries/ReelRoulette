@@ -19,10 +19,13 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan Dev Script Cleanup after Desktop Client Removal
+M12i4: Name library items only by id in the API, and move the WebUI-only fixtures to its tests
 
-- MILESTONES.md adds Dev Script Cleanup as M12i5, which merges `run-server-rebuild.ps1` into `run-server.ps1` so one command installs the WebUI's packages when they're out of date, rebuilds the WebUI, and runs the server, and updates every reference to the old script.
-- It fixes two ISSUES.md issues: "run-server-rebuild builds without installing packages", with an `npm ci` that runs only when `node_modules` is missing or older than `package-lock.json`, and "Five scripts ignore a switch they don't take", with `[CmdletBinding()]`.
-- ISSUES.md's switch issue adds `verify-web-deploy.ps1`, which also ignores a switch it doesn't take.
-- The entry's Traps carry both issues' facts and the scripts' callers, including that agents must not run `run-server.ps1`, which uses the user's real settings.
-- The seven active milestones after it are renumbered M12i6 through M12i12, and the Planned Releases outline lists the new milestone.
+- `POST /api/library-states`, `PresetResponse.summary`, and the fields only the desktop read are gone: `itemTagsChanged.itemIds`, auto-tag apply's paths, count, and top-level ids, `playbackRecorded.path`, the stats' per-type played counts, and the auto-tag scan's path list with the catalog's path scan.
+- Every route that takes an item id finds it only by its catalog id, so a full path finds nothing there, while auto-tag apply still takes full paths, and `/api/media/{token}` streams only the tokens random and play issue.
+- Favorite, blacklist, and record-playback take `itemId`, and clear playback stats takes `itemIds`, in the server, OpenAPI, the generated types, the WebUI, and the current-state docs.
+- Clear playback stats clears the whole library only with `allItems: true` and refuses a request that names no items, or both, with 400, and the API version is 2 on the server and the WebUI, so an installed desktop refuses the server instead of sending path-named requests or clearing every item's stats.
+- The WebUI writes filters without `favoritesOnly` and `excludeBlacklisted`, and Core loses the methods that wrote them; the parser and the WebUI still read them in stored presets, and the FilterState schema test names them as read but left out of the schema.
+- New server tests show a full path finds no item, the media route refuses an id or a path, the routes read the renamed fields, and clear-stats refuses a request that names no items; a WebUI test shows no mode combination writes an old field. Each failed with the old behavior put back.
+- The five fixtures only the WebUI reads move to its tests, `filter-mode-projection.json` goes with its readers, and `filter-state-written.json` holds a filter saved with only the old fields, so every fixture left in `shared/fixtures/` has a Core and a WebUI reader.
+- The changelog records the API removal, M12i4's Contract and Fixtures slices land, its Mockup slice and Release checks gain the API 2 Diagnostics and a note to reload open pages after the update, and Per-Preset Preset Writes, WebUI Multi-Select and Bulk Actions, and Admin Refresh, Backup, and Duplicate Review follow the changed test, fixture, schema, and clear-stats request.

@@ -403,7 +403,7 @@ export interface paths {
         put?: never;
         /**
          * Read one library item
-         * @description Returns one catalog item by id or full path. The body matches a list-query item, including tags,
+         * @description Returns one catalog item by its catalog id. The body matches a list-query item, including tags,
          *     favorite, blacklist, playback stats, duration, and loudness. Thumbnail layout fields stay on
          *     `POST /api/library/query`.
          */
@@ -515,15 +515,19 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/media/{idOrToken}": {
+    "/api/media/{token}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Stream media by stable item id or issued playback token */
-        get: operations["getMediaByIdOrToken"];
+        /**
+         * Stream media by an issued playback token
+         * @description Streams the file a playback token names. `POST /api/random` and `POST /api/play/{itemId}` issue the
+         *     token in their `mediaUrl`. A catalog item id or a full path is not a token.
+         */
+        get: operations["getMediaByToken"];
         put?: never;
         post?: never;
         delete?: never;
@@ -592,29 +596,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Clear playback stats */
-        post: operations["postClearPlaybackStats"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/library-states": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
         /**
-         * Fetch item state for requested paths
-         * @description Returns favorite and blacklist state for the requested item paths.
-         *     An empty path list returns no items. The read does not load the full catalog.
+         * Clear playback stats
+         * @description Clears the play count and last-played time of the items in `itemIds`, or of every item with
+         *     `allItems: true`. A request with neither, or with both, is refused and clears nothing, so a request
+         *     that names no items never clears the whole library.
          */
-        post: operations["postLibraryStates"];
+        post: operations["postClearPlaybackStats"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1160,36 +1148,28 @@ export interface components {
         /**
          * @description A library filter, as clients send it and presets store it. Browse, its counts, and random picks apply
          *     it the same way. Every field is optional, so `{}` is a valid filter, and each field's default applies
-         *     when it is missing, or null where the field allows it. Fields not listed here are allowed and ignored.
+         *     when it is missing, or null where the field allows it. Fields not listed here are allowed and ignored,
+         *     except the older `favoritesOnly` and `excludeBlacklisted`, read as `favoritesMode` and `blacklistedMode`
+         *     describe.
          */
         FilterState: {
             /**
              * @description How the filter treats favorites: `off` ignores them, `only` keeps only favorites, and `excluded` leaves
              *     them out. Read in any case. Another value, including null or a number, counts as missing. When
-             *     missing, `favoritesOnly` decides.
+             *     missing, a preset stored before the modes is read from its older `favoritesOnly` field: true is
+             *     `only`, and false or missing is `off`. No client writes `favoritesOnly` now.
              * @enum {string}
              */
             favoritesMode?: "off" | "only" | "excluded";
             /**
              * @description How the filter treats blacklisted items: `off` ignores them, `only` keeps only blacklisted items, and
              *     `excluded` leaves them out. Read in any case. Another value, including null or a number, counts as
-             *     missing. When missing, `excludeBlacklisted` decides. An item is never both favorite and blacklisted, so
-             *     `favoritesMode` `only` with `only` here matches nothing.
+             *     missing. When missing, a preset stored before the modes is read from its older `excludeBlacklisted`
+             *     field: false is `off`, and true or missing is `excluded`. No client writes `excludeBlacklisted` now. An
+             *     item is never both favorite and blacklisted, so `favoritesMode` `only` with `only` here matches nothing.
              * @enum {string}
              */
             blacklistedMode?: "off" | "only" | "excluded";
-            /**
-             * @description The older form of `favoritesMode`, used only when that field is missing: true is `only`, and false or
-             *     missing is `off`. Write it beside `favoritesMode`, true only for `only`, so a reader that knows only
-             *     this field matches more items, never fewer.
-             */
-            favoritesOnly?: boolean;
-            /**
-             * @description The older form of `blacklistedMode`, used only when that field is missing: false is `off`, and true
-             *     or missing is `excluded`. Write it beside `blacklistedMode`, true only for `excluded`, so a reader
-             *     that knows only this field matches more items, never fewer.
-             */
-            excludeBlacklisted?: boolean;
             /** @description Only items never played. Defaults to false. */
             onlyNeverPlayed?: boolean;
             /** @description Only videos with a known duration. Photos always pass. Defaults to false. */
@@ -1241,8 +1221,6 @@ export interface components {
         PresetResponse: {
             id: string;
             name: string;
-            /** @description Always null. The server never fills it. */
-            summary?: string | null;
             /** @description The filter the preset was saved with, as it was posted, with later tag renames and deletions applied. */
             filterState?: components["schemas"]["FilterState"] | null;
         };
@@ -1271,8 +1249,8 @@ export interface components {
         LibraryQueryRequest: {
             /**
              * @description Omitted or null applies no filter predicates, so blacklisted items are listed. A present object uses
-             *     the same field defaults as playback filters, so blacklisted items are left out when neither
-             *     `blacklistedMode` nor `excludeBlacklisted` says otherwise.
+             *     the same field defaults as playback filters, so blacklisted items are left out when `blacklistedMode`
+             *     doesn't say otherwise.
              */
             filterState?: components["schemas"]["FilterState"] | null;
             /** @description Filename or relative-path substring. Blank or whitespace matches every enabled-source item. */
@@ -1313,7 +1291,7 @@ export interface components {
             searchBaselineCount: number;
         };
         LibraryItemReadRequest: {
-            /** @description Catalog item id or full path. */
+            /** @description Catalog item id. */
             id: string;
         };
         /** @description One library item. List query adds thumbnail layout fields at serve time. Those fields are not stored in the catalog and are not part of the single-item read. */
@@ -1395,13 +1373,15 @@ export interface components {
             isBlacklisted: boolean;
         };
         FavoriteRequest: {
-            path: string;
+            /** @description Catalog item id. */
+            itemId: string;
             isFavorite: boolean;
             /** @description The client making the change, which `itemStateChanged` names. */
             clientId?: string | null;
         };
         BlacklistRequest: {
-            path: string;
+            /** @description Catalog item id. */
+            itemId: string;
             isBlacklisted: boolean;
             /** @description The client making the change, which `itemStateChanged` names. */
             clientId?: string | null;
@@ -1409,7 +1389,8 @@ export interface components {
         RecordPlaybackRequest: {
             clientId?: string | null;
             sessionId?: string | null;
-            path: string;
+            /** @description Catalog item id. */
+            itemId: string;
         };
         RecordPlaybackResponse: {
             accepted: boolean;
@@ -1431,8 +1412,12 @@ export interface components {
              */
             lastPlayedUtc?: string | null;
         };
+        /** @description Names either `allItems` or `itemIds`, never both. */
         ClearPlaybackStatsRequest: {
-            itemPaths?: string[] | null;
+            /** @description True clears every item's playback stats. Defaults to false. */
+            allItems?: boolean;
+            /** @description Catalog item ids whose playback stats to clear. An id not in the catalog is skipped. */
+            itemIds?: string[] | null;
         };
         ClearPlaybackStatsResponse: {
             /** Format: int32 */
@@ -1461,8 +1446,6 @@ export interface components {
         PlaybackRecordedPayload: {
             /** @description Catalog item id of the file that was played. */
             itemId: string;
-            /** @description Full path of the file that was played. */
-            path: string;
             clientId?: string | null;
             sessionId?: string | null;
             /**
@@ -1493,11 +1476,6 @@ export interface components {
         StreamOpenedPayload: {
             /** Format: int64 */
             currentRevision: number;
-        };
-        LibraryStatesRequest: {
-            clientId?: string | null;
-            sessionId?: string | null;
-            paths?: string[] | null;
         };
         LibraryStateResponse: {
             itemId: string;
@@ -1624,15 +1602,7 @@ export interface components {
             /** Format: int32 */
             blacklisted: number;
             /** Format: int32 */
-            uniquePlayedVideos: number;
-            /** Format: int32 */
-            uniquePlayedPhotos: number;
-            /** Format: int32 */
             uniquePlayedMedia: number;
-            /** Format: int32 */
-            neverPlayedVideos: number;
-            /** Format: int32 */
-            neverPlayedPhotos: number;
             /** Format: int32 */
             neverPlayedMedia: number;
             /** Format: int32 */
@@ -1713,10 +1683,8 @@ export interface components {
             reason: string;
         };
         AutoTagScanRequest: {
-            /** @description When true, scan every item and ignore itemIds. When false with no itemIds, scan enabled sources only. A non-empty itemIds list is full paths to scan. */
+            /** @description When true, scan every item. When false, scan enabled sources only. */
             scanFullLibrary?: boolean;
-            /** @description Full paths. Used only when scanFullLibrary is false and the list is non-empty. */
-            itemIds?: string[];
         };
         AutoTagScanResponse: {
             rows: components["schemas"]["AutoTagMatchRowResponse"][];
@@ -1744,17 +1712,10 @@ export interface components {
         };
         AutoTagAppliedAssignment: {
             tagName: string;
-            /** @description Files that gained this tag. */
-            changedItemPaths: string[];
             /** @description Catalog item ids of the files that gained this tag. */
             changedItemIds: string[];
         };
         AutoTagApplyResponse: {
-            /** Format: int32 */
-            assignmentsAdded: number;
-            changedItemPaths: string[];
-            /** @description Catalog item ids of the files that gained a tag. */
-            changedItemIds: string[];
             /** @description One entry per tag that was newly written, listing only the files that gained that tag. */
             applied: components["schemas"]["AutoTagAppliedAssignment"][];
         };
@@ -1794,9 +1755,7 @@ export interface components {
             itemCount: number;
         };
         ItemTagsChangedPayload: {
-            /** @description The files as the change named them. A tag apply lists the item ids or full paths the request sent, and auto-tag apply lists full paths. */
-            itemIds: string[];
-            /** @description Catalog item ids of the listed files that are in the catalog. */
+            /** @description Catalog item ids of the files the change applies to. */
             resolvedItemIds: string[];
             addedTags: string[];
             removedTags: string[];
@@ -3067,12 +3026,13 @@ export interface operations {
             503: components["responses"]["LibraryUnavailable"];
         };
     };
-    getMediaByIdOrToken: {
+    getMediaByToken: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                idOrToken: string;
+                /** @description A playback token from a `mediaUrl`. */
+                token: string;
             };
             cookie?: never;
         };
@@ -3096,7 +3056,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Media not found */
+            /** @description Unknown token, or the file is not found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3128,7 +3088,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Invalid request */
+            /** @description Missing item id */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3139,6 +3099,15 @@ export interface operations {
             };
             /** @description Unauthorized when auth is required and request is not paired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No catalog item has this id */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3169,7 +3138,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Invalid request */
+            /** @description Missing item id */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3180,6 +3149,15 @@ export interface operations {
             };
             /** @description Unauthorized when auth is required and request is not paired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No catalog item has this id */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3212,7 +3190,7 @@ export interface operations {
                     "application/json": components["schemas"]["RecordPlaybackResponse"];
                 };
             };
-            /** @description Invalid request */
+            /** @description Missing item id */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3223,6 +3201,15 @@ export interface operations {
             };
             /** @description Unauthorized when auth is required and request is not paired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No catalog item has this id */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3255,38 +3242,13 @@ export interface operations {
                     "application/json": components["schemas"]["ClearPlaybackStatsResponse"];
                 };
             };
-            /** @description Unauthorized when auth is required and request is not paired */
-            401: {
+            /** @description Neither `allItems` nor any item id, or both */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            503: components["responses"]["LibraryUnavailable"];
-        };
-    };
-    postLibraryStates: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LibraryStatesRequest"];
-            };
-        };
-        responses: {
-            /** @description State snapshots for the requested paths. An empty path list returns no items. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LibraryStateResponse"][];
                 };
             };
             /** @description Unauthorized when auth is required and request is not paired */

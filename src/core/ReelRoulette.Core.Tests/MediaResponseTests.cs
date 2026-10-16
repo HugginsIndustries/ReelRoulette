@@ -50,6 +50,39 @@ public sealed class MediaResponseTests : IDisposable
         Assert.True(connection.Aborted);
     }
 
+    [Fact]
+    public async Task TheMediaRouteStreamsAnIssuedToken_AndRefusesAnItemIdOrAFullPath()
+    {
+        var mediaPath = Path.Combine(_appData, "clip.mp4");
+        File.WriteAllBytes(mediaPath, [0x01, 0x02, 0x03]);
+        CatalogSeed.Write(
+            _appData,
+            sources: [new SeedSource("s1", _appData)],
+            items: [new SeedItem("item-1", mediaPath) { SourceId = "s1", FileName = "clip.mp4" }]);
+        var playback = new LibraryPlaybackService(new ServerMediaTokenStore(), NullLogger<LibraryPlaybackService>.Instance, CatalogOpen.Host(_appData));
+        Assert.True(playback.TryPlayItem("item-1", forceMediaMissing: false, out var played, out _, out _, out _));
+        var token = played!.MediaUrl["/api/media/".Length..];
+
+        var (tokenStatus, tokenBody) = await Serve(token);
+        Assert.Equal(StatusCodes.Status200OK, tokenStatus);
+        Assert.Equal([0x01, 0x02, 0x03], tokenBody);
+        Assert.Equal(StatusCodes.Status404NotFound, (await Serve("item-1")).Status);
+        Assert.Equal(StatusCodes.Status404NotFound, (await Serve(mediaPath)).Status);
+
+        async Task<(int Status, byte[] Body)> Serve(string requested)
+        {
+            var context = new DefaultHttpContext
+            {
+                RequestServices = new ServiceCollection().AddLogging().BuildServiceProvider()
+            };
+            using var body = new MemoryStream();
+            context.Response.Body = body;
+            var result = ServerHostComposition.ServeMedia(context, requested, playback, new OperatorTestingService(), CancellationToken.None);
+            await result.ExecuteAsync(context);
+            return (context.Response.StatusCode, body.ToArray());
+        }
+    }
+
     public void Dispose()
     {
         LibraryCatalogBackup.WaitForPending();

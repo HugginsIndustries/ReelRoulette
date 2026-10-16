@@ -2,7 +2,7 @@
 const KEY_PREFIX = "rr_device.";
 
 /**
- * What the WebUI remembers on this device across a page refresh, as the desktop remembers its own across restarts.
+ * What the WebUI remembers on this device across a page refresh.
  * Each setting is one entry, kept as JSON. Browser storage is kept per address, so the WebUI opened at another address
  * on the same device remembers its own.
  */

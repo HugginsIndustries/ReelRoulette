@@ -292,7 +292,7 @@ describe("random pick", () => {
       randomizationMode: "SmartShuffle"
     });
     expect(pick.presetId).toBeUndefined();
-    expect(pick.filterState.favoritesOnly).toBe(false);
+    expect(pick.filterState.favoritesMode).toBe("off");
     expect(video().src).toBe(VIDEO_URL);
     expect(video().style.display).toBe("block");
     expect(seekSlider().disabled).toBe(false);
@@ -300,7 +300,7 @@ describe("random pick", () => {
     expect(photo().style.display).toBe("none");
     expect(video().paused).toBe(false);
     expect(server.requests("POST", "/api/record-playback").map((call) => call.body)).toEqual([
-      { path: "item-video", clientId: page.clientId(), sessionId: page.sessionId() }
+      { itemId: "item-video", clientId: page.clientId(), sessionId: page.sessionId() }
     ]);
     // Playing is the normal state, which shows nothing and only relays.
     await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Playing", VIDEO_ITEM, 1)));
@@ -534,21 +534,21 @@ describe("favorite and blacklist", () => {
 
     await click(emptyState());
     await click(button("Favorite"));
-    expect(server.requests("POST", "/api/favorite")[0]!.body).toEqual({ path: "item-video", isFavorite: true, clientId });
+    expect(server.requests("POST", "/api/favorite")[0]!.body).toEqual({ itemId: "item-video", isFavorite: true, clientId });
     expect(isLit("Favorite")).toBe(true);
 
     await click(button("Blacklist"));
-    expect(server.requests("POST", "/api/blacklist")[0]!.body).toEqual({ path: "item-video", isBlacklisted: true, clientId });
+    expect(server.requests("POST", "/api/blacklist")[0]!.body).toEqual({ itemId: "item-video", isBlacklisted: true, clientId });
     expect(isLit("Blacklist")).toBe(true);
     expect(isLit("Favorite")).toBe(false);
 
     await click(button("Favorite"));
-    expect(server.requests("POST", "/api/favorite")[1]!.body).toEqual({ path: "item-video", isFavorite: true, clientId });
+    expect(server.requests("POST", "/api/favorite")[1]!.body).toEqual({ itemId: "item-video", isFavorite: true, clientId });
     expect(isLit("Favorite")).toBe(true);
     expect(isLit("Blacklist")).toBe(false);
 
     await click(button("Favorite"));
-    expect(server.requests("POST", "/api/favorite")[2]!.body).toEqual({ path: "item-video", isFavorite: false, clientId });
+    expect(server.requests("POST", "/api/favorite")[2]!.body).toEqual({ itemId: "item-video", isFavorite: false, clientId });
     expect(isLit("Favorite")).toBe(false);
 
     await click(button("Blacklist"));

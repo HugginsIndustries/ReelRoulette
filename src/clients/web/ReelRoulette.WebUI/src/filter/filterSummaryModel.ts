@@ -20,7 +20,7 @@ function counted(count: number, noun: string): string {
  * The applied filters as the Library tab's Filters line names them, in order: Favorites only or excluded, Blacklisted
  * only, each checked Basic Filters option by its label, a media type or audio choice other than the first, the sources
  * checked out of all, the minimum and maximum duration, and the included and excluded tags. Blacklisted excluded, the
- * default, isn't named, as the desktop's summary doesn't name it. Empty when no filter applies.
+ * default, isn't named. Empty when no filter applies.
  *
  * `sources` is the list the Filter tab shows, or null while it isn't known, when the sources are only counted.
  */

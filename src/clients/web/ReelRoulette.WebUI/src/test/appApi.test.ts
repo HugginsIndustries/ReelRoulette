@@ -21,14 +21,14 @@ describe("createAppApi", () => {
   it("posts JSON with credentials", async () => {
     const { calls, fetchImpl } = recordingFetch(() => new Response("{}"));
     const api = createAppApi("http://localhost:51301", { onUnauthorized: () => {}, fetch: fetchImpl });
-    await api.post("/api/favorite", { path: "item-1", isFavorite: true });
+    await api.post("/api/favorite", { itemId: "item-1", isFavorite: true });
 
     expect(calls[0]!.url).toBe("http://localhost:51301/api/favorite");
     expect(calls[0]!.init).toMatchObject({
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: "item-1", isFavorite: true })
+      body: JSON.stringify({ itemId: "item-1", isFavorite: true })
     });
   });
 

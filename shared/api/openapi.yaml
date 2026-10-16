@@ -680,7 +680,7 @@ paths:
     post:
       summary: Read one library item
       description: |
-        Returns one catalog item by id or full path. The body matches a list-query item, including tags,
+        Returns one catalog item by its catalog id. The body matches a list-query item, including tags,
         favorite, blacklist, playback stats, duration, and loudness. Thumbnail layout fields stay on
         `POST /api/library/query`.
       operationId: postLibraryItem
@@ -916,16 +916,20 @@ paths:
         "503":
           $ref: "#/components/responses/LibraryUnavailable"
 
-  /api/media/{idOrToken}:
+  /api/media/{token}:
     get:
-      summary: Stream media by stable item id or issued playback token
-      operationId: getMediaByIdOrToken
+      summary: Stream media by an issued playback token
+      description: |
+        Streams the file a playback token names. `POST /api/random` and `POST /api/play/{itemId}` issue the
+        token in their `mediaUrl`. A catalog item id or a full path is not a token.
+      operationId: getMediaByToken
       parameters:
-        - name: idOrToken
+        - name: token
           in: path
           required: true
           schema:
             type: string
+          description: A playback token from a `mediaUrl`.
       responses:
         "200":
           description: Media stream response with range support
@@ -941,7 +945,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: Media not found
+          description: Unknown token, or the file is not found
           content:
             application/json:
               schema:
@@ -963,13 +967,19 @@ paths:
         "200":
           description: Favorite updated
         "400":
-          description: Invalid request
+          description: Missing item id
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No catalog item has this id
           content:
             application/json:
               schema:
@@ -991,13 +1001,19 @@ paths:
         "200":
           description: Blacklist updated
         "400":
-          description: Invalid request
+          description: Missing item id
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No catalog item has this id
           content:
             application/json:
               schema:
@@ -1023,7 +1039,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RecordPlaybackResponse"
         "400":
-          description: Invalid request
+          description: Missing item id
           content:
             application/json:
               schema:
@@ -1034,12 +1050,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No catalog item has this id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "503":
           $ref: "#/components/responses/LibraryUnavailable"
 
   /api/playback/clear-stats:
     post:
       summary: Clear playback stats
+      description: |
+        Clears the play count and last-played time of the items in `itemIds`, or of every item with
+        `allItems: true`. A request with neither, or with both, is refused and clears nothing, so a request
+        that names no items never clears the whole library.
       operationId: postClearPlaybackStats
       requestBody:
         required: true
@@ -1054,37 +1080,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClearPlaybackStatsResponse"
-        "401":
-          description: Unauthorized when auth is required and request is not paired
+        "400":
+          description: Neither `allItems` nor any item id, or both
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "503":
-          $ref: "#/components/responses/LibraryUnavailable"
-
-  /api/library-states:
-    post:
-      summary: Fetch item state for requested paths
-      operationId: postLibraryStates
-      description: |
-        Returns favorite and blacklist state for the requested item paths.
-        An empty path list returns no items. The read does not load the full catalog.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LibraryStatesRequest"
-      responses:
-        "200":
-          description: State snapshots for the requested paths. An empty path list returns no items.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/LibraryStateResponse"
         "401":
           description: Unauthorized when auth is required and request is not paired
           content:
@@ -2108,7 +2109,9 @@ components:
       description: |
         A library filter, as clients send it and presets store it. Browse, its counts, and random picks apply
         it the same way. Every field is optional, so `{}` is a valid filter, and each field's default applies
-        when it is missing, or null where the field allows it. Fields not listed here are allowed and ignored.
+        when it is missing, or null where the field allows it. Fields not listed here are allowed and ignored,
+        except the older `favoritesOnly` and `excludeBlacklisted`, read as `favoritesMode` and `blacklistedMode`
+        describe.
       properties:
         favoritesMode:
           type: string
@@ -2119,7 +2122,8 @@ components:
           description: |
             How the filter treats favorites: `off` ignores them, `only` keeps only favorites, and `excluded` leaves
             them out. Read in any case. Another value, including null or a number, counts as missing. When
-            missing, `favoritesOnly` decides.
+            missing, a preset stored before the modes is read from its older `favoritesOnly` field: true is
+            `only`, and false or missing is `off`. No client writes `favoritesOnly` now.
         blacklistedMode:
           type: string
           enum:
@@ -2129,20 +2133,9 @@ components:
           description: |
             How the filter treats blacklisted items: `off` ignores them, `only` keeps only blacklisted items, and
             `excluded` leaves them out. Read in any case. Another value, including null or a number, counts as
-            missing. When missing, `excludeBlacklisted` decides. An item is never both favorite and blacklisted, so
-            `favoritesMode` `only` with `only` here matches nothing.
-        favoritesOnly:
-          type: boolean
-          description: |
-            The older form of `favoritesMode`, used only when that field is missing: true is `only`, and false or
-            missing is `off`. Write it beside `favoritesMode`, true only for `only`, so a reader that knows only
-            this field matches more items, never fewer.
-        excludeBlacklisted:
-          type: boolean
-          description: |
-            The older form of `blacklistedMode`, used only when that field is missing: false is `off`, and true
-            or missing is `excluded`. Write it beside `blacklistedMode`, true only for `excluded`, so a reader
-            that knows only this field matches more items, never fewer.
+            missing. When missing, a preset stored before the modes is read from its older `excludeBlacklisted`
+            field: false is `off`, and true or missing is `excluded`. No client writes `excludeBlacklisted` now. An
+            item is never both favorite and blacklisted, so `favoritesMode` `only` with `only` here matches nothing.
         onlyNeverPlayed:
           type: boolean
           description: Only items never played. Defaults to false.
@@ -2228,10 +2221,6 @@ components:
           type: string
         name:
           type: string
-        summary:
-          type: string
-          nullable: true
-          description: Always null. The server never fills it.
         filterState:
           anyOf:
             - $ref: "#/components/schemas/FilterState"
@@ -2300,8 +2289,8 @@ components:
             - type: "null"
           description: |
             Omitted or null applies no filter predicates, so blacklisted items are listed. A present object uses
-            the same field defaults as playback filters, so blacklisted items are left out when neither
-            `blacklistedMode` nor `excludeBlacklisted` says otherwise.
+            the same field defaults as playback filters, so blacklisted items are left out when `blacklistedMode`
+            doesn't say otherwise.
         search:
           type: string
           nullable: true
@@ -2360,7 +2349,7 @@ components:
       properties:
         id:
           type: string
-          description: Catalog item id or full path.
+          description: Catalog item id.
 
     LibraryProjectionItem:
       type: object
@@ -2490,11 +2479,12 @@ components:
     FavoriteRequest:
       type: object
       required:
-        - path
+        - itemId
         - isFavorite
       properties:
-        path:
+        itemId:
           type: string
+          description: Catalog item id.
         isFavorite:
           type: boolean
         clientId:
@@ -2505,11 +2495,12 @@ components:
     BlacklistRequest:
       type: object
       required:
-        - path
+        - itemId
         - isBlacklisted
       properties:
-        path:
+        itemId:
           type: string
+          description: Catalog item id.
         isBlacklisted:
           type: boolean
         clientId:
@@ -2520,7 +2511,7 @@ components:
     RecordPlaybackRequest:
       type: object
       required:
-        - path
+        - itemId
       properties:
         clientId:
           type: string
@@ -2528,8 +2519,9 @@ components:
         sessionId:
           type: string
           nullable: true
-        path:
+        itemId:
           type: string
+          description: Catalog item id.
 
     RecordPlaybackResponse:
       type: object
@@ -2560,10 +2552,15 @@ components:
 
     ClearPlaybackStatsRequest:
       type: object
+      description: Names either `allItems` or `itemIds`, never both.
       properties:
-        itemPaths:
+        allItems:
+          type: boolean
+          description: True clears every item's playback stats. Defaults to false.
+        itemIds:
           type: array
           nullable: true
+          description: Catalog item ids whose playback stats to clear. An id not in the catalog is skipped.
           items:
             type: string
 
@@ -2636,14 +2633,10 @@ components:
       type: object
       required:
         - itemId
-        - path
       properties:
         itemId:
           type: string
           description: Catalog item id of the file that was played.
-        path:
-          type: string
-          description: Full path of the file that was played.
         clientId:
           type: string
           nullable: true
@@ -2692,21 +2685,6 @@ components:
         currentRevision:
           type: integer
           format: int64
-
-    LibraryStatesRequest:
-      type: object
-      properties:
-        clientId:
-          type: string
-          nullable: true
-        sessionId:
-          type: string
-          nullable: true
-        paths:
-          type: array
-          items:
-            type: string
-          nullable: true
 
     LibraryStateResponse:
       type: object
@@ -2962,11 +2940,7 @@ components:
         - totalMedia
         - favorites
         - blacklisted
-        - uniquePlayedVideos
-        - uniquePlayedPhotos
         - uniquePlayedMedia
-        - neverPlayedVideos
-        - neverPlayedPhotos
         - neverPlayedMedia
         - totalPlays
         - videosWithAudio
@@ -2988,19 +2962,7 @@ components:
         blacklisted:
           type: integer
           format: int32
-        uniquePlayedVideos:
-          type: integer
-          format: int32
-        uniquePlayedPhotos:
-          type: integer
-          format: int32
         uniquePlayedMedia:
-          type: integer
-          format: int32
-        neverPlayedVideos:
-          type: integer
-          format: int32
-        neverPlayedPhotos:
           type: integer
           format: int32
         neverPlayedMedia:
@@ -3177,12 +3139,7 @@ components:
       properties:
         scanFullLibrary:
           type: boolean
-          description: When true, scan every item and ignore itemIds. When false with no itemIds, scan enabled sources only. A non-empty itemIds list is full paths to scan.
-        itemIds:
-          type: array
-          description: Full paths. Used only when scanFullLibrary is false and the list is non-empty.
-          items:
-            type: string
+          description: When true, scan every item. When false, scan enabled sources only.
 
     AutoTagScanResponse:
       type: object
@@ -3245,15 +3202,10 @@ components:
 
     AutoTagAppliedAssignment:
       type: object
-      required: [tagName, changedItemPaths, changedItemIds]
+      required: [tagName, changedItemIds]
       properties:
         tagName:
           type: string
-        changedItemPaths:
-          type: array
-          description: Files that gained this tag.
-          items:
-            type: string
         changedItemIds:
           type: array
           description: Catalog item ids of the files that gained this tag.
@@ -3262,20 +3214,8 @@ components:
 
     AutoTagApplyResponse:
       type: object
-      required: [assignmentsAdded, changedItemPaths, changedItemIds, applied]
+      required: [applied]
       properties:
-        assignmentsAdded:
-          type: integer
-          format: int32
-        changedItemPaths:
-          type: array
-          items:
-            type: string
-        changedItemIds:
-          type: array
-          description: Catalog item ids of the files that gained a tag.
-          items:
-            type: string
         applied:
           type: array
           description: One entry per tag that was newly written, listing only the files that gained that tag.
@@ -3359,16 +3299,11 @@ components:
 
     ItemTagsChangedPayload:
       type: object
-      required: [itemIds, resolvedItemIds, addedTags, removedTags]
+      required: [resolvedItemIds, addedTags, removedTags]
       properties:
-        itemIds:
-          type: array
-          description: The files as the change named them. A tag apply lists the item ids or full paths the request sent, and auto-tag apply lists full paths.
-          items:
-            type: string
         resolvedItemIds:
           type: array
-          description: Catalog item ids of the listed files that are in the catalog.
+          description: Catalog item ids of the files the change applies to.
           items:
             type: string
         addedTags:

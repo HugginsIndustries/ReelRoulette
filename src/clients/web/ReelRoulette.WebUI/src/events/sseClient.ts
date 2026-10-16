@@ -40,7 +40,7 @@ export interface SseClient {
 /**
  * The revision to resume from. A resync takes its own revision, which can be lower after a server restart.
  * `streamOpened` gives a client with no revision the server's revision, even 0, and never moves one it holds.
- * Locked to shared/fixtures/event-revision.json.
+ * Locked to src/test/fixtures/event-revision.json.
  */
 export function nextEventRevision(lastRevision: number | null, eventType: string, revision: number): number {
   if (eventType === "resyncRequired" || lastRevision == null) {

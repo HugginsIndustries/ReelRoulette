@@ -59,7 +59,7 @@ public sealed class ServerStateRegressionTests
         var service = new ServerStateService();
         service.PublishExternal("playbackRecorded", new PlaybackRecordedPayload
         {
-            Path = "movie.mp4",
+            ItemId = "item-1",
             ClientId = "client-a",
             SessionId = "session-1"
         });
@@ -69,7 +69,7 @@ public sealed class ServerStateRegressionTests
         Assert.Equal("playbackRecorded", envelope.EventType);
 
         var payload = Assert.IsType<PlaybackRecordedPayload>(envelope.Payload);
-        Assert.Equal("movie.mp4", payload.Path);
+        Assert.Equal("item-1", payload.ItemId);
         Assert.Equal("client-a", payload.ClientId);
         Assert.Equal("session-1", payload.SessionId);
         Assert.Null(payload.PlayCount);
@@ -83,7 +83,7 @@ public sealed class ServerStateRegressionTests
         var nowUtc = DateTime.UtcNow;
         service.PublishExternal("playbackRecorded", new PlaybackRecordedPayload
         {
-            Path = "movie.mp4",
+            ItemId = "item-1",
             ClientId = "client-a",
             SessionId = "session-1",
             PlayCount = 9,
@@ -149,7 +149,7 @@ public sealed class ServerStateRegressionTests
         var service = new ServerStateService();
         _ = service.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
         {
-            ItemIds = ["item-1"],
+            ResolvedItemIds = ["item-1"],
             AddedTags = ["TagA"],
             RemovedTags = []
         });
@@ -165,7 +165,7 @@ public sealed class ServerStateRegressionTests
         var service = new ServerStateService();
         _ = service.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
         {
-            ItemIds = ["item-1"],
+            ResolvedItemIds = ["item-1"],
             AddedTags = ["NewTag"],
             RemovedTags = []
         });

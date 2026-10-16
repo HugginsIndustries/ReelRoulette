@@ -5,10 +5,10 @@ namespace ReelRoulette.Server.Contracts;
 public sealed class VersionResponse
 {
     public string AppVersion { get; set; } = "dev";
-    public string ApiVersion { get; set; } = "1";
+    public string ApiVersion { get; set; } = "2";
     public string? AssetsVersion { get; set; }
-    public string MinimumCompatibleApiVersion { get; set; } = "0";
-    public List<string> SupportedApiVersions { get; set; } = ["1", "0"];
+    public string MinimumCompatibleApiVersion { get; set; } = "2";
+    public List<string> SupportedApiVersions { get; set; } = ["2"];
     public List<string> Capabilities { get; set; } = [];
     /// <summary>Whether the server has a library, as <c>/control/status</c> reports it.</summary>
     public string LibraryState { get; set; } = "ready";
@@ -20,7 +20,6 @@ public sealed class PresetResponse
 {
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
-    public string? Summary { get; set; }
     public JsonElement? FilterState { get; set; }
 }
 
@@ -45,11 +44,7 @@ public sealed class LibraryGlobalStatsResponse
     public int TotalMedia { get; set; }
     public int Favorites { get; set; }
     public int Blacklisted { get; set; }
-    public int UniquePlayedVideos { get; set; }
-    public int UniquePlayedPhotos { get; set; }
     public int UniquePlayedMedia { get; set; }
-    public int NeverPlayedVideos { get; set; }
-    public int NeverPlayedPhotos { get; set; }
     public int NeverPlayedMedia { get; set; }
     public int TotalPlays { get; set; }
     public int VideosWithAudio { get; set; }
@@ -95,7 +90,7 @@ public sealed class RandomRequest
 
 public sealed class RandomResponse
 {
-    /// <summary>Full path of the file, which the desktop reads.</summary>
+    /// <summary>Full path of the file, which the WebUI's Stats tab shows.</summary>
     public string Id { get; set; } = string.Empty;
     public string ItemId { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
@@ -108,14 +103,14 @@ public sealed class RandomResponse
 
 public sealed class FavoriteRequest
 {
-    public string Path { get; set; } = string.Empty;
+    public string ItemId { get; set; } = string.Empty;
     public bool IsFavorite { get; set; }
     public string? ClientId { get; set; }
 }
 
 public sealed class BlacklistRequest
 {
-    public string Path { get; set; } = string.Empty;
+    public string ItemId { get; set; } = string.Empty;
     public bool IsBlacklisted { get; set; }
     public string? ClientId { get; set; }
 }
@@ -124,7 +119,7 @@ public sealed class RecordPlaybackRequest
 {
     public string? ClientId { get; set; }
     public string? SessionId { get; set; }
-    public string Path { get; set; } = string.Empty;
+    public string ItemId { get; set; } = string.Empty;
 }
 
 public sealed class PlayItemRequest
@@ -133,9 +128,11 @@ public sealed class PlayItemRequest
     public string? SessionId { get; set; }
 }
 
+/// <summary>Names either every item, with <see cref="AllItems"/>, or the items in <see cref="ItemIds"/>, never both.</summary>
 public sealed class ClearPlaybackStatsRequest
 {
-    public List<string>? ItemPaths { get; set; }
+    public bool AllItems { get; set; }
+    public List<string>? ItemIds { get; set; }
 }
 
 public sealed class ClearPlaybackStatsResponse
@@ -156,17 +153,9 @@ public sealed class RecordPlaybackResult
 {
     public bool Found { get; set; }
     public string ItemId { get; set; } = string.Empty;
-    public string FullPath { get; set; } = string.Empty;
     public int PlayCount { get; set; }
     public DateTime? LastPlayedUtc { get; set; }
     public DateTime? PreviousLastPlayedUtc { get; set; }
-}
-
-public sealed class LibraryStatesRequest
-{
-    public string? ClientId { get; set; }
-    public string? SessionId { get; set; }
-    public List<string>? Paths { get; set; }
 }
 
 public sealed class LibraryStateResponse
@@ -459,7 +448,6 @@ public sealed class ItemStateChangedPayload
 public sealed class PlaybackRecordedPayload
 {
     public string ItemId { get; set; } = string.Empty;
-    public string Path { get; set; } = string.Empty;
     public string? ClientId { get; set; }
     public string? SessionId { get; set; }
     public int? PlayCount { get; set; }
@@ -469,8 +457,6 @@ public sealed class PlaybackRecordedPayload
 
 public sealed class ItemTagsChangedPayload
 {
-    /// <summary>The files as the change named them, which can be full paths.</summary>
-    public List<string> ItemIds { get; set; } = [];
     public List<string> ResolvedItemIds { get; set; } = [];
     public List<string> AddedTags { get; set; } = [];
     public List<string> RemovedTags { get; set; } = [];
@@ -576,7 +562,6 @@ public sealed class DuplicateApplyFailure
 public sealed class AutoTagScanRequest
 {
     public bool ScanFullLibrary { get; set; } = true;
-    public List<string> ItemIds { get; set; } = [];
 }
 
 public sealed class AutoTagScanResponse
@@ -614,21 +599,17 @@ public sealed class AutoTagAssignment
 public sealed class AutoTagAppliedAssignment
 {
     public string TagName { get; set; } = string.Empty;
-    public List<string> ChangedItemPaths { get; set; } = [];
     public List<string> ChangedItemIds { get; set; } = [];
 }
 
 public sealed class AutoTagApplyResponse
 {
-    public int AssignmentsAdded { get; set; }
-    public List<string> ChangedItemPaths { get; set; } = [];
-    public List<string> ChangedItemIds { get; set; } = [];
     public List<AutoTagAppliedAssignment> Applied { get; set; } = [];
 }
 
 public sealed class ClientLogRequest
 {
-    public string Source { get; set; } = "desktop";
+    public string Source { get; set; } = string.Empty;
     public string Level { get; set; } = "info";
     public string Message { get; set; } = string.Empty;
 }

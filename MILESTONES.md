@@ -183,8 +183,8 @@ Last milestone completed: M12i3
 | --- | --- | --- |
 | Code and tests | ✅ Complete | The desktop projects, the Core code only the desktop uses, and their tests removed from the solution and the repository. |
 | Packaging | ✅ Complete | A release that builds and publishes only the server, with FFmpeg's license text, and the old icons deleted. |
-| Contract | ⏳ Planned | Routes, fields, and lookups only the desktop used removed, item requests named by id, and the old filter fields no longer written, in OpenAPI, the generated WebUI types, and the WebUI. |
-| Fixtures | ⏳ Planned | The fixtures only the WebUI reads moved to its tests, so every shared fixture has a Core and a WebUI reader. |
+| Contract | ✅ Complete | Routes, fields, and lookups only the desktop used removed, item requests named by id, and the old filter fields no longer written, in OpenAPI, the generated WebUI types, and the WebUI. |
+| Fixtures | ✅ Complete | The fixtures only the WebUI reads moved to its tests, so every shared fixture has a Core and a WebUI reader. |
 | Mockup | ⏳ Planned | The mockup without the desktop notice, the desktop client, or its log sources. |
 | Docs | ⏳ Planned | `AGENTS.md`, the pre-release skill, current-state docs, the testing checklist, and the changelog without the desktop client. |
 
@@ -277,14 +277,19 @@ Last milestone completed: M12i3
 
 - Remove `POST /api/library-states`, `LibraryStatesRequest`, and `LibraryCatalogSession.ReadItemStates`, which only that route uses. `LibraryStateResponse` stays, since favorite and blacklist return it.
 - Remove `PresetResponse.summary`, which the server never fills.
-- Remove the fields only the desktop reads: `itemTagsChanged.itemIds`, the auto-tag apply response's `changedItemPaths` (at its top and in `applied`) and `assignmentsAdded`, `playbackRecorded.path`, and the library stats' `uniquePlayed*` and `neverPlayed*` fields.
+- Remove the fields only the desktop reads: `itemTagsChanged.itemIds`, the auto-tag apply response's `changedItemPaths` (at its top and in `applied`) and `assignmentsAdded`, `playbackRecorded.path`, and the library stats' `uniquePlayedVideos`, `uniquePlayedPhotos`, `neverPlayedVideos`, and `neverPlayedPhotos`.
+- Remove the auto-tag apply response's top-level `changedItemIds`, which no client reads, so the response holds only `applied`.
+- The library stats' `uniquePlayedMedia` and `neverPlayedMedia` stay, since the Stats tab shows them.
 - Remove `AutoTagScanRequest.itemIds`, which only the desktop fills.
 - Item lookups take only a catalog id: `ResolveItemId` no longer falls back to the full path, and `POST /api/library/item` reads by id only.
 - `GET /api/media/{idOrToken}` becomes `GET /api/media/{token}` and streams only the tokens the random and play routes issue.
 - Rename the request fields that now hold only an item id: `path` becomes `itemId` in the favorite, blacklist, and record-playback requests, and `itemPaths` becomes `itemIds` in clear playback stats. `LibraryItemReadRequest.id` keeps its name.
 - The WebUI's serializer, and Core's `FlagFilterModes.Name`, `FavoritesOnly`, and `ExcludeBlacklisted`, stop writing `favoritesOnly` and `excludeBlacklisted`, and the FilterState schema drops them.
 - The server's filter parser and the WebUI keep reading the old fields in stored presets.
+- `FilterStateSchema_NamesEveryFieldTheParserReads` names the two old fields as read by the parser but left out of the schema, until Per-Preset Preset Writes stops reading them.
 - `ClientLogRequest.Source` no longer defaults to `"desktop"`.
+- The server's API version becomes 2: `apiVersion` 2, `minimumCompatibleApiVersion` 2, and only "2" supported, and the WebUI's own version becomes 2, so a client written for version 1, such as an installed desktop app, refuses the server.
+- Clear playback stats clears every item only with `allItems: true`, clears just the items in `itemIds`, and refuses with 400, clearing nothing, a request with neither or both.
 - The comment that the random and play responses' `id` is for the desktop, and the WebUI's comments about the desktop, are corrected.
 - OpenAPI, the generated WebUI types, the WebUI's requests, and `docs/api.md` change with the routes and fields.
 
@@ -295,18 +300,44 @@ Last milestone completed: M12i3
 - The WebUI sends auto-tag apply's `itemPaths` as full paths, which the server finds with `ResolveItemByPath`, so that lookup stays.
 - The WebUI names items by catalog id at every call to the routes `ResolveItemId` serves, and plays media only by token (inferred, from its call sites).
 - `POST /api/play/{itemId}` accepts a full path through `ResolveItemId`, though OpenAPI and `docs/api.md` say it doesn't.
-- `serializeFilterStateForApi` (`src/filter/filterStateModel.ts`) writes `favoritesOnly` and `excludeBlacklisted` beside the modes for older readers, and fails type-checking against generated types without them.
+- `serializeFilterStateForApi` (`src/filter/filterStateModel.ts`) writes `favoritesOnly` and `excludeBlacklisted` beside the modes for older readers. Without the two fields in the generated types it still type-checks, since the generated `FilterState` takes any other field (measured).
+- `FilterStateSchema_NamesEveryFieldTheParserReads` (`OpenApiRouteContractTests.cs`) needs the fields `LibraryListFilterParser` reads and the FilterState schema's properties to be one set, so dropping the old fields from the schema while the parser reads them fails it (inferred).
+- With the serializer no longer writing the old fields, 41 WebUI tests in 8 files fail, each checking them in a request it sent (measured).
 - `LibraryListFilterParser` reads the old fields through `FlagFilterModes.ResolveFavorites` and `ResolveBlacklisted`, and the WebUI through `resolveFlagModes`.
 - No release contains the Favorites and Blacklisted modes, so every preset a release saved has only the old fields (measured).
+- The Stats tab shows the library stats' `uniquePlayedMedia` and `neverPlayedMedia` (`src/stats/statsModel.ts`).
+- No WebUI code calls `POST /api/playback/clear-stats`.
+- The server clears every item's playback stats when clear-stats names no items, and the server's JSON reading ignores a field the request type doesn't have, so a client that still sends `itemPaths`, such as an installed desktop, would clear the whole library.
+- The desktop refuses a server whose `minimumCompatibleApiVersion` is above 1 or whose `apiVersion` isn't 0 or 1 (`MainWindow.axaml.cs`, in git history from before Desktop Client Removal).
+- About 40 server tests name items by full path on the routes `ResolveItemId` serves (measured).
 - `Spec_ListsEveryMappedApiAndControlRoute` fails for a route the server maps that the spec doesn't list, and `OpenApiSpec.AssertMatchesSchema` needs a payload's fields and its schema's to be the same set.
 
 **Acceptance**
 
 - OpenAPI has none of the removed routes and fields and names the renamed fields, checked by reading `shared/api/openapi.yaml`, and `npm run verify:contracts` passes.
-- A full path no longer finds an item on any route, and the media route streams only issued tokens, in server tests of the id lookup and the media route.
-- The favorite, blacklist, record-playback, and clear playback stats requests send `itemId` or `itemIds`, in WebUI tests of each request and server tests of each route.
+- A full path no longer finds an item on any route that takes an item id, and the media route streams only issued tokens, in server tests of the id lookup and the media route.
+- The favorite, blacklist, and record-playback requests send `itemId`, in WebUI tests of each request and server tests of each route, and clear playback stats takes `itemIds`, in a server test, since no WebUI code calls it.
 - The WebUI writes neither `favoritesOnly` nor `excludeBlacklisted`, and a stored preset with only the old fields still filters as before, in WebUI filter model tests and server filter parser tests.
+- Clear playback stats with `allItems: true` clears every item, with `itemIds` clears only those, and with neither or both is refused with 400 and clears nothing, in server tests of the route.
+- The server reports API version 2 and accepts clients of version 2 only, and the WebUI accepts only a version 2 server, in server version tests and WebUI compatibility tests.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- Gone: `POST /api/library-states` with `LibraryStatesRequest`, `GetLibraryStates`, and `ReadItemStates`; `PresetResponse.summary`; `itemTagsChanged.itemIds`; auto-tag apply's `changedItemPaths`, `assignmentsAdded`, and top-level `changedItemIds`, so its response holds only `applied`; `playbackRecorded.path` with `RecordPlaybackResult.FullPath`; the library stats' four per-type played counts; and `AutoTagScanRequest.itemIds` with the catalog's path scan (`CatalogAutoTagScanScope.Paths`, `ReadAutoTagItemsByPaths`, `ReadTagsForItems`). The catalog's auto-tag result keeps only each tag's changed ids.
+- `ResolveItemId` matches only the catalog id, in any case, so the library item, favorite, blacklist, record-playback, clear-stats, play, and tag editor model and apply-item-tags routes take only an id. Favorite, blacklist, and record-playback answer "itemId is required" for a blank id and "item not found in library" for an unknown one. `ResolveItemByPath` stays for auto-tag apply's `itemPaths`.
+- `GET /api/media/{token}` streams only tokens from `ServerMediaTokenStore`, so an item id no longer skips the check that its source is enabled.
+- Favorite, blacklist, and record-playback take `itemId`, and clear-stats takes `itemIds`.
+- `FlagFilterModes.Name`, `FavoritesOnly`, and `ExcludeBlacklisted` are gone, and the WebUI's serializer writes only the modes. The parser and `resolveFlagModes` still read the old fields, and `FilterStateSchema_NamesEveryFieldTheParserReads` lists them in `OldFieldsReadButNotSpecified`, failing while the list names a field the parser no longer reads (measured, with the parser's read of `excludeBlacklisted` removed).
+- `ClientLogRequest.Source` defaults to empty, and `RandomResponse.Id`'s comment says the Stats tab shows it.
+- OpenAPI drops the route and fields, names `itemId` and `itemIds`, names the media operation `getMediaByToken`, and describes the old filter fields only as what stored presets fall back to. Favorite, blacklist, and record-playback list their 404 for an unknown id. `LibraryStateResponse` stays, though no route's response refers to it. The generated WebUI types and `docs/api.md` follow.
+- `CONTEXT.md`, `README.md`, `docs/architecture.md`, and `docs/domain-inventory.md` follow too: the library item read by id only, clear-stats with `allItems` or ids and refusing neither or both, the auto-tag scan as the full library or enabled sources, `/api/media/{token}`, `playbackRecorded` and `itemTagsChanged` without their path fields, and API version 2 in the WebUI's status and Diagnostics, with no item-state read.
+- New server tests: a full path finds nothing through each of nine catalog lookups (`ItemLookups_FindNoItemByItsFullPath`), favorite, blacklist, record-playback, and play answer 404 for one with no event, the media route streams an issued token and refuses an id and a full path, and the routes read `itemId` and `itemIds` and no longer bind `path` or `itemPaths`. Each failed with the old behavior put back (measured). About 40 tests that named items by full path use ids.
+- New WebUI test: each of the nine mode combinations is written as the modes alone and reads back the same, which failed with the old fields put back (measured). The favorite, blacklist, and record-playback request tests expect exactly `itemId`.
+- The server's API version is 2, with `minimumCompatibleApiVersion` 2 and only "2" supported, and the WebUI's is 2 and accepts only a version 2 server. The tests that pinned version 1 expect 2, and those that used 2 as an unsupported version use 3.
+- Clear-stats is a handler of its own (`ServerHostComposition.ClearPlaybackStats`) that refuses a request with neither `allItems` nor a non-blank item id, or with both, before it reaches the catalog. The catalog session's `ClearPlaybackStats` clears only the ids it is given, none clearing nothing, and `ClearAllPlaybackStats` clears every item.
+- New route tests: `allItems: true` clears every item, `itemIds` clears only those, and `{}`, `allItems: false`, null, empty, or blank `itemIds`, an old `itemPaths` request, and `allItems` with `itemIds` are each refused with 400, clearing nothing and publishing no event. With the old behavior put back, all seven refused requests answered 200 (measured).
+- `dotnet build ReelRoulette.sln`: 0 warnings. `dotnet test ReelRoulette.sln`: Core.Tests 488 and ServerApp.Tests 7 passed. SystemChecks passed. `npm run verify`: 1483 tests in 72 files passed (measured).
 
 #### Fixtures slice
 
@@ -314,19 +345,29 @@ Last milestone completed: M12i3
 
 - `event-revision.json`, `library-tile-effect.json`, `preset-filter-equality.json`, `sort-direction-labels.json`, and `filter-state-written.json` lose their C# readers and move to the WebUI's tests, so `shared/fixtures/` holds only fixtures that Core and the WebUI both read.
 - `filter-mode-projection.json` and its readers go, since nothing writes the old fields.
-- `filter-state-written.json`'s half of a filter written with the old fields stays until Per-Preset Preset Writes rewrites stored presets.
+- The moved fixtures go to `src/clients/web/ReelRoulette.WebUI/src/test/fixtures/`.
+- `filter-state-written.json`'s `webui` entry loses the old fields, and its `desktop` entry becomes `oldFields`, the same filter as a release saved it: only `favoritesOnly` and `excludeBlacklisted`, with no modes. It stays until Per-Preset Preset Writes rewrites stored presets.
 - `filter-mode-resolution.json`, `filter-enum-values.json`, and `tag-name-order.json` stay in `shared/fixtures/`, read by Core and the WebUI.
 
 **Traps**
 
 - Desktop tests are the only C# readers of the five fixtures that move (measured).
-- `filter-mode-projection.json`'s only C# reader tests `FlagFilterModes.Name`, `FavoritesOnly`, and `ExcludeBlacklisted`, which only the desktop called (measured).
+- `filter-mode-projection.json`'s only C# reader, in the Core tests, tests `FlagFilterModes.Name`, `FavoritesOnly`, and `ExcludeBlacklisted`, which only the desktop called, and the WebUI's tests read it twice, for the serializer and with `filter-state-written.json`'s `desktop` entry (measured).
 - No WebUI-only copies of shared fixture cases exist. WebUI tests only note that the desktop reads the same fixture (measured).
 
 **Acceptance**
 
 - The moved fixtures are read by WebUI tests from their new place, and every fixture left in `shared/fixtures/` has a Core reader and a WebUI reader, checked by a search of the tests.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- `event-revision.json`, `library-tile-effect.json`, `preset-filter-equality.json`, `sort-direction-labels.json`, and `filter-state-written.json` are in `src/clients/web/ReelRoulette.WebUI/src/test/fixtures/`, read from there by `sseClient`, `libraryQuerySession`, `presetFilterEquality`, `libraryBrowseModel`, `filterStateModel`, and the Filter screen's tests, and no C# file names them (measured).
+- `filter-mode-projection.json` is deleted, with its Core test and the WebUI's two readers of it.
+- `filter-state-written.json`'s `webui` entry has no old fields, and its `oldFields` entry, with only `favoritesOnly` true and `excludeBlacklisted` false, reads as Favorites only and Blacklisted off in the filter model tests and the Filter screen's test of a preset saved before the modes. Both tests failed with the WebUI's read of `excludeBlacklisted` removed (measured).
+- `shared/fixtures/` holds `filter-enum-values.json` and `filter-mode-resolution.json`, read by Core's `FilterStateTests` and the WebUI's `filterStateModel` tests, and `tag-name-order.json`, read by `TagNameComparerTests` and `tagNameOrder` tests (measured).
+- The nine projection cases and the nine cases reading the old desktop entry are gone, replaced by the Contract slice's nine mode combinations and one `oldFields` reading. Test comments say Core reads the shared fixtures, without the desktop.
+- `dotnet test ReelRoulette.sln` and `npm run verify` passed, as in the Contract slice (measured).
 
 #### Mockup slice
 
@@ -335,6 +376,7 @@ Last milestone completed: M12i3
 - Remove the desktop notice page (`desktop-notice.html` and `build/desktop-notice.src.html`), its card in the index, its line in the mockup's `README.md`, its entry in `build_pages.py`, and its checks in `check.mjs`.
 - The admin page's connected clients and Log Viewer sources lose the desktop client and its log sources.
 - Notes in the mockup that describe the desktop as a current client go.
+- The Settings tab's Diagnostics shows the server as "0.15.0 (API 2)" in place of "0.15.0 (API 1)" (`build/layout.src.html`), as the WebUI does with the server's API version 2.
 
 **Traps**
 
@@ -375,6 +417,7 @@ Last milestone completed: M12i3
 
 - Agent: On Linux and Windows, the release publishes only the server, and the Windows package carries FFmpeg's license text, checked in a dev-channel release run of `release.yml`.
 - Agent: The v0.15.0 release notes say the desktop app is no longer released and that ReelRoulette in the browser replaces it.
+- Agent: The v0.15.0 release notes tell users to reload any open ReelRoulette page after updating the server, since an open page keeps the old API version until it's reloaded.
 
 #### Not included
 
@@ -505,6 +548,7 @@ Last milestone completed: M12i3
 - A WebUI preset save writes every preset with its modes, so only presets nobody saved since keep only the old fields (inferred).
 - The server publishes no event when presets change.
 - The server compares no filters: the preset comparison is the desktop's `LibraryPresetSelection.FiltersEqual` and the WebUI's `filterStatesEqualForPresetMatch`, which `preset-filter-equality.json` locks.
+- `FilterStateSchema_NamesEveryFieldTheParserReads` (`OpenApiRouteContractTests.cs`) lists `favoritesOnly` and `excludeBlacklisted` in `OldFieldsReadButNotSpecified`, as fields the parser reads and the FilterState schema leaves out, and fails while the list names a field the parser no longer reads, so the list goes when the parser stops reading them.
 - `LibraryListFilterParser` keeps a category's AND entry, as `filter-enum-values.json` locks it, while the WebUI drops AND entries from every filter it reads (`withoutAndLocalModes` in `src/filter/filterStateModel.ts`).
 
 **Acceptance**
@@ -548,7 +592,7 @@ Last milestone completed: M12i3
 - The WebUI remembers its active preset by id.
 - The remembered preset survives a preset list that lacks it, such as an empty reply.
 - A chosen preset stays chosen, by its id, even when an earlier preset has the same filter, so two presets with equal filters can be told apart in the Filter tab's heading, the preset dropdown, and the remembered preset.
-- `resolveFlagModes` and the WebUI's readers of `filter-mode-resolution.json` go, and so does `filter-state-written.json`'s half of a filter written with the old fields.
+- `resolveFlagModes` and the WebUI's readers of `filter-mode-resolution.json` go, and so does the `oldFields` entry of `src/test/fixtures/filter-state-written.json`, a filter written with only the old fields.
 - The WebUI's `isDefaultFilter` (`src/filter/filterStateModel.ts`) reads `default-filter.json` in its tests, each case read as the WebUI reads a filter.
 - Builds on the preset-equality fixture from Remove the Preset Match Route.
 
@@ -1724,7 +1768,7 @@ Last milestone completed: M12i3
 **Traps**
 
 - `POST /api/favorite` and `POST /api/blacklist` take one item id each.
-- `POST /api/playback/clear-stats` and `POST /api/tag-editor/apply-item-tags` each take a list of item ids, `itemIds`, so a selection of items that aren't loaded can be cleared.
+- `POST /api/playback/clear-stats` and `POST /api/tag-editor/apply-item-tags` each take a list of item ids, `itemIds`, so a selection of items that aren't loaded can be cleared. Clear-stats refuses a request that names no ids without `allItems`.
 - No route removes items from the library.
 - The ids-only response is about 1.9 MB for the developer catalog's 49,055 items, worked out from 36-character ids (inferred).
 - Item Ratings' `POST /api/rating` takes one item, and its `itemRatingChanged` names one item.
@@ -1803,7 +1847,7 @@ Last milestone completed: M12i3
 - The desktop acted on selected items from its context menu: add to or remove from favorites and the blacklist, add or remove tags, clear playback stats, and remove from library.
 - `toggleFlag` in `src/playback/player.ts` clears the other flag when it sets one.
 - `src/playback/player.ts` applies a favorite or blacklist answer to the item playing when the answer arrives, so pressing Next before it does marks the new item locally and caches that state under its id until an event for it corrects it.
-- The server's answer carries the changed item's `itemId` and both flags (`LibraryStateResponse`, which `shared/api/openapi.yaml` does not describe yet).
+- The server's answer carries the changed item's `itemId` and both flags (`LibraryStateResponse`, which `shared/api/openapi.yaml` names but no route's response refers to).
 
 **Acceptance**
 
@@ -2587,6 +2631,7 @@ Last milestone completed: M12i3
 - While a refresh runs, the Refresh card shows its stage and progress, and its result pops up as WebUI Notifications' Library refresh popup, a warning when it fails.
 - The refresh settings: auto-refresh and its interval (5–1440 minutes), forced loudness and duration rescans on the next refresh, and fingerprint scan parallelism (1–16).
 - Clear playback stats for the whole library, which the desktop offered from its Playback menu through `POST /api/playback/clear-stats`. It is an admin action, in the admin view's library section: a red Clear All Playback Stats… button under Playback stats in the Library refresh card.
+- Clear All Playback Stats… sends `allItems: true`, since the route refuses a request that names neither `allItems` nor any item id.
 - Clear All Playback Stats… asks "Clear the playback stats of every item in the library? Plays and last played go back to none." with a red Clear, and a Your actions popup then says "Cleared the library's playback stats.".
 
 **Traps**

@@ -8,7 +8,7 @@ ReelRoulette is a server-first media randomizer with thin desktop and web client
 - The server app serves:
   - API endpoints (`/api/*`)
   - SSE endpoint (`/api/events`)
-  - media streaming (`/api/media/{idOrToken}`)
+  - media streaming (`/api/media/{token}`)
   - WebUI static assets
   - Operator UI (`/operator`)
 - Control-plane/admin operations are exposed under `/control/*` (status, settings, pair, restart, stop, testing, logs).

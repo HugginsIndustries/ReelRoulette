@@ -49,13 +49,12 @@ public static class ApiContractMapper
         };
     }
 
-    public static PresetResponse MapPreset(string id, string name, string? summary = null, JsonElement? filterState = null)
+    public static PresetResponse MapPreset(string id, string name, JsonElement? filterState = null)
     {
         return new PresetResponse
         {
             Id = id,
             Name = name,
-            Summary = summary,
             FilterState = filterState
         };
     }
