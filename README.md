@@ -22,24 +22,24 @@ ReelRoulette is a server-first media randomizer with thin desktop and web client
 - npm (for WebUI build/verify flows).
 - PowerShell Core (`pwsh`) for `tools/scripts/*.ps1` helpers (for example `pwsh ./tools/scripts/run-server.ps1`).
   - Linux (Arch Linux, CachyOS, and similar): install from the AUR, for example `paru -S powershell-bin` or `yay -S powershell-bin`; that package provides `pwsh` on your PATH.
-- **VLC / LibVLC** for **desktop** video playback when running from source. **FFmpeg** (including **`ffprobe` on your `PATH`**) on the **server** host for library refresh (duration, loudness, thumbnails, and related probes). Install these from your OS packages on Linux—AppImages do **not** bundle them. The desktop app loads the system **`libvlc.so.5`** soname directly; on most distros you install **LibVLC libraries and plugins** only (not the full VLC media player metapackage where packages are split). On **Arch-like** distros the **`vlc`** package remains monolithic. On **Windows**, use distro-equivalent installs on your `PATH` for local `dotnet run` (official **Velopack** server packages bundle FFmpeg/ffprobe; desktop packages bundle LibVLC).
+- **FFmpeg** (including **`ffprobe` on your `PATH`**) on the **server** host for library refresh (duration, loudness, thumbnails, and related probes). Install it from your OS packages on Linux—AppImages do **not** bundle it. On **Windows**, put it on your `PATH` for local `dotnet run` (official **Velopack** server packages bundle FFmpeg and ffprobe).
 
 ## Quick Start
 
 These paths are for **people who want to run packaged builds**. If you are changing code, skip to [Developing from source](#developing-from-source).
 
-Official **installers** for stable tags are on **[GitHub Releases](https://github.com/HugginsIndustries/ReelRoulette/releases)** (Velopack **`Setup.exe`** on Windows, **`.AppImage`** on Linux). The release pipeline also publishes **Velopack update feeds** to Backblaze B2. **Velopack-installed** server and desktop builds can check, download, and apply updates from Operator or Desktop Settings (stable or preview/dev channel). You usually want **two pieces**: the **server** (hosts your library, API, WebUI, Operator) and optionally the **desktop** app (a native client). The **WebUI** is served by the server at the root URL once the server is running.
+Official **installers** for stable tags are on **[GitHub Releases](https://github.com/HugginsIndustries/ReelRoulette/releases)** (Velopack **`Setup.exe`** on Windows, **`.AppImage`** on Linux). The release pipeline also publishes **Velopack update feeds** to Backblaze B2. A **Velopack-installed** server can check, download, and apply updates from Operator (stable or preview/dev channel). The **server** is the only download: it hosts your library, API, WebUI, and Operator, and serves the **WebUI** at the root URL once it is running.
 
 ### Windows
 
-1. From the latest **stable** GitHub release (or your dev feed URL), download the **server** and (optionally) **desktop** **`Setup.exe`** installers produced by Velopack.
-2. Run each installer. Installs are **per-user** under `%LocalAppData%` (no elevation, no MSI, no Program Files layout). Desktop and Start Menu shortcuts are created when the installer offers them.
-3. Start the **server** first. Open **[http://localhost:45123/operator](http://localhost:45123/operator)** in a browser for the Operator UI, or connect the desktop app to that server. The tray icon (when available) can open Operator, refresh the library, and toggle “launch on startup.”
-4. **Upgrades:** On a Velopack-installed build, use **Check for Updates** in Operator (server) or Desktop **Settings**. Download and Apply are separate confirmed steps; the app does not restart until you apply. You can also install a newer **`Setup.exe`** from GitHub Releases. **v0.11.0** Inno/portable installs use a different layout — replace them with the Velopack **`Setup.exe`** (per-user under `%LocalAppData%`). `dotnet run` / unpackaged sessions are not Velopack-installed and cannot apply feed updates.
+1. From the latest **stable** GitHub release (or your dev feed URL), download the **server** **`Setup.exe`** installer produced by Velopack.
+2. Run the installer. Installs are **per-user** under `%LocalAppData%` (no elevation, no MSI, no Program Files layout). Desktop and Start Menu shortcuts are created when the installer offers them.
+3. Start the **server**. Open **[http://localhost:45123/operator](http://localhost:45123/operator)** in a browser for the Operator UI, or **[http://localhost:45123](http://localhost:45123)** for the WebUI. The tray icon (when available) can open Operator, refresh the library, and toggle “launch on startup.”
+4. **Upgrades:** On a Velopack-installed server, use **Check for Updates** in Operator. Download and Apply are separate confirmed steps; the app does not restart until you apply. You can also install a newer **`Setup.exe`** from GitHub Releases. **v0.11.0** Inno/portable installs use a different layout — replace them with the Velopack **`Setup.exe`** (per-user under `%LocalAppData%`). `dotnet run` / unpackaged sessions are not Velopack-installed and cannot apply feed updates.
 
 ### Linux
 
-1. Download the **server** and (optionally) **desktop** **`.AppImage`** from the latest GitHub release or your feed mirror.
+1. Download the **server** **`.AppImage`** from the latest GitHub release or your feed mirror.
 2. Make the file executable and run it, for example:
 
    ```bash
@@ -49,12 +49,12 @@ Official **installers** for stable tags are on **[GitHub Releases](https://githu
 
    Keeping copies under **`~/Applications`** (or another directory you control) is a common convention; create the folder if you use it. The AppImage works from any location.
 
-   On first launch (and whenever you move the file and run it again), the server and desktop apps **register themselves** in your application menu (`reelroulette-server` / `reelroulette-desktop`) and refresh the shortcut to point at the current AppImage path. No installer or `--install` step is required.
+   On first launch (and whenever you move the file and run it again), the server **registers itself** in your application menu (`reelroulette-server`) and refreshes the shortcut to point at the current AppImage path. No installer or `--install` step is required.
 
    **AppImage runtime:** most builds need **FUSE 2** on the host (`libfuse2`, or **`libfuse2t64`** on newer Ubuntu-based releases). If the AppImage will not start, install that package or run with **`--appimage-extract-and-run`**.
 
-3. Install **FFmpeg** (with **`ffprobe`**) and **LibVLC** (libraries/plugins per your distro—the dependency dialog’s copy-paste command is verified minimal) before relying on playback and library refresh—Linux packages do not bundle those tools. If the **desktop** AppImage starts but LibVLC is missing, it shows a dialog with a **copy-paste command** for your distribution instead of exiting silently.
-4. **Upgrades:** On a Velopack AppImage, use **Check for Updates** in Operator (server) or Desktop **Settings**. Download and Apply are separate confirmed steps; the app does not restart until you apply. You can also download a newer **`.AppImage`** from GitHub Releases and run it. **v0.11.0** portable tarballs / legacy AppImages are a different packaging path — replace them with the Velopack **`.AppImage`**. `dotnet run` sessions cannot apply feed updates.
+3. Install **FFmpeg** (with **`ffprobe`**) from your distribution before relying on library refresh—Linux packages do not bundle it.
+4. **Upgrades:** On a Velopack AppImage, use **Check for Updates** in Operator. Download and Apply are separate confirmed steps; the app does not restart until you apply. You can also download a newer **`.AppImage`** from GitHub Releases and run it. **v0.11.0** portable tarballs / legacy AppImages are a different packaging path — replace them with the Velopack **`.AppImage`**. `dotnet run` sessions cannot apply feed updates.
 
 ### Developing from source
 
@@ -76,12 +76,6 @@ dotnet build ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj -f 
 
 # Linux/macOS (tray when available, otherwise headless):
 dotnet run --framework net10.0 --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj
-```
-
-Run the desktop client:
-
-```bash
-dotnet run --project ./src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj
 ```
 
 Run the WebUI dev server:
@@ -161,7 +155,7 @@ Set release-aligned version surfaces in one step (repo-root `.version` is the so
 pwsh ./tools/scripts/set-release-version.ps1 -Version v0.15.0-dev.1
 ```
 
-Omit `-Version` to read the current value from `.version` and fan out without changing the file. By default this also updates the desktop app `<Version>`, regenerates WebUI OpenAPI contracts (`npm run generate:contracts`), and runs solution build/test, WebUI verify, and deploy smoke. Pass `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify` to skip any of those. Use `-NoDocUpdates` to leave `README.md` / `docs/dev-setup.md` release command examples unchanged.
+Omit `-Version` to read the current value from `.version` and fan out without changing the file. By default this also regenerates WebUI OpenAPI contracts (`npm run generate:contracts`) and runs solution build/test, WebUI verify, and deploy smoke. Pass `-NoRegenerateContracts` and/or `-NoRunVerify` to skip either of those. Use `-NoDocUpdates` to leave `README.md` / `docs/dev-setup.md` release command examples unchanged.
 
 Packaged-server smoke (Linux, Velopack AppImage):
 
@@ -205,7 +199,7 @@ Manual test guide:
 
 ## Packaging and releases
 
-ReelRoulette ships through **Velopack** only. The **`.github/workflows/release.yml`** workflow (tag push or manual dispatch) builds self-contained **ServerApp** and **DesktopApp** outputs for **Windows** and **Linux**, stages WebUI assets for server legs, bundles Windows native dependencies in CI, packs with **`vpk`**, and publishes update feeds to **Backblaze B2**. Stable tag releases also mirror **`Setup.exe`** and **`.AppImage`** onto the existing **GitHub release** (not update packages, feed JSON, or portable zips). **Velopack-installed** builds check those feeds (background check-only, plus operator/Settings **Check → Download → Apply**); both hosts also call **`VelopackApp` hooks** at startup so install/update/uninstall hook invocations work.
+ReelRoulette ships through **Velopack** only. The **`.github/workflows/release.yml`** workflow (tag push or manual dispatch) builds self-contained **ServerApp** outputs for **Windows** and **Linux**, stages WebUI assets, bundles Windows FFmpeg and its license text in CI, packs with **`vpk`**, and publishes update feeds to **Backblaze B2**. Stable tag releases also mirror **`Setup.exe`** and **`.AppImage`** onto the existing **GitHub release** (not update packages, feed JSON, or portable zips). **Velopack-installed** servers check those feeds (background check-only, plus the operator's **Check → Download → Apply**), and call **`VelopackApp` hooks** at startup so install/update/uninstall hook invocations work.
 
 ### Maintainer flow
 
@@ -246,6 +240,6 @@ See `docs/dev-setup.md` for channel names, dev vs stable tiers, and troubleshoot
 
 ## Third-Party Components
 
-ReelRoulette integrates **VideoLAN VLC / LibVLC** and **FFmpeg** (including **ffprobe**). They are licensed under the GNU GPL and LGPL respectively. See the `licenses/` folder for license texts and [https://www.videolan.org](https://www.videolan.org) and [https://ffmpeg.org](https://ffmpeg.org) for source code.
+ReelRoulette uses **FFmpeg** (including **ffprobe**) to read media files.
 
-**Windows** release **server** packages bundle **FFmpeg** and **ffprobe** (CI-acquired build). **Windows** **desktop** packages bundle **LibVLC** under **`runtimes/win-x64/native/libvlc/`**. **Linux** packages bundle **no** LibVLC or FFmpeg; install **LibVLC libraries/plugins** and **ffmpeg/ffprobe** from your distribution (see the desktop dependency dialog or README prerequisites).
+**Windows** release **server** packages bundle **FFmpeg** and **ffprobe** from [BtbN's FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds) (`win64-gpl`, FFmpeg `n9.0.2-17-g2a571b6068`), which is built with `--enable-gpl --enable-version3` and licensed under the **GNU GPL version 3** or later. Its license text ships beside them as `runtimes/win-x64/native/FFmpeg-LICENSE.txt`, and is `licenses/GPL-3.0.txt` in this repository. FFmpeg's source code is at [https://ffmpeg.org](https://ffmpeg.org), and the build's scripts are in the BtbN repository. **Linux** packages bundle **no** FFmpeg; install **ffmpeg** and **ffprobe** from your distribution.

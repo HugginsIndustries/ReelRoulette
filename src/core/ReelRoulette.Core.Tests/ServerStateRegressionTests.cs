@@ -60,7 +60,7 @@ public sealed class ServerStateRegressionTests
         service.PublishExternal("playbackRecorded", new PlaybackRecordedPayload
         {
             Path = "movie.mp4",
-            ClientId = "desktop-client",
+            ClientId = "client-a",
             SessionId = "session-1"
         });
 
@@ -70,7 +70,7 @@ public sealed class ServerStateRegressionTests
 
         var payload = Assert.IsType<PlaybackRecordedPayload>(envelope.Payload);
         Assert.Equal("movie.mp4", payload.Path);
-        Assert.Equal("desktop-client", payload.ClientId);
+        Assert.Equal("client-a", payload.ClientId);
         Assert.Equal("session-1", payload.SessionId);
         Assert.Null(payload.PlayCount);
         Assert.Null(payload.LastPlayedUtc);
@@ -84,7 +84,7 @@ public sealed class ServerStateRegressionTests
         service.PublishExternal("playbackRecorded", new PlaybackRecordedPayload
         {
             Path = "movie.mp4",
-            ClientId = "desktop-client",
+            ClientId = "client-a",
             SessionId = "session-1",
             PlayCount = 9,
             LastPlayedUtc = nowUtc
@@ -244,7 +244,6 @@ public sealed class ServerStateRegressionTests
             var raw = preset.FilterState.GetRawText();
             Assert.Contains("TagB", raw, StringComparison.Ordinal);
             Assert.DoesNotContain("TagA", raw, StringComparison.Ordinal);
-            Assert.False(File.Exists(Path.Combine(appDataPath, "desktop-settings.json")));
 
             var reloaded = new ServerStateService(catalog: CatalogOpen.Host(appDataPath));
             var reloadedPreset = Assert.Single(reloaded.GetPresetCatalogSnapshot());

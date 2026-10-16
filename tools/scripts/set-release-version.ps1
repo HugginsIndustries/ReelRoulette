@@ -1,8 +1,9 @@
 #!/usr/bin/env pwsh
+# CmdletBinding refuses a switch the script doesn't take, rather than ignoring it.
+[CmdletBinding()]
 param(
     [string]$Version,
     [switch]$NoDocUpdates,
-    [switch]$NoUpdateDesktopVersion,
     [switch]$NoRegenerateContracts,
     [switch]$NoRunVerify
 )
@@ -209,10 +210,6 @@ try {
     Update-ContractTestsAssetsVersion
 
     Set-ProjectVersion -ProjectPath (Join-Path $repoRoot "src" "core" "ReelRoulette.ServerApp" "ReelRoulette.ServerApp.csproj")
-    Set-ProjectVersion -ProjectPath (Join-Path $repoRoot "src" "clients" "desktop" "ReelRoulette.LibraryArchive" "ReelRoulette.LibraryArchive.csproj")
-    if (-not $NoUpdateDesktopVersion.IsPresent) {
-        Set-ProjectVersion -ProjectPath (Join-Path $repoRoot "src" "clients" "desktop" "ReelRoulette.DesktopApp" "ReelRoulette.DesktopApp.csproj")
-    }
     if (-not $NoDocUpdates.IsPresent) {
         Update-ReleaseDocsVersion
     }

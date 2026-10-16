@@ -17,7 +17,7 @@ It is ownership-first and reflects current state only.
 Core/server domain services own business rules and persisted state semantics.
 
 - `src/core/ReelRoulette.Core/*`
-  - filtering/randomization helpers, storage abstractions, verification modules, **`LibraryGridLayout`** (shared justified-row thumbnail grid layout).
+  - filtering/randomization helpers, library path and backup file naming helpers, verification modules.
 - `src/core/ReelRoulette.Core/Library/LibraryCatalogStore.cs` and `LibraryCatalogSession.cs`
   - SQLite catalog at `library.db` (WAL, synchronous=NORMAL, `user_version` 4) is the live library store. Opening a catalog at an older version from 2 upgrades it in place in one transaction, one step per version: version 3 brings the stored file name sort key, the sort indexes, and neither a separate item tag index nor a file name fold index, which no query uses, and version 4 brings each item's loudness analysis version, with every stored peak cleared. `LibraryCatalogNameSortKey` computes the key, which orders like OrdinalIgnoreCase but takes its casing from .NET's built-in Unicode table rather than the system's ICU, so the key is the same on every system; insert and rename write it with the row. Presets and thumbnail revision, width, and height are catalog columns. Core settings stay in `core-settings.json`. Startup opens it without reading the whole catalog and updates catalog rows in place. A catalog that a newer version saved, including a replace file beside it, or one that cannot be opened or read at the moment, is left unchanged. A file that is not a database, is corrupt, or has another schema, including a schema version before 2, is moved aside to `library.db.refused`. An empty catalog is created only when there is no `library.db`, refused file, or catalog backup. In any of those other cases the server runs without a library: library routes answer 503 with the reason, `/api/version`, `/control/status`, and the Operator page show it, and neither backups nor refresh run. `LibraryCatalogSession.QueryList` is the browse query (enabled sources, search, filter, sort, paging), with one index per sort mode and direction and both counts cached by catalog revision, search, and filter. The filter's tags become one set of item ids that each item is checked against once, so a filter costs the same with one tag or many; tags match by name fold. Random eligibility uses that filter without search, plus the request's video and photo options, and reads only each eligible item's id, path, play count, and last played; the picked item is read by id. Direct play reads one item and its source. Tag-editor model reads and tag-editor writes (item tags, categories, tags, and auto-tag apply) update those rows. The source list and source enable and disable read those rows. The tag table is the catalog's tag list. An item can still hold a tag name that is not in that table. Favorite, blacklist, record-playback, and clear-stats update those rows. Library stats are one SQL pass grouped by source id and media type and include the loudness baseline. A single-item read returns one row by id or path. An item-state read returns only the requested paths. An empty path list returns no items. Auto-tag scan and duplicate scan read catalog rows. Duplicate apply deletes the non-kept rows. Source import inserts and updates catalog rows. Refresh writes the columns each stage owns. `GET /api/library/catalog-checkpoint` and server catalog backups write a standalone SQLite copy of `library.db`.
 - `src/core/ReelRoulette.Server/Services/LibraryOperationsService.cs`
@@ -267,7 +267,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryBrowseModel.ts`
   - sort mode, direction labels, and search text held by the Library tab.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridLayout.ts`
-  - Core-aligned justified-row layout port (`getAspectRatio`, `buildRows`), at the Library tab's tile size, rows 100 to 240 px high aiming for 160; layout width uses full scrollport (no desktop 8px right gutter).
+  - justified-row layout (`getAspectRatio`, `buildRows`), at the Library tab's tile size, rows 100 to 240 px high aiming for 160; layout width uses full scrollport (no desktop 8px right gutter).
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridTileModel.ts`
   - grid tile HTML with the file name as the tile's tooltip, thumbnail URL builder, filled favorite and blacklist badges, and the playing icon every tile has, which shows only on the playing tile.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridRowModel.ts`
@@ -352,7 +352,7 @@ Runtime scripts:
 - `tools/scripts/run-server.ps1`
 - `tools/scripts/run-server-rebuild.ps1`
 - scripts select `net10.0-windows` framework on Windows and `net10.0` on non-Windows for ServerApp startup.
-- `tools/scripts/set-release-version.ps1` (release-aligned version fan-out for OpenAPI/runtime/tests/server+desktop project metadata, optional WebUI contract regen and verify gates, plus README/dev-setup release command examples; use `-NoDocUpdates` / `-NoUpdateDesktopVersion` / `-NoRegenerateContracts` / `-NoRunVerify` to skip pieces)
+- `tools/scripts/set-release-version.ps1` (release-aligned version fan-out for OpenAPI/runtime/tests/server project metadata, optional WebUI contract regen and verify gates, plus README/dev-setup release command examples; use `-NoDocUpdates` / `-NoRegenerateContracts` / `-NoRunVerify` to skip pieces)
 - `tools/scripts/stage-webui-assets.ps1` (WebUI build + copy into server publish `wwwroot`; used by `release.yml` and packaged-server smoke)
 - `tools/scripts/reset-checklist.ps1` (resets `docs/checklists/testing-checklist.md` metadata/checklist state, fills Release version from `.version` without its `-dev.N` suffix, and removes `Failed:`, `Skipped:`, and `Pending:` notes; preserves waived checks by default, supports `-RemoveWaived`)
 
@@ -365,7 +365,7 @@ Packaging and release:
 
 - `.github/workflows/release.yml` (Velopack matrix build/pack/upload to B2; stable GitHub mirror of `Setup.exe` / `.AppImage` only; sole shipping pipeline)
 - `tools/scripts/stage-webui-assets.ps1`
-- logo and icon assets: `assets/logo/` (the server, its release legs, and the WebUI); the desktop and its release legs keep `assets/HI.ico`, `assets/HI-256.png`, and `assets/HI-512.png` until it is removed
+- logo and icon assets: `assets/logo/` (the server, its release legs, and the WebUI)
 
 CI:
 

@@ -138,7 +138,7 @@ Last milestone completed: M12i3
 
 ### M12i4 - Desktop Client Removal
 
-- **Status**: ⏳ Planned
+- **Status**: 🚧 In Progress
 - **Goal**: The desktop client, its packaging, its tests, and everything only it used are gone, and the WebUI is the only client.
 
 #### Decisions
@@ -181,8 +181,8 @@ Last milestone completed: M12i3
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Code and tests | ⏳ Planned | The desktop projects, the Core code only the desktop uses, and their tests removed from the solution and the repository. |
-| Packaging | ⏳ Planned | A release that builds and publishes only the server, with FFmpeg's license text, and the old icons deleted. |
+| Code and tests | ✅ Complete | The desktop projects, the Core code only the desktop uses, and their tests removed from the solution and the repository. |
+| Packaging | ✅ Complete | A release that builds and publishes only the server, with FFmpeg's license text, and the old icons deleted. |
 | Contract | ⏳ Planned | Routes, fields, and lookups only the desktop used removed, item requests named by id, and the old filter fields no longer written, in OpenAPI, the generated WebUI types, and the WebUI. |
 | Fixtures | ⏳ Planned | The fixtures only the WebUI reads moved to its tests, so every shared fixture has a Core and a WebUI reader. |
 | Mockup | ⏳ Planned | The mockup without the desktop notice, the desktop client, or its log sources. |
@@ -210,8 +210,19 @@ Last milestone completed: M12i3
 
 **Acceptance**
 
-- The solution has no desktop projects, and nothing refers to `src/clients/desktop`, checked by a search of the repository.
+- The solution has no desktop projects, and nothing in the code, scripts, workflows, or the solution refers to `src/clients/desktop`, checked by a search of the repository.
 - `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and `npm run verify` pass.
+
+**Evidence**
+
+- `src/clients/desktop` is deleted, its 107 tracked files and its 3.6 GB of ignored build output, and `ReelRoulette.sln` is edited by hand to drop the three projects and the `desktop` folder, keeping its encoding (`dotnet sln remove` also drops the empty `clients` and `web` folders and adds a byte order mark).
+- The Core tests' link to `CoreServerApiClient.cs` and `CoreServerApiClientTests.cs` (15 cases) are gone, and so are Core's `LibraryGridLayout` with `LibraryGridLayoutTests.cs` (6 cases), `JsonFileStorageService`, `CoreStorageServices`, and `Abstractions/CoreInterfaces.cs`.
+- Reworded comments: `BackupFileNaming`, `TagNameComparer`, `LibraryPlaybackService.BuildRandomizationScopeKey`, and the old-field shapes in `OpenApiRouteContractTests`. The tests' desktop client ids and log source are neutral, `QueryLibrary_AcceptsDesktopDurationFilterJson` is `QueryLibrary_AcceptsDurationStringFilterJson`, and the regression test's check that no `desktop-settings.json` is written is gone, since nothing writes that file.
+- The desktop comments in `FlagFilterModes.cs`, `ApiContracts.cs`, `FilterStateTests.cs`, and `ItemIdContractTests.cs` change with the Contract slice, which changes those files.
+- `LibraryCatalogStore`'s `ReadSourceRootPaths`, `DiscardIncoming`, `DiscardPrevious`, `RestorePrevious`, `DeleteLiveDatabase`, and `LibraryCatalogReplaceOptions.RetainPrevious` now have no caller and no test until Admin Library Catalog Transfer (measured).
+- `dotnet build ReelRoulette.sln`: 0 warnings, 0 errors. `dotnet test ReelRoulette.sln`: Core.Tests 476 and ServerApp.Tests 7 passed. `npm run verify`: 1490 tests passed (measured).
+- README's and `CONTEXT.md`'s command to run the desktop, and `docs/dev-setup.md`'s Run Desktop app section and Key Projects entry, are gone. `docs/architecture.md` and `docs/domain-inventory.md` no longer describe Core's `LibraryGridLayout` or storage abstractions, and name the WebUI's `libraryGridLayout.ts` as the only grid layout.
+- A search finds no code, script, workflow, or solution entry that refers to `src/clients/desktop` or the desktop projects. `CONTEXT.md`, `docs/architecture.md`, and `docs/domain-inventory.md` still name `src/clients/desktop` in their desktop client descriptions, which the Docs slice removes, and its Acceptance searches for that path.
 
 #### Packaging slice
 
@@ -235,15 +246,30 @@ Last milestone completed: M12i3
 - The Windows server package bundles BtbN's `win64-gpl` FFmpeg build, and Linux packages bundle no FFmpeg.
 - `README.md` says LibVLC and FFmpeg are "licensed under the GNU GPL and LGPL respectively", which pairs them the wrong way round (inferred).
 - `verify-linux-packaged-server-smoke.sh` has no desktop-client references: its `.desktop` matches are the server's freedesktop menu entries (measured).
-- CI has no desktop job, so `ci.yml` needs no change (measured).
+- CI has no desktop job (measured).
 - An installed desktop's updater polls its own feed (`reelroulette/desktop{-dev}` on B2, channel `{os}-desktop{-dev}`, package `ReelRoulette.Desktop`) and never reads GitHub, so it can't pick up a server package.
 - Once no desktop is published, the installed desktop reports itself up to date, since the old feed files stay on B2 (inferred).
+- `set-release-version.ps1` sets `ReelRoulette.LibraryArchive.csproj`'s version on every run, not only behind the switch, so the script fails once that project is gone (measured).
 
 **Acceptance**
 
 - `release.yml` builds and publishes only server packages and feeds, and the Windows server package carries FFmpeg's license text, checked by reading it.
-- Nothing in the code, scripts, or current-state docs refers to `HI.ico`, `HI-256.png`, `HI-512.png`, LibVLC, or `-NoUpdateDesktopVersion`, checked by a search of the repository.
+- Nothing in the code, scripts, workflows, or the solution refers to `HI.ico`, `HI-256.png`, `HI-512.png`, LibVLC, or `-NoUpdateDesktopVersion`, checked by a search of the repository.
 - `./tools/scripts/verify-linux-packaged-server-smoke.sh` passes.
+
+**Evidence**
+
+- `release.yml` lists `components=(server)`, without the desktop case, its icon branch, `native_component="desktop"`, `stage_native`, or the LibVLC relocation step. Its matrix step, run locally with a stable and a dev version, gives 4 and 2 legs, identical to the server legs before without `stage_native` (measured).
+- The bundled FFmpeg build is configured with `--enable-gpl --enable-version3`, from the ffprobe banner in the v0.14.1 release run's log, so it needs the GPL-3.0 text (measured).
+- The step, now "Bundle FFmpeg and its license into publish output (Windows server)", copies `licenses/GPL-3.0.txt` to `runtimes/win-x64/native/FFmpeg-LICENSE.txt`, fails without it, and logs its size. Its license lines, run locally against a scratch folder, copied the text unchanged, and the step's script parses (measured). `ci.yml`'s comment that names the step follows the rename.
+- `set-release-version.ps1` no longer takes `-NoUpdateDesktopVersion` or sets the desktop projects' versions. Run with `-Version v0.0.0-test -NoRunVerify` in a scratch copy of the repo, it exits 0 and changes only `.version`, OpenAPI, `ServerStateService.cs`, `ServerContractTests.cs`, `ServerApp.csproj`, `README.md`, and `docs/dev-setup.md` (measured).
+- `set-release-version.ps1` has `[CmdletBinding()]`, so it refuses a switch it doesn't take, such as `-NoUpdateDesktopVersion` or a typo like `-NoRunVerfy`, before changing anything; without it, both were ignored and the run went ahead (measured, in a scratch copy).
+- `assets/HI.ico`, `assets/HI-256.png`, `assets/HI-512.png`, and `licenses/LGPL-2.1.txt` are deleted.
+- README's Third-Party Components names the BtbN build, its GPL-3.0 license, and where its text ships, and no longer names LibVLC.
+- These sections describe the server-only release and the script without the switch: README's Prerequisites, Quick Start (which offers only the server's downloads), Helper Scripts, and Packaging and releases; `docs/dev-setup.md`'s Prerequisites, Velopack packaging and release, Release Versioning, and Troubleshooting; `docs/architecture.md`'s Packaging and Delivery; `CONTEXT.md`'s server icon and CI and release lines; and `docs/domain-inventory.md`'s release script and icon asset lines. `.gitignore`'s comment drops LibVLC. The rest of those docs still describe the desktop client until the Docs slice.
+- `./tools/scripts/verify-linux-packaged-server-smoke.sh` passed, and `pwsh ./tools/scripts/tests/test-scripts.ps1` passed 83 checks (measured).
+- A search finds no code, script, workflow, or solution entry that refers to `HI.ico`, `HI-256.png`, `HI-512.png`, LibVLC, or `-NoUpdateDesktopVersion`. `CONTEXT.md`, `docs/architecture.md`, and `docs/domain-inventory.md` still name LibVLC in their desktop client descriptions, which the Docs slice removes, and its Acceptance searches for LibVLC.
+- The changelog's Removed entry for the desktop app and Fixed entry for FFmpeg's license land with this slice rather than the Docs slice, and the new logo bullet drops its sentence that the desktop keeps its old icon, so each commit's changelog matches it.
 
 #### Contract slice
 
@@ -332,17 +358,17 @@ Last milestone completed: M12i3
 - The pre-release skill's standard environment no longer lists the desktop app (`.claude/skills/pre-release/SKILL.md`).
 - `CONTEXT.md`, `README.md`, `docs/architecture.md`, `docs/api.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, OpenAPI's descriptions, and `MILESTONES.md`'s Ownership Boundaries no longer describe the desktop client.
 - The testing checklist loses the desktop app from its environment line, its desktop Smoke item, its desktop in-app update item in Release Flow, the Release Specific checks of the desktop retirement notice, the desktop update note, the desktop's old icon, and the desktop's filter dialog, and "and desktop" in its check of `release.yml`'s finish.
-- `CHANGELOG.md`'s `[Unreleased]` loses the desktop halves of its bullets, since v0.15.0 ships no desktop, and gains a Removed entry for the desktop app. Its bullets keep "WebUI".
+- `CHANGELOG.md`'s `[Unreleased]` loses the desktop halves of its bullets, since v0.15.0 ships no desktop. Its bullets keep "WebUI".
 
 **Traps**
 
 - Current-state docs mention the desktop on 24 lines in `CONTEXT.md`, 18 in `README.md`, 17 in `docs/architecture.md` (including its diagram), 11 in `docs/api.md`, 20 in `docs/dev-setup.md`, 31 in `docs/domain-inventory.md`, and 3 in OpenAPI (measured).
 - `CLAUDE.md` doesn't mention the desktop (measured).
-- `[Unreleased]` describes desktop changes in its filter modes, true peak, Allow remote connections, new logo, and desktop preset picks bullets.
+- `[Unreleased]` describes desktop changes in its filter modes, true peak, Allow remote connections, and desktop preset picks bullets.
 
 **Acceptance**
 
-- No current-state doc, `AGENTS.md`, or the pre-release skill describes the desktop client as current, checked by a search of them.
+- No current-state doc, `AGENTS.md`, or the pre-release skill describes the desktop client as current or refers to `src/clients/desktop` or LibVLC, checked by a search of them.
 - `pwsh ./tools/scripts/check-milestones.ps1` passes.
 
 #### Release checks

@@ -19,13 +19,13 @@ Instructions:
 
 Commit Message:
 
-M12i3: Show the WebUI's count as matching / total, held badges on corners, and the Filter tab's icon footer
+M12i4: Remove the desktop client, its tests, and its release packages
 
-- The Library tab's count line reads "{matching} / {total}", such as "615 / 49,106", which screen readers hear as "615 of 49,106 items".
-- A held action's red mark is a badge on its top-right corner, out of its flow, so the button keeps its width, and a Filter section's tab shows the same badge in place of the icon after its name.
-- The Filter tab's footer is icon buttons: Clear all filters, disabled at the default filter; Discard changes, in place of Cancel, which discards at once and leaves the tab open, in the overlay too; and Apply, orange with the unsaved-changes dot, red while a field holds it. Apply and Discard changes wait for a change.
-- A held action focuses its field within the press, after its Filter section shows, as a tap does, so a phone or tablet opens the keyboard with the field above it.
-- Tag category headers show their count and dot expanded or collapsed, the Tags tab's Save shows the dot, and each Filter category's match select is named "Match mode for {category}" without the "Local:" label.
-- The mockup's Discard changes leaves the panel open, and its Apply clears the Filter tab's category dots, with checks for both; its icon subset swaps `cancel` for `undo`.
-- A duration typed, left, and erased is no change, now also tested with a browser's events in the app and the mockup; on the iPad, left with a tap, it still counts as one, recorded in ISSUES.md.
-- CONTEXT.md, the domain inventory, the changelog, and the testing checklist describe the new display, M12i3 moves to MILESTONES-COMPLETED.md, and WebUI Keyboard Navigation and Focus plans moving focus somewhere sensible from a button that disables itself when pressed, such as Discard changes or the Tags tab's Save.
+- The desktop app, its library archive helper, and their tests leave the solution and the repository, with the Core code only they used: the grid layout and the JSON settings storage with its interfaces. Core's tests no longer compile the desktop's API client.
+- Comments and test data in Core, the server, and their tests that named the desktop as a client are reworded, apart from those the Contract slice changes.
+- `release.yml` builds and publishes only the server, so the desktop's installers, update feeds, and `ReelRoulette.Desktop` assets stop, along with the LibVLC relocation step and the unread `stage_native`.
+- The Windows server package ships FFmpeg's GPL-3.0 license text as `FFmpeg-LICENSE.txt` beside `ffmpeg.exe`, and the release step fails without it; the bundled build is configured with `--enable-gpl --enable-version3`.
+- `set-release-version.ps1` no longer updates the desktop projects or takes `-NoUpdateDesktopVersion`, and with `[CmdletBinding()]` it refuses a switch it doesn't take instead of ignoring it; ISSUES.md records the four other scripts that still ignore one.
+- The old `HI` icons and the LGPL text, which only LibVLC needed, are deleted, and README's Third-Party Components names FFmpeg's license and build.
+- README's Quick Start offers only the server's downloads, the packaging and release sections of README, dev-setup, architecture, CONTEXT, and the domain inventory describe the server-only release and the script, and no doc gives a command to run the desktop or describes Core's grid layout.
+- The changelog records the removal and the license fix, and M12i4's Code and tests and Packaging slices land; the rest of the docs' desktop descriptions wait for its Docs slice.

@@ -869,7 +869,7 @@ public sealed class LibraryListQueryTests
     }
 
     [Fact]
-    public void QueryLibrary_AcceptsDesktopDurationFilterJson()
+    public void QueryLibrary_AcceptsDurationStringFilterJson()
     {
         var appData = Path.Combine(Path.GetTempPath(), "reelroulette-library-query", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(appData);

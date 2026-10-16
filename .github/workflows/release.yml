@@ -78,7 +78,7 @@ jobs:
             tiers=(dev stable)
           fi
 
-          components=(server desktop)
+          components=(server)
           platforms=(linux windows)
 
           matrix_json='{"include":[]}'
@@ -91,12 +91,6 @@ jobs:
                 pack_title="ReelRoulette Server"
                 csproj="src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj"
                 main_exe_base="ReelRoulette.ServerApp"
-                ;;
-              desktop)
-                pack_id="ReelRoulette.Desktop"
-                pack_title="ReelRoulette Desktop"
-                csproj="src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj"
-                main_exe_base="ReelRoulette.DesktopApp"
                 ;;
             esac
 
@@ -125,7 +119,6 @@ jobs:
                 channel_suffix=""
                 native_component=""
                 stage_webui=false
-                stage_native=false
                 if [[ "$tier" == "dev" ]]; then
                   tier_suffix="-dev"
                   channel_suffix="-dev"
@@ -139,33 +132,13 @@ jobs:
 
                 feed_urls+=("${PUBLIC_FEED_BASE}/${prefix}/releases.${channel}.json")
 
-                if [[ "$component" == "server" ]]; then
-                  framework="$framework_server"
-                  stage_webui=true
-                  stage_native=false
-                  if [[ "$platform" == "windows" ]]; then
-                    icon="assets/logo/app.ico"
-                  else
-                    icon="assets/logo/png/icon-256.png"
-                  fi
-                else
-                  framework=""
-                  stage_webui=false
-                  stage_native=false
-                  if [[ "$platform" == "windows" ]]; then
-                    icon="assets/HI.ico"
-                  else
-                    icon="assets/HI-256.png"
-                  fi
-                fi
+                framework="$framework_server"
+                stage_webui=true
                 if [[ "$platform" == "windows" ]]; then
-                  if [[ "$component" == "server" ]]; then
-                    stage_native=true
-                    native_component="server"
-                  else
-                    stage_native=true
-                    native_component="desktop"
-                  fi
+                  icon="assets/logo/app.ico"
+                  native_component="server"
+                else
+                  icon="assets/logo/png/icon-256.png"
                 fi
 
                 leg="$(jq -nc \
@@ -184,7 +157,6 @@ jobs:
                   --arg icon "$icon" \
                   --argjson mirror_github "$mirror_github" \
                   --argjson stage_webui "$stage_webui" \
-                  --argjson stage_native "$stage_native" \
                   --arg native_component "${native_component:-}" \
                   '{
                     component: $component,
@@ -202,7 +174,6 @@ jobs:
                     icon: $icon,
                     mirror_github: $mirror_github,
                     stage_webui: $stage_webui,
-                    stage_native: $stage_native,
                     native_component: $native_component
                   }')"
 
@@ -349,13 +320,14 @@ jobs:
         run: |
           pwsh ./tools/scripts/stage-webui-assets.ps1 -RepoRoot "$env:GITHUB_WORKSPACE" -PublishDir "$env:PUBLISH_DIR"
 
-      - name: Bundle FFmpeg into publish output (Windows server)
+      - name: Bundle FFmpeg and its license into publish output (Windows server)
         if: matrix.native_component == 'server'
         shell: pwsh
         env:
           # A BtbN month-end build, which BtbN keeps; daily builds are pruned after about two weeks.
           # CI's Windows tests install the same build: the tag, asset, and SHA-256 must match
-          # ci.yml's "Install ffmpeg" step in build-test-windows.
+          # ci.yml's "Install ffmpeg" step in build-test-windows, and README.md's Third-Party
+          # Components names the build's version.
           FFMPEG_RELEASE_TAG: autobuild-2026-09-30-13-08
           FFMPEG_ASSET: ffmpeg-n9.0.2-17-g2a571b6068-win64-gpl-9.0
           FFMPEG_SHA256: a0e45723c72141975f51d8666302e614711745f3102b704ca3f82c897a58d278
@@ -377,6 +349,13 @@ jobs:
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
           Copy-Item -LiteralPath (Join-Path $bin 'ffmpeg.exe') -Destination (Join-Path $dest 'ffmpeg.exe') -Force
           Copy-Item -LiteralPath (Join-Path $bin 'ffprobe.exe') -Destination (Join-Path $dest 'ffprobe.exe') -Force
+          # The build is configured with --enable-gpl --enable-version3, so it ships under GPL-3.0.
+          $license = Join-Path $dest 'FFmpeg-LICENSE.txt'
+          Copy-Item -LiteralPath 'licenses/GPL-3.0.txt' -Destination $license -Force
+          if (-not (Test-Path -LiteralPath $license)) {
+            throw "FFmpeg license gate failed: missing $license"
+          }
+          Write-Host "Bundled FFmpeg license: runtimes/win-x64/native/FFmpeg-LICENSE.txt ($((Get-Item -LiteralPath $license).Length) bytes)"
           $bundledFfprobe = Join-Path $dest 'ffprobe.exe'
           $versionOutput = @(& $bundledFfprobe -version)
           if ($LASTEXITCODE -ne 0) {
@@ -385,36 +364,6 @@ jobs:
           $versionOutput | Write-Host
           if (-not ($versionOutput[0] -like "ffprobe version $env:FFMPEG_VERSION *")) {
             throw "Bundled ffprobe is '$($versionOutput[0])', expected $env:FFMPEG_VERSION"
-          }
-
-      - name: Relocate LibVLC into probe path (Windows desktop)
-        if: matrix.native_component == 'desktop'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $publishRoot = $env:PUBLISH_DIR
-          $src = Join-Path $publishRoot 'libvlc/win-x64'
-          $dest = Join-Path $publishRoot 'runtimes/win-x64/native/libvlc'
-          if (-not (Test-Path -LiteralPath $src)) {
-            throw "Expected LibVLC publish output at $src"
-          }
-          $x86Tree = Join-Path $publishRoot 'libvlc/win-x86'
-          if (Test-Path -LiteralPath $x86Tree) {
-            throw "Unexpected libvlc/win-x86 output (VlcWindowsX86Enabled should be false)"
-          }
-          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
-          Move-Item -LiteralPath $src -Destination $dest -Force
-          $libvlcRoot = Join-Path $publishRoot 'libvlc'
-          if (Test-Path -LiteralPath $libvlcRoot) {
-            Remove-Item -LiteralPath $libvlcRoot -Recurse -Force
-          }
-          $dll = Join-Path $dest 'libvlc.dll'
-          $plugins = Join-Path $dest 'plugins'
-          if (-not (Test-Path -LiteralPath $dll)) {
-            throw "LibVLC gate failed: missing $dll"
-          }
-          if (-not (Test-Path -LiteralPath $plugins)) {
-            throw "LibVLC gate failed: missing plugins directory $plugins"
           }
 
       - name: Download prior release index (delta)

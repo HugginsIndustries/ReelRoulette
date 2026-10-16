@@ -29,7 +29,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
     - Uses a cross-platform Avalonia tray host when available (lifecycle/refresh/operator shortcuts). The tray runs until the server shuts it down, always on the tray's UI thread. If the tray ends without that, `last.log` records it and the server keeps running.
     - The tray loads the Fluent theme, since on Windows Avalonia draws the tray menu as its own window. `last.log` records tray icon clicks, each time the Windows tray menu opens (with its size and item count) and closes, failed or rejected tray menu actions, tray UI errors, and Avalonia warnings and errors, each written once per run.
     - Falls back to a deterministic headless host when a tray cannot be created.
-  - The server's executable and tray icon is `assets/logo/app.ico`, copied next to the executable. The desktop client keeps its old `assets/HI.ico`, `HI-256.png`, and `HI-512.png` until it is removed.
+  - The server's executable and tray icon is `assets/logo/app.ico`, copied next to the executable.
   - Startup-launch registration is host-managed with immediate toggle support through tray and Operator control settings:
     - Windows: user-scoped `HKCU` registration.
     - Linux: XDG autostart (`*.desktop` under `~/.config/autostart/` or `$XDG_CONFIG_HOME/autostart/`, with `Exec=`/`Path=` derived from the stable app path—**`APPIMAGE`** when running an AppImage, otherwise the process path—and host content root pinned to `AppContext.BaseDirectory` so session autostart finds config and WebUI assets).
@@ -94,7 +94,7 @@ ReelRoulette is migrating from a monolithic desktop app to a thin-client, API-fi
 
 - **Operational surfaces**
   - Pre-release testing checklist at `docs/checklists/testing-checklist.md`: automated checks, a short smoke test, release-specific agent and manual checks, and the release flow.
-  - CI and release: `ci.yml` (build/test + WebUI verify) and `release.yml` (tag + `workflow_dispatch`, Velopack publish to Backblaze B2—Windows per-user `Setup.exe`, Linux AppImage-style bundles, no MSI or portable zip; stable builds also mirror those installers onto the existing GitHub release). B2 **update feeds** are published for in-app updates; **ServerApp** and the **desktop client** check and apply their own updates when installed via Velopack (manual check/download/apply in operator UI or desktop Settings). CI and release install the .NET SDK from `global.json` and run Node 24, and the Windows server release bundles a pinned, hash-checked BtbN FFmpeg build and fails unless its `ffprobe -version` names that build.
+  - CI and release: `ci.yml` (build/test + WebUI verify) and `release.yml` (tag + `workflow_dispatch`, Velopack publish to Backblaze B2—Windows per-user `Setup.exe`, Linux AppImage-style bundles, no MSI or portable zip; stable builds also mirror those installers onto the existing GitHub release). B2 **update feeds** are published for in-app updates; **ServerApp** checks and applies its own updates when installed via Velopack (manual check/download/apply in the operator UI). Only the server is built and published. CI and release install the .NET SDK from `global.json` and run Node 24, and the Windows server release bundles a pinned, hash-checked BtbN FFmpeg build with its GPL-3.0 license text, and fails unless its `ffprobe -version` names that build.
   - Release versioning: **`tools/scripts/set-release-version.ps1`** reads/writes repo-root **`.version`** and fans out OpenAPI, project versions, contract fixtures, optional verify gates, and doc examples before tagging.
   - Packaging staging: **`stage-webui-assets.ps1`** (server WebUI in publish output); used by **`release.yml`** and **`verify-linux-packaged-server-smoke.sh`**.
   - Packaged-server smoke: **`verify-linux-packaged-server-smoke.sh`** builds or accepts a Velopack Linux server AppImage and curls `/health`, `/api/version`, `/control/status`, `/operator` headlessly.
@@ -121,7 +121,6 @@ For full setup/run details use `README.md` and `docs/dev-setup.md`. Core command
 - `dotnet test ReelRoulette.sln`
 - `dotnet run --framework net10.0-windows --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` (Windows runtime; tray when available, otherwise headless)
 - `dotnet run --framework net10.0 --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` (non-Windows runtime; tray when available, otherwise headless)
-- `dotnet run --project ./src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj`
 - `pwsh ./tools/scripts/run-server.ps1` / `pwsh ./tools/scripts/run-server-rebuild.ps1`
 - `npm run verify` (in `src/clients/web/ReelRoulette.WebUI`)
 

@@ -9,11 +9,10 @@ This guide covers local setup, run paths, verification gates, packaging, and rel
 - PowerShell Core (`pwsh`) for repository scripts under `tools/scripts/` (for example `pwsh ./tools/scripts/run-server.ps1`).
   - Windows: install PowerShell 7+ with `winget install Microsoft.PowerShell` so `pwsh` is on your PATH. Built-in Windows PowerShell 5.1 is not enough for scripts that rely on PowerShell 7+; use `pwsh` after install (restart the terminal or Cursor if `pwsh` is not found until PATH refreshes).
   - Linux (Arch Linux, CachyOS, and similar): install from the AUR, for example `paru -S powershell-bin` or `yay -S powershell-bin`; that package provides `pwsh` on your PATH.
-- VLC / LibVLC libraries and plugins for desktop video playback when running from source; FFmpeg (with `ffprobe` on `PATH`) on the **server** for library refresh (duration, loudness, thumbnails). Install from your OS on Linux and for local Windows `dotnet run`. **Velopack** Windows server packages bundle FFmpeg/ffprobe; Windows desktop packages bundle LibVLC. Linux AppImages bundle neither—the desktop app resolves **`libvlc.so.5`** via a native loader hook (minimal library/plugin packages on split distros; monolithic **`vlc`** on Arch). If the desktop AppImage is launched without LibVLC, it shows a copy-paste install command for the detected distro family.
+- FFmpeg (with `ffprobe` on `PATH`) on the **server** for library refresh (duration, loudness, thumbnails). Install from your OS on Linux and for local Windows `dotnet run`. **Velopack** Windows server packages bundle FFmpeg/ffprobe; Linux AppImages don't.
 
 ## Key Projects
 
-- Desktop app: `src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj`
 - Core domain: `src/core/ReelRoulette.Core/ReelRoulette.Core.csproj`
 - Server transport: `src/core/ReelRoulette.Server/ReelRoulette.Server.csproj`
 - Default runtime host: `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj`
@@ -47,16 +46,6 @@ Runtime notes:
 Use when you want to ensure web assets are freshly rebuilt before startup:
 
 - `pwsh ./tools/scripts/run-server-rebuild.ps1`
-
-### Run Desktop app
-
-- **`dotnet run`** on Windows uses the **VideoLAN.LibVLC.Windows** NuGet copy under **`libvlc/win-x64/`** in the build output. Packaged Windows desktop builds load **`runtimes/win-x64/native/libvlc/`** instead.
-- `dotnet run --project ./src/clients/desktop/ReelRoulette.DesktopApp/ReelRoulette.DesktopApp.csproj`
-
-Desktop behavior notes:
-
-- Desktop is API/SSE thin-client orchestration for migrated flows.
-- Desktop playback can run local-first with API fallback (or force API mode via settings).
 
 ## API and Control Surfaces (High-Signal)
 
@@ -201,16 +190,16 @@ To start over with an empty library instead, move `library.db`, `library.db.prev
 All shipping packages are produced by **`.github/workflows/release.yml`** (tag push or `workflow_dispatch`). The workflow:
 
 - Validates `.version` against the requested tag.
-- Builds **ServerApp** and **DesktopApp** self-contained for `win-x64` and `linux-x64`.
-- Stages WebUI via **`stage-webui-assets.ps1`** on server legs.
-- Bundles Windows FFmpeg (server) and relocates NuGet LibVLC (desktop) inline on Windows legs.
+- Builds **ServerApp** self-contained for `win-x64` and `linux-x64`.
+- Stages WebUI via **`stage-webui-assets.ps1`**.
+- Bundles Windows FFmpeg and its license text (`runtimes/win-x64/native/FFmpeg-LICENSE.txt`) inline on Windows legs.
 - Packs with **`vpk`** (Windows skips portable zips) and uploads feeds to Backblaze B2; stable tags also mirror **`Setup.exe`** and **`.AppImage`** to GitHub Releases.
 
-Windows output is a per-user **`Setup.exe`** (no MSI, no portable zip). Linux output is a Velopack **AppImage**-style bundle. Update channels follow `{os}-{component}` for stable and `{os}-{component}-dev` for dev builds.
+Windows output is a per-user **`Setup.exe`** (no MSI, no portable zip). Linux output is a Velopack **AppImage**-style bundle. Update channels follow `{os}-server` for stable and `{os}-server-dev` for dev builds.
 
-**Linux AppImage menu integration:** When `APPIMAGE` is set (running the downloaded `.AppImage` file), ServerApp and DesktopApp reconcile a Freedesktop launcher under `$XDG_DATA_HOME/applications/` (default `~/.local/share/applications/`) and hicolor icons on every startup—silent, no first-run flag. `dotnet run` and Windows builds skip registration. Dangling entries after deleting an AppImage are not removed automatically.
+**Linux AppImage menu integration:** When `APPIMAGE` is set (running the downloaded `.AppImage` file), ServerApp reconciles a Freedesktop launcher under `$XDG_DATA_HOME/applications/` (default `~/.local/share/applications/`) and hicolor icons on every startup—silent, no first-run flag. `dotnet run` and Windows builds skip registration. Dangling entries after deleting an AppImage are not removed automatically.
 
-**Installed runtime:** ServerApp and DesktopApp call **`VelopackApp.Build().Run()`** at startup so Velopack **install/update/uninstall hook** invocations work. **Velopack-installed** builds also check the B2 feed: a background loop is **check-only**; download and apply are confirmed actions in Operator (`/control/update/*`) or Desktop Settings (stable or preview/dev via the dev-channel toggle). Unpackaged `dotnet run` sessions report not-installed and skip apply.
+**Installed runtime:** ServerApp calls **`VelopackApp.Build().Run()`** at startup so Velopack **install/update/uninstall hook** invocations work. **Velopack-installed** builds also check the B2 feed: a background loop is **check-only**; download and apply are confirmed actions in Operator (`/control/update/*`), stable or preview/dev via the dev-channel toggle. Unpackaged `dotnet run` sessions report not-installed and skip apply.
 
 ### Packaged-server smoke (Linux)
 
@@ -228,9 +217,9 @@ Repo-root **`.version`** holds the canonical release version as a single v-prefi
 
 - `pwsh ./tools/scripts/set-release-version.ps1 -Version v0.15.0-dev.1`
 - Omit `-Version` to read `.version` and fan out without changing the file.
-- By default, the script also updates the desktop app `<Version>`, runs `npm run generate:contracts` in WebUI, runs solution build/test plus WebUI verify and `verify-web-deploy.ps1`, and updates release command examples in `README.md` and `docs/dev-setup.md`.
+- By default, the script also runs `npm run generate:contracts` in WebUI, runs solution build/test plus WebUI verify and `verify-web-deploy.ps1`, and updates release command examples in `README.md` and `docs/dev-setup.md`.
 - Use `-NoDocUpdates` to skip the README/dev-setup example updates.
-- Use `-NoUpdateDesktopVersion`, `-NoRegenerateContracts`, and/or `-NoRunVerify` to skip desktop version, contract regeneration, or the verify steps respectively.
+- Use `-NoRegenerateContracts` and/or `-NoRunVerify` to skip contract regeneration or the verify steps respectively.
 
 This updates:
 
@@ -239,8 +228,6 @@ This updates:
 - server `assetsVersion` in `/api/version` response
 - release-version test fixtures
 - server app project `<Version>`
-- `ReelRoulette.LibraryArchive` project `<Version>`
-- desktop project `<Version>`
 
 GitHub / B2 release flow:
 
@@ -269,6 +256,6 @@ Check `MILESTONES.md` and `MILESTONES-COMPLETED.md` against their maintenance ru
 - Version/capability startup blocks:
   - check `/api/version` and `/api/capabilities` output against expected client requirements.
 - Velopack release workflow failures:
-  - confirm `.version` matches the tag; inspect the failing matrix leg log (Windows ffprobe gate, LibVLC presence gate, or pack/upload steps).
+  - confirm `.version` matches the tag; inspect the failing matrix leg log (Windows ffprobe gate, FFmpeg license gate, or pack/upload steps).
 - Packaged Linux server smoke failures:
   - re-run `./tools/scripts/verify-linux-packaged-server-smoke.sh` and inspect server stdout/stderr from the script.

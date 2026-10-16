@@ -31,7 +31,7 @@ public sealed class ServerLogServiceTests
                     var message = $"w{writer:D2}-{index:D4} {new string('x', (writer * 7 + index) % 90)} END";
                     if (writer % 2 == 0)
                     {
-                        operations.AppendClientLog(new ClientLogRequest { Source = "desktop-main-window", Level = "info", Message = message });
+                        operations.AppendClientLog(new ClientLogRequest { Source = "webui", Level = "info", Message = message });
                     }
                     else
                     {
@@ -57,7 +57,7 @@ public sealed class ServerLogServiceTests
                 var match = LineShape.Match(line);
                 Assert.True(match.Success, $"Malformed line: {line}");
                 var writer = int.Parse(match.Groups["id"].Value[1..3]);
-                Assert.Equal(writer % 2 == 0 ? "desktop-main-window" : "server", match.Groups["source"].Value);
+                Assert.Equal(writer % 2 == 0 ? "webui" : "server", match.Groups["source"].Value);
                 ids.Add(match.Groups["id"].Value);
             }
 

@@ -67,6 +67,6 @@ artifacts/
 # Velopack pack output (default vpk --outputDir)
 Releases/
 
-# Windows native deps (ffmpeg/ffprobe/LibVLC) — optional local cache under runtimes/win-x64/native/ (not used for Velopack CI builds)
+# Windows native deps (ffmpeg/ffprobe) — optional local cache under runtimes/win-x64/native/ (not used for Velopack CI builds)
 runtimes/
 

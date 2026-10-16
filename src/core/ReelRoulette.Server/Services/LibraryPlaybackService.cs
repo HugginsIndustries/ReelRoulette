@@ -242,8 +242,9 @@ public sealed class LibraryPlaybackService
     }
 
     /// <summary>
-    /// Isolates shuffle-bag / folder-spread state per browser tab (session) and per desktop process,
-    /// while keeping anonymous web clients that omit session on a single shared scope.
+    /// Isolates shuffle-bag / folder-spread state per browser tab (session), keeping a client that
+    /// omits its session on one scope per client id, and anonymous clients that omit their session on a
+    /// single shared scope.
     /// </summary>
     internal static string BuildRandomizationScopeKey(string? clientId, string? sessionId)
     {

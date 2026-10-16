@@ -36,11 +36,13 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 - **WebUI errors show in a dialog:** Errors that used to flash by on the WebUI's status line, such as a random pick or a play that fails, a missing file, a favorite that can't be saved, or a filter or tag change that can't load or save, now show in the app's dialog until you close it, also on a phone on its side. The same error doesn't stack up while it is showing. A server that can't be reached reads "Couldn't reach the server." in every browser, a library that takes too long to load says the server didn't answer in time, a failed Auto Tag scan says so instead of reporting no matches, and a failed tag save names its own failed step instead of an earlier one. A device that needs pairing shows only the pairing prompt, whatever it was doing, and pairing with a server that can't be reached says so.
 - **WebUI player says what's going on:** A small indicator at the top of the WebUI's player shows one thing at a time, in place of status line messages that flipped between each other: Reconnecting… while the server can't be reached, that the server isn't compatible or is running without a library, Loading… once a file takes more than half a second, and a library refresh's stage and progress while the player's controls show. A server running without a library is now named as such, and the WebUI loads nothing from it instead of failing every request with an error.
 - **WebUI popups and notifications:** The WebUI's status line is gone, and so is the diagnostics line mobile browsers showed below the player. Messages such as a favorite saved, a filter applied, a favorite or blacklist change made on another device, the connection coming back, or a library refresh finishing pop up briefly beside the player, and a failed refresh stays until you close it. A bell on the player opens a list of recent messages and of what's going on now, and its badge counts the ones that didn't pop up.
-- **New logo and icons:** The WebUI's header shows the new ReelRoulette logo in place of the app name, or the icon alone on a phone, and its browser tab, installed app, and home screen icons are the new icon. Its page title and installed app name are now just ReelRoulette. The server's executable, tray, installer, and Linux menu icons are the new icon too. The desktop app keeps its old icon until it is removed.
+- **New logo and icons:** The WebUI's header shows the new ReelRoulette logo in place of the app name, or the icon alone on a phone, and its browser tab, installed app, and home screen icons are the new icon. Its page title and installed app name are now just ReelRoulette. The server's executable, tray, installer, and Linux menu icons are the new icon too.
 
 ### Deprecated
 
 ### Removed
+
+- **Desktop app:** The desktop app is no longer built or released, and its installers and update feeds stop. ReelRoulette in the browser, installed as an app or not, is the only client on every device.
 
 ### Fixed
 
@@ -51,6 +53,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 - **One random pick at a time:** Pressing Next again in the WebUI while a random pick is loading no longer sends more picks that each play briefly and count as a play. A pick the server doesn't answer within 10 seconds is cancelled with "No response from the server. Try again.", and the next press starts a fresh one.
 - **Preset star clears when the filter is put back:** In the WebUI, setting a category's match mode to ANY (OR) and back, or unchecking sources and checking them again for a preset that names every source, no longer leaves a star on the Filter tab's preset heading or the preset dropdown, or Apply showing changes, and moving a preset and back no longer leaves Apply showing changes.
 - **Refresh keeps files from an unmounted drive or share:** When a source's folder is there but holds no media files, as when its drive or network share isn't mounted, a refresh no longer removes every file of that source from the library along with its tags, favorites, and play stats. It keeps them, writes a warning to the server log naming the folder, and the WebUI says so in a dialog naming the folder, once per page load.
+- **FFmpeg's license in Windows server packages:** Windows server packages now include the GPL-3.0 license text for the FFmpeg and ffprobe they bundle, as `FFmpeg-LICENSE.txt` beside them.
 
 ### Security
 

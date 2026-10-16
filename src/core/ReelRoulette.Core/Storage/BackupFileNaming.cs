@@ -3,7 +3,7 @@ using System.Globalization;
 namespace ReelRoulette.Core.Storage;
 
 /// <summary>
-/// Shared backup filename timestamp formatting for desktop and core JSON backups.
+/// Shared backup filename timestamp formatting for the server's settings and library catalog backups.
 /// </summary>
 public static class BackupFileNaming
 {

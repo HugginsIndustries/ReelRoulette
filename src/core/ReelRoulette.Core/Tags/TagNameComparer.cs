@@ -1,7 +1,7 @@
 namespace ReelRoulette.Core.Tags;
 
 /// <summary>
-/// Display order for tag and category names, shared by server and desktop and mirrored by the WebUI.
+/// Display order for tag and category names on the server, mirrored by the WebUI.
 /// </summary>
 public sealed class TagNameComparer : IComparer<string>
 {
