@@ -445,7 +445,7 @@ export interface paths {
         /**
          * Download a standalone catalog checkpoint
          * @description Returns a SQLite database of the live catalog, produced while `library.db` is open.
-         *     The file does not depend on a WAL sidecar. Desktop library export saves this response as `library.db`.
+         *     The file does not depend on a WAL sidecar.
          */
         get: operations["getLibraryCatalogCheckpoint"];
         put?: never;
@@ -1206,7 +1206,7 @@ export interface components {
             includedSourceIds?: string[] | null;
             /**
              * @description Shortest video duration. A number is seconds, and a string is .NET TimeSpan text, such as
-             *     `HH:MM:SS` or the desktop's `d.HH:MM:SS.fffffff`, so `"90"` is 90 days and `"1:30"` is 1 hour 30
+             *     `HH:MM:SS` or `d.HH:MM:SS.fffffff`, so `"90"` is 90 days and `"1:30"` is 1 hour 30
              *     minutes. Videos without a known duration are left out, and photos always pass. Defaults to no limit.
              */
             minDuration?: string | number | null;
@@ -3887,7 +3887,7 @@ export interface operations {
                 clientId?: string | null;
                 /** @description Optional runtime session identity for reconnect/playback correlation. */
                 sessionId?: string | null;
-                /** @description Optional client type hint (for example desktop/web/mobile-web/operator). */
+                /** @description Optional client type hint (for example web or mobile-web). */
                 clientType?: string | null;
                 /** @description Optional friendly device/client label shown in operator diagnostics. */
                 deviceName?: string | null;

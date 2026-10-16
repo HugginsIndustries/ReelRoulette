@@ -19,7 +19,7 @@ Run `pwsh ./tools/scripts/reset-checklist.ps1` to clear check states and `Failed
 - Test date/time: 2026-10-06 15:35:45
 - Tester: Christian Huggins
 - Release version: v0.14.1
-- Environment (OS + device(s) + browser(s)): CachyOS desktop (desktop app, server, WebUI in Firefox); CachyOS laptop on home LAN (WebUI in Firefox via .local); Pixel 8 Pro (WebUI in Firefox over Tailscale); iPad Pro 13-inch M4 (WebUI installed from Safari, over Tailscale); Windows 11 VM (desktop and server, Setup.exe install and in-app update from the previous release)
+- Environment (OS + device(s) + browser(s)): CachyOS desktop (server, WebUI in Firefox); CachyOS laptop on home LAN (WebUI in Firefox via .local); Pixel 8 Pro (WebUI in Firefox over Tailscale); iPad Pro 13-inch M4 (WebUI installed from Safari, over Tailscale); Windows 11 VM (server, Setup.exe install and in-app update from the previous release)
 
 ---
 
@@ -47,7 +47,6 @@ A quick pass over the basics no automated test covers end to end.
 
 - [x] The WebUI loads, browses the library, and plays a video in a desktop browser.
 - [x] The WebUI loads, browses the library, and plays a video on a phone.
-- [x] The desktop app starts, connects to the server, and plays a video.
 - [x] The server starts with its tray icon, and tray **Restart Server** and **Stop Server / Exit** work.
 - [x] The Operator page loads.
 
@@ -59,9 +58,13 @@ A quick pass over the basics no automated test covers end to end.
 
 An agent verifies these from the repo, its docs, or the release workflow's runs during the pass, and ticks them.
 
-- [ ] Mockup gap audit: every screen in `docs/mockups/reelroulette/` matches the release's WebUI, admin section, recovery page, and desktop retirement notice, and each difference found is fixed in the mockup or recorded as a backlog item in `MILESTONES.md`.
+- [ ] Mockup gap audit: every screen in `docs/mockups/reelroulette/` matches the release's WebUI, admin section, and recovery page, and each difference found is fixed in the mockup or recorded as a backlog item in `MILESTONES.md`.
 
-- [ ] The v0.15.0 release notes tell desktop users to update the desktop along with the server.
+- [ ] On Linux and Windows, the release publishes only the server, and the Windows package carries FFmpeg's license text, checked in a dev-channel release run of `release.yml`.
+
+- [ ] The v0.15.0 release notes say the desktop app is no longer released and that ReelRoulette in the browser replaces it.
+
+- [ ] The v0.15.0 release notes tell users to reload any open ReelRoulette page after updating the server, since an open page keeps the old API version until it's reloaded.
 
 ### Manual checks
 
@@ -73,9 +76,9 @@ These need a person, real devices, or the Windows VM.
 - [ ] On Android Chrome over HTTPS through each proxy, with the default auth mode, choosing Install (not Create shortcut) adds the WebUI to Settings → Apps and opens it standalone with its icon; iOS Add to Home Screen and desktop browser install still open standalone.
 - [ ] With the server paused (`kill -STOP` on its process) while the WebUI plays, pressing Next several times shows Loading… on the player's indicator and, about 10 seconds after the first press, "No response from the server. Try again." in the in-app notice; after `kill -CONT`, `last.log` has one `playback=random-pick-timeout` line and no more than one random pick from those presses, and the next Next plays one item.
 - [ ] After the Preact migration, the player, the library, filter, presets, and tag editor in the side panel's tabs, and Auto Tag work as in the previous release apart from the side panel's, its Library, Filter, and Tags tabs', and Auto Tag's own changes and the player's Auto-Pause, scrub bar, time, and Mute changes, in and out of fullscreen, on a desktop browser, the iPad in Safari, an Android phone, and as an installed app.
-- [ ] With the dev release installed on Windows and Linux, the server's executable, shortcut, tray, and Linux menu icons show the new logo, the WebUI's tab icon and its installed app icon on Android and iOS show it too, and the desktop app keeps its old icon. On Windows, check the server executable's icon in Explorer at small, medium, large, and extra large icon views, and the tray icon, since `app.ico` stores every size as PNG.
+- [ ] With the dev release installed on Windows and Linux, the server's executable, shortcut, tray, and Linux menu icons show the new logo, and the WebUI's tab icon and its installed app icon on Android and iOS show it too. On Windows, check the server executable's icon in Explorer at small, medium, large, and extra large icon views, and the tray icon, since `app.ico` stores every size as PNG.
 - [ ] On the Windows VM, measure whether folder import and refresh see paths in a different casing from the stored ones: add a source typed in a casing that differs from the folder on disk, import it, rename a file by case only, and refresh. Record the result in the Ordinal Path Identity on Linux entry's Traps in `MILESTONES.md`.
-- [ ] In the WebUI and the desktop, Favorites excluded and Blacklisted only each limit browse and random play as named, and a preset saved in one client shows the same filter in the other.
+- [ ] In the WebUI, Favorites excluded and Blacklisted only each limit browse and random play as named.
 - [ ] In the WebUI's Filter tab, on a desktop browser and a phone in both themes, a flagged duration's tooltip shows beside its red icon and inside the screen while the pointer is on the icon, after a tap on it, and while the field has focus.
 - [ ] Every in-app dialog matches the WebUI's theme and works in an installed web app on desktop and on mobile, including in fullscreen.
 - [ ] In the installed app on Android and iOS, dragging a tag category and a preset by its handle reorders them, and a drag that starts elsewhere on a row scrolls.
@@ -107,7 +110,6 @@ These need a person, real devices, or the Windows VM.
 During the pass, on the release's dev build:
 
 - [x] Server in-app update from the previous release: the check finds the new version without downloading, Download reaches ready, and Apply & Restart relaunches on it, on Linux and Windows; on Linux, menu entries still launch the updated AppImage.
-- [x] Desktop in-app update from the previous release: Settings finds the new version without downloading, Download reaches ready, and Apply & Restart relaunches on it, on Linux and Windows; on Linux, menu entries still launch the updated AppImage.
 
 When finishing the release, an agent ticks these:
 
@@ -122,7 +124,7 @@ After committing the release, before tagging:
 
 After tagging, keep an eye on:
 
-- `release.yml` finishing on Windows and Linux for server and desktop.
+- `release.yml` finishing on Windows and Linux for the server.
 - The GitHub release having only `Setup.exe` and `.AppImage`, plus source archives.
 - An installed previous release finding and applying this update in-app.
 

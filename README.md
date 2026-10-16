@@ -1,6 +1,6 @@
 # ReelRoulette
 
-ReelRoulette is a server-first media randomizer with thin desktop and web clients.
+ReelRoulette is a server-first media randomizer, used in the browser on any device, or installed from it as an app.
 
 ## What This Repo Runs
 
@@ -13,7 +13,7 @@ ReelRoulette is a server-first media randomizer with thin desktop and web client
   - Operator UI (`/operator`)
 - Control-plane/admin operations are exposed under `/control/*` (status, settings, pair, restart, stop, testing, logs).
 - The Operator opens directly on the server machine. From another machine it first asks for the control token, which is shown under Control Settings in the Operator on the server machine. On a server with no browser, the token is `controlRuntime.adminSharedToken` in `core-settings.json` in the server data folder (see [docs/dev-setup.md](docs/dev-setup.md#user-data-locations)). Requests through a reverse proxy count as another machine, even when the proxy runs on the server machine.
-- Desktop and WebUI act as API/SSE clients; server/core owns authoritative domain state.
+- The WebUI is the only client, over the API and SSE; server/core owns authoritative domain state.
 
 ## Prerequisites
 

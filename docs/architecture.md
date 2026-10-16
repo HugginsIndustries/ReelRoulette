@@ -8,14 +8,13 @@ It is intentionally current-state only and does not track milestone chronology.
 ReelRoulette is an API-first, thin-client system:
 
 - Core/server owns business logic and authoritative state.
-- Desktop and WebUI are orchestration and rendering clients over API plus SSE.
-- Shared contracts in `shared/api/openapi.yaml` align behavior across clients.
+- The WebUI is the only client, an orchestration and rendering layer over API plus SSE.
+- Shared contracts in `shared/api/openapi.yaml` define the API the WebUI calls and the types it checks its requests against.
 
 ## High-Level Runtime Topology
 
 ```mermaid
 flowchart LR
-    desktop[Desktop Client]
     web[WebUI Client]
     operator[Operator UI]
     host[ServerApp Host]
@@ -23,7 +22,6 @@ flowchart LR
     domain[Core Domain Services]
     data[Storage and Media Services]
 
-    desktop --> host
     web --> host
     operator --> host
 
@@ -64,21 +62,20 @@ flowchart LR
 
 - Own domain mutation rules, projection inputs, and persistence semantics.
 - Execute library operations, refresh pipeline behavior, and randomization/filter logic. Random eligibility is the library list filter. Direct play reads one item and its source.
-- Expose deterministic APIs for all migrated client flows.
+- Expose deterministic APIs for every client flow.
 
 ### Client Layers
 
-- Desktop client (`src/clients/desktop/ReelRoulette.DesktopApp/`, Avalonia) and WebUI (`src/clients/web/ReelRoulette.WebUI`) are orchestration/render layers.
+- The WebUI (`src/clients/web/ReelRoulette.WebUI`) is the orchestration/render layer.
 - WebUI ships a small **PWA** surface (`manifest.webmanifest`, `index.html` install meta, `public/icons/*`, root `public/sw.js` registered in secure contexts for Chromium installability). The worker intercepts document navigations only. Build-time sync copies the logo and icons from `assets/logo/` at their sizes (see `scripts/sync-shared-icon.mjs`), and the build output check confirms the manifest's declared sizes match the PNGs.
-- Playback filtering and preset catalogs are edited through API-backed UIs on both clients (no client-authoritative filter catalogs).
-- The WebUI remembers on each device only which preset is active and the filter it applied, as the desktop remembers its own; presets stay on the server. On the first preset load after a page refresh, a remembered preset whose own filter was applied applies again as the server has it, so changes made elsewhere in the meantime, such as tag renames, reach the filter.
+- Playback filtering and preset catalogs are edited through the WebUI's API-backed UI (no client-authoritative filter catalogs).
+- The WebUI remembers on each device only which preset is active and the filter it applied; presets stay on the server. On the first preset load after a page refresh, a remembered preset whose own filter was applied applies again as the server has it, so changes made elsewhere in the meantime, such as tag renames, reach the filter.
 - Clients issue command/query calls through APIs and project state from API plus SSE.
-- Desktop library activation (grid) is server-authoritative via `POST /api/play/{itemId}`; local LibVLC render only, with no duplicate client `record-playback` for that start. Desktop library browse is an infinite-scrolling grid fed by `POST /api/library/query`. Connect and resync use library stats, the sources API, and the tag catalog. Now-playing reads the loaded tile or `POST /api/library/item`. The loudness baseline comes from library stats.
 - WebUI Auto Tag performs filename/path matching only on the server. Auto-tag scan and duplicate scan read catalog rows. A full-library scan reads every item, and any other scan reads enabled sources. Duplicate groups are ready fingerprints. Duplicate apply deletes the other files and catalog rows and leaves the kept item. The web client sends `scanFullLibrary` and applies selected suggestions via API without client-local tag-matching authority.
 - WebUI Library tab grid lays out its own justified rows (`libraryGridLayout.ts`) and scrolls them virtually, a row at a time. Browse is `POST /api/library/query`, in 200-item pages, and a reload of the loaded window is one request for up to 10,000 tiles; tile JPEGs load from `GET /api/thumbnail/{itemId}` using that page's thumbnail fields, with the page's thumbnail version in the URL so the browser caches each JPEG until it is written again. A finished refresh run reloads the loaded window once. The first page loads after connect and stays loaded across hide and show. Header counts stay the current query totals after a change that finishes while the tab is hidden. Tile activation is server-authoritative via `POST /api/play/{itemId}` (the side panel closes on success only as the full-screen overlay; no duplicate client `record-playback`). Favorite, blacklist, playback, and tag events patch or reload the loaded window whether the tab is shown or hidden, and the WebUI matches them to tiles and the playing item by item id. `resyncRequired` reloads that window and does not fetch the full catalog.
-- WebUI Stats tab only reads: library stats from `GET /api/library/stats`, the playing item from `POST /api/library/item`, and the time before this play from the `playbackRecorded` event's `previousLastPlayedUtc`. It loads only while it shows, coalescing a burst of events into one load as the desktop's stats panel does.
-- Clients must not reintroduce local authoritative mutation fallbacks for migrated domains.
-- Library export and import run on the desktop and move only `library.db`. Export asks for a destination, then downloads a server catalog checkpoint into that file. Import replaces the live database after the server-stopped acknowledgment and can remap source folders. Import replaces presets and thumbnail revision and dimensions with the imported catalog. Settings and backups stay where they are. JPEG files stay in the local thumbnail directory until the next thumbnail stage completes, which generates thumbnails for the imported catalog and removes JPEG files that are not in it. An existing `library.db` with sources or items requires overwrite confirmation, and so does one that cannot be opened. Import refuses to replace a catalog that a newer version saved and leaves it in place. If import fails before the new database is in place, the previous catalog is put back, and a folder that had no catalog is left without one. A cleanup failure after that leaves the imported catalog in place. The server writes the checkpoint and the `library.db.backup.*` files.
+- WebUI Stats tab only reads: library stats from `GET /api/library/stats`, the playing item from `POST /api/library/item`, and the time before this play from the `playbackRecorded` event's `previousLastPlayedUtc`. It loads only while it shows, coalescing a burst of events into one load.
+- The WebUI must not add local authoritative mutation fallbacks for server-owned domains.
+- `GET /api/library/catalog-checkpoint` writes a standalone copy of the live `library.db`. No client exports or imports a library, so `LibraryCatalogStore`'s replace methods have no caller; `Open` still recovers an interrupted replace on every start.
 
 ## Contracts and Compatibility
 
@@ -99,7 +96,7 @@ Envelope fields:
 
 Reconnect and recovery:
 
-- Clients reconnect with revision continuity hints (`Last-Event-ID` and fallback query semantics where applicable). Desktop and WebUI both resume with the last event ID, and take the revision of a `resyncRequired` they receive. A stream opened without a last event ID starts with `streamOpened`, which gives the client the server's current revision to resume from.
+- Clients reconnect with revision continuity hints (`Last-Event-ID` and fallback query semantics where applicable). The WebUI resumes with the last event ID, and takes the revision of a `resyncRequired` it receives. A stream opened without a last event ID starts with `streamOpened`, which gives the client the server's current revision to resume from.
 - Server replays retained events when available.
 - On replay gaps, and for a last event ID ahead of the current revision (as after a server restart), server emits `resyncRequired`. WebUI reloads the loaded library list.
 
@@ -127,8 +124,7 @@ Operator UI is an operational surface and does not own domain logic.
 ## Media, Playback, and Missing Media Behavior
 
 - Clients request random/playback targets through server-authoritative APIs.
-- Media fetch paths and missing-media error semantics are contract-defined and consistent across clients.
-- Desktop playback policy can use local-first with API fallback where configured, while preserving server-authoritative flow contracts.
+- Media fetch paths and missing-media error semantics are contract-defined.
 
 ## Refresh, Thumbnail, and Processing Pipeline
 
@@ -157,16 +153,15 @@ Operator UI is an operational surface and does not own domain logic.
 - `src/core/ReelRoulette.Core`: domain logic and the library catalog store.
 - `src/core/ReelRoulette.Server`: transport/composition layer.
 - `src/core/ReelRoulette.ServerApp`: default runtime host and operator surface.
-- `src/clients/web/ReelRoulette.WebUI`: web client orchestration.
-- `src/clients/desktop/ReelRoulette.DesktopApp/`: Desktop client orchestration and rendering (Avalonia).
+- `src/clients/web/ReelRoulette.WebUI`: the client, orchestration and rendering.
 - `shared/api/openapi.yaml`: canonical API contract source.
 
 ## Guardrails
 
 - Keep server layer thin and move business rules into core services.
-- Preserve API-authoritative behavior for migrated flows.
-- Keep desktop and web behavior aligned through shared contracts and SSE semantics.
-- Avoid client-local authoritative fallback paths in migrated domains.
+- Preserve API-authoritative behavior for server-owned flows.
+- Keep the WebUI aligned with the server through shared contracts and SSE semantics.
+- Avoid client-local authoritative fallback paths in server-owned domains.
 - Keep this file current-state only; avoid historical/future narrative here.
 
 ## Related Documents

@@ -2,9 +2,9 @@ Instructions:
 
 - Keep title format as `*: {concise summary}`.
 - Use one of these title prefixes based on scope:
-  - `Docs: {concise summary}` for docs-only updates.
+  - `Docs: {concise summary}` for docs-only updates outside of milestone work.
   - `{milestone id}: {concise summary}` for milestone implementation work (examples: `M8c: ...`, `M9h: ...`, `M16b: ...`).
-  - Do not use milestone-id title prefixes for planning/roadmap/doc-only milestone updates; use `Docs:` for those commits.
+  - A milestone's own slices use its milestone-id prefix even when they change only docs. Planning edits that record or reorder milestones are not milestone work, so they use `Docs:`.
   - `Bugfix: {concise summary}` for defect fixes.
   - `Feature: {concise summary}` for net-new feature work outside milestone framing.
   - `Refactor: {concise summary}` for internal code restructuring with no behavior change.
@@ -19,13 +19,12 @@ Instructions:
 
 Commit Message:
 
-M12i4: Name library items only by id in the API, and move the WebUI-only fixtures to its tests
+M12i4: Describe ReelRoulette without the desktop client, and complete Desktop Client Removal
 
-- `POST /api/library-states`, `PresetResponse.summary`, and the fields only the desktop read are gone: `itemTagsChanged.itemIds`, auto-tag apply's paths, count, and top-level ids, `playbackRecorded.path`, the stats' per-type played counts, and the auto-tag scan's path list with the catalog's path scan.
-- Every route that takes an item id finds it only by its catalog id, so a full path finds nothing there, while auto-tag apply still takes full paths, and `/api/media/{token}` streams only the tokens random and play issue.
-- Favorite, blacklist, and record-playback take `itemId`, and clear playback stats takes `itemIds`, in the server, OpenAPI, the generated types, the WebUI, and the current-state docs.
-- Clear playback stats clears the whole library only with `allItems: true` and refuses a request that names no items, or both, with 400, and the API version is 2 on the server and the WebUI, so an installed desktop refuses the server instead of sending path-named requests or clearing every item's stats.
-- The WebUI writes filters without `favoritesOnly` and `excludeBlacklisted`, and Core loses the methods that wrote them; the parser and the WebUI still read them in stored presets, and the FilterState schema test names them as read but left out of the schema.
-- New server tests show a full path finds no item, the media route refuses an id or a path, the routes read the renamed fields, and clear-stats refuses a request that names no items; a WebUI test shows no mode combination writes an old field. Each failed with the old behavior put back.
-- The five fixtures only the WebUI reads move to its tests, `filter-mode-projection.json` goes with its readers, and `filter-state-written.json` holds a filter saved with only the old fields, so every fixture left in `shared/fixtures/` has a Core and a WebUI reader.
-- The changelog records the API removal, M12i4's Contract and Fixtures slices land, its Mockup slice and Release checks gain the API 2 Diagnostics and a note to reload open pages after the update, and Per-Preset Preset Writes, WebUI Multi-Select and Bulk Actions, and Admin Refresh, Backup, and Duplicate Review follow the changed test, fixture, schema, and clear-stats request.
+- The mockup loses the desktop retirement notice, the admin page's desktop client and its log sources, and its notes on the desktop as a current client, and its Diagnostics shows API 2.
+- `AGENTS.md` drops the desktop freeze and names the WebUI as the only client layer, the Core tests' `TestIsolation`, and the retired desktop in the completed milestones, and the pre-release skill and testing checklist no longer list the desktop app.
+- `CONTEXT.md`, README, architecture, the API doc, dev setup, the domain inventory, and the icon font's README lose their desktop client sections and comparisons, their rules no longer speak of migrated flows or parity across clients, and their WebUI lines no longer mention a path list or an empty item-state read.
+- OpenAPI's descriptions no longer name the desktop, its client type hint gives only the types the WebUI sends, and the generated WebUI types follow.
+- `[Unreleased]` loses the desktop halves of its bullets and the desktop preset fix, since v0.15.0 ships no desktop.
+- The testing checklist gets this milestone's release checks, M12i4 moves to MILESTONES-COMPLETED.md, and planned entries, ISSUES.md, and a shared fixture's case name describe the desktop only as retired.
+- The commit message instructions say a milestone's own slices take its prefix even when they change only docs, and `Docs:` is for docs-only work outside milestones.

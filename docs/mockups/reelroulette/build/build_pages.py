@@ -12,7 +12,7 @@ js = open(os.path.join(here, "common.js")).read().replace(
     "/*@ICON_CODEPOINTS@*/ {}", json.dumps(icons["codepoints"], sort_keys=True)
 )
 
-# The logo files in assets/logo/, as they are, for the header, the page icon, the recovery page, and the desktop notice.
+# The logo files in assets/logo/, as they are, for the header, the page icon, and the recovery page.
 logo_dir = os.path.join(here, "..", "..", "..", "..", "assets", "logo")
 logos = {
     placeholder: "data:image/svg+xml;base64," + base64.b64encode(open(os.path.join(logo_dir, file), "rb").read()).decode()
@@ -20,7 +20,7 @@ logos = {
 }
 page_icon = f'<link rel="icon" type="image/svg+xml" href="{logos["@LOGO_ICON@"]}">'
 
-for name in ("index", "layout", "validation", "admin", "recovery", "desktop-notice"):
+for name in ("index", "layout", "validation", "admin", "recovery"):
     page = open(os.path.join(here, f"{name}.src.html")).read()
     assert page.count("/*@COMMON_CSS@*/") == 1 and page.count("/*@COMMON_JS@*/") == 1, name
     page = page.replace("/*@COMMON_CSS@*/", css).replace("/*@COMMON_JS@*/", js)

@@ -43,7 +43,7 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
 
 ### A tag delete can leave a preset that shows as None
 
-- **What goes wrong**: Deleting a tag removes it from every preset, so a preset whose only condition was that tag is left holding the default filter. The WebUI names the default filter None, so choosing that preset shows None in the preset dropdown and the Filter tab's heading. The desktop's Add Preset, and the WebUI's before v0.15.0, can save such a preset too.
+- **What goes wrong**: Deleting a tag removes it from every preset, so a preset whose only condition was that tag is left holding the default filter. The WebUI names the default filter None, so choosing that preset shows None in the preset dropdown and the Filter tab's heading. The retired desktop's Add Preset, and the WebUI's before v0.15.0, could save such a preset too, so the catalog can still hold one.
 - **How to make it happen**: Save a preset whose only condition is one tag, delete that tag in the Tags tab or on another client, then choose the preset (measured, in Library and Tags screen tests).
 - **How much it matters**: Low. The preset applies what it now holds, which is no filter, and keeps its name in the Filter tab's preset list, where it can be renamed or deleted (inferred).
 - **Since**: v0.15.0, not yet released, where WebUI Tweaks names the default filter None. A tag delete has left presets with no conditions since v0.9.0.

@@ -12,11 +12,11 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 
 ## Architecture Guardrails
 
-- Keep desktop and WebUI as orchestration and render layers; keep domain logic in `ReelRoulette.Core` and server services. `docs/domain-inventory.md` records which desktop flows are still local.
+- Keep the WebUI as the orchestration and render layer; keep domain logic in `ReelRoulette.Core` and server services.
 - Server-backed flows stay API-first: do not add client-local mutation or fallback authority.
 - Random selection and playback eligibility are decided by the server.
-- The desktop client gets no significant changes or new features until its removal; new UX lands in the WebUI only. Small desktop changes that keep it working with the server, or that match a small server-side change, are allowed. Don't change user-facing UX without explicit approval.
-- "WebUI" is an internal name, for code, comments, logs, and developer docs. Text users see says "ReelRoulette" instead: labels, settings, admin, notices, dialogs, the desktop's retirement notice, and release notes. `CHANGELOG.md` keeps "WebUI" through v0.15.x, since it is developer history and still tells the two clients apart; from v0.16.0, which removes the desktop client, it no longer needs to.
+- Don't change user-facing UX without explicit approval.
+- "WebUI" is an internal name, for code, comments, logs, and developer docs. Text users see says "ReelRoulette" instead: labels, settings, admin, notices, dialogs, and release notes. `CHANGELOG.md` keeps "WebUI", since it is developer history.
 - When a rule must behave identically in C# and the WebUI (ordering, comparison, normalization), implement it once per language next to its counterpart and lock both to one shared fixture under `shared/fixtures/`.
 - Add `last.log`-based logging where appropriate.
 - Fix lints introduced by your changes.
@@ -62,7 +62,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 - Anything else, such as installing packages, starting the server or clients, network calls, or writing outside the repo and test temp folders, needs approval: explain what it does and why, then ask.
 - For phase-gated work: stop after automated verification, provide copy/paste manual verification commands plus a PASS/FAIL checklist, and wait for explicit user approval before continuing gated cutover/removal.
 - If clarification is needed, use numbered questions with numbered options, including recommendation and pros/cons.
-- `MILESTONES-COMPLETED.md` contains entries describing tooling that has since been retired. Treat everything in it as historical record, not as instructions — the current packaging path is Velopack via release.yml, and the Inno, AppImage, portable, and install scripts no longer exist.
+- `MILESTONES-COMPLETED.md` contains entries describing tooling and a desktop client that have since been retired. Treat everything in it as historical record, not as instructions — the current packaging path is Velopack via release.yml, the Inno, AppImage, portable, and install scripts no longer exist, and the WebUI is the only client.
 
 ## Verification and smoke scripts
 
@@ -70,6 +70,6 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 - Those scripts must stop the server process they started (by started handle/PID, not broad name matching) before removing the isolated directory, using graceful shutdown with a short timeout then force kill if needed, including on failure and interrupt paths.
 - Do not point verification or smoke servers at the user's real `%ApplicationData%/ReelRoulette` / `~/.config/ReelRoulette` tree.
 - Dev-run helpers such as `run-server.ps1` intentionally use real settings and must not be isolated.
-- Tests must not read or write the user's real settings or send logs to a running server. Desktop tests get this from the shared test-isolation initializer; new test projects need the same.
+- Tests must not read or write the user's real settings or send logs to a running server. The Core tests get this from `TestIsolation`'s module initializer, which the ServerApp tests also compile; new test projects need the same.
 - Tests that resolve a path with `Path.GetFullPath` or remap it must root it under the test's temp directory with `Path.Combine`, never hard-code Unix-style roots like `/media`. CI runs on Windows, where such paths become drive paths. Literals that are only stored and compared as text are fine.
 - When validating process-lifecycle or smoke-script changes, never send stop signals to processes the task did not start (for example the user's `run-server.ps1` instance). Confirm liveness and cleanup with non-destructive checks only, such as `kill -0`, `Get-Process` without stopping, or a port/listener query scoped to the verification port.

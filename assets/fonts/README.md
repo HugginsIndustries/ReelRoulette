@@ -8,8 +8,7 @@ This folder contains the **Material Symbols Outlined** variable font used for co
 
 ## Usage
 
-- **Desktop (Avalonia):** used as an icon font via `TextBlock`/`FontFamily`. Icons are referenced by ligature name (e.g., `play_arrow`), and tinted via `Foreground`.
-- **Web UI:** the same icon names are used for consistency; icons are tinted via CSS `color` and can be styled via weight/size.
+- **Web UI:** used as an icon font. Icons are referenced by ligature name (e.g., `play_arrow`), tinted via CSS `color`, and can be styled via weight/size.
 
 ## Notes
 
@@ -36,7 +35,5 @@ When updating the font:
 
 1. Download the updated **Material Symbols Outlined** variable font.
 2. Replace `MaterialSymbolsOutlined.var.ttf`.
-3. Verify icons render correctly on:
-   - Desktop (Avalonia)
-   - Web UI (browser)
+3. Verify icons render correctly in the Web UI (browser).
 4. Commit with a note about the update date/version/source.

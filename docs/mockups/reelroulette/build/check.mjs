@@ -119,12 +119,11 @@ function internalNames(document) {
 }
 
 const logoIcon = "data:image/svg+xml;base64," + readFileSync(new URL("../../../../assets/logo/logo-icon.svg", import.meta.url)).toString("base64");
-for (const name of ["index", "validation", "recovery", "desktop-notice", "layout", "admin"]) {
+for (const name of ["index", "validation", "recovery", "layout", "admin"]) {
   const { document, errors } = await load(name, 1280);
   check(`${name}: no script errors ${errors.join("; ")}`, errors.length === 0);
   check(`${name}: the page icon is logo-icon.svg`, document.querySelector('link[rel="icon"][type="image/svg+xml"]')?.getAttribute("href") === logoIcon);
   if (name === "recovery") check("recovery: the title shows the icon", document.querySelector("h1 img")?.getAttribute("src") === logoIcon && document.querySelector("h1").textContent === "ReelRoulette Recovery");
-  if (name === "desktop-notice") check("desktop-notice: the notice shows the icon", document.querySelector("#notice .notice-head img")?.getAttribute("src") === logoIcon);
   if (!["index", "validation"].includes(name)) {
     const found = internalNames(document);
     check(`${name}: what the app shows says ReelRoulette, never WebUI (${found.join(" | ")})`, found.length === 0);
@@ -3076,7 +3075,7 @@ for (const width of [1280, 390]) {
   check(`admin@${width}: and saving again without a change asks nothing`, !topDialog());
   check(`admin@${width}: no approved proposal still carries a Proposed or Open note`, !/Proposed|Open:/.test(document.body.textContent));
   const clients = $("client-list").textContent;
-  check(`admin@${width}: clients show their id and OS`, ["web-3f9c2e81 · Windows", "web-a71d09c4 · iOS", "web-55be2f10 · Android", "desktop-0c9e7a22 · OS not reported"].every((text) => clients.includes(text)));
+  check(`admin@${width}: clients show their id and OS`, ["web-3f9c2e81 · Windows", "web-a71d09c4 · iOS", "web-55be2f10 · Android"].every((text) => clients.includes(text)));
   check(`admin@${width}: the Log Viewer is named so in its card and jump link`, document.querySelector("#logs h3").textContent.endsWith("Log Viewer") && document.querySelector('.admin-nav a[href="#logs"]').textContent === "Log Viewer" && !document.body.textContent.includes("Server Logs"));
   check(`admin@${width}: it has no Tail lines field and shows the newest ${$("log-rows").querySelectorAll(".log-line").length} lines, loading older ones on scroll`,
     !$("logs").textContent.includes("Tail") && $("log-rows").querySelectorAll(".log-line").length === 20 && $("log-rows").querySelector(".log-more").textContent.startsWith("Loading"));
@@ -3089,7 +3088,7 @@ for (const width of [1280, 390]) {
   logRows.scrollTop = 0;
   logRows.dispatchEvent(new window.Event("scroll"));
   check(`admin@${width}: the Log Viewer's filters start collapsed, with chips, and no category filter`, $("log-filters").hidden && $("log-chips").textContent.includes("Levels: All") && !$("log-filters").textContent.includes("Category"));
-  check(`admin@${width}: the sources are the lines' second brackets (${$("log-svc").textContent})`, ["server", "webui", "desktop-main-window", "desktop-update"].every((source) => $("log-svc").textContent.includes(source)));
+  check(`admin@${width}: the sources are the lines' second brackets (${$("log-svc").textContent})`, ["server", "webui"].every((source) => $("log-svc").textContent.includes(source)) && !$("log-svc").textContent.includes("desktop"));
   const rowCount = () => $("log-rows").querySelectorAll(".log-line").length;
   const allRows = rowCount();
   $("log-levels").querySelectorAll("input")[0].click();
@@ -3106,7 +3105,7 @@ for (const width of [1280, 390]) {
   $("mock-dev-run").click();
   const counts = $("client-counts").textContent;
   check(`admin@${width}: clients show the three counts, their types and connection times, and no session id (${counts})`,
-    counts.includes("API sessions: 3") && counts.includes("Control sessions: 1") && counts.includes("Event streams: 4") &&
+    counts.includes("API sessions: 3") && counts.includes("Control sessions: 1") && counts.includes("Event streams: 3") &&
     clients.includes("mobile-web · 192.168.1.31 · connected 09:47") && !/session/i.test(clients));
   $("mock-bad-import").click();
   check(`admin@${width}: an import shows its upload progress (${$("import-state").textContent})`, !$("import-upload").hidden && $("import-state").textContent === "Uploading notes.db: 0%");
@@ -3156,15 +3155,6 @@ for (const width of [1280, 390]) {
   await new Promise((resolve) => setTimeout(resolve, 0));
   check(`recovery@${width}: then offers Apply & Restart`, !$("update-apply").hidden && $("update-download").hidden);
   check(`recovery@${width}: no script errors anywhere ${errors.join("; ")}`, errors.length === 0);
-}
-
-{
-  const { document, errors } = await load("desktop-notice", 1280);
-  const open = document.getElementById("notice-open");
-  check(`desktop-notice: the notice names ReelRoulette and its button says where it goes (${open.textContent})`,
-    open.textContent === "Open ReelRoulette in your browser" && document.getElementById("notice").textContent.includes("Use ReelRoulette in your browser instead."));
-  open.click();
-  check(`desktop-notice: Open ReelRoulette in your browser closes the notice ${errors.join("; ")}`, document.getElementById("notice").hidden && errors.length === 0);
 }
 
 console.log(failures ? `${failures} failed` : "all passed");

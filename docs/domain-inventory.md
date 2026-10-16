@@ -31,7 +31,7 @@ Core/server domain services own business rules and persisted state semantics.
 
 Boundary:
 
-- Domain/state mutation authority is core/server, not desktop/web clients.
+- Domain/state mutation authority is core/server, not the WebUI.
 
 ---
 
@@ -97,56 +97,6 @@ Includes:
 - control-plane auth in `src/core/ReelRoulette.Server/Auth/ServerPairingAuthMiddleware.cs` (localhost trusted, as `LocalRequest` decides; every other address needs the control token) and control token generation in `CoreSettingsService`,
 - startup-launch control surface (`/control/startup`),
 - operator diagnostics and manual testing controls.
-
----
-
-## Desktop Client Orchestration (`src/clients/desktop/ReelRoulette.DesktopApp/`)
-
-Desktop is orchestration/render for migrated flows.
-
-- `src/clients/desktop/ReelRoulette.LibraryArchive/`
-  - shared `net10.0` library: library database export/import. A transfer is one SQLite checkpoint. Source-root remap and skip run inside that database. An existing `library.db` that cannot be opened requires confirmation. If import fails before the new database is in place, the previous catalog is put back, and a folder that had no catalog is left without one. A cleanup failure after that leaves the imported catalog in place.
-- `src/clients/desktop/ReelRoulette.DesktopApp.Tests/`
-  - xUnit tests for `ReelRoulette.LibraryArchive` migration helpers, export→import round-trip, library-panel browse window decisions, and tag-save local apply (immediate tiles, a confirmed tag kept when the save fails, failed-tail undo that keeps a tag which arrived during the save, filter retarget, own-echo skip, and a rename event for a wider set of files that still applies).
-- `src/clients/desktop/ReelRoulette.DesktopApp/LibraryPanelBrowse.cs`
-  - pure decisions for infinite-scroll fill, append reflow, whether a catalog event patches tiles or reloads the loaded window (shared fixture `library-tile-effect.json`), whether an open query or a further page still in flight is read again, whether a deferred refresh keeps that query open, where a query page reflows, the committed loaded span a reload uses after a splice stops halfway, which copy supplies now-playing stats, when a file that is not on screen is read again, when that read replaces the copy already shown, and when a playback event paints the current-file section.
-- `src/clients/desktop/ReelRoulette.DesktopApp/MainWindow.axaml.cs`
-  - API/SSE lifecycle orchestration, reconnect/resync guidance, compatibility gating, playback orchestration (library grid click-to-play via `POST /api/play/{itemId}`); grid-only library panel that browses through `POST /api/library/query`. Connect and resync use library stats, sources, and the tag catalog.
-- `src/clients/desktop/ReelRoulette.DesktopApp/LibraryStatsRefresh.cs`
-  - coalesces library stats refreshes: a short wait gathers a burst, one request in flight, and one more for requests made during it.
-- `src/clients/desktop/ReelRoulette.DesktopApp/CoreServerApiClient.cs`
-  - typed desktop API adapter (commands/queries/SSE wiring), including `QueryLibraryAsync` and `RequestPlayItemAsync`.
-- `src/clients/desktop/ReelRoulette.DesktopApp/ManageSourcesDialog.axaml.cs`
-  - API-backed source/duplicate orchestration behavior.
-- `src/clients/desktop/ReelRoulette.DesktopApp/LibraryImportRemapDialog.*`, `LibraryOverwriteConfirmDialog.*`
-  - desktop UI for library database import (per-source remap/skip, overwrite confirm naming the library catalog, server-stopped acknowledgment). Export saves the server checkpoint as `library.db`. Import replaces that database only.
-- `src/clients/desktop/ReelRoulette.DesktopApp/AutoTagDialog.axaml.cs`
-  - API-backed auto-tag scan/apply orchestration. Scoped scan sends no path list. The dialog closes on accept. Apply then updates the current file and loaded tiles before the request returns, and a failure undoes tags an event has not already confirmed.
-- `src/clients/desktop/ReelRoulette.DesktopApp/TagSaveApply.cs`
-  - local tag-save delta, undo of an unconfirmed failed tail on the tiles loaded now, retarget of a renamed or deleted filter tag, and skip of the save's own exact item-tag event. An incoming rename or delete retargets that filter before the reload. A rename or delete event for the files that had that tag still applies.
-- `src/clients/desktop/ReelRoulette.DesktopApp/SettingsDialog.axaml(.cs)`
-  - client-side settings orchestration including playback policy toggle UX and Velopack check → download → apply.
-- `src/clients/desktop/ReelRoulette.DesktopApp/UpdateService.cs`
-  - Velopack self-update for packaged desktop builds (same check-only background poll and confirmed download/apply as the server; channel via `DevChannelEnabled`).
-- `src/clients/desktop/ReelRoulette.DesktopApp/ClientLogRelay.cs`
-  - client log relay to server-side log ingestion API.
-
-Desktop flows that still run locally:
-
-- Server-owned work still done on the desktop:
-  - Library database import: `LibraryArchiveMigration.ImportDatabase` writes the server's `library.db` from the desktop process while the server is stopped, including source remap and skip.
-  - Preset writes: the filter dialog edits the whole preset list and `POST /api/presets` replaces it. Apply posts the list only when the dialog changed it, and a library preset pick posts nothing.
-  - Preset-match heading: `LibraryPresetSelection.FiltersEqual` decides which saved preset the current filter equals, comparing the Favorites and Blacklisted modes the desktop's filter model resolves through Core's `FlagFilterModes`, locked to the WebUI by `shared/fixtures/preset-filter-equality.json`.
-  - Refresh status summary: `MainWindow` parses refresh stage messages into the status line summary (`BuildSourceRefreshSummary` and the stage counts).
-- Client-owned flows that stay local by design:
-  - Local-first playback through LibVLC: a file the desktop can reach plays from disk, and the API media path is used when it cannot or when `ForceApiPlayback` is set.
-  - Loudness baseline choice for volume normalization: auto mode uses the baseline from the last library stats response, and manual mode uses the desktop's own override.
-  - Desktop settings backups of `desktop-settings.json`, with their own gap and count.
-  - Show in File Manager (`OpenFileLocation`), which opens the local file browser.
-
-Boundary:
-
-- No authoritative local mutation fallback for migrated server-owned domains.
 
 ---
 
@@ -239,7 +189,7 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
 - `src/clients/web/ReelRoulette.WebUI/src/library/library.ts`
   - the Library tab's state and actions: the first page once the server is ready, open and close (the panel has shown the tab, so open flushes the grid's deferred layout), the controls, whether they are collapsed, the Filters line's parts, totals, direction label, and body as signals, the compatibility message in place of the grid while the server fails the check, and "Running without a library." with the server's message while it has no library, search with its wait, sort, nothing queried, neither a query started over nor the first page when the tab opens, until the server has passed the compatibility check with a library, nor while it fails it or has none, fill from the grid's coverage while open, favorite, playback, refresh, resync, and preset pick events, the playing item's tile, the sources for the Filters line, loaded once when a source filter applies, the Filter tab shown from the Filters line, a later page's failure, which pops up and keeps the tiles already loaded, and tile play through `POST /api/play/{itemId}`, which holds Loading… while it waits, joins history, closes the panel as the overlay, and hands the item to the player, or shows its failure in the notice. A refresh that keeps a source's items because its folder listed no media files shows a notice naming each folder once per page load, loading the source list when it hasn't loaded or lacks the source. It remembers whether the controls are collapsed, and the sort and its direction, in the per-device store; the search text is not remembered.
 - `src/clients/web/ReelRoulette.WebUI/src/filter/filterStateModel.ts`
-  - filter JSON serialize/parse aligned with desktop/server `FilterState`, with the wire shape typed by OpenAPI's generated `FilterState` schema, and a filter without its categories' AND match modes, as the WebUI keeps the filters it reads for its own use, and preset lists compared by order, name, and filter. Typed durations are parsed strictly; durations from the server are read leniently, so the desktop's fractional seconds read as whole seconds.
+  - filter JSON serialize/parse aligned with the server's `FilterState`, with the wire shape typed by OpenAPI's generated `FilterState` schema, and a filter without its categories' AND match modes, as the WebUI keeps the filters it reads for its own use, and preset lists compared by order, name, and filter. Typed durations are parsed strictly; durations from the server are read leniently, so fractional seconds in a stored preset read as whole seconds.
 - `src/clients/web/ReelRoulette.WebUI/src/filter/filterDialog.ts`
   - the Filter tab's state and actions: open (on the section it was left on, General the first time; without unsaved changes it starts over from the applied filter and the preset dropdown's preset; it then loads sources, which it hands to the store for the Library tab's Filters line, the tag model, and presets, keeping the working copy and taking only what loaded), close, which keeps the working copy and its changes until Apply or Discard changes, a tag renamed or deleted, renamed or removed in the working copy and the preset list, the working copy with the heading, whether its filter is the default one, and whether it holds unsaved changes, against the applied filter and the saved preset list it keeps, so Clear all counts and a change put back doesn't, with each duration as its field reads, as the heading's star reads it too, while the heading names the working filter's preset, for the dots and for starting over, worked out after each change, General, Tags, and preset edits, Edit Preset with its rename and its Delete, which asks first, the fields' problems and whether each action is disabled or held, with Add Preset and Update Preset disabled while the filter is the default one, saying why, a held one moving to the field that holds it, within the press, after showing its section, the tag categories expanded, remembered in the per-device store, Refresh, which keeps a preset list that differs from the saved one and loads the tab when it hasn't loaded yet, nothing loading, and Refresh and Apply doing nothing, while the server fails the compatibility check or runs without a library, and a tab that shows loading once the server is ready, keeping its changes, Clear all, a preset picked in the Library tab, which starts it over from that preset's filter and the saved presets whether or not it shows, Discard changes, which puts back the applied filter and the saved presets and leaves the tab open, and Apply, which saves a preset list that differs from the saved one, applies the filter, updates the preset dropdown, and starts the library over. Apply closes the panel as the overlay.
 - `src/clients/web/ReelRoulette.WebUI/src/filter/filterDialogModel.ts`
@@ -261,13 +211,13 @@ WebUI is runtime-config-driven API/SSE client orchestration. Its screens are Pre
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryProjectionSync.ts`
   - pure SSE patch helpers for favorite, blacklist, and playback fields on loaded tiles, matched by item id only.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryQuerySession.ts`
-  - list-query window: first page, fill-on-scroll, hide/show, patch or reload, and resync. A favorite or blacklist on an item that is not loaded uses the event's previous values. Scoped auto-tag scan sends no path list. Tag save writes the tiles loaded now, updates the stored filter when a tag is renamed or deleted, and reloads that window once when a tag filter can change which files are shown.
+  - list-query window: first page, fill-on-scroll, hide/show, patch or reload, and resync. A favorite or blacklist on an item that is not loaded uses the event's previous values. Auto-tag scan sends only its scope. Tag save writes the tiles loaded now, updates the stored filter when a tag is renamed or deleted, and reloads that window once when a tag filter can change which files are shown.
 - `src/clients/web/ReelRoulette.WebUI/src/library/tagSave.ts`
   - pending-only tag-editor save plan, the same local delta matched by item id (auto-tag by the scan rows' item ids), a confirmed tag kept when the request fails, failed-tail undo, the same filter retarget, and the same own-event skip for an exact item-tag echo. An incoming rename or delete retargets that filter before the reload. A rename or delete event for a wider set of files still applies.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryBrowseModel.ts`
   - sort mode, direction labels, and search text held by the Library tab.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridLayout.ts`
-  - justified-row layout (`getAspectRatio`, `buildRows`), at the Library tab's tile size, rows 100 to 240 px high aiming for 160; layout width uses full scrollport (no desktop 8px right gutter).
+  - justified-row layout (`getAspectRatio`, `buildRows`), at the Library tab's tile size, rows 100 to 240 px high aiming for 160; layout width uses full scrollport.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridTileModel.ts`
   - grid tile HTML with the file name as the tile's tooltip, thumbnail URL builder, filled favorite and blacklist badges, and the playing icon every tile has, which shows only on the playing tile.
 - `src/clients/web/ReelRoulette.WebUI/src/library/libraryGridRowModel.ts`

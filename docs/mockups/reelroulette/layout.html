@@ -1818,7 +1818,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
               <dt>Session</dt><dd>7a01d6c4-2e9b-4f13-8c5d-6b3a9e0f1d27</dd>
               <dt>Client type</dt><dd id="diag-type"></dd>
               <dt>Device name</dt><dd id="diag-device"></dd>
-              <dt>Server</dt><dd>0.15.0 (API 1)</dd>
+              <dt>Server</dt><dd>0.15.0 (API 2)</dd>
               <dt>ReelRoulette</dt><dd>0.15.0</dd>
             </dl>
           </div>
@@ -6031,7 +6031,7 @@ function readApplied() {
   const fav = $("filter-fav").checked ? $("filter-fav-mode").value : null;
   const bl = $("filter-bl").checked ? $("filter-bl-mode").value : null;
   // The summary names Favorites only or excluded, and Blacklisted only. Blacklisted excluded is the default, which
-  // the summary leaves out as the desktop's leaves out Exclude blacklisted today.
+  // the summary leaves out.
   if (fav) parts.push(`Favorites ${fav}`);
   if (bl === "only") parts.push("Blacklisted only");
   const basic = [...sectionOf("Basic Filters").querySelectorAll(".filter-stack > label")];
@@ -6095,7 +6095,7 @@ function passesApplied(item) {
   if (a.exclude.some((key) => item.tags.has(key))) return false;
   return true;
 }
-// A one-line summary of the applied filter above the grid, as the desktop shows; it opens the Filter tab.
+// A one-line summary of the applied filter above the grid; it opens the Filter tab.
 function renderFilterSummary() {
   const line = $("lib-filters");
   line.hidden = applied.parts.length === 0;
@@ -6401,7 +6401,7 @@ function fileStats(item) {
   if (!isPhoto(item)) {
     statRow(table, "Duration", fmt(item.duration));
     statRow(table, "Has audio", item.hasAudio == null ? "Unknown" : yesNo(item.hasAudio));
-    // What normalization applies, as the desktop shows it: the baseline difference limited by its settings, signed, or
+    // What normalization applies, as the desktop showed it: the baseline difference limited by its settings, signed, or
     // Off while it or Enhanced audio is off, and N/A for a file without loudness data, which plays at the volume.
     const adjustment = loudnessAdjustment(item);
     statRow(table, "Loudness", item.hasAudio === false ? "N/A" : item.loudness == null ? "Unknown" : `${item.loudness.toFixed(1)} LUFS`);
@@ -6690,7 +6690,7 @@ function initSettings() {
   });
 }
 
-// ---- Keyboard shortcuts: the desktop's keys, plus proposed keys for the tabs and fullscreen ----
+// ---- Keyboard shortcuts: the keys the desktop had, plus proposed keys for the tabs and fullscreen ----
 const SHORTCUTS = [
   ["K / Space", "Play or pause, or pause and resume a photo's timer"],
   ["J / L", "Seek back or forward by the seek step"],

@@ -6,6 +6,326 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12i4 - Desktop Client Removal
+
+- **Status**: ✅ Complete
+- **Goal**: The desktop client, its packaging, its tests, and everything only it used are gone, and the WebUI is the only client.
+
+#### Decisions
+
+- The desktop goes before the WebUI does everything it did. Until the milestones that bring them back, these desktop features have no equivalent:
+  - the volume slider, scroll-wheel volume, and volume steps, which WebUI Volume and Enhanced Audio brings back;
+  - loudness normalization and the Stats panel's Adjustment row, which WebUI Loudness Normalization brings back;
+  - an on-screen Random button, which WebUI Player Controls brings back;
+  - the keyboard shortcuts, which WebUI Keyboard Shortcuts brings back;
+  - Show in File Manager, which Show in File Manager from the WebUI brings back;
+  - multi-select, its bulk actions, and editing several items' tags, which WebUI Multi-Select and Bulk Actions brings back;
+  - Refresh Now, the refresh and backup settings, duplicate review, and clearing the whole library's playback stats, which Admin Refresh, Backup, and Duplicate Review brings back;
+  - Manage Sources, with its statistics, adding a folder, enabling and disabling a source, and refreshing one source, which Admin Source Management brings back;
+  - library export and import with the source remap, which Admin Library Catalog Transfer brings back, with restoring a backup;
+  - volume above 100%, which WebUI Volume Boost may bring back.
+- Until the admin milestones land, nothing offers a UI for library management, a gap that is accepted.
+- Meanwhile the tray's Refresh Library still starts a refresh, and auto-refresh and backups keep running on the stored settings.
+- Formats only LibVLC plays, such as avi and wmv, play in no client until the playback sessions release, and Browser-Playable Filter only hides them.
+- These desktop features are dropped without a WebUI equivalent, because a browser cannot offer them:
+  - always-on-top (the closest is picture-in-picture, which the WebUI turns off with `disablepictureinpicture`),
+  - desktop self-update,
+  - the Linux dependency dialog,
+  - application menu registration,
+  - the FFmpeg log window, which has been empty since the server took over refresh,
+  - Player View's lock of the window to the video's aspect ratio.
+- These desktop Settings dialog entries are dropped as not useful in the WebUI:
+  - the desktop's own dev update channel (the server's is in the admin section),
+  - client settings backups (the WebUI's settings are a few values in browser storage),
+  - the core server base URL (the WebUI calls the server that served it),
+  - Force API playback (the WebUI always plays through `/api/media`),
+  - image scaling (it limited how large the desktop decoded photos, and the browser scales photos to fit by itself).
+- These are dropped as not worth bringing back:
+  - the Diagnostics dialog's last SSE revision, API reachability line, and Copy button, beside the client and session ids and versions the Settings tab's Diagnostics shows,
+  - the status line's times to the millisecond.
+- A route, field, or event that only the desktop calls today stays while a planned milestone is written to use it: the refresh start, status, and settings routes, the backup settings, duplicate scan and apply, source import and enable, the catalog checkpoint, clear playback stats, `sourceStateChanged`, and the source statistics' duration fields.
+- Requests name a library item only by its catalog id, in a field named for it, and the server no longer looks an item up by its full path.
+- The filter state's old `favoritesOnly` and `excludeBlacklisted` fields are no longer written, and the server and the WebUI keep reading them in stored presets until Per-Preset Preset Writes rewrites those presets.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Code and tests | ✅ Complete | The desktop projects, the Core code only the desktop uses, and their tests removed from the solution and the repository. |
+| Packaging | ✅ Complete | A release that builds and publishes only the server, with FFmpeg's license text, and the old icons deleted. |
+| Contract | ✅ Complete | Routes, fields, and lookups only the desktop used removed, item requests named by id, and the old filter fields no longer written, in OpenAPI, the generated WebUI types, and the WebUI. |
+| Fixtures | ✅ Complete | The fixtures only the WebUI reads moved to its tests, so every shared fixture has a Core and a WebUI reader. |
+| Mockup | ✅ Complete | The mockup without the desktop notice, the desktop client, or its log sources. |
+| Docs | ✅ Complete | `AGENTS.md`, the pre-release skill, current-state docs, the testing checklist, and the changelog without the desktop client. |
+
+#### Code and tests slice
+
+**Scope**
+
+- Remove `ReelRoulette.DesktopApp`, `ReelRoulette.LibraryArchive`, and `ReelRoulette.DesktopApp.Tests` from the solution and the repository.
+- Remove the Core tests' link to the desktop's `CoreServerApiClient.cs` (`ReelRoulette.Core.Tests.csproj`) and `CoreServerApiClientTests.cs`, which tests it.
+- Remove Core's `LibraryGridLayout` and its tests, and `JsonFileStorageService`, `CoreStorageServices`, and `Abstractions/CoreInterfaces.cs`, which only the desktop uses.
+- Comments in Core, the server, and the Core tests that describe the desktop as a client go or are reworded.
+- `LibraryCatalogStore`'s import and replace API stays (`ReadSourceRootPaths`, `PrepareIncomingFromFile`, `RemapSources`, `PublishIncoming`, and its recovery), since Admin Library Catalog Transfer reuses it.
+
+**Traps**
+
+- The three projects are 107 tracked files and 31,740 lines of C# and AXAML, including 4,231 test lines, 173 test methods, and 421 test cases (measured).
+- `ReelRoulette.Core.Tests.csproj` compiles the desktop's `CoreServerApiClient.cs` for `CoreServerApiClientTests.cs`, 15 test cases, so with the desktop folder gone and that link left the build fails with CS2001 (measured).
+- With the projects, the link, and the test file removed, the solution builds with no warnings, and the remaining 482 Core tests and 7 ServerApp tests pass (measured).
+- Only `LibraryArchive` and the Core tests call `LibraryCatalogStore`'s import API (measured).
+- `src/clients/desktop` also holds 3.6 GB of untracked build output, which removing the tracked files leaves behind (measured).
+- `LibVLCSharp.Avalonia`, `VideoLAN.LibVLC.Windows`, `TagLibSharp`, and `Avalonia.Fonts.Inter` leave with the desktop project. Avalonia itself stays, since the server's tray uses it (measured).
+- The desktop's duplicate Select Best rule (`DuplicateGroupViewModel` in `DuplicatesDialog.axaml.cs`), its import remap dialog, and its Manage Sources statistics stay readable in git history for the admin milestones that rebuild them.
+
+**Acceptance**
+
+- The solution has no desktop projects, and nothing in the code, scripts, workflows, or the solution refers to `src/clients/desktop`, checked by a search of the repository.
+- `dotnet build ReelRoulette.sln`, `dotnet test ReelRoulette.sln`, and `npm run verify` pass.
+
+**Evidence**
+
+- `src/clients/desktop` is deleted, its 107 tracked files and its 3.6 GB of ignored build output, and `ReelRoulette.sln` is edited by hand to drop the three projects and the `desktop` folder, keeping its encoding (`dotnet sln remove` also drops the empty `clients` and `web` folders and adds a byte order mark).
+- The Core tests' link to `CoreServerApiClient.cs` and `CoreServerApiClientTests.cs` (15 cases) are gone, and so are Core's `LibraryGridLayout` with `LibraryGridLayoutTests.cs` (6 cases), `JsonFileStorageService`, `CoreStorageServices`, and `Abstractions/CoreInterfaces.cs`.
+- Reworded comments: `BackupFileNaming`, `TagNameComparer`, `LibraryPlaybackService.BuildRandomizationScopeKey`, and the old-field shapes in `OpenApiRouteContractTests`. The tests' desktop client ids and log source are neutral, `QueryLibrary_AcceptsDesktopDurationFilterJson` is `QueryLibrary_AcceptsDurationStringFilterJson`, and the regression test's check that no `desktop-settings.json` is written is gone, since nothing writes that file.
+- The desktop comments in `FlagFilterModes.cs`, `ApiContracts.cs`, `FilterStateTests.cs`, and `ItemIdContractTests.cs` change with the Contract slice, which changes those files.
+- `LibraryCatalogStore`'s `ReadSourceRootPaths`, `DiscardIncoming`, `DiscardPrevious`, `RestorePrevious`, `DeleteLiveDatabase`, and `LibraryCatalogReplaceOptions.RetainPrevious` now have no caller and no test until Admin Library Catalog Transfer (measured).
+- `dotnet build ReelRoulette.sln`: 0 warnings, 0 errors. `dotnet test ReelRoulette.sln`: Core.Tests 476 and ServerApp.Tests 7 passed. `npm run verify`: 1490 tests passed (measured).
+- README's and `CONTEXT.md`'s command to run the desktop, and `docs/dev-setup.md`'s Run Desktop app section and Key Projects entry, are gone. `docs/architecture.md` and `docs/domain-inventory.md` no longer describe Core's `LibraryGridLayout` or storage abstractions, and name the WebUI's `libraryGridLayout.ts` as the only grid layout.
+- A search finds no code, script, workflow, or solution entry that refers to `src/clients/desktop` or the desktop projects. `CONTEXT.md`, `docs/architecture.md`, and `docs/domain-inventory.md` still name `src/clients/desktop` in their desktop client descriptions, which the Docs slice removes, and its Acceptance searches for that path.
+
+#### Packaging slice
+
+**Scope**
+
+- Remove the `desktop` component from the `release.yml` matrix, with its `--icon` choice, its `native_component`, and the Windows LibVLC relocation step.
+- Remove `stage_native`, which `release.yml` computes but never reads.
+- Stop publishing the desktop update feeds.
+- Remove the desktop's `<Version>` updates and the `-NoUpdateDesktopVersion` switch from `set-release-version.ps1`, and the docs that describe the switch.
+- Delete the old icons `assets/HI.ico`, `assets/HI-256.png`, and `assets/HI-512.png`.
+- The Windows server package, which bundles FFmpeg and ffprobe, ships the license text its FFmpeg build needs from `licenses/`.
+- `licenses/LGPL-2.1.txt`, which only LibVLC needed, is deleted once nothing ships it.
+- `README.md`'s Third-Party Components section names FFmpeg's license correctly and no longer names LibVLC.
+
+**Traps**
+
+- `release.yml` lists `components=(server desktop)` and gives the desktop its own case, `--icon` choice, `native_component`, and the step "Relocate LibVLC into probe path (Windows desktop)".
+- Every leg packs, uploads to B2, and mirrors to GitHub with no per-component code, so dropping the desktop legs stops the desktop feeds and the `ReelRoulette.Desktop` assets.
+- `--shortcuts "Desktop,StartMenuRoot"` makes the server's Windows desktop shortcut, and stays.
+- Only `DesktopApp.csproj` copies `licenses/GPL-3.0.txt` and `licenses/LGPL-2.1.txt` into a build, so the Windows server package ships no license text for the FFmpeg build it bundles (measured).
+- The Windows server package bundles BtbN's `win64-gpl` FFmpeg build, and Linux packages bundle no FFmpeg.
+- `README.md` says LibVLC and FFmpeg are "licensed under the GNU GPL and LGPL respectively", which pairs them the wrong way round (inferred).
+- `verify-linux-packaged-server-smoke.sh` has no desktop-client references: its `.desktop` matches are the server's freedesktop menu entries (measured).
+- CI has no desktop job (measured).
+- An installed desktop's updater polls its own feed (`reelroulette/desktop{-dev}` on B2, channel `{os}-desktop{-dev}`, package `ReelRoulette.Desktop`) and never reads GitHub, so it can't pick up a server package.
+- Once no desktop is published, the installed desktop reports itself up to date, since the old feed files stay on B2 (inferred).
+- `set-release-version.ps1` sets `ReelRoulette.LibraryArchive.csproj`'s version on every run, not only behind the switch, so the script fails once that project is gone (measured).
+
+**Acceptance**
+
+- `release.yml` builds and publishes only server packages and feeds, and the Windows server package carries FFmpeg's license text, checked by reading it.
+- Nothing in the code, scripts, workflows, or the solution refers to `HI.ico`, `HI-256.png`, `HI-512.png`, LibVLC, or `-NoUpdateDesktopVersion`, checked by a search of the repository.
+- `./tools/scripts/verify-linux-packaged-server-smoke.sh` passes.
+
+**Evidence**
+
+- `release.yml` lists `components=(server)`, without the desktop case, its icon branch, `native_component="desktop"`, `stage_native`, or the LibVLC relocation step. Its matrix step, run locally with a stable and a dev version, gives 4 and 2 legs, identical to the server legs before without `stage_native` (measured).
+- The bundled FFmpeg build is configured with `--enable-gpl --enable-version3`, from the ffprobe banner in the v0.14.1 release run's log, so it needs the GPL-3.0 text (measured).
+- The step, now "Bundle FFmpeg and its license into publish output (Windows server)", copies `licenses/GPL-3.0.txt` to `runtimes/win-x64/native/FFmpeg-LICENSE.txt`, fails without it, and logs its size. Its license lines, run locally against a scratch folder, copied the text unchanged, and the step's script parses (measured). `ci.yml`'s comment that names the step follows the rename.
+- `set-release-version.ps1` no longer takes `-NoUpdateDesktopVersion` or sets the desktop projects' versions. Run with `-Version v0.0.0-test -NoRunVerify` in a scratch copy of the repo, it exits 0 and changes only `.version`, OpenAPI, `ServerStateService.cs`, `ServerContractTests.cs`, `ServerApp.csproj`, `README.md`, and `docs/dev-setup.md` (measured).
+- `set-release-version.ps1` has `[CmdletBinding()]`, so it refuses a switch it doesn't take, such as `-NoUpdateDesktopVersion` or a typo like `-NoRunVerfy`, before changing anything; without it, both were ignored and the run went ahead (measured, in a scratch copy).
+- `assets/HI.ico`, `assets/HI-256.png`, `assets/HI-512.png`, and `licenses/LGPL-2.1.txt` are deleted.
+- README's Third-Party Components names the BtbN build, its GPL-3.0 license, and where its text ships, and no longer names LibVLC.
+- These sections describe the server-only release and the script without the switch: README's Prerequisites, Quick Start (which offers only the server's downloads), Helper Scripts, and Packaging and releases; `docs/dev-setup.md`'s Prerequisites, Velopack packaging and release, Release Versioning, and Troubleshooting; `docs/architecture.md`'s Packaging and Delivery; `CONTEXT.md`'s server icon and CI and release lines; and `docs/domain-inventory.md`'s release script and icon asset lines. `.gitignore`'s comment drops LibVLC. The rest of those docs still describe the desktop client until the Docs slice.
+- `./tools/scripts/verify-linux-packaged-server-smoke.sh` passed, and `pwsh ./tools/scripts/tests/test-scripts.ps1` passed 83 checks (measured).
+- A search finds no code, script, workflow, or solution entry that refers to `HI.ico`, `HI-256.png`, `HI-512.png`, LibVLC, or `-NoUpdateDesktopVersion`. `CONTEXT.md`, `docs/architecture.md`, and `docs/domain-inventory.md` still name LibVLC in their desktop client descriptions, which the Docs slice removes, and its Acceptance searches for LibVLC.
+- The changelog's Removed entry for the desktop app and Fixed entry for FFmpeg's license land with this slice rather than the Docs slice, and the new logo bullet drops its sentence that the desktop keeps its old icon, so each commit's changelog matches it.
+
+#### Contract slice
+
+**Scope**
+
+- Remove `POST /api/library-states`, `LibraryStatesRequest`, and `LibraryCatalogSession.ReadItemStates`, which only that route uses. `LibraryStateResponse` stays, since favorite and blacklist return it.
+- Remove `PresetResponse.summary`, which the server never fills.
+- Remove the fields only the desktop reads: `itemTagsChanged.itemIds`, the auto-tag apply response's `changedItemPaths` (at its top and in `applied`) and `assignmentsAdded`, `playbackRecorded.path`, and the library stats' `uniquePlayedVideos`, `uniquePlayedPhotos`, `neverPlayedVideos`, and `neverPlayedPhotos`.
+- Remove the auto-tag apply response's top-level `changedItemIds`, which no client reads, so the response holds only `applied`.
+- The library stats' `uniquePlayedMedia` and `neverPlayedMedia` stay, since the Stats tab shows them.
+- Remove `AutoTagScanRequest.itemIds`, which only the desktop fills.
+- Item lookups take only a catalog id: `ResolveItemId` no longer falls back to the full path, and `POST /api/library/item` reads by id only.
+- `GET /api/media/{idOrToken}` becomes `GET /api/media/{token}` and streams only the tokens the random and play routes issue.
+- Rename the request fields that now hold only an item id: `path` becomes `itemId` in the favorite, blacklist, and record-playback requests, and `itemPaths` becomes `itemIds` in clear playback stats. `LibraryItemReadRequest.id` keeps its name.
+- The WebUI's serializer, and Core's `FlagFilterModes.Name`, `FavoritesOnly`, and `ExcludeBlacklisted`, stop writing `favoritesOnly` and `excludeBlacklisted`, and the FilterState schema drops them.
+- The server's filter parser and the WebUI keep reading the old fields in stored presets.
+- `FilterStateSchema_NamesEveryFieldTheParserReads` names the two old fields as read by the parser but left out of the schema, until Per-Preset Preset Writes stops reading them.
+- `ClientLogRequest.Source` no longer defaults to `"desktop"`.
+- The server's API version becomes 2: `apiVersion` 2, `minimumCompatibleApiVersion` 2, and only "2" supported, and the WebUI's own version becomes 2, so a client written for version 1, such as an installed desktop app, refuses the server.
+- Clear playback stats clears every item only with `allItems: true`, clears just the items in `itemIds`, and refuses with 400, clearing nothing, a request with neither or both.
+- The comment that the random and play responses' `id` is for the desktop, and the WebUI's comments about the desktop, are corrected.
+- OpenAPI, the generated WebUI types, the WebUI's requests, and `docs/api.md` change with the routes and fields.
+
+**Traps**
+
+- The WebUI's Stats tab reads the playing item through `POST /api/library/item` with its id (`src/stats/statsTab.ts`), so the route stays.
+- The WebUI's Stats tab shows the random and play responses' `id` as the file's path, and the player falls back to it for the display name (`src/stats/statsTab.ts`, `src/playback/nowPlaying.ts`, `src/playback/player.ts`), so the field stays.
+- The WebUI sends auto-tag apply's `itemPaths` as full paths, which the server finds with `ResolveItemByPath`, so that lookup stays.
+- The WebUI names items by catalog id at every call to the routes `ResolveItemId` serves, and plays media only by token (inferred, from its call sites).
+- `POST /api/play/{itemId}` accepts a full path through `ResolveItemId`, though OpenAPI and `docs/api.md` say it doesn't.
+- `serializeFilterStateForApi` (`src/filter/filterStateModel.ts`) writes `favoritesOnly` and `excludeBlacklisted` beside the modes for older readers. Without the two fields in the generated types it still type-checks, since the generated `FilterState` takes any other field (measured).
+- `FilterStateSchema_NamesEveryFieldTheParserReads` (`OpenApiRouteContractTests.cs`) needs the fields `LibraryListFilterParser` reads and the FilterState schema's properties to be one set, so dropping the old fields from the schema while the parser reads them fails it (inferred).
+- With the serializer no longer writing the old fields, 41 WebUI tests in 8 files fail, each checking them in a request it sent (measured).
+- `LibraryListFilterParser` reads the old fields through `FlagFilterModes.ResolveFavorites` and `ResolveBlacklisted`, and the WebUI through `resolveFlagModes`.
+- No release contains the Favorites and Blacklisted modes, so every preset a release saved has only the old fields (measured).
+- The Stats tab shows the library stats' `uniquePlayedMedia` and `neverPlayedMedia` (`src/stats/statsModel.ts`).
+- No WebUI code calls `POST /api/playback/clear-stats`.
+- The server clears every item's playback stats when clear-stats names no items, and the server's JSON reading ignores a field the request type doesn't have, so a client that still sends `itemPaths`, such as an installed desktop, would clear the whole library.
+- The desktop refuses a server whose `minimumCompatibleApiVersion` is above 1 or whose `apiVersion` isn't 0 or 1 (`MainWindow.axaml.cs`, in git history from before Desktop Client Removal).
+- About 40 server tests name items by full path on the routes `ResolveItemId` serves (measured).
+- `Spec_ListsEveryMappedApiAndControlRoute` fails for a route the server maps that the spec doesn't list, and `OpenApiSpec.AssertMatchesSchema` needs a payload's fields and its schema's to be the same set.
+
+**Acceptance**
+
+- OpenAPI has none of the removed routes and fields and names the renamed fields, checked by reading `shared/api/openapi.yaml`, and `npm run verify:contracts` passes.
+- A full path no longer finds an item on any route that takes an item id, and the media route streams only issued tokens, in server tests of the id lookup and the media route.
+- The favorite, blacklist, and record-playback requests send `itemId`, in WebUI tests of each request and server tests of each route, and clear playback stats takes `itemIds`, in a server test, since no WebUI code calls it.
+- The WebUI writes neither `favoritesOnly` nor `excludeBlacklisted`, and a stored preset with only the old fields still filters as before, in WebUI filter model tests and server filter parser tests.
+- Clear playback stats with `allItems: true` clears every item, with `itemIds` clears only those, and with neither or both is refused with 400 and clears nothing, in server tests of the route.
+- The server reports API version 2 and accepts clients of version 2 only, and the WebUI accepts only a version 2 server, in server version tests and WebUI compatibility tests.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- Gone: `POST /api/library-states` with `LibraryStatesRequest`, `GetLibraryStates`, and `ReadItemStates`; `PresetResponse.summary`; `itemTagsChanged.itemIds`; auto-tag apply's `changedItemPaths`, `assignmentsAdded`, and top-level `changedItemIds`, so its response holds only `applied`; `playbackRecorded.path` with `RecordPlaybackResult.FullPath`; the library stats' four per-type played counts; and `AutoTagScanRequest.itemIds` with the catalog's path scan (`CatalogAutoTagScanScope.Paths`, `ReadAutoTagItemsByPaths`, `ReadTagsForItems`). The catalog's auto-tag result keeps only each tag's changed ids.
+- `ResolveItemId` matches only the catalog id, in any case, so the library item, favorite, blacklist, record-playback, clear-stats, play, and tag editor model and apply-item-tags routes take only an id. Favorite, blacklist, and record-playback answer "itemId is required" for a blank id and "item not found in library" for an unknown one. `ResolveItemByPath` stays for auto-tag apply's `itemPaths`.
+- `GET /api/media/{token}` streams only tokens from `ServerMediaTokenStore`, so an item id no longer skips the check that its source is enabled.
+- Favorite, blacklist, and record-playback take `itemId`, and clear-stats takes `itemIds`.
+- `FlagFilterModes.Name`, `FavoritesOnly`, and `ExcludeBlacklisted` are gone, and the WebUI's serializer writes only the modes. The parser and `resolveFlagModes` still read the old fields, and `FilterStateSchema_NamesEveryFieldTheParserReads` lists them in `OldFieldsReadButNotSpecified`, failing while the list names a field the parser no longer reads (measured, with the parser's read of `excludeBlacklisted` removed).
+- `ClientLogRequest.Source` defaults to empty, and `RandomResponse.Id`'s comment says the Stats tab shows it.
+- OpenAPI drops the route and fields, names `itemId` and `itemIds`, names the media operation `getMediaByToken`, and describes the old filter fields only as what stored presets fall back to. Favorite, blacklist, and record-playback list their 404 for an unknown id. `LibraryStateResponse` stays, though no route's response refers to it. The generated WebUI types and `docs/api.md` follow.
+- `CONTEXT.md`, `README.md`, `docs/architecture.md`, and `docs/domain-inventory.md` follow too: the library item read by id only, clear-stats with `allItems` or ids and refusing neither or both, the auto-tag scan as the full library or enabled sources, `/api/media/{token}`, `playbackRecorded` and `itemTagsChanged` without their path fields, and API version 2 in the WebUI's status and Diagnostics, with no item-state read.
+- New server tests: a full path finds nothing through each of nine catalog lookups (`ItemLookups_FindNoItemByItsFullPath`), favorite, blacklist, record-playback, and play answer 404 for one with no event, the media route streams an issued token and refuses an id and a full path, and the routes read `itemId` and `itemIds` and no longer bind `path` or `itemPaths`. Each failed with the old behavior put back (measured). About 40 tests that named items by full path use ids.
+- New WebUI test: each of the nine mode combinations is written as the modes alone and reads back the same, which failed with the old fields put back (measured). The favorite, blacklist, and record-playback request tests expect exactly `itemId`.
+- The server's API version is 2, with `minimumCompatibleApiVersion` 2 and only "2" supported, and the WebUI's is 2 and accepts only a version 2 server. The tests that pinned version 1 expect 2, and those that used 2 as an unsupported version use 3.
+- Clear-stats is a handler of its own (`ServerHostComposition.ClearPlaybackStats`) that refuses a request with neither `allItems` nor a non-blank item id, or with both, before it reaches the catalog. The catalog session's `ClearPlaybackStats` clears only the ids it is given, none clearing nothing, and `ClearAllPlaybackStats` clears every item.
+- New route tests: `allItems: true` clears every item, `itemIds` clears only those, and `{}`, `allItems: false`, null, empty, or blank `itemIds`, an old `itemPaths` request, and `allItems` with `itemIds` are each refused with 400, clearing nothing and publishing no event. With the old behavior put back, all seven refused requests answered 200 (measured).
+- `dotnet build ReelRoulette.sln`: 0 warnings. `dotnet test ReelRoulette.sln`: Core.Tests 488 and ServerApp.Tests 7 passed. SystemChecks passed. `npm run verify`: 1483 tests in 72 files passed (measured).
+
+#### Fixtures slice
+
+**Scope**
+
+- `event-revision.json`, `library-tile-effect.json`, `preset-filter-equality.json`, `sort-direction-labels.json`, and `filter-state-written.json` lose their C# readers and move to the WebUI's tests, so `shared/fixtures/` holds only fixtures that Core and the WebUI both read.
+- `filter-mode-projection.json` and its readers go, since nothing writes the old fields.
+- The moved fixtures go to `src/clients/web/ReelRoulette.WebUI/src/test/fixtures/`.
+- `filter-state-written.json`'s `webui` entry loses the old fields, and its `desktop` entry becomes `oldFields`, the same filter as a release saved it: only `favoritesOnly` and `excludeBlacklisted`, with no modes. It stays until Per-Preset Preset Writes rewrites stored presets.
+- `filter-mode-resolution.json`, `filter-enum-values.json`, and `tag-name-order.json` stay in `shared/fixtures/`, read by Core and the WebUI.
+
+**Traps**
+
+- Desktop tests are the only C# readers of the five fixtures that move (measured).
+- `filter-mode-projection.json`'s only C# reader, in the Core tests, tests `FlagFilterModes.Name`, `FavoritesOnly`, and `ExcludeBlacklisted`, which only the desktop called, and the WebUI's tests read it twice, for the serializer and with `filter-state-written.json`'s `desktop` entry (measured).
+- No WebUI-only copies of shared fixture cases exist. WebUI tests only note that the desktop reads the same fixture (measured).
+
+**Acceptance**
+
+- The moved fixtures are read by WebUI tests from their new place, and every fixture left in `shared/fixtures/` has a Core reader and a WebUI reader, checked by a search of the tests.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- `event-revision.json`, `library-tile-effect.json`, `preset-filter-equality.json`, `sort-direction-labels.json`, and `filter-state-written.json` are in `src/clients/web/ReelRoulette.WebUI/src/test/fixtures/`, read from there by `sseClient`, `libraryQuerySession`, `presetFilterEquality`, `libraryBrowseModel`, `filterStateModel`, and the Filter screen's tests, and no C# file names them (measured).
+- `filter-mode-projection.json` is deleted, with its Core test and the WebUI's two readers of it.
+- `filter-state-written.json`'s `webui` entry has no old fields, and its `oldFields` entry, with only `favoritesOnly` true and `excludeBlacklisted` false, reads as Favorites only and Blacklisted off in the filter model tests and the Filter screen's test of a preset saved before the modes. Both tests failed with the WebUI's read of `excludeBlacklisted` removed (measured).
+- `shared/fixtures/` holds `filter-enum-values.json` and `filter-mode-resolution.json`, read by Core's `FilterStateTests` and the WebUI's `filterStateModel` tests, and `tag-name-order.json`, read by `TagNameComparerTests` and `tagNameOrder` tests (measured).
+- The nine projection cases and the nine cases reading the old desktop entry are gone, replaced by the Contract slice's nine mode combinations and one `oldFields` reading. Test comments say Core reads the shared fixtures, without the desktop.
+- `dotnet test ReelRoulette.sln` and `npm run verify` passed, as in the Contract slice (measured).
+
+#### Mockup slice
+
+**Scope**
+
+- Remove the desktop notice page (`desktop-notice.html` and `build/desktop-notice.src.html`), its card in the index, its line in the mockup's `README.md`, its entry in `build_pages.py`, and its checks in `check.mjs`.
+- The admin page's connected clients and Log Viewer sources lose the desktop client and its log sources.
+- Notes in the mockup that describe the desktop as a current client go.
+- The Settings tab's Diagnostics shows the server as "0.15.0 (API 2)" in place of "0.15.0 (API 1)" (`build/layout.src.html`), as the WebUI does with the server's API version 2.
+
+**Traps**
+
+- `check.mjs` checks the desktop notice, a connected client `desktop-0c9e7a22`, and the log sources `desktop-main-window` and `desktop-update` (measured).
+- `check.mjs` also checks "Event streams: 4", which counts the admin page's clients, so it drops to 3 with the desktop client (measured).
+- The mockup's loudness settings follow the desktop's defaults and formula until WebUI Loudness Normalization replaces them.
+
+**Acceptance**
+
+- The mockup has no desktop notice page or card, and its admin page shows no desktop client or desktop log source, checked by reading it, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+
+**Evidence**
+
+- `desktop-notice.html` and `build/desktop-notice.src.html` are deleted, with the index's card, the mockup README's line, `build_pages.py`'s entry and comment, and `check.mjs`'s checks of the notice.
+- The admin page lists three connected clients, with "Event streams: 3", and the Log Viewer's sources are `server` and `webui`. Its two desktop lines are now a WebUI line and a server line, so the Log Viewer's line counts and paging checks are unchanged. The client id and OS check drops the desktop's "OS not reported", whose fallback stays.
+- The Settings tab's Diagnostics shows the server as "0.15.0 (API 2)".
+- Comments that described the desktop as current are reworded. The loudness settings keep their references to the desktop's defaults and formula, as the Traps say.
+- The unused `desktop_windows` icon stays in the icon subset, since rebuilding it takes `build_font.py` and fontTools.
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages and `node docs/mockups/reelroulette/build/check.mjs` passed. Its new check that no Log Viewer source names the desktop failed with a desktop line put back (measured).
+
+#### Docs slice
+
+**Scope**
+
+- `AGENTS.md`:
+  - The desktop freeze rule goes, keeping "Don't change user-facing UX without explicit approval".
+  - The architecture rule names only the WebUI as the orchestration and render layer, without the desktop flows `docs/domain-inventory.md` records.
+  - The "WebUI" naming rule loses "the desktop's retirement notice" and says `CHANGELOG.md` keeps "WebUI" as developer history.
+  - The test isolation rule names the Core tests' `TestIsolation` in place of the desktop tests' initializer.
+  - The note that `MILESTONES-COMPLETED.md` describes retired tooling names the desktop client too.
+- The pre-release skill's standard environment no longer lists the desktop app (`.claude/skills/pre-release/SKILL.md`).
+- `CONTEXT.md`, `README.md`, `docs/architecture.md`, `docs/api.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, OpenAPI's descriptions, and `MILESTONES.md`'s Ownership Boundaries no longer describe the desktop client.
+- The testing checklist loses the desktop app from its environment line, its desktop Smoke item, its desktop in-app update item in Release Flow, the Release Specific checks of the desktop retirement notice, the desktop update note, the desktop's old icon, and the desktop's filter dialog, and "and desktop" in its check of `release.yml`'s finish.
+- `CHANGELOG.md`'s `[Unreleased]` loses the desktop halves of its bullets, since v0.15.0 ships no desktop. Its bullets keep "WebUI".
+
+**Traps**
+
+- Current-state docs mention the desktop on 24 lines in `CONTEXT.md`, 18 in `README.md`, 17 in `docs/architecture.md` (including its diagram), 11 in `docs/api.md`, 20 in `docs/dev-setup.md`, 31 in `docs/domain-inventory.md`, and 3 in OpenAPI (measured).
+- `CLAUDE.md` doesn't mention the desktop (measured).
+- `[Unreleased]` describes desktop changes in its filter modes, true peak, Allow remote connections, and desktop preset picks bullets.
+
+**Acceptance**
+
+- No current-state doc, `AGENTS.md`, or the pre-release skill describes the desktop client as current or refers to `src/clients/desktop` or LibVLC, checked by a search of them.
+- `pwsh ./tools/scripts/check-milestones.ps1` passes.
+
+**Evidence**
+
+- `AGENTS.md` names the WebUI as the only orchestration and render layer, keeps "Don't change user-facing UX without explicit approval" without the desktop freeze, drops the retirement notice from the naming rule and says `CHANGELOG.md` keeps "WebUI" as developer history, names the Core tests' `TestIsolation` in the test isolation rule, and says `MILESTONES-COMPLETED.md` describes a retired desktop client too.
+- The pre-release skill's standard environment and the testing checklist's environment line no longer list the desktop app.
+- The testing checklist loses the desktop Smoke item and the desktop in-app update in Release Flow, the mockup gap audit loses the retirement notice, the old icon check its desktop clause, and the Favorites and Blacklisted check its desktop and cross-client halves, the desktop update note goes, and `release.yml`'s finish is checked for the server. This milestone's three Release checks are added under Agent checks.
+- `CONTEXT.md` loses its Desktop client section, the desktop projects in its repository map, its desktop self-update line, and its comparisons with the desktop, and its WebUI lines no longer mention a path list or an empty item-state read.
+- `README.md`, `docs/architecture.md` (its diagram too), `docs/api.md`, `docs/dev-setup.md`, `docs/domain-inventory.md` (its Desktop Client Orchestration section, with the old fixture paths), and `assets/fonts/README.md` describe the WebUI as the only client. Their rules and `CONTEXT.md`'s about migrated flows and parity across clients are plain rules for server-owned flows, and `docs/architecture.md` says `LibraryCatalogStore`'s replace methods have no caller while `Open` still recovers an interrupted replace on every start.
+- OpenAPI's catalog checkpoint, client type, and duration descriptions no longer name the desktop, the client type hint gives only `web` and `mobile-web`, the types the WebUI sends, and the generated WebUI types follow.
+- `MILESTONES.md`'s Ownership Boundaries, Per-Preset Preset Writes' preset comparison Trap and Not included, Browser-Playable Filter's preset equality Trap, `ISSUES.md`'s preset issue, and `filter-enum-values.json`'s case of enum names no longer describe the desktop as current.
+- `[Unreleased]` loses the desktop halves of the filter modes, true peak, and Allow remote connections bullets and the desktop preset picks fix, and keeps the autoplay bullet's pointer to the desktop's Keep Playing.
+- A search of every Markdown file outside the changelog, the release notes, the milestone files, and the mockup, and of `shared/` (OpenAPI and the fixtures), finds the desktop only as retired, and no `src/clients/desktop` or LibVLC (measured).
+- `pwsh ./tools/scripts/check-milestones.ps1` and `pwsh ./tools/scripts/tests/test-scripts.ps1` passed (measured).
+- With the fixture's renamed case and the client type hint's edit, `dotnet build ReelRoulette.sln` had 0 warnings, `dotnet test ReelRoulette.sln` passed Core.Tests 488 and ServerApp.Tests 7, and `npm run verify` passed 1483 tests in 72 files, with the generated contracts up to date (measured).
+
+#### Release checks
+
+- Agent: On Linux and Windows, the release publishes only the server, and the Windows package carries FFmpeg's license text, checked in a dev-channel release run of `release.yml`.
+- Agent: The v0.15.0 release notes say the desktop app is no longer released and that ReelRoulette in the browser replaces it.
+- Agent: The v0.15.0 release notes tell users to reload any open ReelRoulette page after updating the server, since an open page keeps the old API version until it's reloaded.
+
+#### Not included
+
+- Rewriting historical `CHANGELOG.md` sections and completed milestones, which keep their desktop references.
+- Rewriting stored presets' old Favorites and Blacklisted fields, which is Per-Preset Preset Writes.
+- Removing the web runtime settings' `enabled` field, which is Recovery Page and Operator Retirement.
+- Making `/api/web-runtime/settings` admin-only and removing token query auth, which is Auth Cutover for API and Admin.
+- The random and play responses' `id`, which keeps the full path the WebUI's Stats tab shows.
+- Auto-tag apply's full-path `itemPaths`, which the WebUI sends.
+- Refresh, backup settings, duplicate review, and clearing all playback stats in the admin section, which is Admin Refresh, Backup, and Duplicate Review.
+- Managing sources in the admin section, which is Admin Source Management.
+- Library export, import, and backup restore in the admin section, which is Admin Library Catalog Transfer.
+- Volume above 100%, which is WebUI Volume Boost.
+
 ### M12i3 - WebUI Tweaks
 
 - **Status**: ✅ Complete
