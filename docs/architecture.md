@@ -178,3 +178,4 @@ Operator UI is an operational surface and does not own domain logic.
 - `CONTEXT.md`: concise capability and repository context.
 - `MILESTONES.md`: planning, scope tracking, and acceptance evidence.
 - `MILESTONES-COMPLETED.md`: completed milestones and their evidence.
+- `ISSUES.md`: known bugs, until they are fixed.

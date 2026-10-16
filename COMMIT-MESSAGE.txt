@@ -19,11 +19,9 @@ Instructions:
 
 Commit Message:
 
-M12i3: Clear the Filter tab's unsaved-changes dot and preset star when changes are undone
+Docs: Track known bugs in ISSUES.md, apart from the milestones
 
-- The Filter tab compares itself with the applied filter and a saved copy of the preset list, so a change put back clears its dot, the panel button's, Apply's star, and "Preset*": a match mode set back to ALL (AND), sources checked as they were, a preset moved and back, or a duration typed, left, and emptied.
-- The Filter tab's heading stars its preset as a duration's text reads while it is typed, and keeps naming the working filter's preset until the field is left.
-- ALL (AND) match modes are no longer stored, and filters read from the server or the device drop them, so a preset saved with one matches its filter again. The existing shared fixtures and the server's filter parser are unchanged.
-- No preset may hold the default filter: Add Preset and Update Preset are disabled for it, with a tooltip saying to choose a filter, and None always names the default filter, so the None hold goes from the store, the remembered filter, and the Filter tab.
-- The mockup's "Preset*", match modes, and preset actions work the same way, with each of its presets holding a filter of its own, and Per-Preset Preset Writes now plans telling apart presets with equal filters and refusing a preset that holds the default filter, by one rule a new shared fixture locks for Core and the WebUI.
-- CONTEXT.md and the domain inventory describe the comparisons, the stored filters without AND entries, and presets that need a filter; the changelog the star that clears and presets that need a filter; and WebUI Tweaks records that the Tags tab's dot keeps tracking edits, by the user's choice, and that a preset holding the default filter, which a tag delete, the desktop's Add Preset, or the WebUI's Add Preset before v0.15.0 can leave, shows as None, a known issue.
+- ISSUES.md holds known issues, things that behave wrong, each with what goes wrong, how to make it happen, how much it matters, the release it's in since, and where in the code, and an issue is deleted once a milestone that names it or a Bugfix: commit fixes it.
+- It starts with the Tags tab's Save failing with 409 for a tag added and deleted before it, a new tag named after a just-renamed tag being lost, and a tag delete leaving a preset that shows as None, which WebUI Tweaks and Per-Preset Preset Writes now point to.
+- The known bugs among Server Robustness Findings and Client Robustness Findings move there, one issue per finding, except an unchecked thumbnail path and a weak eligible-set signature, which are too unlikely to track and are dropped. Server Robustness Findings keeps the stalled source and the needless work, and Client Robustness Findings the client and session ids.
+- AGENTS.md, CLAUDE.md, MILESTONES.md's rules, the testing checklist, the doc maps, and the implement, plan-from-report, review-fix, and pre-release skills send bugs to ISSUES.md, recorded only when the user asks, and improvements to MILESTONES.md.

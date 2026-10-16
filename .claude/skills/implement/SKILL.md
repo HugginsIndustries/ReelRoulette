@@ -39,7 +39,7 @@ Do not work around a blocker silently. Do not adjust a test, a fixture, or a def
 
 Do not edit `AGENTS.md` unless the user explicitly asks you to. If a rule there blocks the task, report it and stop rather than changing it yourself.
 
-Keep `MILESTONES.md` and docs in the state `AGENTS.md` (and any docs it points at) require — complete what this change finishes (a completed milestone moves to the top of `MILESTONES-COMPLETED.md`), record future work and scope boundaries as the maintenance rules in `MILESTONES.md` describe, and update current-state docs the project says to keep in sync. Do not invent extra docs.
+Keep `MILESTONES.md` and docs in the state `AGENTS.md` (and any docs it points at) require — complete what this change finishes (a completed milestone moves to the top of `MILESTONES-COMPLETED.md`, and an issue it fixes is deleted from `ISSUES.md`), record future work and scope boundaries as the maintenance rules in `MILESTONES.md` describe, record a bug in `ISSUES.md` only when the user asks, and update current-state docs the project says to keep in sync. Do not invent extra docs.
 
 For milestone work, when a slice lands, set its row in the Slices table to its new status, keep the entry's Status in step with its slices, and add the slice's Evidence part. List a check for the pre-release pass in the entry's Release checks: an `Agent:` bullet when an agent can verify it from the repo, its docs, or the release workflow's runs, and a `Manual:` bullet when it needs a person, real devices, or the Windows VM. When the milestone completes, copy its Release checks into the Release Specific section of the testing checklist, under Agent checks or Manual checks, before moving the entry. Outside a milestone, such a check goes straight into that section.
 
@@ -67,7 +67,7 @@ What changed, and what now behaves differently.
 
 **Anything that deviated from the plan, with the reasoning.** This matters more than the rest of the summary.
 
-Anything learned along the way that was not part of the task — a bug found in passing, an assumption that turned out wrong, something adjacent that looks fragile.
+Anything learned along the way that was not part of the task — a bug found in passing, an assumption that turned out wrong, something adjacent that looks fragile. A bug found in passing goes in `ISSUES.md` only if the user asks to record it.
 
 The outcome of verification — what was run, what passed, and the measured result where a claim was proven rather than merely tested.
 

@@ -1,6 +1,6 @@
 ---
 name: plan-from-report
-description: Use when asked to turn a report, review, or list of findings into planning changes in MILESTONES.md — new or amended milestones, backlog items, release placement, or Planned Releases changes. Plans the edit and stops for confirmation before changing anything. Docs-only.
+description: Use when asked to turn a report, review, or list of findings into planning changes in MILESTONES.md — new or amended milestones, backlog items, release placement, or Planned Releases changes — or into known issues in ISSUES.md. Plans the edit and stops for confirmation before changing anything. Docs-only.
 ---
 
 # Plan from report
@@ -9,7 +9,9 @@ Follow `AGENTS.md`. Read the top of `MILESTONES.md` (its maintenance rules and t
 
 ## Map before adding
 
-For each finding, check whether an existing milestone or backlog item already covers it, fully or partly. Say which one by name. Only findings nothing covers become new entries. Never duplicate an existing item; amend it instead.
+For each finding, check whether an existing milestone, backlog item, or issue in `ISSUES.md` already covers it, fully or partly. Say which one by name. Only findings nothing covers become new entries. Never duplicate an existing item; amend it instead.
+
+A finding that is a bug, something that behaves wrong, is not planned work: it becomes an issue in `ISSUES.md`, in that file's format, not a milestone or backlog item. A milestone planned to fix one names it by its title in its Scope.
 
 ## Placement
 
@@ -26,7 +28,7 @@ For each finding, check whether an existing milestone or backlog item already co
 - Record a settled choice under Decisions when it shapes more than one slice, and in the slice's Scope when it shapes only that one. Write it as settled, without saying where it was decided.
 - Carry the report's facts and measured numbers into the Traps of the slice that will hit them, including known traps such as an approach measured to be slow or wrong. Mark them "(measured)" or "(inferred)" as the report does, and leave a fact read from code or docs unmarked.
 - Give each slice its own acceptance criteria, each naming the tests that show it. Verification is automated tests plus at most a quick spot check. Longer manual checks, repeated runs, and Windows VM passes become one-line `Agent:` or `Manual:` bullets in the entry's Release checks, not milestone steps.
-- Record anything out of scope, never silently: future work as its own backlog item or as an addition to the existing milestone that will do it, after checking existing items so nothing is recorded twice, and scope boundaries as a bullet in Not included, naming the covering milestone by its exact title after "which is".
+- Record anything out of scope, never silently: a bug as an issue in `ISSUES.md`, future work as its own backlog item or as an addition to the existing milestone that will do it, after checking existing items so nothing is recorded twice, and scope boundaries as a bullet in Not included, naming the covering milestone by its exact title after "which is".
 
 ## IDs and renumbering
 
@@ -34,7 +36,7 @@ Follow the file's rules for P and M IDs and promotion. Renumber only milestones 
 
 ## The plan
 
-Present it and stop. Show: each finding and where it goes (existing item or new entry, with the release), any renumbering as an old-to-new table, every name reference that changes, and any genuine fork as a numbered question with a recommendation. Decide the rest yourself and say what you decided.
+Present it and stop. Show: each finding and where it goes (existing item, new entry with the release, or an issue in `ISSUES.md`), any renumbering as an old-to-new table, every name reference that changes, and any genuine fork as a numbered question with a recommendation. Decide the rest yourself and say what you decided.
 
 ## After confirmation
 

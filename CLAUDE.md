@@ -8,7 +8,7 @@ Skills own the workflow: their stops for approval, the docs and tracker, and the
 - **verifier:** runs verification commands and returns only failures. Give it the exact commands from AGENTS.md for the change.
 - **reviewer:** read-only review of a change through one lens; review-staged runs several in parallel.
 - **implementer:** only after the user has approved a plan. Give it one slice verbatim, with the milestone entry's Decisions when it is milestone work, the files it owns, and how to verify it. Parallel implementers never share a file. Review its diff yourself and carry its deviations into the summary.
-- **One writer for shared files:** only this session edits MILESTONES.md, MILESTONES-COMPLETED.md, CHANGELOG.md, RELEASE-NOTES.md, COMMIT-MESSAGE.txt, AGENTS.md, CLAUDE.md, and the current-state docs AGENTS.md says to keep in sync.
+- **One writer for shared files:** only this session edits MILESTONES.md, MILESTONES-COMPLETED.md, ISSUES.md, CHANGELOG.md, RELEASE-NOTES.md, COMMIT-MESSAGE.txt, AGENTS.md, CLAUDE.md, and the current-state docs AGENTS.md says to keep in sync.
 - **Keep in this session:** small or sequential changes, anything needing back-and-forth with the user, and every question to the user. Subagents can't ask questions, so one that hits a fork stops and reports, and this session brings it to the user.
 - **Built-in agents:** don't use Explore or Plan for research that feeds a report or plan; they skip this file and AGENTS.md. Use investigator instead.
 

@@ -2,13 +2,13 @@
 
 This checklist is the pre-release pass: automated checks, a short smoke test, checks for this release's changes, and the release flow. Regression coverage comes from automated tests.
 
-**Rule:** Every item is a check that passes or fails. Roadmap text, future work, and known issues go in `MILESTONES.md`, not here.
+**Rule:** Every item is a check that passes or fails. Roadmap text and future work go in `MILESTONES.md`, and known issues in `ISSUES.md`, not here.
 
 **Rule:** One line per check. Do not repeat implementation details, file paths, or platform notes that other docs already cover.
 
 **Rule:** A manual check describes something a person can see or do in the apps. An agent check is something an agent can confirm from the repo, its docs, or the release workflow's runs. Other behavior that is only visible in code, logs, or API responses belongs in automated tests, not in this list.
 
-**Rule:** A failed or skipped check stays unticked and gets a `Failed:` or `Skipped:` sub-bullet that says what happened and names the backlog item in `MILESTONES.md` that tracks it.
+**Rule:** A failed or skipped check stays unticked and gets a `Failed:` or `Skipped:` sub-bullet that says what happened and names the issue in `ISSUES.md` or the backlog item in `MILESTONES.md` that tracks it.
 
 **Rule:** An agent check that can't be verified yet during the pass, for example because this version has no release run, stays unticked and gets a `Pending:` sub-bullet that says why. It is verified when finishing the release, and the note is removed.
 

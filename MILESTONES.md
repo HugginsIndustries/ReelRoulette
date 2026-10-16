@@ -30,6 +30,7 @@ Do not use this file for detailed architecture explanation or current capability
 
 - `MILESTONES.md`: roadmap, milestone scope, acceptance gates, verification evidence.
 - `MILESTONES-COMPLETED.md`: archive of finished milestones.
+- `ISSUES.md`: known bugs, until they are fixed.
 - `CONTEXT.md`: current implemented capabilities across server/desktop/web/operator.
 - `AGENTS.md`: agent workflow, boundaries, and doc-discipline rules.
 - `docs/domain-inventory.md`: ownership-first implementation surface map.
@@ -41,6 +42,7 @@ Do not use this file for detailed architecture explanation or current capability
 - Keep entries **current-state accurate**: update statuses and evidence as work progresses.
 - Keep scope locked to milestone intent.
 - Record future work found during a milestone as its own backlog item in `## Planned Milestones`, or as an addition to the existing milestone that will do it. Check existing items first so the work is not recorded twice.
+- Known bugs live in `ISSUES.md`, not here. A milestone that fixes one names it by its title in its Scope.
 - Record scope boundaries as bullets in the entry's Not included section. When another milestone covers the boundary, name it by its exact title after "which is" (for example `- Rebinding, which is Customizable Keyboard Shortcuts.`), which `check-milestones.ps1` enforces.
 - Organize milestone sections as:
   - `## Planned Releases`: the release outline at the top of this file; keep it in sync when milestones are added, moved, promoted, completed, or removed.
@@ -145,7 +147,7 @@ Last milestone completed: M12i2
 - The held action's badge and the category headers are built as the user approves them in the Mockup slice's review, and neither app slice starts before that review.
 - The category headers change in the Tags tab and the Filter tab's Tags section alike, since both use one header (`TagCategory` in the WebUI, `categoryEl` in the mockup).
 - The Filter tab's Apply and Cancel tell whether there are changes from the Unsaved state slice's comparison of the tab with the applied filter and the saved presets, so the Display slice's footer lands after it.
-- No preset may hold exactly the default filter, by the user's choice: **None** stands for the default filter, so the preset dropdown's None hold goes. A preset holding the default filter, which a tag delete, the desktop's Add Preset, or the WebUI's Add Preset before v0.15.0 can leave, shows as None and gets no other handling, a known issue.
+- No preset may hold exactly the default filter, by the user's choice: **None** stands for the default filter, so the preset dropdown's None hold goes. A preset holding the default filter, which a tag delete, the desktop's Add Preset, or the WebUI's Add Preset before v0.15.0 can leave, shows as None and gets no other handling, the known issue "A tag delete can leave a preset that shows as None" in `ISSUES.md`.
 
 #### Slices
 
@@ -260,7 +262,7 @@ Last milestone completed: M12i2
 - The Filter tab keeps the source list its General fields were filled from through the tab showing again and Refresh.
 - A duration that isn't valid now counts for Apply's star as well as the dots, so a held Apply reads "Apply*", and the heading stars it, as the mockup's does.
 - In the user's review, presets were barred from holding the default filter, in place of comparing the None hold, and the None hold went. The device's remembered filter no longer has `holdNone`, and one written before is read without it.
-- A tag deleted elsewhere that was a preset's only filter leaves the preset with the default filter, which then shows as None, in Library and Tags screen tests (measured).
+- A tag deleted elsewhere that was a preset's only filter leaves the preset with the default filter, which then shows as None, in Library and Tags screen tests (measured), the known issue "A tag delete can leave a preset that shows as None" in `ISSUES.md`.
 - The mockup's Filter tab names the working filter's preset as the app does, None for the default filter and otherwise the first preset whose filter matches, stars it live as a duration is typed, and keeps the filter when None is chosen. Its presets each hold a filter other than the default one, Add Preset and Update Preset are disabled with their tooltip for the default filter, and its match modes and Update Preset keep their state.
 - When Apply saves the preset list, the WebUI posts its presets without AND entries, so a desktop whose applied filter holds one shows its preset starred after that save, since the desktop's comparer, kept as decided, counts the entry. Server filtering is unaffected, and the desktop's removal is the next milestone (inferred).
 - `CONTEXT.md` and `docs/domain-inventory.md` describe the comparisons, the stored filters without AND entries, and the presets that need a filter, `CHANGELOG.md`'s Fixed section the star that clears, and its Changed section the presets that need a filter.
@@ -684,7 +686,7 @@ Last milestone completed: M12i2
 
 #### Not included
 
-- A preset holding the default filter, which a tag delete, the desktop's Add Preset, or the WebUI's Add Preset before v0.15.0 can leave, and which the server keeps and the WebUI shows as None, a known issue that no milestone takes.
+- A preset holding the default filter, which a tag delete, the desktop's Add Preset, or the WebUI's Add Preset before v0.15.0 can leave, and which the server keeps and the WebUI shows as None, the known issue "A tag delete can leave a preset that shows as None" in `ISSUES.md`, which no milestone takes.
 
 ### M12i6 - Item Ratings
 
@@ -2660,7 +2662,7 @@ Last milestone completed: M12i2
 
 #### Not included
 
-- The server's other robustness findings, which is Server Robustness Findings.
+- The server's other robustness findings, which is Server Robustness Findings, and its known bugs, which `ISSUES.md` lists.
 
 ### M12q - Admin Refresh, Backup, and Duplicate Review
 
@@ -4308,62 +4310,33 @@ Last milestone completed: M12i2
 ### P35 - Server Robustness Findings
 
 - **Status**: ⏳ Planned
-- **Goal**: Close the server and Core robustness findings that no other milestone owns, so bad input and crashes cannot lose settings or grow memory without bound, and a stalled drive or share cannot stall a refresh.
+- **Goal**: Close the server robustness findings that no other milestone owns, so a stalled drive or share cannot stall a refresh and the server does no needless work.
 
 #### Scope
 
-- Paths and processes:
-  - Thumbnail path from an unchecked id: `RefreshPipelineService.GetThumbnailPath` accepts only the id format the server generates and checks that the full path stays under the thumbnail folder.
-  - Unread process output: `RefreshPipelineService.VerifyFfmpegAsync` reads both of ffmpeg's streams or stops redirecting them.
-  - Shell launch: `RestartCoordinator.TryLaunchReplacementProcess` waits for the port in managed code and starts the process with `ProcessStartInfo.ArgumentList`, with no shell.
-  - Stuck restart flag: clear `_restartInProgress` when the scheduled stop fails, or track Idle, Pending, Stopping, and Failed states.
-  - Autostart entry quoting: `LinuxXdgStartupLaunchService.BuildDesktopEntryContent` escapes the path to the Desktop Entry spec.
-  - Autostart status: `LinuxXdgStartupLaunchService.GetStatusAsync` parses both `Hidden` and `X-GNOME-Autostart-enabled`, and checks that the `Exec` path exists.
-  - Uncancellable hashing: `FileFingerprintService.ComputeFingerprint` hashes asynchronously with a `CancellationToken`.
-- Memory and selection:
-  - Unbounded randomization state: cap the count of `LibraryPlaybackService._clientRandomizationStates`, evict the least recently used, and limit id length.
-  - Weak eligible-set signature: `RandomSelectionEngineCore.ComputeEligibleSignature` compares the count plus a SHA-256 over the ids in order.
-  - Telemetry reads: `ApiTelemetryService` keeps a ring buffer that reads newest first.
-  - Session list under lock: `ServerSessionStore.GetActiveSessions` copies the records under the lock and sorts outside it.
-  - Dead write-back: `DynamicCorsOriginRegistry` keeps the rebuilt list only in the registry.
-- Events:
-  - Revision reuse after a restart: give each server start an instance id that clients send back with the last event ID, or start revisions from a value that cannot repeat, and send `resyncRequired` on a mismatch. This is a contract change.
 - Storage:
   - Stalled source: the refresh stops working on a source whose storage stops responding, keeps that source's items as they are, and logs a warning, instead of crawling on. Decides the threshold and whether the rest of the run continues.
   - Two stats per file: the fingerprint stage's check loop stats each file once, or reuses the size and write time the walk already read.
-- The audio filter's handling of unscanned videos: decides whether a NULL `has_audio` counts as **With audio**, **Without audio**, or neither, then aligns `docs/api.md`, the WebUI's labels, and tests.
+- Needless work:
+  - Telemetry reads: `ApiTelemetryService` keeps a ring buffer that reads newest first.
+  - Session list under lock: `ServerSessionStore.GetActiveSessions` copies the records under the lock and sorts outside it.
+  - Dead write-back: `DynamicCorsOriginRegistry` keeps the rebuilt list only in the registry.
 
 #### Traps
 
-- Paths and processes:
-  - Thumbnail path from an unchecked id: `RefreshPipelineService.GetThumbnailPath` builds `Path.Combine(_thumbnailDir, $"{itemId}.jpg")` from the catalog item id, and an imported `library.db` can hold any id, including `..` segments, so a thumbnail write or delete could land outside the thumbnail folder.
-  - Unread process output: `RefreshPipelineService.VerifyFfmpegAsync` redirects ffmpeg's standard output and error, reads neither, and waits for exit; enough output would fill a pipe and hang the check. The other ffmpeg and ffprobe calls already read stderr.
-  - Shell launch: on Linux, `RestartCoordinator.TryLaunchReplacementProcess` in `src/core/ReelRoulette.ServerApp/Program.cs` builds one `/bin/bash -lc` script with the process path, assembly path, host, and port interpolated, so a path containing `"` or `\` breaks it.
-  - Stuck restart flag: `RestartCoordinator.TryRestartAsync` and `TryStopAsync` set `_restartInProgress` and clear it only when the request is not accepted. If the scheduled stop fails or the process does not exit, every later restart or stop answers "already in progress".
-  - Autostart entry quoting: `LinuxXdgStartupLaunchService.BuildDesktopEntryContent` writes `Exec="<path>"` without escaping, while the Desktop Entry spec requires `"`, `` ` ``, `$`, and `\` inside a quoted argument to be backslash-escaped and `%` to be written `%%`.
-  - Autostart status: `LinuxXdgStartupLaunchService.GetStatusAsync` reports enabled whenever the file lacks `Hidden=true`, ignoring `X-GNOME-Autostart-enabled=false` and a missing `Exec` target.
-  - Uncancellable hashing: `FileFingerprintService.ComputeFingerprint` hashes the whole file synchronously with no cancellation, and the refresh fingerprint stage calls it, so stopping the server during a large file waits for the hash to finish.
-- Memory and selection:
-  - Unbounded randomization state: `LibraryPlaybackService._clientRandomizationStates` keeps one shuffle state per client and session key and never removes any, and the ids come from requests.
-  - Weak eligible-set signature: `RandomSelectionEngineCore.ComputeEligibleSignature` uses a 32-bit `HashCode` over the eligible item ids, so two different eligible sets can collide and reuse the wrong shuffle state.
-  - Telemetry reads: `ApiTelemetryService.GetIncoming` and `GetOutgoing` call `Reverse()` over the whole queue on every control status poll.
-  - Session list under lock: `ServerSessionStore.GetActiveSessions` filters, sorts, and projects inside the session lock.
-  - Dead write-back: `DynamicCorsOriginRegistry.RebuildAllowedOrigins` writes the rebuilt list back into the shared `ServerRuntimeOptions.CorsAllowedOrigins`, which nothing reads after the registry's constructor.
-- Events:
-  - Revision reuse after a restart: `ServerStateService` starts its revision counter at zero on every start. A client that reconnects after the restarted server has published past that client's last event ID, but no further than its replay history, gets a partial replay from the new server and no `resyncRequired`.
 - Storage:
   - Stalled source: the source walk (`EnumerateMediaFiles`, which calls `Directory.EnumerateFiles` with `AllDirectories`) and the fingerprint stage's check loop have no timeout and run synchronously on one thread pool thread.
   - With the media on a soft CIFS mount whose server answered slowly, the largest source's walk took 17 min 48 s against 8.5–15 s normally, the check loop advanced one file every 50–65 s, and the run took 48.5 min against 3.5–6.5 min (measured).
   - `Directory.EnumerateFiles` with `AllDirectories` throws on an I/O error rather than returning a partial list.
   - A source whose folder lists no media files while the library holds items from it already keeps them, with a `last.log` warning.
   - Two stats per file: the check loop calls `File.Exists` and then `new FileInfo` for every item, about 98,000 stats on a 49,100-item library, which take 3.4–4.6 min, about 2.1–2.8 ms a stat (measured).
-- The audio filter's handling of unscanned videos: `LibraryCatalogListQuery` matches **With audio** on `has_audio = 1` and **Without audio** on `has_audio = 0`, so a video whose audio has not been scanned (`has_audio` NULL) is hidden by both.
+- Needless work:
+  - Telemetry reads: `ApiTelemetryService.GetIncoming` and `GetOutgoing` call `Reverse()` over the whole queue on every control status poll.
+  - Session list under lock: `ServerSessionStore.GetActiveSessions` filters, sorts, and projects inside the session lock.
+  - Dead write-back: `DynamicCorsOriginRegistry.RebuildAllowedOrigins` writes the rebuilt list back into the shared `ServerRuntimeOptions.CorsAllowedOrigins`, which nothing reads after the registry's constructor.
 
 #### Acceptance
 
-- A catalog item id that would resolve outside the thumbnail folder is refused, in its finding's test.
-- No server process launch goes through a shell, in its finding's test.
-- Randomization state stays within its cap under many client and session ids, in its finding's test.
 - A refresh stops working on a source whose storage stops responding, keeps that source's items, and logs a warning, in its finding's tests with a source whose walk stalls and one whose file checks stall.
 - The check loop stats each file once, in its finding's test.
 - Each finding above is fixed or explicitly declined with a reason in this entry.
@@ -4375,33 +4348,28 @@ Last milestone completed: M12i2
 - The server's own settings findings (partial posts, the non-atomic write, and the silent load failure), which is Server Settings Robustness, since the admin section saves server settings from any device.
 - Logging slow sources and refresh durations, which is Server Instrumentation.
 - Telling a file the server can't read from a missing one in the media and play routes, which is Browser-Playable Filter.
+- The server's known bugs, which `ISSUES.md` lists.
 
 ---
 
 ### P36 - Client Robustness Findings
 
 - **Status**: ⏳ Planned
-- **Goal**: Close the WebUI and dev-script robustness findings that no other milestone owns.
+- **Goal**: The WebUI's client and session ids never become an auth secret once login sessions exist.
 
 #### Scope
 
-- WebUI:
-  - Client and session ids: once login sessions exist, decides whether the server derives them from the session instead, and keeps them from ever becoming an auth secret.
-- Dev scripts:
-  - Missing install: `tools/scripts/run-server-rebuild.ps1` runs `npm ci` when `node_modules` is missing or older than `package-lock.json`, with a `-SkipInstall` switch.
+- Client and session ids: once login sessions exist, decides whether the server derives them from the session instead, and keeps them from ever becoming an auth secret.
 
 #### Traps
 
-- WebUI:
-  - Client and session ids: `src/api/coreApi.ts` keeps the client id in `localStorage` and the session id in `sessionStorage`, and `sseClient.ts` puts both in the event stream URL, where proxy access logs record them.
-  - They identify a randomization scope and are not credentials today.
-- Dev scripts:
-  - Missing install: `tools/scripts/run-server-rebuild.ps1` runs `npm run build` without installing packages, so a clean clone or a changed lockfile builds stale or fails.
+- `src/api/coreApi.ts` keeps the client id in `localStorage` and the session id in `sessionStorage`, and `sseClient.ts` puts both in the event stream URL, where proxy access logs record them.
+- They identify a randomization scope and are not credentials today.
 
 #### Acceptance
 
-- Each finding above is fixed or explicitly declined with a reason in this entry.
-- Each fixed finding has a test.
+- The finding above is fixed or explicitly declined with a reason in this entry.
+- A fix has a test.
 - `npm run verify` passes.
 
 #### Not included
@@ -4411,6 +4379,7 @@ Last milestone completed: M12i2
 - Unchecked JSON, which is WebUI Notifications, since it already changes that code.
 - Favorite and blacklist after Next, which is WebUI Multi-Select and Bulk Actions, since it already changes that code.
 - The weak build check, which is New Logo and Icons, since it already changes that code.
+- Known bugs in the WebUI and the dev scripts, which `ISSUES.md` lists.
 
 ---
 

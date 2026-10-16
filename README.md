@@ -238,6 +238,7 @@ See `docs/dev-setup.md` for channel names, dev vs stable tiers, and troubleshoot
 - Current implemented capability inventory: `CONTEXT.md`
 - Milestone planning and tracking: `MILESTONES.md`
 - Completed milestones: `MILESTONES-COMPLETED.md`
+- Known bugs: `ISSUES.md`
 - API contract and endpoint/event behavior: `docs/api.md`
 - Local setup and development workflows: `docs/dev-setup.md`
 - Domain-level implementation inventory: `docs/domain-inventory.md`

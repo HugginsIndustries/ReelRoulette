@@ -61,7 +61,7 @@ Run this after the user says their manual pass is done.
 
 1. Verify each Agent check that has a `Pending:` note, as in Part 1 step 5. When it passes, tick it and remove the note; when it fails, replace the note with `Failed:`. If one still can't be verified, keep the note and say why.
 2. Read the checklist as the user left it. List any unticked item that has no `Failed:` or `Skipped:` note, other than the Release Flow items this part ticks, and ask about each before going on.
-3. Check that every failure and skip points to a backlog item in `MILESTONES.md`. List any that don't.
+3. Check that every failure and skip points to an issue in `ISSUES.md` or a backlog item in `MILESTONES.md`. List any that don't.
 4. Re-check `[Unreleased]` against the style note, since fixes made during testing may have added to it, and update the release notes draft to match.
 5. Set the final version with `pwsh ./tools/scripts/set-release-version.ps1 -Version v{VERSION} -NoRunVerify`, and show what it changed.
 6. Cut the changelog with `pwsh ./tools/scripts/cut-changelog.ps1 -Version {VERSION} -Name "{Release Name}"`. It moves `[Unreleased]` into `## [{VERSION}] — {Release Name} (YYYY-MM-DD)` with today's date, keeping only headings that have entries, leaves a fresh `[Unreleased]` with every heading empty, and updates the footer compare links. If it refuses, fix what it reports and run it again. Show what it changed.
