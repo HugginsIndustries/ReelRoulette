@@ -159,7 +159,7 @@ Last milestone completed: M12i5
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Server | ✅ Complete | The schema step with preset ids and rewritten filter states, per-preset writes in the catalog, the preset event, and the server's filter parser without the old fields. |
-| Contract | ⏳ Planned | Per-preset routes, the preset id in responses and random requests, and the preset event, in OpenAPI and the generated WebUI types. |
+| Contract | ✅ Complete | Per-preset routes, the preset id in responses and random requests, and the preset event, in OpenAPI and the generated WebUI types. |
 | WebUI | ⏳ Planned | The Filter tab saving each changed preset by id, the preset list following the preset event, the WebUI without the old fields, and the whole-list replace removed. |
 
 #### Server slice
@@ -243,6 +243,7 @@ Last milestone completed: M12i5
 - `PresetResponse.id` is the preset's stable id, and the random request's `presetId` matches it.
 - Create and update answer `400` for the default filter, and `409` for another preset's filter, with an error that names that preset. Create and rename answer `409` for a name another preset has.
 - Update, rename, reorder, and delete answer `500` for a write the catalog doesn't take (`NotSaved`), with the server's reason as the error.
+- A per-preset catalog write that throws, as when another write holds the catalog past its busy timeout, is not saved either, create's too: it answers `500` with the server's reason, gets a `last.log` warning, and changes and publishes nothing.
 - Tag rename and delete write a `last.log` warning when their preset write fails, as the per-preset writes do.
 - The `presetCatalogChanged` event and its schema, whose `presetId` is null for a reorder.
 - The server stops advertising `api.presets.match`, whose route Remove the Preset Match Route took out, and advertises a capability for the per-preset routes in its place, which the WebUI requires.
@@ -266,9 +267,33 @@ Last milestone completed: M12i5
 - A random request's `presetId` finds a preset by id and not by name, in server tests of random selection.
 - Create and update answer `400` for the default filter and `409` naming the preset for another preset's filter, in server tests of the routes.
 - Update, rename, reorder, and delete answer `500` with the server's reason for a write the catalog doesn't take, in server tests of the routes.
+- A per-preset write whose catalog write throws, create's included, answers `500` with the server's reason, writes a `last.log` warning, and changes nothing, in server tests of the routes.
 - A tag rename and a tag delete whose preset write fails write a `last.log` warning, in server tests of each.
 - The server advertises the per-preset routes' capability and not `api.presets.match`, in server contract tests, and the WebUI reports a server without it as missing a required capability, in WebUI compatibility tests.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- `dotnet build ReelRoulette.sln` passes with no warnings, and `dotnet test ReelRoulette.sln` passes: 510 Core tests and 7 ServerApp tests.
+- `npm run verify` passes: 1,484 tests in 72 files, the generated types' freshness check, the build, and its output check.
+- SystemChecks and `check-milestones.ps1` pass.
+- The routes are `POST /api/presets/create` (`{ name, filterState, clientId? }`), `POST /api/presets/{presetId}/update` (`{ filterState, clientId? }`), `POST /api/presets/{presetId}/rename` (`{ name, clientId? }`), `POST /api/presets/reorder` (`{ presetIds, clientId? }`), and `POST /api/presets/{presetId}/delete` (an optional `{ clientId? }`), all POST, as the API's other routes are and as its CORS policy allows. Create, update, and rename answer with the preset as written, and reorder and delete with an empty 200. An empty name, a filter state that isn't an object, or the default filter is `400`, an unknown id `404`, another preset's name or filter, or an order that doesn't name every preset once, `409`, and a write the catalog doesn't take `500`, each with the server's reason in `error`. The capability is `api.presets.byId`.
+- `PresetRouteTests` checks each route's request, response, and `presetCatalogChanged` payload against OpenAPI, each event's preset id and `clientId`, every refusal's status and reason, `500` for update, rename, reorder, and delete when the catalog lacks the preset, and `500` for create and update while another connection holds the catalog's write lock, with a `last.log` warning, nothing changed, and nothing published.
+- `PresetCatalogTests` checks that a tag rename and a tag delete whose preset write fails under the same held lock each write a `last.log` warning while the catalog keeps its presets, so holding a write transaction on a second connection does make the write fail (measured).
+- `LibraryPlaybackServiceTests` and `FilterStateTests` check that `presetId` finds a preset by its id, and not by its name or its id in another case, and that `GetPresets` returns the stored ids. `ServerContractTests` checks the capability, and the WebUI's compatibility and screen tests report a server without it.
+- Each check fails when what it guards is broken, each break made from a copy in `artifacts/scratch/` and restored byte for byte (measured):
+  - `presetId` matched by name fails the random pick by id test and `MissingOrNullFilterState_KeepsEachRoutesMeaning`.
+  - `GetPresets` giving names as ids fails its test.
+  - Another preset's filter answering `400`, and a write the catalog doesn't take answering `400`, fail three route tests.
+  - Leaving out tag rename and delete's `last.log` line fails their test.
+  - Not catching a write that throws fails the route test of it.
+  - The server advertising `api.presets.match` fails `ServerContractTests`, and the WebUI requiring it fails two compatibility tests.
+  - Dropping `clientId` from the event's schema fails the route contract test.
+- Deviations:
+  - `PresetWriteResult` carries the preset as written, which create, update, and rename answer with, so a route doesn't read the presets again after its write.
+  - Tag rename and delete's failed preset write goes to `last.log` in place of the console logger, rather than to both, as the per-preset writes log only to `last.log`.
+  - `CatalogSeed.HoldWriteLock` holds the write lock of a catalog the server opened, which is in WAL mode, beside `HoldBusy`, which locks a rollback-journal catalog.
+- `docs/api.md` lists and describes the routes, the event, `presetId` by id, the whole-list replace keeping ids by name, and tag rename and delete's warning. `CONTEXT.md` and the domain inventory name the routes and the preset id.
 
 #### WebUI slice
 

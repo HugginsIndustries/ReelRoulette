@@ -171,7 +171,7 @@ public sealed class PresetCatalogTests : IDisposable
         Assert.All(results, result => Assert.Equal(PresetWriteStatus.NotSaved, result.Status));
         Assert.Equal(before, Describe(state));
         Assert.Empty(PresetEvents(state, revision));
-        var warnings = File.ReadLines(Path.Combine(_tempDir, "last.log")).Where(line => line.Contains("[warn]", StringComparison.Ordinal)).ToList();
+        var warnings = Warnings();
         Assert.Equal(4, warnings.Count);
         Assert.All(warnings, line => Assert.Contains("was not saved", line, StringComparison.Ordinal));
     }
@@ -308,6 +308,31 @@ public sealed class PresetCatalogTests : IDisposable
         Assert.Empty(PresetEvents(state, revision));
     }
 
+    // Another write holds the catalog past the preset write's busy timeout, so the catalog keeps the presets it had. The
+    // server still changes the presets it holds, as the tag rename and delete landed, and last.log says each wasn't saved.
+    [Fact]
+    public void TagRenameAndDelete_WhosePresetWriteFails_WriteALastLogWarning()
+    {
+        var log = new ServerLogService(_tempDir);
+        var state = SeededState(out var ids, log);
+        var before = Describe(state);
+
+        using (CatalogSeed.HoldWriteLock(Path.Combine(_tempDir, LibraryCatalogStore.DatabaseFileName)))
+        {
+            Assert.True(state.RenameTagInPresetCatalogOnly("ann", "Anne"));
+            Assert.True(state.RemoveTagFromPresetCatalogOnly("Bob"));
+        }
+
+        Assert.Equal(
+            Describe([(ids[0], "Night", NightFilter), (ids[1], "Clips", ClipsFilter), (ids[2], "Ann", """{"selectedTags":["Anne"]}""")]),
+            Describe(state));
+        Assert.Equal(before, Describe(Restarted()));
+        var warnings = Warnings();
+        Assert.Equal(2, warnings.Count);
+        Assert.Contains("Preset filters changed by a tag rename were not saved", warnings[0], StringComparison.Ordinal);
+        Assert.Contains("Preset filters changed by a tag delete were not saved", warnings[1], StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         LibraryCatalogBackup.WaitForPending();
@@ -366,6 +391,11 @@ public sealed class PresetCatalogTests : IDisposable
             .Select(envelope => (PresetCatalogChangedPayload)envelope.Payload)
             .Select(payload => (payload.PresetId, payload.ClientId))
             .ToList();
+    }
+
+    private List<string> Warnings()
+    {
+        return File.ReadLines(Path.Combine(_tempDir, "last.log")).Where(line => line.Contains("[warn]", StringComparison.Ordinal)).ToList();
     }
 
     private void AssertUnchanged(ServerStateService state, List<string> before, long revision)

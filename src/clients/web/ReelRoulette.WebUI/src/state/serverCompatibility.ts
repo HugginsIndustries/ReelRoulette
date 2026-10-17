@@ -10,7 +10,7 @@ const REQUIRED_SERVER_CAPABILITIES = [
   "events.refreshStatusChanged",
   "events.resyncRequired",
   "api.random.filterState",
-  "api.presets.match"
+  "api.presets.byId"
 ];
 
 /** The parts of `GET /api/version` the compatibility check and Diagnostics read. */

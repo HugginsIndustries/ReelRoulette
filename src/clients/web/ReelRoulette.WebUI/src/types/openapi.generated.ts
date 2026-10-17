@@ -335,6 +335,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/presets/create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a preset after every other one
+         * @description Gives the preset a new id and publishes `presetCatalogChanged` with it and the request's `clientId`.
+         */
+        post: operations["postPresetCreate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/presets/{presetId}/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace a preset's filter
+         * @description Publishes `presetCatalogChanged` with the preset's id and the request's `clientId`. The preset's own filter,
+         *     as presets compare filters, is taken.
+         */
+        post: operations["postPresetUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/presets/{presetId}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rename a preset, keeping its id
+         * @description Publishes `presetCatalogChanged` with the preset's id and the request's `clientId`. A preset may take its own
+         *     name in another case.
+         */
+        post: operations["postPresetRename"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/presets/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Put the presets in a new order
+         * @description Changes only the order, and publishes `presetCatalogChanged` with a null `presetId` and the request's
+         *     `clientId`.
+         */
+        post: operations["postPresetReorder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/presets/{presetId}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete a preset
+         * @description Publishes `presetCatalogChanged` with the deleted preset's id and the request's `clientId`.
+         */
+        post: operations["postPresetDelete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sources": {
         parameters: {
             query?: never;
@@ -1217,6 +1320,7 @@ export interface components {
             [key: string]: unknown;
         };
         PresetResponse: {
+            /** @description The preset's own id, kept across renames, which the preset routes and `presetCatalogChanged` use. */
             id: string;
             name: string;
             /** @description The filter the preset was saved with, as it was posted, with later tag renames and deletions applied, and with the older `favoritesOnly` and `excludeBlacklisted` rewritten into `favoritesMode` and `blacklistedMode` by the catalog's upgrade. */
@@ -1335,8 +1439,8 @@ export interface components {
         };
         RandomRequest: {
             /**
-             * @description A saved preset's name, ignoring case, used only when `filterState` is omitted or null. `all-media`
-             *     picks with the default filter when no preset has that name.
+             * @description A saved preset's id, exactly, used only when `filterState` is omitted or null. A preset's name finds no
+             *     preset. `all-media`, which is never a preset's id, picks with the default filter.
              */
             presetId?: string;
             /**
@@ -1427,7 +1531,7 @@ export interface components {
             eventType: string;
             /** Format: date-time */
             timestamp: string;
-            payload: components["schemas"]["ItemStateChangedPayload"] | components["schemas"]["PlaybackRecordedPayload"] | components["schemas"]["ResyncRequiredPayload"] | components["schemas"]["ItemTagsChangedPayload"] | components["schemas"]["TagCatalogChangedPayload"] | components["schemas"]["SourceStateChangedPayload"] | components["schemas"]["RefreshStatusChangedPayload"] | components["schemas"]["StreamOpenedPayload"];
+            payload: components["schemas"]["ItemStateChangedPayload"] | components["schemas"]["PlaybackRecordedPayload"] | components["schemas"]["ResyncRequiredPayload"] | components["schemas"]["ItemTagsChangedPayload"] | components["schemas"]["TagCatalogChangedPayload"] | components["schemas"]["PresetCatalogChangedPayload"] | components["schemas"]["SourceStateChangedPayload"] | components["schemas"]["RefreshStatusChangedPayload"] | components["schemas"]["StreamOpenedPayload"];
         };
         ItemStateChangedPayload: {
             itemId: string;
@@ -1486,6 +1590,36 @@ export interface components {
         FilterPresetSnapshot: {
             name: string;
             filterState: components["schemas"]["FilterState"];
+        };
+        CreatePresetRequest: {
+            /** @description Trimmed before it is saved. */
+            name: string;
+            /** @description Stored as posted. Omitted or null is the default filter, which a preset can't hold. */
+            filterState: components["schemas"]["FilterState"] | null;
+            /** @description The client making the change, which `presetCatalogChanged` carries back. */
+            clientId?: string | null;
+        };
+        UpdatePresetFilterRequest: {
+            /** @description Stored as posted. Omitted or null is the default filter, which a preset can't hold. */
+            filterState: components["schemas"]["FilterState"] | null;
+            /** @description The client making the change, which `presetCatalogChanged` carries back. */
+            clientId?: string | null;
+        };
+        RenamePresetRequest: {
+            /** @description Trimmed before it is saved. */
+            name: string;
+            /** @description The client making the change, which `presetCatalogChanged` carries back. */
+            clientId?: string | null;
+        };
+        ReorderPresetsRequest: {
+            /** @description Every preset's id, once each, in the new order. */
+            presetIds: string[];
+            /** @description The client making the change, which `presetCatalogChanged` carries back. */
+            clientId?: string | null;
+        };
+        DeletePresetRequest: {
+            /** @description The client making the change, which `presetCatalogChanged` carries back. */
+            clientId?: string | null;
         };
         TagCategorySnapshot: {
             id: string;
@@ -1766,6 +1900,13 @@ export interface components {
             reason: string;
             categories: components["schemas"]["TagCategorySnapshot"][];
             tags: components["schemas"]["TagSnapshot"][];
+        };
+        /** @description Published by each preset create, update, rename, reorder, and delete. The whole-list replace, `POST /api/presets`, publishes none, and tag rename and delete publish none, so clients see the presets they change through `tagCatalogChanged`. */
+        PresetCatalogChangedPayload: {
+            /** @description The preset created, updated, renamed, or deleted, or null when the presets were reordered. */
+            presetId: string | null;
+            /** @description The client whose request made the change, so it can tell its own change from another device's. */
+            clientId: string | null;
         };
         SourceStateChangedPayload: {
             sourceId: string;
@@ -2664,6 +2805,313 @@ export interface operations {
             503: components["responses"]["LibraryUnavailable"];
         };
     };
+    postPresetCreate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePresetRequest"];
+            };
+        };
+        responses: {
+            /** @description The new preset, with its id */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetResponse"];
+                };
+            };
+            /** @description The name is empty, the filter state is not an object, or the filter is the default one */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Another preset has the name, ignoring case, or the filter, and `error` names it */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The catalog didn't take the write, which changed nothing */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            503: components["responses"]["LibraryUnavailable"];
+        };
+    };
+    postPresetUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                presetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePresetFilterRequest"];
+            };
+        };
+        responses: {
+            /** @description The preset with its new filter */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetResponse"];
+                };
+            };
+            /** @description The filter state is not an object, or the filter is the default one */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No preset has this id */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Another preset has the filter, and `error` names it */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The catalog didn't take the write, which changed nothing */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            503: components["responses"]["LibraryUnavailable"];
+        };
+    };
+    postPresetRename: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                presetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenamePresetRequest"];
+            };
+        };
+        responses: {
+            /** @description The preset with its new name */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetResponse"];
+                };
+            };
+            /** @description The name is empty */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No preset has this id */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Another preset has the name, ignoring case, and `error` names it */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The catalog didn't take the write, which changed nothing */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            503: components["responses"]["LibraryUnavailable"];
+        };
+    };
+    postPresetReorder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderPresetsRequest"];
+            };
+        };
+        responses: {
+            /** @description The presets are in the new order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `presetIds` doesn't name every preset exactly once, as when another device has since added or deleted one */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The catalog didn't take the write, which changed nothing */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            503: components["responses"]["LibraryUnavailable"];
+        };
+    };
+    postPresetDelete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                presetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DeletePresetRequest"];
+            };
+        };
+        responses: {
+            /** @description The preset is deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No preset has this id */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The catalog didn't take the write, which changed nothing */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            503: components["responses"]["LibraryUnavailable"];
+        };
+    };
     getSources: {
         parameters: {
             query?: never;
@@ -2939,7 +3387,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `filterState` is omitted or null and no preset has the `presetId` name. `all-media` never returns 404. */
+            /** @description `filterState` is omitted or null and no preset has the `presetId` id. `all-media` never returns 404. */
             404: {
                 headers: {
                     [name: string]: unknown;

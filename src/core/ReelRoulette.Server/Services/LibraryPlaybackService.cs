@@ -35,8 +35,7 @@ public sealed class LibraryPlaybackService
             .Select(group =>
             {
                 var preset = group.First();
-                var name = preset.Name.Trim();
-                return ApiContractMapper.MapPreset(name, name, filterState: preset.FilterState);
+                return ApiContractMapper.MapPreset(preset.Id, preset.Name.Trim(), filterState: preset.FilterState);
             })
             .ToList();
     }
@@ -263,6 +262,7 @@ public sealed class LibraryPlaybackService
         return _tokenStore.TryResolve(token, out fullPath);
     }
 
+    /// <summary>The preset whose id is <paramref name="presetId"/>, exactly. A preset's name finds nothing.</summary>
     private static StoredPreset? ResolvePreset(IReadOnlyList<StoredPreset> presets, string presetId)
     {
         if (string.IsNullOrWhiteSpace(presetId))
@@ -271,7 +271,7 @@ public sealed class LibraryPlaybackService
         }
 
         return (presets ?? [])
-            .FirstOrDefault(p => string.Equals(p.Name, presetId, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(p => string.Equals(p.Id, presetId, StringComparison.Ordinal));
     }
 
     private static bool TryResolveFilter(

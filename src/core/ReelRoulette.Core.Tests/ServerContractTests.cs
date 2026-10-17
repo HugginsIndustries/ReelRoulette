@@ -95,7 +95,9 @@ public sealed class ServerContractTests
         Assert.Contains("events.refreshStatusChanged", version.Capabilities);
         Assert.Contains("events.resyncRequired", version.Capabilities);
         Assert.Contains("api.random.filterState", version.Capabilities);
-        Assert.Contains("api.presets.match", version.Capabilities);
+        Assert.Contains("api.presets.byId", version.Capabilities);
+        // The preset match route is gone, so the server no longer advertises it.
+        Assert.DoesNotContain("api.presets.match", version.Capabilities);
         Assert.Contains("control.status", version.Capabilities);
         Assert.Contains("control.settings", version.Capabilities);
         Assert.Contains("control.logs.server", version.Capabilities);

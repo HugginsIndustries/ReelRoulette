@@ -7,7 +7,7 @@ const CAPABILITIES = [
   "events.refreshStatusChanged",
   "events.resyncRequired",
   "api.random.filterState",
-  "api.presets.match"
+  "api.presets.byId"
 ];
 
 describe("serverCompatibilityError", () => {
@@ -34,7 +34,7 @@ describe("serverCompatibilityError", () => {
 
   it("lists every missing capability", () => {
     expect(serverCompatibilityError({ apiVersion: "2", capabilities: ["auth.sessionCookie", "identity.sessionId"] })).toBe(
-      "Server missing required capabilities: events.refreshStatusChanged, events.resyncRequired, api.random.filterState, api.presets.match."
+      "Server missing required capabilities: events.refreshStatusChanged, events.resyncRequired, api.random.filterState, api.presets.byId."
     );
   });
 });

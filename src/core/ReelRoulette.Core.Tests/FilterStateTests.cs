@@ -97,7 +97,7 @@ public sealed class FilterStateTests : IDisposable
     }
 
     // Each route that takes a filter state, with its body read as the server binds it: the library query, the
-    // random pick, and the preset catalog, whose presets a random pick reads by name.
+    // random pick, and the preset catalog, whose presets a random pick reads by id.
     [Fact]
     public void MissingOrNullFilterState_KeepsEachRoutesMeaning()
     {
@@ -117,18 +117,22 @@ public sealed class FilterStateTests : IDisposable
         var restarted = new ServerStateService(catalog: CatalogOpen.Host(_tempDir));
         foreach (var presets in new[] { state.GetPresetCatalogSnapshot(), restarted.GetPresetCatalogSnapshot() })
         {
-            // A random pick falls back to presetId. all-media, which names no preset here, is the default filter.
-            Assert.Equal(["favorite"], PickIds(playback, presets, """{"presetId":"night"}"""));
-            Assert.Equal(["favorite"], PickIds(playback, presets, """{"presetId":"night","filterState":null}"""));
+            var ids = presets.ToDictionary(preset => preset.Name, preset => preset.Id);
+
+            // A random pick falls back to presetId, a preset's id. all-media, which is never a preset's id, is the default filter.
+            Assert.Equal(["favorite"], PickIds(playback, presets, $$"""{"presetId":"{{ids["Night"]}}"}"""));
+            Assert.Equal(["favorite"], PickIds(playback, presets, $$"""{"presetId":"{{ids["Night"]}}","filterState":null}"""));
             Assert.Equal(["favorite", "plain"], PickIds(playback, presets, """{"presetId":"all-media"}"""));
             Assert.Equal(["favorite", "plain"], PickIds(playback, presets, """{"presetId":"all-media","filterState":null}"""));
-            Assert.Equal(["favorite", "plain"], PickIds(playback, presets, """{"presetId":"Bare"}"""));
-            Assert.Equal(["favorite", "plain"], PickIds(playback, presets, """{"presetId":"Empty"}"""));
+            Assert.Equal(["favorite", "plain"], PickIds(playback, presets, $$"""{"presetId":"{{ids["Bare"]}}"}"""));
+            Assert.Equal(["favorite", "plain"], PickIds(playback, presets, $$"""{"presetId":"{{ids["Empty"]}}"}"""));
 
             Assert.Equal(StatusCodes.Status400BadRequest, PickStatus(playback, presets, "{}"));
             Assert.Equal(StatusCodes.Status400BadRequest, PickStatus(playback, presets, """{"filterState":null}"""));
             Assert.Equal(StatusCodes.Status404NotFound, PickStatus(playback, presets, """{"presetId":"Unknown"}"""));
             Assert.Equal(StatusCodes.Status404NotFound, PickStatus(playback, presets, """{"presetId":"Unknown","filterState":null}"""));
+            // A preset's name finds no preset.
+            Assert.Equal(StatusCodes.Status404NotFound, PickStatus(playback, presets, """{"presetId":"Night"}"""));
         }
     }
 

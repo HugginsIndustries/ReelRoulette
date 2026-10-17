@@ -597,6 +597,250 @@ paths:
         "503":
           $ref: "#/components/responses/LibraryUnavailable"
 
+  /api/presets/create:
+    post:
+      summary: Add a preset after every other one
+      description: |
+        Gives the preset a new id and publishes `presetCatalogChanged` with it and the request's `clientId`.
+      operationId: postPresetCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePresetRequest"
+      responses:
+        "200":
+          description: The new preset, with its id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PresetResponse"
+        "400":
+          description: The name is empty, the filter state is not an object, or the filter is the default one
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Another preset has the name, ignoring case, or the filter, and `error` names it
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: The catalog didn't take the write, which changed nothing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
+
+  /api/presets/{presetId}/update:
+    post:
+      summary: Replace a preset's filter
+      description: |
+        Publishes `presetCatalogChanged` with the preset's id and the request's `clientId`. The preset's own filter,
+        as presets compare filters, is taken.
+      operationId: postPresetUpdate
+      parameters:
+        - name: presetId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePresetFilterRequest"
+      responses:
+        "200":
+          description: The preset with its new filter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PresetResponse"
+        "400":
+          description: The filter state is not an object, or the filter is the default one
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No preset has this id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Another preset has the filter, and `error` names it
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: The catalog didn't take the write, which changed nothing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
+
+  /api/presets/{presetId}/rename:
+    post:
+      summary: Rename a preset, keeping its id
+      description: |
+        Publishes `presetCatalogChanged` with the preset's id and the request's `clientId`. A preset may take its own
+        name in another case.
+      operationId: postPresetRename
+      parameters:
+        - name: presetId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenamePresetRequest"
+      responses:
+        "200":
+          description: The preset with its new name
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PresetResponse"
+        "400":
+          description: The name is empty
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No preset has this id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Another preset has the name, ignoring case, and `error` names it
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: The catalog didn't take the write, which changed nothing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
+
+  /api/presets/reorder:
+    post:
+      summary: Put the presets in a new order
+      description: |
+        Changes only the order, and publishes `presetCatalogChanged` with a null `presetId` and the request's
+        `clientId`.
+      operationId: postPresetReorder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderPresetsRequest"
+      responses:
+        "200":
+          description: The presets are in the new order
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: |
+            `presetIds` doesn't name every preset exactly once, as when another device has since added or deleted one
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: The catalog didn't take the write, which changed nothing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
+
+  /api/presets/{presetId}/delete:
+    post:
+      summary: Delete a preset
+      description: |
+        Publishes `presetCatalogChanged` with the deleted preset's id and the request's `clientId`.
+      operationId: postPresetDelete
+      parameters:
+        - name: presetId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeletePresetRequest"
+      responses:
+        "200":
+          description: The preset is deleted
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No preset has this id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: The catalog didn't take the write, which changed nothing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
+
   /api/sources:
     get:
       summary: Get library sources with global enabled states
@@ -818,7 +1062,7 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: |
-            `filterState` is omitted or null and no preset has the `presetId` name. `all-media` never returns 404.
+            `filterState` is omitted or null and no preset has the `presetId` id. `all-media` never returns 404.
           content:
             application/json:
               schema:
@@ -2217,6 +2461,7 @@ components:
       properties:
         id:
           type: string
+          description: The preset's own id, kept across renames, which the preset routes and `presetCatalogChanged` use.
         name:
           type: string
         filterState:
@@ -2407,8 +2652,8 @@ components:
         presetId:
           type: string
           description: |
-            A saved preset's name, ignoring case, used only when `filterState` is omitted or null. `all-media`
-            picks with the default filter when no preset has that name.
+            A saved preset's id, exactly, used only when `filterState` is omitted or null. A preset's name finds no
+            preset. `all-media`, which is never a preset's id, picks with the default filter.
         filterState:
           anyOf:
             - $ref: "#/components/schemas/FilterState"
@@ -2597,6 +2842,7 @@ components:
             - $ref: "#/components/schemas/ResyncRequiredPayload"
             - $ref: "#/components/schemas/ItemTagsChangedPayload"
             - $ref: "#/components/schemas/TagCatalogChangedPayload"
+            - $ref: "#/components/schemas/PresetCatalogChangedPayload"
             - $ref: "#/components/schemas/SourceStateChangedPayload"
             - $ref: "#/components/schemas/RefreshStatusChangedPayload"
             - $ref: "#/components/schemas/StreamOpenedPayload"
@@ -2718,6 +2964,76 @@ components:
           type: string
         filterState:
           $ref: "#/components/schemas/FilterState"
+
+    CreatePresetRequest:
+      type: object
+      required:
+        - name
+        - filterState
+      properties:
+        name:
+          type: string
+          description: Trimmed before it is saved.
+        filterState:
+          anyOf:
+            - $ref: "#/components/schemas/FilterState"
+            - type: "null"
+          description: Stored as posted. Omitted or null is the default filter, which a preset can't hold.
+        clientId:
+          type: string
+          nullable: true
+          description: The client making the change, which `presetCatalogChanged` carries back.
+
+    UpdatePresetFilterRequest:
+      type: object
+      required:
+        - filterState
+      properties:
+        filterState:
+          anyOf:
+            - $ref: "#/components/schemas/FilterState"
+            - type: "null"
+          description: Stored as posted. Omitted or null is the default filter, which a preset can't hold.
+        clientId:
+          type: string
+          nullable: true
+          description: The client making the change, which `presetCatalogChanged` carries back.
+
+    RenamePresetRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Trimmed before it is saved.
+        clientId:
+          type: string
+          nullable: true
+          description: The client making the change, which `presetCatalogChanged` carries back.
+
+    ReorderPresetsRequest:
+      type: object
+      required:
+        - presetIds
+      properties:
+        presetIds:
+          type: array
+          items:
+            type: string
+          description: Every preset's id, once each, in the new order.
+        clientId:
+          type: string
+          nullable: true
+          description: The client making the change, which `presetCatalogChanged` carries back.
+
+    DeletePresetRequest:
+      type: object
+      properties:
+        clientId:
+          type: string
+          nullable: true
+          description: The client making the change, which `presetCatalogChanged` carries back.
 
     TagCategorySnapshot:
       type: object
@@ -3338,6 +3654,25 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TagSnapshot"
+
+    PresetCatalogChangedPayload:
+      type: object
+      description: >-
+        Published by each preset create, update, rename, reorder, and delete. The whole-list replace,
+        `POST /api/presets`, publishes none, and tag rename and delete publish none, so clients see the presets
+        they change through `tagCatalogChanged`.
+      required:
+        - presetId
+        - clientId
+      properties:
+        presetId:
+          type: string
+          nullable: true
+          description: The preset created, updated, renamed, or deleted, or null when the presets were reordered.
+        clientId:
+          type: string
+          nullable: true
+          description: The client whose request made the change, so it can tell its own change from another device's.
 
     SourceStateChangedPayload:
       type: object

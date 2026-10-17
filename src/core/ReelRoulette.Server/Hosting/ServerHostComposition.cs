@@ -355,6 +355,16 @@ public static class ServerHostComposition
             return Results.Ok();
         });
 
+        app.MapPost("/api/presets/create", CreatePreset);
+
+        app.MapPost("/api/presets/{presetId}/update", UpdatePreset);
+
+        app.MapPost("/api/presets/{presetId}/rename", RenamePreset);
+
+        app.MapPost("/api/presets/reorder", ReorderPresets);
+
+        app.MapPost("/api/presets/{presetId}/delete", DeletePreset);
+
         app.MapPost("/api/random", (RandomRequest request, ServerStateService state, LibraryPlaybackService playback, OperatorTestingService testingService) =>
         {
             request.ClientId = NormalizeOptionalIdentity(request.ClientId);
@@ -678,6 +688,60 @@ public static class ServerHostComposition
             PreviousLastPlayedUtc = recorded.PreviousLastPlayedUtc
         });
         return Results.Ok(playResponse);
+    }
+
+    internal static IResult CreatePreset(CreatePresetRequest request, ServerStateService state)
+    {
+        var result = state.CreatePreset(request.Name, request.FilterState, NormalizeOptionalIdentity(request.ClientId));
+        return PresetWritten(result, answersWithPreset: true);
+    }
+
+    internal static IResult UpdatePreset(string presetId, UpdatePresetFilterRequest request, ServerStateService state)
+    {
+        var result = state.UpdatePresetFilter(presetId, request.FilterState, NormalizeOptionalIdentity(request.ClientId));
+        return PresetWritten(result, answersWithPreset: true);
+    }
+
+    internal static IResult RenamePreset(string presetId, RenamePresetRequest request, ServerStateService state)
+    {
+        var result = state.RenamePreset(presetId, request.Name, NormalizeOptionalIdentity(request.ClientId));
+        return PresetWritten(result, answersWithPreset: true);
+    }
+
+    internal static IResult ReorderPresets(ReorderPresetsRequest request, ServerStateService state)
+    {
+        var result = state.ReorderPresets(request.PresetIds, NormalizeOptionalIdentity(request.ClientId));
+        return PresetWritten(result, answersWithPreset: false);
+    }
+
+    internal static IResult DeletePreset(string presetId, DeletePresetRequest? body, ServerStateService state)
+    {
+        var result = state.DeletePreset(presetId, NormalizeOptionalIdentity(body?.ClientId));
+        return PresetWritten(result, answersWithPreset: false);
+    }
+
+    /// <summary>
+    /// Answers a preset write with the preset as written, or an empty 200 for a reorder or a delete. A refusal or a
+    /// write the catalog didn't take answers with the server's reason.
+    /// </summary>
+    private static IResult PresetWritten(PresetWriteResult result, bool answersWithPreset)
+    {
+        if (result.Status == PresetWriteStatus.Done)
+        {
+            return answersWithPreset && result.Preset != null
+                ? Results.Ok(ApiContractMapper.MapPreset(result.Preset.Id, result.Preset.Name, result.Preset.FilterState))
+                : Results.Ok();
+        }
+
+        var statusCode = result.Status switch
+        {
+            PresetWriteStatus.NotFound => StatusCodes.Status404NotFound,
+            PresetWriteStatus.NameTaken or PresetWriteStatus.FilterTaken or PresetWriteStatus.OrderMismatch => StatusCodes.Status409Conflict,
+            PresetWriteStatus.NotSaved => StatusCodes.Status500InternalServerError,
+            // No name, a filter state that isn't an object, or the default filter.
+            _ => StatusCodes.Status400BadRequest
+        };
+        return Results.Json(new { error = result.Error }, statusCode: statusCode);
     }
 
     /// <summary>

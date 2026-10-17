@@ -593,14 +593,14 @@ describe("server compatibility", () => {
   it("blocks a server that lacks a required capability and stops the event stream", async () => {
     const server = new FakeServer();
     server.on("GET", "/api/version", () =>
-      json({ ...COMPATIBLE_VERSION, capabilities: COMPATIBLE_VERSION.capabilities.filter((c) => c !== "api.presets.match") })
+      json({ ...COMPATIBLE_VERSION, capabilities: COMPATIBLE_VERSION.capabilities.filter((c) => c !== "api.presets.byId") })
     );
     const page = mountPage({ server });
 
     // The player's indicator and the Library tab show it, and the log keeps the full message.
     await waitFor(() => expect(optionLabels(presetSelect())).toEqual(["Server compatibility check failed"]));
     await waitFor(() =>
-      expect(page.server.logLines()).toContain("status=Server missing required capabilities: api.presets.match. hasCurrent=false attempt=0")
+      expect(page.server.logLines()).toContain("status=Server missing required capabilities: api.presets.byId. hasCurrent=false attempt=0")
     );
     expect(page.stream().closed).toBe(true);
 

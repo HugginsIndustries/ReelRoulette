@@ -23,7 +23,7 @@ public sealed class ServerStateService
         "events.refreshStatusChanged",
         "events.resyncRequired",
         "api.random.filterState",
-        "api.presets.match",
+        "api.presets.byId",
         "api.webRuntime.settings",
         "api.sources.import",
         "api.duplicates",
@@ -170,9 +170,18 @@ public sealed class ServerStateService
             }
 
             var preset = new StoredPreset { Id = NewPresetId(), Name = trimmed, FilterState = filterState!.Value.Clone() };
-            WriteCatalog(session => session.CreatePreset(ToCatalogPreset(preset)));
+            var unsaved = WritePresetChange($"create of {preset.Id}", session =>
+            {
+                session.CreatePreset(ToCatalogPreset(preset));
+                return true;
+            });
+            if (unsaved != null)
+            {
+                return unsaved;
+            }
+
             _presetCatalog.Add(preset);
-            return Changed(preset.Id, clientId);
+            return Changed(preset, clientId);
         }
     }
 
@@ -204,7 +213,7 @@ public sealed class ServerStateService
             }
 
             preset.FilterState = stored;
-            return Changed(preset.Id, clientId);
+            return Changed(preset, clientId);
         }
     }
 
@@ -233,7 +242,7 @@ public sealed class ServerStateService
             }
 
             preset.Name = trimmed;
-            return Changed(preset.Id, clientId);
+            return Changed(preset, clientId);
         }
     }
 
@@ -258,7 +267,7 @@ public sealed class ServerStateService
             }
 
             _presetCatalog = order.Select(id => byId[id]).ToList();
-            return Changed(presetId: null, clientId);
+            return Changed(preset: null, clientId);
         }
     }
 
@@ -279,7 +288,7 @@ public sealed class ServerStateService
             }
 
             _presetCatalog.Remove(preset);
-            return Changed(preset.Id, clientId);
+            return Changed(preset, clientId);
         }
     }
 
@@ -291,7 +300,7 @@ public sealed class ServerStateService
             return false;
         }
 
-        return RevisePresetFilters(root =>
+        return RevisePresetFilters("tag rename", root =>
             RenameTagInFilterArray(root, "selectedTags", oldName, newName) |
             RenameTagInFilterArray(root, "excludedTags", oldName, newName));
     }
@@ -307,7 +316,7 @@ public sealed class ServerStateService
             return false;
         }
 
-        return RevisePresetFilters(root =>
+        return RevisePresetFilters("tag delete", root =>
             RemoveTagFromFilterArray(root, "selectedTags", tagName) |
             RemoveTagFromFilterArray(root, "excludedTags", tagName));
     }
@@ -598,11 +607,19 @@ public sealed class ServerStateService
 
     private static PresetWriteResult PresetRefused(PresetWriteStatus status, string error) => new() { Status = status, Error = error };
 
-    /// <summary>Publishes the change, within the preset lock so events follow the order of the writes.</summary>
-    private PresetWriteResult Changed(string? presetId, string? clientId)
+    /// <summary>
+    /// Publishes the change to <paramref name="preset"/>, or to the order when it is null, within the preset lock so
+    /// events follow the order of the writes.
+    /// </summary>
+    private PresetWriteResult Changed(StoredPreset? preset, string? clientId)
     {
-        Publish("presetCatalogChanged", new PresetCatalogChangedPayload { PresetId = presetId, ClientId = clientId });
-        return new PresetWriteResult { Status = PresetWriteStatus.Done, PresetId = presetId };
+        Publish("presetCatalogChanged", new PresetCatalogChangedPayload { PresetId = preset?.Id, ClientId = clientId });
+        return new PresetWriteResult
+        {
+            Status = PresetWriteStatus.Done,
+            PresetId = preset?.Id,
+            Preset = preset == null ? null : ClonePreset(preset)
+        };
     }
 
     /// <summary>Writes to the catalog when the server has a library. Without a catalog, as in tests, presets live only in memory.</summary>
@@ -615,26 +632,42 @@ public sealed class ServerStateService
     }
 
     /// <summary>
-    /// Writes one preset change to the catalog, as <see cref="WriteCatalog"/> does. A write that changes no row, as when
-    /// the catalog lacks a preset the server holds after a failed write it logged, is not saved: last.log gets a warning,
-    /// and the caller changes nothing and publishes nothing. Null when the change was saved.
+    /// Writes one preset change to the catalog, as <see cref="WriteCatalog"/> does. A write that throws, as when another
+    /// write holds the catalog past its busy timeout, or that changes no row, as when the catalog lacks a preset the
+    /// server holds after a failed write it logged, is not saved: last.log gets a warning, and the caller changes nothing
+    /// and publishes nothing. Null when the change was saved.
     /// </summary>
     private PresetWriteResult? WritePresetChange(string change, Func<LibraryCatalogSession, bool> write)
     {
-        if (_catalog is not { HasLibrary: true } || write(_catalog.Session))
+        if (_catalog is not { HasLibrary: true })
         {
             return null;
         }
 
-        _serverLog?.Append("warn", $"Preset {change} was not saved: the catalog's presets differ from the server's.");
+        string reason;
+        try
+        {
+            if (write(_catalog.Session))
+            {
+                return null;
+            }
+
+            reason = "the catalog's presets differ from the server's.";
+        }
+        catch (Exception ex)
+        {
+            reason = ex.Message;
+        }
+
+        _serverLog?.Append("warn", $"Preset {change} was not saved: {reason}");
         return PresetRefused(PresetWriteStatus.NotSaved, "The preset change couldn't be saved.");
     }
 
     /// <summary>
     /// Changes each preset's filter state that <paramref name="revise"/> changes, in one catalog write, keeping its id.
-    /// A failed write is logged, and the presets still change.
+    /// A failed write gets a last.log warning naming <paramref name="change"/>, and the presets still change.
     /// </summary>
-    private bool RevisePresetFilters(Func<JsonObject, bool> revise)
+    private bool RevisePresetFilters(string change, Func<JsonObject, bool> revise)
     {
         lock (_filterSessionLock)
         {
@@ -664,7 +697,7 @@ public sealed class ServerStateService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to persist preset catalog.");
+                _serverLog?.Append("warn", $"Preset filters changed by a {change} were not saved: {ex.Message}");
             }
 
             foreach (var (preset, filterState) in revised)
@@ -801,6 +834,9 @@ public sealed class PresetWriteResult
 
     /// <summary>The preset written, or null for a reorder or a refusal.</summary>
     public string? PresetId { get; init; }
+
+    /// <summary>The preset as written, or as it was before a delete. Null for a reorder or a refusal.</summary>
+    public StoredPreset? Preset { get; init; }
 
     public string? Error { get; init; }
 }

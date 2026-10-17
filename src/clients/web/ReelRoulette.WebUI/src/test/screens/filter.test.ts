@@ -721,7 +721,7 @@ describe("opening and closing", () => {
   it("shows but loads nothing while the server is incompatible", async () => {
     const server = new FakeServer();
     server.on("GET", "/api/version", () =>
-      json({ ...COMPATIBLE_VERSION, capabilities: COMPATIBLE_VERSION.capabilities.filter((c) => c !== "api.presets.match") })
+      json({ ...COMPATIBLE_VERSION, capabilities: COMPATIBLE_VERSION.capabilities.filter((c) => c !== "api.presets.byId") })
     );
     mountPage({ server });
     await waitFor(() => expect(selectedPresetLabel()).toBe("Server compatibility check failed"));

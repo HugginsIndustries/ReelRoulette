@@ -373,6 +373,23 @@ internal static class CatalogSeed
     }
 
     /// <summary>
+    /// Holds the write lock on a catalog the server has opened, which it keeps in WAL mode, so a write on another
+    /// connection fails once its busy timeout passes, while reads go on. Disposing it changes nothing.
+    /// </summary>
+    public static SqliteConnection HoldWriteLock(string databasePath)
+    {
+        var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Mode = SqliteOpenMode.ReadWrite,
+            Pooling = false
+        }.ToString());
+        connection.Open();
+        Execute(connection, "BEGIN IMMEDIATE;");
+        return connection;
+    }
+
+    /// <summary>
     /// Overwrites the <c>catalog_meta</c> table page of a standalone catalog, so the schema check and
     /// the other tables still read, but reading the revision row fails as corrupt.
     /// </summary>

@@ -178,6 +178,37 @@ public sealed class FilterPresetSnapshot
     public JsonElement FilterState { get; set; }
 }
 
+public sealed class CreatePresetRequest
+{
+    public string? Name { get; set; }
+    public JsonElement? FilterState { get; set; }
+    public string? ClientId { get; set; }
+}
+
+public sealed class UpdatePresetFilterRequest
+{
+    public JsonElement? FilterState { get; set; }
+    public string? ClientId { get; set; }
+}
+
+public sealed class RenamePresetRequest
+{
+    public string? Name { get; set; }
+    public string? ClientId { get; set; }
+}
+
+public sealed class ReorderPresetsRequest
+{
+    /// <summary>Every preset's id, once each, in the new order.</summary>
+    public List<string>? PresetIds { get; set; }
+    public string? ClientId { get; set; }
+}
+
+public sealed class DeletePresetRequest
+{
+    public string? ClientId { get; set; }
+}
+
 public sealed class TagCategorySnapshot
 {
     public string Id { get; set; } = string.Empty;

@@ -14,7 +14,7 @@ const COMPATIBLE_VERSION = {
     "events.refreshStatusChanged",
     "events.resyncRequired",
     "api.random.filterState",
-    "api.presets.match"
+    "api.presets.byId"
   ]
 };
 

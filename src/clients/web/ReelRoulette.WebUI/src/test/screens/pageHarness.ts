@@ -23,7 +23,7 @@ export const REQUIRED_CAPABILITIES = [
   "events.refreshStatusChanged",
   "events.resyncRequired",
   "api.random.filterState",
-  "api.presets.match"
+  "api.presets.byId"
 ];
 
 export const COMPATIBLE_VERSION = {

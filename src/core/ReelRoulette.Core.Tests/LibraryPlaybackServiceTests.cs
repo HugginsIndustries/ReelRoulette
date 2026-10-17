@@ -14,21 +14,19 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), "reelroulette-library-playback-tests", Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void GetPresets_ShouldProjectPresetCatalogNames()
+    public void GetPresets_GivesEachPresetsOwnId()
     {
         Directory.CreateDirectory(_tempDir);
         var service = CreateService();
         IReadOnlyList<StoredPreset> presets =
         [
-            new StoredPreset { Name = "All Media", FilterState = ParseJson("{}") },
-            new StoredPreset { Name = "Favorites", FilterState = ParseJson("{}") }
+            new StoredPreset { Id = "id-1", Name = "All Media", FilterState = ParseJson("{}") },
+            new StoredPreset { Id = "id-2", Name = "Favorites", FilterState = ParseJson("{}") }
         ];
 
         var responses = service.GetPresets(presets);
 
-        Assert.Equal(2, responses.Count);
-        Assert.Equal("All Media", responses[0].Id);
-        Assert.Equal("Favorites", responses[1].Id);
+        Assert.Equal([("id-1", "All Media"), ("id-2", "Favorites")], responses.Select(response => (response.Id, response.Name)));
     }
 
     [Fact]
@@ -113,7 +111,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
     }
 
     [Fact]
-    public void TrySelectRandom_ResolvesPresetIdByNameWhenNoFilterStateIsSent()
+    public void TrySelectRandom_ResolvesPresetIdByIdWhenNoFilterStateIsSent()
     {
         Directory.CreateDirectory(_tempDir);
         var favoritePath = Path.Combine(_tempDir, "favorite.mp4");
@@ -141,21 +139,25 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         var service = CreateService();
         IReadOnlyList<StoredPreset> presets =
         [
-            new StoredPreset { Name = "Favorites", FilterState = ParseJson("{\"favoritesMode\":\"only\"}") }
+            new StoredPreset { Id = "preset-1", Name = "Favorites", FilterState = ParseJson("{\"favoritesMode\":\"only\"}") }
         ];
 
         for (var attempt = 0; attempt < 5; attempt++)
         {
-            var ok = service.TrySelectRandom(new RandomRequest { PresetId = "favorites" }, presets, out var response, out var statusCode, out var error);
+            var ok = service.TrySelectRandom(new RandomRequest { PresetId = "preset-1" }, presets, out var response, out var statusCode, out var error);
             Assert.True(ok, error);
             Assert.Equal(StatusCodes.Status200OK, statusCode);
             Assert.Equal(favoritePath, response!.Id);
         }
 
-        var missing = service.TrySelectRandom(new RandomRequest { PresetId = "Unknown" }, presets, out _, out var missingStatus, out var missingError);
-        Assert.False(missing);
-        Assert.Equal(StatusCodes.Status404NotFound, missingStatus);
-        Assert.Equal("Preset 'Unknown' not found.", missingError);
+        // A preset's name, or its id in another case, finds no preset.
+        foreach (var presetId in new[] { "Favorites", "PRESET-1", "Unknown" })
+        {
+            var missing = service.TrySelectRandom(new RandomRequest { PresetId = presetId }, presets, out _, out var missingStatus, out var missingError);
+            Assert.False(missing);
+            Assert.Equal(StatusCodes.Status404NotFound, missingStatus);
+            Assert.Equal($"Preset '{presetId}' not found.", missingError);
+        }
     }
 
     [Fact]

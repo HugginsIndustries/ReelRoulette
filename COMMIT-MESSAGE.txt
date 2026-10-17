@@ -19,11 +19,11 @@ Instructions:
 
 Commit Message:
 
-M12i6: Give each preset its own id, write presets one at a time on the server, and refuse a preset that repeats another's filter
+M12i6: Add per-preset routes, and name presets by their id in the API
 
-- The catalog moves to schema version 5, whose step gives each preset an id of its own and writes each stored preset's Favorites and Blacklisted modes in place of the older `favoritesOnly` and `excludeBlacklisted`, which the server's filter parser no longer reads.
-- The server can create, update, rename, reorder, and delete one preset by id, each publishing `presetCatalogChanged`, and refuses a preset holding the default filter, another preset's filter, or another preset's name. A write the catalog doesn't take is reported as not saved and changes nothing, with a `last.log` warning. Their routes come with the Contract slice; until the WebUI slice, the whole-list replace keeps each preset's id by its name.
-- Core's `FilterStateComparison` compares filters as the WebUI's preset comparison does, and `preset-filter-equality.json` returns to `shared/fixtures/`, read by Core and the WebUI, without the old fields' cases. The WebUI's comparison ignores a category's AND mode itself.
-- Tag rename and delete update only the presets holding the tag, in one catalog write, keeping their ids, and are never refused for the filters they leave.
-- OpenAPI's FilterState and PresetResponse descriptions, `docs/api.md`, `CONTEXT.md`, dev setup, and the domain inventory follow.
-- M12i6's entry records that no preset may hold another preset's filter, which replaces keeping a chosen preset chosen beside an equal one, moves the whole-list replace's removal to the WebUI slice, has the Contract slice replace the stale `api.presets.match` capability, answer a write the catalog doesn't take with 500, and log tag rename and delete's failed preset writes to `last.log`, and adds the Server slice's evidence. The tag delete issue in `ISSUES.md` now covers tag renames and presets left with one filter.
+- `POST /api/presets/create`, `/{presetId}/update`, `/{presetId}/rename`, `/reorder`, and `/{presetId}/delete` write one preset by id. Create, update, and rename answer with the preset as written. A refusal answers 400, 404, or 409 with the server's reason, and a write the catalog doesn't take answers 500.
+- A per-preset catalog write that throws, as when another write holds the catalog past its busy timeout, is not saved either: it changes and publishes nothing, with a `last.log` warning. Tag rename and delete's failed preset writes get a `last.log` warning too.
+- `GET /api/presets` returns each preset's own id in place of its name, and the random request's `presetId` matches that id exactly.
+- The server advertises `api.presets.byId` in place of the stale `api.presets.match`, and the WebUI requires it.
+- OpenAPI describes the routes, their requests, and `presetCatalogChanged`, the WebUI types are regenerated, and `docs/api.md`, `CONTEXT.md`, and the domain inventory follow.
+- M12i6's entry adds the thrown write to the Contract slice's Scope and Acceptance, and records the slice's evidence.

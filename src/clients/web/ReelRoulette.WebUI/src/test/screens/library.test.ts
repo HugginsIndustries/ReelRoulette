@@ -315,7 +315,7 @@ describe("overlay", () => {
     stubLayoutSize();
     const server = new FakeServer();
     server.on("GET", "/api/version", () =>
-      json({ ...COMPATIBLE_VERSION, capabilities: COMPATIBLE_VERSION.capabilities.filter((c) => c !== "api.presets.match") })
+      json({ ...COMPATIBLE_VERSION, capabilities: COMPATIBLE_VERSION.capabilities.filter((c) => c !== "api.presets.byId") })
     );
     mountPage({ server });
     await waitFor(() => expect(server.requests("GET", "/api/version")).toHaveLength(1));
@@ -323,7 +323,7 @@ describe("overlay", () => {
 
     await openLibrary();
     expect(isOpen()).toBe(true);
-    expect(within(overlay()).getByRole("alert").textContent).toBe("Server missing required capabilities: api.presets.match.");
+    expect(within(overlay()).getByRole("alert").textContent).toBe("Server missing required capabilities: api.presets.byId.");
     expect(controlsShown()).toBe(true);
     // Nothing loads, so search and sort have nothing to change, and the preset dropdown says why.
     expect([searchBox().disabled, sortSelect().disabled, directionButton().disabled]).toEqual([true, true, true]);
