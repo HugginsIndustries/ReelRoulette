@@ -1,10 +1,13 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
 namespace ReelRoulette.Core.Filtering;
 
 /// <summary>
-/// The Favorites and Blacklisted filter modes as a filter state carries them. Each filter resolves on its own: a
-/// known mode decides, and otherwise its older boolean does, which only presets stored before the modes carry. The
-/// server's parser calls this; the WebUI's copy is in filterStateModel.ts. Locked to
-/// shared/fixtures/filter-mode-resolution.json.
+/// The Favorites and Blacklisted filter modes as a filter state carries them. Presets stored before the modes carry
+/// older booleans instead, which the catalog's schema 5 step rewrites into the modes: each filter resolves on its
+/// own, a known mode deciding, and otherwise its older boolean. The WebUI's copy of that rule is in
+/// filterStateModel.ts. Locked to shared/fixtures/filter-mode-resolution.json.
 /// </summary>
 public static class FlagFilterModes
 {
@@ -37,5 +40,44 @@ public static class FlagFilterModes
     public static FlagFilterModeValue ResolveBlacklisted(FlagFilterModeValue? mode, bool? excludeBlacklisted)
     {
         return mode ?? (excludeBlacklisted == false ? FlagFilterModeValue.Off : FlagFilterModeValue.Excluded);
+    }
+
+    /// <summary>
+    /// Writes a stored filter state's modes as they resolve, by name, and removes <c>favoritesOnly</c> and
+    /// <c>excludeBlacklisted</c>, so it filters as it did and has the shape every client writes. A mode that is not a
+    /// string, and an old field that is not a boolean, count as missing.
+    /// </summary>
+    public static void WriteModes(JsonObject filterState)
+    {
+        ArgumentNullException.ThrowIfNull(filterState);
+        var favorites = ResolveFavorites(ReadMode(filterState["favoritesMode"]), ReadBool(filterState["favoritesOnly"]));
+        var blacklisted = ResolveBlacklisted(ReadMode(filterState["blacklistedMode"]), ReadBool(filterState["excludeBlacklisted"]));
+        filterState["favoritesMode"] = Name(favorites);
+        filterState["blacklistedMode"] = Name(blacklisted);
+        filterState.Remove("favoritesOnly");
+        filterState.Remove("excludeBlacklisted");
+    }
+
+    /// <summary>The mode's name as filter states carry it.</summary>
+    public static string Name(FlagFilterModeValue mode) => mode switch
+    {
+        FlagFilterModeValue.Only => "only",
+        FlagFilterModeValue.Excluded => "excluded",
+        _ => "off"
+    };
+
+    private static FlagFilterModeValue? ReadMode(JsonNode? node)
+    {
+        return node?.GetValueKind() == JsonValueKind.String ? Parse(node.GetValue<string>()) : null;
+    }
+
+    private static bool? ReadBool(JsonNode? node)
+    {
+        return node?.GetValueKind() switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => null
+        };
     }
 }

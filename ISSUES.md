@@ -41,16 +41,21 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
   - `planTagEditorSave` in `src/clients/web/ReelRoulette.WebUI/src/library/tagSave.ts` sends new tags before renames.
   - `LibraryCatalogSession.UpsertTag` in `src/core/ReelRoulette.Core/Library/LibraryCatalogSession.cs` takes an existing name as that tag, moving it to the given category, or refusing when it is already there, which `/api/tag-editor/upsert-tag` answers with 409.
 
-### A tag delete can leave a preset that shows as None
+### A tag delete or rename can leave a preset that shows as None or as another preset
 
-- **What goes wrong**: Deleting a tag removes it from every preset, so a preset whose only condition was that tag is left holding the default filter. The WebUI names the default filter None, so choosing that preset shows None in the preset dropdown and the Filter tab's heading. The retired desktop's Add Preset, and the WebUI's before v0.15.0, could save such a preset too, so the catalog can still hold one.
-- **How to make it happen**: Save a preset whose only condition is one tag, delete that tag in the Tags tab or on another client, then choose the preset (measured, in Library and Tags screen tests).
-- **How much it matters**: Low. The preset applies what it now holds, which is no filter, and keeps its name in the Filter tab's preset list, where it can be renamed or deleted (inferred).
-- **Since**: v0.15.0, not yet released, where WebUI Tweaks names the default filter None. A tag delete has left presets with no conditions since v0.9.0.
+- **What goes wrong**: Deleting a tag removes it from every preset, and renaming a tag onto another tag's name merges the two in every preset, so a preset can be left holding the default filter, or the same filter as another preset:
+  - The WebUI names the default filter None, so choosing a preset that holds it shows None in the preset dropdown and the Filter tab's heading.
+  - The WebUI names the first preset whose filter matches, so choosing the later of two presets with one filter shows the earlier one's name there.
+  - The retired desktop's Add Preset, and the WebUI's before v0.15.0, could save either kind of preset too, so the catalog can still hold them.
+- **How to make it happen**:
+  - Save a preset whose only condition is one tag, delete that tag in the Tags tab or on another client, then choose the preset (measured, in Library and Tags screen tests).
+  - Save one preset including Bob and another including Robert, otherwise the same, rename Bob to Robert in Edit Tag and save, then choose the second preset (inferred). Deleting a tag does the same when that tag was all that set one preset apart from another (inferred).
+- **How much it matters**: Low. Each preset applies what it now holds and keeps its name in the Filter tab's preset list, where it can be renamed or deleted (inferred).
+- **Since**: v0.15.0, not yet released, for a preset that shows as None, where WebUI Tweaks names the default filter None. A preset that shows as another one is in v0.12.0 at least, whose WebUI also named the first preset whose filter matches. A tag delete has left presets with no conditions since v0.9.0.
 - **Where**:
-  - `RemoveTagFromPresetCatalog` in `src/core/ReelRoulette.Server/Services/ServerStateService.cs`, which `/api/tag-editor/delete-tag` calls, removes the tag from each preset's included and excluded tags.
-  - `resolvePresetAnchor` in `src/clients/web/ReelRoulette.WebUI/src/filter/filterStateModel.ts` names the default filter None.
-  - The server keeps such a preset. Per-Preset Preset Writes makes the preset routes refuse one, which a tag delete doesn't go through.
+  - `RemoveTagFromPresetCatalogOnly` and `RenameTagInPresetCatalogOnly` in `src/core/ReelRoulette.Server/Services/ServerStateService.cs`, which `/api/tag-editor/delete-tag` and `/api/tag-editor/rename-tag` call, remove or rename the tag in each preset's included and excluded tags.
+  - `resolvePresetAnchor` in `src/clients/web/ReelRoulette.WebUI/src/filter/filterStateModel.ts` names the default filter None, and otherwise the first preset whose filter matches.
+  - The server keeps such presets. Per-Preset Preset Writes makes the preset routes refuse a preset holding the default filter or another preset's, which tag deletes and renames don't go through.
 
 ## Filter tab
 

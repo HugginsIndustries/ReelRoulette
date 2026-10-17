@@ -9,7 +9,8 @@ internal sealed record SeedCategory(string Id, string Name, int SortOrder);
 
 internal sealed record SeedTag(string Name, string CategoryId = "uncategorized");
 
-internal sealed record SeedPreset(string Name, string FilterStateJson = "{}");
+/// <summary>A preset, with its id from schema version 5. Without one, the seed gives it a new id.</summary>
+internal sealed record SeedPreset(string Name, string FilterStateJson = "{}", string? Id = null);
 
 internal sealed record SeedItem(string Id, string FullPath)
 {
@@ -108,6 +109,7 @@ internal static class CatalogSeed
             2 => Schema2,
             3 => Schema3,
             4 => Schema4,
+            5 => Schema5,
             _ => throw new ArgumentOutOfRangeException(nameof(schemaVersion), schemaVersion, "The seed has no tables for this schema version.")
         };
 
@@ -241,6 +243,19 @@ internal static class CatalogSeed
 
             foreach (var (preset, position) in (presets ?? []).Select((row, index) => (row, index)))
             {
+                if (schemaVersion >= 5)
+                {
+                    Execute(
+                        connection,
+                        "INSERT INTO presets VALUES ($position, $name, $fold, $filter, $id);",
+                        ("$position", position),
+                        ("$name", preset.Name),
+                        ("$fold", Fold(preset.Name)),
+                        ("$filter", preset.FilterStateJson),
+                        ("$id", preset.Id ?? Guid.NewGuid().ToString()));
+                    continue;
+                }
+
                 Execute(
                     connection,
                     "INSERT INTO presets VALUES ($position, $name, $fold, $filter);",
@@ -278,7 +293,8 @@ internal static class CatalogSeed
         int userVersion,
         string fileName = "library.db",
         IEnumerable<SeedItem>? items = null,
-        bool standalone = false)
+        bool standalone = false,
+        IEnumerable<SeedPreset>? presets = null)
     {
         Directory.CreateDirectory(directory);
         var staging = Path.Combine(Path.GetTempPath(), "rr-seed-" + Guid.NewGuid().ToString("N"));
@@ -286,11 +302,11 @@ internal static class CatalogSeed
         {
             if (userVersion is >= LibraryCatalogStore.OldestUpgradableSchemaVersion and <= LibraryCatalogStore.SchemaVersion)
             {
-                WriteSchemaVersion(staging, userVersion, items: items);
+                WriteSchemaVersion(staging, userVersion, items: items, presets: presets);
             }
             else
             {
-                Write(staging, items: items);
+                Write(staging, items: items, presets: presets);
             }
 
             var staged = Path.Combine(staging, "library.db");
@@ -430,12 +446,6 @@ internal static class CatalogSeed
             name_fold TEXT NOT NULL,
             PRIMARY KEY (item_id, position)
         );
-        CREATE TABLE presets (
-            position INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            name_fold TEXT NOT NULL,
-            filter_state TEXT NOT NULL
-        );
         CREATE TABLE catalog_meta (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
@@ -445,6 +455,27 @@ internal static class CatalogSeed
         CREATE INDEX idx_items_relative_path_fold ON items(relative_path_fold);
         CREATE INDEX idx_tags_name_fold ON tags(name_fold);
         CREATE INDEX idx_item_tags_name_fold ON item_tags(name_fold);
+        """;
+
+    private const string Schema2Presets = """
+        CREATE TABLE presets (
+            position INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            name_fold TEXT NOT NULL,
+            filter_state TEXT NOT NULL
+        );
+
+        """;
+
+    private const string Schema5Presets = """
+        CREATE TABLE presets (
+            position INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            name_fold TEXT NOT NULL,
+            filter_state TEXT NOT NULL,
+            id TEXT NOT NULL DEFAULT ''
+        );
+
         """;
 
     private const string Schema2ItemColumns = """
@@ -481,7 +512,7 @@ internal static class CatalogSeed
 
     private const string Schema2 =
         "CREATE TABLE items (\n" + Schema2ItemColumns + "\n);\n" +
-        SharedTables +
+        SharedTables + Schema2Presets +
         "CREATE INDEX idx_items_file_name_fold ON items(file_name_fold);\n" +
         "CREATE INDEX idx_item_tags_item_id ON item_tags(item_id);\n";
 
@@ -489,9 +520,11 @@ internal static class CatalogSeed
 
     private const string Schema4ItemColumns = Schema3ItemColumns + ",\n    loudness_analysis_version INTEGER NOT NULL DEFAULT 0";
 
-    private const string Schema3 = "CREATE TABLE items (\n" + Schema3ItemColumns + "\n);\n" + SharedTables + SortIndexes;
+    private const string Schema3 = "CREATE TABLE items (\n" + Schema3ItemColumns + "\n);\n" + SharedTables + Schema2Presets + SortIndexes;
 
-    private const string Schema4 = "CREATE TABLE items (\n" + Schema4ItemColumns + "\n);\n" + SharedTables + SortIndexes;
+    private const string Schema4 = "CREATE TABLE items (\n" + Schema4ItemColumns + "\n);\n" + SharedTables + Schema2Presets + SortIndexes;
+
+    private const string Schema5 = "CREATE TABLE items (\n" + Schema4ItemColumns + "\n);\n" + SharedTables + Schema5Presets + SortIndexes;
 
     private const string SortIndexes =
         """

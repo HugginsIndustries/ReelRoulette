@@ -781,7 +781,7 @@ public sealed class LibraryListQueryTests
 
             var favorites = operations.QueryLibrary(new LibraryQueryRequest
             {
-                FilterState = JsonSerializer.SerializeToElement(new { favoritesOnly = true }),
+                FilterState = JsonSerializer.SerializeToElement(new { favoritesMode = "only" }),
                 Limit = 10
             });
             Assert.True(favorites.Accepted);
@@ -1034,34 +1034,6 @@ public sealed class LibraryListQueryTests
 
         // The defaults, Favorites off and Blacklisted excluded, are today's results.
         AssertListedAndEligible(session, "{}", FlagModeItemIds(item => !item.Blacklisted));
-    }
-
-    // Each old field alone, true, false, or missing, as the parser read them before the modes: favoritesOnly true keeps
-    // only favorites, and excludeBlacklisted anything but false leaves out blacklisted items.
-    [Fact]
-    public void FlagModes_OldFieldsAlone_GiveTheirOldResults()
-    {
-        using var dir = new TempDirectory();
-        var session = SeedFlagModeItems(dir);
-        foreach (var favoritesOnly in new bool?[] { true, false, null })
-        {
-            foreach (var excludeBlacklisted in new bool?[] { true, false, null })
-            {
-                var fields = new List<string>();
-                if (favoritesOnly is bool favorites)
-                {
-                    fields.Add($"\"favoritesOnly\":{(favorites ? "true" : "false")}");
-                }
-
-                if (excludeBlacklisted is bool exclude)
-                {
-                    fields.Add($"\"excludeBlacklisted\":{(exclude ? "true" : "false")}");
-                }
-
-                var expected = FlagModeItemIds(item => (favoritesOnly != true || item.Favorite) && (excludeBlacklisted == false || !item.Blacklisted));
-                AssertListedAndEligible(session, "{" + string.Join(",", fields) + "}", expected);
-            }
-        }
     }
 
     // Every count a filtered query returns, its total and its search baseline, at one catalog revision. Each pairing

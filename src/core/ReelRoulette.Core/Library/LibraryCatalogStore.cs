@@ -2,7 +2,9 @@ using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
+using ReelRoulette.Core.Filtering;
 using ReelRoulette.Core.Storage;
 
 namespace ReelRoulette.Core.Library;
@@ -156,13 +158,16 @@ public sealed class LibraryCatalogItem
 
 public sealed class LibraryCatalogPreset
 {
+    /// <summary>The preset's own id, kept across renames.</summary>
+    public string Id { get; init; } = string.Empty;
+
     public string Name { get; init; } = string.Empty;
     public string FilterStateJson { get; init; } = "{}";
 }
 
 public static class LibraryCatalogStore
 {
-    public const int SchemaVersion = 4;
+    public const int SchemaVersion = 5;
 
     /// <summary>
     /// The oldest schema version a release shipped. Open and import upgrade a catalog at it, or at any later
@@ -250,7 +255,8 @@ public static class LibraryCatalogStore
     {
         [2] = Schema2ItemColumns,
         [3] = Schema3ItemColumns,
-        [4] = Schema4ItemColumns
+        [4] = Schema4ItemColumns,
+        [5] = Schema4ItemColumns
     };
 
     /// <summary>
@@ -261,7 +267,8 @@ public static class LibraryCatalogStore
     private static readonly Dictionary<int, Action<SqliteConnection, SqliteTransaction>> UpgradeSteps = new()
     {
         [2] = UpgradeSchema2To3,
-        [3] = UpgradeSchema3To4
+        [3] = UpgradeSchema3To4,
+        [4] = UpgradeSchema4To5
     };
 
     /// <summary>
@@ -433,6 +440,50 @@ public static class LibraryCatalogStore
             connection,
             transaction,
             "UPDATE items SET peak_db = NULL, loudness_analysis_version = CASE WHEN media_type = 0 THEN 1 ELSE 0 END;");
+    }
+
+    /// <summary>
+    /// Schema version 4 to 5: gives each preset an id of its own, kept across renames, and writes each stored
+    /// filter state's Favorites and Blacklisted modes in place of the older <c>favoritesOnly</c> and
+    /// <c>excludeBlacklisted</c>, so every stored preset filters as it did and has one shape. A filter state that is
+    /// not an object, such as a preset saved with a null one, stays as it is.
+    /// </summary>
+    private static void UpgradeSchema4To5(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        Execute(connection, transaction, "ALTER TABLE presets ADD COLUMN id TEXT NOT NULL DEFAULT '';");
+        var presets = new List<(long Position, string FilterState)>();
+        using (var read = connection.CreateCommand())
+        {
+            read.Transaction = transaction;
+            read.CommandText = "SELECT position, filter_state FROM presets;";
+            using var reader = read.ExecuteReader();
+            while (reader.Read())
+            {
+                presets.Add((reader.GetInt64(0), reader.GetString(1)));
+            }
+        }
+
+        foreach (var (position, filterState) in presets)
+        {
+            Execute(
+                connection,
+                transaction,
+                "UPDATE presets SET id = $id, filter_state = $filter WHERE position = $position;",
+                ("$id", Guid.NewGuid().ToString()),
+                ("$filter", WithFlagModesWritten(filterState)),
+                ("$position", position));
+        }
+    }
+
+    private static string WithFlagModesWritten(string filterStateJson)
+    {
+        if (JsonNode.Parse(filterStateJson) is not JsonObject filterState)
+        {
+            return filterStateJson;
+        }
+
+        FlagFilterModes.WriteModes(filterState);
+        return filterState.ToJsonString();
     }
 
     /// <summary>
@@ -971,7 +1022,8 @@ public static class LibraryCatalogStore
                 position INTEGER PRIMARY KEY,
                 name TEXT NOT NULL,
                 name_fold TEXT NOT NULL,
-                filter_state TEXT NOT NULL
+                filter_state TEXT NOT NULL,
+                id TEXT NOT NULL DEFAULT ''
             );
             CREATE TABLE catalog_meta (
                 key TEXT PRIMARY KEY,

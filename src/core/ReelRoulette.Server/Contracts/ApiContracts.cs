@@ -477,6 +477,15 @@ public sealed class TagCatalogChangedPayload
     public List<TagSnapshot> Tags { get; set; } = [];
 }
 
+public sealed class PresetCatalogChangedPayload
+{
+    /// <summary>The preset created, updated, renamed, or deleted, or null when the presets were reordered.</summary>
+    public string? PresetId { get; set; }
+
+    /// <summary>The client whose request changed the presets, so it can tell its own change from another device's.</summary>
+    public string? ClientId { get; set; }
+}
+
 public sealed class RefreshStatusChangedPayload
 {
     public RefreshStatusSnapshot Snapshot { get; set; } = new();

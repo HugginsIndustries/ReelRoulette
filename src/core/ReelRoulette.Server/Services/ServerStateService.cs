@@ -2,6 +2,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging.Abstractions;
+using ReelRoulette.Core.Filtering;
+using ReelRoulette.Core.Library;
 using ReelRoulette.Server.Contracts;
 
 namespace ReelRoulette.Server.Services;
@@ -44,11 +46,12 @@ public sealed class ServerStateService
     private readonly object _sourceLock = new();
     private readonly ILogger<ServerStateService> _logger;
     private readonly LibraryCatalogHost? _catalog;
+    private readonly ServerLogService? _serverLog;
     private long _revision;
     private readonly List<Channel<ServerEventEnvelope>> _subscribers = new();
     private readonly Queue<ServerEventEnvelope> _eventHistory = new();
     private const int EventHistoryCapacity = 256;
-    private List<FilterPresetSnapshot> _presetCatalog = [];
+    private List<StoredPreset> _presetCatalog = [];
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -57,11 +60,13 @@ public sealed class ServerStateService
 
     public ServerStateService(
         ILogger<ServerStateService>? logger = null,
-        LibraryCatalogHost? catalog = null)
+        LibraryCatalogHost? catalog = null,
+        ServerLogService? serverLog = null)
     {
         _logger = logger ?? NullLogger<ServerStateService>.Instance;
         // Without a catalog, nothing touches disk.
         _catalog = catalog;
+        _serverLog = serverLog;
 
         if (_catalog != null)
         {
@@ -109,24 +114,176 @@ public sealed class ServerStateService
         }
     }
 
-    public IReadOnlyList<FilterPresetSnapshot> GetPresetCatalogSnapshot()
+    public IReadOnlyList<StoredPreset> GetPresetCatalogSnapshot()
     {
         lock (_filterSessionLock)
         {
-            return ClonePresetCatalog(_presetCatalog);
+            return _presetCatalog.Select(ClonePreset).ToList();
         }
     }
 
+    /// <summary>
+    /// Replaces every preset with the posted list, keeping each preset's id by its name, ignoring case, and giving a
+    /// new name a new id. A preset without a name is left out, and so is one named as an earlier one.
+    /// </summary>
     public void SetPresetCatalog(IEnumerable<FilterPresetSnapshot>? presets)
     {
         lock (_filterSessionLock)
         {
-            _presetCatalog = ClonePresetCatalog(presets ?? []);
-        }
+            var ids = _presetCatalog.ToDictionary(preset => preset.Name, preset => preset.Id, StringComparer.OrdinalIgnoreCase);
+            var replaced = (presets ?? [])
+                .Where(preset => !string.IsNullOrWhiteSpace(preset.Name))
+                .GroupBy(preset => preset.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Select(group => new StoredPreset
+                {
+                    Id = ids.TryGetValue(group.Key, out var id) ? id : NewPresetId(),
+                    Name = group.Key,
+                    FilterState = group.First().FilterState
+                })
+                .ToList();
+            try
+            {
+                WriteCatalog(session => session.ReplacePresets(replaced.Select(ToCatalogPreset).ToList()));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist preset catalog.");
+            }
 
-        PersistPresetCatalog();
+            _presetCatalog = replaced;
+        }
     }
 
+    /// <summary>
+    /// Adds a preset after every other one, with a new id. It is refused for an empty name or another preset's,
+    /// ignoring case, for a filter state that is not an object, and for the default filter or another preset's.
+    /// </summary>
+    public PresetWriteResult CreatePreset(string? name, JsonElement? filterState, string? clientId)
+    {
+        var trimmed = name?.Trim() ?? string.Empty;
+        lock (_filterSessionLock)
+        {
+            var refused = RefuseName(trimmed, exceptId: null) ?? RefuseFilter(filterState, exceptId: null);
+            if (refused != null)
+            {
+                return refused;
+            }
+
+            var preset = new StoredPreset { Id = NewPresetId(), Name = trimmed, FilterState = filterState!.Value.Clone() };
+            WriteCatalog(session => session.CreatePreset(ToCatalogPreset(preset)));
+            _presetCatalog.Add(preset);
+            return Changed(preset.Id, clientId);
+        }
+    }
+
+    /// <summary>
+    /// Replaces a preset's filter state. It is refused, as for a new preset, for the default filter or another
+    /// preset's; the preset's own filter is taken.
+    /// </summary>
+    public PresetWriteResult UpdatePresetFilter(string? id, JsonElement? filterState, string? clientId)
+    {
+        lock (_filterSessionLock)
+        {
+            var preset = FindPreset(id);
+            if (preset == null)
+            {
+                return PresetNotFound();
+            }
+
+            var refused = RefuseFilter(filterState, preset.Id);
+            if (refused != null)
+            {
+                return refused;
+            }
+
+            var stored = filterState!.Value.Clone();
+            var unsaved = WritePresetChange($"update of {preset.Id}", session => session.UpdatePresetFilter(preset.Id, stored.GetRawText()));
+            if (unsaved != null)
+            {
+                return unsaved;
+            }
+
+            preset.FilterState = stored;
+            return Changed(preset.Id, clientId);
+        }
+    }
+
+    /// <summary>Renames a preset. It is refused for an empty name or another preset's, ignoring case.</summary>
+    public PresetWriteResult RenamePreset(string? id, string? name, string? clientId)
+    {
+        var trimmed = name?.Trim() ?? string.Empty;
+        lock (_filterSessionLock)
+        {
+            var preset = FindPreset(id);
+            if (preset == null)
+            {
+                return PresetNotFound();
+            }
+
+            var refused = RefuseName(trimmed, preset.Id);
+            if (refused != null)
+            {
+                return refused;
+            }
+
+            var unsaved = WritePresetChange($"rename of {preset.Id}", session => session.RenamePreset(preset.Id, trimmed));
+            if (unsaved != null)
+            {
+                return unsaved;
+            }
+
+            preset.Name = trimmed;
+            return Changed(preset.Id, clientId);
+        }
+    }
+
+    /// <summary>Puts the presets in the order of <paramref name="ids"/>, which must name every preset once.</summary>
+    public PresetWriteResult ReorderPresets(IReadOnlyList<string>? ids, string? clientId)
+    {
+        var order = ids ?? [];
+        lock (_filterSessionLock)
+        {
+            var byId = _presetCatalog.ToDictionary(preset => preset.Id, StringComparer.Ordinal);
+            if (order.Count != byId.Count ||
+                !order.All(id => id != null && byId.ContainsKey(id)) ||
+                order.Distinct(StringComparer.Ordinal).Count() != order.Count)
+            {
+                return PresetRefused(PresetWriteStatus.OrderMismatch, "The order must name every preset once.");
+            }
+
+            var unsaved = WritePresetChange("reorder", session => session.ReorderPresets(order));
+            if (unsaved != null)
+            {
+                return unsaved;
+            }
+
+            _presetCatalog = order.Select(id => byId[id]).ToList();
+            return Changed(presetId: null, clientId);
+        }
+    }
+
+    public PresetWriteResult DeletePreset(string? id, string? clientId)
+    {
+        lock (_filterSessionLock)
+        {
+            var preset = FindPreset(id);
+            if (preset == null)
+            {
+                return PresetNotFound();
+            }
+
+            var unsaved = WritePresetChange($"delete of {preset.Id}", session => session.DeletePreset(preset.Id));
+            if (unsaved != null)
+            {
+                return unsaved;
+            }
+
+            _presetCatalog.Remove(preset);
+            return Changed(preset.Id, clientId);
+        }
+    }
+
+    /// <summary>Renames the tag in every preset's included and excluded tags. A tag rename is never refused for the filters it leaves.</summary>
     public bool RenameTagInPresetCatalogOnly(string oldName, string newName)
     {
         if (string.IsNullOrWhiteSpace(oldName) || string.IsNullOrWhiteSpace(newName))
@@ -134,15 +291,15 @@ public sealed class ServerStateService
             return false;
         }
 
-        var changed = RenameTagInPresetCatalog(oldName, newName);
-        if (changed)
-        {
-            PersistPresetCatalog();
-        }
-
-        return changed;
+        return RevisePresetFilters(root =>
+            RenameTagInFilterArray(root, "selectedTags", oldName, newName) |
+            RenameTagInFilterArray(root, "excludedTags", oldName, newName));
     }
 
+    /// <summary>
+    /// Removes the tag from every preset's included and excluded tags. A tag delete is never refused for the filters it
+    /// leaves, even the default filter or another preset's.
+    /// </summary>
     public bool RemoveTagFromPresetCatalogOnly(string tagName)
     {
         if (string.IsNullOrWhiteSpace(tagName))
@@ -150,13 +307,9 @@ public sealed class ServerStateService
             return false;
         }
 
-        var changed = RemoveTagFromPresetCatalog(tagName);
-        if (changed)
-        {
-            PersistPresetCatalog();
-        }
-
-        return changed;
+        return RevisePresetFilters(root =>
+            RemoveTagFromFilterArray(root, "selectedTags", tagName) |
+            RemoveTagFromFilterArray(root, "excludedTags", tagName));
     }
 
     public IReadOnlyList<SourceResponse> GetSourcesSnapshot()
@@ -377,64 +530,150 @@ public sealed class ServerStateService
         }
     }
 
-    private static List<FilterPresetSnapshot> ClonePresetCatalog(IEnumerable<FilterPresetSnapshot> source)
+    private static StoredPreset ClonePreset(StoredPreset preset)
     {
-        return source
-            .Where(p => !string.IsNullOrWhiteSpace(p.Name))
-            .Select(p => new FilterPresetSnapshot
-            {
-                Name = p.Name.Trim(),
-                FilterState = p.FilterState
-            })
-            .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.First())
-            .ToList();
+        return new StoredPreset { Id = preset.Id, Name = preset.Name, FilterState = preset.FilterState };
     }
 
-    private bool RenameTagInPresetCatalog(string oldName, string newName)
+    private static string NewPresetId() => Guid.NewGuid().ToString();
+
+    private static LibraryCatalogPreset ToCatalogPreset(StoredPreset preset)
     {
-        var changed = false;
-        lock (_filterSessionLock)
+        return new LibraryCatalogPreset
         {
-            foreach (var preset in _presetCatalog)
-            {
-                if (!TryMutatePresetFilterState(preset.FilterState, root =>
-                    RenameTagInFilterArray(root, "selectedTags", oldName, newName) |
-                    RenameTagInFilterArray(root, "excludedTags", oldName, newName),
-                    out var updated))
-                {
-                    continue;
-                }
-
-                preset.FilterState = updated;
-                changed = true;
-            }
-        }
-
-        return changed;
+            Id = preset.Id,
+            Name = preset.Name,
+            FilterStateJson = preset.FilterState.ValueKind == JsonValueKind.Undefined ? "{}" : preset.FilterState.GetRawText()
+        };
     }
 
-    private bool RemoveTagFromPresetCatalog(string tagName)
+    private StoredPreset? FindPreset(string? id)
     {
-        var changed = false;
-        lock (_filterSessionLock)
-        {
-            foreach (var preset in _presetCatalog)
-            {
-                if (!TryMutatePresetFilterState(preset.FilterState, root =>
-                    RemoveTagFromFilterArray(root, "selectedTags", tagName) |
-                    RemoveTagFromFilterArray(root, "excludedTags", tagName),
-                    out var updated))
-                {
-                    continue;
-                }
+        return string.IsNullOrWhiteSpace(id)
+            ? null
+            : _presetCatalog.FirstOrDefault(preset => string.Equals(preset.Id, id, StringComparison.Ordinal));
+    }
 
-                preset.FilterState = updated;
-                changed = true;
-            }
+    /// <summary>Why a preset can't take <paramref name="name"/>: it is empty, or another preset's, ignoring case.</summary>
+    private PresetWriteResult? RefuseName(string name, string? exceptId)
+    {
+        if (name.Length == 0)
+        {
+            return PresetRefused(PresetWriteStatus.NameMissing, "A preset needs a name.");
         }
 
-        return changed;
+        var holder = _presetCatalog.FirstOrDefault(preset =>
+            preset.Id != exceptId && string.Equals(preset.Name, name, StringComparison.OrdinalIgnoreCase));
+        return holder == null ? null : PresetRefused(PresetWriteStatus.NameTaken, $"Another preset is named \"{holder.Name}\".");
+    }
+
+    /// <summary>
+    /// Why a preset can't hold <paramref name="filterState"/>: it is not an object, or it is the default filter or
+    /// another preset's, as presets compare filters. A missing filter state is the default filter.
+    /// </summary>
+    private PresetWriteResult? RefuseFilter(JsonElement? filterState, string? exceptId)
+    {
+        if (!LibraryListFilterParser.TryParse(filterState, out var filter, out var error))
+        {
+            return PresetRefused(PresetWriteStatus.FilterNotValid, error ?? "filterState is not valid");
+        }
+
+        filter ??= new FilterStateModel();
+        if (FilterStateComparison.IsDefault(filter))
+        {
+            return PresetRefused(PresetWriteStatus.DefaultFilter, "A preset can't hold the default filter.");
+        }
+
+        var holder = _presetCatalog.FirstOrDefault(preset => preset.Id != exceptId && HoldsFilter(preset, filter));
+        return holder == null ? null : PresetRefused(PresetWriteStatus.FilterTaken, $"Preset \"{holder.Name}\" already has this filter.");
+    }
+
+    private static bool HoldsFilter(StoredPreset preset, FilterStateModel filter)
+    {
+        return LibraryListFilterParser.TryParse(preset.FilterState, out var held, out _) &&
+            FilterStateComparison.SameFilter(held ?? new FilterStateModel(), filter);
+    }
+
+    private static PresetWriteResult PresetNotFound() => PresetRefused(PresetWriteStatus.NotFound, "Preset not found.");
+
+    private static PresetWriteResult PresetRefused(PresetWriteStatus status, string error) => new() { Status = status, Error = error };
+
+    /// <summary>Publishes the change, within the preset lock so events follow the order of the writes.</summary>
+    private PresetWriteResult Changed(string? presetId, string? clientId)
+    {
+        Publish("presetCatalogChanged", new PresetCatalogChangedPayload { PresetId = presetId, ClientId = clientId });
+        return new PresetWriteResult { Status = PresetWriteStatus.Done, PresetId = presetId };
+    }
+
+    /// <summary>Writes to the catalog when the server has a library. Without a catalog, as in tests, presets live only in memory.</summary>
+    private void WriteCatalog(Action<LibraryCatalogSession> write)
+    {
+        if (_catalog is { HasLibrary: true })
+        {
+            write(_catalog.Session);
+        }
+    }
+
+    /// <summary>
+    /// Writes one preset change to the catalog, as <see cref="WriteCatalog"/> does. A write that changes no row, as when
+    /// the catalog lacks a preset the server holds after a failed write it logged, is not saved: last.log gets a warning,
+    /// and the caller changes nothing and publishes nothing. Null when the change was saved.
+    /// </summary>
+    private PresetWriteResult? WritePresetChange(string change, Func<LibraryCatalogSession, bool> write)
+    {
+        if (_catalog is not { HasLibrary: true } || write(_catalog.Session))
+        {
+            return null;
+        }
+
+        _serverLog?.Append("warn", $"Preset {change} was not saved: the catalog's presets differ from the server's.");
+        return PresetRefused(PresetWriteStatus.NotSaved, "The preset change couldn't be saved.");
+    }
+
+    /// <summary>
+    /// Changes each preset's filter state that <paramref name="revise"/> changes, in one catalog write, keeping its id.
+    /// A failed write is logged, and the presets still change.
+    /// </summary>
+    private bool RevisePresetFilters(Func<JsonObject, bool> revise)
+    {
+        lock (_filterSessionLock)
+        {
+            var revised = new List<(StoredPreset Preset, JsonElement FilterState)>();
+            foreach (var preset in _presetCatalog)
+            {
+                if (TryMutatePresetFilterState(preset.FilterState, revise, out var updated))
+                {
+                    revised.Add((preset, updated));
+                }
+            }
+
+            if (revised.Count == 0)
+            {
+                return false;
+            }
+
+            try
+            {
+                WriteCatalog(session => session.RunInTransaction(() =>
+                {
+                    foreach (var (preset, filterState) in revised)
+                    {
+                        session.UpdatePresetFilter(preset.Id, filterState.GetRawText());
+                    }
+                }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist preset catalog.");
+            }
+
+            foreach (var (preset, filterState) in revised)
+            {
+                preset.FilterState = filterState;
+            }
+
+            return true;
+        }
     }
 
     private static bool TryMutatePresetFilterState(JsonElement source, Func<JsonObject, bool> mutate, out JsonElement updated)
@@ -505,49 +744,25 @@ public sealed class ServerStateService
         return changed;
     }
 
-    private void PersistPresetCatalog()
-    {
-        if (_catalog == null)
-        {
-            return;
-        }
-
-        try
-        {
-            IReadOnlyList<FilterPresetSnapshot> snapshot;
-            lock (_filterSessionLock)
-            {
-                snapshot = ClonePresetCatalog(_presetCatalog);
-            }
-
-            _catalog.Session.ReplacePresets(snapshot.Select(preset => new ReelRoulette.Core.Library.LibraryCatalogPreset
-            {
-                Name = preset.Name,
-                FilterStateJson = preset.FilterState.ValueKind == JsonValueKind.Undefined ? "{}" : preset.FilterState.GetRawText()
-            }).ToList());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to persist preset catalog.");
-        }
-    }
-
     private void BootstrapFromDisk()
     {
         try
         {
             if (_catalog != null)
             {
-                var parsedPresets = _catalog.Session.ReadPresets()
-                    .Select(preset => new FilterPresetSnapshot
+                var storedPresets = _catalog.Session.ReadPresets()
+                    .Where(preset => !string.IsNullOrWhiteSpace(preset.Name))
+                    .GroupBy(preset => preset.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+                    .Select(group => new StoredPreset
                     {
-                        Name = preset.Name,
-                        FilterState = ParsePresetFilter(preset.FilterStateJson)
+                        Id = group.First().Id,
+                        Name = group.Key,
+                        FilterState = ParsePresetFilter(group.First().FilterStateJson)
                     })
                     .ToList();
                 lock (_filterSessionLock)
                 {
-                    _presetCatalog = ClonePresetCatalog(parsedPresets);
+                    _presetCatalog = storedPresets;
                 }
             }
         }
@@ -556,6 +771,38 @@ public sealed class ServerStateService
             _logger.LogWarning(ex, "Failed to bootstrap preset catalog.");
         }
     }
+}
+
+/// <summary>A preset as the server holds it: its own id, kept across renames, its name, and its filter state as posted.</summary>
+public sealed class StoredPreset
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public JsonElement FilterState { get; set; }
+}
+
+public enum PresetWriteStatus
+{
+    Done,
+    NotFound,
+    NameMissing,
+    NameTaken,
+    FilterNotValid,
+    DefaultFilter,
+    FilterTaken,
+    OrderMismatch,
+    NotSaved
+}
+
+/// <summary>A preset write's outcome: the preset written, or why it was refused.</summary>
+public sealed class PresetWriteResult
+{
+    public PresetWriteStatus Status { get; init; }
+
+    /// <summary>The preset written, or null for a reorder or a refusal.</summary>
+    public string? PresetId { get; init; }
+
+    public string? Error { get; init; }
 }
 
 public sealed class ReplayResult

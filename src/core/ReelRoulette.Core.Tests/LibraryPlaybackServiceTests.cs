@@ -18,10 +18,10 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
     {
         Directory.CreateDirectory(_tempDir);
         var service = CreateService();
-        IReadOnlyList<FilterPresetSnapshot> presets =
+        IReadOnlyList<StoredPreset> presets =
         [
-            new FilterPresetSnapshot { Name = "All Media", FilterState = ParseJson("{}") },
-            new FilterPresetSnapshot { Name = "Favorites", FilterState = ParseJson("{}") }
+            new StoredPreset { Name = "All Media", FilterState = ParseJson("{}") },
+            new StoredPreset { Name = "Favorites", FilterState = ParseJson("{}") }
         ];
 
         var responses = service.GetPresets(presets);
@@ -54,9 +54,9 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
             ]);
 
         var service = CreateService();
-        IReadOnlyList<FilterPresetSnapshot> presets =
+        IReadOnlyList<StoredPreset> presets =
         [
-            new FilterPresetSnapshot { Name = "All Media", FilterState = ParseJson("{}") }
+            new StoredPreset { Name = "All Media", FilterState = ParseJson("{}") }
         ];
         var request = new RandomRequest
         {
@@ -102,7 +102,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         var ok = service.TrySelectRandom(new RandomRequest
         {
             PresetId = string.Empty,
-            FilterState = ParseJson("{\"favoritesOnly\":true}")
+            FilterState = ParseJson("{\"favoritesMode\":\"only\"}")
         }, [], out var response, out var statusCode, out var error);
 
         Assert.True(ok);
@@ -139,9 +139,9 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
             ]);
 
         var service = CreateService();
-        IReadOnlyList<FilterPresetSnapshot> presets =
+        IReadOnlyList<StoredPreset> presets =
         [
-            new FilterPresetSnapshot { Name = "Favorites", FilterState = ParseJson("{\"favoritesOnly\":true}") }
+            new StoredPreset { Name = "Favorites", FilterState = ParseJson("{\"favoritesMode\":\"only\"}") }
         ];
 
         for (var attempt = 0; attempt < 5; attempt++)

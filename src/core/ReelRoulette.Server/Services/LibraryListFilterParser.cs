@@ -24,8 +24,8 @@ internal static class LibraryListFilterParser
         var element = state.Value;
         var model = new FilterStateModel
         {
-            FavoritesMode = FlagFilterModes.ResolveFavorites(FlagMode(element, "favoritesMode"), NullableBool(element, "favoritesOnly")),
-            BlacklistedMode = FlagFilterModes.ResolveBlacklisted(FlagMode(element, "blacklistedMode"), NullableBool(element, "excludeBlacklisted")),
+            FavoritesMode = FlagMode(element, "favoritesMode") ?? FlagFilterModeValue.Off,
+            BlacklistedMode = FlagMode(element, "blacklistedMode") ?? FlagFilterModeValue.Excluded,
             OnlyNeverPlayed = Bool(element, "onlyNeverPlayed", false),
             OnlyKnownDuration = Bool(element, "onlyKnownDuration", false),
             OnlyKnownLoudness = Bool(element, "onlyKnownLoudness", false),

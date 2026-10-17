@@ -19,11 +19,11 @@ Instructions:
 
 Commit Message:
 
-M12i5: Rebuild the WebUI in run-server.ps1, refuse switches the dev scripts don't take, and complete Dev Script Cleanup
+M12i6: Give each preset its own id, write presets one at a time on the server, and refuse a preset that repeats another's filter
 
-- `run-server.ps1` installs the WebUI's packages with `npm ci` when `node_modules` is missing or `package-lock.json` is newer than the last install, rebuilds the WebUI, and always serves that build, so `run-server-rebuild.ps1` is gone.
-- `check-milestones.ps1`, `cut-changelog.ps1`, `reset-checklist.ps1`, `run-server.ps1`, and `verify-web-deploy.ps1` get `[CmdletBinding()]`, so a switch they don't take stops them instead of being ignored, and the script tests check that the first three refuse one.
-- ServerApp drops its fallback to the repo's WebUI `dist`, which it never found once its content root was pinned to the build folder, so it serves `ServerApp:WebUiStaticRootPath` when that's set and otherwise its own `wwwroot`.
-- README, dev setup, `CONTEXT.md`, the domain inventory, and the Auth Cutover for API and Admin entry name only `run-server.ps1`.
-- Both dev-script issues leave `ISSUES.md`, whose header, and `AGENTS.md`'s line on it, now say `CHANGELOG.md` records a fix only when users would notice it.
-- M12i5 moves to MILESTONES-COMPLETED.md with its evidence, including the user's spot check of three runs.
+- The catalog moves to schema version 5, whose step gives each preset an id of its own and writes each stored preset's Favorites and Blacklisted modes in place of the older `favoritesOnly` and `excludeBlacklisted`, which the server's filter parser no longer reads.
+- The server can create, update, rename, reorder, and delete one preset by id, each publishing `presetCatalogChanged`, and refuses a preset holding the default filter, another preset's filter, or another preset's name. A write the catalog doesn't take is reported as not saved and changes nothing, with a `last.log` warning. Their routes come with the Contract slice; until the WebUI slice, the whole-list replace keeps each preset's id by its name.
+- Core's `FilterStateComparison` compares filters as the WebUI's preset comparison does, and `preset-filter-equality.json` returns to `shared/fixtures/`, read by Core and the WebUI, without the old fields' cases. The WebUI's comparison ignores a category's AND mode itself.
+- Tag rename and delete update only the presets holding the tag, in one catalog write, keeping their ids, and are never refused for the filters they leave.
+- OpenAPI's FilterState and PresetResponse descriptions, `docs/api.md`, `CONTEXT.md`, dev setup, and the domain inventory follow.
+- M12i6's entry records that no preset may hold another preset's filter, which replaces keeping a chosen preset chosen beside an equal one, moves the whole-list replace's removal to the WebUI slice, has the Contract slice replace the stale `api.presets.match` capability, answer a write the catalog doesn't take with 500, and log tag rename and delete's failed preset writes to `last.log`, and adds the Server slice's evidence. The tag delete issue in `ISSUES.md` now covers tag renames and presets left with one filter.

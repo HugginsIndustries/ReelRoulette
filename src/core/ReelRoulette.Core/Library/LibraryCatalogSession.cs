@@ -528,21 +528,23 @@ public sealed class LibraryCatalogSession
     {
         using var connection = LibraryCatalogStore.OpenWrite(_databasePath);
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT name, filter_state FROM presets ORDER BY position;";
+        command.CommandText = "SELECT id, name, filter_state FROM presets ORDER BY position;";
         using var reader = command.ExecuteReader();
         var presets = new List<LibraryCatalogPreset>();
         while (reader.Read())
         {
             presets.Add(new LibraryCatalogPreset
             {
-                Name = reader.GetString(0),
-                FilterStateJson = reader.GetString(1)
+                Id = reader.GetString(0),
+                Name = reader.GetString(1),
+                FilterStateJson = reader.GetString(2)
             });
         }
 
         return presets;
     }
 
+    /// <summary>Replaces every preset with <paramref name="presets"/>, in their order, each with its id.</summary>
     public void ReplacePresets(IReadOnlyList<LibraryCatalogPreset> presets)
     {
         ArgumentNullException.ThrowIfNull(presets);
@@ -551,22 +553,121 @@ public sealed class LibraryCatalogSession
             LibraryCatalogStore.Execute(connection, transaction, "DELETE FROM presets;");
             for (var i = 0; i < presets.Count; i++)
             {
-                var preset = presets[i];
-                LibraryCatalogStore.Execute(
-                    connection,
-                    transaction,
-                    """
-                    INSERT INTO presets (position, name, name_fold, filter_state)
-                    VALUES ($position, $name, $fold, $filter);
-                    """,
-                    ("$position", i),
-                    ("$name", preset.Name),
-                    ("$fold", LibraryCatalogStore.Fold(preset.Name)),
-                    ("$filter", string.IsNullOrWhiteSpace(preset.FilterStateJson) ? "{}" : preset.FilterStateJson));
+                InsertPreset(connection, transaction, i, presets[i]);
             }
 
             return true;
         });
+    }
+
+    /// <summary>Adds a preset after every other one.</summary>
+    public void CreatePreset(LibraryCatalogPreset preset)
+    {
+        ArgumentNullException.ThrowIfNull(preset);
+        Commit((connection, transaction) =>
+        {
+            var position = LibraryCatalogStore.ExecuteScalarInt(
+                connection,
+                "SELECT COALESCE(MAX(position) + 1, 0) FROM presets;",
+                transaction);
+            InsertPreset(connection, transaction, position, preset);
+            return true;
+        });
+    }
+
+    /// <summary>Replaces the filter state of the preset with this id. False when there is none.</summary>
+    public bool UpdatePresetFilter(string id, string filterStateJson)
+    {
+        return Commit((connection, transaction) =>
+            LibraryCatalogStore.Execute(
+                connection,
+                transaction,
+                "UPDATE presets SET filter_state = $filter WHERE id = $id;",
+                ("$id", id),
+                ("$filter", StoredFilterState(filterStateJson))) > 0);
+    }
+
+    /// <summary>Renames the preset with this id. False when there is none.</summary>
+    public bool RenamePreset(string id, string name)
+    {
+        return Commit((connection, transaction) =>
+            LibraryCatalogStore.Execute(
+                connection,
+                transaction,
+                "UPDATE presets SET name = $name, name_fold = $fold WHERE id = $id;",
+                ("$id", id),
+                ("$name", name),
+                ("$fold", LibraryCatalogStore.Fold(name))) > 0);
+    }
+
+    /// <summary>
+    /// Puts the presets in the order of <paramref name="ids"/>, changing nothing else. False, changing nothing, unless
+    /// it names every preset once.
+    /// </summary>
+    public bool ReorderPresets(IReadOnlyList<string> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        return Commit((connection, transaction) =>
+        {
+            var stored = new List<string>();
+            using (var read = connection.CreateCommand())
+            {
+                read.Transaction = transaction;
+                read.CommandText = "SELECT id FROM presets;";
+                using var reader = read.ExecuteReader();
+                while (reader.Read())
+                {
+                    stored.Add(reader.GetString(0));
+                }
+            }
+
+            if (ids.Count != stored.Count || !ids.ToHashSet(StringComparer.Ordinal).SetEquals(stored))
+            {
+                return false;
+            }
+
+            // Positions are the key, so every preset moves out of the way before each takes its new one.
+            LibraryCatalogStore.Execute(connection, transaction, "UPDATE presets SET position = -1 - position;");
+            for (var i = 0; i < ids.Count; i++)
+            {
+                LibraryCatalogStore.Execute(
+                    connection,
+                    transaction,
+                    "UPDATE presets SET position = $position WHERE id = $id;",
+                    ("$position", i),
+                    ("$id", ids[i]));
+            }
+
+            return true;
+        });
+    }
+
+    /// <summary>Deletes the preset with this id. False when there is none.</summary>
+    public bool DeletePreset(string id)
+    {
+        return Commit((connection, transaction) =>
+            LibraryCatalogStore.Execute(connection, transaction, "DELETE FROM presets WHERE id = $id;", ("$id", id)) > 0);
+    }
+
+    private static void InsertPreset(SqliteConnection connection, SqliteTransaction transaction, int position, LibraryCatalogPreset preset)
+    {
+        LibraryCatalogStore.Execute(
+            connection,
+            transaction,
+            """
+            INSERT INTO presets (position, name, name_fold, filter_state, id)
+            VALUES ($position, $name, $fold, $filter, $id);
+            """,
+            ("$position", position),
+            ("$name", preset.Name),
+            ("$fold", LibraryCatalogStore.Fold(preset.Name)),
+            ("$filter", StoredFilterState(preset.FilterStateJson)),
+            ("$id", preset.Id));
+    }
+
+    private static string StoredFilterState(string filterStateJson)
+    {
+        return string.IsNullOrWhiteSpace(filterStateJson) ? "{}" : filterStateJson;
     }
 
     public bool SetThumbnail(string itemId, string? revision, int? width, int? height)

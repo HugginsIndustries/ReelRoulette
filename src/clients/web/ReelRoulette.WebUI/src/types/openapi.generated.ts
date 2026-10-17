@@ -1149,24 +1149,22 @@ export interface components {
          * @description A library filter, as clients send it and presets store it. Browse, its counts, and random picks apply
          *     it the same way. Every field is optional, so `{}` is a valid filter, and each field's default applies
          *     when it is missing, or null where the field allows it. Fields not listed here are allowed and ignored,
-         *     except the older `favoritesOnly` and `excludeBlacklisted`, read as `favoritesMode` and `blacklistedMode`
-         *     describe.
+         *     including the older `favoritesOnly` and `excludeBlacklisted`, which the catalog's upgrade rewrote into
+         *     `favoritesMode` and `blacklistedMode` in every stored preset.
          */
         FilterState: {
             /**
              * @description How the filter treats favorites: `off` ignores them, `only` keeps only favorites, and `excluded` leaves
-             *     them out. Read in any case. Another value, including null or a number, counts as missing. When
-             *     missing, a preset stored before the modes is read from its older `favoritesOnly` field: true is
-             *     `only`, and false or missing is `off`. No client writes `favoritesOnly` now.
+             *     them out. Read in any case. Another value, including null or a number, counts as missing, which is
+             *     `off`.
              * @enum {string}
              */
             favoritesMode?: "off" | "only" | "excluded";
             /**
              * @description How the filter treats blacklisted items: `off` ignores them, `only` keeps only blacklisted items, and
              *     `excluded` leaves them out. Read in any case. Another value, including null or a number, counts as
-             *     missing. When missing, a preset stored before the modes is read from its older `excludeBlacklisted`
-             *     field: false is `off`, and true or missing is `excluded`. No client writes `excludeBlacklisted` now. An
-             *     item is never both favorite and blacklisted, so `favoritesMode` `only` with `only` here matches nothing.
+             *     missing, which is `excluded`. An item is never both favorite and blacklisted, so `favoritesMode` `only`
+             *     with `only` here matches nothing.
              * @enum {string}
              */
             blacklistedMode?: "off" | "only" | "excluded";
@@ -1221,7 +1219,7 @@ export interface components {
         PresetResponse: {
             id: string;
             name: string;
-            /** @description The filter the preset was saved with, as it was posted, with later tag renames and deletions applied. */
+            /** @description The filter the preset was saved with, as it was posted, with later tag renames and deletions applied, and with the older `favoritesOnly` and `excludeBlacklisted` rewritten into `favoritesMode` and `blacklistedMode` by the catalog's upgrade. */
             filterState?: components["schemas"]["FilterState"] | null;
         };
         SourceResponse: {

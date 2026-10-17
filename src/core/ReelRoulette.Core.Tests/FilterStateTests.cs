@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.Core.Filtering;
@@ -13,8 +14,10 @@ public sealed class FilterStateTests : IDisposable
 {
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), "reelroulette-filter-state-tests", Guid.NewGuid().ToString("N"));
 
+    // The catalog's schema 5 step writes each stored filter state's modes by this rule, and the parser then reads only
+    // the modes.
     [Fact]
-    public void Parser_ResolvesFlagModes_AsTheSharedFixtureSays()
+    public void WriteModes_ResolvesFlagModes_AsTheSharedFixtureSays()
     {
         using var fixture = JsonDocument.Parse(File.ReadAllText(OpenApiSpec.RepoPath("shared", "fixtures", "filter-mode-resolution.json")));
         var cases = fixture.RootElement.EnumerateArray().ToList();
@@ -22,7 +25,11 @@ public sealed class FilterStateTests : IDisposable
         foreach (var testCase in cases)
         {
             var name = testCase.GetProperty("name").GetString();
-            Assert.True(LibraryListFilterParser.TryParse(testCase.GetProperty("filter"), out var parsed, out var error), $"{name}: {error}");
+            var filterState = JsonNode.Parse(testCase.GetProperty("filter").GetRawText())!.AsObject();
+            FlagFilterModes.WriteModes(filterState);
+            Assert.False(filterState.ContainsKey("favoritesOnly") || filterState.ContainsKey("excludeBlacklisted"), $"{name}: {filterState.ToJsonString()}");
+            using var written = JsonDocument.Parse(filterState.ToJsonString());
+            Assert.True(LibraryListFilterParser.TryParse(written.RootElement, out var parsed, out var error), $"{name}: {error}");
             var expected = (Mode(testCase, "favoritesMode"), Mode(testCase, "blacklistedMode"));
             var actual = (parsed!.FavoritesMode, parsed.BlacklistedMode);
             Assert.True(expected == actual, $"{name}: expected {expected}, got {actual}.");
@@ -35,6 +42,39 @@ public sealed class FilterStateTests : IDisposable
             "excluded" => FlagFilterModeValue.Excluded,
             var other => throw new InvalidOperationException($"Unknown expected mode '{other}'.")
         };
+    }
+
+    // Each side is read as the server reads a filter state, and compared both ways round. The WebUI reads the same fixture.
+    [Fact]
+    public void Comparison_AgreesWithEveryCaseOfTheSharedFixture()
+    {
+        using var fixture = JsonDocument.Parse(File.ReadAllText(OpenApiSpec.RepoPath("shared", "fixtures", "preset-filter-equality.json")));
+        var cases = fixture.RootElement.EnumerateArray().ToList();
+        Assert.NotEmpty(cases);
+        foreach (var testCase in cases)
+        {
+            var name = testCase.GetProperty("name").GetString();
+            Assert.True(LibraryListFilterParser.TryParse(testCase.GetProperty("left"), out var left, out var leftError), $"{name}: {leftError}");
+            Assert.True(LibraryListFilterParser.TryParse(testCase.GetProperty("right"), out var right, out var rightError), $"{name}: {rightError}");
+            var same = testCase.GetProperty("same").GetBoolean();
+            Assert.True(same == FilterStateComparison.SameFilter(left!, right!), $"{name}: expected same={same}.");
+            Assert.True(same == FilterStateComparison.SameFilter(right!, left!), $"{name}, the other way round: expected same={same}.");
+        }
+    }
+
+    [Fact]
+    public void Comparison_TellsTheDefaultFilterByEquality()
+    {
+        foreach (var json in new[] { "{}", """{"favoritesMode":"off","blacklistedMode":"excluded","globalMatchMode":null}""", """{"categoryLocalMatchModes":{"people":0}}""" })
+        {
+            using var document = JsonDocument.Parse(json);
+            Assert.True(LibraryListFilterParser.TryParse(document.RootElement, out var filter, out var error), error);
+            Assert.True(FilterStateComparison.IsDefault(filter!), json);
+        }
+
+        using var favorites = JsonDocument.Parse("""{"favoritesMode":"only"}""");
+        Assert.True(LibraryListFilterParser.TryParse(favorites.RootElement, out var favoritesFilter, out _));
+        Assert.False(FilterStateComparison.IsDefault(favoritesFilter!));
     }
 
     [Fact]
@@ -73,7 +113,7 @@ public sealed class FilterStateTests : IDisposable
 
         // A posted preset without a filter state, or with null, picks with the default filter, before and after a restart.
         state.SetPresetCatalog(Body<List<FilterPresetSnapshot>>(
-            """[{"name":"Night","filterState":{"favoritesOnly":true}},{"name":"Bare"},{"name":"Empty","filterState":null}]"""));
+            """[{"name":"Night","filterState":{"favoritesMode":"only"}},{"name":"Bare"},{"name":"Empty","filterState":null}]"""));
         var restarted = new ServerStateService(catalog: CatalogOpen.Host(_tempDir));
         foreach (var presets in new[] { state.GetPresetCatalogSnapshot(), restarted.GetPresetCatalogSnapshot() })
         {
@@ -153,7 +193,7 @@ public sealed class FilterStateTests : IDisposable
     }
 
     // Smart shuffle, the default mode, picks every eligible item once before any again, so six picks cover a set of three.
-    private static string[] PickIds(LibraryPlaybackService playback, IReadOnlyList<FilterPresetSnapshot> presets, string body)
+    private static string[] PickIds(LibraryPlaybackService playback, IReadOnlyList<StoredPreset> presets, string body)
     {
         var request = Body<RandomRequest>(body);
         request.ClientId = Guid.NewGuid().ToString("N");
@@ -167,7 +207,7 @@ public sealed class FilterStateTests : IDisposable
         return [.. picked];
     }
 
-    private static int PickStatus(LibraryPlaybackService playback, IReadOnlyList<FilterPresetSnapshot> presets, string body)
+    private static int PickStatus(LibraryPlaybackService playback, IReadOnlyList<StoredPreset> presets, string body)
     {
         Assert.False(playback.TrySelectRandom(Body<RandomRequest>(body), presets, out _, out var statusCode, out _));
         return statusCode;

@@ -9,8 +9,9 @@ interface PresetEqualityCase {
   same: boolean;
 }
 
+// Core reads the same fixture.
 const cases: PresetEqualityCase[] = JSON.parse(
-  readFileSync(new URL("./fixtures/preset-filter-equality.json", import.meta.url), "utf8")
+  readFileSync(new URL("../../../../../../shared/fixtures/preset-filter-equality.json", import.meta.url), "utf8")
 );
 
 describe("filterStatesEqualForPresetMatch fixture", () => {

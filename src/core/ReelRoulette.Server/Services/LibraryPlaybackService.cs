@@ -27,7 +27,7 @@ public sealed class LibraryPlaybackService
         _serverLog = serverLog;
     }
 
-    public IReadOnlyList<PresetResponse> GetPresets(IReadOnlyList<FilterPresetSnapshot> presets)
+    public IReadOnlyList<PresetResponse> GetPresets(IReadOnlyList<StoredPreset> presets)
     {
         return (presets ?? [])
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
@@ -43,7 +43,7 @@ public sealed class LibraryPlaybackService
 
     public bool TrySelectRandom(
         RandomRequest request,
-        IReadOnlyList<FilterPresetSnapshot> presets,
+        IReadOnlyList<StoredPreset> presets,
         out RandomResponse? response,
         out int statusCode,
         out string? error)
@@ -263,7 +263,7 @@ public sealed class LibraryPlaybackService
         return _tokenStore.TryResolve(token, out fullPath);
     }
 
-    private static FilterPresetSnapshot? ResolvePreset(IReadOnlyList<FilterPresetSnapshot> presets, string presetId)
+    private static StoredPreset? ResolvePreset(IReadOnlyList<StoredPreset> presets, string presetId)
     {
         if (string.IsNullOrWhiteSpace(presetId))
         {
@@ -276,7 +276,7 @@ public sealed class LibraryPlaybackService
 
     private static bool TryResolveFilter(
         RandomRequest request,
-        IReadOnlyList<FilterPresetSnapshot> presets,
+        IReadOnlyList<StoredPreset> presets,
         out FilterStateModel? filter,
         out int statusCode,
         out string? error)

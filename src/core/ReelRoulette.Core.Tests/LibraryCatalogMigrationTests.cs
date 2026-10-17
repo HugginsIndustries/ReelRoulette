@@ -1,5 +1,8 @@
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using ReelRoulette.Core.Filtering;
 using ReelRoulette.Core.Library;
+using ReelRoulette.Server.Services;
 using Xunit;
 
 namespace ReelRoulette.Core.Tests;
@@ -45,7 +48,7 @@ public sealed class LibraryCatalogMigrationTests
         Assert.Equal(
             before.Items.Select(item => (item.Id, item.FileName, item.MediaType, item.PlayCount, string.Join("|", item.Tags))),
             opened.Snapshot()!.Items.Select(item => (item.Id, item.FileName, item.MediaType, item.PlayCount, string.Join("|", item.Tags))));
-        Assert.Equal("Night", Assert.Single(opened.Session.ReadPresets()).Name);
+        AssertUpgradedNightPreset(Assert.Single(opened.Session.ReadPresets()));
     }
 
     [Theory]
@@ -55,7 +58,12 @@ public sealed class LibraryCatalogMigrationTests
         using var dir = new TempDirectory();
         using var source = new TempDirectory();
         CatalogSeed.Write(dir.Path, items: [new SeedItem("current", "/clips/current.mp4")]);
-        var export = CatalogSeed.WriteAtVersion(source.Path, version, items: [new SeedItem("import", "/clips/Import.mp4")], standalone: true);
+        var export = CatalogSeed.WriteAtVersion(
+            source.Path,
+            version,
+            items: [new SeedItem("import", "/clips/Import.mp4")],
+            standalone: true,
+            presets: [new SeedPreset("Night", """{"favoritesOnly":true}""")]);
 
         LibraryCatalogStore.PrepareIncomingFromFile(dir.Path, export);
 
@@ -66,6 +74,37 @@ public sealed class LibraryCatalogMigrationTests
         var opened = CatalogOpen.Open(dir.Path);
         Assert.Null(opened.MigratedFromSchemaVersion);
         Assert.Equal("import", Assert.Single(opened.Snapshot()!.Items).Id);
+        AssertUpgradedNightPreset(Assert.Single(opened.Session!.ReadPresets()));
+    }
+
+    // Full filter states in the shapes presets were saved in before the flag modes, with no mode fields, one with modes
+    // in mixed case, and one saved as null, which the step leaves as it is.
+    [Fact]
+    public void Open_Schema4Catalog_GivesEachPresetItsOwnId_AndWritesItsModesInPlaceOfTheOldFields()
+    {
+        using var dir = new TempDirectory();
+        CatalogSeed.WriteSchemaVersion(
+            dir.Path,
+            4,
+            presets:
+            [
+                new SeedPreset("Old favorites", """{"favoritesOnly":true,"excludeBlacklisted":false,"onlyNeverPlayed":true,"audioFilter":1,"minDuration":"00:01:30","maxDuration":null,"selectedTags":["Ann"],"excludedTags":["Bob"],"categoryLocalMatchModes":{"people":1},"globalMatchMode":null,"tagMatchMode":0,"onlyKnownDuration":true,"onlyKnownLoudness":false,"mediaTypeFilter":1,"includedSourceIds":["s1"]}"""),
+                new SeedPreset("Old plain", """{"favoritesOnly":false,"excludeBlacklisted":true,"onlyNeverPlayed":true,"onlyKnownDuration":true,"onlyKnownLoudness":false,"audioFilter":1,"mediaTypeFilter":1,"globalMatchMode":null,"selectedTags":["Ann"],"excludedTags":["Bob"],"includedSourceIds":["s1"],"categoryLocalMatchModes":{"people":1},"minDuration":"00:01:30"}"""),
+                new SeedPreset("Modes", """{"favoritesMode":"Excluded","blacklistedMode":"only","favoritesOnly":true}"""),
+                new SeedPreset("Null", "null")
+            ]);
+
+        var opened = CatalogOpen.Open(dir.Path);
+
+        Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
+        var presets = opened.Session!.ReadPresets();
+        Assert.Equal(["Old favorites", "Old plain", "Modes", "Null"], presets.Select(preset => preset.Name));
+        Assert.All(presets, preset => Assert.False(string.IsNullOrEmpty(preset.Id)));
+        Assert.Equal(presets.Count, presets.Select(preset => preset.Id).Distinct(StringComparer.Ordinal).Count());
+        AssertFiltersAsBefore(presets[0].FilterStateJson, FlagFilterModeValue.Only, FlagFilterModeValue.Off);
+        AssertFiltersAsBefore(presets[1].FilterStateJson, FlagFilterModeValue.Off, FlagFilterModeValue.Excluded);
+        Assert.Equal("""{"favoritesMode":"excluded","blacklistedMode":"only"}""", presets[2].FilterStateJson);
+        Assert.Equal("null", presets[3].FilterStateJson);
     }
 
     [Fact]
@@ -127,7 +166,7 @@ public sealed class LibraryCatalogMigrationTests
         Assert.Equal(
             before.Items.Select(item => (item.Id, item.FileName, item.PlayCount, string.Join("|", item.Tags))),
             after.Items.Select(item => (item.Id, item.FileName, item.PlayCount, string.Join("|", item.Tags))));
-        Assert.Equal("Night", Assert.Single(opened.Session.ReadPresets()).Name);
+        AssertUpgradedNightPreset(Assert.Single(opened.Session.ReadPresets()));
         Assert.DoesNotContain(Directory.GetFiles(dir.Path).Select(Path.GetFileName), name => name!.StartsWith("library.db.", StringComparison.Ordinal));
 
         var reopened = CatalogOpen.Open(dir.Path);
@@ -260,6 +299,35 @@ public sealed class LibraryCatalogMigrationTests
             ],
             tags: [new SeedTag("Ann"), new SeedTag("Bo")],
             presets: [new SeedPreset("Night", """{"favoritesOnly":true}""")]);
+    }
+
+    private static void AssertUpgradedNightPreset(LibraryCatalogPreset preset)
+    {
+        Assert.Equal("Night", preset.Name);
+        Assert.False(string.IsNullOrEmpty(preset.Id));
+        Assert.Equal("""{"favoritesMode":"only","blacklistedMode":"excluded"}""", preset.FilterStateJson);
+    }
+
+    /// <summary>The filter the old-shape presets above held, with its modes written and the old fields gone.</summary>
+    private static void AssertFiltersAsBefore(string filterStateJson, FlagFilterModeValue favorites, FlagFilterModeValue blacklisted)
+    {
+        Assert.DoesNotContain("favoritesOnly", filterStateJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("excludeBlacklisted", filterStateJson, StringComparison.Ordinal);
+        using var document = JsonDocument.Parse(filterStateJson);
+        Assert.True(LibraryListFilterParser.TryParse(document.RootElement, out var filter, out var error), error);
+        Assert.Equal((favorites, blacklisted), (filter!.FavoritesMode, filter.BlacklistedMode));
+        Assert.True(filter.OnlyNeverPlayed);
+        Assert.Equal(AudioFilterModeValue.WithAudioOnly, filter.AudioFilter);
+        Assert.Equal(TimeSpan.FromSeconds(90), filter.MinDuration);
+        Assert.Null(filter.MaxDuration);
+        Assert.Equal(["Ann"], filter.SelectedTags);
+        Assert.Equal(["Bob"], filter.ExcludedTags);
+        Assert.Equal(TagMatchModeValue.Or, Assert.Single(filter.CategoryLocalMatchModes!, pair => pair.Key == "people").Value);
+        Assert.Null(filter.GlobalMatchMode);
+        Assert.True(filter.OnlyKnownDuration);
+        Assert.False(filter.OnlyKnownLoudness);
+        Assert.Equal(MediaTypeFilterValue.VideosOnly, filter.MediaTypeFilter);
+        Assert.Equal(["s1"], filter.IncludedSourceIds);
     }
 
     private static List<string> DescribeNewCatalog()

@@ -50,7 +50,7 @@ public sealed class CatalogSeedTests
                 sources: [new SeedSource("src", "/Media", "Clips", IsEnabled: false)],
                 categories: [new SeedCategory("people", "People", 1)],
                 tags: [new SeedTag("Alice", "people")],
-                presets: [new SeedPreset("Night", """{"favoritesOnly":true}""")],
+                presets: [new SeedPreset("Night", """{"favoritesMode":"only"}""", "night-id")],
                 items:
                 [
                     new SeedItem("item-1", "/Media/A.mp4")
@@ -118,7 +118,7 @@ public sealed class CatalogSeedTests
             Assert.Equal(["Alice", "Extra"], item.Tags);
 
             var preset = Assert.Single(opened.Session!.ReadPresets());
-            Assert.Equal(("Night", """{"favoritesOnly":true}"""), (preset.Name, preset.FilterStateJson));
+            Assert.Equal(("night-id", "Night", """{"favoritesMode":"only"}"""), (preset.Id, preset.Name, preset.FilterStateJson));
         }
         finally
         {

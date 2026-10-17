@@ -555,6 +555,7 @@ function sortedUnique(values: string[]): string[] {
 }
 
 function comparablePresetSnapshot(state: FilterState): string {
+  const localModes = withoutAndLocalModes(state).categoryLocalMatchModes;
   return JSON.stringify(
     serializeFilterStateForApi({
       ...state,
@@ -563,16 +564,19 @@ function comparablePresetSnapshot(state: FilterState): string {
       selectedTags: sortedUnique(state.selectedTags.map((tag) => tag.toUpperCase())),
       excludedTags: sortedUnique(state.excludedTags.map((tag) => tag.toUpperCase())),
       includedSourceIds: sortedUnique(state.includedSourceIds),
-      categoryLocalMatchModes: state.categoryLocalMatchModes
-        ? Object.fromEntries(Object.entries(state.categoryLocalMatchModes).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      categoryLocalMatchModes: localModes
+        ? Object.fromEntries(Object.entries(localModes).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
         : null
     })
   );
 }
 
 /**
- * Preset comparison. An unset global match mode means AND, so it equals an explicit AND.
- * Tags compare as case-insensitive sets, source IDs as sets, and category modes by key in any order.
+ * Preset comparison, which no preset may share with another or with the default filter. An unset global match mode
+ * means AND, so it equals an explicit AND, and a category's AND mode counts as no entry. Tags compare as
+ * case-insensitive sets, source IDs as sets, so a list naming every source differs from all sources, category modes
+ * by key in any order, and durations in whole seconds. Core's FilterStateComparison is the C# copy. Locked to
+ * shared/fixtures/preset-filter-equality.json.
  */
 export function filterStatesEqualForPresetMatch(a: FilterState, b: FilterState): boolean {
   return comparablePresetSnapshot(a) === comparablePresetSnapshot(b);
