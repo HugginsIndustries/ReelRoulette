@@ -186,7 +186,7 @@ describe("filterStateModel", () => {
     const none = filterStateForHeaderPresetSelection(null);
     expect(none).toEqual(createDefaultFilterState());
     const named = filterStateForHeaderPresetSelection({
-      filterState: { favoritesOnly: true, excludeBlacklisted: false }
+      filterState: { favoritesMode: "only", blacklistedMode: "off" }
     });
     expect(named.favoritesMode).toBe("only");
     expect(named.blacklistedMode).toBe("off");
@@ -272,30 +272,24 @@ function readFixture<T>(name: string): T {
   return JSON.parse(readFileSync(new URL(`../../../../../../shared/fixtures/${name}`, import.meta.url), "utf8")) as T;
 }
 
-interface FlagModeResolutionCase {
-  name: string;
-  filter: ApiFilterState;
-  favoritesMode: FlagFilterMode;
-  blacklistedMode: FlagFilterMode;
-}
-
 interface EnumValuesCase {
   name: string;
   filter: ApiFilterState;
   audioFilter: number;
   mediaTypeFilter: number;
   categoryLocalMatchModes: Record<string, number>;
+  favoritesMode: FlagFilterMode;
+  blacklistedMode: FlagFilterMode;
 }
 
-// Core reads the same fixtures.
-const resolutionCases = readFixture<FlagModeResolutionCase[]>("filter-mode-resolution.json");
+// Core reads the same fixture.
 const enumCases = readFixture<EnumValuesCase[]>("filter-enum-values.json");
 
-describe("flag filter mode resolution shared fixture", () => {
-  it.each(resolutionCases)("$name", ({ filter, favoritesMode, blacklistedMode }) => {
-    const read = filterStateFromApiObject(filter);
-    expect(read.favoritesMode).toBe(favoritesMode);
-    expect(read.blacklistedMode).toBe(blacklistedMode);
+describe("flag filter modes read", () => {
+  it("reads a missing mode as the default filter's, without the older favoritesOnly and excludeBlacklisted", () => {
+    const read = filterStateFromApiObject({ favoritesOnly: true, excludeBlacklisted: false });
+    expect(read.favoritesMode).toBe("off");
+    expect(read.blacklistedMode).toBe("excluded");
   });
 });
 
@@ -321,21 +315,22 @@ describe("flag filter modes written", () => {
 });
 
 describe("filter enum values shared fixture", () => {
-  it.each(enumCases)("$name", ({ filter, audioFilter, mediaTypeFilter, categoryLocalMatchModes }) => {
+  it.each(enumCases)("$name", ({ filter, audioFilter, mediaTypeFilter, categoryLocalMatchModes, favoritesMode, blacklistedMode }) => {
     const read = filterStateFromApiObject(filter);
     expect(read.audioFilter).toBe(audioFilter);
     expect(read.mediaTypeFilter).toBe(mediaTypeFilter);
     // The fixture writes none as {}, which the reader holds as null.
     expect(read.categoryLocalMatchModes).toEqual(Object.keys(categoryLocalMatchModes).length ? categoryLocalMatchModes : null);
+    expect(read.favoritesMode).toBe(favoritesMode);
+    expect(read.blacklistedMode).toBe(blacklistedMode);
   });
 });
 
 interface WrittenFilterFixture {
-  oldFields: ApiFilterState;
   webui: ApiFilterState;
 }
 
-// One filter as the WebUI writes it in full, and as a release saved it before the Favorites and Blacklisted modes.
+// One filter as the WebUI writes it in full.
 const writtenFilters = JSON.parse(
   readFileSync(new URL("./fixtures/filter-state-written.json", import.meta.url), "utf8")
 ) as WrittenFilterFixture;
@@ -364,15 +359,6 @@ function writtenFixtureFilter(): FilterState {
 describe("filter state written fixture", () => {
   it("writes the filter as its webui entry", () => {
     expect(serializeFilterStateForApi(writtenFixtureFilter())).toEqual(writtenFilters.webui);
-  });
-
-  it("reads its oldFields entry, saved before the modes, as Favorites only and Blacklisted off", () => {
-    const read = filterStateFromApiObject(writtenFilters.oldFields);
-    expect(read.favoritesMode).toBe("only");
-    expect(read.blacklistedMode).toBe("off");
-    expect(
-      filterStatesEqualForPresetMatch(read, { ...writtenFixtureFilter(), favoritesMode: "only", blacklistedMode: "off" })
-    ).toBe(true);
   });
 });
 

@@ -5,7 +5,7 @@
     "loaded": true,
     "before": { "isFavorite": false, "isBlacklisted": false },
     "after": { "isFavorite": true, "isBlacklisted": false },
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
@@ -15,47 +15,47 @@
     "loaded": true,
     "before": { "isFavorite": true, "isBlacklisted": false },
     "after": { "isFavorite": false, "isBlacklisted": false },
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "LastPlayed",
     "expected": "patch"
   },
   {
-    "name": "blacklist on a loaded tile under excludeBlacklisted reloads",
+    "name": "blacklist on a loaded tile under Blacklisted excluded reloads",
     "event": "favorite",
     "loaded": true,
     "before": { "isFavorite": true, "isBlacklisted": false },
     "after": { "isFavorite": false, "isBlacklisted": true },
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
   {
-    "name": "blacklist on a loaded tile without excludeBlacklisted patches",
+    "name": "blacklist on a loaded tile with Blacklisted off patches",
     "event": "favorite",
     "loaded": true,
     "before": { "isFavorite": false, "isBlacklisted": false },
     "after": { "isFavorite": false, "isBlacklisted": true },
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": false, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "off", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
   {
-    "name": "unfavorite on a loaded tile under favoritesOnly reloads",
+    "name": "unfavorite on a loaded tile under Favorites only reloads",
     "event": "favorite",
     "loaded": true,
     "before": { "isFavorite": true, "isBlacklisted": false },
     "after": { "isFavorite": false, "isBlacklisted": false },
-    "filter": { "favoritesOnly": true, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "only", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
   {
-    "name": "an unchanged echo on a loaded tile under favoritesOnly patches",
+    "name": "an unchanged echo on a loaded tile under Favorites only patches",
     "event": "favorite",
     "loaded": true,
     "before": { "isFavorite": true, "isBlacklisted": false },
     "after": { "isFavorite": true, "isBlacklisted": false },
-    "filter": { "favoritesOnly": true, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "only", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
@@ -64,103 +64,103 @@
     "event": "favorite",
     "loaded": false,
     "after": { "isFavorite": true, "isBlacklisted": false },
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": false, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "off", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
   {
-    "name": "favorite on an unloaded item under excludeBlacklisted reloads because it may have been blacklisted",
+    "name": "favorite on an unloaded item under Blacklisted excluded reloads because it may have been blacklisted",
     "event": "favorite",
     "loaded": false,
     "after": { "isFavorite": true, "isBlacklisted": false },
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
   {
-    "name": "blacklist on an unloaded item under excludeBlacklisted patches because it cannot enter",
+    "name": "blacklist on an unloaded item under Blacklisted excluded patches because it cannot enter",
     "event": "favorite",
     "loaded": false,
     "after": { "isFavorite": false, "isBlacklisted": true },
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
   {
-    "name": "favorite on an unloaded item under favoritesOnly reloads",
+    "name": "favorite on an unloaded item under Favorites only reloads",
     "event": "favorite",
     "loaded": false,
     "after": { "isFavorite": true, "isBlacklisted": false },
-    "filter": { "favoritesOnly": true, "excludeBlacklisted": false, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "only", "blacklistedMode": "off", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
   {
-    "name": "unfavorite on an unloaded item under favoritesOnly patches",
+    "name": "unfavorite on an unloaded item under Favorites only patches",
     "event": "favorite",
     "loaded": false,
     "after": { "isFavorite": false, "isBlacklisted": false },
-    "filter": { "favoritesOnly": true, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "only", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
   {
-    "name": "favorite on an unloaded item that was not blacklisted under excludeBlacklisted patches",
+    "name": "favorite on an unloaded item that was not blacklisted under Blacklisted excluded patches",
     "event": "favorite",
     "loaded": false,
     "before": { "isFavorite": false, "isBlacklisted": false },
     "after": { "isFavorite": true, "isBlacklisted": false },
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
   {
-    "name": "favorite on an unloaded blacklisted item under excludeBlacklisted reloads because it enters",
+    "name": "favorite on an unloaded blacklisted item under Blacklisted excluded reloads because it enters",
     "event": "favorite",
     "loaded": false,
     "before": { "isFavorite": false, "isBlacklisted": true },
     "after": { "isFavorite": true, "isBlacklisted": false },
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
   {
-    "name": "unblacklist on an unloaded item under excludeBlacklisted reloads because it enters",
+    "name": "unblacklist on an unloaded item under Blacklisted excluded reloads because it enters",
     "event": "favorite",
     "loaded": false,
     "before": { "isFavorite": false, "isBlacklisted": true },
     "after": { "isFavorite": false, "isBlacklisted": false },
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
   {
-    "name": "favorite on an unloaded item under favoritesOnly with previous values reloads because it enters",
+    "name": "favorite on an unloaded item under Favorites only with previous values reloads because it enters",
     "event": "favorite",
     "loaded": false,
     "before": { "isFavorite": false, "isBlacklisted": false },
     "after": { "isFavorite": true, "isBlacklisted": false },
-    "filter": { "favoritesOnly": true, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "only", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
   {
-    "name": "an unchanged echo on an unloaded favorite under favoritesOnly patches",
+    "name": "an unchanged echo on an unloaded favorite under Favorites only patches",
     "event": "favorite",
     "loaded": false,
     "before": { "isFavorite": true, "isBlacklisted": false },
     "after": { "isFavorite": true, "isBlacklisted": false },
-    "filter": { "favoritesOnly": true, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "only", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
   {
-    "name": "blacklist on an unloaded item under excludeBlacklisted with previous values patches",
+    "name": "blacklist on an unloaded item under Blacklisted excluded with previous values patches",
     "event": "favorite",
     "loaded": false,
     "before": { "isFavorite": true, "isBlacklisted": false },
     "after": { "isFavorite": false, "isBlacklisted": true },
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
@@ -168,7 +168,7 @@
     "name": "playback on a loaded tile under name sort patches",
     "event": "playback",
     "loaded": true,
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
@@ -176,7 +176,7 @@
     "name": "playback on a loaded tile under duration sort patches",
     "event": "playback",
     "loaded": true,
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Duration",
     "expected": "patch"
   },
@@ -184,7 +184,7 @@
     "name": "playback on a loaded tile under last played sort reloads",
     "event": "playback",
     "loaded": true,
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "LastPlayed",
     "expected": "reload"
   },
@@ -192,7 +192,7 @@
     "name": "playback on a loaded tile under play count sort reloads",
     "event": "playback",
     "loaded": true,
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "PlayCount",
     "expected": "reload"
   },
@@ -200,7 +200,7 @@
     "name": "playback on a loaded tile under onlyNeverPlayed reloads",
     "event": "playback",
     "loaded": true,
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": true, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": true, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
@@ -208,7 +208,7 @@
     "name": "playback on an unloaded item under name sort patches",
     "event": "playback",
     "loaded": false,
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
@@ -216,7 +216,7 @@
     "name": "playback on an unloaded item under onlyNeverPlayed patches because it cannot enter",
     "event": "playback",
     "loaded": false,
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": true, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": true, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
@@ -224,7 +224,7 @@
     "name": "playback on an unloaded item under last played sort reloads because it can move into the window",
     "event": "playback",
     "loaded": false,
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "LastPlayed",
     "expected": "reload"
   },
@@ -234,7 +234,7 @@
     "loaded": true,
     "addedTags": ["Beach"],
     "removedTags": ["City"],
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
@@ -244,7 +244,7 @@
     "loaded": true,
     "addedTags": ["Night"],
     "removedTags": [],
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": ["Beach"], "excludedTags": ["Skip"] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": ["Beach"], "excludedTags": ["Skip"] },
     "sortMode": "Name",
     "expected": "patch"
   },
@@ -254,7 +254,7 @@
     "loaded": true,
     "addedTags": ["beach"],
     "removedTags": [],
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": ["Beach"], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": ["Beach"], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
@@ -264,7 +264,7 @@
     "loaded": true,
     "addedTags": [],
     "removedTags": ["BEACH"],
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": ["Beach"], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": ["Beach"], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
@@ -274,7 +274,7 @@
     "loaded": true,
     "addedTags": ["Skip"],
     "removedTags": [],
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": ["Skip"] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": ["Skip"] },
     "sortMode": "Name",
     "expected": "reload"
   },
@@ -284,7 +284,7 @@
     "loaded": false,
     "addedTags": ["Beach"],
     "removedTags": [],
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": ["Beach"], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": ["Beach"], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
@@ -294,7 +294,7 @@
     "loaded": false,
     "addedTags": [],
     "removedTags": ["skip"],
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": ["Skip"] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": ["Skip"] },
     "sortMode": "Name",
     "expected": "reload"
   },
@@ -304,7 +304,7 @@
     "loaded": false,
     "addedTags": [],
     "removedTags": ["Beach"],
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": ["Beach"], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": ["Beach"], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
@@ -314,7 +314,7 @@
     "loaded": false,
     "addedTags": ["Skip"],
     "removedTags": [],
-    "filter": { "favoritesOnly": false, "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": ["Skip"] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": ["Skip"] },
     "sortMode": "Name",
     "expected": "patch"
   },
@@ -324,7 +324,7 @@
     "loaded": true,
     "before": { "isFavorite": false, "isBlacklisted": false },
     "after": { "isFavorite": true, "isBlacklisted": false },
-    "filter": { "favoritesMode": "excluded", "favoritesOnly": false, "blacklistedMode": "excluded", "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "excluded", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
@@ -334,7 +334,7 @@
     "loaded": true,
     "before": { "isFavorite": false, "isBlacklisted": false },
     "after": { "isFavorite": false, "isBlacklisted": false },
-    "filter": { "favoritesMode": "excluded", "favoritesOnly": false, "blacklistedMode": "excluded", "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "excluded", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
@@ -344,7 +344,7 @@
     "loaded": true,
     "before": { "isFavorite": false, "isBlacklisted": false },
     "after": { "isFavorite": false, "isBlacklisted": true },
-    "filter": { "favoritesMode": "excluded", "favoritesOnly": false, "blacklistedMode": "off", "excludeBlacklisted": false, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "excluded", "blacklistedMode": "off", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
@@ -354,7 +354,7 @@
     "loaded": true,
     "before": { "isFavorite": false, "isBlacklisted": false },
     "after": { "isFavorite": true, "isBlacklisted": false },
-    "filter": { "favoritesMode": "excluded", "favoritesOnly": false, "blacklistedMode": "off", "excludeBlacklisted": false, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "excluded", "blacklistedMode": "off", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
@@ -364,7 +364,7 @@
     "loaded": false,
     "before": { "isFavorite": true, "isBlacklisted": false },
     "after": { "isFavorite": false, "isBlacklisted": false },
-    "filter": { "favoritesMode": "excluded", "favoritesOnly": false, "blacklistedMode": "excluded", "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "excluded", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
@@ -374,7 +374,7 @@
     "loaded": false,
     "before": { "isFavorite": false, "isBlacklisted": false },
     "after": { "isFavorite": true, "isBlacklisted": false },
-    "filter": { "favoritesMode": "excluded", "favoritesOnly": false, "blacklistedMode": "excluded", "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "excluded", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
@@ -383,7 +383,7 @@
     "event": "favorite",
     "loaded": false,
     "after": { "isFavorite": false, "isBlacklisted": false },
-    "filter": { "favoritesMode": "excluded", "favoritesOnly": false, "blacklistedMode": "excluded", "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "excluded", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
@@ -392,7 +392,7 @@
     "event": "favorite",
     "loaded": false,
     "after": { "isFavorite": true, "isBlacklisted": false },
-    "filter": { "favoritesMode": "excluded", "favoritesOnly": false, "blacklistedMode": "excluded", "excludeBlacklisted": true, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "excluded", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
@@ -402,7 +402,7 @@
     "loaded": true,
     "before": { "isFavorite": false, "isBlacklisted": true },
     "after": { "isFavorite": false, "isBlacklisted": false },
-    "filter": { "favoritesMode": "off", "favoritesOnly": false, "blacklistedMode": "only", "excludeBlacklisted": false, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "only", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
@@ -412,7 +412,7 @@
     "loaded": true,
     "before": { "isFavorite": false, "isBlacklisted": true },
     "after": { "isFavorite": true, "isBlacklisted": false },
-    "filter": { "favoritesMode": "off", "favoritesOnly": false, "blacklistedMode": "only", "excludeBlacklisted": false, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "only", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
@@ -422,7 +422,7 @@
     "loaded": true,
     "before": { "isFavorite": false, "isBlacklisted": true },
     "after": { "isFavorite": false, "isBlacklisted": true },
-    "filter": { "favoritesMode": "off", "favoritesOnly": false, "blacklistedMode": "only", "excludeBlacklisted": false, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "only", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
@@ -432,7 +432,7 @@
     "loaded": false,
     "before": { "isFavorite": false, "isBlacklisted": false },
     "after": { "isFavorite": false, "isBlacklisted": true },
-    "filter": { "favoritesMode": "off", "favoritesOnly": false, "blacklistedMode": "only", "excludeBlacklisted": false, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "only", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
@@ -442,7 +442,7 @@
     "loaded": false,
     "before": { "isFavorite": false, "isBlacklisted": false },
     "after": { "isFavorite": true, "isBlacklisted": false },
-    "filter": { "favoritesMode": "off", "favoritesOnly": false, "blacklistedMode": "only", "excludeBlacklisted": false, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "only", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   },
@@ -451,7 +451,7 @@
     "event": "favorite",
     "loaded": false,
     "after": { "isFavorite": false, "isBlacklisted": true },
-    "filter": { "favoritesMode": "off", "favoritesOnly": false, "blacklistedMode": "only", "excludeBlacklisted": false, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "only", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "reload"
   },
@@ -460,7 +460,7 @@
     "event": "favorite",
     "loaded": false,
     "after": { "isFavorite": true, "isBlacklisted": false },
-    "filter": { "favoritesMode": "off", "favoritesOnly": false, "blacklistedMode": "only", "excludeBlacklisted": false, "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
+    "filter": { "favoritesMode": "off", "blacklistedMode": "only", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
   }

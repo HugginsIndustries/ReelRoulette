@@ -17,9 +17,10 @@ public sealed class FilterStateTests : IDisposable
     // The catalog's schema 5 step writes each stored filter state's modes by this rule, and the parser then reads only
     // the modes.
     [Fact]
-    public void WriteModes_ResolvesFlagModes_AsTheSharedFixtureSays()
+    public void WriteModes_ResolvesFlagModes_AsTheFixtureSays()
     {
-        using var fixture = JsonDocument.Parse(File.ReadAllText(OpenApiSpec.RepoPath("shared", "fixtures", "filter-mode-resolution.json")));
+        using var fixture = JsonDocument.Parse(File.ReadAllText(
+            OpenApiSpec.RepoPath("src", "core", "ReelRoulette.Core.Tests", "Fixtures", "filter-mode-resolution.json")));
         var cases = fixture.RootElement.EnumerateArray().ToList();
         Assert.NotEmpty(cases);
         foreach (var testCase in cases)
@@ -30,18 +31,10 @@ public sealed class FilterStateTests : IDisposable
             Assert.False(filterState.ContainsKey("favoritesOnly") || filterState.ContainsKey("excludeBlacklisted"), $"{name}: {filterState.ToJsonString()}");
             using var written = JsonDocument.Parse(filterState.ToJsonString());
             Assert.True(LibraryListFilterParser.TryParse(written.RootElement, out var parsed, out var error), $"{name}: {error}");
-            var expected = (Mode(testCase, "favoritesMode"), Mode(testCase, "blacklistedMode"));
+            var expected = (ExpectedMode(testCase, "favoritesMode"), ExpectedMode(testCase, "blacklistedMode"));
             var actual = (parsed!.FavoritesMode, parsed.BlacklistedMode);
             Assert.True(expected == actual, $"{name}: expected {expected}, got {actual}.");
         }
-
-        static FlagFilterModeValue Mode(JsonElement testCase, string name) => testCase.GetProperty(name).GetString() switch
-        {
-            "off" => FlagFilterModeValue.Off,
-            "only" => FlagFilterModeValue.Only,
-            "excluded" => FlagFilterModeValue.Excluded,
-            var other => throw new InvalidOperationException($"Unknown expected mode '{other}'.")
-        };
     }
 
     // Each side is read as the server reads a filter state, and compared both ways round. The WebUI reads the same fixture.
@@ -93,6 +86,9 @@ public sealed class FilterStateTests : IDisposable
                 .Select(property => $"{property.Name}={property.Value.GetInt32()}").Order(StringComparer.Ordinal);
             var actualModes = (parsed.CategoryLocalMatchModes ?? []).Select(pair => $"{pair.Key}={(int)pair.Value}").Order(StringComparer.Ordinal);
             Assert.True(expectedModes.SequenceEqual(actualModes), $"{name}: categoryLocalMatchModes are {string.Join(", ", actualModes)}.");
+            var expected = (ExpectedMode(testCase, "favoritesMode"), ExpectedMode(testCase, "blacklistedMode"));
+            var actual = (parsed.FavoritesMode, parsed.BlacklistedMode);
+            Assert.True(expected == actual, $"{name}: expected modes {expected}, got {actual}.");
         }
     }
 
@@ -221,4 +217,13 @@ public sealed class FilterStateTests : IDisposable
     {
         return JsonSerializer.Deserialize<T>(json, OpenApiSpec.ServerJsonOptions)!;
     }
+
+    // A fixture names each expected mode in lower case.
+    private static FlagFilterModeValue ExpectedMode(JsonElement testCase, string name) => testCase.GetProperty(name).GetString() switch
+    {
+        "off" => FlagFilterModeValue.Off,
+        "only" => FlagFilterModeValue.Only,
+        "excluded" => FlagFilterModeValue.Excluded,
+        var other => throw new InvalidOperationException($"Unknown expected mode '{other}'.")
+    };
 }

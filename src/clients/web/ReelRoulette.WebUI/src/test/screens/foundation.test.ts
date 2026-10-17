@@ -24,8 +24,8 @@ const FAVORITES_PRESET = {
   id: "preset-favorites",
   name: "Favorites",
   filterState: {
-    favoritesOnly: true,
-    excludeBlacklisted: true,
+    favoritesMode: "only",
+    blacklistedMode: "excluded",
     onlyNeverPlayed: false,
     onlyKnownDuration: false,
     onlyKnownLoudness: false,

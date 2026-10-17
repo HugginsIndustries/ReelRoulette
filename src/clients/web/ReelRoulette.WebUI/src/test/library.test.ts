@@ -769,7 +769,7 @@ describe("without a library", () => {
     await t.library.play("item-1");
     await t.library.commitQuery();
     t.library.setSortMode("Duration");
-    t.store.presets.value = [{ id: "fav", name: "Favorites", filterState: { favoritesOnly: true, includedSourceIds: ["source-1"] } }];
+    t.store.presets.value = [{ id: "fav", name: "Favorites", filterState: { favoritesMode: "only", includedSourceIds: ["source-1"] } }];
     t.store.pickHeaderPreset("fav");
     await settle();
 
@@ -836,7 +836,7 @@ describe("events", () => {
     await settle();
 
     t.fakeLibrary.items = libraryItems(3, { isFavorite: true });
-    t.store.presets.value = [{ id: "fav", name: "Favorites", filterState: { favoritesOnly: true } }];
+    t.store.presets.value = [{ id: "fav", name: "Favorites", filterState: { favoritesMode: "only" } }];
     t.store.pickHeaderPreset("fav");
     await settle();
     expect(t.queries().at(-1)).toMatchObject({ filterState: { favoritesMode: "only" }, offset: 0, limit: 200 });

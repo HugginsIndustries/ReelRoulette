@@ -363,7 +363,7 @@ describe("filterTagCategories", () => {
 describe("presets and sources", () => {
   it("names preset rows by name or id and leaves out rows with neither", () => {
     const rows = presetRowsFromApi([
-      { id: "p1", name: " Favorites ", filterState: { favoritesOnly: true } },
+      { id: "p1", name: " Favorites ", filterState: { favoritesMode: "only" } },
       { id: "p2", name: "", filterState: {} },
       { name: "" }
     ]);

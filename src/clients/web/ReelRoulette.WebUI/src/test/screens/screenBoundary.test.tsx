@@ -224,7 +224,7 @@ describe("ScreenBoundary", () => {
   it("keeps the header, overlays, and connection working when the player fails to render", async () => {
     failing.player = true;
     const server = new FakeServer();
-    server.on("GET", "/api/presets", () => json([{ id: "preset-1", name: "Favorites", filterState: { favoritesOnly: true } }]));
+    server.on("GET", "/api/presets", () => json([{ id: "preset-1", name: "Favorites", filterState: { favoritesMode: "only" } }]));
     const page = mountPage({ server });
 
     await pageReady(server);

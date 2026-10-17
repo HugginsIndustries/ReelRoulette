@@ -63,7 +63,7 @@ function setup(routes: Record<string, Route> = {}, pairToken?: string) {
   const requests: string[] = [];
   const replies: Record<string, Route> = {
     "GET /api/version": () => json(COMPATIBLE_VERSION),
-    "GET /api/presets": () => json([{ id: "p1", name: "Favorites", filterState: { favoritesOnly: true } }]),
+    "GET /api/presets": () => json([{ id: "p1", name: "Favorites", filterState: { favoritesMode: "only" } }]),
     "POST /api/logs/client": () => new Response(null, { status: 204 }),
     ...routes
   };
@@ -277,7 +277,7 @@ describe("createServerConnection", () => {
       version = after;
       sources[0]!.onopen?.(new Event("open"));
       await settle();
-      presets.answer(json([{ id: "p1", name: "Favorites", filterState: { favoritesOnly: true } }]));
+      presets.answer(json([{ id: "p1", name: "Favorites", filterState: { favoritesMode: "only" } }]));
       await settle();
       expect(store.presetMenu.value).toEqual({ entries: [{ label: menu, value: "" }], selectedValue: "", message: true });
       connection.stop();
@@ -631,7 +631,7 @@ describe("createServerConnection", () => {
     };
     const { store, connection, sources } = setup({
       "GET /api/version": offline(() => json(COMPATIBLE_VERSION)),
-      "GET /api/presets": offline(() => json([{ id: "p1", name: "Favorites", filterState: { favoritesOnly: true } }]))
+      "GET /api/presets": offline(() => json([{ id: "p1", name: "Favorites", filterState: { favoritesMode: "only" } }]))
     });
     connection.start();
     await settle();

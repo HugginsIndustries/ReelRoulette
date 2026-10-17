@@ -32,7 +32,7 @@ import {
 const ALL_FAVORITES_PRESET = {
   id: "preset-favorites",
   name: "Favorites",
-  filterState: { favoritesOnly: true, selectedTags: [], excludedTags: [], includedSourceIds: [] }
+  filterState: { favoritesMode: "only", selectedTags: [], excludedTags: [], includedSourceIds: [] }
 };
 
 const BEACH_PRESET = {

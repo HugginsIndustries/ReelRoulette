@@ -1,7 +1,4 @@
 // @vitest-environment happy-dom
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { statusLogLine } from "../../logging/relayLogLines";
@@ -58,24 +55,16 @@ const TAG_MODEL = {
   items: []
 };
 
-const FAVORITES_PRESET = { id: "preset-favorites", name: "Favorites", filterState: { favoritesOnly: true } };
+const FAVORITES_PRESET = { id: "preset-favorites", name: "Favorites", filterState: { favoritesMode: "only" } };
 const BEACH_PRESET = { id: "preset-beach", name: "Beach days", filterState: { selectedTags: ["Beach"] } };
 const RECENT_PRESET = { id: "preset-recent", name: "Recent", filterState: { onlyNeverPlayed: true } };
-
-/**
- * One filter as a release saved it before the modes, with only the old fields, reading as Favorites only and Blacklisted
- * off.
- */
-const OLD_FIELDS_FILTER = JSON.parse(
-  readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../fixtures/filter-state-written.json"), "utf8")
-).oldFields as Record<string, unknown>;
 
 /** A preset that sets something in every part of the dialog, with "Ghost", a tag the catalog does not have. */
 const RICH_PRESET = {
   id: "preset-rich",
   name: "Rich",
   filterState: {
-    favoritesOnly: true,
+    favoritesMode: "only",
     mediaTypeFilter: 1,
     audioFilter: 2,
     includedSourceIds: ["source-1"],
@@ -1299,18 +1288,6 @@ describe("Favorites and Blacklisted filters", () => {
       );
     }
   });
-
-  it("shows a preset saved before the modes, with only the old fields, as Favorites only and Blacklisted off", async () => {
-    await mountFilter([{ id: "preset-old-fields", name: "Old fields", filterState: OLD_FIELDS_FILTER }]);
-    await pickPreset("preset-old-fields");
-    await openDialog();
-
-    expect(heading()).toBe("Preset: Old fields");
-    expect(flagRow("Favorites")).toEqual({ checked: true, choice: "only", disabled: false });
-    expect(flagRow("Blacklisted")).toEqual({ checked: false, choice: "excluded", disabled: true });
-    expect(box("Only never played").checked).toBe(true);
-    expect(applyShowsChanges()).toBe(false);
-  });
 });
 
 describe("Favorites only with Blacklisted only", () => {
@@ -2472,7 +2449,7 @@ describe("presets need a filter", () => {
 
 describe("names and storage", () => {
   it("shows source, tag, and preset names as text", async () => {
-    await mountFilter([{ id: "preset-mine", name: "<u>Mine</u>", filterState: { favoritesOnly: true } }], (server) => {
+    await mountFilter([{ id: "preset-mine", name: "<u>Mine</u>", filterState: { favoritesMode: "only" } }], (server) => {
       server.on("GET", "/api/sources", () => json([{ id: "source-x", displayName: "<b>Movies</b>", rootPath: "C:\\m", isEnabled: true }]));
       server.on("POST", "/api/tag-editor/model", () =>
         json({ categories: [{ id: "cat-x", name: "<em>Places</em>", sortOrder: 0 }], tags: [{ name: "<i>Beach</i>", categoryId: "cat-x" }], items: [] })

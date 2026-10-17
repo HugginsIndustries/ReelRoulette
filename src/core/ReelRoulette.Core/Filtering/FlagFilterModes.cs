@@ -6,8 +6,8 @@ namespace ReelRoulette.Core.Filtering;
 /// <summary>
 /// The Favorites and Blacklisted filter modes as a filter state carries them. Presets stored before the modes carry
 /// older booleans instead, which the catalog's schema 5 step rewrites into the modes: each filter resolves on its
-/// own, a known mode deciding, and otherwise its older boolean. The WebUI's copy of that rule is in
-/// filterStateModel.ts. Locked to shared/fixtures/filter-mode-resolution.json.
+/// own, a known mode deciding, and otherwise its older boolean. Locked to
+/// src/core/ReelRoulette.Core.Tests/Fixtures/filter-mode-resolution.json.
 /// </summary>
 public static class FlagFilterModes
 {

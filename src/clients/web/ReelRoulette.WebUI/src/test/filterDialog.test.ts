@@ -9,7 +9,7 @@ import { createAppStore, type ApiPreset } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
 import { EMPTY_FIELD } from "../validation/fieldValidation";
 
-const FAVORITES: ApiPreset = { id: "preset-favorites", name: "Favorites", filterState: { favoritesOnly: true } };
+const FAVORITES: ApiPreset = { id: "preset-favorites", name: "Favorites", filterState: { favoritesMode: "only" } };
 const LONG: ApiPreset = { id: "preset-long", name: "Long", filterState: { minDuration: "00:10:00" } };
 const RECENT: ApiPreset = { id: "preset-recent", name: "Recent", filterState: { onlyNeverPlayed: true } };
 

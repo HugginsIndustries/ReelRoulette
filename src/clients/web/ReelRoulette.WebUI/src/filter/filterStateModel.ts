@@ -376,10 +376,7 @@ function durationToApiValue(seconds: number): string {
   return formatDurationForApi(seconds);
 }
 
-/**
- * Serialize for POST /api/random and preset snapshots. Each flag filter is written as its mode only; the older
- * `favoritesOnly` and `excludeBlacklisted` booleans are only read, from presets stored before the modes.
- */
+/** Serialize for POST /api/random and preset snapshots. Each flag filter is written as its mode. */
 export function serializeFilterStateForApi(state: FilterState): ApiFilterState {
   const out: ApiFilterState = {
     favoritesMode: state.favoritesMode,
@@ -455,26 +452,16 @@ function readEnumValue(value: unknown, names: Readonly<Record<string, number>>):
   return Number.isFinite(n) ? n : null;
 }
 
-/** A mode is one of the names `off`, `only`, or `excluded` in any case. Anything else counts as missing. */
+/**
+ * A mode is one of the names `off`, `only`, or `excluded` in any case. Anything else counts as missing, which reads as
+ * the default filter's mode, as the server's parser reads it. Locked to shared/fixtures/filter-enum-values.json.
+ */
 function readFlagMode(value: unknown): FlagFilterMode | null {
   if (typeof value !== "string") {
     return null;
   }
   const lower = value.toLowerCase();
   return lower === "off" || lower === "only" || lower === "excluded" ? lower : null;
-}
-
-/**
- * Each flag filter resolves on its own: a known mode decides, and otherwise its older boolean does. Without a mode,
- * `favoritesOnly` true is only and anything else is off, and `excludeBlacklisted` false is off and anything else,
- * including none, is excluded, so a preset stored before the modes reads as it filtered. Core's FlagFilterModes is
- * the C# copy. Locked to shared/fixtures/filter-mode-resolution.json.
- */
-function resolveFlagModes(o: Record<string, unknown>): { favoritesMode: FlagFilterMode; blacklistedMode: FlagFilterMode } {
-  return {
-    favoritesMode: readFlagMode(o.favoritesMode) ?? (o.favoritesOnly === true ? "only" : "off"),
-    blacklistedMode: readFlagMode(o.blacklistedMode) ?? (o.excludeBlacklisted === false ? "off" : "excluded")
-  };
 }
 
 /** Hydrate from an API filter state. Each field is still checked, since a stored preset holds whatever was posted. */
@@ -485,9 +472,8 @@ export function filterStateFromApiObject(raw: ApiFilterState | null | undefined)
   }
   const o = raw as Record<string, unknown>;
 
-  const modes = resolveFlagModes(o);
-  base.favoritesMode = modes.favoritesMode;
-  base.blacklistedMode = modes.blacklistedMode;
+  base.favoritesMode = readFlagMode(o.favoritesMode) ?? base.favoritesMode;
+  base.blacklistedMode = readFlagMode(o.blacklistedMode) ?? base.blacklistedMode;
   if (typeof o.onlyNeverPlayed === "boolean") {
     base.onlyNeverPlayed = o.onlyNeverPlayed;
   }

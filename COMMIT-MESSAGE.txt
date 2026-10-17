@@ -19,11 +19,10 @@ Instructions:
 
 Commit Message:
 
-M12i6: Add per-preset routes, and name presets by their id in the API
+M12i6: Read only the flag modes in the WebUI, and split the WebUI slice in four
 
-- `POST /api/presets/create`, `/{presetId}/update`, `/{presetId}/rename`, `/reorder`, and `/{presetId}/delete` write one preset by id. Create, update, and rename answer with the preset as written. A refusal answers 400, 404, or 409 with the server's reason, and a write the catalog doesn't take answers 500.
-- A per-preset catalog write that throws, as when another write holds the catalog past its busy timeout, is not saved either: it changes and publishes nothing, with a `last.log` warning. Tag rename and delete's failed preset writes get a `last.log` warning too.
-- `GET /api/presets` returns each preset's own id in place of its name, and the random request's `presetId` matches that id exactly.
-- The server advertises `api.presets.byId` in place of the stale `api.presets.match`, and the WebUI requires it.
-- OpenAPI describes the routes, their requests, and `presetCatalogChanged`, the WebUI types are regenerated, and `docs/api.md`, `CONTEXT.md`, and the domain inventory follow.
-- M12i6's entry adds the thrown write to the Contract slice's Scope and Acceptance, and records the slice's evidence.
+- The WebUI reads a filter's Favorites and Blacklisted only from `favoritesMode` and `blacklistedMode`, and no longer from the older `favoritesOnly` and `excludeBlacklisted`, which the catalog's upgrade has rewritten in every stored preset.
+- `filter-mode-resolution.json` moves from `shared/fixtures/` to the Core tests, which keep locking the upgrade's rule. The WebUI's tests of that rule go, and one test checks that a filter with only the older fields reads as the default modes.
+- `shared/fixtures/filter-enum-values.json` locks how the server and the WebUI read the modes too, with cases for an unknown mode name, a number, null, and mixed case.
+- WebUI test fixtures, `library-tile-effect.json` among them, hold the modes in place of the older fields, with the same meaning.
+- M12i6's WebUI slice becomes four slices, WebUI old fields, Duplicate filter, WebUI writes, and WebUI events, with decisions on preset ids, on merging a fresh preset list into unsaved changes, and on blocking an Apply that would swap two presets' names or filters, and records the first slice's evidence.
