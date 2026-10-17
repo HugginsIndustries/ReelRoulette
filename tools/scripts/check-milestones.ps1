@@ -11,6 +11,7 @@
 #   -Release                   with a release tag as the base, skip checking that new completed entries
 #                              existed in the base, since a release's milestones are often planned after it
 # A base must keep its completed history in MILESTONES-COMPLETED.md; an older base is refused.
+[CmdletBinding()]
 param(
     [string]$Path,
     [string]$CompletedPath,

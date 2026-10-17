@@ -3,6 +3,7 @@
 # test date and the release version from .version without any -dev.N suffix.
 #   -Path         checklist to reset (default: the repo's docs/checklists/testing-checklist.md)
 #   -VersionPath  version file to read (default: the repo's .version)
+[CmdletBinding()]
 param(
     [switch]$KeepMetadata,
     [switch]$RemoveWaived,

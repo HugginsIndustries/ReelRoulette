@@ -1,4 +1,5 @@
 #!/usr/bin/env pwsh
+[CmdletBinding()]
 param(
     [int]$ServerPort = 51312
 )

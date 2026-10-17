@@ -1318,19 +1318,6 @@ static string? ResolveWebUiStaticRoot(string contentRootPath, string? explicitPa
         return Path.GetFullPath(explicitPath);
     }
 
-    var fromRepo = Path.GetFullPath(Path.Combine(
-        contentRootPath,
-        "..",
-        "..",
-        "clients",
-        "web",
-        "ReelRoulette.WebUI",
-        "dist"));
-    if (Directory.Exists(fromRepo))
-    {
-        return fromRepo;
-    }
-
     var localWwwroot = Path.Combine(contentRootPath, "wwwroot");
     if (Directory.Exists(localWwwroot))
     {

@@ -5,6 +5,7 @@
 #   -Name     release name, for example "Cleanup and Polish"
 #   -Date     release date as yyyy-MM-dd (default: today)
 #   -Path     changelog to cut (default: the repo's CHANGELOG.md)
+[CmdletBinding()]
 param(
     [string]$Version,
     [string]$Name,

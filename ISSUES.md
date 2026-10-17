@@ -3,7 +3,7 @@
 This file holds known issues: things that behave wrong. Improvements are planned work and go in `MILESTONES.md`.
 
 - An issue is fixed either by a milestone whose Scope names it by its title here, or on its own in a `Bugfix:` commit.
-- When an issue is fixed, delete it from this file. The commit and `CHANGELOG.md` record the fix.
+- When an issue is fixed, delete it from this file. The commit always records the fix, and `CHANGELOG.md` records it only when users would notice it, as its style note says.
 
 Each issue is a `###` heading with a short title, then these bullets:
 
@@ -138,23 +138,3 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
 - **How much it matters**: Low. A full refresh with ffmpeg scans every video it can read.
 - **Since**: v0.9.0.
 - **Where**: `LibraryCatalogListQuery` in `src/core/ReelRoulette.Core/Library/LibraryCatalogListQuery.cs`.
-
-## Dev scripts
-
-### run-server-rebuild builds without installing packages
-
-- **What goes wrong**: `tools/scripts/run-server-rebuild.ps1` runs `npm run build` without installing packages, so a clean clone fails to build the WebUI, and a changed lockfile builds with stale packages.
-- **How to make it happen**: Run the script on a clone without `node_modules`, or after pulling a change to `package-lock.json`.
-- **How much it matters**: Low. It's a dev script, and running `npm ci` first avoids it.
-- **Since**: v0.9.0.
-- **Where**: `tools/scripts/run-server-rebuild.ps1`.
-
-### Five scripts ignore a switch they don't take
-
-- **What goes wrong**: `cut-changelog.ps1`, `reset-checklist.ps1`, `check-milestones.ps1`, `run-server.ps1`, and `verify-web-deploy.ps1` have no `[CmdletBinding()]`, so a switch they don't take, such as a typo, is silently ignored and the script runs as if it weren't given, instead of being refused.
-- **How to make it happen**: Pass any of them a switch it doesn't take, such as `-Bogus`: `check-milestones.ps1` runs its checks, `reset-checklist.ps1` resets the checklist, and `cut-changelog.ps1` goes on to its own checks (measured, the last two on scratch copies). `run-server.ps1` and `verify-web-deploy.ps1` declare their parameters the same way (inferred).
-- **How much it matters**: Low. A mistyped switch, such as `-Stagged` for `check-milestones.ps1`, quietly gives a different run than asked for, but the usual commands in the docs and skills are spelled right.
-- **Since**: v0.9.0 for `run-server.ps1` and `verify-web-deploy.ps1`, v0.10.0 for `reset-checklist.ps1`, and v0.14.0 for `cut-changelog.ps1` and `check-milestones.ps1`. None of them has ever had `[CmdletBinding()]`.
-- **Where**:
-  - The `param()` blocks of `tools/scripts/cut-changelog.ps1`, `tools/scripts/reset-checklist.ps1`, `tools/scripts/check-milestones.ps1`, `tools/scripts/run-server.ps1`, and `tools/scripts/verify-web-deploy.ps1`. `set-release-version.ps1` already has `[CmdletBinding()]`, and `stage-webui-assets.ps1`'s `[Parameter(Mandatory = $true)]` already makes it refuse an unknown switch (measured).
-  - With it, every caller must pass only switches the script takes, so a fix checks each caller first: `run-server-rebuild.ps1` calls `run-server.ps1`; `set-release-version.ps1` calls `verify-web-deploy.ps1` with no parameters; `tools/scripts/tests/test-scripts.ps1` calls the other three; and the plan-from-report, pre-release, promote-milestones, and review-staged skills call `check-milestones.ps1`, `cut-changelog.ps1`, or `reset-checklist.ps1`.

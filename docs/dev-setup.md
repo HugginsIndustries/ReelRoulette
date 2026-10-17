@@ -29,7 +29,7 @@ This guide covers local setup, run paths, verification gates, packaging, and rel
   - Windows (`net10.0-windows`): `dotnet run --framework net10.0-windows --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj`
   - Linux/macOS (`net10.0`): `dotnet run --framework net10.0 --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` (Avalonia tray when the session supports it; otherwise headless)
 - Scripted (from repo root):
-  - `pwsh ./tools/scripts/run-server.ps1`
+  - `pwsh ./tools/scripts/run-server.ps1` installs the WebUI's packages with `npm ci` when `node_modules` is missing or `package-lock.json` changed since the last install, builds the WebUI, and runs the server on your real settings, serving that build.
 
 Runtime notes:
 
@@ -40,12 +40,6 @@ Runtime notes:
 - Windows runtime uses tray-hosted ServerApp behavior (no visible command prompt when launched as app binary). On Linux, tray appears when a status notifier/tray is available; otherwise the host runs headless deterministically.
 - `Launch Server on Startup` can be toggled from tray and Operator control settings and applies immediately (no restart required).
 - **Linux packaged/binary:** XDG autostart writes `reelroulette-server.desktop` with `Exec=`/`Path=` from the stable server path (**`APPIMAGE`** when running an AppImage, so autostart does not capture `/tmp/.mount_*`); ServerApp sets ASP.NET `ContentRootPath` to `AppContext.BaseDirectory` so login autostart still loads `appsettings` and `wwwroot` when cwd is not the install folder.
-
-### Run ServerApp with WebUI rebuild
-
-Use when you want to ensure web assets are freshly rebuilt before startup:
-
-- `pwsh ./tools/scripts/run-server-rebuild.ps1`
 
 ## API and Control Surfaces (High-Signal)
 
@@ -251,7 +245,7 @@ Check `MILESTONES.md` and `MILESTONES-COMPLETED.md` against their maintenance ru
 ## Troubleshooting
 
 - WebUI changes not appearing:
-  - run `pwsh ./tools/scripts/run-server-rebuild.ps1` to rebuild before run.
+  - `run-server.ps1` rebuilds the WebUI on every run, so stop it and run it again. A server started with `dotnet run` serves the WebUI only when `ServerApp__WebUiStaticRootPath` points at the WebUI's `dist`, which `run-server.ps1` sets.
 - Version/capability startup blocks:
   - check `/api/version` and `/api/capabilities` output against expected client requirements.
 - Velopack release workflow failures:

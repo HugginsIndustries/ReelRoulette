@@ -6,6 +6,105 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12i5 - Dev Script Cleanup
+
+- **Status**: ✅ Complete
+- **Goal**: One command, `run-server.ps1`, installs the WebUI's packages when they're out of date, rebuilds the WebUI, and runs the server from the repo, and the five scripts that ignored a switch they don't take refuse it.
+
+#### Scope
+
+- `tools/scripts/run-server.ps1` builds the WebUI on every run, with `npm run build` in `src/clients/web/ReelRoulette.WebUI`, then starts the server with `dotnet run`.
+- Before the build, it installs the WebUI's packages when `node_modules` or `node_modules/.package-lock.json` is missing, or when `package-lock.json` is newer than `node_modules/.package-lock.json`, and otherwise skips the install.
+- It installs with `npm ci`, which installs exactly what the lockfile lists without rewriting it, so a dev run never changes a tracked file.
+- It prints whether it installs the packages or skips the install, beside the settings it prints today.
+- When the install or the build fails, or the build leaves no `dist`, it stops with an error and doesn't start the server.
+- It always serves the WebUI from that build's `dist`, so it no longer keeps a `ServerApp__WebUiStaticRootPath` already set.
+- It keeps its parameters and their defaults: `-Port`, `-RequireAuth`, `-DisableLocalhostTrust`, `-Framework`, and `-PairingToken`.
+- It stays a dev-run helper on the user's real settings, as `AGENTS.md` requires of dev-run helpers, and is never isolated.
+- `ResolveWebUiStaticRoot` in `src/core/ReelRoulette.ServerApp/Program.cs` drops its fallback to the repo's WebUI `dist`, which it can't reach since the server's content root is pinned to its build folder, so it serves `ServerApp:WebUiStaticRootPath` when that's set and otherwise its own `wwwroot`.
+- Delete `tools/scripts/run-server-rebuild.ps1`.
+- Every reference to `run-server-rebuild.ps1` goes or names `run-server.ps1` instead:
+  - `README.md`'s Helper Scripts gives one command to build the WebUI and run the server.
+  - `docs/dev-setup.md`'s Run ServerApp says the script installs the packages when needed and rebuilds the WebUI first, its Run ServerApp with WebUI rebuild section goes, and its Troubleshooting item for WebUI changes not appearing no longer names the old script.
+  - `CONTEXT.md`'s `tools/scripts/` line and Working Commands.
+  - `docs/domain-inventory.md`'s Runtime scripts.
+  - The Auth Cutover for API and Admin entry's Scope and Traps, which name the `-PairingToken` parameter of both scripts.
+- This milestone fixes the issue "run-server-rebuild builds without installing packages" in `ISSUES.md`, with the install before the build.
+- This milestone fixes the issue "Five scripts ignore a switch they don't take" in `ISSUES.md`: `cut-changelog.ps1`, `reset-checklist.ps1`, `check-milestones.ps1`, `run-server.ps1`, and `verify-web-deploy.ps1` get `[CmdletBinding()]` on their `param()` blocks, once every caller is checked.
+- `tools/scripts/tests/test-scripts.ps1` gets a case for each of `check-milestones.ps1`, `cut-changelog.ps1`, and `reset-checklist.ps1` given an unknown switch.
+- Both issues are deleted from `ISSUES.md` when this milestone lands.
+- `ISSUES.md`'s header and `AGENTS.md`'s line on `ISSUES.md` say the commit always records a fix, and `CHANGELOG.md` only when users would notice it, as its style note says.
+
+#### Traps
+
+- `run-server-rebuild.ps1` builds with `npm run build` without installing packages, checks that `dist` exists, sets `ServerApp__WebUiStaticRootPath` to it, and runs `run-server.ps1` in a child `pwsh` with `-Port`, `-Framework`, `-PairingToken`, and the two switches.
+- Without an install, a clone with no `node_modules` fails to build the WebUI, and a pulled change to `package-lock.json` builds with stale packages.
+- `run-server.ps1` keeps a `ServerApp__WebUiStaticRootPath` already set, and otherwise uses the same `dist`, which is how `run-server-rebuild.ps1` hands it the build.
+- `run-server-rebuild.ps1` always passes the OS's framework, `net10.0-windows` or `net10.0`, and takes no `-Framework` of its own.
+- `dotnet run` builds the server before starting it, so the install and the WebUI build are the only steps the merge adds.
+- npm writes `node_modules/.package-lock.json`, its hidden lockfile, after `package-lock.json` at the end of an install: after the WebUI's last install, `package-lock.json` is 9 ms older, with npm 12.2.0 (measured, from the files' times).
+- `npm ci` writes the hidden lockfile and leaves `package-lock.json` alone, so the run after an install skips the next one (inferred).
+- A pull or checkout that changes `package-lock.json` writes it with the current time, so the next run installs, and one that leaves it unchanged keeps its time (inferred).
+- `npm ci` deletes `node_modules` before it installs, and fails when `package.json` and `package-lock.json` disagree.
+- `stage-webui-assets.ps1` and `verify-web-deploy.ps1` run `npm install` on every run, and CI's WebUI job runs `npm ci`.
+- `README.md`, `CONTEXT.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, `ISSUES.md`, and the Auth Cutover for API and Admin entry name `run-server-rebuild.ps1`, and so do `CHANGELOG.md`'s released sections and `MILESTONES-COMPLETED.md`, which keep it as history (measured, by a search).
+- `AGENTS.md`, the skills, the testing checklist, and the active entries' spot checks don't name `run-server-rebuild.ps1` (measured, by a search).
+- `AGENTS.md` names `run-server.ps1` as the dev-run helper that uses real settings, which stays true of the merged script.
+- `run-server.ps1` runs the server on the user's real settings, catalog, and library, so agents must not run it, and the spot check is the user's.
+- The script tests must not call `run-server.ps1`, since a run that doesn't refuse the switch would start a server on the user's real settings (inferred).
+- The script tests don't call `verify-web-deploy.ps1` either, since a run that doesn't refuse the switch builds the WebUI and starts a server, isolated but slow (inferred). `AGENTS.md` lets agents run it.
+- None of the five scripts has `[CmdletBinding()]`, so a switch it doesn't take is ignored: `check-milestones.ps1` runs its checks, `reset-checklist.ps1` resets the checklist, and `cut-changelog.ps1` goes on to its own checks (measured).
+- `run-server.ps1` and `verify-web-deploy.ps1` declare their parameters the same way, so they ignore an unknown switch too (inferred).
+- With `[CmdletBinding()]`, an unknown switch fails before the script runs, with "A parameter cannot be found that matches parameter name 'Bogus'.", and `pwsh -File` exits 1 (measured, on a scratch copy of `check-milestones.ps1`).
+- `Invoke-Tool` in `test-scripts.ps1` runs a script as `& $Script @Parameters` and turns a thrown error into exit code 1 with its message, so a refused switch reads as code 1 with that message (measured).
+- `test-scripts.ps1` passes the three scripts it tests only parameters they declare.
+- The skills run `check-milestones.ps1` with `-BaseRef HEAD` or `-Staged -BaseRef HEAD`, `cut-changelog.ps1` with `-Version` and `-Name`, and `reset-checklist.ps1` with none.
+- `set-release-version.ps1` calls `verify-web-deploy.ps1` with no parameters, and so do the commands in `AGENTS.md`, `README.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, and the testing checklist.
+- The commands in `README.md`, `docs/dev-setup.md`, and the testing checklist use only switches the scripts declare.
+- Once `run-server-rebuild.ps1` is gone, nothing in the repo calls `run-server.ps1`.
+- `[CmdletBinding()]` also accepts the common parameters, such as `-Verbose` and `-ErrorAction`.
+- `set-release-version.ps1` already has `[CmdletBinding()]`, and `stage-webui-assets.ps1`'s `[Parameter(Mandatory = $true)]` already makes it refuse an unknown switch (measured).
+
+#### Acceptance
+
+- `check-milestones.ps1`, `cut-changelog.ps1`, and `reset-checklist.ps1` each refuse an unknown switch with exit code 1, and `cut-changelog.ps1` and `reset-checklist.ps1` leave their file unchanged when they do, in the new cases of `pwsh ./tools/scripts/tests/test-scripts.ps1`, which passes.
+- `pwsh ./tools/scripts/verify-web-deploy.ps1 -Bogus` exits 1 before it builds anything, and `pwsh ./tools/scripts/verify-web-deploy.ps1` passes.
+- `run-server.ps1` and `verify-web-deploy.ps1` have `[CmdletBinding()]`, `run-server.ps1` installs the packages by the rule in Scope and builds the WebUI before it starts the server, and `run-server-rebuild.ps1` is gone, checked by reading `tools/scripts/`.
+- No file refers to `run-server-rebuild.ps1` apart from this milestone's entry, its commit message, `CHANGELOG.md`, and `MILESTONES-COMPLETED.md`, checked by `git grep run-server-rebuild`.
+- `pwsh ./tools/scripts/check-milestones.ps1` passes.
+- A quick spot check: the user runs `pwsh ./tools/scripts/run-server.ps1`, which skips the install, rebuilds the WebUI, and starts the server, and the WebUI loads from it; then, after `touch src/clients/web/ReelRoulette.WebUI/package-lock.json`, runs it again and sees it install the packages first; then runs it once more and sees it skip the install.
+
+#### Evidence
+
+- `pwsh ./tools/scripts/tests/test-scripts.ps1` failed only its three new cases before `[CmdletBinding()]`, each script running with `-Bogus` and `cut-changelog.ps1` and `reset-checklist.ps1` rewriting their file, and passed 86 of 86 after it (measured).
+- Copies of the `param()` blocks of `run-server.ps1` and `verify-web-deploy.ps1` ran with `-Bogus` and exited 0 without `[CmdletBinding()]`, and refused it with exit 1 with it (measured).
+- A harness in `artifacts/scratch/` ran an unchanged copy of `run-server.ps1` in a fake repo with stand-in `npm` and `dotnet` programs, so no server started, and passed 9 of 9 cases (measured):
+  - packages up to date: no install, then the build, then `dotnet run`, with a `ServerApp__WebUiStaticRootPath` already set replaced by `dist`;
+  - `package-lock.json` newer than the hidden lockfile, or no `node_modules`: `npm ci` before the build;
+  - a failed install, a failed build, or a build that leaves no `dist`: a nonzero exit and no `dotnet run`;
+  - every parameter reaches the settings and `dotnet run`, and the parameters and their defaults match the previous commit's;
+  - `-Bogus`: exit 1 with neither program called.
+- The harness's first run found that `Get-Item` doesn't find `node_modules/.package-lock.json` on Linux without `-Force`, though `Test-Path` does, so the script reads its time with `Get-Item -Force` (measured).
+- The review found that the settings printed before the install and the build, whose output pushed them off screen, and left "Starting ReelRoulette.ServerApp..." on screen when the build failed, so they now print just before `dotnet run`. A second harness ran the final script the same way and passed 3 of 3 cases, two of which fail on the earlier order (measured):
+  - a build that succeeds: its output, then the settings, then `dotnet run`;
+  - a failed build: a nonzero exit, no settings, and no `dotnet run`;
+  - `package-lock.json` newer than the hidden lockfile: `npm ci`, the build, then `dotnet run`, and the settings say it installed.
+- The first harness and the user's spot check ran before that move, which changes only where the settings print.
+- `pwsh ./tools/scripts/verify-web-deploy.ps1 -Bogus` printed only the refusal and exited 1, leaving the previous run's server logs untouched, and `pwsh ./tools/scripts/verify-web-deploy.ps1` passed (measured).
+- After that run's `npm install`, `node_modules/.package-lock.json` was 10 ms newer than `package-lock.json` (measured).
+- `ResolveWebUiStaticRoot` in `src/core/ReelRoulette.ServerApp/Program.cs` no longer falls back to the repo's WebUI `dist`. Since the content root was pinned to `AppContext.BaseDirectory` in April 2026, that fallback looked for `src/core/ReelRoulette.ServerApp/bin/clients/web/ReelRoulette.WebUI/dist`, which never exists, so it was never used (measured, by resolving the path). The server still serves `ServerApp:WebUiStaticRootPath` when it's set, and otherwise its own `wwwroot`.
+- After that removal, `dotnet build ReelRoulette.sln` passed with no warnings, `dotnet test ReelRoulette.sln` passed 495 of 495, and `pwsh ./tools/scripts/verify-web-deploy.ps1` passed (measured).
+- npm 12.2.0's `npm ci` installs with `save: false`, which leaves `package-lock.json` alone, and writes `node_modules/.package-lock.json` on every install, read from npm's code.
+- `pwsh ./tools/scripts/check-milestones.ps1` passes, with and without `-BaseRef HEAD`.
+- `git grep run-server-rebuild` finds it only in `CHANGELOG.md`'s released sections, `MILESTONES-COMPLETED.md`, and the commit message.
+- Docs updated: `README.md`, `docs/dev-setup.md`, `CONTEXT.md`, `docs/domain-inventory.md`, the Auth Cutover for API and Admin entry, `ISSUES.md`, and `AGENTS.md`.
+- `CHANGELOG.md` gets no entry, since the change is to dev scripts and to server code that was never used, none of which users see.
+- The user's spot check passed on all three runs (measured):
+  - the first skipped the install, rebuilt the WebUI, and started the server, and the WebUI loaded from it;
+  - after `touch` on `package-lock.json`, the second installed the packages first;
+  - the third skipped the install again;
+  - the install added no noticeable time to the start.
+
 ### M12i4 - Desktop Client Removal
 
 - **Status**: ✅ Complete

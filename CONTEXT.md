@@ -88,7 +88,7 @@ ReelRoulette is a thin-client, API-first system:
 - `src/clients/`:
   - `web/ReelRoulette.WebUI`: the only client.
 - `shared/api/openapi.yaml`: API contract source of truth.
-- `tools/scripts/`: runtime/verify/release scripts (`run-server*`, `verify-web-deploy*`, `verify-linux-packaged-server-smoke.sh`, `set-release-version.ps1`, `stage-webui-assets.ps1`, `reset-checklist.ps1`, `check-milestones.ps1`, `cut-changelog.ps1`, with fixture tests under `tests/`).
+- `tools/scripts/`: runtime/verify/release scripts (`run-server.ps1`, `verify-web-deploy*`, `verify-linux-packaged-server-smoke.sh`, `set-release-version.ps1`, `stage-webui-assets.ps1`, `reset-checklist.ps1`, `check-milestones.ps1`, `cut-changelog.ps1`, with fixture tests under `tests/`).
 
 ## Working Commands (Canonical Set)
 
@@ -98,7 +98,7 @@ For full setup/run details use `README.md` and `docs/dev-setup.md`. Core command
 - `dotnet test ReelRoulette.sln`
 - `dotnet run --framework net10.0-windows --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` (Windows runtime; tray when available, otherwise headless)
 - `dotnet run --framework net10.0 --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj` (non-Windows runtime; tray when available, otherwise headless)
-- `pwsh ./tools/scripts/run-server.ps1` / `pwsh ./tools/scripts/run-server-rebuild.ps1`
+- `pwsh ./tools/scripts/run-server.ps1` (installs the WebUI's packages when needed, builds the WebUI, and runs the server)
 - `npm run verify` (in `src/clients/web/ReelRoulette.WebUI`)
 
 ## Guardrails for Contributors and Agents

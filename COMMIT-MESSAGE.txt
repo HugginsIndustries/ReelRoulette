@@ -19,12 +19,11 @@ Instructions:
 
 Commit Message:
 
-M12i4: Describe ReelRoulette without the desktop client, and complete Desktop Client Removal
+M12i5: Rebuild the WebUI in run-server.ps1, refuse switches the dev scripts don't take, and complete Dev Script Cleanup
 
-- The mockup loses the desktop retirement notice, the admin page's desktop client and its log sources, and its notes on the desktop as a current client, and its Diagnostics shows API 2.
-- `AGENTS.md` drops the desktop freeze and names the WebUI as the only client layer, the Core tests' `TestIsolation`, and the retired desktop in the completed milestones, and the pre-release skill and testing checklist no longer list the desktop app.
-- `CONTEXT.md`, README, architecture, the API doc, dev setup, the domain inventory, and the icon font's README lose their desktop client sections and comparisons, their rules no longer speak of migrated flows or parity across clients, and their WebUI lines no longer mention a path list or an empty item-state read.
-- OpenAPI's descriptions no longer name the desktop, its client type hint gives only the types the WebUI sends, and the generated WebUI types follow.
-- `[Unreleased]` loses the desktop halves of its bullets and the desktop preset fix, since v0.15.0 ships no desktop.
-- The testing checklist gets this milestone's release checks, M12i4 moves to MILESTONES-COMPLETED.md, and planned entries, ISSUES.md, and a shared fixture's case name describe the desktop only as retired.
-- The commit message instructions say a milestone's own slices take its prefix even when they change only docs, and `Docs:` is for docs-only work outside milestones.
+- `run-server.ps1` installs the WebUI's packages with `npm ci` when `node_modules` is missing or `package-lock.json` is newer than the last install, rebuilds the WebUI, and always serves that build, so `run-server-rebuild.ps1` is gone.
+- `check-milestones.ps1`, `cut-changelog.ps1`, `reset-checklist.ps1`, `run-server.ps1`, and `verify-web-deploy.ps1` get `[CmdletBinding()]`, so a switch they don't take stops them instead of being ignored, and the script tests check that the first three refuse one.
+- ServerApp drops its fallback to the repo's WebUI `dist`, which it never found once its content root was pinned to the build folder, so it serves `ServerApp:WebUiStaticRootPath` when that's set and otherwise its own `wwwroot`.
+- README, dev setup, `CONTEXT.md`, the domain inventory, and the Auth Cutover for API and Admin entry name only `run-server.ps1`.
+- Both dev-script issues leave `ISSUES.md`, whose header, and `AGENTS.md`'s line on it, now say `CHANGELOG.md` records a fix only when users would notice it.
+- M12i5 moves to MILESTONES-COMPLETED.md with its evidence, including the user's spot check of three runs.

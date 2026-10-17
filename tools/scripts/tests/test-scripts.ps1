@@ -123,6 +123,12 @@ try {
         Assert-Check (Invoke-Tool $checker (Get-CheckArgs $validMilestones)) 0 @("OK: valid.md and valid-completed.md passed")
     }
 
+    Test-Case "an unknown switch is refused" {
+        $parameters = Get-CheckArgs $validMilestones
+        $parameters.Bogus = $true
+        Assert-Check (Invoke-Tool $checker $parameters) 1 @("A parameter cannot be found that matches parameter name 'Bogus'.")
+    }
+
     Test-Case "a bare milestone ID in prose fails on its line, and MP3 and P2P beside it are not flagged" {
         $path = New-FixtureCopy $validMilestones "bare-id.md" @(, @("Plays MP3 files and talks P2P", "Plays MP3 files like M1c and talks P2P"))
         Assert-Check (Invoke-Tool $checker (Get-CheckArgs $path)) 1 @("bare-id.md:78: milestone ID 'M1c' outside") 1
@@ -470,7 +476,9 @@ try {
         @{ Name = "an empty release name is refused"; Replacements = @()
             Parameters = @{ Name = " " }; Message = "-Name is required" },
         @{ Name = "a dev version is refused"; Replacements = @()
-            Parameters = @{ Version = "v0.3.0-dev.1" }; Message = "Invalid -Version 'v0.3.0-dev.1'" }
+            Parameters = @{ Version = "v0.3.0-dev.1" }; Message = "Invalid -Version 'v0.3.0-dev.1'" },
+        @{ Name = "an unknown switch is refused"; Replacements = @()
+            Parameters = @{ Bogus = $true }; Message = "A parameter cannot be found that matches parameter name 'Bogus'." }
     )
     $caseNumber = 0
     foreach ($refusal in $refusals) {
@@ -532,6 +540,16 @@ try {
         $versionPath = Join-Path $workDir "reset-invalid.version"
         Set-Content -Path $versionPath -Value "v0.3.0-preview.1" -NoNewline
         $reason = Assert-Check (Invoke-Tool $resetter @{ Path = $path; VersionPath = $versionPath }) 1 @("Invalid version 'v0.3.0-preview.1'")
+        if ($reason) { return $reason }
+        if ((Get-Content -Path $path -Raw) -cne $before) { return "the checklist was modified" }
+    }
+
+    Test-Case "an unknown switch is refused, and the file is unchanged" {
+        $path = New-FixtureCopy $checklistInput "reset-unknown-switch.md"
+        $before = Get-Content -Path $path -Raw
+        $versionPath = Join-Path $workDir "reset-unknown-switch.version"
+        Set-Content -Path $versionPath -Value "v0.3.0" -NoNewline
+        $reason = Assert-Check (Invoke-Tool $resetter @{ Path = $path; VersionPath = $versionPath; Bogus = $true }) 1 @("A parameter cannot be found that matches parameter name 'Bogus'.")
         if ($reason) { return $reason }
         if ((Get-Content -Path $path -Raw) -cne $before) { return "the checklist was modified" }
     }

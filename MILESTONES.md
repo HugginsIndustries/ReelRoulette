@@ -134,73 +134,7 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 ## Active Milestones
 
-Last milestone completed: M12i4
-
-### M12i5 - Dev Script Cleanup
-
-- **Status**: ⏳ Planned
-- **Goal**: One command, `run-server.ps1`, installs the WebUI's packages when they're out of date, rebuilds the WebUI, and runs the server from the repo, and the five scripts that ignored a switch they don't take refuse it.
-
-#### Scope
-
-- `tools/scripts/run-server.ps1` builds the WebUI on every run, with `npm run build` in `src/clients/web/ReelRoulette.WebUI`, then starts the server with `dotnet run`.
-- Before the build, it installs the WebUI's packages when `node_modules` or `node_modules/.package-lock.json` is missing, or when `package-lock.json` is newer than `node_modules/.package-lock.json`, and otherwise skips the install.
-- It installs with `npm ci`, which installs exactly what the lockfile lists without rewriting it, so a dev run never changes a tracked file.
-- It prints whether it installs the packages or skips the install, beside the settings it prints today.
-- When the install or the build fails, or the build leaves no `dist`, it stops with an error and doesn't start the server.
-- It always serves the WebUI from that build's `dist`, so it no longer keeps a `ServerApp__WebUiStaticRootPath` already set.
-- It keeps its parameters and their defaults: `-Port`, `-RequireAuth`, `-DisableLocalhostTrust`, `-Framework`, and `-PairingToken`.
-- It stays a dev-run helper on the user's real settings, as `AGENTS.md` requires of dev-run helpers, and is never isolated.
-- Delete `tools/scripts/run-server-rebuild.ps1`.
-- Every reference to `run-server-rebuild.ps1` goes or names `run-server.ps1` instead:
-  - `README.md`'s Helper Scripts gives one command to build the WebUI and run the server.
-  - `docs/dev-setup.md`'s Run ServerApp says the script installs the packages when needed and rebuilds the WebUI first, its Run ServerApp with WebUI rebuild section goes, and its Troubleshooting item for WebUI changes not appearing no longer names the old script.
-  - `CONTEXT.md`'s `tools/scripts/` line and Working Commands.
-  - `docs/domain-inventory.md`'s Runtime scripts.
-  - The Auth Cutover for API and Admin entry's Scope and Traps, which name the `-PairingToken` parameter of both scripts.
-- This milestone fixes the issue "run-server-rebuild builds without installing packages" in `ISSUES.md`, with the install before the build.
-- This milestone fixes the issue "Five scripts ignore a switch they don't take" in `ISSUES.md`: `cut-changelog.ps1`, `reset-checklist.ps1`, `check-milestones.ps1`, `run-server.ps1`, and `verify-web-deploy.ps1` get `[CmdletBinding()]` on their `param()` blocks, once every caller is checked.
-- `tools/scripts/tests/test-scripts.ps1` gets a case for each of `check-milestones.ps1`, `cut-changelog.ps1`, and `reset-checklist.ps1` given an unknown switch.
-- Both issues are deleted from `ISSUES.md` when this milestone lands.
-
-#### Traps
-
-- `run-server-rebuild.ps1` builds with `npm run build` without installing packages, checks that `dist` exists, sets `ServerApp__WebUiStaticRootPath` to it, and runs `run-server.ps1` in a child `pwsh` with `-Port`, `-Framework`, `-PairingToken`, and the two switches.
-- Without an install, a clone with no `node_modules` fails to build the WebUI, and a pulled change to `package-lock.json` builds with stale packages.
-- `run-server.ps1` keeps a `ServerApp__WebUiStaticRootPath` already set, and otherwise uses the same `dist`, which is how `run-server-rebuild.ps1` hands it the build.
-- `run-server-rebuild.ps1` always passes the OS's framework, `net10.0-windows` or `net10.0`, and takes no `-Framework` of its own.
-- `dotnet run` builds the server before starting it, so the install and the WebUI build are the only steps the merge adds.
-- npm writes `node_modules/.package-lock.json`, its hidden lockfile, after `package-lock.json` at the end of an install: after the WebUI's last install, `package-lock.json` is 9 ms older, with npm 12.2.0 (measured, from the files' times).
-- `npm ci` writes the hidden lockfile and leaves `package-lock.json` alone, so the run after an install skips the next one (inferred).
-- A pull or checkout that changes `package-lock.json` writes it with the current time, so the next run installs, and one that leaves it unchanged keeps its time (inferred).
-- `npm ci` deletes `node_modules` before it installs, and fails when `package.json` and `package-lock.json` disagree.
-- `stage-webui-assets.ps1` and `verify-web-deploy.ps1` run `npm install` on every run, and CI's WebUI job runs `npm ci`.
-- `README.md`, `CONTEXT.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, `ISSUES.md`, and the Auth Cutover for API and Admin entry name `run-server-rebuild.ps1`, and so do `CHANGELOG.md`'s released sections and `MILESTONES-COMPLETED.md`, which keep it as history (measured, by a search).
-- `AGENTS.md`, the skills, the testing checklist, and the active entries' spot checks don't name `run-server-rebuild.ps1` (measured, by a search).
-- `AGENTS.md` names `run-server.ps1` as the dev-run helper that uses real settings, which stays true of the merged script.
-- `run-server.ps1` runs the server on the user's real settings, catalog, and library, so agents must not run it, and the spot check is the user's.
-- The script tests must not call `run-server.ps1`, since a run that doesn't refuse the switch would start a server on the user's real settings (inferred).
-- The script tests don't call `verify-web-deploy.ps1` either, since a run that doesn't refuse the switch builds the WebUI and starts a server, isolated but slow (inferred). `AGENTS.md` lets agents run it.
-- None of the five scripts has `[CmdletBinding()]`, so a switch it doesn't take is ignored: `check-milestones.ps1` runs its checks, `reset-checklist.ps1` resets the checklist, and `cut-changelog.ps1` goes on to its own checks (measured).
-- `run-server.ps1` and `verify-web-deploy.ps1` declare their parameters the same way, so they ignore an unknown switch too (inferred).
-- With `[CmdletBinding()]`, an unknown switch fails before the script runs, with "A parameter cannot be found that matches parameter name 'Bogus'.", and `pwsh -File` exits 1 (measured, on a scratch copy of `check-milestones.ps1`).
-- `Invoke-Tool` in `test-scripts.ps1` runs a script as `& $Script @Parameters` and turns a thrown error into exit code 1 with its message, so a refused switch reads as code 1 with that message (measured).
-- `test-scripts.ps1` passes the three scripts it tests only parameters they declare.
-- The skills run `check-milestones.ps1` with `-BaseRef HEAD` or `-Staged -BaseRef HEAD`, `cut-changelog.ps1` with `-Version` and `-Name`, and `reset-checklist.ps1` with none.
-- `set-release-version.ps1` calls `verify-web-deploy.ps1` with no parameters, and so do the commands in `AGENTS.md`, `README.md`, `docs/dev-setup.md`, `docs/domain-inventory.md`, and the testing checklist.
-- The commands in `README.md`, `docs/dev-setup.md`, and the testing checklist use only switches the scripts declare.
-- Once `run-server-rebuild.ps1` is gone, nothing in the repo calls `run-server.ps1`.
-- `[CmdletBinding()]` also accepts the common parameters, such as `-Verbose` and `-ErrorAction`.
-- `set-release-version.ps1` already has `[CmdletBinding()]`, and `stage-webui-assets.ps1`'s `[Parameter(Mandatory = $true)]` already makes it refuse an unknown switch (measured).
-
-#### Acceptance
-
-- `check-milestones.ps1`, `cut-changelog.ps1`, and `reset-checklist.ps1` each refuse an unknown switch with exit code 1, and `cut-changelog.ps1` and `reset-checklist.ps1` leave their file unchanged when they do, in the new cases of `pwsh ./tools/scripts/tests/test-scripts.ps1`, which passes.
-- `pwsh ./tools/scripts/verify-web-deploy.ps1 -Bogus` exits 1 before it builds anything, and `pwsh ./tools/scripts/verify-web-deploy.ps1` passes.
-- `run-server.ps1` and `verify-web-deploy.ps1` have `[CmdletBinding()]`, `run-server.ps1` installs the packages by the rule in Scope and builds the WebUI before it starts the server, and `run-server-rebuild.ps1` is gone, checked by reading `tools/scripts/`.
-- No file refers to `run-server-rebuild.ps1` apart from this milestone's entry, its commit message, `CHANGELOG.md`, and `MILESTONES-COMPLETED.md`, checked by `git grep run-server-rebuild`.
-- `pwsh ./tools/scripts/check-milestones.ps1` passes.
-- A quick spot check: the user runs `pwsh ./tools/scripts/run-server.ps1`, which skips the install, rebuilds the WebUI, and starts the server, and the WebUI loads from it; then, after `touch src/clients/web/ReelRoulette.WebUI/package-lock.json`, runs it again and sees it install the packages first.
+Last milestone completed: M12i5
 
 ### M12i6 - Per-Preset Preset Writes
 
@@ -3620,7 +3554,7 @@ Last milestone completed: M12i4
 - Testing routes use the same check as the rest of the control plane.
 - Settings reads no longer return secrets.
 - Remove pairing and control-token flows from clients, docs, and contracts. The pairing and control-token problems listed in Traps go with them.
-- The `reelroulette-dev-token` default leaves `appsettings.json` and the `-PairingToken` parameter of `run-server.ps1` and `run-server-rebuild.ps1`.
+- The `reelroulette-dev-token` default leaves `appsettings.json` and the `-PairingToken` parameter of `run-server.ps1`.
 - Session secrets that replace the pairing token must not be passed to a restarted server as an environment variable.
 - Remove `pairToken` from the WebUI's `public/runtime-config.json` and `src/config/runtimeConfig.ts`, and its example from the WebUI `README.md`.
 - The login flow that replaces the WebUI's pairing request returns a typed result on every failure.
@@ -3639,7 +3573,7 @@ Last milestone completed: M12i4
   - `WebRuntimeSettings.AuthMode` is saved by `CoreSettingsService.UpdateWebRuntimeSettings`, but `ServerPairingAuthMiddleware` reads only `RequireAuth`, which the server sets from `AuthMode` only at startup, so setting it to `Off` changes nothing until a restart.
   - `RestartCoordinator.TryLaunchReplacementProcess` in `Program.cs` passes the token to the child as the `CoreServer__PairingToken` environment variable, which other local users can read from `/proc/<pid>/environ` on Linux.
   - The WebUI ships `"pairToken": "reelroulette-dev-token"` in `public/runtime-config.json`, which any browser can fetch, and `src/config/runtimeConfig.ts` parses `pairToken` as a config field.
-  - The same `reelroulette-dev-token` default is in `src/core/ReelRoulette.ServerApp/appsettings.json` and the `-PairingToken` parameter of `tools/scripts/run-server.ps1` and `run-server-rebuild.ps1`.
+  - The same `reelroulette-dev-token` default is in `src/core/ReelRoulette.ServerApp/appsettings.json` and the `-PairingToken` parameter of `tools/scripts/run-server.ps1`.
   - The WebUI's pairing request lets a network error reject instead of reporting it in an in-app notice, as the other failed pairing outcomes do.
 
 #### Acceptance

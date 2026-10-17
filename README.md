@@ -124,11 +124,13 @@ For nginx and the details of what the server reads, see [docs/dev-setup.md](docs
 
 ## Helper Scripts
 
-Run server app directly:
+Build the WebUI and run the server app from the repo, on your real settings and library:
 
 ```bash
 pwsh ./tools/scripts/run-server.ps1
 ```
+
+It installs the WebUI's packages with `npm ci` first when `node_modules` is missing or `package-lock.json` changed since the last install.
 
 Default listen URL: `http://localhost:45123`.
 
@@ -142,12 +144,6 @@ Linux runtime note:
 
 - Tray is used when a graphical session is available; otherwise the server runs headless.
 - Tray and Operator expose the same `Launch Server on Startup` toggle; it writes `reelroulette-server.desktop` under your XDG autostart directory with `Exec=` targeting the stable server binary (from **`APPIMAGE`** when you run a Velopack **AppImage**, otherwise the process path) and `Path=` set to that binary’s directory. If an older autostart entry still points at `/tmp/.mount_*`, toggle startup off and on once to refresh it.
-
-Build WebUI and run server app:
-
-```bash
-pwsh ./tools/scripts/run-server-rebuild.ps1
-```
 
 Set release-aligned version surfaces in one step (repo-root `.version` is the source of truth; bare semver is written to consumers):
 
