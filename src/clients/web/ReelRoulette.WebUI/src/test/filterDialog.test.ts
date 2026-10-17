@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ConfirmRequest } from "../dialogs/dialogs";
 import { createFilterDialog } from "../filter/filterDialog";
-import { DEFAULT_FILTER_PRESET_REASON, DURATION_PROBLEM, FLAG_MODES_PROBLEM } from "../filter/filterDialogModel";
+import { DEFAULT_FILTER_PRESET_REASON, DURATION_PROBLEM, FLAG_MODES_PROBLEM, NO_CHOSEN_PRESET_REASON } from "../filter/filterDialogModel";
 import { createDefaultFilterState, TAG_MATCH_MODE } from "../filter/filterStateModel";
 import type { NotifyRequest } from "../notifications/notifications";
 import { createAppApi } from "../state/appApi";
@@ -641,7 +641,11 @@ describe("Presets tab", () => {
     expect(view().actions.addPreset).toEqual(DISABLED);
 
     dialog.typeDuration("min", "abc");
-    expect(view().actions).toEqual({ apply: heldBy("minDuration"), addPreset: DISABLED, updatePreset: heldBy("minDuration") });
+    expect(view().actions).toEqual({
+      apply: heldBy("minDuration"),
+      addPreset: DISABLED,
+      updatePreset: { ...DISABLED, reason: NO_CHOSEN_PRESET_REASON }
+    });
     expect(dialog.addPreset()).toBe(false);
     expect(dialog.tab.value).toBe("presets");
     expect(moves).toEqual([]);
@@ -680,10 +684,11 @@ describe("Presets tab", () => {
     expect(messages).toEqual([]);
   });
 
-  it("holds Add Preset and Update Preset on a duration that is not valid", async () => {
+  it("holds Add Preset and Update on a duration that is not valid", async () => {
     const { dialog, view, messages, moves } = setup([FAVORITES, RECENT]);
     await dialog.open();
     dialog.choosePreset("Recent");
+    dialog.loadPreset();
     dialog.typeNewPresetName("Mine");
     dialog.typeDuration("max", "1:75");
     expect(view().actions).toEqual({ apply: heldBy("maxDuration"), addPreset: heldBy("maxDuration"), updatePreset: heldBy("maxDuration") });
@@ -703,6 +708,8 @@ describe("Presets tab", () => {
     dialog.typeDuration("max", "2:00");
     dialog.updatePreset();
     expect(view().presets[1]!.filterState.maxDurationSeconds).toBe(120);
+    // Recent now has this filter, so Mine takes one of its own.
+    dialog.typeDuration("max", "3:00");
     dialog.addPreset();
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent", "Mine"]);
   });
@@ -723,11 +730,13 @@ describe("Presets tab", () => {
     const { dialog, view, messages, notified, notices } = setup([FAVORITES, RECENT]);
     await dialog.open();
     dialog.changeGeneral({ maxText: "10:00" });
+    expect(view().actions.updatePreset).toEqual({ ...DISABLED, reason: NO_CHOSEN_PRESET_REASON });
     dialog.updatePreset();
-    expect(notices).toEqual(["Select a preset to update."]);
+    expect(notices).toEqual([]);
     expect(messages).toEqual([]);
 
     dialog.choosePreset("Recent");
+    dialog.loadPreset();
     dialog.changeGeneral({ favoritesOn: true });
     expect(view().heading).toBe("Preset: Recent*");
     dialog.updatePreset();
@@ -742,6 +751,23 @@ describe("Presets tab", () => {
     ]);
     expect(view().presets[1]!.filterState).toMatchObject({ favoritesMode: "only", onlyNeverPlayed: true });
     expect(view().heading).toBe("Preset: Recent");
+  });
+
+  it("updates the preset Choose Preset has chosen, not the one the heading names", async () => {
+    const { dialog, view, notified } = setup([FAVORITES, RECENT]);
+    await dialog.open();
+    dialog.choosePreset("Recent");
+    dialog.loadPreset();
+    dialog.changeGeneral({ maxText: "10:00" });
+    expect(view().heading).toBe("Preset: Recent*");
+    const recent = structuredClone(view().presets[1]!.filterState);
+
+    dialog.choosePreset("Favorites");
+    dialog.updatePreset();
+    expect(notified.at(-1)?.text).toBe('Updated preset "Favorites" locally — Apply to save.');
+    expect(view().presets[0]!.filterState).toEqual(view().working);
+    expect(view().presets[1]!.filterState).toEqual(recent);
+    expect(view().heading).toBe("Preset: Favorites");
   });
 });
 
@@ -819,6 +845,7 @@ describe("Edit Preset", () => {
     const { dialog, view, server } = setup([FAVORITES, RECENT]);
     await dialog.open();
     dialog.choosePreset("Recent");
+    dialog.loadPreset();
     dialog.editPreset(1);
     dialog.typePresetName("  Fresh ");
 
@@ -826,7 +853,7 @@ describe("Edit Preset", () => {
 
     expect(view().presetEdit).toBeNull();
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Fresh"]);
-    expect(view().presetName).toBe("Fresh");
+    expect(view()).toMatchObject({ headingPreset: "Fresh", chosenPreset: "Fresh" });
     expect(view().heading).toBe("Preset: Fresh");
     expect(view().presetsChanged).toBe(true);
     expect(view().unsaved).toBe(true);
@@ -840,6 +867,7 @@ describe("Edit Preset", () => {
     const { dialog, view, confirm } = setup([FAVORITES, RECENT]);
     await dialog.open();
     dialog.choosePreset("Recent");
+    dialog.loadPreset();
     dialog.editPreset(1);
     dialog.typePresetName("Other");
 
@@ -854,7 +882,7 @@ describe("Edit Preset", () => {
     expect(confirm).toHaveBeenCalledTimes(2);
     expect(view().presetEdit).toBeNull();
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites"]);
-    expect(view().presetName).toBeNull();
+    expect(view()).toMatchObject({ headingPreset: null, chosenPreset: null });
     expect(view().heading).toBe("Preset: None*");
     expect(view().presetsChanged).toBe(true);
   });
@@ -887,6 +915,7 @@ describe("applying", () => {
     store.presetsLoaded();
     await dialog.open();
     dialog.choosePreset("Favorites");
+    dialog.loadPreset();
 
     await dialog.apply();
 
@@ -1245,29 +1274,98 @@ describe("unsaved state", () => {
   }
 });
 
-describe("presets need a filter", () => {
-  it("disables Add Preset and Update Preset while the filter, as typed, is the default, and says why", async () => {
+describe("presets need a filter of their own", () => {
+  it("disables Add Preset and Update while the filter, as typed, is the default or a preset's, the chosen one's too, and Update on None, and says why", async () => {
     const { dialog, view, notices } = setup([FAVORITES, RECENT]);
     await dialog.open();
     dialog.typeNewPresetName("Mine");
-    const unavailable = { disabled: true, heldBy: null, reason: DEFAULT_FILTER_PRESET_REASON };
-    expect(view().actions).toMatchObject({ addPreset: unavailable, updatePreset: unavailable });
+    const unavailable = (reason: string) => ({ disabled: true, heldBy: null, reason });
+    const noDefault = unavailable(DEFAULT_FILTER_PRESET_REASON);
+    // On None, Update says first that it has nothing to write into.
+    expect(view().actions).toMatchObject({ addPreset: noDefault, updatePreset: unavailable(NO_CHOSEN_PRESET_REASON) });
     expect(dialog.addPreset()).toBe(false);
     dialog.updatePreset();
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
     expect(notices).toEqual([]);
+
+    dialog.choosePreset("Favorites");
+    expect(view().actions).toMatchObject({ addPreset: noDefault, updatePreset: noDefault });
 
     // A duration counts as its field reads, before the field is left.
     dialog.typeDuration("min", "1:30");
     expect(view().actions).toMatchObject({ addPreset: FREE, updatePreset: FREE });
     expect(view().actions.addPreset.reason).toBeUndefined();
     dialog.typeDuration("min", "");
-    expect(view().actions).toMatchObject({ addPreset: unavailable, updatePreset: unavailable });
+    expect(view().actions).toMatchObject({ addPreset: noDefault, updatePreset: noDefault });
+
+    // Another preset's filter, and then the chosen preset's own, which updating it would leave as it is.
+    dialog.changeGeneral({ onlyNeverPlayed: true });
+    const recentHasIt = unavailable('Preset "Recent" already has this filter.');
+    expect(view().actions).toMatchObject({ addPreset: recentHasIt, updatePreset: recentHasIt });
+    dialog.loadPreset();
+    const favoritesHasIt = unavailable('Preset "Favorites" already has this filter.');
+    expect(view().actions).toMatchObject({ addPreset: favoritesHasIt, updatePreset: favoritesHasIt });
+    expect(dialog.addPreset()).toBe(false);
+    dialog.updatePreset();
+    expect(view().presetsChanged).toBe(false);
+    expect(notices).toEqual([]);
+  });
+});
+
+describe("Choose Preset and Load", () => {
+  it("choosing loads nothing, and Load loads the chosen preset's filter, or the default filter for None, keeping the preset list, and is disabled while the filter already is that one", async () => {
+    const { dialog, view } = setup([FAVORITES, RECENT]);
+    await dialog.open();
+    expect(view()).toMatchObject({ chosenPreset: null, loadDisabled: true });
 
     dialog.choosePreset("Recent");
-    expect(view().actions).toMatchObject({ addPreset: FREE, updatePreset: FREE });
-    dialog.changeGeneral({ onlyNeverPlayed: false });
-    expect(view().actions).toMatchObject({ addPreset: unavailable, updatePreset: unavailable });
+    expect(view()).toMatchObject({ chosenPreset: "Recent", headingPreset: null, loadDisabled: false, unsaved: false });
+    dialog.loadPreset();
+    expect(view()).toMatchObject({ headingPreset: "Recent", heading: "Preset: Recent", loadDisabled: true, unsaved: true });
+    expect(view().general.onlyNeverPlayed).toBe(true);
+
+    // A duration counts as its field reads.
+    dialog.typeDuration("max", "1:00");
+    expect(view().loadDisabled).toBe(false);
+    dialog.typeDuration("max", "");
+    expect(view().loadDisabled).toBe(true);
+
+    dialog.movePreset(1, 0);
+    dialog.choosePreset("");
+    expect(view().loadDisabled).toBe(false);
+    dialog.loadPreset();
+    expect(view().working).toEqual(createDefaultFilterState());
+    expect(view()).toMatchObject({ headingPreset: null, chosenPreset: null, loadDisabled: true, presetsChanged: true });
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites"]);
+  });
+
+  it("starts Choose Preset over on the heading's preset each time the Presets section comes into view, and when Apply applies", async () => {
+    const { dialog, view } = setup([FAVORITES, RECENT]);
+    await dialog.open();
+    dialog.choosePreset("Recent");
+    dialog.loadPreset();
+    dialog.changeGeneral({ favoritesOn: true });
+    expect(view().heading).toBe("Preset: Recent*");
+
+    dialog.showTab("presets");
+    dialog.choosePreset("Favorites");
+    // Showing the section it is on keeps the choice.
+    dialog.showTab("presets");
+    expect(view().chosenPreset).toBe("Favorites");
+    dialog.showTab("tags");
+    dialog.showTab("presets");
+    expect(view().chosenPreset).toBe("Recent");
+
+    // The tab showing on the section, with unsaved changes too.
+    dialog.choosePreset("Favorites");
+    dialog.close();
+    await dialog.open();
+    expect(view()).toMatchObject({ unsaved: true, chosenPreset: "Recent" });
+
+    dialog.showTab("general");
+    dialog.choosePreset("Favorites");
+    await dialog.apply();
+    expect(view().chosenPreset).toBe("Recent");
   });
 });
 
@@ -1281,10 +1379,10 @@ describe("the heading while a duration is typed", () => {
     // Each text on the way stars Long, the empty one included, though it reads as the default filter.
     for (const text of ["10:", "10", "1", "", "2", "20", "20:", "20:0", "20:00"]) {
       dialog.typeDuration("min", text);
-      expect(view()).toMatchObject({ heading: "Preset: Long*", presetName: "Long" });
+      expect(view()).toMatchObject({ heading: "Preset: Long*", headingPreset: "Long" });
     }
     dialog.changeGeneral({ minText: "20:00" });
-    expect(view()).toMatchObject({ heading: "Preset: Long*", presetName: "Long" });
+    expect(view()).toMatchObject({ heading: "Preset: Long*", headingPreset: "Long" });
     await dialog.apply();
     expect(store.activePresetName.value).toBe("Long");
     expect(store.presetMenu.value.entries[0]!.label).toBe("Long*");
@@ -1294,6 +1392,7 @@ describe("the heading while a duration is typed", () => {
     const { dialog, view } = setup([FAVORITES, RECENT]);
     await dialog.open();
     dialog.choosePreset("Recent");
+    dialog.loadPreset();
     await dialog.apply();
     expect(view()).toMatchObject({ heading: "Preset: Recent", unsaved: false });
 

@@ -413,7 +413,7 @@ function TagChip({ chip }: { chip: FilterTagChip }) {
 function PresetsPanel({ view }: { view: FilterDialogView }) {
   const { filterDialog } = useApp();
   const names = view.presets.map((preset) => preset.name);
-  const chosen = view.presetName && names.includes(view.presetName) ? view.presetName : "";
+  const chosen = view.chosenPreset ?? "";
   const reorder = useReorder({ keys: names, nameOf: (name) => name, onMove: (from, to) => filterDialog.movePreset(from, to) });
   // Whether Add Preset added a preset, until its row renders and takes focus.
   const added = useRef(false);
@@ -434,7 +434,12 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
               <option key={name} value={name}>{name}</option>
             ))}
           </select>
-          <HeldButton id="filter-update-preset-btn" class="btn" {...heldAction(view, "updatePreset")} onClick={() => filterDialog.updatePreset()}>Update Preset</HeldButton>
+          <button type="button" id="filter-load-preset-btn" class="icon-btn" aria-label="Load preset" title="Load preset" disabled={view.loadDisabled} onClick={() => filterDialog.loadPreset()}>
+            <span class="material-symbol-icon">sync</span>
+          </button>
+          <HeldButton id="filter-update-preset-btn" class="icon-btn" label="Update preset" heldDot {...heldAction(view, "updatePreset")} onClick={() => filterDialog.updatePreset()}>
+            <span class="material-symbol-icon">save</span>
+          </HeldButton>
         </div>
       </div>
       <div class="filter-section">
@@ -445,7 +450,9 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
               <input {...control} type="text" id="filter-new-preset-name" class="ctl" aria-label="New preset name" placeholder="Enter preset name" autocomplete="off" value={view.newPresetName} onInput={(event) => filterDialog.typeNewPresetName(event.currentTarget.value)} />
             )}
           </ValidatedField>
-          <HeldButton id="filter-add-preset-btn" class="btn" {...heldAction(view, "addPreset")} onClick={() => (added.current = filterDialog.addPreset())}>Add Preset</HeldButton>
+          <HeldButton id="filter-add-preset-btn" class="icon-btn" label="Add preset" heldDot {...heldAction(view, "addPreset")} onClick={() => (added.current = filterDialog.addPreset())}>
+            <span class="material-symbol-icon">add</span>
+          </HeldButton>
         </div>
       </div>
       <div class="filter-section filter-section-manage">

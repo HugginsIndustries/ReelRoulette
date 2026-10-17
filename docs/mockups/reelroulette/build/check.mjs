@@ -153,6 +153,18 @@ for (const name of ["index", "validation", "recovery", "layout", "admin"]) {
   emptyPreset.dispatchEvent(new window.Event("input"));
   check(`validation: a typed preset name enables Add Preset, and emptying it disables it again without a flag (${typedState}, ${actionState(emptyPresetAction)})`,
     typedState === "available" && actionState(emptyPresetAction) === "disabled" && !emptyPreset.hasAttribute("aria-invalid"));
+  // Add Preset is an icon button, so its examples' notes name it by its accessible name, and pressing one marks its note
+  // rather than its icon, so the button keeps its size.
+  const presetSpecimens = pinned.filter((input) => input.dataset.check === "preset").map((input) => input.closest(".specimen"));
+  const lastNoteLine = (specimen) => specimen.querySelector(".attrs").textContent.split("\n").pop();
+  check(`validation: the Add Preset examples' notes name it Add preset (${presetSpecimens.map(lastNoteLine).join(", ")})`,
+    presetSpecimens.map(lastNoteLine).join(", ") === "Add preset: disabled, Add preset: disabled, Add preset: available");
+  const availableAdd = presetSpecimens[2].querySelector("[data-action]");
+  const addIcon = availableAdd.querySelector(".btn-label");
+  const addIconText = addIcon.textContent;
+  availableAdd.click();
+  check(`validation: pressing an available Add Preset example marks its note and leaves its icon as it was (${lastNoteLine(presetSpecimens[2])})`,
+    addIcon.dataset.icon === "add" && addIcon.textContent === addIconText && lastNoteLine(presetSpecimens[2]) === "Add preset: available ✓");
   const typed = pinned[0];
   typed.value = "12:x";
   typed.dispatchEvent(new window.Event("input"));
@@ -281,11 +293,11 @@ for (const name of ["index", "validation", "recovery", "layout", "admin"]) {
   await sleep(300);
   check("validation: and the tooltip is gone once faded", iconFade(settingTip) === "gone");
   const css = [...document.querySelectorAll("style")].map((style) => style.textContent).join("\n");
-  const iconSelectors = ".vfield-icon,\n.vfield-saved,\n.btn-problem,\n.filter-tab .tab-problem,\n.vfield-tip";
-  check("validation: the icons and the tooltip fade on opacity over 250 ms, and not with reduced motion",
+  const iconSelectors = ".vfield-icon,\n.vfield-saved,\n.btn-problem,\n.held-dot,\n.filter-tab .tab-problem,\n.vfield-tip";
+  check("validation: the icons, the held dot, and the tooltip fade on opacity over 250 ms, and not with reduced motion",
     css.includes(`${iconSelectors} {\n  display: none;\n  opacity: 0;\n  transition: opacity 250ms ease;\n}`) &&
-    /@media \(prefers-reduced-motion: reduce\) \{\s*\.vfield-icon,\s*\.vfield-saved,\s*\.btn-problem,\s*\.filter-tab \.tab-problem,\s*\.vfield-tip \{ transition: none; \}/.test(css));
-  check(`validation: each held action's and section tab's badge sits on its corner, out of its flow (${cornerBadges(window)})`, cornerBadges(window) >= 8);
+    /@media \(prefers-reduced-motion: reduce\) \{\s*\.vfield-icon,\s*\.vfield-saved,\s*\.btn-problem,\s*\.held-dot,\s*\.filter-tab \.tab-problem,\s*\.vfield-tip \{ transition: none; \}/.test(css));
+  check(`validation: each held action's and section tab's badge sits on its corner, out of its flow (${cornerBadges(window)})`, cornerBadges(window) >= 5);
   // The specimen's Apply applies its changes, leaving Apply and Discard changes disabled until the next change.
   const miniDiscard = mini.querySelector("[data-discard]");
   const miniFooter = [...mini.querySelectorAll(".filter-footer button")].map((b) => b.querySelector(".material-symbol-icon").dataset.icon).join(",");
@@ -421,7 +433,7 @@ for (const width of [1280, 390]) {
   const playable = (item) => !item.missing && !item.removed && (item.type === "photo" || /\.(mp4|mkv)$/.test(item.name));
 
   check(`layout@${width}: no script errors on load ${errors.join("; ")}`, errors.length === 0);
-  check(`layout@${width}: each held action's and section tab's badge sits on its corner, out of its flow (${cornerBadges(window)})`, cornerBadges(window) >= 5);
+  check(`layout@${width}: each held action's and section tab's badge sits on its corner, out of its flow (${cornerBadges(window)})`, cornerBadges(window) >= 3);
   // Nothing plays until a tap or Play.
   check(`layout@${width}: nothing plays at first, and the player shows the start hint`,
     !$("empty-state").hidden && $("empty-state").textContent === "Tap to play, or open the panel to choose a preset or filter." && $("panel").hidden && $("np-name").parentElement.hidden && chip().includes("Nothing playing"));
@@ -717,18 +729,54 @@ for (const width of [1280, 390]) {
   const presetMoved = changesShown();
   key(presetHandle(1), "ArrowUp");
   check(`layout@${width}: moving a preset is a change, and moving it back is none, and neither enables Clear all, which compares the filter`, presetMoved && noChangesShown() && clearOff());
-  // No preset may hold the default filter, which the mockup starts with: Add Preset, even with a name, and Update Preset
-  // are disabled and say why, and a filter enables them.
-  const presetReason = "Choose a filter to save as a preset.";
-  const saysWhy = (id) => $(id).disabled && $(id).title === presetReason && !$(id).classList.contains("shows-problem") &&
-    document.getElementById($(id).getAttribute("aria-describedby") || "none")?.textContent === presetReason;
-  const enabledQuietly = (id) => !$(id).disabled && !$(id).title && !$(id).hasAttribute("aria-describedby");
+  // Choose Preset only chooses the preset Load and Update act on, starting on None with the default filter. Load and
+  // Update are icon buttons beside it. Load puts the chosen preset's filter in the tab, or the default filter for None,
+  // and is disabled, saying nothing more, while the filter already is that one. No preset may hold the default filter or
+  // a preset's filter, the chosen preset's included: Add Preset, even with a name, and Update are disabled and say why,
+  // Update saying first that it needs a chosen preset, and a filter no preset has enables them.
+  const defaultReason = "Choose a filter to save as a preset.";
+  const saysWhy = (id, reason) => $(id).disabled && $(id).title === reason && !$(id).classList.contains("shows-problem") &&
+    document.getElementById($(id).getAttribute("aria-describedby") || "none")?.textContent === reason;
+  // Without a reason, a button shows its own tooltip.
+  const enabledQuietly = (id, ownTitle) => !$(id).disabled && $(id).title === ownTitle && !$(id).hasAttribute("aria-describedby");
+  const loadOffQuietly = () => $("filter-load-preset").disabled && $("filter-load-preset").title === "Load preset" &&
+    !$("filter-load-preset").hasAttribute("aria-describedby");
+  const iconButton = (id, icon, label) => $(id).classList.contains("icon-btn") && $(id).getAttribute("aria-label") === label &&
+    $(id).querySelector(".material-symbol-icon").dataset.icon === icon;
+  const neverPlayedBox = () => [...document.querySelectorAll('[data-subpanel="general"] .filter-stack > label')]
+    .find((label) => label.textContent.trim() === "Only never played").querySelector("input");
+  check(`layout@${width}: Load and Update are icon buttons after Choose Preset, sync named Load preset and save named Update preset`,
+    iconButton("filter-load-preset", "sync", "Load preset") && iconButton("filter-update-preset", "save", "Update preset") &&
+    $("filter-preset-select").nextElementSibling === $("filter-load-preset") && $("filter-load-preset").nextElementSibling === $("filter-update-preset"));
+  check(`layout@${width}: Add Preset is an icon button after the new preset's name, add named Add preset`,
+    iconButton("filter-add-preset", "add", "Add preset") && $("filter-new-preset").closest(".vfield").nextElementSibling === $("filter-add-preset"));
   input($("filter-new-preset"), "Mine");
-  check(`layout@${width}: with the default filter, Add Preset and Update Preset are disabled and say why (${$("filter-heading").textContent}, ${$("filter-add-preset").title})`,
-    $("filter-heading").textContent === "Preset: None" && clearOff() && saysWhy("filter-add-preset") && saysWhy("filter-update-preset"));
+  check(`layout@${width}: with the default filter on None, Load is disabled quietly, Add Preset says why, and Update says it needs a preset (${$("filter-heading").textContent}, ${$("filter-update-preset").title})`,
+    $("filter-heading").textContent === "Preset: None" && $("filter-preset-select").value === "" && clearOff() && loadOffQuietly() &&
+    saysWhy("filter-add-preset", defaultReason) && saysWhy("filter-update-preset", "Choose a preset to update."));
+  change($("filter-preset-select"), "Favorites");
+  check(`layout@${width}: choosing Favorites loads nothing and is no change, enables Load, and Update gives the default filter's reason (${$("filter-heading").textContent}, ${$("filter-update-preset").title})`,
+    $("filter-heading").textContent === "Preset: None" && !$("filter-fav").checked && noChangesShown() &&
+    enabledQuietly("filter-load-preset", "Load preset") && saysWhy("filter-update-preset", defaultReason));
   change($("filter-fav"), true);
-  check(`layout@${width}: a filter enables them, with no reason left`, enabledQuietly("filter-add-preset") && enabledQuietly("filter-update-preset"));
-  change($("filter-fav"), false);
+  const favoritesReason = 'Preset "Favorites" already has this filter.';
+  check(`layout@${width}: the Favorites sample preset's filter disables Add Preset and Update, naming it, and Load quietly (${$("filter-update-preset").title})`,
+    $("filter-heading").textContent === "Preset: Favorites" && loadOffQuietly() &&
+    saysWhy("filter-add-preset", favoritesReason) && saysWhy("filter-update-preset", favoritesReason));
+  change(neverPlayedBox(), true);
+  check(`layout@${width}: a filter no preset has enables all three, with no reason left, and Choose Preset stays on Favorites`,
+    enabledQuietly("filter-add-preset", "Add preset") && enabledQuietly("filter-update-preset", "Update preset") &&
+    enabledQuietly("filter-load-preset", "Load preset") && $("filter-preset-select").value === "Favorites");
+  $("filter-load-preset").click();
+  check(`layout@${width}: Load puts Favorites' filter in the tab (${$("filter-heading").textContent})`,
+    $("filter-fav").checked && !neverPlayedBox().checked && $("filter-heading").textContent === "Preset: Favorites" && loadOffQuietly());
+  change($("filter-preset-select"), "");
+  key(presetHandle(0), "ArrowDown");
+  $("filter-load-preset").click();
+  check(`layout@${width}: Load on None puts the default filter in the tab and keeps the preset list's changes (${$("filter-heading").textContent})`,
+    !$("filter-fav").checked && $("filter-heading").textContent === "Preset: None" && loadOffQuietly() && changesShown() &&
+    document.querySelectorAll(".filter-preset-row")[1].dataset.key === "Favorites");
+  key(presetHandle(1), "ArrowUp");
   input($("filter-new-preset"), "");
   document.querySelector('[data-sub="tags"]').click();
   // Each click redraws the chips, so the first chip's Include is looked up again.
@@ -889,8 +937,13 @@ for (const width of [1280, 390]) {
     $("filter-fav-mode").value === "only" && $("filter-fav-mode").disabled);
   await applyFilter(false, "only", true, "excluded");
 
-  // Favorites only with Blacklisted only matches nothing: the pair is flagged and holds every action that uses it.
+  // Favorites only with Blacklisted only matches nothing: the pair is flagged and holds every action that uses it. Update
+  // acts on the chosen preset, which starts over on the heading's each time the Presets section shows, so Favorites is
+  // loaded first.
   openTab("filter");
+  document.querySelector('[data-sub="presets"]').click();
+  change($("filter-preset-select"), "Favorites");
+  $("filter-load-preset").click();
   document.querySelector('[data-sub="general"]').click();
   change($("filter-fav"), true);
   change($("filter-fav-mode"), "only");
@@ -906,12 +959,30 @@ for (const width of [1280, 390]) {
   const heldWithIcon = (id) => $(id).getAttribute("aria-disabled") === "true" && $(id).classList.contains("shows-problem") && iconFade($(id).querySelector(".btn-problem")) === "shown";
   const heldWithRedDot = () => apply.getAttribute("aria-disabled") === "true" && apply.classList.contains("shows-problem") && applyDot() && applyDotColor() === errorColor();
   const disabledNoIconId = (id) => disabledNoIcon($(id));
-  check(`layout@${width}: the pair holds Apply and Update Preset, and Add Preset stays disabled while its name is empty`,
-    heldWithRedDot() && heldWithIcon("filter-update-preset") && disabledNoIconId("filter-add-preset") && $("filter-update-preset").title === "Change Favorites or Blacklisted first.");
+  // A held icon button's look, read from a fresh copy, as Apply's dot is: its icon dims, and Update and Add Preset show a
+  // red dot where Apply's sits, in place of the badge.
+  const heldLook = (id, selector) => {
+    const copy = $(id).cloneNode(true);
+    $(id).after(copy);
+    const style = window.getComputedStyle(copy.querySelector(selector));
+    const read = { opacity: style.opacity, background: style.backgroundColor, position: style.position, top: style.top, right: style.right };
+    copy.remove();
+    return read;
+  };
+  const heldWithDot = (id) => {
+    const dot = $(id).querySelector(".held-dot");
+    const look = dot && heldLook(id, ".held-dot");
+    return $(id).getAttribute("aria-disabled") === "true" && $(id).classList.contains("shows-problem") && !$(id).querySelector(".btn-problem") &&
+      !!dot && iconFade(dot) === "shown" && look.background === errorColor() && look.position === "absolute" && look.top === "6px" &&
+      look.right === "6px" && heldLook(id, ".btn-label").opacity === "0.5";
+  };
+  check(`layout@${width}: the pair holds Apply and Update, whose icon dims and shows the red dot where Apply's sits, and Add Preset stays disabled while its name is empty`,
+    heldWithRedDot() && heldWithDot("filter-update-preset") && disabledNoIconId("filter-add-preset") &&
+    $("filter-update-preset").title === "Change Favorites or Blacklisted first.");
   document.querySelector('[data-sub="presets"]').click();
   const messagesBeforePair = messages.entries().length;
   $("filter-update-preset").click();
-  check(`layout@${width}: held Update Preset goes to the Blacklisted dropdown and sends no message`,
+  check(`layout@${width}: held Update goes to the Blacklisted dropdown and sends no message`,
     !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === $("filter-bl-mode") && messages.entries().length === messagesBeforePair);
   change($("filter-bl"), false);
   const pairIcons = () => [document.querySelector('.filter-tab[data-sub="general"] .tab-problem'), $("filter-bl-mode").closest(".vfield").querySelector(".vfield-icon")].map(iconFade);
@@ -921,8 +992,8 @@ for (const width of [1280, 390]) {
   await new Promise((resolve) => setTimeout(resolve, 300));
   check(`layout@${width}: and are gone once faded (${pairIcons()})`, pairIcons().every((state) => state === "gone"));
   input($("filter-min"), "1:7x");
-  check(`layout@${width}: a duration that is not valid holds Update Preset too, and Add Preset stays disabled while its name is empty`,
-    heldWithIcon("filter-update-preset") && disabledNoIconId("filter-add-preset") && $("filter-update-preset").title === "Correct the minimum duration first.");
+  check(`layout@${width}: a duration that is not valid holds Update too, and Add Preset stays disabled while its name is empty`,
+    heldWithDot("filter-update-preset") && disabledNoIconId("filter-add-preset") && $("filter-update-preset").title === "Correct the minimum duration first.");
   document.querySelector('[data-sub="presets"]').click();
   $("filter-new-preset").focus();
   input($("filter-new-preset"), "FAVORITES");
@@ -932,7 +1003,8 @@ for (const width of [1280, 390]) {
     disabledNoIconId("filter-add-preset") && document.querySelector('.filter-tab[data-sub="presets"]').classList.contains("has-problem") &&
     iconFade(document.querySelector('.filter-tab[data-sub="presets"] .tab-problem')) === "shown");
   input($("filter-new-preset"), "Unique name");
-  check(`layout@${width}: with a new name, the duration holds Add Preset with its icon`, heldWithIcon("filter-add-preset") && !$("filter-add-preset").disabled);
+  check(`layout@${width}: with a new name, the duration holds Add Preset, whose icon dims and shows the red dot, as Update's does, saying why (${$("filter-add-preset").title})`,
+    heldWithDot("filter-add-preset") && !$("filter-add-preset").disabled && $("filter-add-preset").title === "Correct the minimum duration first.");
   $("filter-add-preset").click();
   check(`layout@${width}: held Add Preset goes to the duration and adds nothing`,
     !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === $("filter-min") && $("filter-new-preset").value === "Unique name");
@@ -1037,6 +1109,51 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: changing its filter stars it (${$("lib-preset").selectedOptions[0]?.textContent}, ${$("filter-heading").textContent})`,
     $("lib-preset").value === "*" && $("lib-preset").selectedOptions[0].textContent === "Photos only*" && $("filter-heading").textContent === "Preset: Photos only*");
   openTab("filter");
+  // Each time the Presets section comes into view, however it got there, Choose Preset starts over on the preset the
+  // heading names, here Photos only, the base of "Photos only*", with or without unsaved changes, and a choice lasts
+  // while the section stays in view.
+  const presetsSub = () => document.querySelector('[data-sub="presets"]');
+  presetsSub().click();
+  check(`layout@${width}: the Presets section shows Choose Preset on the base of the heading's starred preset (${$("filter-heading").textContent}, ${$("filter-preset-select").value})`,
+    $("filter-heading").textContent === "Preset: Photos only*" && $("filter-preset-select").value === "Photos only");
+  const wayIn = (way, comeBack) => {
+    change($("filter-preset-select"), "Beach days");
+    const kept = $("filter-preset-select").value;
+    comeBack();
+    check(`layout@${width}: ${way} starts Choose Preset over on Photos only, and the choice lasted until then (${kept}, ${$("filter-preset-select").value})`,
+      kept === "Beach days" && $("filter-preset-select").value === "Photos only" && !presetsSub().hidden && presetsSub().classList.contains("is-active"));
+  };
+  wayIn("its sub-tab", () => {
+    document.querySelector('[data-sub="tags"]').click();
+    presetsSub().click();
+  });
+  wayIn("the Filter panel tab", () => {
+    $("tab-btn-library").click();
+    $("tab-btn-filter").click();
+  });
+  wayIn("an arrow key on the panel tabs", () => {
+    $("tab-btn-library").click();
+    key($("tab-btn-library"), "ArrowRight");
+  });
+  wayIn("the panel opening on it", () => {
+    closePanel();
+    $("panel-btn").click();
+  });
+  wayIn("the Filter tab's key", () => {
+    $("tab-btn-library").click();
+    press("2");
+  });
+  wayIn("the Library tab's Filters line", () => {
+    $("tab-btn-library").click();
+    $("lib-filters").click();
+  });
+  change(document.querySelectorAll('input[name="media"]')[1], true);
+  wayIn("its sub-tab, with unsaved changes too,", () => {
+    document.querySelector('[data-sub="general"]').click();
+    presetsSub().click();
+  });
+  change(document.querySelectorAll('input[name="media"]')[2], true);
+  document.querySelector('[data-sub="general"]').click();
   change($("filter-fav"), false);
   check(`layout@${width}: putting the filter back to match its preset clears the star in the heading at once (${$("filter-heading").textContent})`,
     $("filter-heading").textContent === "Preset: Photos only" && !$("filter-apply").disabled);
@@ -1051,8 +1168,9 @@ for (const width of [1280, 390]) {
   openTab("filter");
   document.querySelector('[data-sub="presets"]').click();
   change($("filter-preset-select"), "Favorites");
+  $("filter-load-preset").click();
   document.querySelector('[data-sub="general"]').click();
-  check(`layout@${width}: choosing a preset in the Filter tab loads its filter into the tab`, $("filter-fav").checked && $("filter-fav-mode").value === "only" && $("filter-heading").textContent === "Preset: Favorites");
+  check(`layout@${width}: choosing a preset in the Filter tab and Load loads its filter into the tab`, $("filter-fav").checked && $("filter-fav-mode").value === "only" && $("filter-heading").textContent === "Preset: Favorites");
   $("filter-discard").click();
   check(`layout@${width}: and Discard changes puts the applied filter back, leaving the Filter tab open (${overlay ? "overlay" : "side panel"})`,
     !$("filter-fav").checked && !$("panel").hidden && !$("tab-filter").hidden);
@@ -1070,23 +1188,40 @@ for (const width of [1280, 390]) {
     typedHeadings.push($("filter-heading").textContent);
     field.blur();
   };
-  const choosePresetInTab = (name) => {
+  const loadPresetInTab = (name) => {
     document.querySelector('[data-sub="presets"]').click();
     change($("filter-preset-select"), name);
+    $("filter-load-preset").click();
     document.querySelector('[data-sub="general"]').click();
     return $("filter-heading").textContent;
   };
-  const shortHeading = choosePresetInTab("Short clips");
+  const shortHeading = loadPresetInTab("Short clips");
   typeDuration($("filter-max"), ["02:", "02", "0", "", "3", "3:", "3:0", "3:00"]);
   check(`layout@${width}: Short clips' maximum backspaced to empty and typed again stays on Short clips, starred (${[...new Set(typedHeadings)].join(", ")})`,
     shortHeading === "Preset: Short clips" && typedHeadings.every((heading) => heading === "Preset: Short clips*"));
   $("filter-discard").click();
   typedHeadings.length = 0;
-  const photosHeading = choosePresetInTab("Photos only");
+  const photosHeading = loadPresetInTab("Photos only");
   change(document.querySelectorAll('input[name="media"]')[1], true);
   typeDuration($("filter-max"), ["2:00", "2:0", "2:", "2", ""]);
   check(`layout@${width}: a maximum typed that reads as Short clips' filter on the way keeps Photos only, starred (${[...new Set(typedHeadings)].join(", ")})`,
     photosHeading === "Preset: Photos only" && typedHeadings.every((heading) => heading === "Preset: Photos only*"));
+  $("filter-discard").click();
+  // Add Preset and Update read a duration as its field reads, before the field is left, so one that reads as another
+  // preset's filter disables them, naming that preset. Once the field is read the heading names that preset, and Choose
+  // Preset stays where it was put.
+  loadPresetInTab("Photos only");
+  change(document.querySelectorAll('input[name="media"]')[1], true);
+  $("filter-max").focus();
+  input($("filter-max"), "2:00");
+  const shortReason = 'Preset "Short clips" already has this filter.';
+  check(`layout@${width}: a maximum typed that reads as Short clips' filter disables Add Preset and Update, naming it (${$("filter-update-preset").title}, ${$("filter-heading").textContent})`,
+    $("filter-heading").textContent === "Preset: Photos only*" && saysWhy("filter-add-preset", shortReason) && saysWhy("filter-update-preset", shortReason));
+  $("filter-max").dispatchEvent(new window.Event("change", { bubbles: true }));
+  $("filter-max").blur();
+  check(`layout@${width}: once the field is read, the heading names Short clips, Choose Preset stays on Photos only, and both still name Short clips (${$("filter-heading").textContent}, ${$("filter-preset-select").value})`,
+    $("filter-heading").textContent === "Preset: Short clips" && $("filter-preset-select").value === "Photos only" &&
+    saysWhy("filter-add-preset", shortReason) && saysWhy("filter-update-preset", shortReason));
   $("filter-discard").click();
   // While the server is unreachable, a browse keeps the tiles already loaded and Apply can't save the presets.
   situation("reconnecting");

@@ -270,8 +270,9 @@ function tooltipShown(field: HTMLElement): boolean {
 }
 
 /**
- * Whether a field holds the action, and whether the action shows it: the red badge of a flagged field, not one fading
- * out, or, for Apply, which has no badge, its unsaved-changes dot turned red.
+ * Whether a field holds the action, and whether the action shows it: the red badge of a flagged field, or the red dot
+ * Add Preset and Update show in its place, not one fading out, or, for Apply, which has no badge, its unsaved-changes
+ * dot turned red.
  */
 function heldState(button: HTMLButtonElement): { held: boolean; marked: boolean } {
   const held = button.getAttribute("aria-disabled") === "true";
@@ -280,7 +281,7 @@ function heldState(button: HTMLButtonElement): { held: boolean; marked: boolean 
     expect(button.querySelector(".btn-problem")).toBeNull();
     return { held, marked: !dot.hidden && button.classList.contains("shows-problem") };
   }
-  return { held, marked: button.querySelector(".btn-problem:not(.is-fading-out)") !== null };
+  return { held, marked: button.querySelector(".btn-problem:not(.is-fading-out), .held-dot:not(.is-fading-out)") !== null };
 }
 
 function heading(): string {
@@ -396,6 +397,16 @@ async function chooseInDialog(name: string): Promise<void> {
   await settle();
 }
 
+function loadButton(): HTMLButtonElement {
+  return byId<HTMLButtonElement>("filter-load-preset-btn");
+}
+
+/** Chooses a preset, or None for an empty name, and loads its filter into the tab with Load. */
+async function loadInDialog(name: string): Promise<void> {
+  await chooseInDialog(name);
+  await click(loadButton());
+}
+
 function presetRows(): string[] {
   return Array.from(dialog().querySelectorAll(".filter-preset-name")).map((node) => node.textContent ?? "");
 }
@@ -474,7 +485,7 @@ async function deletePreset(name: string): Promise<void> {
 
 async function addPreset(name: string): Promise<void> {
   fireEvent.input(byId("filter-new-preset-name"), { target: { value: name } });
-  await click(dialogButton("Add Preset"));
+  await click(dialogButton("Add preset"));
 }
 
 /** Whether the page has relayed `text`, a message or a state with no message, whatever was playing. */
@@ -613,7 +624,7 @@ describe("opening and closing", () => {
     await pressKey(presetHandle("Rich"), "ArrowDown");
     expect(applyShowsChanges()).toBe(true);
     expect(clearAllButton().disabled).toBe(true);
-    await chooseInDialog("Favorites");
+    await loadInDialog("Favorites");
     expect(clearAllButton().disabled).toBe(false);
   });
 
@@ -635,7 +646,9 @@ describe("opening and closing", () => {
     const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET, RECENT_PRESET]);
     const queries = libraryQueries(server).length;
     await openDialog();
+    // Favorites excluded, which no preset has, so Draft can take it.
     await click(box("Favorites"));
+    await chooseFlag("Favorites", "excluded");
     await showTab("Presets");
     await addPreset("Draft");
     await pressKey(presetHandle("Favorites"), "ArrowDown");
@@ -674,6 +687,7 @@ describe("opening and closing", () => {
       await showTab("General");
       expect(discardButton().disabled, way).toBe(true);
       await click(box("Favorites"));
+      await chooseFlag("Favorites", "excluded");
       expect(applyShowsChanges(), way).toBe(true);
       await showTab("Presets");
       expect(presetRows(), way).toEqual(["Favorites", "Beach days", "Recent"]);
@@ -947,17 +961,19 @@ describe("General tab", () => {
     return !element ? "gone" : element.classList.contains("is-fading-out") ? "fading" : "shown";
   }
 
-  /** The minimum duration's icon and shown tooltip, General's badge, and Update Preset's badge. */
+  /** The minimum duration's icon and shown tooltip, General's badge, and Add Preset's red dot. */
   function minimumMarks(min: HTMLInputElement): Array<"shown" | "fading" | "gone"> {
     const field = min.closest(".vfield")!;
     const general = within(dialog()).getByRole("tab", { name: "General" });
-    const update = byId("filter-update-preset-btn");
-    return [field.querySelector(".vfield-icon"), field.querySelector(".vfield-tip.is-shown"), general.querySelector(".section-problem"), update.querySelector(".btn-problem")].map(fade);
+    const add = byId("filter-add-preset-btn");
+    return [field.querySelector(".vfield-icon"), field.querySelector(".vfield-tip.is-shown"), general.querySelector(".section-problem"), add.querySelector(".held-dot")].map(fade);
   }
 
-  it("fades a corrected duration's icon and tooltip, General's badge, and a held action's badge out, rendered until they have faded", async () => {
+  it("fades a corrected duration's icon and tooltip, General's badge, and a held action's red dot out, rendered until they have faded", async () => {
     await mountFilter();
     await openDialog();
+    // With a name, the duration holds Add Preset.
+    fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Mine" } });
     const min = byId<HTMLInputElement>("filter-min-dur-text");
     min.focus();
     await type(min, "abc");
@@ -966,7 +982,7 @@ describe("General tab", () => {
     // Only the look lingers: the field and Apply change at once, and the tooltip keeps the problem it said.
     await type(min, "1:07");
     expect(minimumMarks(min)).toEqual(["fading", "fading", "fading", "fading"]);
-    expect([min.hasAttribute("aria-invalid"), min.hasAttribute("aria-describedby"), heldState(byId<HTMLButtonElement>("filter-update-preset-btn")).held, tabMarked("General")]).toEqual([false, false, false, false]);
+    expect([min.hasAttribute("aria-invalid"), min.hasAttribute("aria-describedby"), heldState(byId<HTMLButtonElement>("filter-add-preset-btn")).held, tabMarked("General")]).toEqual([false, false, false, false]);
     expect(min.closest(".vfield")!.querySelector(".vfield-tip")!.textContent).toBe("Use MM:SS, HH:MM:SS, or seconds.");
 
     // Flagged again while they fade, they show again.
@@ -976,10 +992,11 @@ describe("General tab", () => {
     await waitFor(() => expect(minimumMarks(min)).toEqual(["gone", "gone", "gone", "gone"]));
   });
 
-  it("with reduced motion, takes a corrected duration's icon and tooltip, General's badge, and a held action's badge away at once", async () => {
+  it("with reduced motion, takes a corrected duration's icon and tooltip, General's badge, and a held action's red dot away at once", async () => {
     stubReducedMotion();
     await mountFilter();
     await openDialog();
+    fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Mine" } });
     const min = byId<HTMLInputElement>("filter-min-dur-text");
     min.focus();
     await type(min, "abc");
@@ -1277,9 +1294,12 @@ describe("Favorites and Blacklisted filters", () => {
       await click(box("Favorites"));
       await setFlag("Blacklisted", "only");
       await click(box("Blacklisted"));
+      // A filter no preset has, so Load has a filter to load.
+      await click(box("Only never played"));
       await showTab("Presets");
-      await chooseInDialog(`Favorites ${favorites}, Blacklisted ${blacklisted}`);
+      await loadInDialog(`Favorites ${favorites}, Blacklisted ${blacklisted}`);
       await showTab("General");
+      expect(box("Only never played").checked).toBe(false);
       expect(flagRow("Favorites")).toEqual(
         favorites === "off" ? FAVORITES_DEFAULT : { checked: true, choice: favorites, disabled: false }
       );
@@ -1291,11 +1311,11 @@ describe("Favorites and Blacklisted filters", () => {
 });
 
 describe("Favorites only with Blacklisted only", () => {
-  it("is flagged on both dropdowns, with one icon after Blacklisted, and holds Apply, Add Preset, and Update Preset", async () => {
+  it("is flagged on both dropdowns, with one icon after Blacklisted, and holds Apply, Add Preset, and Update", async () => {
     const { server, presets } = await mountFilter([FAVORITES_PRESET]);
     await openDialog();
     await showTab("Presets");
-    await chooseInDialog("Favorites");
+    await loadInDialog("Favorites");
     fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Mine" } });
     await showTab("General");
     const queries = libraryQueries(server).length;
@@ -1312,16 +1332,21 @@ describe("Favorites only with Blacklisted only", () => {
     expect(dialog().querySelectorAll(".vfield-icon")).toHaveLength(1);
     expect(tabMarked("General")).toBe(true);
     const presetButton = (name: string) => within(dialog()).getByRole("button", { name, hidden: true }) as HTMLButtonElement;
-    for (const button of [applyButton(), presetButton("Add Preset"), presetButton("Update Preset")]) {
+    for (const button of [applyButton(), presetButton("Add preset"), presetButton("Update preset")]) {
       expect(heldState(button), button.id).toEqual({ held: true, marked: true });
     }
-    expect(presetButton("Update Preset").title).toBe("Change Favorites or Blacklisted first.");
+    // Add Preset and Update show the red dot where Apply's sits, in place of the badge.
+    for (const button of [presetButton("Add preset"), presetButton("Update preset")]) {
+      expect(button.querySelector(".held-dot"), button.id).not.toBeNull();
+      expect(button.querySelector(".btn-problem"), button.id).toBeNull();
+    }
+    expect(presetButton("Update preset").title).toBe("Change Favorites or Blacklisted first.");
 
     flagSelect("Favorites").focus();
     await settle();
     expect(tooltipShown(flagSelect("Blacklisted"))).toBe(true);
 
-    for (const button of ["Update Preset", "Add Preset"]) {
+    for (const button of ["Update preset", "Add preset"]) {
       await showTab("Presets");
       await click(dialogButton(button));
       expect(selectedTab(), button).toBe("General");
@@ -1570,7 +1595,7 @@ describe("Tags tab", () => {
 });
 
 describe("Presets tab", () => {
-  it("choosing a preset loads its filter, and the heading follows the working filter", async () => {
+  it("choosing a preset loads nothing, Load loads its filter, and the heading follows the working filter", async () => {
     await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
     await showTab("Presets");
@@ -1579,37 +1604,49 @@ describe("Presets tab", () => {
       "Favorites",
       "Beach days"
     ]);
+    // On None with the default filter, Load has nothing to load.
+    expect(presetSelectInDialog().value).toBe("");
+    expect(loadButton().disabled).toBe(true);
 
     await chooseInDialog("Beach days");
+    expect(presetSelectInDialog().value).toBe("Beach days");
+    expect(heading()).toBe("Preset: None");
+    expect(chipState("Beach")).toBe("none");
+    expect(applyShowsChanges()).toBe(false);
+    expect(loadButton().disabled).toBe(false);
+
+    await click(loadButton());
     expect(heading()).toBe("Preset: Beach days");
     expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
     expect(chipState("Beach")).toBe("include");
     expect(applyShowsChanges()).toBe(true);
+    expect(loadButton().disabled).toBe(true);
 
     await click(box("Favorites"));
     expect(heading()).toBe("Preset: Beach days*");
     expect(presetSelectInDialog().value).toBe("Beach days");
+    expect(loadButton().disabled).toBe(false);
     await click(box("Favorites"));
     expect(heading()).toBe("Preset: Beach days");
 
+    // None loads the default filter, and keeps the preset list's changes.
     await chooseInDialog("");
     expect(heading()).toBe("Preset: Beach days");
-    expect(presetSelectInDialog().value).toBe("Beach days");
-
-    await click(box("Favorites"));
-    await chooseInDialog("");
-    expect(heading()).toBe("Preset: None*");
+    await pressKey(presetHandle("Beach days"), "ArrowUp");
+    await click(loadButton());
+    expect(heading()).toBe("Preset: None");
+    expect(chipState("Beach")).toBe("none");
+    expect(presetRows()).toEqual(["Beach days", "Favorites"]);
     expect(presetSelectInDialog().value).toBe("");
-    expect(flagRow("Favorites")).toEqual({ checked: true, choice: "only", disabled: false });
-    expect(chipState("Beach")).toBe("include");
+    expect(applyShowsChanges()).toBe(true);
   });
 
-  it("a chosen preset applies as that preset in the preset dropdown and in random picks", async () => {
+  it("a preset loaded with Load applies as that preset in the preset dropdown and in random picks", async () => {
     const { server } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
     await showTab("Presets");
 
-    await chooseInDialog("Beach days");
+    await loadInDialog("Beach days");
     const applied = await applyAndWait(server);
     expect(applied.selectedTags).toEqual(["Beach"]);
     expect(selectedPresetLabel()).toBe("Beach days");
@@ -1624,12 +1661,12 @@ describe("Presets tab", () => {
     await showTab("Presets");
     const logsBefore = server.logLines().length;
     const name = byId<HTMLInputElement>("filter-new-preset-name");
-    const addButton = () => dialogButton("Add Preset");
+    const addButton = () => dialogButton("Add preset");
     const disabledWithoutIcon = () => {
       expect(addButton().disabled).toBe(true);
       expect(heldState(addButton())).toEqual({ held: false, marked: false });
       expect(addButton().classList.contains("shows-problem")).toBe(false);
-      expect(addButton().title).toBe("");
+      expect(addButton().title).toBe("Add preset");
     };
 
     expect(name.hasAttribute("aria-invalid")).toBe(false);
@@ -1679,7 +1716,8 @@ describe("Presets tab", () => {
     expect(byId<HTMLInputElement>("filter-new-preset-name").value).toBe("");
     expect(selectedTab()).toBe("Presets");
     expect(heading()).toBe("Preset: Unplayed");
-    expect(presetSelectInDialog().value).toBe("Unplayed");
+    // Choose Preset stays where it was, while the section stays in view.
+    expect(presetSelectInDialog().value).toBe("");
 
     const applied = await applyAndWait(server);
     expect(applied.onlyNeverPlayed).toBe(true);
@@ -1691,19 +1729,21 @@ describe("Presets tab", () => {
     expect((await nextPick(server)).presetId).toBe("saved-3");
   });
 
-  it("Update Preset saves the working filter into the chosen preset", async () => {
+  it("Update saves the working filter into the chosen preset", async () => {
     const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
     await click(box("Only never played"));
     await showTab("Presets");
 
-    await click(dialogButton("Update Preset"));
-    await expectNotice(server, "Select a preset to update.");
+    // On None it has nothing to write into, which it says, whatever the filter.
+    expect(dialogButton("Update preset").disabled).toBe(true);
+    expect(dialogButton("Update preset").title).toBe("Choose a preset to update.");
 
-    await chooseInDialog("Favorites");
+    await loadInDialog("Favorites");
+    expect(dialogButton("Update preset").title).toBe('Preset "Favorites" already has this filter.');
     await click(box("Blacklisted"));
     expect(heading()).toBe("Preset: Favorites*");
-    await click(dialogButton("Update Preset"));
+    await click(dialogButton("Update preset"));
     await waitFor(() =>
       expect(server.logLines()).toContain("status=Updated preset locally — Apply to save. hasCurrent=false attempt=0")
     );
@@ -1720,6 +1760,26 @@ describe("Presets tab", () => {
     await waitFor(() => expect(selectedPresetLabel()).toBe("Favorites"));
   });
 
+  it("Update saves the working filter into the preset Choose Preset has chosen, while the heading names another", async () => {
+    const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
+    await openDialog();
+    await showTab("Presets");
+    await loadInDialog("Beach days");
+    await click(box("Only never played"));
+    expect(heading()).toBe("Preset: Beach days*");
+
+    await chooseInDialog("Favorites");
+    await click(dialogButton("Update preset"));
+    expect(heading()).toBe("Preset: Favorites");
+
+    await applyAndWait(server);
+    expect(presets.saves()[0][0]).toMatchObject({
+      name: "Favorites",
+      filterState: { favoritesMode: "off", selectedTags: ["Beach"], onlyNeverPlayed: true }
+    });
+    expect(presets.saves()[0][1]).toMatchObject({ name: "Beach days", filterState: { selectedTags: ["Beach"], onlyNeverPlayed: false } });
+  });
+
   for (const [how, activate] of [
     ["the pointer", press],
     ["the keyboard", pressWithKeyboard]
@@ -1730,7 +1790,7 @@ describe("Presets tab", () => {
       await click(box("Only never played"));
       await showTab("Presets");
       fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Draft" } });
-      await activate(dialogButton("Add Preset"));
+      await activate(dialogButton("Add preset"));
       expect(presetRows()).toEqual(["Favorites", "Beach days", "Draft"]);
       expect(document.activeElement).toBe(presetHandle("Draft"));
     });
@@ -1741,7 +1801,7 @@ describe("Presets tab", () => {
       await click(box("Only never played"));
       await showTab("Presets");
       fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Draft" } });
-      await activate(dialogButton("Add Preset"));
+      await activate(dialogButton("Add preset"));
       expect(presetHandle("Draft").disabled).toBe(false);
       expect(document.activeElement).toBe(presetHandle("Draft"));
     });
@@ -1903,7 +1963,7 @@ describe("Presets tab", () => {
     const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
     await showTab("Presets");
-    await chooseInDialog("Beach days");
+    await loadInDialog("Beach days");
     await click(box("Favorites"));
     await click(box("Favorites"));
 
@@ -1961,7 +2021,7 @@ describe("Presets tab", () => {
     expect(appDialogs()).toEqual([]);
     expect(presetRows()).toEqual(["Favorites", "Beach days"]);
 
-    await chooseInDialog("Beach days");
+    await loadInDialog("Beach days");
     const logsBefore = server.logLines().length;
     edit = await editPreset("Beach days");
     const name = byId<HTMLInputElement>("filter-preset-edit-name");
@@ -2160,7 +2220,8 @@ describe("preset dropdown, refresh, and clear all", () => {
     expect(applyShowsChanges()).toBe(true);
     expect(clearAllButton().disabled).toBe(true);
     expect(presetRows()).toEqual(["Rich", "Favorites"]);
-    expect(presetSelectInDialog().value).toBe("");
+    // Choose Preset keeps its choice while the saved presets have it.
+    expect(presetSelectInDialog().value).toBe("Rich");
     expect(flagRow("Favorites")).toEqual(FAVORITES_DEFAULT);
     expect(box("All (Videos and Photos)").checked).toBe(true);
     expect(box("Movies (C:\\media\\movies)").checked && box("C:\\media\\photos").checked && box("Archive (D:\\archive)").checked).toBe(true);
@@ -2419,31 +2480,162 @@ describe("unsaved state", () => {
   });
 });
 
-describe("presets need a filter", () => {
-  const REASON = "Choose a filter to save as a preset.";
+describe("presets need a filter of their own", () => {
+  const DEFAULT_REASON = "Choose a filter to save as a preset.";
   const addButton = () => byId<HTMLButtonElement>("filter-add-preset-btn");
   const updateButton = () => byId<HTMLButtonElement>("filter-update-preset-btn");
+  const shared = (name: string) => `Preset "${name}" already has this filter.`;
 
-  it("Add Preset and Update Preset are unavailable while the filter is the default, with why as their tooltip", async () => {
+  /** The button is disabled, with `reason` as its tooltip and description, and no field holds it. */
+  function expectReason(button: HTMLButtonElement, reason: string): void {
+    expect(button.disabled, button.id).toBe(true);
+    expect(button.title, button.id).toBe(reason);
+    expect(document.getElementById(button.getAttribute("aria-describedby")!)?.textContent, button.id).toBe(reason);
+    expect(heldState(button), button.id).toEqual({ held: false, marked: false });
+  }
+
+  /** The button can be pressed, with its own tooltip and no description. */
+  function expectAvailable(button: HTMLButtonElement, title: string): void {
+    expect(button.disabled, button.id).toBe(false);
+    expect(button.title, button.id).toBe(title);
+    expect(button.hasAttribute("aria-describedby"), button.id).toBe(false);
+  }
+
+  it("Add Preset and Update are unavailable while the filter is the default, with why as their tooltip, and Update on None says it needs a preset", async () => {
     await mountFilter([FAVORITES_PRESET]);
     await openDialog();
     await showTab("Presets");
     fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Mine" } });
     await settle();
-    for (const button of [addButton(), updateButton()]) {
-      expect(button.disabled).toBe(true);
-      expect(button.title).toBe(REASON);
-      expect(document.getElementById(button.getAttribute("aria-describedby")!)?.textContent).toBe(REASON);
-      expect(heldState(button)).toEqual({ held: false, marked: false });
-    }
+    expectReason(addButton(), DEFAULT_REASON);
+    // On None, Update says first that it has nothing to write into.
+    expectReason(updateButton(), "Choose a preset to update.");
+    await chooseInDialog("Favorites");
+    expectReason(updateButton(), DEFAULT_REASON);
 
     await showTab("General");
     await click(box("Only never played"));
-    for (const button of [addButton(), updateButton()]) {
-      expect(button.disabled).toBe(false);
-      expect(button.title).toBe("");
-      expect(button.hasAttribute("aria-describedby")).toBe(false);
+    expectAvailable(addButton(), "Add preset");
+    expectAvailable(updateButton(), "Update preset");
+    await chooseInDialog("");
+    expectReason(updateButton(), "Choose a preset to update.");
+  });
+
+  it("Add Preset and Update are unavailable while a preset has the filter, the chosen one included, naming it", async () => {
+    await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
+    await openDialog();
+    await showTab("Presets");
+    fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Mine" } });
+    await chooseInDialog("Beach days");
+
+    // Another preset's filter.
+    await click(box("Favorites"));
+    expectReason(addButton(), shared("Favorites"));
+    expectReason(updateButton(), shared("Favorites"));
+
+    // The chosen preset's own filter, which updating it would leave as it is.
+    await click(loadButton());
+    expect(heading()).toBe("Preset: Beach days");
+    expectReason(addButton(), shared("Beach days"));
+    expectReason(updateButton(), shared("Beach days"));
+
+    await click(box("Only never played"));
+    expectAvailable(addButton(), "Add preset");
+    expectAvailable(updateButton(), "Update preset");
+  });
+
+  it("a duration that reads as another preset's filter disables them before its field is left", async () => {
+    const short = { id: "preset-short", name: "Short", filterState: { maxDuration: "00:02:00" } };
+    await mountFilter([FAVORITES_PRESET, short]);
+    await openDialog();
+    fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Mine" } });
+    await chooseInDialog("Favorites");
+    const max = byId<HTMLInputElement>("filter-max-dur-text");
+    fireEvent.input(max, { target: { value: "2:00" } });
+    await settle();
+    expect(heading()).toBe("Preset: None*");
+    expectReason(addButton(), shared("Short"));
+    expectReason(updateButton(), shared("Short"));
+
+    fireEvent.change(max);
+    await settle();
+    expect(heading()).toBe("Preset: Short");
+    expect(presetSelectInDialog().value).toBe("Favorites");
+    expectReason(updateButton(), shared("Short"));
+  });
+
+  it("gives the default filter's reason before naming a preset that holds the default filter", async () => {
+    const everything = { id: "preset-everything", name: "Everything", filterState: {} };
+    await mountFilter([everything, FAVORITES_PRESET]);
+    await openDialog();
+    await showTab("Presets");
+    fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Mine" } });
+    await chooseInDialog("Favorites");
+    await settle();
+    expectReason(addButton(), DEFAULT_REASON);
+    expectReason(updateButton(), DEFAULT_REASON);
+  });
+
+  it("Load, Update, and Add Preset are icon buttons, named and titled Load preset, Update preset, and Add preset", async () => {
+    await mountFilter([FAVORITES_PRESET]);
+    await openDialog();
+    await click(box("Only never played"));
+    await showTab("Presets");
+    await chooseInDialog("Favorites");
+    expect(presetSelectInDialog().nextElementSibling).toBe(loadButton());
+    expect(loadButton().nextElementSibling).toBe(updateButton());
+    for (const [button, label, icon] of [
+      [loadButton(), "Load preset", "sync"],
+      [updateButton(), "Update preset", "save"],
+      [addButton(), "Add preset", "add"]
+    ] as const) {
+      expect(button.classList.contains("icon-btn"), label).toBe(true);
+      expect(button.getAttribute("aria-label"), label).toBe(label);
+      expect(button.title, label).toBe(label);
+      expect(button.querySelector(".material-symbol-icon")?.textContent?.trim(), label).toBe(icon);
     }
+  });
+});
+
+describe("Choose Preset", () => {
+  it("starts over on the heading's preset, its base while starred, each time the Presets section comes into view, with or without unsaved changes, and a choice lasts while it stays in view", async () => {
+    await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
+    await openDialog();
+    await showTab("Presets");
+    await loadInDialog("Beach days");
+    await click(box("Favorites"));
+    expect(heading()).toBe("Preset: Beach days*");
+
+    for (const [way, comeBack] of [
+      ["its sub-tab", async () => {
+        await showTab("General");
+        await showTab("Presets");
+      }],
+      ["the panel's Close", async () => {
+        await closePanel();
+        await openDialog();
+      }],
+      ["another panel tab", async () => {
+        await click(panelTab("Library"));
+        await openDialog();
+      }]
+    ] as Array<[string, () => Promise<void>]>) {
+      await chooseInDialog("Favorites");
+      await settle();
+      expect(presetSelectInDialog().value, way).toBe("Favorites");
+      await comeBack();
+      expect(selectedTab(), way).toBe("Presets");
+      expect(applyShowsChanges(), way).toBe(true);
+      expect(presetSelectInDialog().value, way).toBe("Beach days");
+    }
+
+    // Without unsaved changes, on None.
+    await click(discardButton());
+    expect(applyShowsChanges()).toBe(false);
+    await chooseInDialog("Favorites");
+    await showTab("Tags");
+    await showTab("Presets");
+    expect(presetSelectInDialog().value).toBe("");
   });
 });
 

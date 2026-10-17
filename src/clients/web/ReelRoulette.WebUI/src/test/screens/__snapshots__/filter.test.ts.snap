@@ -242,18 +242,27 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
               "Rich"
             <option selected="false" value="Favorites">
               "Favorites"
-          <button class="held-action btn" id="filter-update-preset-btn" type="button">
+          <button aria-label="Load preset" class="icon-btn" disabled="" id="filter-load-preset-btn" title="Load preset" type="button">
+            <span class="material-symbol-icon">
+              "sync"
+          <button aria-describedby="P0-9" aria-label="Update preset" class="held-action icon-btn" disabled="" id="filter-update-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
-              "Update Preset"
+              <span class="material-symbol-icon">
+                "save"
+          <span class="visually-hidden" id="P0-9">
+            "Preset "Rich" already has this filter."
       <div class="filter-section">
         <h3>
           "Create New Preset From Current Filter"
         <div class="filter-row">
           <span class="vfield new-preset-field">
             <input aria-label="New preset name" autocomplete="off" class="ctl" id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
-          <button class="held-action btn" disabled="" id="filter-add-preset-btn" type="button">
+          <button aria-describedby="P0-11" aria-label="Add preset" class="held-action icon-btn" disabled="" id="filter-add-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
-              "Add Preset"
+              <span class="material-symbol-icon">
+                "add"
+          <span class="visually-hidden" id="P0-11">
+            "Preset "Rich" already has this filter."
       <div class="filter-section filter-section-manage">
         <h3>
           "Manage Presets"
@@ -536,18 +545,27 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
               "Rich"
             <option selected="false" value="Favorites">
               "Favorites"
-          <button class="held-action btn" id="filter-update-preset-btn" type="button">
+          <button aria-label="Load preset" class="icon-btn" disabled="" id="filter-load-preset-btn" title="Load preset" type="button">
+            <span class="material-symbol-icon">
+              "sync"
+          <button aria-describedby="P0-9" aria-label="Update preset" class="held-action icon-btn" disabled="" id="filter-update-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
-              "Update Preset"
+              <span class="material-symbol-icon">
+                "save"
+          <span class="visually-hidden" id="P0-9">
+            "Preset "Rich" already has this filter."
       <div class="filter-section">
         <h3>
           "Create New Preset From Current Filter"
         <div class="filter-row">
           <span class="vfield new-preset-field">
             <input aria-label="New preset name" autocomplete="off" class="ctl" id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
-          <button class="held-action btn" disabled="" id="filter-add-preset-btn" type="button">
+          <button aria-describedby="P0-11" aria-label="Add preset" class="held-action icon-btn" disabled="" id="filter-add-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
-              "Add Preset"
+              <span class="material-symbol-icon">
+                "add"
+          <span class="visually-hidden" id="P0-11">
+            "Preset "Rich" already has this filter."
       <div class="filter-section filter-section-manage">
         <h3>
           "Manage Presets"
@@ -830,18 +848,27 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
               "Rich"
             <option selected="false" value="Favorites">
               "Favorites"
-          <button class="held-action btn" id="filter-update-preset-btn" type="button">
+          <button aria-label="Load preset" class="icon-btn" disabled="" id="filter-load-preset-btn" title="Load preset" type="button">
+            <span class="material-symbol-icon">
+              "sync"
+          <button aria-describedby="P0-9" aria-label="Update preset" class="held-action icon-btn" disabled="" id="filter-update-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
-              "Update Preset"
+              <span class="material-symbol-icon">
+                "save"
+          <span class="visually-hidden" id="P0-9">
+            "Preset "Rich" already has this filter."
       <div class="filter-section">
         <h3>
           "Create New Preset From Current Filter"
         <div class="filter-row">
           <span class="vfield new-preset-field">
             <input aria-label="New preset name" autocomplete="off" class="ctl" id="filter-new-preset-name" placeholder="Enter preset name" type="text" value="">
-          <button class="held-action btn" disabled="" id="filter-add-preset-btn" type="button">
+          <button aria-describedby="P0-11" aria-label="Add preset" class="held-action icon-btn" disabled="" id="filter-add-preset-btn" title="Preset "Rich" already has this filter." type="button">
             <span class="btn-label">
-              "Add Preset"
+              <span class="material-symbol-icon">
+                "add"
+          <span class="visually-hidden" id="P0-11">
+            "Preset "Rich" already has this filter."
       <div class="filter-section filter-section-manage">
         <h3>
           "Manage Presets"

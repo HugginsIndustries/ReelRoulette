@@ -338,6 +338,11 @@ export interface HeldButtonProps {
    */
   dot?: boolean;
   /**
+   * A red dot shows in place of the red icon while a field holds the action, where the unsaved-changes dot sits, for an
+   * icon button without that dot, such as Add Preset. It fades as the icon does.
+   */
+  heldDot?: boolean;
+  /**
    * A field that may sit empty, while it is empty, or any problem in a field right next to the action, disables it,
    * from `actionBlock`. The field says why, so the button shows nothing more, unless `disabledReason` does.
    */
@@ -353,10 +358,10 @@ export interface HeldButtonProps {
 /**
  * An action that uses fields of the pattern. While it is disabled, it dims and pressing it does nothing. While a
  * field elsewhere holds it, its label, or an icon button's icon, dims, it reads as unavailable, the red icon shows as a
- * badge on its top-right corner, out of its flow, or its unsaved-changes dot turns red when it has one, and its click
- * handler moves to that field instead of acting.
+ * badge on its top-right corner, out of its flow, or its unsaved-changes dot turns red when it has one, or a red dot
+ * shows with `heldDot`, and its click handler moves to that field instead of acting.
  */
-export function HeldButton({ id, class: extraClass, label, dot, disabled, heldReason, disabledReason, onClick, children }: HeldButtonProps) {
+export function HeldButton({ id, class: extraClass, label, dot, heldDot, disabled, heldReason, disabledReason, onClick, children }: HeldButtonProps) {
   const describedId = useId();
   const held = !disabled && heldReason !== null;
   const reason = held ? heldReason : disabled ? (disabledReason ?? null) : null;
@@ -379,11 +384,13 @@ export function HeldButton({ id, class: extraClass, label, dot, disabled, heldRe
         <span class="btn-label">{children}</span>
         {dot !== undefined ? (
           <span class="unsaved-dot" hidden={!dot}></span>
-        ) : iconFade.rendered ? (
+        ) : !iconFade.rendered ? null : heldDot ? (
+          <span class={fadeClasses("held-dot", iconFade.leaving)} aria-hidden="true"></span>
+        ) : (
           <span class={fadeClasses("btn-problem material-symbol-icon", iconFade.leaving)} aria-hidden="true">
             error
           </span>
-        ) : null}
+        )}
       </button>
       {reason !== null ? (
         <span id={describedId} class="visually-hidden">

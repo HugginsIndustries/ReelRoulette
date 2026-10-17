@@ -177,8 +177,8 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 /* An action that can't proceed: its label, or an icon button's icon, dims, and a red badge on its top-right corner says
    a field is not valid. The badge sits out of the button's flow, so the button keeps its width and its row never
    wraps. A Filter section's tab shows the same badge while a field in it is flagged. The badge is the outlined icon the
-   fields use, on a disc that hides the border under it. The Filter tab's Apply, the one held action with a dot, turns
-   its dot red instead. */
+   fields use, on a disc that hides the border under it. The Filter tab's Apply turns its unsaved-changes dot red
+   instead, and Add Preset and Choose Preset's Update show a red dot in its place. */
 .btn[aria-disabled="true"],
 .icon-btn[aria-disabled="true"] { cursor: not-allowed; }
 .btn[aria-disabled="true"] .btn-label,
@@ -195,8 +195,10 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
   pointer-events: none;
 }
 /* A dot marks the Filter and Tags tabs, the player's panel button, and the Filter tab's Apply while they hold unsaved
-   changes. */
-.unsaved-dot {
+   changes. A held icon button without the badge, such as Add Preset or Choose Preset's Update, shows a red dot in the
+   same place. */
+.unsaved-dot,
+.held-dot {
   position: absolute;
   top: 6px;
   right: 6px;
@@ -207,6 +209,7 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
   box-shadow: 0 0 0 2px var(--surface);
   pointer-events: none;
 }
+.held-dot { background: var(--error); }
 
 /* The field validation pattern. */
 .vfield {
@@ -262,12 +265,13 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 }
 .vfield-tip[data-place="above"]::after { bottom: -5px; }
 .vfield-tip[data-place="below"]::after { top: -5px; }
-/* The pattern's red icons, in a field and on the corner of a held action or a Filter section's tab, its tooltip, and a
-   setting's saved check fade in and out on their opacity (`fadeShown`): each is rendered while shown or fading out,
-   and opaque while shown. */
+/* The pattern's red icons, in a field and on the corner of a held action or a Filter section's tab, a held action's red
+   dot, its tooltip, and a setting's saved check fade in and out on their opacity (`fadeShown`): each is rendered while
+   shown or fading out, and opaque while shown. */
 .vfield-icon,
 .vfield-saved,
 .btn-problem,
+.held-dot,
 .filter-tab .tab-problem,
 .vfield-tip {
   display: none;
@@ -278,10 +282,12 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 .vfield-saved.fade-rendered,
 .btn-problem.fade-rendered,
 .filter-tab .tab-problem.fade-rendered { display: inline-flex; }
-.vfield-tip.fade-rendered { display: block; }
+.vfield-tip.fade-rendered,
+.held-dot.fade-rendered { display: block; }
 .vfield-icon.fade-shown,
 .vfield-saved.fade-shown,
 .btn-problem.fade-shown,
+.held-dot.fade-shown,
 .filter-tab .tab-problem.fade-shown,
 .vfield-tip.fade-shown { opacity: 1; }
 .vfield-icon:not(.fade-shown) { pointer-events: none; }
@@ -289,6 +295,7 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
   .vfield-icon,
   .vfield-saved,
   .btn-problem,
+  .held-dot,
   .filter-tab .tab-problem,
   .vfield-tip { transition: none; }
 }
@@ -326,6 +333,8 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 .mode-select:disabled { opacity: 0.5; }
 .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .filter-row > label { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+/* An icon button in a row, such as Add Preset or Choose Preset's Update, carries a held action's red dot on its corner. */
+.filter-row > .icon-btn { position: relative; }
 .duration-field { width: 14rem; max-width: 100%; }
 .filter-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 /* Its icon buttons, as the Tags tab's. Apply turns orange and shows the unsaved-changes dot while there are changes to
@@ -1071,7 +1080,8 @@ window.addEventListener("resize", placeAllTips);
  *   an action that can't be used now when no field says why, such as Add Preset with the default filter; the reason is
  *   its tooltip and accessible description. Disabling wins over holding.
  * - Otherwise a flagged field elsewhere holds it: the button's label dims, it reads as unavailable, and the red badge
- *   shows on its top-right corner. Pressing it does nothing but take the user to the first field that holds it.
+ *   shows on its top-right corner, or a red dot for an icon button that has one in its place, such as Add Preset.
+ *   Pressing it does nothing but take the user to the first field that holds it.
  * Call the returned `refresh()` when what `idle()` or `unavailable()` reads changes.
  */
 function holdAction(button, fields, options) {
@@ -1100,7 +1110,7 @@ function holdAction(button, fields, options) {
     const held = !!field;
     const why = unavailable();
     button.classList.toggle("shows-problem", held);
-    fadeShown(button.querySelector(".btn-problem"), held);
+    fadeShown(button.querySelector(".btn-problem, .held-dot"), held);
     if (held) {
       button.setAttribute("aria-disabled", "true");
       describe.textContent = opts.reason ? opts.reason(field) : "Correct the field first.";

@@ -379,7 +379,8 @@ window.addEventListener("resize", placeAllTips);
  *   an action that can't be used now when no field says why, such as Add Preset with the default filter; the reason is
  *   its tooltip and accessible description. Disabling wins over holding.
  * - Otherwise a flagged field elsewhere holds it: the button's label dims, it reads as unavailable, and the red badge
- *   shows on its top-right corner. Pressing it does nothing but take the user to the first field that holds it.
+ *   shows on its top-right corner, or a red dot for an icon button that has one in its place, such as Add Preset.
+ *   Pressing it does nothing but take the user to the first field that holds it.
  * Call the returned `refresh()` when what `idle()` or `unavailable()` reads changes.
  */
 function holdAction(button, fields, options) {
@@ -408,7 +409,7 @@ function holdAction(button, fields, options) {
     const held = !!field;
     const why = unavailable();
     button.classList.toggle("shows-problem", held);
-    fadeShown(button.querySelector(".btn-problem"), held);
+    fadeShown(button.querySelector(".btn-problem, .held-dot"), held);
     if (held) {
       button.setAttribute("aria-disabled", "true");
       describe.textContent = opts.reason ? opts.reason(field) : "Correct the field first.";

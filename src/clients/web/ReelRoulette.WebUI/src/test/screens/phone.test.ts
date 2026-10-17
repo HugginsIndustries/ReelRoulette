@@ -225,7 +225,10 @@ describe("a phone on its side", () => {
     expect(currentStyle(panel().querySelector(".filter-dialog-header")!).minHeight).toBe("36px");
     expect(currentStyle(document.getElementById("filter-min-dur-text")!).minHeight).toBe("38px");
     expect(currentStyle(document.getElementById("filter-dialog-preset-select")!).minHeight).toBe("38px");
-    expect(currentStyle(document.getElementById("filter-update-preset-btn")!).minHeight).toBe("38px");
+    // Choose Preset's Load and Update are icon buttons, which keep their size.
+    for (const id of ["filter-load-preset-btn", "filter-update-preset-btn"]) {
+      expect(currentStyle(document.getElementById(id)!).height, id).toBe("44px");
+    }
     await click(tab("Tags"));
     expect(currentStyle(panel().querySelector(".tag-editor-header h2")!).fontSize).toBe("16px");
     // The tabs' icon buttons keep their size.

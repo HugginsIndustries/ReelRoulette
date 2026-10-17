@@ -103,7 +103,7 @@ These need a person, real devices, or the Windows VM.
 - [ ] On the iPad in Safari and on a desktop browser, in Timer mode with Autoplay and Loop on and Loop stops autoplay on, a video longer than Advance after repeats a stretch of Advance after seconds from its start and from where a seek lands, and the stretch shows faintly on the scrub bar, lined up with the thumb.
 - [ ] On the iPad and a desktop browser, a photo with Loop on stays on screen with no flicker each time its timer starts over.
 - [ ] On a phone and the iPad, pressing a held Apply with a minimum that is not valid brings the Min field above the keyboard.
-- [ ] On a phone 360 px wide, a held Add Preset and a flagged section's tab show their badges whole, without the button changing width or its row wrapping.
+- [ ] On a phone 360 px wide, a flagged section's tab shows its badge whole, without the tab changing width or its row wrapping.
 
 ## Release Flow
 

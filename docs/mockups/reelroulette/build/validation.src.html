@@ -102,7 +102,7 @@ h1 { font-size: 1.4rem; margin: 0; }
 
   <section class="group">
     <h2>Disabled or held</h2>
-    <p class="group-note">A field that may sit empty, such as a name typed for an action, is never flagged while it is empty: the action that needs it is disabled, dimmed, and pressing it does nothing. A field that must always hold a value for the app to work, such as Advance after in Settings, is flagged when it is emptied, so the user sees it. Any other problem is flagged in its field, with the red icon and the tooltip. An action whose fields all sit right next to it, a field beside its button or the fields of the dialog it is in, is disabled while one of them has a problem, with no icon on the button, since the field says why. An action that uses a field elsewhere, such as Apply, is held instead: its label dims, a red badge shows on its top-right corner without changing its width, and pressing it moves to the field, as the last section shows. The Filter tab's Apply, an icon button and the one held action with an orange dot, dims its icon and turns its dot red instead of showing the badge. Each red icon, in a field or on the corner of a held action or a Filter section's tab, and the tooltip fade in and out, and Apply's dot changes color, over about 250 ms, the icons keeping their place while they fade out; with reduced motion they show and hide at once.</p>
+    <p class="group-note">A field that may sit empty, such as a name typed for an action, is never flagged while it is empty: the action that needs it is disabled, dimmed, and pressing it does nothing. A field that must always hold a value for the app to work, such as Advance after in Settings, is flagged when it is emptied, so the user sees it. Any other problem is flagged in its field, with the red icon and the tooltip. An action whose fields all sit right next to it, a field beside its button or the fields of the dialog it is in, is disabled while one of them has a problem, with no icon on the button, since the field says why. An action that uses a field elsewhere, such as Apply, is held instead: its label dims, a red badge shows on its top-right corner without changing its width, and pressing it moves to the field, as the last section shows. The Filter tab's Apply, an icon button and the one held action with an orange dot, dims its icon and turns its dot red instead of showing the badge, and Add Preset and Choose Preset's Update, icon buttons without that dot, dim their icons and show a red dot where Apply's sits. Each red icon, in a field or on the corner of a held action or a Filter section's tab, a held action's red dot, and the tooltip fade in and out, and Apply's dot changes color, over about 250 ms, the icons keeping their place while they fade out; with reduced motion they show and hide at once.</p>
   </section>
 
   <section class="group">
@@ -141,7 +141,7 @@ h1 { font-size: 1.4rem; margin: 0; }
 
   <section class="group">
     <h2>Favorites and Blacklisted (Filter tab, General)</h2>
-    <p class="group-note">Checked as a pair. No item is both a favorite and blacklisted, so Favorites only with Blacklisted only matches nothing and is flagged as it is chosen; every other pairing is allowed. One icon sits just after the Blacklisted dropdown. Both dropdowns are marked invalid and described by its tooltip, and focusing either one shows it. Apply, Add Preset, and Update Preset can't proceed until either changes, and pressing one moves to the Blacklisted dropdown.</p>
+    <p class="group-note">Checked as a pair. No item is both a favorite and blacklisted, so Favorites only with Blacklisted only matches nothing and is flagged as it is chosen; every other pairing is allowed. One icon sits just after the Blacklisted dropdown. Both dropdowns are marked invalid and described by its tooltip, and focusing either one shows it. Apply, Add Preset, and Update preset can't proceed until either changes, and pressing one moves to the Blacklisted dropdown.</p>
     <div class="specimens">
       <figure class="specimen" data-pair>
         <div class="filter-stack">
@@ -167,17 +167,17 @@ h1 { font-size: 1.4rem; margin: 0; }
     <p class="group-note">Required, but an empty name is never flagged: Add Preset is disabled until the field has a name. A name a saved preset already has, ignoring case, is flagged as it is typed, and Add Preset, which sits beside the field, is disabled too, without an icon. A problem in a General field, such as a duration that is not valid, holds Add Preset instead, as it holds Apply. Saved presets here: Favorites, Short clips, Long videos.</p>
     <div class="specimens">
       <figure class="specimen">
-        <div class="field-row"><span class="vfield"><input class="ctl" type="text" placeholder="Enter preset name" aria-label="New preset name" data-check="preset" value=""><span class="vfield-icon material-symbol-icon">error</span></span><button class="btn" type="button" data-action><span class="btn-label">Add Preset</span><span class="btn-problem material-symbol-icon">error</span></button></div>
+        <div class="field-row"><span class="vfield"><input class="ctl" type="text" placeholder="Enter preset name" aria-label="New preset name" data-check="preset" value=""><span class="vfield-icon material-symbol-icon">error</span></span><button class="icon-btn" type="button" aria-label="Add preset" title="Add preset" data-action><span class="btn-label material-symbol-icon">add</span></button></div>
         <figcaption><b>Empty</b>Not flagged. Add Preset is disabled: dimmed, and pressing it does nothing.</figcaption>
         <p class="attrs mock-note"></p>
       </figure>
       <figure class="specimen">
-        <div class="field-row"><span class="vfield"><input class="ctl" type="text" placeholder="Enter preset name" aria-label="New preset name" data-check="preset" data-pinned value="favorites"><span class="vfield-icon material-symbol-icon">error</span></span><button class="btn" type="button" data-action><span class="btn-label">Add Preset</span><span class="btn-problem material-symbol-icon">error</span></button></div>
+        <div class="field-row"><span class="vfield"><input class="ctl" type="text" placeholder="Enter preset name" aria-label="New preset name" data-check="preset" data-pinned value="favorites"><span class="vfield-icon material-symbol-icon">error</span></span><button class="icon-btn" type="button" aria-label="Add preset" title="Add preset" data-action><span class="btn-label material-symbol-icon">add</span></button></div>
         <figcaption><b>A saved preset's name</b>Flagged as typed, ignoring case; tooltip held open here so it shows. Add Preset is disabled, without an icon.</figcaption>
         <p class="attrs mock-note"></p>
       </figure>
       <figure class="specimen">
-        <div class="field-row"><span class="vfield"><input class="ctl" type="text" placeholder="Enter preset name" aria-label="New preset name" data-check="preset" value="Beach days"><span class="vfield-icon material-symbol-icon">error</span></span><button class="btn" type="button" data-action><span class="btn-label">Add Preset</span><span class="btn-problem material-symbol-icon">error</span></button></div>
+        <div class="field-row"><span class="vfield"><input class="ctl" type="text" placeholder="Enter preset name" aria-label="New preset name" data-check="preset" value="Beach days"><span class="vfield-icon material-symbol-icon">error</span></span><button class="icon-btn" type="button" aria-label="Add preset" title="Add preset" data-action><span class="btn-label material-symbol-icon">add</span></button></div>
         <figcaption><b>A new name</b>Valid. Add Preset adds it.</figcaption>
         <p class="attrs mock-note"></p>
       </figure>
@@ -364,7 +364,8 @@ function actionState(action) {
 }
 
 function showAttrs(field, out, action) {
-  const label = action ? action.querySelector(".btn-label")?.textContent || action.getAttribute("aria-label") : "";
+  // An icon button's label is its icon, so its accessible name names it.
+  const label = action ? action.getAttribute("aria-label") || action.querySelector(".btn-label")?.textContent : "";
   out.textContent = attrsOf(field.input) + (action ? `\n${label}: ${actionState(action)}` : "");
 }
 
@@ -414,11 +415,12 @@ document.querySelectorAll(".specimen:not([data-pair]):not([data-setting])").forE
   const action = specimen.querySelector("[data-action]");
   if (action) {
     holdAction(action, () => [field], { reason: REASONS[kind], beside: BESIDE.has(kind) ? () => [field] : undefined });
-    const label = action.querySelector(".btn-label");
+    // A press shows a check after the button's label, or after its note for an icon button, which keeps its size.
+    const mark = action.classList.contains("icon-btn") ? out : action.querySelector(".btn-label");
     action.addEventListener("click", () => {
-      if (!label) return;
-      label.textContent += " ✓";
-      setTimeout(() => (label.textContent = label.textContent.replace(" ✓", "")), 900);
+      if (!mark) return;
+      mark.textContent += " ✓";
+      setTimeout(() => (mark.textContent = mark.textContent.replace(" ✓", "")), 900);
     });
   }
   // After the action's own listener, so its state is current.

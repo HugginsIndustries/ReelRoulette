@@ -208,8 +208,8 @@ input, progress, meter { accent-color: var(--huggins-orange); }
 /* An action a field holds: its label, or an icon button's icon, dims, and a red badge on its top-right corner says a
    field is not valid. The badge sits out of the button's flow, so the button keeps its width and its row never wraps.
    A Filter section's tab shows the same badge while a field in it is flagged. The badge is the outlined icon the fields
-   use, on a disc that hides the border under it. The Filter tab's Apply, the one held action with a dot, turns its dot
-   red instead, over the 250 ms the red marks fade in. */
+   use, on a disc that hides the border under it. The Filter tab's Apply turns its unsaved-changes dot red instead, over
+   the 250 ms the red marks fade in, and Add Preset and Update show a red dot where Apply's sits. */
 .held-action {
   position: relative;
   display: inline-flex;
@@ -236,6 +236,17 @@ input, progress, meter { accent-color: var(--huggins-orange); }
 .held-action > .unsaved-dot {
   transition: background-color 250ms ease;
 }
+.held-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--error);
+  box-shadow: 0 0 0 2px var(--surface);
+  pointer-events: none;
+}
 .shows-problem > .unsaved-dot {
   background: var(--error);
 }
@@ -249,12 +260,13 @@ input, progress, meter { accent-color: var(--huggins-orange); }
   color: var(--success);
   pointer-events: none;
 }
-/* The pattern's red icons, its tooltip, and a setting's saved check fade in as they show, and fade out, still
-   rendered, as they go (`useFadeOut`); a fade out takes over from a fade in that hasn't finished. With reduced motion
-   they show and hide at once. */
+/* The pattern's red icons and a held action's red dot, its tooltip, and a setting's saved check fade in as they show,
+   and fade out, still rendered, as they go (`useFadeOut`); a fade out takes over from a fade in that hasn't finished.
+   With reduced motion they show and hide at once. */
 .vfield-icon,
 .vfield-saved,
 .btn-problem,
+.held-dot,
 .section-problem,
 .vfield-tip.is-shown {
   animation: field-mark-in 250ms ease;
@@ -263,6 +275,7 @@ input, progress, meter { accent-color: var(--huggins-orange); }
 .vfield-icon.is-fading-out,
 .vfield-saved.is-fading-out,
 .btn-problem.is-fading-out,
+.held-dot.is-fading-out,
 .section-problem.is-fading-out,
 .vfield-tip.is-fading-out {
   opacity: 0;
@@ -276,6 +289,7 @@ input, progress, meter { accent-color: var(--huggins-orange); }
   .vfield-icon,
   .vfield-saved,
   .btn-problem,
+  .held-dot,
   .section-problem,
   .vfield-tip.is-shown,
   .held-action > .unsaved-dot {

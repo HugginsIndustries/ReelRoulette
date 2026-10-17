@@ -2018,6 +2018,8 @@ describe("saving", () => {
     });
     await pickPreset("preset-beach");
     await click(panelTab("Filter"));
+    // Only never played too, so Mine has a filter of its own.
+    await click(within(byId("filter-dialog")).getByLabelText("Only never played"));
     await click(within(byId("filter-dialog")).getByRole("tab", { name: /^Presets/ }));
     await typeInto(byId("filter-new-preset-name"), "Mine");
     await click(byId("filter-add-preset-btn"));

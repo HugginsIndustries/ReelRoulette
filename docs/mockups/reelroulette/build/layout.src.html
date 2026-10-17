@@ -988,15 +988,16 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
             <div class="filter-section">
               <h3>Choose Preset</h3>
               <div class="filter-row">
-                <select class="ctl grow" id="filter-preset-select"></select>
-                <button class="btn" type="button" id="filter-update-preset"><span class="btn-label">Update Preset</span><span class="btn-problem material-symbol-icon">error</span></button>
+                <select class="ctl grow" id="filter-preset-select" aria-label="Choose preset"></select>
+                <button class="icon-btn" type="button" id="filter-load-preset" aria-label="Load preset" title="Load preset"><span class="material-symbol-icon">sync</span></button>
+                <button class="icon-btn" type="button" id="filter-update-preset" aria-label="Update preset" title="Update preset"><span class="btn-label material-symbol-icon">save</span><span class="held-dot"></span></button>
               </div>
             </div>
             <div class="filter-section">
               <h3>Create New Preset From Current Filter</h3>
               <div class="filter-row">
                 <span class="vfield new-preset-field"><input class="ctl" type="text" id="filter-new-preset" placeholder="Enter preset name" aria-label="New preset name" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
-                <button class="btn" type="button" id="filter-add-preset"><span class="btn-label">Add Preset</span><span class="btn-problem material-symbol-icon">error</span></button>
+                <button class="icon-btn" type="button" id="filter-add-preset" aria-label="Add preset" title="Add preset"><span class="btn-label material-symbol-icon">add</span><span class="held-dot"></span></button>
               </div>
             </div>
             <div class="filter-section">
@@ -2131,6 +2132,7 @@ function showTab(tab) {
   });
   applyLayout();
   if (tab === "library") layoutGrid();
+  notePresetsView();
 }
 
 let opener = null;
@@ -2149,6 +2151,7 @@ function closePanel() {
   const hadFocus = $("panel").contains(focused) || $("handle").contains(focused);
   state.open = false;
   store.set("open", false);
+  notePresetsView();
   applyLayout();
   if (hadFocus) (opener || $("panel-btn")).focus({ preventScroll: true });
 }
@@ -3186,10 +3189,31 @@ let localSnapshot = new Map();
 // Tag filters: each tag included or excluded, by key; and the categories matched with ANY (OR).
 const filterTagState = new Map();
 let filterLocalModes = new Map();
-// The preset the tab works from, which Apply makes the dropdown's. It starts over from the dropdown's.
+// The preset the tab works from, which the heading names and Apply makes the dropdown's. It starts over from the
+// dropdown's.
 let tabBase = lib.preset;
+// The preset Choose Preset has chosen, which Load and Update act on, or "" for None. It stays where the user puts it
+// while the Presets section stays in view, and starts over on the preset the heading names when the tab starts over or
+// the section comes into view.
+let chosenPreset = lib.preset;
+// The filter Load puts in the tab: the chosen preset's, or the default filter for None, as Clear all does.
+const chosenFilter = () => (chosenPreset ? presetFilters.get(chosenPreset) : DEFAULT_FILTER);
 function startOver() {
   tabBase = lib.preset;
+  chosenPreset = lib.preset;
+}
+// Each time the Presets section comes into view, however it got there, Choose Preset starts over on the preset the
+// heading names, its base while starred, with or without unsaved changes: from its sub-tab, the Filter tab, or the
+// panel opening on it. Showing a tab or a section, or closing the panel, calls this.
+let presetsWereInView = false;
+function notePresetsView() {
+  const inView = state.open && state.tab === "filter" && !filterBody.querySelector('[data-subpanel="presets"]').hidden;
+  if (inView && !presetsWereInView) {
+    chosenPreset = tabBase;
+    renderPresets();
+    renderApply();
+  }
+  presetsWereInView = inView;
 }
 // The preset a filter is named for, as the app names it: None for the default filter; otherwise the first preset whose
 // filter matches; otherwise the preset it came from, or None, starred.
@@ -3212,6 +3236,7 @@ function showSub(sub) {
   });
   filterBody.scrollTop = 0;
   placeAllTips();
+  notePresetsView();
 }
 document.querySelectorAll(".filter-tab").forEach((tab) => tab.addEventListener("click", () => showSub(tab.dataset.sub)));
 
@@ -3316,7 +3341,8 @@ const filterIsDefault = () => sameFilter(filterValue(), DEFAULT_FILTER);
 // Whether the tab holds changes to apply, compared with the applied filter and the saved presets, so a change put back
 // is none: its filter, typed durations included, and its preset list by order, name, and filter. Without one, Apply and
 // Discard changes are disabled; with one, Apply turns orange with the dot, as the tab and the panel button show it. Clear
-// all is disabled while the filter is the default one, and so are Add Preset and Update Preset, which say why.
+// all is disabled while the filter is the default one, Load while it is the chosen preset's, and Add Preset and Update
+// while it is the default one or a preset's, saying why.
 function filterChanges() {
   if (!appliedValue) return false;
   const value = filterValue();
@@ -3336,12 +3362,13 @@ function renderApply() {
   apply.querySelector(".unsaved-dot").hidden = !changed;
   $("filter-discard").disabled = !changed;
   $("filter-clear").disabled = filterIsDefault();
+  $("filter-load-preset").disabled = sameFilter(filterValue(), chosenFilter());
   applyHold?.refresh();
   addPresetHold?.refresh();
   updatePresetHold?.refresh();
   // The heading names the working filter's preset, as the dropdown will once it applies, and stars it while the tab's
   // filter, with each duration as its field reads, differs from that preset's, so text passed through while typing
-  // doesn't change the preset.
+  // doesn't change the preset. Choose Preset doesn't follow it.
   const anchor = presetAnchor(workingValue(), tabBase, presets, presetFilters);
   tabBase = anchor.name;
   const named = anchor.name ? presetFilters.get(anchor.name) : DEFAULT_FILTER;
@@ -3356,7 +3383,7 @@ function renderApply() {
   fadeShown(presetsTab.querySelector(".tab-problem"), nameField.flagged);
   presetsTab.title = nameField.flagged ? "A field here is not valid" : "";
 }
-// Apply, Add Preset, and Update Preset all use the General section's pair and durations; Add Preset uses the name too.
+// Apply, Add Preset, and Update all use the General section's pair and durations; Add Preset uses the name too.
 // Add Preset sits beside the name, so an empty or taken name disables it, and only the General fields hold it.
 function generalReason(field, ending) {
   if (field === flagModesField) return `Change Favorites or Blacklisted ${ending}.`;
@@ -3367,17 +3394,25 @@ applyHold = holdAction($("filter-apply"), () => [flagModesField, minField, maxFi
   reason: (field) => generalReason(field, "to apply"),
   beforeReveal: () => showSub("general")
 });
-// No preset may hold the default filter, so Add Preset and Update Preset are disabled while the tab's filter is the
-// default one, saying why.
-const defaultFilterReason = () => (filterIsDefault() ? "Choose a filter to save as a preset." : null);
+// No preset may hold the default filter or another preset's, so Add Preset and Update are disabled while the tab's
+// filter, with each duration as its field reads, is the default one or a preset's, the chosen preset's included, since
+// updating a preset with the filter it has changes nothing. They say why, the default filter first, and name the first
+// preset that has the filter.
+function presetReason() {
+  if (filterIsDefault()) return "Choose a filter to save as a preset.";
+  const value = filterValue();
+  const holder = presets.find((name) => sameFilter(presetFilters.get(name), value));
+  return holder ? `Preset "${holder}" already has this filter.` : null;
+}
 addPresetHold = holdAction($("filter-add-preset"), () => [nameField, flagModesField, minField, maxField], {
   beside: () => [nameField],
-  unavailable: defaultFilterReason,
+  unavailable: presetReason,
   reason: (field) => generalReason(field, "first"),
   beforeReveal: () => showSub("general")
 });
+// Update has nothing to write into while Choose Preset is on None, which it says before the filter's reasons.
 updatePresetHold = holdAction($("filter-update-preset"), () => [flagModesField, minField, maxField], {
-  unavailable: defaultFilterReason,
+  unavailable: () => (chosenPreset ? presetReason() : "Choose a preset to update."),
   reason: (field) => generalReason(field, "first"),
   beforeReveal: () => showSub("general")
 });
@@ -3385,13 +3420,8 @@ updatePresetHold = holdAction($("filter-update-preset"), () => [flagModesField, 
 
 filterBody.addEventListener("change", (event) => {
   if (event.target.closest('[data-subpanel="presets"]') && event.target.id !== "filter-preset-select") return;
-  if (event.target.id === "filter-preset-select") {
-    // Choosing a preset loads its filter into the tab; choosing None keeps the filter. Apply then makes the choice the
-    // dropdown's.
-    const name = event.target.value;
-    if (name) applyFilterValue(presetFilters.get(name));
-    tabBase = name;
-  }
+  // Choosing a preset only chooses the one Load and Update act on; it loads nothing.
+  if (event.target.id === "filter-preset-select") chosenPreset = event.target.value;
   renderApply();
 });
 
@@ -3469,7 +3499,8 @@ $("filter-discard").addEventListener("click", () => {
   renderLibPresets();
   renderApply();
 });
-// Clear all filters returns to the default filter and the saved presets, as today.
+// Clear all filters returns to the default filter and the saved presets, as today. Choose Preset keeps its choice while
+// the saved presets have it.
 $("filter-clear").addEventListener("click", () => {
   applyFilterValue(DEFAULT_FILTER);
   presets.splice(0, presets.length, ...presetSnapshot);
@@ -3485,12 +3516,17 @@ $("filter-refresh").addEventListener("click", () => {
   renderFilterTags();
   acknowledge("Filter data refreshed.", "filter");
 });
-// Update Preset saves the tab's filter into the chosen preset until Apply saves the list, as today.
+// Load puts the chosen preset's filter in the tab, or the default filter for None, which Apply then applies, as picking a
+// preset did before. It leaves the preset list as it is.
+$("filter-load-preset").addEventListener("click", () => {
+  applyFilterValue(chosenFilter());
+  tabBase = chosenPreset;
+  renderApply();
+});
+// Update saves the tab's filter into the chosen preset until Apply saves the list.
 $("filter-update-preset").addEventListener("click", () => {
-  const chosen = $("filter-preset-select").value;
-  if (!chosen) return void noticeDialog({ message: "Select a preset to update." });
-  acknowledge(`Updated preset "${chosen}" locally — Apply to save.`, "filter");
-  presetFilters.set(chosen, filterValue());
+  acknowledge(`Updated preset "${chosenPreset}" locally — Apply to save.`, "filter");
+  presetFilters.set(chosenPreset, filterValue());
   renderApply();
 });
 
@@ -3501,7 +3537,6 @@ function presetsChanged() {
 }
 function renderPresets() {
   const select = $("filter-preset-select");
-  const keep = select.value || lib.preset;
   select.textContent = "";
   ["None", ...presets].forEach((name, index) => {
     const option = document.createElement("option");
@@ -3509,7 +3544,9 @@ function renderPresets() {
     option.textContent = name;
     select.append(option);
   });
-  select.value = presets.includes(keep) ? keep : "";
+  // Choose Preset shows the chosen preset, or None once the list no longer has it.
+  if (!presets.includes(chosenPreset)) chosenPreset = "";
+  select.value = chosenPreset;
   const list = $("filter-preset-list");
   list.textContent = "";
   if (state.situation === "empty" || !presets.length) {
@@ -3556,6 +3593,7 @@ function openEditPreset(index) {
       presetFilters.set(name, presetFilters.get(own));
       if (name !== own) presetFilters.delete(own);
       if (tabBase === own) tabBase = name;
+      if (chosenPreset === own) chosenPreset = name;
       presetsChanged();
     },
     deleteMessage: () => `Delete preset "${own}"?`,

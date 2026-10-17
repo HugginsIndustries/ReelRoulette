@@ -19,10 +19,10 @@ Instructions:
 
 Commit Message:
 
-M12i6: Read only the flag modes in the WebUI, and split the WebUI slice in four
+M12i6: Keep presets from sharing a filter in the Filter tab, and split Choose Preset from Load
 
-- The WebUI reads a filter's Favorites and Blacklisted only from `favoritesMode` and `blacklistedMode`, and no longer from the older `favoritesOnly` and `excludeBlacklisted`, which the catalog's upgrade has rewritten in every stored preset.
-- `filter-mode-resolution.json` moves from `shared/fixtures/` to the Core tests, which keep locking the upgrade's rule. The WebUI's tests of that rule go, and one test checks that a filter with only the older fields reads as the default modes.
-- `shared/fixtures/filter-enum-values.json` locks how the server and the WebUI read the modes too, with cases for an unknown mode name, a number, null, and mixed case.
-- WebUI test fixtures, `library-tile-effect.json` among them, hold the modes in place of the older fields, with the same meaning.
-- M12i6's WebUI slice becomes four slices, WebUI old fields, Duplicate filter, WebUI writes, and WebUI events, with decisions on preset ids, on merging a fresh preset list into unsaved changes, and on blocking an Apply that would swap two presets' names or filters, and records the first slice's evidence.
+- Add Preset and Update are unavailable while the filter, as typed, is the default one or a preset's, the chosen preset's included, and their tooltip names the preset that has it, as the server's refusal will.
+- Choose Preset only chooses the preset that new Load and Update icon buttons act on, and starts over on the heading's preset each time the Presets section comes into view. Load puts the chosen preset's filter, or the default filter for None, in the tab, and Update on None says it needs a preset.
+- Add Preset becomes an icon button, and a held Add Preset or Update shows a red dot where Apply's sits, in place of the badge.
+- The design mockup shows the same, with checks for each way into the Presets section, and M12i6's Duplicate filter slice is complete.
+- Library Profiles' Decisions and its Server and WebUI slices plan each profile's own default filter, which None and Clear all will load and Update on None will change.

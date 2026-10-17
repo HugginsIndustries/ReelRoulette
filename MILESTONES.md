@@ -153,7 +153,7 @@ Last milestone completed: M12i5
 - A filter is the default one when it equals the default filter by that rule.
 - A category's AND match mode counts as no entry in the comparison, as the WebUI drops it from every filter it reads.
 - A source list compares as the set of sources it names, so a list naming every source differs from all sources: all sources also takes in a source added later, the comparison needs no source list, and checking every source in the Filter tab writes all sources rather than a list.
-- The WebUI names presets by id: the Filter tab's list and its chosen preset, the preset dropdown, and the remembered active preset.
+- The WebUI names presets by id: the Filter tab's list, its heading's preset, and the preset Choose Preset has chosen, the preset dropdown, and the remembered active preset.
 - When the Filter tab takes a freshly loaded preset list while it holds unsaved preset changes, presets it hasn't changed take the server's version, and its renames, filter changes, deletes, and new presets stay.
 - The merged list keeps the server's order unless the tab reordered, which keeps the tab's order, with presets new on the server at the end.
 - A preset another device deleted leaves the tab's list, with any unsaved change to it, rather than coming back on Apply.
@@ -166,7 +166,7 @@ Last milestone completed: M12i5
 | Server | ✅ Complete | The schema step with preset ids and rewritten filter states, per-preset writes in the catalog, the preset event, and the server's filter parser without the old fields. |
 | Contract | ✅ Complete | Per-preset routes, the preset id in responses and random requests, and the preset event, in OpenAPI and the generated WebUI types. |
 | WebUI old fields | ✅ Complete | The WebUI reading only the Favorites and Blacklisted modes, `filter-enum-values.json` locking how the server and the WebUI read them, and `filter-mode-resolution.json` moved to the Core tests. |
-| Duplicate filter | ⏳ Planned | Add Preset and Update Preset disabled for a filter another preset has, in the mockup and then the app. |
+| Duplicate filter | ✅ Complete | Add Preset and Update disabled for a filter a preset already has, and Choose Preset only choosing the preset that new Load and Update icon buttons act on, in the mockup and then the app. |
 | WebUI writes | ⏳ Planned | The Filter tab saving each changed preset by id, a refused save showing the server's reason, the active preset remembered by id, and the whole-list replace removed. |
 | WebUI events | ⏳ Planned | Every open WebUI following the preset event, the applied preset following another device's change, and Other devices popups for preset changes. |
 
@@ -346,24 +346,72 @@ Last milestone completed: M12i5
 
 **Scope**
 
-- Add Preset is disabled while the filter, with each duration as its field reads, matches a preset in the tab's list, saying `Preset "{name}" already has this filter.`, and Update Preset while it matches a preset other than the chosen one, saying the same. The default filter's reason comes first.
-- The mockup's Add Preset and Update Preset show the new reason first, for the user's review, and the app follows.
-- The mockup's Choose Preset follows the working filter to the first preset that has it, as the app's does, so the mockup's Update Preset reason matches the app's.
+- Add Preset and Update are disabled while the filter, with each duration as its field reads, matches any preset in the tab's list, saying `Preset "{name}" already has this filter.` for the first such preset. The default filter's reason comes first.
+- Update checks the chosen preset too, since updating a preset with the filter it already has changes nothing and still says it updated the preset.
+- Choosing in Choose Preset loads nothing: it only chooses the preset Load and Update act on.
+- Each time the Presets section comes into view, however it got there, Choose Preset starts over on the preset the heading names, its base while starred, with or without unsaved changes. A choice lasts while the section stays in view.
+- The heading keeps naming the preset the filter matches.
+- A Load icon button after the dropdown, with the `sync` icon and the tooltip and name "Load preset", loads the chosen preset's filter into the tab, which Apply then applies. On None it loads the default filter, keeping the preset list.
+- Load is disabled, with no reason, while the tab's filter, with each duration as its field reads, already is the chosen one's.
+- Update Preset becomes an Update icon button after Load, with the `save` icon and the tooltip and name "Update preset", which writes the tab's filter into the chosen preset.
+- On None, Update is disabled, saying `Choose a preset to update.` before the filter's reasons, in place of the "Select a preset to update." notice. It stays disabled there until Library Profiles gives each profile its own default filter.
+- Update stays held by the General fields that hold it now: its icon dims and it shows a red dot where Apply's sits, in place of the badge, with its reasons as now. Load is never held, since it replaces the filter.
+- Add Preset becomes an icon button, with the `add` icon and the tooltip and name "Add preset".
+- A held Add Preset shows the red dot, as Update does: its icon dims, its tooltip says why as now, and pressing it still moves to the field. The name field beside it keeps flagging the name itself.
+- The mockup shows the design first, for the user's review, and the app follows, with the tab's chosen preset separate from the heading's preset.
+- `CHANGELOG.md`'s `[Unreleased]` bullet "Presets need a filter" takes the duplicate rule, and the new Choose Preset, Load, and Update where its style note asks for a line.
 - Builds on the preset-equality fixture from Remove the Preset Match Route, which the Server slice moves back to `shared/fixtures/`.
 
 **Traps**
 
-- Add Preset and Update Preset are disabled for the default filter through `blockOf` in `src/filter/filterDialog.ts`, with `DEFAULT_FILTER_PRESET_REASON`, and the mockup does the same with `defaultFilterReason` in `build/layout.src.html`, checked in `build/check.mjs`.
-- The Filter tab's heading, the preset dropdown, and Apply name the first preset whose filter matches (`resolvePresetAnchor` and `dialogPresetBase` in `src/filter/filterStateModel.ts`), and the tab's chosen preset follows the working filter to it, so Update Preset can make the chosen preset match another only while a typed duration hasn't reached the working filter (inferred).
-- The mockup's chosen preset is the `#filter-preset-select` value, which changes only when picked (`renderPresets` in `build/layout.src.html`), while its heading follows the filter.
+- Add Preset and Update Preset are disabled for the default filter through `blockOf` in `src/filter/filterDialog.ts`, with `DEFAULT_FILTER_PRESET_REASON`.
+- The tab's one `presetName` is both the chosen preset and the heading's: `settled()` resolves it from the working filter through `dialogPresetBase` on every change, the heading stars it, Apply makes it the active preset, and Update Preset, rename, and delete find the chosen preset by it (`src/filter/filterDialog.ts`).
+- `choosePreset` loads the preset's filter, and `updatePreset` shows "Select a preset to update." and "Preset not found." notices (`src/filter/filterDialog.ts`).
+- `open()` starts the tab over only without unsaved changes, and `restart()` takes `presetName` from `store.activePresetName`.
+- The mockup keeps the chosen preset as `chosenPreset` beside `tabBase`, the heading's preset, and `notePresetsView`, which showing a tab or a section and closing the panel call, starts it over when the Presets section comes into view (`build/layout.src.html`).
+- The panel calls `filterDialog.open()` each time the Filter tab shows, from a tab switch or the panel opening (`connectTabs` in `src/state/appServices.ts`), and `showTab` shows a section (`src/filter/filterDialog.ts`), so the app's Presets section comes into view through those two (inferred).
 - In the mockup and the app, a disabled action's reason shows only as its title and a hidden description (`holdAction` in `build/common.js`, `HeldButton` in `src/ui/FieldValidation.tsx`), and a reason that disables outranks a field that holds.
-- `check.mjs`'s check that a filter enables Add Preset and Update Preset turns Favorites on, which gives the Favorites sample preset's filter, so it fails under the new rule, as do the Filter screen tests that add a preset with Favorites alone beside `FAVORITES_PRESET` (inferred).
+- `HeldButton` draws an icon button from its `label`, its name and its title while no reason shows, and `.held-action` positions its badge (`src/styles.css`). It shows the badge, or an unsaved-changes dot through `dot`, which only the Filter footer's Apply uses, so a red dot alone while held is new to it.
+- The app loads the whole Material Symbols font (`public/assets/fonts/MaterialSymbolsOutlined.var.ttf`), and the mockup's subset already has `sync`, `save`, and `add`.
+- With the duplicate rule added to `filterDialog.ts`, 6 of 1,451 WebUI tests failed, each adding a preset with another preset's filter or expecting Add Preset enabled for one, the Filter screen markup snapshot among them (measured).
+- The Filter screen tests choose a preset with `chooseInDialog` in 10 places and the unit tests in `filterDialog.test.ts` with `choosePreset` in 8 (measured), and those that expect a pick to load change with this slice (inferred).
 
 **Acceptance**
 
-- Add Preset is disabled while the filter matches a preset, naming it, and Update Preset while it matches another, both after the default filter's reason, in Filter screen tests.
-- The mockup's Add Preset and Update Preset say the same, after the default filter's reason, in `node docs/mockups/reelroulette/build/check.mjs`, which passes.
+- Add Preset and Update are disabled while the filter matches any preset, the chosen one included, naming it, after the default filter's reason, in Filter screen tests.
+- Choosing a preset loads nothing and lasts while the Presets section stays in view, and Choose Preset starts over on the heading's preset, its base while starred, each time the section comes into view, through its sub-tab and the Filter tab showing, with and without unsaved changes, in Filter screen tests.
+- Load loads the chosen preset's filter, or the default filter for None, keeping the preset list, and is disabled while the filter already is that one, in Filter screen tests.
+- Update on None is disabled, saying `Choose a preset to update.`, and is held by a General field otherwise, with the red dot and no badge, in Filter screen tests.
+- A held Add Preset dims and shows the red dot, with no badge, and pressing it moves to the field, in Filter screen tests.
+- Load, Update, and Add Preset are icon buttons with the `sync`, `save`, and `add` icons, named and titled "Load preset", "Update preset", and "Add preset", in Filter screen tests.
+- The mockup shows the same, with a check for each way into the Presets section, its sub-tab, the Filter tab, an arrow key on the panel tabs, the panel opening, the Filter tab's key, and the Filters line, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
+
+**Evidence**
+
+- `npm run verify` passes: 1,460 tests in 72 files, the generated types' freshness check, the build, and its output check.
+- `node docs/mockups/reelroulette/build/check.mjs` passes its 1,213 checks, and `check-milestones.ps1` passes.
+- The user approved the mockup on their devices after three review rounds, which set the design the Scope describes: Update checking the chosen preset too, Choose Preset only choosing for new Load and Update icon buttons and starting over each time the Presets section comes into view, Add Preset as an icon button, and a red dot in place of the badge on a held Add Preset or Update.
+- With a pick that loads nothing, 15 of 1,451 WebUI tests failed, 7 unit and 8 Filter screen tests, which now choose and press Load (measured).
+- Each new app test fails when what it guards is broken, each break made in `filterDialog.ts` or `FilterDialog.tsx` and restored byte for byte from a copy in `artifacts/scratch/` (measured):
+  - No duplicate rule fails 5 tests, and the duplicate reason put before the default filter's fails the test of their order.
+  - A pick that loads fails 10, Load never disabled 3, and Load that puts back the saved presets 2.
+  - No None reason fails 5, and no start-over for Choose Preset 5.
+  - The badge in place of the red dot fails the held pair test and both fade tests, and other names for Load and Add Preset fail 22.
+  - Update finding its preset by the heading's preset fails both tests of Update while the heading names another preset.
+- Each of the mockup's new checks fails under at least one of ten breaks, each made in a copy of the mockup under `artifacts/scratch/`: no duplicate rule, a pick that loads, Load never disabled, no None reason, Load doing nothing, Load putting back the saved presets, no held dot, every filter blocked, no start-over, and other names (measured).
+- The validation page's two checks of its Add Preset examples failed before the page named an icon button by its `aria-label` and marked its press in its note (measured).
+- The two badge-count checks only lowered their expected counts, to 3 on the main page and 5 on the validation page, since Add Preset and Update lost their badges.
+- Deviations:
+  - The view's `presetName` is now `headingPreset`, beside the new `chosenPreset`, since it names only the heading's preset.
+  - Load on None keeps the preset list's changes, and Clear all keeps the chosen preset while the saved presets have it, as the approved mockup does.
+  - Apply and Discard changes start Choose Preset over on the heading's preset while the Presets section stays in view, as the approved mockup does.
+  - After Add Preset, Choose Preset stays where it was rather than following the heading to the new preset.
+  - On a short screen, Load and Update keep the icon buttons' 44 px, as the mockup's do, where Update Preset took the text buttons' 38 px.
+  - The validation page's Add Preset examples are icon buttons, to match the Filter tab, and their notes name them and mark a press.
+  - The changelog bullet is renamed "Presets need a filter of their own".
+  - The Decisions and the WebUI writes slice now name the heading's preset and the chosen preset where they named one chosen preset.
+- `CONTEXT.md`, `docs/domain-inventory.md`, and `CHANGELOG.md` describe Choose Preset, Load, Update, the duplicate rule, and the held red dot, the testing checklist's 360 px check covers only a flagged section tab's badge, and Library Profiles' Decisions and its Server and WebUI slices record each profile's own default filter.
 
 #### WebUI writes slice
 
@@ -375,7 +423,7 @@ Last milestone completed: M12i5
 - Apply stops at the first write the server refuses, reloads the presets, keeps the changes that didn't land as unsaved, and applies nothing. Writes that landed stay saved.
 - A refused save's notice says `Saving presets failed: {the server's reason}`, and its log line leaves the preset's name out, as `Saving presets failed (409).`.
 - Refresh, opening the tab, and a refused save take the server's list by the merge the Decisions describe, in place of keeping the tab's list or taking the server's whole.
-- The Filter tab's rows and its chosen preset hold the preset's id.
+- The Filter tab's rows, its heading's preset, and the preset Choose Preset has chosen hold the preset's id.
 - A preset added but not yet saved has a temporary id until Apply creates it.
 - The WebUI remembers its active preset by id, in the remembered record's `presetId` in place of `preset`, so a record from before reads as none and each device starts once at None with the default filter.
 - The remembered preset survives a preset list that lacks it, such as an empty reply.
@@ -1789,6 +1837,8 @@ Last milestone completed: M12i5
 - Other devices popups, and the refresh's notice of kept folders, leave out items and folders in sources the active profile hides. The item events carry each item's `sourceId` for this.
 - The admin section ignores profiles and covers the whole library.
 - Each device remembers its active profile, and each profile remembers its last applied filter or preset on each device.
+- Each profile has its own default filter, which None and Clear all load and which the Filter tab's Update changes while Choose Preset is on None.
+- A new profile starts with the default profile's default filter.
 - Switching while the Filter or Tags tab holds unsaved changes asks "Discard changes?" first.
 - U opens the picker, and the arrow keys and Enter choose a profile.
 - The picker hides with the header, in fullscreen and on a phone on its side, where the user turns the phone upright to switch.
@@ -1847,6 +1897,7 @@ Last milestone completed: M12i5
   - The default profile can't be deleted or given a chosen list of sources.
   - Deleting a profile deletes its source rows in the same transaction.
 - A profile that follows all sources includes a source added later, and a chosen list doesn't.
+- Each profile's own default filter is stored with it in `profiles`, and the profile store reads and writes it, as the Decisions describe.
 - The server resolves the request's profile to its sources, and `BuildWhere` adds them as a condition outside the filter, so the library query's page, `totalCount`, `searchBaselineCount`, its ids-only option, and random picks keep only the profile's sources.
 - Auto Tag's scan keeps only the profile's sources: a full-library scan reads every item in them, and a scan with no path list their enabled ones.
 - Library stats count only enabled sources, as lists, counts, and random picks do: the totals and the baseline loudness leave disabled sources out, while each source's own row in the per-source list still counts its items, which Admin Source Management shows.
@@ -1925,6 +1976,7 @@ Last milestone completed: M12i5
   - leaves the playing item and history as they are.
 - A device whose active profile is gone, deleted on another device or removed by a catalog import or a backup restore, falls back to the default profile once `profilesChanged` or the profile list says so.
 - The Filter tab lists only the profile's sources, the Filters line counts them out of the profile's sources, and a source list that names none of the profile's sources is not read as every source.
+- None and Clear all load the active profile's default filter, and the Filter tab's Update is enabled on None, where it writes the tab's filter into that default filter.
 - The Stats tab's library cards come from the profile's stats.
 - Other devices popups, the bulk ones included, leave out items in sources the profile hides, and a bulk popup counts only the items it shows. The refresh's kept-folder notice leaves out folders the profile hides.
 
@@ -1991,7 +2043,7 @@ Last milestone completed: M12i5
 - Sources are never left out of a filter this way, since dropping a hidden source's id would turn a list of only hidden sources into every source.
 - Updating a preset in a profile keeps its stored conditions on the tags, categories, and sources the profile hides, decided one tag, category, and source at a time. An empty source list, stored or saved, means every source, and a result that names every source is stored as an empty list.
 - The "modified" marker ignores the conditions on hidden tags and hidden sources.
-- Presets are account-wide: Update Preset changes the preset everywhere it shows.
+- Presets are account-wide: Update changes the preset everywhere it shows.
 - Editing an item's tags leaves its hidden tags untouched.
 - Auto Tag and the Stats tab see only the profile's visible tags.
 - Reordering categories or presets in a profile moves them only among the places the visible ones held, and hidden ones keep their places.

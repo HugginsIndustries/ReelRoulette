@@ -264,8 +264,16 @@ export const DURATION_PROBLEM = "Use MM:SS, HH:MM:SS, or seconds.";
 /** A preset name another preset has, ignoring case. */
 export const PRESET_NAME_PROBLEM = "Use a name no other preset has.";
 
-/** Why Add Preset and Update Preset are disabled while the filter is the default one, which no preset may hold. */
+/** Why Add Preset and Update are disabled while the filter is the default one, which no preset may hold. */
 export const DEFAULT_FILTER_PRESET_REASON = "Choose a filter to save as a preset.";
+
+/** Why Add Preset and Update are disabled while a preset already has the filter, which no two presets may share. */
+export function sharedFilterReason(name: string): string {
+  return `Preset "${name}" already has this filter.`;
+}
+
+/** Why Update is disabled while Choose Preset is on None, which has nothing to write the filter into. */
+export const NO_CHOSEN_PRESET_REASON = "Choose a preset to update.";
 
 /** Favorites only with Blacklisted only matches nothing, since the app never lets an item be both. */
 export const FLAG_MODES_PROBLEM = "Nothing is both a favorite and blacklisted. Use excluded for one of them.";
