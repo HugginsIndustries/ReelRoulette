@@ -155,7 +155,6 @@ Last milestone completed: M12i6
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Audio spike | ✅ Complete | A report on a real video routed through the gain stage in each target browser and device. |
-| Server | ⏳ Planned | Cross-origin headers on media responses, and `crossorigin` on the player's media elements, so media from another origin in development isn't silent through Web Audio. |
 | Volume | ⏳ Planned | The Enhanced audio gain stage and setting, the volume slider, Mute in the seek row, scroll wheel and two-finger drag volume with a volume indicator, the volume steps, and their per-device settings. |
 
 #### Audio spike slice
@@ -188,26 +187,6 @@ Last milestone completed: M12i6
 - The gain stage worked in every browser tried, iOS included, and sounded worse than direct playback only in Firefox on Android.
 - Waived: Chrome on a desktop, Firefox on the iPad, and Safari on a desktop, which were dropped to keep to the standard test environment's browsers.
 - Docs: the Volume slice's Traps take the measured facts, and the release checks of this milestone and of WebUI Loudness Normalization name the standard test devices.
-
-#### Server slice
-
-**Scope**
-
-- A small, additive change, for development: media responses carry cross-origin headers for the WebUI's origins, and the player's media elements ask for them (`crossorigin`).
-- The slice confirms or adds the header on `/api/media` responses, range responses included.
-
-**Traps**
-
-- In every served setup the WebUI's media comes from the page's own origin, since the runtime config's `apiBaseUrl` is the scheme and host the browser used (`WebRuntimeConfig.Build`), so localhost, the LAN address, the mDNS name, and an HTTPS proxy are all same-origin.
-- Only the Vite dev server, whose `public/runtime-config.json` points port 5173 at the server on 51301, plays media from another origin.
-- Media from another origin without cross-origin headers plays silent through Web Audio (inferred).
-- The CORS policy `ReelRouletteWebClient` is applied to the whole app when CORS is on (`UseCors` in `ServerHostComposition.cs`), for the origins `DynamicCorsOriginRegistry` allows.
-- Media responses may therefore already carry the header, which hasn't been checked with a cross-origin media request (inferred).
-
-**Acceptance**
-
-- In the Vite dev server, media from the server's other origin isn't silent through the gain stage, shown by a server test that media responses carry the cross-origin header for the WebUI's origins.
-- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
 #### Volume slice
 
@@ -254,6 +233,8 @@ Last milestone completed: M12i6
 - `check.mjs` runs the pages in happy-dom, which computes styles but lays nothing out, so it works out the scrub bar's width from the seek row's fixed widths and gaps (inferred).
 - The mockup tries the gain stage with a stand-in sound, a soft chord it plays with videos through the same path.
 - In the mockup, stepping the volume crackled and play and pause popped, on every device (measured).
+- In every served setup the WebUI's media comes from the page's own origin, since the runtime config's `apiBaseUrl` is the scheme and host the browser used (`WebRuntimeConfig.Build`), so localhost, the LAN address, the mDNS name, and an HTTPS proxy are all same-origin.
+- The player's `<video>` has no `crossorigin` attribute (`VIDEO_FLAGS` in `src/ui/Player.tsx`), and same-origin media needs none to play through the gain stage (inferred).
 - An element routed through Web Audio stays routed: the player's `src = ""` and a new source, Next, and autoplay's next item without a tap all play through the gain stage, in Firefox on Linux and Android and on the iPad (measured).
 - On a touch screen, `pointerdown` carries no user activation in Firefox on Android or Safari on the iPad, while `pointerup`, `touchend`, and `click` do (measured). The mockup starts the gain stage on `pointerdown` and `keydown` only.
 - On the iPad, in Safari and the installed app, leaving the app pauses the video and puts the audio context in an `interrupted` state. Coming back returns it to `running` and resumes a video that was playing, without a tap (measured).
@@ -290,6 +271,7 @@ Last milestone completed: M12i6
 - Enhanced audio's description naming loudness normalization, which is WebUI Loudness Normalization.
 - The [ and ] volume keys, which is WebUI Keyboard Shortcuts.
 - Volume above 100%, which is WebUI Volume Boost.
+- Media from another origin, as only the Vite dev server plays it, may play silent through Enhanced audio, and turning Enhanced audio off is the workaround.
 
 ### M12i8 - WebUI Loudness Normalization
 
@@ -394,7 +376,7 @@ Last milestone completed: M12i6
 - `DynamicsCompressorNode` is not a brick-wall limiter, since it has no look-ahead, and browsers may implement it differently (inferred).
 - `DynamicsCompressorNode` applies its own makeup gain, worked out from its curve: about +0.6 dB at a −1 dB threshold and a ratio of 20, so the limiter holds peaks near −0.4 dBFS rather than −1 (inferred).
 - WebUI Stats Panel's scan measures a video of 60 minutes or more over 10 minutes from 20% in, so its peak can miss the loudest moment.
-- The server's cross-origin headers on media responses, from WebUI Volume and Enhanced Audio, keep media from another origin in development from playing silent through the gain stage.
+- Media from another origin, which only the Vite dev server plays, may play silent through the gain stage (inferred), so normalization is tried with the WebUI the server serves.
 - iOS's numeric and decimal keypads have no minus key (inferred).
 
 **Acceptance**
@@ -448,7 +430,7 @@ Last milestone completed: M12i6
 
 **Traps**
 
-- In the Vite dev server, media comes from the server's other origin, which WebUI Volume and Enhanced Audio's Server slice keeps from playing silent through Web Audio.
+- The WebUI that `run-server.ps1` builds is served from the server's own origin, while the Vite dev server plays media from another origin, which may play silent through the gain stage (inferred).
 
 **Acceptance**
 

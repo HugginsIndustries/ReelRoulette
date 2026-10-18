@@ -19,9 +19,9 @@ Instructions:
 
 Commit Message:
 
-M12i7: Record the audio spike's findings on the Web Audio gain stage
+M12i7: Drop the Server slice, since the WebUI's media is same-origin in every served setup
 
-- MILESTONES.md: the Audio spike slice is complete. A real video through the gain stage had sound, stayed in sync, changed volume without crackles, and came back after the app was in the background in Firefox on Linux and Android and on the iPad, in its installed app and Safari. Firefox on Android added random pops that direct playback doesn't, with a larger buffer too, while Chrome on Android didn't.
-- MILESTONES.md: the Volume slice's Traps take the measured facts: a touch `pointerdown` carries no user activation, iPadOS interrupts and resumes the audio and the video on its own, the iPad's sound starts about 0.37 s after `playing`, and Firefox on Android's pops.
-- MILESTONES.md: the release checks of WebUI Volume and Enhanced Audio and WebUI Loudness Normalization name the standard test devices.
-- Pre-release skill: the standard environment's Pixel runs the WebUI installed from Chrome, the browser the app is installed with there.
+- MILESTONES.md: WebUI Volume and Enhanced Audio no longer has a Server slice for cross-origin headers on media responses and `crossorigin` on the player. Only the Vite dev server plays media from another origin.
+- MILESTONES.md: its Not included says media from another origin may play silent through Enhanced audio, and turning Enhanced audio off is the workaround.
+- MILESTONES.md: the Volume slice's Traps take the same-origin fact and that the player's video has no `crossorigin`, which it doesn't need.
+- MILESTONES.md: WebUI Loudness Normalization's Traps no longer count on the server's cross-origin headers, and say to try it with the WebUI the server serves.
