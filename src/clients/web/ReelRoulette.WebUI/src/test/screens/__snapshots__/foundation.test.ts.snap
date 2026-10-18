@@ -376,7 +376,7 @@ exports[`page structure > keeps the starting markup 1`] = `
                           <span id="settings-popup-kinds-devices">
                             "Other devices"
                           <small id="settings-popup-kinds-devices-description">
-                            "Favorites and blacklist changes made on another device."
+                            "Favorites, blacklist, and preset changes made on another device."
                       <label>
                         <input aria-describedby="settings-popup-kinds-refresh-description" aria-labelledby="settings-popup-kinds-refresh" name="settings-popup-kinds" type="checkbox" value="refresh">
                         <span>

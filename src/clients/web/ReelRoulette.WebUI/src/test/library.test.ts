@@ -857,6 +857,26 @@ describe("events", () => {
     expect(t.queries().at(-1)).toMatchObject({ offset: 0, limit: 3 });
   });
 
+  it("starts over, loading the sources for the Filters line, when the applied preset follows another device's new filter", async () => {
+    const t = setup();
+    t.emit("serverReady");
+    await settle();
+    t.store.presets.value = [{ id: "fav", name: "Favorites", filterState: { favoritesMode: "only" } }];
+    t.store.pickHeaderPreset("fav");
+    await settle();
+    const sent = t.queries().length;
+    const phone = { id: "src-phone", displayName: "Phone backup", rootPath: "/media/phone", isEnabled: true };
+    t.replies.set("/api/sources", () => json([phone]));
+
+    const before = t.store.presets.peek()[0]!;
+    t.store.presetsReloaded([{ ...before, filterState: { favoritesMode: "only", includedSourceIds: ["src-phone"] } }], before);
+    await settle();
+    expect(t.queries()).toHaveLength(sent + 1);
+    expect(t.queries().at(-1)).toMatchObject({ filterState: { favoritesMode: "only", includedSourceIds: ["src-phone"] }, offset: 0 });
+    expect(t.requests("/api/sources")).toHaveLength(1);
+    expect(t.store.sources.peek()).toEqual([phone]);
+  });
+
   it("detaching the tab's view while it is open counts as closed, and opening without it does nothing", async () => {
     const t = setup();
     t.library.open();

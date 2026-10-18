@@ -5,6 +5,7 @@ import { createAppStore } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
 import { createPlayerIndicator } from "../state/lastingStates";
 import { createServerConnection, VERSION_CHECK_TIMEOUT_MS, VERSION_RECHECK_MS } from "../state/serverConnection";
+import { REFRESH_GATHER_MS } from "../stats/coalescedRefresh";
 
 const COMPATIBLE_VERSION = {
   apiVersion: "2",
@@ -219,17 +220,23 @@ describe("createServerConnection", () => {
     ]);
   });
 
-  it("reloads presets before passing a resync on", async () => {
-    const { connection, requests, sources } = setup();
-    const resync = vi.fn(() => {
-      expect(requests.filter((request) => request === "GET /api/presets")).toHaveLength(2);
-    });
-    connection.on("resyncRequired", resync);
+  it("passes a resync on at once, and reloads the presets shortly after, once for it and the preset events in its burst", async () => {
+    vi.useFakeTimers();
+    const { connection, sources, count } = setup();
+    const steps: string[] = [];
+    connection.on("resyncRequired", (payload) => steps.push(`resyncRequired ${payload.reason} presets=${count("GET /api/presets")}`));
+    connection.on("presetsReloaded", () => steps.push(`presetsReloaded presets=${count("GET /api/presets")}`));
     connection.start();
-    await settle();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(count("GET /api/presets")).toBe(1);
 
+    sources[0]!.emit("presetCatalogChanged", 8, { presetId: "p1", clientId: "client-2" });
     sources[0]!.emit("resyncRequired", 9, { reason: "gap" });
-    expect(resync).toHaveBeenCalledWith({ reason: "gap" });
+    sources[0]!.emit("presetCatalogChanged", 10, { presetId: null, clientId: "client-2" });
+    expect(steps).toEqual(["resyncRequired gap presets=1"]);
+    await vi.advanceTimersByTimeAsync(REFRESH_GATHER_MS);
+    expect(count("GET /api/presets")).toBe(2);
+    expect(steps).toEqual(["resyncRequired gap presets=1", "presetsReloaded presets=2"]);
   });
 
   it("blocks an incompatible server: stops the stream, and preset loads and pairing say so, with no popup", async () => {
@@ -941,5 +948,190 @@ describe("createServerConnection", () => {
     expect(store.refreshProgress.value).not.toBeNull();
     stream.emit("resyncRequired", 9, { reason: "gap" });
     expect(store.refreshProgress.value).toBeNull();
+  });
+});
+
+describe("preset events", () => {
+  const CATS = { id: "preset-cats", name: "Cats", filterState: { selectedTags: ["Cats"] } };
+  const DOGS = { id: "preset-dogs", name: "Dogs", filterState: { selectedTags: ["Dogs"] } };
+  const BIRDS = { id: "preset-birds", name: "Birds", filterState: { selectedTags: ["Birds"] } };
+
+  /** A started connection whose server's presets the test changes, as another device does, with fake timers. */
+  async function started(initial: object[] = [CATS, DOGS]) {
+    vi.useFakeTimers();
+    const server = { presets: initial.slice() };
+    const t = setup({ "GET /api/presets": () => json(server.presets) });
+    const steps: string[] = [];
+    t.store.on("appliedPresetFollowed", () => steps.push(`followed ${t.store.appliedFilter.peek().selectedTags.join()}`));
+    t.connection.on("presetsReloaded", () => steps.push("presetsReloaded"));
+    t.connection.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const stream = t.sources[0]!;
+    let revision = 100;
+    return {
+      ...t,
+      server,
+      steps,
+      /** The preset event another device, or this one as `client-1`, sends. */
+      changed(presetId: string | null, clientId: string | null = "client-2") {
+        stream.emit("presetCatalogChanged", revision++, { presetId, clientId });
+      },
+      resync() {
+        stream.emit("resyncRequired", revision++, { reason: "gap" });
+      },
+      /** Waits for the burst's one reload to land. */
+      gather: () => vi.advanceTimersByTimeAsync(REFRESH_GATHER_MS),
+      /** The preset dropdown's shown entry. */
+      shown: () => t.store.presetMenu.peek().entries.find((entry) => entry.value === t.store.presetMenu.peek().selectedValue)?.label,
+      devicePopups: () => t.notified.filter((popup) => popup.kind === "devices")
+    };
+  }
+
+  it("reloads the presets once for a burst of events, updates the preset dropdown, and pops up another device's change", async () => {
+    const t = await started();
+    expect(t.count("GET /api/presets")).toBe(1);
+
+    t.server.presets = [CATS, DOGS, BIRDS];
+    t.changed(BIRDS.id);
+    t.changed(null);
+    t.changed(BIRDS.id, "client-1");
+    await vi.advanceTimersByTimeAsync(REFRESH_GATHER_MS - 1);
+    expect(t.count("GET /api/presets")).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(t.count("GET /api/presets")).toBe(2);
+    expect(t.store.presetMenu.peek().entries.map((entry) => entry.label)).toEqual(["None", "Cats", "Dogs", "Birds"]);
+    expect(t.devicePopups()).toEqual([
+      { kind: "devices", text: 'Preset "Birds" added on another device', key: "presets", logText: "Preset added on another device" }
+    ]);
+    expect(t.steps).toEqual(["presetsReloaded"]);
+  });
+
+  it("reloads for this device's own changes and a reorder without a popup, and counts an event without a client id as another device's", async () => {
+    const t = await started();
+    t.server.presets = [DOGS, { ...CATS, name: "Kittens" }];
+    t.changed(CATS.id, "client-1");
+    t.changed(null);
+    await t.gather();
+    expect(t.count("GET /api/presets")).toBe(2);
+    expect(t.store.presetMenu.peek().entries.map((entry) => entry.label)).toEqual(["None", "Dogs", "Kittens"]);
+    expect(t.devicePopups()).toEqual([]);
+
+    t.server.presets = [DOGS];
+    t.changed(CATS.id, null);
+    await t.gather();
+    expect(t.devicePopups().map((popup) => popup.text)).toEqual(['Preset "Kittens" deleted on another device']);
+  });
+
+  it("keeps each preset as the page held it when its event arrived, so a load landing before the reload doesn't hide the change", async () => {
+    const t = await started();
+    t.server.presets = [{ ...CATS, name: "Kittens" }, DOGS];
+    t.changed(CATS.id);
+    await t.connection.loadPresets();
+    await t.gather();
+    expect(t.devicePopups().map((popup) => popup.text)).toEqual(['Preset "Cats" renamed to "Kittens" on another device']);
+  });
+
+  it("collapses a burst's changes into one popup", async () => {
+    const t = await started();
+    t.server.presets = [{ ...CATS, name: "Kittens" }, BIRDS];
+    t.changed(CATS.id);
+    t.changed(DOGS.id);
+    t.changed(BIRDS.id);
+    await t.gather();
+    expect(t.devicePopups()).toEqual([
+      { kind: "devices", text: "3 presets changed on another device", key: "presets", logText: "3 presets changed on another device" }
+    ]);
+  });
+
+  it("follows another device's new filter for the preset this device applied unchanged, and not once it shows as modified", async () => {
+    const t = await started();
+    t.store.pickHeaderPreset(CATS.id);
+    t.server.presets = [{ ...CATS, filterState: { selectedTags: ["Kittens"] } }, DOGS];
+    t.changed(CATS.id);
+    await t.gather();
+    expect(t.store.appliedFilter.peek().selectedTags).toEqual(["Kittens"]);
+    expect(t.store.activePresetId.peek()).toBe(CATS.id);
+    expect(t.shown()).toBe("Cats");
+    // The library and the Filter tab hear of the follow before the reload's end.
+    expect(t.steps).toEqual(["followed Kittens", "presetsReloaded"]);
+    expect(t.devicePopups()).toEqual([
+      {
+        kind: "devices",
+        text: 'Your preset "Cats" was updated on another device. The library has been updated.',
+        key: "your-preset",
+        logText: "Your preset was updated on another device. The library has been updated."
+      }
+    ]);
+
+    t.store.appliedFilter.value = { ...t.store.appliedFilter.peek(), onlyNeverPlayed: true };
+    t.store.syncHeaderPresets();
+    expect(t.shown()).toBe("Cats*");
+    t.server.presets = [{ ...CATS, filterState: { selectedTags: ["Lions"] } }, DOGS];
+    t.changed(CATS.id);
+    await t.gather();
+    expect(t.store.appliedFilter.peek()).toMatchObject({ selectedTags: ["Kittens"], onlyNeverPlayed: true });
+    expect(t.shown()).toBe("Cats*");
+    expect(t.steps).toEqual(["followed Kittens", "presetsReloaded", "presetsReloaded"]);
+    expect(t.devicePopups().at(-1)).toEqual({
+      kind: "devices",
+      text: 'Preset "Cats" updated on another device',
+      key: "presets",
+      logText: "Preset updated on another device"
+    });
+  });
+
+  it("follows none of the changes of tabs in one browser, which share its client id", async () => {
+    const t = await started();
+    t.store.pickHeaderPreset(CATS.id);
+    t.server.presets = [{ ...CATS, filterState: { selectedTags: ["Kittens"] } }, DOGS];
+    t.changed(CATS.id, "client-1");
+    await t.gather();
+    expect(t.store.appliedFilter.peek().selectedTags).toEqual(["Cats"]);
+    expect(t.shown()).toBe("Cats*");
+    expect(t.steps).toEqual(["presetsReloaded"]);
+    expect(t.devicePopups()).toEqual([]);
+  });
+
+  it("keeps a deleted active preset's filter applied, shown as None*, with its own popup", async () => {
+    const t = await started();
+    t.store.pickHeaderPreset(CATS.id);
+    t.server.presets = [DOGS];
+    t.changed(CATS.id);
+    await t.gather();
+    expect(t.store.appliedFilter.peek().selectedTags).toEqual(["Cats"]);
+    expect(t.store.activePresetId.peek()).toBe(CATS.id);
+    expect(t.shown()).toBe("None*");
+    expect(t.steps).toEqual(["presetsReloaded"]);
+    expect(t.devicePopups()).toEqual([
+      {
+        kind: "devices",
+        text: 'Your preset "Cats" was deleted on another device. Its filter is still applied.',
+        key: "your-preset",
+        logText: "Your preset was deleted on another device. Its filter is still applied."
+      }
+    ]);
+  });
+
+  it("follows the applied preset's new filter on a resync, with only its own popup", async () => {
+    const t = await started();
+    t.store.pickHeaderPreset(CATS.id);
+    t.server.presets = [{ ...CATS, filterState: { selectedTags: ["Kittens"] } }, { ...DOGS, name: "Puppies" }, BIRDS];
+    t.resync();
+    await t.gather();
+    expect(t.store.appliedFilter.peek().selectedTags).toEqual(["Kittens"]);
+    expect(t.shown()).toBe("Cats");
+    expect(t.steps).toEqual(["followed Kittens", "presetsReloaded"]);
+    expect(t.devicePopups().map((popup) => popup.text)).toEqual([
+      'Your preset "Cats" was updated on another device. The library has been updated.'
+    ]);
+
+    // A preset event in the burst, even this device's own, keeps the preset as it was when the event arrived.
+    t.server.presets = [{ ...CATS, filterState: { selectedTags: ["Lions"] } }];
+    t.changed(CATS.id, "client-1");
+    await t.connection.loadPresets();
+    t.resync();
+    await t.gather();
+    expect(t.store.appliedFilter.peek().selectedTags).toEqual(["Lions"]);
+    expect(t.devicePopups()).toHaveLength(2);
   });
 });

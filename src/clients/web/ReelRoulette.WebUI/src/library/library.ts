@@ -470,12 +470,15 @@ export function createLibrary(options: LibraryOptions): Library {
     }
   }
 
-  store.on("headerFilterChanged", () => {
+  // A preset picked in the dropdown, or the applied preset's new filter from another device, starts the library over.
+  const appliedFilterChanged = () => {
     void commitQuery();
     if (serverReady && !store.heldBack.peek()) {
       void loadSourcesForSummary();
     }
-  });
+  };
+  store.on("headerFilterChanged", appliedFilterChanged);
+  store.on("appliedPresetFollowed", appliedFilterChanged);
   connection.on("serverReady", () => {
     serverReady = true;
     void session.ensureLoaded(store.appliedFilter.peek(), controls.peek());

@@ -105,6 +105,16 @@ function setup(presets: ApiPreset[] = [FAVORITES], shared?: FakePresets) {
       connectionListeners[event] = listener;
     }
   };
+  /**
+   * Reloads the presets for a preset event or a resync, as the connection does, with the server's list as it is now: the
+   * store takes them, following the active preset when `activeChanged` says another device changed it, and the dialog
+   * hears that they reloaded.
+   */
+  function presetEvent(options: { activeChanged?: boolean } = {}): void {
+    const active = store.presets.peek().find((preset) => preset.id === store.activePresetId.peek()) ?? null;
+    store.presetsReloaded(structuredClone(server.presets), options.activeChanged ? active : null);
+    connectionListeners.presetsReloaded?.();
+  }
   /** Tells the dialog the server is ready, as the connection does, and lets what it loads arrive. */
   async function serverReady(): Promise<void> {
     connectionListeners.serverReady?.();
@@ -144,7 +154,25 @@ function setup(presets: ApiPreset[] = [FAVORITES], shared?: FakePresets) {
   for (const field of ["flagModes", "minDuration", "maxDuration", "newPresetName"] as const) {
     dialog.reveal.attach(field, () => moves.push(`${field} on ${dialog.tab.peek()}`));
   }
-  return { dialog, view, store, server, messages, notified, notices, noticeLogs, steps, library, remembered, confirm, panel, deviceWrites, serverReady, moves };
+  return {
+    dialog,
+    view,
+    store,
+    server,
+    messages,
+    notified,
+    notices,
+    noticeLogs,
+    steps,
+    library,
+    remembered,
+    confirm,
+    panel,
+    deviceWrites,
+    serverReady,
+    presetEvent,
+    moves
+  };
 }
 
 /** The id of the preset at `index` in the tab's list, or one no preset has past its end. */
@@ -1682,5 +1710,109 @@ describe("the heading while a duration is typed", () => {
     dialog.typeDuration("max", "");
     expect(view().working.maxDurationSeconds).toBe(600);
     expect(view()).toMatchObject({ heading: "Preset: Recent", unsaved: false });
+  });
+});
+
+describe("preset events", () => {
+  function rename(dialog: FilterDialog, id: string, name: string): void {
+    dialog.editPreset(id);
+    dialog.typePresetName(name);
+    dialog.savePresetEdit();
+  }
+
+  it("takes another device's changes by the merge, shown or hidden, keeping an unsaved rename and a typed name", async () => {
+    const { dialog, view, server, presetEvent } = setup([FAVORITES, LONG, RECENT]);
+    await dialog.open();
+    rename(dialog, LONG.id, "Longer");
+    dialog.typeNewPresetName("Typed");
+
+    // Another device renames Recent.
+    server.presets = [FAVORITES, LONG, { ...RECENT, name: "Fresh" }];
+    presetEvent();
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Longer", "Fresh"]);
+    expect(view().savedPresets.map((preset) => preset.name)).toEqual(["Favorites", "Long", "Fresh"]);
+    expect(view().newPresetName).toBe("Typed");
+    expect(view().presetsChanged).toBe(true);
+
+    // Hidden, it takes another device's new preset, and delete, all the same.
+    dialog.close();
+    server.presets = [FAVORITES, LONG, { id: "preset-new", name: "Birds", filterState: { onlyKnownLoudness: true } }];
+    presetEvent();
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Longer", "Birds"]);
+    expect(view().presetsChanged).toBe(true);
+  });
+
+  it("does nothing before it has loaded once", () => {
+    const { dialog, server, presetEvent } = setup([FAVORITES]);
+    server.presets = [FAVORITES, LONG];
+    presetEvent();
+    expect(dialog.view.value).toBeNull();
+  });
+
+  it("doesn't take a reload while Apply's writes are being sent, and Apply's own reload brings the change in", async () => {
+    const { dialog, view, server, presetEvent } = setup([FAVORITES, LONG, RECENT]);
+    await dialog.open();
+    rename(dialog, LONG.id, "Longer");
+    dialog.editPreset(RECENT.id);
+    await dialog.deleteEditedPreset();
+
+    const applied = dialog.apply();
+    // Another device renames Favorites while the writes are on their way.
+    server.fakePresets.list = server.fakePresets.list.map((preset) => (preset.id === FAVORITES.id ? { ...preset, name: "Starred" } : preset));
+    presetEvent();
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Longer"]);
+    expect(view().savedPresets.map((preset) => preset.name)).toEqual(["Favorites", "Long", "Recent"]);
+    await applied;
+
+    expect(server.fakePresets.summaries()).toEqual(["delete preset-recent", "rename preset-long Longer"]);
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Starred", "Longer"]);
+    expect(view().presetsChanged).toBe(false);
+  });
+
+  it("takes the applied preset's new filter into the working filter while it is the applied filter, keeping the tab's other changes", async () => {
+    const { dialog, view, store, server, presetEvent } = setup([FAVORITES, LONG, RECENT]);
+    store.pickHeaderPreset(FAVORITES.id);
+    await dialog.open();
+    rename(dialog, RECENT.id, "Fresh");
+    dialog.typeNewPresetName("Typed");
+    dialog.editPreset(LONG.id);
+    dialog.typePresetName("Lo");
+
+    server.presets = [{ ...FAVORITES, filterState: { favoritesMode: "only", onlyKnownDuration: true } }, LONG, RECENT];
+    presetEvent({ activeChanged: true });
+    expect(store.appliedFilter.peek()).toMatchObject({ favoritesMode: "only", onlyKnownDuration: true });
+    expect(view().working).toMatchObject({ favoritesMode: "only", onlyKnownDuration: true });
+    expect(view().general).toMatchObject({ favoritesOn: true, onlyKnownDuration: true });
+    expect(view().heading).toBe("Preset: Favorites");
+    expect(view().headingPreset).toBe(FAVORITES.id);
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Long", "Fresh"]);
+    expect(view().newPresetName).toBe("Typed");
+    expect(view().presetEdit).toEqual({ id: LONG.id, name: "Lo" });
+    expect(view().unsaved).toBe(true);
+    expect(view().presetsChanged).toBe(true);
+  });
+
+  it("keeps a working filter that differs from the applied filter, a typed duration too, as the user left it", async () => {
+    const { dialog, view, store, server, presetEvent } = setup([FAVORITES, LONG]);
+    store.pickHeaderPreset(FAVORITES.id);
+    await dialog.open();
+    dialog.changeGeneral({ onlyNeverPlayed: true });
+
+    server.presets = [{ ...FAVORITES, filterState: { favoritesMode: "only", onlyKnownDuration: true } }, LONG];
+    presetEvent({ activeChanged: true });
+    expect(store.appliedFilter.peek()).toMatchObject({ onlyKnownDuration: true, onlyNeverPlayed: false });
+    expect(view().working).toMatchObject({ onlyKnownDuration: false, onlyNeverPlayed: true });
+    expect(view().general).toMatchObject({ onlyKnownDuration: false, onlyNeverPlayed: true });
+    // The dots now compare the working filter with the new applied filter.
+    expect(view().applied).toMatchObject({ onlyKnownDuration: true });
+
+    // A duration typed but not yet taken into the working filter is a change too.
+    dialog.discardChanges();
+    dialog.typeDuration("min", "00:05");
+    server.presets = [{ ...FAVORITES, filterState: { favoritesMode: "only", mediaTypeFilter: 1 } }, LONG];
+    presetEvent({ activeChanged: true });
+    expect(store.appliedFilter.peek().mediaTypeFilter).toBe(1);
+    expect(view().working.mediaTypeFilter).toBe(0);
+    expect(view().general.minText).toBe("00:05");
   });
 });

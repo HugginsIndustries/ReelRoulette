@@ -9,11 +9,15 @@ import {
 } from "../events/refreshStatusProjection";
 import { errorText, sendRequest, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
+import { findPresetById } from "../filter/filterStateModel";
+import { presetChanges, presetPopups, type PresetEventRecord } from "../filter/presetEvents";
 import { createSseClient, type EventSourceLike, type SseClient } from "../events/sseClient";
 import type { Notifications } from "../notifications/notifications";
+import { createCoalescedRefresh } from "../stats/coalescedRefresh";
+import type { components } from "../types/openapi.generated";
 import type { RefreshKeptSource } from "../types/serverContracts";
 import type { AppApi } from "./appApi";
-import { PRESET_MENU_BLOCKED, PRESET_MENU_LOAD_FAILED, PRESET_MENU_NO_LIBRARY, type AppStore } from "./appStore";
+import { PRESET_MENU_BLOCKED, PRESET_MENU_LOAD_FAILED, PRESET_MENU_NO_LIBRARY, type ApiPreset, type AppStore } from "./appStore";
 import { serverCompatibilityError, serverVersionOf } from "./serverCompatibility";
 
 /** A version check that gets no answer in this time counts as not reaching the server. */
@@ -48,8 +52,16 @@ export interface ServerConnectionEvents {
    * Sent once the run's source stage has finished, or the run has stopped, and again only when a run's list changes.
    */
   refreshKeptSources: (keptSources: RefreshKeptSource[]) => void;
-  /** The server could not replay missed events. Presets have started reloading, and the refresh progress cleared. */
+  /**
+   * The server could not replay missed events. The refresh progress has cleared, and the presets reload shortly, as for
+   * a preset event, sending `presetsReloaded` once they have.
+   */
   resyncRequired: (payload: any) => void;
+  /**
+   * The presets reloaded for a burst of preset events or a resync, and the store took them, the applied preset's new
+   * filter included when the store followed it.
+   */
+  presetsReloaded: () => void;
 }
 
 export interface ServerConnection {
@@ -57,7 +69,7 @@ export interface ServerConnection {
    * Checks the server version, opens the event stream, and pairs with the config's token, which pops nothing up. The
    * version is checked again each time the event stream opens, or fails while the server doesn't ask for pairing, and
    * every few seconds while the stream is open and the last check didn't reach the server. The presets load once a
-   * check finds the server ready.
+   * check finds the server ready, and again once for each burst of preset events or resyncs.
    */
   start(): void;
   /** Closes the event stream and removes the reconnect listeners. */
@@ -80,7 +92,7 @@ export interface ServerConnectionOptions {
   api: AppApi;
   /** The in-app dialogs, for a pairing that fails or that the server's compatibility check blocks. */
   dialogs: Pick<Dialogs, "notice">;
-  /** The one-off messages: Paired., Reconnected., and how a library refresh ended. */
+  /** The one-off messages: Paired., Reconnected., how a library refresh ended, and preset changes from another device. */
   notifications: Pick<Notifications, "notify">;
   /** Defaults to the global `fetch`, looked up on each request. */
   fetch?: typeof fetch;
@@ -102,7 +114,8 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     tagCatalogChanged: [],
     refreshCompleted: [],
     refreshKeptSources: [],
-    resyncRequired: []
+    resyncRequired: [],
+    presetsReloaded: []
   };
   let eventStream: SseClient | null = null;
   let lastAppliedRefreshRunId: string | null = null;
@@ -121,6 +134,12 @@ export function createServerConnection(options: ServerConnectionOptions): Server
   let streamOpen = false;
   /** The next check while the stream is open and the last check didn't reach the server. */
   let recheckTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The presets the preset events since the last reload named, by id, each as the page held it when its first arrived. */
+  let presetEvents = new Map<string, PresetEventRecord>();
+  /** A resync asked for the next reload. */
+  let resyncAsked = false;
+  /** Reloads the presets once for a burst of preset events and resyncs. */
+  const presetReloads = createCoalescedRefresh(reloadPresetsForEvents);
 
   function emit<K extends keyof ServerConnectionEvents>(event: K, ...args: Parameters<ServerConnectionEvents[K]>): void {
     for (const listener of listeners[event]) {
@@ -216,20 +235,29 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     return true;
   }
 
-  async function loadPresets(): Promise<boolean> {
+  /** The store takes loaded presets and rebuilds the preset dropdown. */
+  function takeLoadedPresets(presets: ApiPreset[]): void {
+    store.presets.value = presets;
+    store.presetsLoaded();
+  }
+
+  /** Loads the saved presets, which `take` gives the store, and says whether they loaded. */
+  async function loadPresets(take: (presets: ApiPreset[]) => void = takeLoadedPresets): Promise<boolean> {
     if (presetsHeldBack()) {
       return false;
     }
 
     try {
       const presets = await api.getJson("/api/presets");
-      store.presets.value = Array.isArray(presets) ? presets : [];
+      const list: ApiPreset[] = Array.isArray(presets) ? presets : [];
       // The server failed the compatibility check, or turned out to have no library, while they loaded; the check
       // that finds it ready again loads them again.
-      if (presetsHeldBack()) {
+      if (store.heldBack.peek()) {
+        store.presets.value = list;
+        presetsHeldBack();
         return false;
       }
-      store.presetsLoaded();
+      take(list);
       return true;
     } catch (error) {
       // A 401 shows only the pairing prompt, which the request has asked for, and sent its line: the preset dropdown
@@ -242,6 +270,58 @@ export function createServerConnection(options: ServerConnectionOptions): Server
       store.relayStatus(`Error loading presets: ${errorText(error)}`);
       return false;
     }
+  }
+
+  /**
+   * Records a preset event for the next reload, which it asks for. The preset is kept as the page holds it now, since
+   * another load, such as the Filter tab's, can land before the reload and hide the change. A preset named by several
+   * events in a burst keeps its first record, and counts as another device's when any of them came from one. An event
+   * without a client id counts as another device's.
+   */
+  function recordPresetEvent(payload: Partial<components["schemas"]["PresetCatalogChangedPayload"]>): void {
+    const id = typeof payload.presetId === "string" ? payload.presetId : null;
+    if (id !== null) {
+      const anotherDevice = !payload.clientId || payload.clientId !== store.identity.clientId;
+      const recorded = presetEvents.get(id);
+      if (recorded) {
+        recorded.anotherDevice ||= anotherDevice;
+      } else {
+        presetEvents.set(id, { before: findPresetById(store.presets.peek(), id) ?? null, anotherDevice });
+      }
+    }
+    // A reorder names no preset, and needs the reload all the same.
+    void presetReloads.request();
+  }
+
+  /**
+   * Reloads the presets for the preset events and resyncs recorded since the last reload, keeping those that arrive
+   * meanwhile for the next. The store follows the active preset when another device changed its filter while it applied
+   * unchanged; tabs in one browser share a client id, so they follow none of each other's changes. A resync, which can't
+   * tell which device changed which preset, follows it the same way, and shows only the active preset's own popup.
+   * Otherwise another device's changes pop up. A load that fails drops what it took.
+   */
+  async function reloadPresetsForEvents(): Promise<void> {
+    const records = presetEvents;
+    presetEvents = new Map();
+    const resync = resyncAsked;
+    resyncAsked = false;
+    const activeId = store.activePresetId.peek();
+    if (resync && activeId !== null) {
+      const recorded = records.get(activeId);
+      records.set(activeId, { before: recorded ? recorded.before : findPresetById(store.presets.peek(), activeId) ?? null, anotherDevice: true });
+    }
+    const active = activeId === null ? undefined : records.get(activeId);
+    let followed = false;
+    const loaded = await loadPresets((presets) => {
+      followed = store.presetsReloaded(presets, active?.anotherDevice ? active.before : null);
+    });
+    if (!loaded) {
+      return;
+    }
+    for (const popup of presetPopups(presetChanges(records, store.presets.peek()), activeId, followed, resync)) {
+      notifications.notify(popup);
+    }
+    emit("presetsReloaded");
   }
 
   /** Reads `/api/version`, failing after `VERSION_CHECK_TIMEOUT_MS` without an answer. */
@@ -378,6 +458,9 @@ export function createServerConnection(options: ServerConnectionOptions): Server
         tagCatalogChanged(payload) {
           emit("tagCatalogChanged", payload);
         },
+        presetCatalogChanged(payload) {
+          recordPresetEvent(payload);
+        },
         refreshStatusChanged(payload) {
           const raw = payload?.snapshot || payload?.Snapshot;
           if (!raw) return;
@@ -404,7 +487,9 @@ export function createServerConnection(options: ServerConnectionOptions): Server
         resyncRequired(payload) {
           // A refresh that ended while events were missed would otherwise stay showing.
           store.refreshProgress.value = null;
-          void loadPresets();
+          // Presets changed while events were missed reload as for a preset event.
+          resyncAsked = true;
+          void presetReloads.request();
           emit("resyncRequired", payload);
         }
       }
@@ -504,7 +589,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
       cancelRecheck();
       store.reconnecting.value = false;
     },
-    loadPresets,
+    loadPresets: () => loadPresets(),
     pair: (token) => pair(token, true),
     on(event, listener) {
       listeners[event].push(listener);

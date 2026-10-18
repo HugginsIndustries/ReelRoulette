@@ -785,6 +785,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
   font: inherit;
   cursor: pointer;
 }
+.mock-sheet-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -1172,7 +1173,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
                   <span class="setting-label" id="set-popup-kinds-label">Show popups for</span>
                   <div class="choice-stack" role="group" aria-labelledby="set-popup-kinds-label">
                     <label><input type="checkbox" name="set-popup-kind" value="actions"><span>Your actions<small>Such as Added to favorites, Filters applied, and Path copied.</small></span></label>
-                    <label><input type="checkbox" name="set-popup-kind" value="devices"><span>Other devices<small>Favorites and blacklist changes made on another device.</small></span></label>
+                    <label><input type="checkbox" name="set-popup-kind" value="devices"><span>Other devices<small>Favorites, blacklist, and preset changes made on another device.</small></span></label>
                     <label><input type="checkbox" name="set-popup-kind" value="refresh"><span>Library refresh<small>When a refresh finishes or fails.</small></span></label>
                     <label><input type="checkbox" name="set-popup-kind" value="skips"><span>Skipped files<small>When playback skips a missing file or one this browser can't play.</small></span></label>
                     <label><input type="checkbox" name="set-popup-kind" value="connection"><span>Connection<small>When the connection to the server comes back, or the library can't load more.</small></span></label>
@@ -1345,10 +1346,19 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <legend>Events</legend>
         <div class="mock-sheet-actions">
           <button type="button" id="mock-sync">A favorite from another device</button>
+          <button type="button" id="mock-preset-added">A preset added on another device</button>
+          <button type="button" id="mock-preset-renamed">A preset renamed on another device</button>
+          <button type="button" id="mock-preset-updated">A preset updated on another device</button>
+          <button type="button" id="mock-preset-deleted">A preset deleted on another device</button>
+          <button type="button" id="mock-presets-burst">Three presets changed on another device</button>
+          <button type="button" id="mock-your-updated">Your preset updated on another device</button>
+          <button type="button" id="mock-your-deleted">Your preset deleted on another device</button>
           <button type="button" id="mock-kept-one">A refresh keeps Phone backup's items</button>
           <button type="button" id="mock-kept-both">A refresh keeps both sources' items</button>
           <button type="button" id="mock-startup">The runtime config fails</button>
         </div>
+        <p class="mock-small mock-keep">The preset changes act on presets besides yours, the one the preset dropdown shows; the Your preset ones act on yours.</p>
+        <p class="mock-small mock-keep" id="mock-presets-note" hidden></p>
         <p class="mock-small mock-keep">A refresh that finds no media files in a source's folder keeps its items, and a notice names each folder once per page load; reload the page to see it again.</p>
       </fieldset>
       <div class="mock-sheet-actions">
@@ -3112,6 +3122,8 @@ $("lib-dir").addEventListener("click", () => {
 // presets" when they can't load, and the applied filter's preset as the app names it, with a starred row, such as
 // "Favorites*", while it matches no preset and isn't the default filter.
 function renderLibPresets() {
+  // The Mockup tab's preset changes from another device follow the preset the dropdown shows.
+  renderMockPresets();
   const select = $("lib-preset");
   select.textContent = "";
   const add = (value, label) => select.append(Object.assign(document.createElement("option"), { value, textContent: label }));
@@ -3123,7 +3135,7 @@ function renderLibPresets() {
   if (presetsLoading) return add("", "Loading...");
   select.disabled = false;
   const anchor = presetAnchor(appliedValue || DEFAULT_FILTER, lib.preset, presetSnapshot, savedPresetFilters);
-  if (anchor.starred) add("*", anchorLabel(anchor, savedPresetNames));
+  if (anchor.starred) add("*", anchorLabel(anchor, presetSnapshot, savedPresetNames));
   add("", "None");
   presetSnapshot.forEach((id) => add(id, savedPresetNames.get(id)));
   select.value = anchor.starred ? "*" : anchor.id;
@@ -3207,7 +3219,7 @@ let chosenPreset = lib.preset;
 const chosenFilter = () => (chosenPreset ? presetFilters.get(chosenPreset) : DEFAULT_FILTER);
 function startOver() {
   tabBase = lib.preset;
-  chosenPreset = lib.preset;
+  chosenPreset = presets.includes(lib.preset) ? lib.preset : "";
 }
 // Each time the Presets section comes into view, however it got there, Choose Preset starts over on the preset the
 // heading names, its base while starred, with or without unsaved changes: from its sub-tab, the Filter tab, or the
@@ -3223,14 +3235,15 @@ function notePresetsView() {
   presetsWereInView = inView;
 }
 // The preset a filter is named for, as the app names it: None for the default filter; otherwise the first preset whose
-// filter matches; otherwise the preset it came from, or None, starred. Presets go by id.
+// filter matches; otherwise the preset it came from, starred. That preset stays while the list lacks it, as after
+// another device deletes it, showing as None*. Presets go by id.
 function presetAnchor(value, base, ids, filters) {
   if (sameFilter(value, DEFAULT_FILTER)) return { id: "", starred: false };
   const match = ids.find((id) => sameFilter(filters.get(id), value));
   if (match) return { id: match, starred: false };
-  return { id: ids.includes(base) ? base : "", starred: true };
+  return { id: base, starred: true };
 }
-const anchorLabel = (anchor, names) => `${(anchor.id && names.get(anchor.id)) || "None"}${anchor.starred ? "*" : ""}`;
+const anchorLabel = (anchor, ids, names) => `${(ids.includes(anchor.id) && names.get(anchor.id)) || "None"}${anchor.starred ? "*" : ""}`;
 
 function showSub(sub) {
   document.querySelectorAll(".filter-tab").forEach((tab) => {
@@ -3379,8 +3392,9 @@ function renderApply() {
   // doesn't change the preset. Choose Preset doesn't follow it.
   const anchor = presetAnchor(workingValue(), tabBase, presets, presetFilters);
   tabBase = anchor.id;
-  const named = anchor.id ? presetFilters.get(anchor.id) : DEFAULT_FILTER;
-  $("filter-heading").textContent = `Preset: ${anchorLabel({ id: anchor.id, starred: !sameFilter(filterValue(), named) }, presetNames)}`;
+  // A preset the list lacks has no filter to match, so it stays starred.
+  const named = !anchor.id ? DEFAULT_FILTER : presets.includes(anchor.id) ? presetFilters.get(anchor.id) : null;
+  $("filter-heading").textContent = `Preset: ${anchorLabel({ id: anchor.id, starred: !named || !sameFilter(filterValue(), named) }, presets, presetNames)}`;
   const generalTab = document.querySelector('.filter-tab[data-sub="general"]');
   const generalProblem = flagModesField.flagged || minField.flagged || maxField.flagged;
   generalTab.classList.toggle("has-problem", generalProblem);
@@ -3671,6 +3685,65 @@ $("filter-add-preset").addEventListener("click", () => {
   presetsChanged();
   $("filter-preset-list").lastElementChild?.querySelector(".drag-handle")?.focus();
 });
+
+// A freshly loaded preset list, by id, as the preset event brings it, becomes the saved presets, and the tab takes it by
+// merging, keeping its unsaved changes: a preset it hasn't changed takes the server's version, and its renames, filter
+// changes, deletes, and new presets stay. The list keeps the server's order unless the tab reordered, which keeps the
+// tab's, with presets new on the server at the end. A preset the server no longer has leaves the tab's list, with any
+// change to it, rather than coming back on Apply.
+function takeLoadedPresets(order, names, filters) {
+  const saved = presets.filter((id) => presetSnapshot.includes(id));
+  const savedOrder = presetSnapshot.filter((id) => saved.includes(id));
+  const reordered = saved.some((id, index) => id !== savedOrder[index]);
+  const added = presets.filter((id) => !presetSnapshot.includes(id));
+  const fresh = order.filter((id) => !presetSnapshot.includes(id));
+  const merged = reordered
+    ? [...presets.filter((id) => order.includes(id) || added.includes(id)), ...fresh]
+    : [...order.filter((id) => presets.includes(id) || fresh.includes(id)), ...added];
+  const ownName = (id) => !order.includes(id) || presetNames.get(id) !== savedPresetNames.get(id);
+  const ownFilter = (id) => !order.includes(id) || !sameFilter(presetFilters.get(id), savedPresetFilters.get(id));
+  presetNames = new Map(merged.map((id) => [id, ownName(id) ? presetNames.get(id) : names.get(id)]));
+  presetFilters = new Map(merged.map((id) => [id, ownFilter(id) ? presetFilters.get(id) : filters.get(id)]));
+  presets.splice(0, presets.length, ...merged);
+  presetSnapshot = order.slice();
+  savedPresetNames = new Map(names);
+  savedPresetFilters = new Map(filters);
+  presetsChanged();
+}
+// The applied filter takes `value`, as when another device changes the filter of the preset this device applied
+// unchanged, and the library reloads, as a page load does. The tab's working filter takes it too while it is the
+// applied filter unchanged, and otherwise stays as the user left it. The tab's unsaved preset changes stay either way.
+function followAppliedFilter(value) {
+  const fields = [...filterBody.querySelectorAll('[data-subpanel="general"] input, [data-subpanel="general"] select'), $("filter-global")];
+  const follows = sameFilter(filterValue(), appliedValue);
+  const working = { fields: fields.map((el) => [el, el.value, el.checked]), tags: new Map(filterTagState), local: new Map(filterLocalModes), base: tabBase };
+  // The applied filter goes into the tab's fields, which the applied state and the Filters line read.
+  $("filter-playable").checked = applied.playable;
+  applyFilterValue(value);
+  snapshot = snapshot.map((entry) => (fields.includes(entry[0]) ? [entry[0], entry[0].value, entry[0].checked, entry[0].disabled] : entry));
+  tagSnapshot = new Map(filterTagState);
+  localSnapshot = new Map(filterLocalModes);
+  appliedValue = filterValue();
+  saveFilterState();
+  readApplied();
+  // Only files this browser can play stays as the tab has it, and so does the rest of a working filter that differed.
+  working.fields.forEach(([el, fieldValue, checked]) => {
+    if (follows && el !== $("filter-playable")) return;
+    el.value = fieldValue;
+    el.checked = checked;
+  });
+  if (!follows) {
+    filterTagState.clear();
+    working.tags.forEach((mode, key) => filterTagState.set(key, mode));
+    filterLocalModes = new Map(working.local);
+    tabBase = working.base;
+    syncModeSelects();
+    [minField, maxField].forEach((field) => field.update());
+  }
+  renderFilterTags();
+  renderApply();
+  reloadGrid();
+}
 
 function chipEl(name, buttons, stateClass) {
   const chip = document.createElement("div");
@@ -4357,6 +4430,117 @@ $("mock-sync").addEventListener("click", () => {
   renderPlayback();
   layoutGrid(true);
 });
+
+// Preset changes from another device. The page reloads the presets and tells the changes apart by comparing the list
+// with the one before, since the event carries only the preset's id and the device's clientId. The preset dropdown takes
+// the list at once, and the Filter tab by its merge, whether it shows or not. Like the server, another device saves no
+// preset with the default filter or another preset's filter.
+const ADDED_PRESET_NAMES = ["Dogs", "Cats", "Birds", "Horses", "Boats", "Trains"];
+const RENAMED_PRESET_NAMES = ["Puppies", "Kittens", "Highlights", "Road trips", "Weekends", "Quick picks"];
+// The server's presets, as the dropdown last loaded them, in a copy another device's change edits.
+const serverPresets = () => ({ order: presetSnapshot.slice(), names: new Map(savedPresetNames), filters: new Map(savedPresetFilters) });
+// Your preset: the one this device has applied, which the dropdown shows, starred while its filter shows as modified,
+// or null while None is applied or the list lacks it.
+function yourPreset() {
+  const anchor = presetAnchor(appliedValue || DEFAULT_FILTER, lib.preset, presetSnapshot, savedPresetFilters);
+  return presetSnapshot.includes(anchor.id) ? anchor : null;
+}
+const otherPresets = () => presetSnapshot.filter((id) => id !== yourPreset()?.id);
+// A name and a filter that neither the server's presets nor the tab's have, and a filter that is neither applied nor in
+// the tab, so a change shows only as itself.
+function freePresetName(candidates, server) {
+  const names = [...server.order.map((id) => server.names.get(id)), ...presets.map((id) => presetNames.get(id))];
+  const free = (name) => !names.some((each) => sameName(each, name));
+  return candidates.find(free) ?? Array.from({ length: names.length + 1 }, (_, index) => `Preset ${index + 1}`).find(free);
+}
+function freePresetFilter(server) {
+  const held = [...server.order.map((id) => server.filters.get(id)), ...presets.map((id) => presetFilters.get(id)), appliedValue, filterValue()];
+  for (let minutes = 1; ; minutes++) {
+    const value = { ...DEFAULT_FILTER, media: "videos", min: minutes * 60 };
+    if (!held.some((each) => sameFilter(each, value))) return value;
+  }
+}
+const PRESET_POPUPS = {
+  added: (change) => `Preset "${change.name}" added on another device`,
+  renamed: (change) => `Preset "${change.name}" renamed to "${change.to}" on another device`,
+  updated: (change) => `Preset "${change.name}" updated on another device`,
+  deleted: (change) => `Preset "${change.name}" deleted on another device`
+};
+// Another device changes the server's presets with `edit`, in one burst of events that share one reload.
+function presetsFromAnotherDevice(edit) {
+  const before = serverPresets();
+  const yours = yourPreset();
+  const server = serverPresets();
+  edit(server);
+  // A rename and a filter change in one burst read as updated, by the new name. A reorder alone is no change.
+  const changes = server.order.filter((id) => !before.order.includes(id)).map((id) => ({ id, kind: "added", name: server.names.get(id) }));
+  before.order.forEach((id) => {
+    const name = before.names.get(id);
+    if (!server.order.includes(id)) changes.push({ id, kind: "deleted", name });
+    else if (!sameFilter(server.filters.get(id), before.filters.get(id))) changes.push({ id, kind: "updated", name: server.names.get(id) });
+    else if (server.names.get(id) !== name) changes.push({ id, kind: "renamed", name, to: server.names.get(id) });
+  });
+  // Your preset's new filter applies while its filter is unchanged; a delete keeps its filter, shown as modified.
+  const yourChange = yours && changes.find((change) => change.id === yours.id);
+  const follows = yourChange?.kind === "updated" && !yours.starred;
+  takeLoadedPresets(server.order, server.names, server.filters);
+  if (follows) followAppliedFilter(server.filters.get(yours.id));
+  lib.preset = presetAnchor(appliedValue, lib.preset, presetSnapshot, savedPresetFilters).id;
+  saveLibState();
+  renderLibPresets();
+  // The ordinary popups share one key, so a later burst's replaces one still showing, and several changes collapse
+  // into one. A change to your preset that changes what this device plays keeps its own popup, with a key of its own;
+  // a rename, or an update while its filter shows as modified, is ordinary.
+  const own = yourChange && (follows || yourChange.kind === "deleted") ? yourChange : null;
+  const rest = changes.filter((change) => change !== own);
+  if (rest.length) {
+    notes.notify({ kind: "devices", text: rest.length > 1 ? `${rest.length} presets changed on another device` : PRESET_POPUPS[rest[0].kind](rest[0]), key: "presets" });
+  }
+  if (own) {
+    notes.notify({
+      kind: "devices",
+      text: own.kind === "deleted"
+        ? `Your preset "${own.name}" was deleted on another device. Its filter is still applied.`
+        : `Your preset "${own.name}" was updated on another device. The library has been updated.`,
+      key: "your-preset"
+    });
+  }
+}
+const addPreset = (server) => {
+  const id = `preset-${nextPresetId++}`;
+  server.names.set(id, freePresetName(ADDED_PRESET_NAMES, server));
+  server.filters.set(id, freePresetFilter(server));
+  server.order.push(id);
+};
+const renamePreset = (server, id) => server.names.set(id, freePresetName(RENAMED_PRESET_NAMES, server));
+const updatePreset = (server, id) => server.filters.set(id, freePresetFilter(server));
+const deletePreset = (server, id) => server.order.splice(server.order.indexOf(id), 1);
+$("mock-preset-added").addEventListener("click", () => presetsFromAnotherDevice(addPreset));
+$("mock-preset-renamed").addEventListener("click", () => presetsFromAnotherDevice((server) => renamePreset(server, otherPresets()[0])));
+$("mock-preset-updated").addEventListener("click", () => presetsFromAnotherDevice((server) => updatePreset(server, otherPresets()[0])));
+$("mock-preset-deleted").addEventListener("click", () => presetsFromAnotherDevice((server) => deletePreset(server, otherPresets().at(-1))));
+$("mock-presets-burst").addEventListener("click", () => presetsFromAnotherDevice((server) => {
+  const others = otherPresets();
+  addPreset(server);
+  renamePreset(server, others[0]);
+  deletePreset(server, others.at(-1));
+}));
+$("mock-your-updated").addEventListener("click", () => presetsFromAnotherDevice((server) => updatePreset(server, yourPreset().id)));
+$("mock-your-deleted").addEventListener("click", () => presetsFromAnotherDevice((server) => deletePreset(server, yourPreset().id)));
+// Your preset's changes need a preset applied, and the others one besides it, or two for three at once.
+function renderMockPresets() {
+  const yours = yourPreset();
+  const others = otherPresets().length;
+  ["mock-preset-renamed", "mock-preset-updated", "mock-preset-deleted"].forEach((id) => ($(id).disabled = others < 1));
+  $("mock-presets-burst").disabled = others < 2;
+  $("mock-your-updated").disabled = $("mock-your-deleted").disabled = !yours;
+  const why = [
+    yours ? "" : "To change your preset, pick one in the preset dropdown first.",
+    others ? (others < 2 ? "Three presets changed needs two presets besides yours: add one first." : "") : "To change a preset besides yours, add one first."
+  ].filter(Boolean).join(" ");
+  $("mock-presets-note").textContent = why;
+  $("mock-presets-note").hidden = !why;
+}
 
 // A refresh that finds no media files in a source's folder while the library holds items from it, as when the drive
 // or share it is on isn't mounted, keeps those items. Once the refresh has gone through the sources, the notice names

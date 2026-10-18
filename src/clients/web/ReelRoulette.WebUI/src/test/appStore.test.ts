@@ -450,4 +450,36 @@ describe("remembered filter", () => {
     store.presetsLoaded();
     expect(store.appliedFilter.value).toEqual({ ...createDefaultFilterState(), onlyNeverPlayed: true });
   });
+
+  it("follows the active preset's new filter from reloaded presets, writing one record, and tells listeners without a pick", () => {
+    const { store, storage } = setup();
+    store.presets.value = [BEACH];
+    store.presetsLoaded();
+    store.pickHeaderPreset(BEACH.id);
+    const writes = () => storage.writtenKeys.filter((key) => key === KEY).length;
+    expect(writes()).toBe(1);
+    const picked = vi.fn();
+    const followed = vi.fn();
+    store.on("headerFilterChanged", picked);
+    store.on("appliedPresetFollowed", followed);
+
+    const shore = { ...BEACH, filterState: serializeFilterStateForApi({ ...createDefaultFilterState(), selectedTags: ["Shore"] }) };
+    expect(store.presetsReloaded([shore], BEACH)).toBe(true);
+    expect(store.appliedFilter.value.selectedTags).toEqual(["Shore"]);
+    expect(store.selectedPresetValue()).toBe("preset-beach");
+    expect(writes()).toBe(2);
+    expect(remembered(storage)).toMatchObject({ presetId: "preset-beach", unchanged: true, filter: { selectedTags: ["Shore"] } });
+    expect(followed).toHaveBeenCalledTimes(1);
+    expect(picked).not.toHaveBeenCalled();
+
+    // Without another device's change to the active preset, or while the applied filter isn't the preset's own as
+    // it was, the filter stays, shown as modified.
+    const coast = { ...BEACH, filterState: serializeFilterStateForApi({ ...createDefaultFilterState(), selectedTags: ["Coast"] }) };
+    expect(store.presetsReloaded([coast], null)).toBe(false);
+    expect(store.appliedFilter.value.selectedTags).toEqual(["Shore"]);
+    expect(store.presetMenu.value.entries[0]!.label).toBe("Beach*");
+    expect(store.presetsReloaded([coast], BEACH)).toBe(false);
+    expect(store.appliedFilter.value.selectedTags).toEqual(["Shore"]);
+    expect(followed).toHaveBeenCalledTimes(1);
+  });
 });

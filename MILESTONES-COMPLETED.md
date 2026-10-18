@@ -6,6 +6,460 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12i6 - Per-Preset Preset Writes
+
+- **Status**: ✅ Complete
+- **Goal**: Saving, renaming, reordering, or deleting a preset on one device changes only that preset on the server, so two devices editing presets do not overwrite each other.
+- **Depends on**: Desktop Client Removal, so only the WebUI moves to per-preset writes and the whole-list replace goes in the same change.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- Each preset has a stable id, kept across renames, which the preset routes, the random request's `presetId`, and the preset event use.
+- The catalog moves to schema version 5, with its own upgrade step from 4 that adds the preset id column, gives each stored preset an id, and rewrites each stored filter state's old `favoritesOnly` and `excludeBlacklisted` into its Favorites and Blacklisted modes, so every stored preset has one shape.
+- Once stored presets are rewritten, the server and the WebUI stop reading the old fields.
+- No preset may hold the default filter or the same filter as another preset. The Filter tab keeps from saving either, and the preset routes refuse both, so a chosen preset never needs telling apart from another with its filter.
+- Core and the WebUI compare filters by one rule, the WebUI's for the Filter tab's "Preset*" star, which `preset-filter-equality.json` locks for both, back under `shared/fixtures/` with a Core reader beside the WebUI's.
+- A filter is the default one when it equals the default filter by that rule.
+- A category's AND match mode counts as no entry in the comparison, as the WebUI drops it from every filter it reads.
+- A source list compares as the set of sources it names, so a list naming every source differs from all sources: all sources also takes in a source added later, the comparison needs no source list, and checking every source in the Filter tab writes all sources rather than a list.
+- The WebUI names presets by id: the Filter tab's list, its heading's preset, and the preset Choose Preset has chosen, the preset dropdown, and the remembered active preset.
+- When the Filter tab takes a freshly loaded preset list while it holds unsaved preset changes, presets it hasn't changed take the server's version, and its renames, filter changes, deletes, and new presets stay.
+- The merged list keeps the server's order unless the tab reordered, which keeps the tab's order, with presets new on the server at the end.
+- A preset another device deleted leaves the tab's list, with any unsaved change to it, rather than coming back on Apply.
+- An Apply that would have two or more presets take each other's names, or their filters, in a loop, such as two presets swapping names or three rotating them, is blocked in the Filter tab, not supported. Apply shows as unavailable, with a reason naming each preset in the loop and saying to apply the change in two steps.
+- Pressing Apply while a loop blocks it shows the reason in a notice, since a phone or tablet shows no tooltip and Apply saves the user's work. Add Preset and Update keep their reasons in their tooltips only.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Server | ✅ Complete | The schema step with preset ids and rewritten filter states, per-preset writes in the catalog, the preset event, and the server's filter parser without the old fields. |
+| Contract | ✅ Complete | Per-preset routes, the preset id in responses and random requests, and the preset event, in OpenAPI and the generated WebUI types. |
+| WebUI old fields | ✅ Complete | The WebUI reading only the Favorites and Blacklisted modes, `filter-enum-values.json` locking how the server and the WebUI read them, and `filter-mode-resolution.json` moved to the Core tests. |
+| Duplicate filter | ✅ Complete | Add Preset and Update disabled for a filter a preset already has, and Choose Preset only choosing the preset that new Load and Update icon buttons act on, in the mockup and then the app. |
+| WebUI writes | ✅ Complete | The Filter tab saving each changed preset by id, Apply blocked by a loop of names or filters, a refused save showing the server's reason, the active preset remembered by id, and the whole-list replace removed. |
+| WebUI events | ✅ Complete | Every open WebUI following the preset event, the applied preset following another device's change, and Other devices popups for preset changes. |
+
+#### Server slice
+
+**Scope**
+
+- The catalog moves to schema version 5 with its own step from 4, as the Decisions describe. A new catalog has the id column too, last in its table.
+- The step rewrites the old fields with `FlagFilterModes.ResolveFavorites` and `ResolveBlacklisted`, and removes the old keys.
+- Create, update, rename, reorder, and delete one preset in the catalog under the server's preset lock, held across each catalog write. Reorder takes the ids in their new order and changes no preset's filter.
+- Create and rename refuse a name another preset has, ignoring case.
+- The whole-list replace keeps working until the WebUI slice removes it, keeping each preset's id by its name, ignoring case, and giving a new name a new id.
+- Tag rename and delete keep updating presets on the server, and are never refused for the filters they leave.
+- Create and update refuse a preset whose filter is the default one or another preset's, by Core's comparison: create against every preset, and update against every preset but the one it changes. The refusal for another preset's filter names that preset.
+- Core's filter comparison, beside `FilterStateModel` in `src/core/ReelRoulette.Core/Filtering/`, compares as the WebUI's `filterStatesEqualForPresetMatch` does, with a category's AND entry counting as none, and tells the default filter by equality with it.
+- `preset-filter-equality.json` moves from the WebUI's test fixtures back to `shared/fixtures/`. Core tests read it through `LibraryListFilterParser`, and the WebUI's fixture test reads it there.
+- The fixture's cases with the old fields go, and "category local mode differs from none", an AND entry, becomes a case where an AND entry equals none.
+- The WebUI's `filterStatesEqualForPresetMatch` drops AND entries itself, so its fixture test passes the new case as Core's does.
+- Each per-preset write publishes `presetCatalogChanged` with the changed preset's id, or none for a reorder, which changes no one preset, and the request's `clientId`. Tag rename and delete keep publishing only `tagCatalogChanged`, from which the WebUI revises its presets.
+- `LibraryListFilterParser` no longer reads the old fields.
+
+**Traps**
+
+- The `presets` table is keyed by `position`, with `name`, `name_fold`, and `filter_state` (`LibraryCatalogStore.cs`), so a preset has no id of its own.
+- `PresetResponse.id` is the preset's name (`GetPresets` in `LibraryPlaybackService.cs`), and the random request's `presetId` matches a stored preset by name (`ResolvePreset`).
+- `PersistPresetCatalog` in `ServerStateService.cs` writes the whole list, and presets are stored as the posted JSON, so the server keeps fields it doesn't read.
+- The catalog is at schema version 4, which hasn't shipped: no release tag contains it (measured before promotion). A catalog already at 4, such as a development server's, would fail `HasRequiredCatalogSchema` and be moved aside as damaged if version 4 changed, so the id column takes its own step.
+- `LibraryCatalogMigrationTests` compares an upgraded catalog with a new one through `CatalogSeedTests.DescribeSchema`, column by column in order, so the new column is last in the new catalog's table too.
+- `OlderSchemaVersions()` covers every version from 2 to the one before current, so `CatalogSeed` needs schema 4 tables and a schema 5 seed.
+- No release contains the Favorites and Blacklisted modes, so every preset a release saved has only the old fields (measured).
+- A WebUI preset save writes every preset with its modes, so only presets nobody saved since keep only the old fields (inferred).
+- The server publishes no event when presets change.
+- The server compares no filters: the preset comparison is the WebUI's `filterStatesEqualForPresetMatch`, which `preset-filter-equality.json`, in the WebUI's test fixtures, locks.
+- `filterStatesEqualForPresetMatch` compares the filters it is given, and the WebUI drops AND entries where it reads a filter (`withoutAndLocalModes`), so the fixture says an AND entry differs from none.
+- The server's parser reads a duration with `TimeSpan.TryParse`, so `"1:30"` is 1 h 30 min and fractions of a second stay, while the WebUI's `parseServerDuration` reads two parts as minutes and seconds, and its comparison writes whole seconds. Neither client writes a two-part duration (inferred), so the comparison compares whole seconds and the fixture has no two-part duration.
+- A tag rename onto another tag's name merges the two (`RenameTag_OntoExistingName_MergesCatalogAndItemTags`), and a tag delete removes the tag from every preset, so either can leave two presets with one filter, or one with the default filter.
+- `FilterStateSchema_NamesEveryFieldTheParserReads` (`OpenApiRouteContractTests.cs`) lists `favoritesOnly` and `excludeBlacklisted` in `OldFieldsReadButNotSpecified`, as fields the parser reads and the FilterState schema leaves out, and fails while the list names a field the parser no longer reads, so the list goes when the parser stops reading them.
+- `LibraryListFilterParser` keeps a category's AND entry, as `filter-enum-values.json` locks it, while the WebUI drops AND entries from every filter it reads (`withoutAndLocalModes` in `src/filter/filterStateModel.ts`).
+
+**Acceptance**
+
+- A catalog at each version from 2 to 4 opens upgraded and imports upgraded with preset ids, and matches a new catalog's schema, in the catalog upgrade tests.
+- A stored preset with only the old fields filters the same after the step, with its modes written and the old keys gone, in catalog upgrade tests of stored presets.
+- Each per-preset write changes only the preset it names, and reorder changes only the order, in server tests for each write.
+- Each preset change publishes `presetCatalogChanged` with the preset's id, or none for a reorder, and the request's `clientId`, in server tests of each write.
+- Create and update refuse a preset whose filter is the default one or another preset's, naming that preset, and update takes its preset's own filter, in server tests of each.
+- Create and rename refuse a name another preset has, ignoring case, and rename takes its preset's own name in another case, in server tests of each.
+- The whole-list replace keeps each preset's id by its name, in server tests of it.
+- A tag delete or rename that leaves two presets with one filter, or one with the default filter, still lands, in server tests of each.
+- Core's comparison agrees with every case of `shared/fixtures/preset-filter-equality.json`, both ways round, in Core tests of the fixture, and the WebUI's fixture test passes against it.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- `dotnet build ReelRoulette.sln` passes with no warnings, and `dotnet test ReelRoulette.sln` passes: 505 Core tests and 7 ServerApp tests.
+- `npm run verify` passes: 1,484 tests in 72 files, the build, and its output check.
+- SystemChecks and `check-milestones.ps1` pass.
+- `LibraryCatalogMigrationTests` opens and imports catalogs at versions 2, 3, and 4 with preset ids and the new catalog's schema, and `Open_Schema4Catalog_GivesEachPresetItsOwnId_AndWritesItsModesInPlaceOfTheOldFields` checks that two old-shape presets filter as before, that mixed-case modes are written by name, and that a null filter state stays as it is.
+- `PresetCatalogTests` covers each write, its event, its refusals, a write the catalog doesn't take, which is not saved, changes nothing, and gets a `last.log` warning, the whole-list replace's ids, and a tag rename and delete that leave presets with one filter and with the default filter, each read back from the catalog after a restart.
+- `FilterStateTests` reads `preset-filter-equality.json` and `filter-mode-resolution.json` in Core: the comparison both ways round, and the step's `FlagFilterModes.WriteModes`.
+- Each check fails when what it guards is broken, each break made from a copy in `artifacts/scratch/` and restored byte for byte (measured):
+  - Core's comparison keeping AND entries fails the fixture's AND case and three other tests.
+  - The WebUI's comparison keeping them fails its two AND cases.
+  - Skipping each refusal fails the default filter, other preset's filter, and name tests.
+  - `WriteModes` keeping `favoritesOnly` fails its fixture test and eight upgrade tests.
+- Written before their fixes, the fixture's case of the one tag `A|B` against the tags `A` and `B` failed Core's comparison, which joined names with `|`, while the WebUI's passed it, and `WritesTheCatalogDoesNotTake_AreNotSaved_AndChangeNothing` failed with every write reported done (measured).
+- The step on a copy of the user's catalog upgraded its 29 presets from schema version 4 in 36 ms, with 29 distinct ids, each filter's modes as the old rule read them, every other field unchanged, and the old fields gone (measured). None holds the default filter or another preset's filter, by a Python copy of the rule (measured). The copy was deleted.
+- Deviations:
+  - The writes hold the server's preset lock in `ServerStateService` across each catalog write, rather than the library operations lock: presets already live there, and the lock keeps each change in step with its event.
+  - The server holds presets as `StoredPreset`, with their ids, and `FilterPresetSnapshot` stays only the whole-list replace's body.
+  - An update, rename, reorder, or delete that changes no catalog row, as when the catalog lacks a preset the server holds after a failed write it logged and went on from, is not saved: it changes nothing, publishes nothing, gets a `last.log` warning, and reports `NotSaved`, so the change isn't lost at the next restart. `ServerStateService` takes the server's `ServerLogService` for it.
+  - OpenAPI's FilterState description no longer says the old fields are read, its PresetResponse `filterState` description names the upgrade's rewrite, and the WebUI types are regenerated, since the parser stopped reading them in this slice.
+  - `FlagModes_OldFieldsAlone_GiveTheirOldResults` and the contract test of old-shape filters go, since their rule now lives in the step, which `FilterStateTests` and the upgrade tests check.
+  - The fixture's new cases cover an OR mode, a leftover AND mode beside an OR mode, a source list naming two sources, fractions of a second, a mode's case, and the one tag `A|B` against the tags `A` and `B`, which Core's comparison, written as JSON like the WebUI's, keeps apart.
+- `CONTEXT.md`, `docs/dev-setup.md`, and `docs/domain-inventory.md` name schema version 5 and its step, and the domain inventory the preset writes. `docs/api.md` says the server ignores the old fields and that Core and the WebUI read `shared/fixtures/preset-filter-equality.json`.
+
+#### Contract slice
+
+**Scope**
+
+- Per-preset routes to create, update, rename, reorder, and delete a preset, naming it by id.
+- `PresetResponse.id` is the preset's stable id, and the random request's `presetId` matches it.
+- Create and update answer `400` for the default filter, and `409` for another preset's filter, with an error that names that preset. Create and rename answer `409` for a name another preset has.
+- Update, rename, reorder, and delete answer `500` for a write the catalog doesn't take (`NotSaved`), with the server's reason as the error.
+- A per-preset catalog write that throws, as when another write holds the catalog past its busy timeout, is not saved either, create's too: it answers `500` with the server's reason, gets a `last.log` warning, and changes and publishes nothing.
+- Tag rename and delete write a `last.log` warning when their preset write fails, as the per-preset writes do.
+- The `presetCatalogChanged` event and its schema, whose `presetId` is null for a reorder.
+- The server stops advertising `api.presets.match`, whose route Remove the Preset Match Route took out, and advertises a capability for the per-preset routes in its place, which the WebUI requires.
+- The whole-list replace, `POST /api/presets`, stays beside the new routes until the WebUI slice, so the WebUI keeps saving presets.
+- OpenAPI, the generated WebUI types, and `docs/api.md`, which describes the routes and the event.
+
+**Traps**
+
+- `docs/api.md` says the random request's `presetId` matches a stored preset's name.
+- `Spec_ListsEveryMappedApiAndControlRoute` fails for a route the server maps that the spec doesn't list, and for one the spec lists that the server doesn't serve.
+- `OpenApiSpec.AssertMatchesSchema` needs a payload's fields and its schema's to be the same set.
+- `api.presets.match` is in the server's `Capabilities` (`ServerStateService.cs`), which `ServerContractTests` checks, and in the WebUI's required capabilities (`src/state/serverCompatibility.ts`), which its tests copy in `src/test/screens/pageHarness.ts`, `src/test/serverCompatibility.test.ts`, and `src/test/serverConnection.test.ts`.
+- `WritePresetChange` in `ServerStateService.cs` returns `NotSaved` when a catalog write changes no row. Create never does, since its insert always adds a row.
+- `WritesTheCatalogDoesNotTake_AreNotSaved_AndChangeNothing` (`PresetCatalogTests.cs`) makes such a write by deleting a preset's row through a second `CatalogOpen.Host` on the same folder.
+- `RevisePresetFilters` in `ServerStateService.cs`, which tag rename and delete call, logs a failed catalog write only through `_logger.LogWarning`, which doesn't reach `last.log`. `last.log` lines go through the `ServerLogService` that `ServerStateService` holds as `_serverLog`.
+- A catalog write fails when another connection holds a write transaction past the 1,000 ms busy timeout of `LibraryCatalogStore.OpenWrite`, so a test can hold one open across a tag rename or delete (inferred).
+
+**Acceptance**
+
+- The per-preset routes and the event match their schemas, in contract tests, and `npm run verify:contracts` passes.
+- A random request's `presetId` finds a preset by id and not by name, in server tests of random selection.
+- Create and update answer `400` for the default filter and `409` naming the preset for another preset's filter, in server tests of the routes.
+- Update, rename, reorder, and delete answer `500` with the server's reason for a write the catalog doesn't take, in server tests of the routes.
+- A per-preset write whose catalog write throws, create's included, answers `500` with the server's reason, writes a `last.log` warning, and changes nothing, in server tests of the routes.
+- A tag rename and a tag delete whose preset write fails write a `last.log` warning, in server tests of each.
+- The server advertises the per-preset routes' capability and not `api.presets.match`, in server contract tests, and the WebUI reports a server without it as missing a required capability, in WebUI compatibility tests.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- `dotnet build ReelRoulette.sln` passes with no warnings, and `dotnet test ReelRoulette.sln` passes: 510 Core tests and 7 ServerApp tests.
+- `npm run verify` passes: 1,484 tests in 72 files, the generated types' freshness check, the build, and its output check.
+- SystemChecks and `check-milestones.ps1` pass.
+- The routes are `POST /api/presets/create` (`{ name, filterState, clientId? }`), `POST /api/presets/{presetId}/update` (`{ filterState, clientId? }`), `POST /api/presets/{presetId}/rename` (`{ name, clientId? }`), `POST /api/presets/reorder` (`{ presetIds, clientId? }`), and `POST /api/presets/{presetId}/delete` (an optional `{ clientId? }`), all POST, as the API's other routes are and as its CORS policy allows. Create, update, and rename answer with the preset as written, and reorder and delete with an empty 200. An empty name, a filter state that isn't an object, or the default filter is `400`, an unknown id `404`, another preset's name or filter, or an order that doesn't name every preset once, `409`, and a write the catalog doesn't take `500`, each with the server's reason in `error`. The capability is `api.presets.byId`.
+- `PresetRouteTests` checks each route's request, response, and `presetCatalogChanged` payload against OpenAPI, each event's preset id and `clientId`, every refusal's status and reason, `500` for update, rename, reorder, and delete when the catalog lacks the preset, and `500` for create and update while another connection holds the catalog's write lock, with a `last.log` warning, nothing changed, and nothing published.
+- `PresetCatalogTests` checks that a tag rename and a tag delete whose preset write fails under the same held lock each write a `last.log` warning while the catalog keeps its presets, so holding a write transaction on a second connection does make the write fail (measured).
+- `LibraryPlaybackServiceTests` and `FilterStateTests` check that `presetId` finds a preset by its id, and not by its name or its id in another case, and that `GetPresets` returns the stored ids. `ServerContractTests` checks the capability, and the WebUI's compatibility and screen tests report a server without it.
+- Each check fails when what it guards is broken, each break made from a copy in `artifacts/scratch/` and restored byte for byte (measured):
+  - `presetId` matched by name fails the random pick by id test and `MissingOrNullFilterState_KeepsEachRoutesMeaning`.
+  - `GetPresets` giving names as ids fails its test.
+  - Another preset's filter answering `400`, and a write the catalog doesn't take answering `400`, fail three route tests.
+  - Leaving out tag rename and delete's `last.log` line fails their test.
+  - Not catching a write that throws fails the route test of it.
+  - The server advertising `api.presets.match` fails `ServerContractTests`, and the WebUI requiring it fails two compatibility tests.
+  - Dropping `clientId` from the event's schema fails the route contract test.
+- Deviations:
+  - `PresetWriteResult` carries the preset as written, which create, update, and rename answer with, so a route doesn't read the presets again after its write.
+  - Tag rename and delete's failed preset write goes to `last.log` in place of the console logger, rather than to both, as the per-preset writes log only to `last.log`.
+  - `CatalogSeed.HoldWriteLock` holds the write lock of a catalog the server opened, which is in WAL mode, beside `HoldBusy`, which locks a rollback-journal catalog.
+- `docs/api.md` lists and describes the routes, the event, `presetId` by id, the whole-list replace keeping ids by name, and tag rename and delete's warning. `CONTEXT.md` and the domain inventory name the routes and the preset id.
+
+#### WebUI old fields slice
+
+**Scope**
+
+- `filterStateFromApiObject` in `src/filter/filterStateModel.ts` reads only `favoritesMode` and `blacklistedMode`, and a missing or unknown mode reads as the default filter's, so `resolveFlagModes` goes.
+- The WebUI's readers of `filter-mode-resolution.json` go, and so do the `oldFields` entry of `src/test/fixtures/filter-state-written.json`, a filter written with only the old fields, and the tests that read such a filter by the old rule. One new test reads a filter holding only the old fields as the default filter's modes.
+- `filter-mode-resolution.json` moves from `shared/fixtures/` to `src/core/ReelRoulette.Core.Tests/Fixtures/`, where `FilterStateTests` keeps locking the step's rule.
+- WebUI test fixtures that hold the old fields, `src/test/fixtures/library-tile-effect.json` among them, hold the modes instead, with the same meaning.
+- `shared/fixtures/filter-enum-values.json` gives every case its expected Favorites and Blacklisted modes, with cases for an unknown mode name, a number, null, and mixed case, and its WebUI and Core readers check both modes.
+- `docs/api.md` says the Core tests lock the step's rule, `filter-enum-values.json` locks how the server and the WebUI read the modes, and the WebUI reads only the modes.
+
+**Traps**
+
+- `filterStateFromApiObject` reads the old fields through `resolveFlagModes` (`src/filter/filterStateModel.ts`).
+- The WebUI's tests read `filter-mode-resolution.json` from `shared/fixtures/` (`readFixture` in `src/test/filterStateModel.test.ts`), which also reads `filter-enum-values.json`.
+- Core's `FilterStateTests` reads the fixture through `OpenApiSpec.RepoPath`, which reads repo files from the source tree, so the move needs no project file change.
+- With the old fields unread, 40 WebUI tests in 9 files fail, mostly through fixtures that hold only the old fields, among them `library-tile-effect.json`, which writes every case's filter that way (measured).
+- `FlagFilterModes.cs` names the WebUI's copy of the rule and the fixture's path in its comment.
+- The moved fixture's cases with only modes were the WebUI's only tests of an unknown, numeric, or mixed-case mode, and Core's test of it runs `WriteModes` before the parser, so the parser never reads such a value there (measured).
+
+**Acceptance**
+
+- A filter holding only `favoritesOnly` and `excludeBlacklisted` reads as the default filter's modes, in WebUI filter state tests.
+- Core's `FilterStateTests` reads every case of `filter-mode-resolution.json` from the Core tests, and `shared/fixtures/` no longer has it.
+- Every case of `filter-enum-values.json` reads as its Favorites and Blacklisted modes, in `Parser_ReadsEnumFields_AsTheSharedFixtureSays` and the WebUI's fixture test.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- `dotnet build ReelRoulette.sln` passes with no warnings, and `dotnet test ReelRoulette.sln` passes: 510 Core tests and 7 ServerApp tests.
+- `npm run verify` passes: 1,451 tests in 72 files, the generated types' freshness check, the build, and its output check. The 33 fewer tests are the fixture's 36 cases, the `oldFields` test, and the Filter screen test of a preset with only the old fields, less the one new test and the four new cases of `filter-enum-values.json`.
+- SystemChecks and `check-milestones.ps1` pass.
+- The new test in `filterStateModel.test.ts` reads a filter holding only `favoritesOnly: true` and `excludeBlacklisted: false` as Favorites off and Blacklisted excluded, and fails with the old reader put back from a copy in `artifacts/scratch/`, restored byte for byte (measured).
+- `filter-mode-resolution.json` moved byte for byte, with its 36 cases, to `src/core/ReelRoulette.Core.Tests/Fixtures/`, which `WriteModes_ResolvesFlagModes_AsTheFixtureSays`, renamed from `AsTheSharedFixtureSays`, reads (measured).
+- `filter-enum-values.json` has 13 cases, each with its expected modes, the nine it had expecting the default ones, and its mixed-case case fails in `Parser_ReadsEnumFields_AsTheSharedFixtureSays` and in the WebUI's fixture test with each side's mode reading made case-sensitive, restored byte for byte from a copy in `artifacts/scratch/` (measured).
+- `library-tile-effect.json`'s 49 filters hold the modes the old rule read from them, with every other field unchanged, checked by a script before it was written, and its case names say "Blacklisted excluded", "Blacklisted off", and "Favorites only" (measured).
+- The test that picks a preset in the preset dropdown, in `filterStateModel.test.ts`, holds the modes in place of the old fields, and test presets elsewhere hold `favoritesMode: "only"`, which the old fields read as.
+- `docs/api.md` says the Core tests lock the step's rule, `filter-enum-values.json` locks the server's and the WebUI's reading of the modes, and the WebUI reads and writes only the modes. The comment in `FlagFilterModes.cs` names the moved fixture's new place, and `readFlagMode`'s names `filter-enum-values.json`.
+
+#### Duplicate filter slice
+
+**Scope**
+
+- Add Preset and Update are disabled while the filter, with each duration as its field reads, matches any preset in the tab's list, saying `Preset "{name}" already has this filter.` for the first such preset. The default filter's reason comes first.
+- Update checks the chosen preset too, since updating a preset with the filter it already has changes nothing and still says it updated the preset.
+- Choosing in Choose Preset loads nothing: it only chooses the preset Load and Update act on.
+- Each time the Presets section comes into view, however it got there, Choose Preset starts over on the preset the heading names, its base while starred, with or without unsaved changes. A choice lasts while the section stays in view.
+- The heading keeps naming the preset the filter matches.
+- A Load icon button after the dropdown, with the `sync` icon and the tooltip and name "Load preset", loads the chosen preset's filter into the tab, which Apply then applies. On None it loads the default filter, keeping the preset list.
+- Load is disabled, with no reason, while the tab's filter, with each duration as its field reads, already is the chosen one's.
+- Update Preset becomes an Update icon button after Load, with the `save` icon and the tooltip and name "Update preset", which writes the tab's filter into the chosen preset.
+- On None, Update is disabled, saying `Choose a preset to update.` before the filter's reasons, in place of the "Select a preset to update." notice. It stays disabled there until Library Profiles gives each profile its own default filter.
+- Update stays held by the General fields that hold it now: its icon dims and it shows a red dot where Apply's sits, in place of the badge, with its reasons as now. Load is never held, since it replaces the filter.
+- Add Preset becomes an icon button, with the `add` icon and the tooltip and name "Add preset".
+- A held Add Preset shows the red dot, as Update does: its icon dims, its tooltip says why as now, and pressing it still moves to the field. The name field beside it keeps flagging the name itself.
+- The mockup shows the design first, for the user's review, and the app follows, with the tab's chosen preset separate from the heading's preset.
+- `CHANGELOG.md`'s `[Unreleased]` bullet "Presets need a filter" takes the duplicate rule, and the new Choose Preset, Load, and Update where its style note asks for a line.
+- Builds on the preset-equality fixture from Remove the Preset Match Route, which the Server slice moves back to `shared/fixtures/`.
+
+**Traps**
+
+- Add Preset and Update Preset are disabled for the default filter through `blockOf` in `src/filter/filterDialog.ts`, with `DEFAULT_FILTER_PRESET_REASON`.
+- The tab's one `presetName` is both the chosen preset and the heading's: `settled()` resolves it from the working filter through `dialogPresetBase` on every change, the heading stars it, Apply makes it the active preset, and Update Preset, rename, and delete find the chosen preset by it (`src/filter/filterDialog.ts`).
+- `choosePreset` loads the preset's filter, and `updatePreset` shows "Select a preset to update." and "Preset not found." notices (`src/filter/filterDialog.ts`).
+- `open()` starts the tab over only without unsaved changes, and `restart()` takes `presetName` from `store.activePresetName`.
+- The mockup keeps the chosen preset as `chosenPreset` beside `tabBase`, the heading's preset, and `notePresetsView`, which showing a tab or a section and closing the panel call, starts it over when the Presets section comes into view (`build/layout.src.html`).
+- The panel calls `filterDialog.open()` each time the Filter tab shows, from a tab switch or the panel opening (`connectTabs` in `src/state/appServices.ts`), and `showTab` shows a section (`src/filter/filterDialog.ts`), so the app's Presets section comes into view through those two (inferred).
+- In the mockup and the app, a disabled action's reason shows only as its title and a hidden description (`holdAction` in `build/common.js`, `HeldButton` in `src/ui/FieldValidation.tsx`), and a reason that disables outranks a field that holds.
+- `HeldButton` draws an icon button from its `label`, its name and its title while no reason shows, and `.held-action` positions its badge (`src/styles.css`). It shows the badge, or an unsaved-changes dot through `dot`, which only the Filter footer's Apply uses, so a red dot alone while held is new to it.
+- The app loads the whole Material Symbols font (`public/assets/fonts/MaterialSymbolsOutlined.var.ttf`), and the mockup's subset already has `sync`, `save`, and `add`.
+- With the duplicate rule added to `filterDialog.ts`, 6 of 1,451 WebUI tests failed, each adding a preset with another preset's filter or expecting Add Preset enabled for one, the Filter screen markup snapshot among them (measured).
+- The Filter screen tests choose a preset with `chooseInDialog` in 10 places and the unit tests in `filterDialog.test.ts` with `choosePreset` in 8 (measured), and those that expect a pick to load change with this slice (inferred).
+
+**Acceptance**
+
+- Add Preset and Update are disabled while the filter matches any preset, the chosen one included, naming it, after the default filter's reason, in Filter screen tests.
+- Choosing a preset loads nothing and lasts while the Presets section stays in view, and Choose Preset starts over on the heading's preset, its base while starred, each time the section comes into view, through its sub-tab and the Filter tab showing, with and without unsaved changes, in Filter screen tests.
+- Load loads the chosen preset's filter, or the default filter for None, keeping the preset list, and is disabled while the filter already is that one, in Filter screen tests.
+- Update on None is disabled, saying `Choose a preset to update.`, and is held by a General field otherwise, with the red dot and no badge, in Filter screen tests.
+- A held Add Preset dims and shows the red dot, with no badge, and pressing it moves to the field, in Filter screen tests.
+- Load, Update, and Add Preset are icon buttons with the `sync`, `save`, and `add` icons, named and titled "Load preset", "Update preset", and "Add preset", in Filter screen tests.
+- The mockup shows the same, with a check for each way into the Presets section, its sub-tab, the Filter tab, an arrow key on the panel tabs, the panel opening, the Filter tab's key, and the Filters line, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+**Evidence**
+
+- `npm run verify` passes: 1,460 tests in 72 files, the generated types' freshness check, the build, and its output check.
+- `node docs/mockups/reelroulette/build/check.mjs` passes its 1,213 checks, and `check-milestones.ps1` passes.
+- The user approved the mockup on their devices after three review rounds, which set the design the Scope describes: Update checking the chosen preset too, Choose Preset only choosing for new Load and Update icon buttons and starting over each time the Presets section comes into view, Add Preset as an icon button, and a red dot in place of the badge on a held Add Preset or Update.
+- With a pick that loads nothing, 15 of 1,451 WebUI tests failed, 7 unit and 8 Filter screen tests, which now choose and press Load (measured).
+- Each new app test fails when what it guards is broken, each break made in `filterDialog.ts` or `FilterDialog.tsx` and restored byte for byte from a copy in `artifacts/scratch/` (measured):
+  - No duplicate rule fails 5 tests, and the duplicate reason put before the default filter's fails the test of their order.
+  - A pick that loads fails 10, Load never disabled 3, and Load that puts back the saved presets 2.
+  - No None reason fails 5, and no start-over for Choose Preset 5.
+  - The badge in place of the red dot fails the held pair test and both fade tests, and other names for Load and Add Preset fail 22.
+  - Update finding its preset by the heading's preset fails both tests of Update while the heading names another preset.
+- Each of the mockup's new checks fails under at least one of ten breaks, each made in a copy of the mockup under `artifacts/scratch/`: no duplicate rule, a pick that loads, Load never disabled, no None reason, Load doing nothing, Load putting back the saved presets, no held dot, every filter blocked, no start-over, and other names (measured).
+- The validation page's two checks of its Add Preset examples failed before the page named an icon button by its `aria-label` and marked its press in its note (measured).
+- The two badge-count checks only lowered their expected counts, to 3 on the main page and 5 on the validation page, since Add Preset and Update lost their badges.
+- Deviations:
+  - The view's `presetName` is now `headingPreset`, beside the new `chosenPreset`, since it names only the heading's preset.
+  - Load on None keeps the preset list's changes, and Clear all keeps the chosen preset while the saved presets have it, as the approved mockup does.
+  - Apply and Discard changes start Choose Preset over on the heading's preset while the Presets section stays in view, as the approved mockup does.
+  - After Add Preset, Choose Preset stays where it was rather than following the heading to the new preset.
+  - On a short screen, Load and Update keep the icon buttons' 44 px, as the mockup's do, where Update Preset took the text buttons' 38 px.
+  - The validation page's Add Preset examples are icon buttons, to match the Filter tab, and their notes name them and mark a press.
+  - The changelog bullet is renamed "Presets need a filter of their own".
+  - The Decisions and the WebUI writes slice now name the heading's preset and the chosen preset where they named one chosen preset.
+- `CONTEXT.md`, `docs/domain-inventory.md`, and `CHANGELOG.md` describe Choose Preset, Load, Update, the duplicate rule, and the held red dot, the testing checklist's 360 px check covers only a flagged section tab's badge, and Library Profiles' Decisions and its Server and WebUI slices record each profile's own default filter.
+
+#### WebUI writes slice
+
+**Scope**
+
+- The Filter tab keeps every change until Apply, which sends one write for each preset it changed, by id, and never the whole list: deletes, then renames, then filter updates, then new presets, then one reorder while the order still differs.
+- A rename that takes a name another rename gives up goes after it, and an update that takes a filter another update gives up goes after that one.
+- Apply shows as unavailable while the tab's changes would have presets take each other's names, or their filters, in a loop of two or more, its icon dimmed and its dot red, as a held Apply's, with a reason naming each preset in the loop and saying to apply the change in two steps. The ordering of renames and updates finds the loop, whatever its size.
+- Pressing Apply while a loop blocks it shows the reason in a notice and saves and applies nothing. The notice's log line leaves the presets' names out.
+- Apply stops at the first write the server refuses, reloads the presets, keeps the changes that didn't land as unsaved, and applies nothing. Writes that landed stay saved.
+- A refused save's notice says `Saving presets failed: {the server's reason}`, and its log line leaves the preset's name out, as `Saving presets failed (409).`.
+- Refresh, opening the tab, and a refused save take the server's list by the merge the Decisions describe, in place of keeping the tab's list or taking the server's whole.
+- The Filter tab's rows, its heading's preset, and the preset Choose Preset has chosen hold the preset's id.
+- A preset added but not yet saved has a temporary id until Apply creates it.
+- The WebUI remembers its active preset by id, in the remembered record's `presetId` in place of `preset`, so a record from before reads as none and each device starts once at None with the default filter.
+- The remembered preset survives a preset list that lacks it, such as an empty reply.
+- A 401's log line names a preset route's id as `{presetId}`, as it names an item id.
+- Once the WebUI no longer posts it, the whole-list replace, `POST /api/presets`, goes from the server, with `SetPresetCatalog`, Core's `ReplacePresets`, and the `FilterPresetSnapshot` schema, in OpenAPI, the generated WebUI types, `docs/api.md`, and `CONTEXT.md`.
+- The two-device test runs at the unit level: two Filter tabs against one fake server that keeps presets by id.
+- The mockup shows Apply's loop reason and its notice first, with this slice's other changes, for the user's review, and the app follows.
+
+**Traps**
+
+- The WebUI posts the whole preset list to `POST /api/presets` (`presetsToPostBody` in `src/filter/filterStateModel.ts`), which replaces the server's preset catalog, so the last writer wins.
+- `presetsToPostBody` types its body with the spec's `FilterPresetSnapshot`, which only `POST /api/presets` uses, so the schema goes with the route.
+- The WebUI's Filter tab keeps a preset list Apply hasn't saved while it is hidden and the panel is closed, for as long as the page stays open, and doesn't take the server's list while it holds one, so its Apply can overwrite preset changes another device made hours earlier (inferred).
+- Apply's notice for a refused save gives only the status, as "Saving presets failed (409).", and `api.post` leaves the response body unread (`src/filter/filterDialog.ts`).
+- The server's refusals answer `{ "error": "..." }`: `A preset can't hold the default filter.` (400), `Preset "{name}" already has this filter.` (409), `Another preset is named "{name}".` (409), `Preset not found.` (404), `The order must name every preset once.` (409), and `The preset change couldn't be saved.` (500).
+- A body ASP.NET can't bind answers 400 without an `error` (inferred), so the notice needs the status alone when there is none.
+- The WebUI remembers its active preset by name on each device (`activePresetName` in `src/state/appStore.ts`).
+- A preset load whose list lacks the active preset sets the link to null (`showPresetList` in `src/state/appStore.ts`), and the remembered record then keeps `preset: null` for good, so a later list that has the preset shows "None*" (measured).
+- `SetPresetCatalog` in `ServerStateService.cs` is the only caller of Core's `LibraryCatalogSession.ReplacePresets` outside tests, and `LibraryCatalogSchema2Tests` uses it only to store a preset.
+- `PresetCatalogTests`, `FilterStateTests`, and `ServerStateRegressionTests` store presets through the whole-list replace, and the presets `FilterStateTests.MissingOrNullFilterState_KeepsEachRoutesMeaning` stores hold the default filter, which create refuses, so they go through `CatalogSeed`.
+- `Spec_ListsEveryMappedApiAndControlRoute` passes whether the route and its spec entry stay or go, as long as they go together, so the route's removal needs a test of its own.
+- The screen tests' `FakeServer` keeps no presets, and the Filter tab's tests fake `POST /api/presets` with positional `saved-{n}` ids that some tests expect (`servePresets` in `src/test/screens/filter.test.ts`, `setup` in `src/test/filterDialog.test.ts`).
+- Two pages can share one `FakeServer`, but `MountedPage.clientId()` reads storage live, only the last page mounted is unmounted, and both pages render the same element ids (measured).
+- `requestRoute` in `src/api/serverRequest.ts` names only an item id in a route as a placeholder.
+- No order of the writes lands a loop: the server refuses every order of a loop of two, three, or four renames, while one walk that puts each rename after the one that frees its name finds a loop of any size (measured with a prototype against the server's name rule).
+- A disabled button takes no press, and `HeldButton` disables a button that has a disabling reason (`src/ui/FieldValidation.tsx`), as the mockup's `holdAction` does for an `unavailable` reason (`build/common.js`), so Apply blocked by a loop needs to show as unavailable while staying pressable.
+- The mockup keys presets by name (`build/layout.src.html`), so a name swap there reads as a filter swap and a reorder until its presets have ids (inferred), and its Apply has no `unavailable` reason.
+
+**Acceptance**
+
+- A preset saved on one device while another device has its preset list open is still present after the other device saves a different preset, in a two-session test of concurrent saves.
+- The WebUI never posts the whole preset list, and Apply sends one write for each change, in order, in WebUI tests of each preset write.
+- A delete then an add of one name, a rename then an add of the old name, and a filter moved from one preset to a new one each save, in WebUI tests of the write order.
+- Apply shows as unavailable while the tab's changes swap two presets' names, while they swap two presets' filters, and while three presets rotate their names, with the reason naming each preset in the loop, and pressing it shows the reason in a notice and saves and applies nothing, while a chain of renames applies, in Filter screen tests.
+- A save the server refuses for another preset's filter shows the server's reason, logs `Saving presets failed (409).` without the preset's name, keeps the changes that didn't land, and applies nothing, in Filter screen tests.
+- Refresh while the tab holds unsaved changes keeps them and takes the server's version of every other preset, in Filter tab tests.
+- A modified preset still shows "Preset*" after a preset load whose list lacks it is followed by one that has it, and a remembered record from before, which names its preset in `preset`, reads as None with the default filter, in WebUI tests of the remembered filter.
+- A 401 from a preset route logs the route with `{presetId}` in place of the id, in server request tests.
+- `POST /api/presets` is gone from OpenAPI and the server, in contract tests, and `dotnet test ReelRoulette.sln` passes.
+- The mockup's Apply gives the loop reason, and its notice when pressed, the mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+**Evidence**
+
+- `dotnet build ReelRoulette.sln` passes with no warnings, and `dotnet test ReelRoulette.sln` passes: 510 Core tests and 7 ServerApp tests.
+- `npm run verify` passes: 1,491 tests in 73 files, the generated types' freshness check, the build, and its output check.
+- `node docs/mockups/reelroulette/build/check.mjs` passes its 1,227 checks, and SystemChecks and `check-milestones.ps1` pass.
+- The user approved the mockup after one review round, which turned a blocked Apply's dot red, as a held Apply's is, in place of keeping it orange.
+- A prototype of the ordering, run against a copy of the server's name rule, found a loop of two, three, and four renames with one walk and no case for its size, while the server refused every order of each loop, 2, 6, and 24 orders, and a chain and a rename of case alone landed (measured). So the check that blocks a swap blocks longer loops at no extra cost, which the user then chose over swaps alone.
+- Written before the per-preset writes, the two-device test failed against the whole-list save: the second device's Apply left the server with `Favorites` and `Known duration`, without the first device's `Unplayed` (measured).
+- Apply's writes are `delete`, `rename`, `update`, `create`, then `reorder`, each with this device's `clientId`. A new preset's temporary id is `unsaved-{n}` until its create answers with the server's id, which its row, the heading's preset, and Choose Preset then take.
+- `presetWrites.test.ts` covers the order, chains, a rename of case alone, the loops, and the merge; `filterDialog.test.ts` covers each write against `src/test/fakePresetServer.ts`, which keeps presets by id and refuses as the server does, two devices, a refusal partway, a write that can't reach the server, a create that landed before a refused reorder, and a second Apply and a Refresh while Apply's writes are being sent; and the Filter screen tests cover the blocked Apply and a refused save.
+- Each new check fails when what it guards is broken, each break made in place and restored byte for byte from a copy in `artifacts/scratch/` (measured):
+  - No loop check fails 6 tests, a check of two-preset loops only fails the 3 rotation tests, and renames sent in the list's order fail the 3 chain tests.
+  - The merge taking the server's list whole fails 8, and keeping the tab's list while it has changes fails 6.
+  - A new preset keeping its temporary id fails 2, and the saved list not taking a landed delete or rename fails the test of a write that can't reach the server, which was added when the rename's break first failed none.
+  - A refusal's notice without the server's reason fails 3, and its log line with the reason 2.
+  - A blocked press that shows nothing fails 3, and a blocked Apply that doesn't look held fails both screen tests.
+  - A second Apply that doesn't wait for the first's writes fails the test of a double press, sending the delete again to a 404, and so does a Refresh that doesn't wait, loading the sources mid-save.
+  - The active preset dropping on a list that lacks it fails 3, a record from before read by its `preset` fails 1, and a 401 without `{presetId}` fails 2.
+  - The removal test fails with the route and its spec entry put back, and with the spec entry alone.
+- Each of the mockup's new checks fails under at least one of seven breaks, each made in a copy of the mockup under `artifacts/scratch/`: no loop check, two-preset loops only, every change waiting on every other, a press that shows nothing, a press that still applies, an orange dot, and the old sample notice (measured).
+- Deviations:
+  - Edit Preset holds the preset's id, as the merge can move rows.
+  - The merge works field by field: a preset the tab renamed takes another device's filter, and one whose filter it changed takes another device's name.
+  - `ServerConnection.loadPresets` says whether the presets loaded, so a refused Apply merges only a list that loaded. A write that can't reach the server, or a 401, keeps the tab's list as the writes that landed left it, without reloading.
+  - Apply reloads the presets once, after applying the filter, as before, taking them by the merge, rather than also between its writes and applying.
+  - Apply and Refresh do nothing while Apply's preset writes are being sent, with no change to how they look, since a second Apply would send the writes again from the saved list as it was, which review found.
+  - `HeldButton` takes a `blockedReason`, and the mockup's `holdAction` a `blocked` reason with `onBlocked`, for an action that looks held and stays pressable.
+  - The remembered preset survives by one rule in `resolvePresetAnchor`: the previous preset stays the anchor while the list lacks it, in the preset dropdown and the Filter tab's heading alike, as **None\***.
+  - `FakeServer` has a fallback for routes that carry an id, which `fakePresetServer.ts` answers.
+  - The unreachable `ValueKind == Undefined` branch of `ToCatalogPreset` went with the whole-list replace, and `MissingOrNullFilterState_KeepsEachRoutesMeaning` seeds its presets and checks them once, since a restart reads the same catalog.
+  - The mockup's presets have ids, and its remembered preset moved to `libPresetId`.
+  - The fake server's refusals compare filters by the WebUI's comparison, which `preset-filter-equality.json` locks to Core's.
+- Until the WebUI events slice, a tab that stays showing doesn't take another device's changes, so a reorder after another device added a preset is refused with `The order must name every preset once.`, and the reload brings that preset in for the next Apply, as a test shows.
+- `CONTEXT.md`, `docs/api.md`, and `docs/domain-inventory.md` describe the per-preset saves, the merge, the blocked Apply, and the active preset by id, with the whole-list replace gone from them and from OpenAPI.
+
+#### WebUI events slice
+
+**Scope**
+
+- On `presetCatalogChanged`, every open WebUI reloads the presets, after its own changes too, since tabs in one browser share a `clientId`, and a burst of events shares one reload, through `createCoalescedRefresh`. A resync reloads them the same way.
+- The preset dropdown and the Filter tab update without a page reload, the tab by the merge the Decisions describe, except while its own Apply saves, which reloads after.
+- When another device changes the filter of the preset this device has applied unchanged, this device's applied filter takes the new filter and the library reloads, as a page load does, and the Filter tab keeps its unsaved changes.
+- The Filter tab's working filter takes the new filter too while it is the applied filter unchanged, and otherwise stays as the user left it.
+- Tabs in one browser follow none of each other's filter changes, since they share a `clientId`.
+- A resync follows the applied preset the same way, with only its own popup, since it can't tell which device changed which preset.
+- When another device deletes the preset this device has applied, its filter stays applied, shown as modified.
+- A preset added, renamed, changed, or deleted on another device, told apart by `clientId`, shows an Other devices popup: `Preset "Dogs" added on another device`, `Preset "Dogs" renamed to "Puppies" on another device`, `Preset "Dogs" updated on another device`, or `Preset "Dogs" deleted on another device`.
+- A preset renamed and changed in one burst reads as updated, by its new name.
+- A change from another device to this device's active preset shows its own popup when it changes what this device plays: `Your preset "Cats" was updated on another device. The library has been updated.` for an update it follows, or `Your preset "Cats" was deleted on another device. Its filter is still applied.` for a delete.
+- A rename of the active preset, or an update to it while its filter shows as modified, shows the ordinary popup, since this device's filter and library stay as they are.
+- A reorder alone shows no popup, and this device's own changes show none.
+- Several changes from one burst collapse into one popup, such as `3 presets changed on another device`, except that a change to the active preset keeps its own.
+- The ordinary preset popups share one key, so a later burst's replaces one still showing, and the active preset's popup has its own.
+- The popups' log lines leave the presets' names out, such as `Preset updated on another device`.
+- The Settings tab's Other devices popups say `Favorites, blacklist, and preset changes made on another device.`
+- The mockup shows the popups first, for the user's review, and the app follows.
+
+**Traps**
+
+- The WebUI loads presets when the server's version check passes (`src/state/serverConnection.ts`) and has no preset event to follow.
+- Tabs in one browser share a `clientId`, which lives in `localStorage` (`getClientId` in `src/api/coreApi.ts`), while each tab has its own `sessionId`.
+- The event carries only `presetId` and `clientId`, so telling an add, rename, update, and delete apart, and naming the preset, means comparing the reloaded list with the one before (inferred).
+- A pick in the preset dropdown emits `headerFilterChanged`, which restarts the Filter tab, dropping its unsaved changes (`src/filter/filterDialog.ts`), and commits the library's query (`src/library/library.ts`), so following the active preset can't go through `pickHeaderPreset` as it is.
+- The page's first preset load applies an unchanged remembered preset again through `pickHeaderPreset` (`presetsLoaded` in `src/state/appStore.ts`).
+- `createCoalescedRefresh` is in `src/stats/coalescedRefresh.ts`.
+- `FakeEventSource.emit` in `src/test/screens/pageHarness.ts` sends an event to one page's stream.
+- The mockup's Other devices popups cover only favorites and the blacklist (`build/layout.src.html`).
+- The Settings tab's Other devices description names only favorites and the blacklist, in the app (`src/ui/SettingsTab.tsx`) and the mockup.
+- The server keeps its last 256 events for a stream to replay (`EventHistoryCapacity` in `ServerStateService.cs`), so a page asleep for hours while another device plays gets `resyncRequired` in place of the preset events it missed (inferred).
+- The tag editor revises the presets the store holds in place when a tag is renamed or deleted (`retargetFilters` in `src/tags/tagEditor.ts`), as the server revises them without a preset event.
+- The Filter tab's view keeps the applied filter as of its last change, and a reload the tab takes while Apply's preset writes are being sent would replace the saved list the writes are landing in (`savingPresets` in `src/filter/filterDialog.ts`).
+- A list that lacks the active preset already keeps its filter, shown as **None\*** in the preset dropdown and the Filter tab's heading (`resolvePresetAnchor` in `src/filter/filterStateModel.ts`).
+
+**Acceptance**
+
+- Every open WebUI shows the same preset list after any device changes it, and unsaved changes in the Filter tab stay, in WebUI tests of the preset event.
+- A burst of preset events reloads the presets once, and a resync reloads them the same way, in server connection tests.
+- An update from another device to the preset this device applied unchanged applies the new filter and reloads the library, keeping the Filter tab's unsaved changes, and a delete keeps the filter, shown as modified, in WebUI tests of the preset event.
+- A resync applies the new filter of the preset this device applied unchanged, with only its own popup, in server connection tests.
+- Each popup shows for its change, a reorder and this device's own changes show none, and a burst collapses into one, keeping the active preset's own, in WebUI tests of the preset event.
+- The Settings tab's Other devices popups name preset changes, in Settings screen tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+**Evidence**
+
+- `npm run verify` passes: 1,518 tests in 74 files, the generated types' freshness check, the build, and its output check.
+- `node docs/mockups/reelroulette/build/check.mjs` passes its 1,241 checks, and SystemChecks and `check-milestones.ps1` pass.
+- The user approved the mockup after one review round, with the popups and decisions the Scope describes.
+- The connection reloads the presets in `reloadPresetsForEvents` in `src/state/serverConnection.ts`, through one `createCoalescedRefresh`, and sends `presetsReloaded` once the store has them. The store's `presetsReloaded` takes the list and follows the active preset in one batch, then sends `appliedPresetFollowed`, which the library and the Filter tab listen to. `src/filter/presetEvents.ts` tells the changes apart and builds the popups, under the keys `presets` and `your-preset`.
+- 27 new tests (measured):
+  - `presetEvents.test.ts`: 9, covering each change, the collapse, the active preset's own popup, and the log texts.
+  - `serverConnection.test.ts`: 8, covering one load for a burst, own changes and a reorder, the snapshot taken when the event arrives, the follow, tabs sharing a `clientId`, a delete shown as **None\***, and a resync's follow, plus its resync test, rewritten to cover a resync sharing the burst's load.
+  - `filterDialog.test.ts`: 5, covering the merge shown and hidden, none before the tab loads, none while Apply's writes are being sent, and the working filter following only while it is the applied filter.
+  - `appStore.test.ts`, `library.test.ts`, and the Filter screen tests: 1 each.
+  - The foundation screen tests: 2, covering the dropdown and popup, and a follow's library query.
+- `settings.test.ts` checks the Other devices description, and the foundation markup snapshot takes it.
+- Each new app check fails when what it guards is broken, each break made in place and restored byte for byte from a copy in `artifacts/scratch/` (measured):
+  - A load for each event fails 5, the resync loading directly 2, and own changes popping up 3.
+  - No collapse fails 3, and a rename winning over a filter change 1.
+  - No follow fails 7, and following a modified preset 2.
+  - The Filter tab not merging on the reload fails 4, merging during Apply's writes 1, and its working filter always following 1.
+  - The old Settings text fails 2.
+- Each of the mockup's 14 new checks fails under at least one of 13 breaks, each made in a copy of the mockup under `artifacts/scratch/` (measured): no popups, no shared key, no collapse, no follow, the working filter always following, a modified preset following, a delete with the ordinary popup, buttons never disabled, the note never hiding, the old Settings text, a script error, a merge that drops the tab's rename, and no merge.
+- Deviations:
+  - Each event keeps its preset as the page held it when the event arrived, so another load landing before the reload, such as the Filter tab's, doesn't hide the change.
+  - A resync passes `resyncRequired` on at once and reloads the presets with the burst's reload, 250 ms later. The server connection test that wanted the presets reloaded before the resync was passed on became a test of the shared reload.
+  - `loadPresets` takes the loaded list through a callback inside the connection, so the store can take it and follow in one batch. The public `loadPresets()` stays as it was.
+  - The mockup's preset anchor keeps a preset the list lacks, showing **None\***, as `resolvePresetAnchor` does, where it had dropped it.
+  - The mockup's Filter tab gained the merge, which it lacked.
+  - A disabled Mockup tab button now dims.
+- `CONTEXT.md`, `docs/api.md`, `docs/architecture.md`, and `docs/domain-inventory.md` describe the preset reload, the follow, and the popups, `CHANGELOG.md`'s "Presets stay in step across devices", renamed from "Presets from two devices no longer overwrite each other", and its popups bullet name them, and the testing checklist's Manual checks take this milestone's release checks.
+
+#### Release checks
+
+- Manual: On two devices, saving, renaming, reordering, and deleting a preset on one shows on the other without a reload, a save, rename, or delete with its Other devices popup and a reorder with none, and neither overwrites the other's changes.
+- Manual: On two devices, updating on one the preset the other has applied changes the other's filter and library, with its popup.
+
+#### Not included
+
+- A preset holding the default filter or another preset's filter, which a tag delete or rename can leave, or the retired desktop's Add Preset or the WebUI's before v0.15.0 could save, and which the server keeps, the known issue "A tag delete or rename can leave a preset that shows as None or as another preset" in `ISSUES.md`, which no milestone takes.
+
 ### M12i5 - Dev Script Cleanup
 
 - **Status**: ✅ Complete

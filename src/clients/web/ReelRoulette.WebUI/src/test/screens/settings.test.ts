@@ -1102,6 +1102,9 @@ describe("Notifications", () => {
       ["skips", true],
       ["connection", true]
     ]);
+    expect(document.getElementById(checkbox("Other devices").getAttribute("aria-describedby")!)!.textContent).toBe(
+      "Favorites, blacklist, and preset changes made on another device."
+    );
     expect(Array.from(positionSelect().options).map((option) => [option.value, option.textContent])).toEqual([
       ["bottom-center", "Bottom center"],
       ["bottom-left", "Bottom left"],

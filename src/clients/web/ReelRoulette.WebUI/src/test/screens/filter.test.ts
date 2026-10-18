@@ -2304,6 +2304,30 @@ describe("preset dropdown, refresh, and clear all", () => {
     expect(presets.summaries()).toEqual(["reorder preset-beach,preset-favorites,preset-recent"]);
   });
 
+  it("takes another device's preset change while it shows, keeping an unsaved rename, as the preset dropdown does", async () => {
+    const { page, server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
+    await openDialog();
+    await showTab("Presets");
+    await editPreset("Beach days");
+    fireEvent.input(byId("filter-preset-edit-name"), { target: { value: "Shore" } });
+    await press(byId("filter-preset-edit-save-btn"));
+    expect(presetRows()).toEqual(["Favorites", "Shore"]);
+
+    presets.list = [...presets.list, RECENT_PRESET];
+    page.stream().emit("presetCatalogChanged", 50, { presetId: RECENT_PRESET.id, clientId: "another-client" });
+    await waitFor(() => expect(presetRows()).toEqual(["Favorites", "Shore", "Recent"]));
+    expect(applyShowsChanges()).toBe(true);
+    expect(Array.from(document.querySelectorAll<HTMLOptionElement>("#preset-select option")).map((option) => option.textContent)).toEqual([
+      "None",
+      "Favorites",
+      "Beach days",
+      "Recent"
+    ]);
+
+    await applyAndWait(server);
+    expect(presets.summaries()).toEqual(["rename preset-beach Shore"]);
+  });
+
   it("Clear all filters goes back to the default filter and drops unsaved preset changes", async () => {
     const { server, presets } = await mountFilter([RICH_PRESET, FAVORITES_PRESET]);
     await pickPreset("preset-rich");

@@ -89,6 +89,13 @@ function selectedPresetLabelText(): string {
   return select.options[select.selectedIndex]?.textContent ?? "";
 }
 
+/** The popups showing, each as its first line, leaving out any that are fading out. */
+function toastTexts(): string[] {
+  return Array.from(document.querySelectorAll<HTMLElement>("#toasts .toast:not(.is-leaving)")).map(
+    (toast) => toast.querySelector(".toast-text > div")?.textContent ?? ""
+  );
+}
+
 /** The lines the page relayed for `text`, a message or a state with no message, whatever was playing. */
 function relayedLines(server: FakeServer, text: string): string[] {
   return server.logLines().filter((line) => line.startsWith(`status=${text} hasCurrent=`));
@@ -396,6 +403,48 @@ describe("preset dropdown", () => {
     const next = server.requests("POST", "/api/random")[1]!.body;
     expect(next.presetId).toBeUndefined();
     expect(next.filterState.favoritesMode).toBe("off");
+  });
+
+  it("follows another device's preset changes without a page reload, popping each up, and not this device's own", async () => {
+    const server = new FakeServer();
+    let presets: object[] = [FAVORITES_PRESET];
+    server.on("GET", "/api/presets", () => json(presets));
+    const page = mountPage({ server });
+    await waitFor(() => expect(optionLabels(presetSelect())).toEqual(["None", "Favorites"]));
+
+    const unplayed = { id: "preset-unplayed", name: "Unplayed", filterState: { onlyNeverPlayed: true } };
+    presets = [FAVORITES_PRESET, unplayed];
+    page.stream().emit("presetCatalogChanged", 40, { presetId: unplayed.id, clientId: "another-client" });
+    await waitFor(() => expect(optionLabels(presetSelect())).toEqual(["None", "Favorites", "Unplayed"]));
+    await waitFor(() => expect(toastTexts()).toEqual(['Preset "Unplayed" added on another device']));
+    expect(relayedLines(server, "Preset added on another device")).toHaveLength(1);
+    expect(server.logLines().some((line) => line.includes("Unplayed"))).toBe(false);
+
+    // This device's own rename, which another tab in this browser may have made, reloads without a popup.
+    presets = [FAVORITES_PRESET, { ...unplayed, name: "Fresh" }];
+    page.stream().emit("presetCatalogChanged", 41, { presetId: unplayed.id, clientId: page.clientId() });
+    await waitFor(() => expect(optionLabels(presetSelect())).toEqual(["None", "Favorites", "Fresh"]));
+    expect(relayedLines(server, "Preset renamed on another device")).toEqual([]);
+    expect(server.requests("GET", "/api/presets")).toHaveLength(3);
+  });
+
+  it("applies another device's new filter for the preset applied unchanged, and starts the library over", async () => {
+    const server = new FakeServer();
+    let presets: object[] = [FAVORITES_PRESET];
+    server.on("GET", "/api/presets", () => json(presets));
+    const page = mountPage({ server });
+    await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(1));
+    await pickPreset("preset-favorites");
+    await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(2));
+
+    presets = [{ ...FAVORITES_PRESET, filterState: { ...FAVORITES_PRESET.filterState, onlyNeverPlayed: true } }];
+    page.stream().emit("presetCatalogChanged", 40, { presetId: FAVORITES_PRESET.id, clientId: "another-client" });
+    await waitFor(() => expect(server.requests("POST", "/api/library/query")).toHaveLength(3));
+    expect(server.requests("POST", "/api/library/query")[2]!.body.filterState).toMatchObject({ favoritesMode: "only", onlyNeverPlayed: true });
+    expect(selectedLabel(presetSelect())).toBe("Favorites");
+    await waitFor(() =>
+      expect(toastTexts()).toEqual(['Your preset "Favorites" was updated on another device. The library has been updated.'])
+    );
   });
 
   it("shows Loading... until presets arrive and an error entry when they cannot load, with nothing to choose", async () => {

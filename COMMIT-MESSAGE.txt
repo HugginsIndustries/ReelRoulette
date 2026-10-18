@@ -19,11 +19,11 @@ Instructions:
 
 Commit Message:
 
-M12i6: Save presets one at a time from the Filter tab, block Apply for presets that would trade names or filters, and remove the whole-list replace
+M12i6: Follow preset changes in every open WebUI, follow the applied preset's new filter from another device, and pop up other devices' preset changes
 
-- Apply sends one write for each preset the Filter tab changed, by id: deletes, renames, filter updates, new presets, then one reorder, each rename and update after the one that frees its name or filter. At the first refusal it shows the server's reason, logged with only the status, keeps what didn't land as unsaved, and applies nothing.
-- Presets that would take each other's names or filters, in a loop of any size, block Apply, which shows its dot red and the reason, and its press shows the reason in a notice, as a phone or tablet shows no tooltip.
-- Refresh, opening the tab, and a refused save take the server's list by a merge that keeps the tab's changes and takes the server's version of every other preset.
-- The Filter tab, the preset dropdown, and the remembered active preset go by id, and the remembered preset survives a list that lacks it. A 401's log line names a preset route's id as `{presetId}`.
-- The server's whole-list `POST /api/presets` goes, with `SetPresetCatalog`, Core's `ReplacePresets`, and `FilterPresetSnapshot`, in OpenAPI and the generated types.
-- The design mockup gives presets ids and shows the blocked Apply and its notice, with checks for each, and M12i6's WebUI writes slice is complete.
+- On `presetCatalogChanged` and `resyncRequired`, every open WebUI reloads its presets, once for a burst, through `createCoalescedRefresh`, and the preset dropdown and the Filter tab take them, the tab by its merge, shown or not, except while Apply's writes are being sent.
+- When another device changes the filter of the preset a page has applied unchanged, or a resync finds it changed, the applied filter takes the new filter and the library starts over without restarting the Filter tab, whose working filter follows only while it is the applied filter. A deleted applied preset keeps its filter, shown as None*.
+- Another device's added, renamed, updated, and deleted presets pop up as Other devices, told apart by `clientId` and by comparing the reloaded list with each preset as the page held it when its event came, a burst collapsing into one popup, and the applied preset keeping its own for an update it followed or a delete. Logs leave the names out.
+- The Settings tab's Other devices popups name preset changes.
+- The design mockup shows the preset changes from another device, their popups, and the Filter tab's merge, with checks for each, and keeps a preset the list lacks as the app does.
+- M12i6's WebUI events slice, and M12i6, are complete.

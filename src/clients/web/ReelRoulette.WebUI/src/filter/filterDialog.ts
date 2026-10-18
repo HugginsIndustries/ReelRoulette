@@ -177,9 +177,10 @@ export interface FilterDialog {
   showTab(tab: FilterDialogTab): void;
   /**
    * Loads the sources, tags, and presets again, keeping the working filter, and takes the loaded preset list by the
-   * merge, which keeps the tab's preset changes and takes the server's version of every other preset. Before they have
-   * loaded once, it loads them as showing the tab does. It does nothing while the server fails the compatibility check
-   * or runs without a library, or while Apply's preset writes are being sent.
+   * merge, which keeps the tab's preset changes and takes the server's version of every other preset, as the tab does
+   * whenever the presets reload for a preset event or a resync, shown or not. Before they have loaded once, it loads
+   * them as showing the tab does. It does nothing while the server fails the compatibility check or runs without a
+   * library, or while Apply's preset writes are being sent.
    */
   refresh(): Promise<void>;
   /**
@@ -626,6 +627,30 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     }
   });
 
+  // Presets reloaded for a preset event or a resync are taken by the merge, whether the tab shows or not, so its preset
+  // changes stay. While Apply's writes are being sent, the reload would replace the saved list they land in, and Apply
+  // reloads once they have.
+  connection.on("presetsReloaded", () => {
+    const current = view.peek();
+    if (current && !savingPresets) {
+      update(presetsTaking(current, presetRowsFromApi(store.presets.peek())));
+    }
+  });
+
+  // The applied preset's new filter from another device: the working filter takes it while it was the applied filter,
+  // with each duration as its field reads, and otherwise stays as the user left it. The tab doesn't start over, so its
+  // preset changes, a typed new preset name, and an open Edit Preset stay. The view's applied filter is the one before,
+  // until this update settles it again.
+  function followApplied(): void {
+    const current = view.peek();
+    const typed = current ? filterWithTypedDurations(current.working, current.general) : null;
+    if (!current || !typed || !filterStatesEqualForPresetMatch(typed, current.applied)) {
+      return;
+    }
+    const working = cloneFilterState(store.appliedFilter.peek());
+    update({ working, general: generalDraftFromFilter(working, current.sources) });
+  }
+
   const dialog: FilterDialog = {
     isOpen,
     tab,
@@ -933,6 +958,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
   // A preset picked in the Library tab's preset dropdown starts the tab over from the new filter and the saved presets,
   // dropping its unsaved changes, whether or not it shows.
   store.on("headerFilterChanged", restart);
+  store.on("appliedPresetFollowed", followApplied);
 
   return dialog;
 }

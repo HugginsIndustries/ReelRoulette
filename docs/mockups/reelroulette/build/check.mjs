@@ -3123,6 +3123,116 @@ for (const width of [1280, 390]) {
   check(`loudness: no script errors ${errors.join("; ")}`, errors.length === 0);
 }
 
+{
+  // Preset changes from another device, which the Mockup tab's Events stand in for: each reaches the preset dropdown at
+  // once and the Filter tab by its merge, with one Other devices popup, and a change to the preset this device has
+  // applied that changes what it plays keeps its own.
+  const { document, errors, window } = await load("layout", 1280, "?instant");
+  const $ = (id) => document.getElementById(id);
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+  const input = (el, value) => {
+    el.value = value;
+    el.dispatchEvent(new window.Event("input"));
+  };
+  const change = (el, value) => {
+    if (typeof value === "boolean") el.checked = value;
+    else el.value = value;
+    el.dispatchEvent(new window.Event("change", { bubbles: true }));
+  };
+  const topDialog = () => [...document.querySelectorAll("dialog.app-dialog")].at(-1);
+  const button = (root, label) => [...root.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith(label));
+  const messages = window.mockup.notifications;
+  const toastText = (toast) => toast.querySelector(".toast-text > div").textContent;
+  const newest = () => messages.entries()[0]?.text || "";
+  const said = (text) => newest() === text && messages.toasts().some((toast) => toastText(toast) === text) && messages.entries()[0].kind === "devices";
+  // The popups showing with a key, the dropdown's presets and the one it shows, by name, and the Filter tab's presets.
+  const keyed = (key) => messages.toasts().filter((toast) => toast.dataset.key === key).map(toastText);
+  const dropdownNames = () => [...$("lib-preset").options].filter((option) => option.value && option.value !== "*").map((option) => option.textContent);
+  const dropdownShows = () => [...$("lib-preset").options].find((option) => option.value === $("lib-preset").value)?.textContent;
+  const choosePreset = (name) => change($("lib-preset"), [...$("lib-preset").options].find((option) => option.textContent === name).value);
+  const rowNames = () => [...document.querySelectorAll(".filter-preset-row .filter-preset-name")].map((el) => el.textContent);
+  const filtersLine = () => $("lib-filters").textContent;
+  const neverPlayedBox = () => [...$("filter-body").querySelectorAll("label")].find((label) => label.textContent.trim() === "Only never played").querySelector("input");
+  const videosOnly = () => document.querySelectorAll('input[name="media"]')[1].checked;
+  const unsavedShown = () => $("filter-apply").classList.contains("has-pending") && !$("filter-discard").disabled;
+
+  check(`presets: with None applied, Your preset's changes are disabled, and a note says to pick a preset first (${$("mock-presets-note").textContent})`,
+    $("mock-your-updated").disabled && $("mock-your-deleted").disabled && !$("mock-preset-renamed").disabled && !$("mock-presets-burst").disabled &&
+    !$("mock-presets-note").hidden && $("mock-presets-note").textContent === "To change your preset, pick one in the preset dropdown first.");
+  $("mock-preset-added").click();
+  check(`presets: a preset added on another device shows last in the dropdown and the Filter tab, with its popup (${newest()})`,
+    said('Preset "Dogs" added on another device') && dropdownNames().at(-1) === "Dogs" && rowNames().at(-1) === "Dogs" && keyed("presets").length === 1);
+  $("mock-preset-renamed").click();
+  check(`presets: a rename names the old name and the new, and its popup replaces the add's, which shares its key (${keyed("presets")})`,
+    said('Preset "Favorites" renamed to "Puppies" on another device') && keyed("presets").join() === 'Preset "Favorites" renamed to "Puppies" on another device' &&
+    dropdownNames()[0] === "Puppies" && rowNames()[0] === "Puppies");
+  $("mock-preset-updated").click();
+  check(`presets: an update names the preset (${newest()})`, said('Preset "Puppies" updated on another device') && keyed("presets").length === 1);
+  $("mock-preset-deleted").click();
+  check(`presets: a delete leaves the dropdown and the Filter tab (${newest()})`,
+    said('Preset "Dogs" deleted on another device') && !dropdownNames().includes("Dogs") && !rowNames().includes("Dogs"));
+  const entriesBeforeBurst = messages.entries().length;
+  $("mock-presets-burst").click();
+  check(`presets: an add, a rename, and a delete in one burst collapse into one popup (${newest()}, ${messages.entries().length - entriesBeforeBurst} new)`,
+    said("3 presets changed on another device") && messages.entries().length === entriesBeforeBurst + 1 && keyed("presets").length === 1 &&
+    dropdownNames().at(-1) === "Dogs" && dropdownNames()[0] === "Kittens" && !dropdownNames().includes("Summer") && rowNames().join() === dropdownNames().join());
+
+  // Photos only applied, unchanged, and the Filter tab holding an unsaved rename, with the applied filter as its working
+  // filter: an update to Photos only applies its new filter, in the tab too, and the rename stays.
+  choosePreset("Photos only");
+  await tick();
+  check("presets: with a preset applied, Your preset's changes are enabled and the note hides",
+    !$("mock-your-updated").disabled && !$("mock-your-deleted").disabled && $("mock-presets-note").hidden);
+  $("panel-btn").click();
+  $("tab-btn-filter").click();
+  document.querySelector('[data-sub="presets"]').click();
+  [...document.querySelectorAll(".filter-preset-row")].find((row) => row.querySelector(".filter-preset-name").textContent === "Cooking").querySelector('[title="Edit preset"]').click();
+  input(topDialog().querySelector("input"), "Cooking at home");
+  button(topDialog(), "Save").click();
+  const appliedBefore = filtersLine();
+  $("mock-your-updated").click();
+  await tick();
+  check(`presets: another device's update to your preset, applied unchanged, applies its new filter and reloads the library, with its own popup (${filtersLine()}, ${dropdownShows()}, ${newest()})`,
+    said('Your preset "Photos only" was updated on another device. The library has been updated.') && keyed("your-preset").length === 1 &&
+    dropdownShows() === "Photos only" && $("lib-preset").value !== "*" && /^Filters: Videos only · Min \d\d:\d\d$/.test(filtersLine()) && filtersLine() !== appliedBefore);
+  check(`presets: the Filter tab's working filter, the applied one unchanged, takes the new filter, and its unsaved rename stays (${$("filter-heading").textContent})`,
+    $("filter-heading").textContent === "Preset: Photos only" && videosOnly() && $("filter-min").value !== "" && rowNames().includes("Cooking at home") && !rowNames().includes("Cooking") && unsavedShown());
+  // A working filter that differs from the applied one stays as the user left it.
+  change(neverPlayedBox(), true);
+  const minBefore = $("filter-min").value;
+  const appliedThen = filtersLine();
+  $("mock-your-updated").click();
+  await tick();
+  check(`presets: a later update applies its filter, and the Filter tab's working filter, changed, stays as the user left it (${filtersLine()}, ${$("filter-heading").textContent})`,
+    said('Your preset "Photos only" was updated on another device. The library has been updated.') && keyed("your-preset").length === 1 &&
+    filtersLine() !== appliedThen && /^Filters: Videos only · Min \d\d:\d\d$/.test(filtersLine()) && dropdownShows() === "Photos only" &&
+    neverPlayedBox().checked && $("filter-min").value === minBefore && $("filter-heading").textContent === "Preset: Photos only*" && rowNames().includes("Cooking at home") && unsavedShown());
+  // Applied as modified, starred, your preset's update keeps the filter and shows the ordinary popup.
+  $("filter-apply").click();
+  const appliedModified = filtersLine();
+  const entriesBeforeModified = messages.entries().length;
+  $("mock-your-updated").click();
+  await tick();
+  check(`presets: an update to your preset while its filter shows as modified keeps the filter, still starred, with the ordinary popup (${dropdownShows()}, ${newest()})`,
+    said('Preset "Photos only" updated on another device') && keyed("presets").join() === 'Preset "Photos only" updated on another device' &&
+    messages.entries().length === entriesBeforeModified + 1 && dropdownShows() === "Photos only*" && $("lib-preset").value === "*" && filtersLine() === appliedModified &&
+    filtersLine().includes("Only never played"));
+  // Deleting your preset keeps its filter applied, shown as None*.
+  choosePreset("Beach days");
+  await tick();
+  const appliedBeach = filtersLine();
+  $("mock-your-deleted").click();
+  await tick();
+  check(`presets: another device's delete of your preset keeps its filter applied, shown as None*, with its own popup (${filtersLine()}, ${dropdownShows()}, ${$("filter-heading").textContent}, ${newest()})`,
+    said('Your preset "Beach days" was deleted on another device. Its filter is still applied.') && keyed("your-preset").length === 1 &&
+    filtersLine() === appliedBeach && appliedBeach === "Filters: 1 tag" && dropdownShows() === "None*" && $("lib-preset").value === "*" &&
+    !dropdownNames().includes("Beach days") && !rowNames().includes("Beach days") && $("filter-heading").textContent === "Preset: None*" &&
+    $("mock-your-updated").disabled && $("mock-your-deleted").disabled);
+  const devicesKind = document.querySelector('input[name="set-popup-kind"][value="devices"]').closest("label").querySelector("small").textContent;
+  check(`presets: the Settings tab's Other devices popups name preset changes (${devicesKind})`, devicesKind === "Favorites, blacklist, and preset changes made on another device.");
+  check(`presets: no script errors ${errors.join("; ")}`, errors.length === 0);
+}
+
 for (const width of [1280, 390]) {
   // Daily retention starts off, at 0 days, so upgrading keeps today's rotation, and the restore list shows daily
   // backups only while it is on.

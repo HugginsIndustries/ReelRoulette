@@ -3,6 +3,7 @@ import type { RefreshProgress } from "../events/refreshStatusProjection";
 import type { FilterSource } from "../filter/filterDialogModel";
 import {
   createDefaultFilterState,
+  filterStateForHeaderPresetSelection,
   filterStateFromApiObject,
   filterStatesEqualForPresetMatch,
   findPresetById,
@@ -118,6 +119,11 @@ export type StorageLike = Pick<Storage, "getItem" | "setItem">;
 export interface AppStoreEvents {
   /** A pick in the preset dropdown, which the header held before the Library tab, changed the applied filter. */
   headerFilterChanged: () => void;
+  /**
+   * Another device changed the filter of the active preset while it applied unchanged, and the applied filter took the
+   * new filter, as `presetsReloaded` says.
+   */
+  appliedPresetFollowed: () => void;
   /** The Settings tab's Advance after changed. */
   advanceAfterChanged: () => void;
   /** The autoplay mode, or Loop stops autoplay, changed. */
@@ -201,6 +207,14 @@ export interface AppStore {
    * reach the filter, as they do while the page is open. Then the preset dropdown is rebuilt.
    */
   presetsLoaded(): void;
+  /**
+   * Presets reloaded for a preset event or a resync have loaded, and the store takes them as `presetsLoaded` does. When
+   * another device changed the active preset, `activeBefore` is that preset as this device held it before the change,
+   * otherwise null. While the applied filter was its filter, unchanged, and the reloaded preset has another, the applied
+   * filter takes the new filter, the preset dropdown follows, and `appliedPresetFollowed` is sent once the device's
+   * memory has the result. A deleted preset's filter stays applied, shown as modified. Says whether it followed.
+   */
+  presetsReloaded(presets: ApiPreset[], activeBefore: ApiPreset | null): boolean;
   /** Shows one message in the preset dropdown in place of the presets. */
   showPresetMenuMessage(text: string): void;
   /** Applies a preset dropdown pick: None, a saved preset, or the starred row that keeps the filter. */
@@ -267,6 +281,7 @@ export function createAppStore(options: AppStoreOptions): AppStore {
   const now = options.now ?? (() => Date.now());
   const listeners: { [K in keyof AppStoreEvents]: AppStoreEvents[K][] } = {
     headerFilterChanged: [],
+    appliedPresetFollowed: [],
     advanceAfterChanged: [],
     autoplaySettingsChanged: []
   };
@@ -345,6 +360,28 @@ export function createAppStore(options: AppStoreOptions): AppStore {
       }
       // After the preset applies again, so only what results is remembered.
       presetsLoadedOnce.value = true;
+    },
+
+    presetsReloaded(presets, activeBefore) {
+      // One batch, so the device's memory takes the list and the followed filter once, not each step on the way.
+      const followed = batch(() => {
+        const applied = store.appliedFilter.peek();
+        const before = activeBefore?.id === store.activePresetId.peek() ? activeBefore : null;
+        const reloaded = before ? findPresetById(presets, before.id) : undefined;
+        const wasOwn = !!before && isPresetOwnFilter(applied, [before], before.id);
+        const next = wasOwn && reloaded ? filterStateForHeaderPresetSelection(reloaded) : null;
+        const follows = !!next && !filterStatesEqualForPresetMatch(next, applied);
+        store.presets.value = presets;
+        if (follows) {
+          store.appliedFilter.value = next;
+        }
+        store.presetsLoaded();
+        return follows;
+      });
+      if (followed) {
+        emit("appliedPresetFollowed");
+      }
+      return followed;
     },
 
     showPresetMenuMessage(text) {
