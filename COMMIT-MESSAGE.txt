@@ -19,9 +19,10 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan long-press tooltips, animations, and extended metadata, and the Filter and Tags tabs' new tab look and live reloads
+Docs: Group the ratings milestones in v0.15.0, move the rating keys to WebUI Player Rating, and add rules for schema versions and Depends on
 
-- Add backlog items for long-press tooltips on touch screens (P52, low priority, after animations), animations for the panel, dialogs, overlays, and the bell's list (P53a), animation settings and more animated surfaces (P53b), and extended metadata stored in the catalog and edited in the app (P54, soon after v0.15.0).
-- Narrow P4 to File Metadata Sync, building on Extended Metadata, and rename its references.
-- M12k1 gains a mockup round and a slice that give the Filter tab's sub-tabs and the admin navigation the panel tabs' look, drop the Filter tab's Refresh, replace the Tags tab's Refresh with Discard changes, and reload both tabs on tag and source events.
-- Library Profiles' dialog tabs and the WebUI Admin Section's navigation take the same tab look, and Admin Source Management builds on the Filter tab's reload on `sourceStateChanged`.
+- Move Item Ratings and WebUI Player Rating to right after Browser-Playable Filter, and renumber to the new order: M12i7 Volume and Enhanced Audio, M12i8 Loudness Normalization, M12i9 Player Controls, M12i10 Keyboard Shortcuts, M12k2 Item Ratings, M12k3 Player Rating, M12k4 Rating Filter and Sort, and M12k5 Rating-Weighted Random Picks.
+- WebUI Player Rating takes the rating keys from WebUI Keyboard Shortcuts, adds them to the shortcut reference, and depends on Keyboard Shortcuts, which no longer depends on Item Ratings. Item Ratings' star control keeps its arrow keys while it has focus.
+- Add maintenance rules: a planned milestone never names the version number of a schema step that hasn't landed, and Depends on names only milestones whose work it can't be built without, with a backlog item's priority at the end of its Goal.
+- Item Ratings, Rating Filter and Sort, Library Profiles, Profile Tag and Preset Visibility, and P54 now say the catalog moves to the next schema version instead of naming 6 to 9.
+- Remove Depends on entries that were order, priority, schema-step order, or fitting around another milestone, in M12i10, M12k2, M12k3, M12k4, M12m, M12n1, M12n2, M12o1, P52, and P54, move the priority in P4, P52, and P54 into their Goals, and point P28h and P28j at the milestones whose routes they use.

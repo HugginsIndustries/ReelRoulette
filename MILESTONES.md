@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI is the only client on every device from v0.15.0, which removes the desktop client. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter, sort, and weight random picks, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12i11, M12i12, M12j, M12k1, M12k2, M12k3, M12l1, M12l2, M12l3, M12m, M12n1, M12n2, M12n3, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t, M12u.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter, sort, and weight random picks, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12l1, M12l2, M12l3, M12m, M12n1, M12n2, M12n3, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t, M12u.
 - **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.16.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access, and give each account its own favorites, ratings, history, tags, presets, and profiles. P28b, P28c, P28d, P28e, P28f, P28m, P28g, P28h, P28j, P28n, P28k, P28l.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
@@ -54,7 +54,9 @@ Do not use this file for detailed architecture explanation or current capability
 - When a milestone is completed, move it to the top of `MILESTONES-COMPLETED.md` as-is: keep its body unchanged except final-state corrections, and preserve newest completions first.
 - In an entry's body, do not reference milestone IDs; use milestone names/descriptions (or "this milestone"/"this series") so ID reassignment does not require copy edits.
 - ID references are allowed only in milestone section headers, the `Last milestone completed: Mx` tracker line, and the `## Planned Releases` outline.
+- A planned milestone never names the schema version number of a step that hasn't landed. It says the catalog moves to the next schema version, with its upgrade step from the version before, so reordering milestones doesn't make it wrong. Versions already in the code, such as the shipped 2→3 step, may be named.
 - The Depends on bullet names milestones by their exact titles, which `check-milestones.ps1` enforces, and may end with a condition on starting, as the Entry Format describes.
+- Depends on names only milestones whose work this one can't be built without, because it uses their routes, schema columns, components, events, or settings. Order preferences, priority, schema-step order, and fitting around another milestone's choices, such as joining its Esc order, are not dependencies. A backlog item's priority goes in a short clause at the end of its Goal, such as "Low priority, after Animations."
 - Keep acceptance criteria testable and outcome-focused (avoid implementation-narrative bloat).
 - Keep verification evidence concrete:
   - commands/checks run,
@@ -136,179 +138,7 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 Last milestone completed: M12i6
 
-### M12i7 - Item Ratings
-
-- **Status**: ⏳ Planned
-- **Goal**: Library items have a 5-star rating with half stars, set from the Stats tab's Current file section and shared by every device.
-- **Depends on**: WebUI Stats Panel, whose Current file section holds the rating and whose catalog upgrade chain takes its schema step, and WebUI Notifications, whose Your actions and Other devices popups announce a rating change, and Per-Preset Preset Writes, whose schema step comes before this one's.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Decisions
-
-- A rating is ½ to 5 stars in half-star steps, or none. The catalog stores it as a whole number of half stars from 1 to 10, with no value for none and never 0, so "0 stars" and "not rated" can't both exist. The API gives it in stars, a multiple of 0.5 from 0.5 to 5.
-- Ratings are shared by every device, as favorites and the blacklist are, until accounts exist; then each account has its own, as its favorites and blacklist are.
-- A rating is independent of favorite and blacklist: blacklisting an item keeps its rating, and rating an item changes neither flag.
-- A rating change publishes its own event, `itemRatingChanged`, with the item's id and path, its rating and previous rating, and the `clientId` of the request that made it. Reusing `itemStateChanged` would show a rating change as a favorite change on other devices.
-- The rating has its own line in the Current file section, under the path: the label Rating, five stars, and a Clear button while the item is rated.
-  - A mouse over a star previews the value under it, the star's left half meaning half a star less than its right half, and a click sets it.
-  - On a touch screen a tap on a star's half sets that value, and a drag along the stars changes the value as it moves and sets it on release.
-  - From the keyboard it is one tab stop: the left and down arrows step down half a star, the right and up arrows step up half a star, Home is Not rated, End is 5 stars, and Delete or Backspace clears it.
-  - To screen readers it is a slider named Rating, from 0 to 5, whose value text is "3.5 stars", "1 star", or "Not rated".
-- The popups are "Rated {rating}" and "Rating cleared" as Your actions, with the file name as the second line, and the same text followed by "on another device" as Other devices, where {rating} reads as the value text does, such as "3.5 stars".
-
-#### Slices
-
-| Slice | Status | Delivers |
-| --- | --- | --- |
-| Mockup | ⏳ Planned | The rating in the Stats tab's Current file section, the Rated card, the rating popups, and a check that every icon the mockup uses is in its font subset, approved on a desktop browser, the iPad, and an Android phone. |
-| Server | ⏳ Planned | The rating column in a new catalog schema step, the shipped 2→3 step's index SQL frozen, setting a rating in the catalog, `rating` on item reads, and the rated count in the stats read. |
-| Contract | ⏳ Planned | The rating route and its `itemRatingChanged` event, the rated count in the stats response, and `rating` and the fields the server always sends named in `LibraryProjectionItem`, in OpenAPI and the generated WebUI types. |
-| WebUI | ⏳ Planned | The rating control in the Current file section, its popups and event handling, and the Rated card. |
-
-#### Mockup slice
-
-**Scope**
-
-- The rating line in the Stats tab's Current file section, as the Decisions describe, under the path line. It shows only while the stats rows show, so not with nothing playing, for a file the server no longer has, while the server fails the compatibility check, runs without a library, or asks for pairing, or while the item loads.
-- A Rated card in the Library cards, after Blacklisted, counting the rated items.
-- The Your actions and Other devices rating popups, a Mockup-tab button for a rating from another device beside the favorite one, and the Settings tab's Other devices description naming rating changes.
-- `star` and `star_half` in the mockup's icon subset, with `star` also filled.
-- A check in `check.mjs` that every icon a mockup page uses is in its font subset.
-- The ratings the mockup's items start with come from each item's id.
-- Before the app is built, the user approves the rating on a desktop browser, the iPad, and an Android phone, including the size of the stars and how halves are tapped and dragged.
-
-**Traps**
-
-- The mockup's fonts are a subset that `build_font.py` cuts from the WebUI's font, with outlined icons in `ICONS` and filled ones in `FILLED`, written into `icons.json`; neither list has a star.
-- `setIcon` in `common.js` shows an icon missing from the subset as codepoint 0xE000, the `error` glyph, and `check.mjs` doesn't check for it (measured).
-- `star_half` ignores the font's fill axis: its left half is solid and its right half outlined at every fill (measured).
-- A filled `star` is flat only at optical size 20, the size filled icons use; at 48 its fill leaves a ring (measured). Empty and half stars use the outlined icons' size, and full stars the filled icons'.
-- `fileStats` in `layout.src.html` builds the Current file section, and `statRow` takes a DOM node as its value.
-- Drawing the starting ratings from `statRand` would shift every random value drawn after them (inferred).
-- The mockup's path line also holds Copy Path or Show in File Manager, which Show in File Manager from the WebUI builds.
-- `#mock-sync` is the Mockup tab's favorite from another device, which sends an Other devices popup with the key `sync:{id}`.
-- `check.mjs` runs the pages in happy-dom, with no layout and no pointer drags, so the stars' size and how halves are tapped and dragged can only be judged on the devices.
-- At 320 px wide the stats table's value column is about 210 px, too narrow for five 44 px stars and Clear, while the section's full width is about 290 px (inferred).
-
-**Acceptance**
-
-- The mockup shows the rating line, the Rated card, and the rating popups as the user approved them, and `node docs/mockups/reelroulette/build/check.mjs` passes, with checks of the control's value text, its keys, the states that hide it, and the popups and their keys.
-- `check.mjs` fails when a page uses an icon that isn't in its font subset, in a check run with one icon renamed to one the subset lacks, then restored.
-
-#### Server slice
-
-**Scope**
-
-- The catalog moves to schema version 6, with its own upgrade step from 5 that adds only a nullable `rating` column to `items`. A new catalog has the column last too.
-- The shipped 2→3 step's sort indexes move into their own constant, so a later change to the indexes a new catalog gets can't change a shipped step.
-- Setting a rating writes it under the library operations lock, reading the value before and after, as a favorite does, and reports whether it changed.
-- Item reads, `POST /api/library/item` and `POST /api/library/query`, send `rating` in stars when the item is rated, from `ToItem`.
-- The library stats read counts the rated items in its one pass.
-
-**Traps**
-
-- Per-Preset Preset Writes moves the catalog to schema version 5, and neither 4 nor 5 has shipped (inferred). A catalog already at 5, such as a development server's, would fail `HasRequiredCatalogSchema` and be moved aside as damaged if version 5 gained the column, so the column takes its own step.
-- `UpgradeSchema2To3` runs `SortIndexesSql`, the constant `WriteEmptyDatabase` runs for a new catalog, so adding an index to it would change the shipped step and break upgrading a schema-2 catalog, which doesn't have a newer index's column yet.
-- `LibraryCatalogMigrationTests` compares an upgraded catalog with a new one through `CatalogSeedTests.DescribeSchema`, column by column in order and index by index, so the new column is last in the new catalog's table too.
-- `OlderSchemaVersions()` covers every version from 2 to the one before current, so `CatalogSeed` needs schema 5 tables and a schema 6 seed.
-- `ListPageSql` and the item readers read columns by position.
-- Adding the column costs no space, and rating all 49,000 items of a synthetic catalog added about 0.3 MB (measured).
-- `ToItem` leaves `peakDb` out when there is none.
-- `ReadStatsGroups` is one `GROUP BY source_id, media_type` pass behind `GET /api/library/stats`.
-- Backups of the previous schema version stay in `backups/`, untrimmed, after an upgrade.
-
-**Acceptance**
-
-- A catalog at each version from 2 to 5 opens upgraded and imports upgraded with the rating column, and matches a new catalog's schema, in the catalog upgrade tests.
-- The 2→3 step runs its own index SQL, not the constant a new catalog runs, checked by reading it, and a schema-2 catalog still upgrades, in the catalog upgrade tests.
-- Setting, changing, and clearing a rating stores it, and setting the same value again reports no change, in server tests of setting a rating.
-- Item reads send `rating` in stars for a rated item and leave it out for an unrated one, in server tests of both reads.
-- Library stats count the rated items, in server tests of library stats.
-- `dotnet test ReelRoulette.sln` passes.
-
-#### Contract slice
-
-**Scope**
-
-- `POST /api/rating` takes `itemId`, the item's catalog id as `POST /api/favorite` takes it, `rating`, in stars, or null to clear, and `clientId`.
-  - It answers 400 for an empty item id or a rating that isn't a multiple of 0.5 from 0.5 to 5, and 404 for an item that isn't in the library.
-  - It answers with the item's id, its rating, and the revision of the event it published, as the favorite route does.
-- It publishes `itemRatingChanged` only when the rating changed, with `itemId`, `path`, `rating`, `previousRating`, and the request's `clientId`, no rating being null.
-- The library stats response carries the rated count.
-- `LibraryProjectionItem` names `rating`, sent only for a rated item, and the fields the server always sends that it doesn't name yet: `fullPath`, `isFavorite`, `isBlacklisted`, `playCount`, `fingerprintAlgorithm`, `fingerprintVersion`, and `tags`.
-- OpenAPI, the generated WebUI types, and `docs/api.md`, which describes the event types.
-
-**Traps**
-
-- `PublishItemState` in `ServerHostComposition.cs` publishes `itemStateChanged` for every favorite or blacklist request that finds its item, even when nothing changed, so other devices pop up a change that didn't happen.
-- `clientId` comes from the request body, trimmed by `NormalizeOptionalIdentity`, an empty one counting as none.
-- `Spec_ListsEveryMappedApiAndControlRoute` fails for a route the server maps that the spec doesn't list, and for one the spec lists that the server doesn't serve.
-- `OpenApiSpec.AssertMatchesSchema` needs a payload's fields and its schema's to be the same set, so the event's schema and payload type change together, and so do the stats response's (`GetLibraryStats_ResponseMatchesSpec`).
-- `LibraryProjectionItem` allows extra properties, so the fields it doesn't name are missing from the generated WebUI types, and `ItemIdContractTests.LibraryItems_CarryLoudnessAndPeak_AsTheSchemaNamesThem` reads the names it has.
-- `npm run verify:contracts` only checks that the generated types match the OpenAPI file.
-
-**Acceptance**
-
-- The route sets, changes, and clears a rating, answers 400 and 404 as described, and publishes `itemRatingChanged` with the previous rating and the trimmed `clientId`, matching its schema, only when the rating changed, in server tests of the rating route.
-- The stats response with the rated count matches its schema, in `GetLibraryStats_ResponseMatchesSpec`.
-- `LibraryProjectionItem` names `rating` and the fields the server always sends, in a contract test reading its names.
-- `npm run verify:contracts` passes, and `docs/api.md` describes the route, the event, and the fields, checked by reading it.
-- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
-
-#### WebUI slice
-
-**Scope**
-
-- The rating control in the Current file section, as the Decisions describe, on its own line under the path, shown only while the section shows its stats rows.
-- A new value shows at once. A click, tap, or drag sends it when it is set; arrow-key steps are sent once the keys pause, when focus leaves the control, or when the item changes, so stepping from 1 to 4 stars sends one request.
-- A rating goes to the item it was set on, even when another item plays before it is sent.
-- A request that fails puts the rating back and shows "Rating update failed: {error}" in the in-app notice, or "Rating update failed ({status})." when the server refuses it, as a favorite's failure does.
-- `itemRatingChanged` is registered with the event stream. It updates the control, unless a change made here is still waiting to be sent, and reloads the Stats tab as the favorite event does.
-- The rating popups as the Decisions word them: Your actions with the key `rating`, so a second rating replaces the first, and Other devices for an event whose `clientId` isn't this device's, or that has none, with the file name left out of `last.log`.
-- The Rated card after Blacklisted, and the Settings tab's Other devices description naming rating changes.
-
-**Traps**
-
-- The Stats tab has no control today. `fileRows()` in `src/stats/statsModel.ts` builds plain-text rows, so the rating needs its own markup in `FileStats` (`src/ui/StatsTab.tsx`).
-- In `src/stats/statsTab.ts` the view's `file` is null with nothing playing, and its `rows` are null for a file the server no longer has, while the server is held back or asks for pairing, and until the playing item's read arrives.
-- `toggleFlag` in `src/playback/player.ts` changes nothing until the server answers, so nothing in the app yet shows a value before its request lands.
-- The `itemStateChanged` handler in `src/playback/player.ts` words its Other devices popup from the favorite and blacklist flags alone, with the key `sync:{itemId}`.
-- `src/events/sseClient.ts` listens only to the event types in the handlers `src/state/serverConnection.ts` passes it, and moves the resume revision on only for them.
-- The Stats tab reloads through `createCoalescedRefresh` (`src/stats/coalescedRefresh.ts`), 250 ms after the first request of a burst.
-- The panel's resize handle (`PanelHandle` in `src/ui/Panel.tsx`) takes the arrow keys, Home, and End and gives `aria-valuetext`, and the Settings tab's sliders are named by their label alone, with the value as shown as their value text.
-- The WebUI loads the full Material Symbols font, so `star` and `star_half` need no font change, and `.material-symbol-icon.is-filled` uses optical size 20.
-- Interactive elements are 44 px on every pointer; on a phone on its side (`short-screen`) text buttons shrink to 38 px and icon buttons keep their size.
-
-**Acceptance**
-
-- A click or tap on a star's left or right half sets half a star less or the whole star, a drag sets the value on release, the keys step, clear, and set as described, and Clear clears, with the slider's value and value text following, in Stats screen tests of the rating control.
-- The control is absent with nothing playing, for a file the server no longer has, while the server is held back or asks for pairing, and while the item loads, in Stats screen tests of each state.
-- Arrow-key steps send one request once they pause or focus leaves, and a rating set before another item plays goes to the item it was set on, in Stats screen tests.
-- A failed request puts the rating back and shows its notice, in Stats screen tests.
-- A rating change pops up as Your actions on this device and as Other devices for another device's event or one without a client id, and a second rating replaces the first popup, in WebUI tests of the rating popups.
-- Another device's rating updates the control, in Stats screen tests.
-- The Rated card shows the stats' rated count, in Stats screen tests.
-- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and a spot check on the user's phone.
-
-#### Release checks
-
-- Manual: On the iPad and an Android phone, setting half-star ratings by tapping each half and by dragging, and clearing one, works, and a second device shows each change with its Other devices popup.
-- Manual: In a desktop browser, hovering the stars previews the rating and a click sets it.
-
-#### Not included
-
-- A rating on the player, which is WebUI Player Rating.
-- Rating keys, which is WebUI Keyboard Shortcuts.
-- Filtering and sorting by rating, which is Rating Filter and Sort.
-- Weighting random picks by rating, which is Rating-Weighted Random Picks.
-- Ratings on library tiles, which is WebUI Ratings on Tiles.
-- Rating several items at once, which is WebUI Multi-Select and Bulk Actions.
-- Ratings in duplicate review, which is Admin Refresh, Backup, and Duplicate Review.
-- Reading ratings from media files and writing them back, which is File Metadata Sync.
-- Ratings kept per account, which is Per-Account Library Data.
-
-### M12i8 - WebUI Volume and Enhanced Audio
+### M12i7 - WebUI Volume and Enhanced Audio
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI has a volume control on every device, by slider, scroll wheel, and two-finger drag, through an Enhanced audio gain stage that also gives iPhone and iPad an in-app volume.
@@ -442,7 +272,7 @@ Last milestone completed: M12i6
 - The [ and ] volume keys, which is WebUI Keyboard Shortcuts.
 - Volume above 100%, which is WebUI Volume Boost.
 
-### M12i9 - WebUI Loudness Normalization
+### M12i8 - WebUI Loudness Normalization
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI evens out loudness between videos toward a target the user picks, without clipping, and its Night mode evens out loudness within a video, in every browser the WebUI supports.
@@ -618,7 +448,7 @@ Last milestone completed: M12i6
 - Peak measurement and the loudness rescan, which is WebUI Stats Panel.
 - Night mode settings beyond on and off.
 
-### M12i10 - WebUI Player Controls
+### M12i9 - WebUI Player Controls
 
 - **Status**: ⏳ Planned
 - **Goal**: The player's controls can hide after a time with no activity, and a Random button picks a new item from anywhere in the history.
@@ -663,45 +493,11 @@ Last milestone completed: M12i6
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and a spot check on the user's own browsers and phone, without the VM.
 
-### M12i11 - WebUI Player Rating
-
-- **Status**: ⏳ Planned
-- **Goal**: The player shows the playing item's rating and sets it without opening the Stats tab.
-- **Depends on**: Item Ratings, whose rating route, event, and star control it uses, and WebUI Player Controls, whose controls it shows and hides with.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Scope
-
-- The player shows the playing item's rating and sets it by mouse, touch, and keyboard.
-- Before the app is built, its design is settled in the mockup and approved on a desktop browser, the iPad, and an Android phone: where it sits on the player, how it shows the rating at a glance, how it sets one by mouse, touch, and keyboard, and how it looks at phone widths and on a phone on its side.
-- It sets a rating as Item Ratings' control does, with the same popups.
-- It shows and hides with the player's other controls.
-
-#### Traps
-
-- The player's top corners hold the bell at the left, and the panel button, favorite, and blacklist at the right, with the panel button at the left beside the bell while the panel is on the left, each 44 px (`.overlay-btn` in `src/styles.css`).
-- The player's indicator sits between them with `max-width: calc(100% - 336px)`, and on a player narrower than 600 px (`NARROW_PLAYER_BELOW_WIDTH` in `src/panel/panelHost.ts`) it drops below them.
-- On a 360 px phone about 144 px is left between the two corner groups, which the indicator uses (inferred).
-- The swipe gestures skip touches inside `#overlay-controls` (`src/ui/Player.tsx`), so a control there doesn't trigger next or previous.
-- The Stats tab is one tap away, through the header's file name.
-
-#### Acceptance
-
-- The player shows the playing item's rating and sets it as the approved mockup shows, by mouse, touch, and keyboard, with Item Ratings' popups, in Player screen tests.
-- The player's rating follows a rating set in the Stats tab or on another device, in Player screen tests.
-- It shows and hides with the player's controls, in Player screen tests.
-- The mockup shows the player's rating as approved and matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and a spot check on the user's phone.
-
-#### Release checks
-
-- Manual: On the iPad and an Android phone, in both orientations, the player's rating shows the playing item's rating and sets one by touch.
-
-### M12i12 - WebUI Keyboard Shortcuts
+### M12i10 - WebUI Keyboard Shortcuts
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI has the desktop's keyboard shortcuts wherever a browser allows them, plus seek-step and frame-step keys, double-tap seeking with a seek indicator, and a shortcut reference.
-- **Depends on**: WebUI Settings Panel, WebUI Stats Panel, so every panel tab exists, and WebUI Volume and Enhanced Audio, whose volume its keys step and whose volume indicator they show, and WebUI Autoplay Modes, whose autoplay it toggles, and WebUI Player Controls, whose controls show on a key press and whose Random button R presses, and Item Ratings, whose rating its keys set.
+- **Depends on**: WebUI Settings Panel, WebUI Stats Panel, so every panel tab exists, and WebUI Volume and Enhanced Audio, whose volume its keys step and whose volume indicator they show, and WebUI Autoplay Modes, whose autoplay it toggles, and WebUI Player Controls, whose controls show on a key press and whose Random button R presses.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
@@ -731,11 +527,6 @@ Last milestone completed: M12i6
   - It uses the browser's frame timings (`requestVideoFrameCallback`) where the browser provides them, and, where it doesn't, an assumed frame rate that this milestone decides.
   - It replaces the desktop's Frame seek step (Shift and the arrow keys), which LibVLC drove.
 - J, L, a double-tap, and a frame step are seeks: while Timer mode repeats a stretch, each starts the stretch where it lands, as a seek by the scrub bar does, which the mockup shows.
-- Rating keys set the playing item's rating as Item Ratings' control does, with its popups, and do nothing while nothing plays:
-  - Shift+1 to Shift+5 set 1 to 5 stars, and Shift+0 clears the rating.
-  - `-` and `=` step the rating down and up by half a star.
-  - Shift and a digit are matched by the key's position (`event.code`), since Shift changes the character a digit key gives.
-- While Item Ratings' star control has focus, its keys stay its own, so the left and right arrows change its rating there, not the playing item.
 - Shortcuts do nothing while focus is in a text field.
 - Esc closes the first of these that is open: the bell's list, the panel, and then pseudo-fullscreen. An open dialog, Auto Tag included, takes Esc itself.
 - A shortcut reference in the Settings tab's Keyboard shortcuts section, collapsed by default with a chevron. `?`, pressed anywhere outside a text field, opens Settings with it expanded, and the reference lists `?` too.
@@ -745,8 +536,6 @@ Last milestone completed: M12i6
 
 - A seek by the scrub bar starts Timer mode's repeating stretch where it lands through the player's `seek` (`src/playback/player.ts`); a key that moves the video's position some other way leaves the stretch where it was.
 - Besides Escape, which closes overlays, the WebUI handles keys only on the element that has focus: Enter or Space on a library tile and on the header's file name, which opens the Stats tab, the arrow keys, Home, and End on the panel's resize handle, the up and down arrows on drag handles, and Enter in text fields (measured).
-- Item Ratings' star control takes the arrow keys, Home, End, Delete, and Backspace while it has focus.
-- With Shift held, a digit key's `event.key` is the shifted character, such as "!" on a US layout (inferred).
 - The desktop bound K play or pause, J and L seek, Left and Right previous and next, R random, F favorite, B blacklist, A autoplay, M mute, comma and period volume, T tags, P player view, S settings, O import folder, Q quit, F11 fullscreen, and 1 to 5 to show or hide parts of the window. It also swallowed 6 to 8 and Space, which did nothing (measured).
 - The browser keeps Ctrl+Q, Ctrl+O, and F11, for its own fullscreen (inferred).
 - Auto Tag is already an in-app dialog (`src/ui/AutoTag.tsx`): Esc does what its X does and waits while a scan runs, and the stage's Escape handler leaves Esc to any open dialog (`src/ui/Stage.tsx`), so the Esc order needs nothing for it (measured).
@@ -768,8 +557,6 @@ Last milestone completed: M12i6
 - The seek indicator shows on the right with "+ {n}" and › for a forward seek and on the left with "− {n}" and ‹ for a back seek, for J, L, and double-taps and not for the scrub bar, adds up consecutive seeks, starts over after about a second or with a seek the other way, shows while the controls are hidden, and shows without the slide with reduced motion, in seek indicator tests with fake timers.
 - While a video is paused, comma and period step one frame back and forward; while it plays, they do nothing. Shown by frame stepping tests with and without the browser's frame timings.
 - While Timer mode repeats a stretch, J, L, a double-tap, and a frame step start it where they land, in keyboard and gesture tests.
-- Shift+1 to Shift+5 set 1 to 5 stars, Shift+0 clears the rating, and `-` and `=` step it by half a star, on the playing item with Item Ratings' popups, and they do nothing while nothing plays, in keyboard tests per binding.
-- While Item Ratings' star control has focus, the arrow keys change its rating and not the playing item, in keyboard tests per binding.
 - Shift+F enters and leaves fullscreen, in keyboard tests per binding.
 - Space plays or pauses as K does, and leaves a focused button or tile to its own action, in keyboard tests per binding.
 - The shortcut reference matches the bindings, and `?` opens Settings with it expanded, in a test that the reference lists every binding.
@@ -786,6 +573,7 @@ Last milestone completed: M12i6
 
 - Rebinding, which is Customizable Keyboard Shortcuts.
 - Seeking by double-click with a mouse, since double-tap seeking is for touch screens.
+- Rating keys, which is WebUI Player Rating.
 - The Actions menu and selection in the Esc order, after Auto Tag and before the panel, which is WebUI Multi-Select and Bulk Actions.
 - The profile picker's key and its place in the Esc order, which is Library Profiles.
 
@@ -1048,11 +836,229 @@ Last milestone completed: M12i6
 - Playing formats a browser can't, which is WebUI Playback Cutover and Format Resilience.
 - The Filter tab following sources added, renamed, or removed in the admin section, which is Admin Source Management.
 
-### M12k2 - Rating Filter and Sort
+### M12k2 - Item Ratings
+
+- **Status**: ⏳ Planned
+- **Goal**: Library items have a 5-star rating with half stars, set from the Stats tab's Current file section and shared by every device.
+- **Depends on**: WebUI Stats Panel, whose Current file section holds the rating and whose catalog upgrade chain takes its schema step, and WebUI Notifications, whose Your actions and Other devices popups announce a rating change.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- A rating is ½ to 5 stars in half-star steps, or none. The catalog stores it as a whole number of half stars from 1 to 10, with no value for none and never 0, so "0 stars" and "not rated" can't both exist. The API gives it in stars, a multiple of 0.5 from 0.5 to 5.
+- Ratings are shared by every device, as favorites and the blacklist are, until accounts exist; then each account has its own, as its favorites and blacklist are.
+- A rating is independent of favorite and blacklist: blacklisting an item keeps its rating, and rating an item changes neither flag.
+- A rating change publishes its own event, `itemRatingChanged`, with the item's id and path, its rating and previous rating, and the `clientId` of the request that made it. Reusing `itemStateChanged` would show a rating change as a favorite change on other devices.
+- The rating has its own line in the Current file section, under the path: the label Rating, five stars, and a Clear button while the item is rated.
+  - A mouse over a star previews the value under it, the star's left half meaning half a star less than its right half, and a click sets it.
+  - On a touch screen a tap on a star's half sets that value, and a drag along the stars changes the value as it moves and sets it on release.
+  - From the keyboard it is one tab stop: the left and down arrows step down half a star, the right and up arrows step up half a star, Home is Not rated, End is 5 stars, and Delete or Backspace clears it.
+  - To screen readers it is a slider named Rating, from 0 to 5, whose value text is "3.5 stars", "1 star", or "Not rated".
+- The popups are "Rated {rating}" and "Rating cleared" as Your actions, with the file name as the second line, and the same text followed by "on another device" as Other devices, where {rating} reads as the value text does, such as "3.5 stars".
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ⏳ Planned | The rating in the Stats tab's Current file section, the Rated card, the rating popups, and a check that every icon the mockup uses is in its font subset, approved on a desktop browser, the iPad, and an Android phone. |
+| Server | ⏳ Planned | The rating column in a new catalog schema step, the shipped 2→3 step's index SQL frozen, setting a rating in the catalog, `rating` on item reads, and the rated count in the stats read. |
+| Contract | ⏳ Planned | The rating route and its `itemRatingChanged` event, the rated count in the stats response, and `rating` and the fields the server always sends named in `LibraryProjectionItem`, in OpenAPI and the generated WebUI types. |
+| WebUI | ⏳ Planned | The rating control in the Current file section, its popups and event handling, and the Rated card. |
+
+#### Mockup slice
+
+**Scope**
+
+- The rating line in the Stats tab's Current file section, as the Decisions describe, under the path line. It shows only while the stats rows show, so not with nothing playing, for a file the server no longer has, while the server fails the compatibility check, runs without a library, or asks for pairing, or while the item loads.
+- A Rated card in the Library cards, after Blacklisted, counting the rated items.
+- The Your actions and Other devices rating popups, a Mockup-tab button for a rating from another device beside the favorite one, and the Settings tab's Other devices description naming rating changes.
+- `star` and `star_half` in the mockup's icon subset, with `star` also filled.
+- A check in `check.mjs` that every icon a mockup page uses is in its font subset.
+- The ratings the mockup's items start with come from each item's id.
+- Before the app is built, the user approves the rating on a desktop browser, the iPad, and an Android phone, including the size of the stars and how halves are tapped and dragged.
+
+**Traps**
+
+- The mockup's fonts are a subset that `build_font.py` cuts from the WebUI's font, with outlined icons in `ICONS` and filled ones in `FILLED`, written into `icons.json`; neither list has a star.
+- `setIcon` in `common.js` shows an icon missing from the subset as codepoint 0xE000, the `error` glyph, and `check.mjs` doesn't check for it (measured).
+- `star_half` ignores the font's fill axis: its left half is solid and its right half outlined at every fill (measured).
+- A filled `star` is flat only at optical size 20, the size filled icons use; at 48 its fill leaves a ring (measured). Empty and half stars use the outlined icons' size, and full stars the filled icons'.
+- `fileStats` in `layout.src.html` builds the Current file section, and `statRow` takes a DOM node as its value.
+- Drawing the starting ratings from `statRand` would shift every random value drawn after them (inferred).
+- The mockup's path line also holds Copy Path or Show in File Manager, which Show in File Manager from the WebUI builds.
+- `#mock-sync` is the Mockup tab's favorite from another device, which sends an Other devices popup with the key `sync:{id}`.
+- `check.mjs` runs the pages in happy-dom, with no layout and no pointer drags, so the stars' size and how halves are tapped and dragged can only be judged on the devices.
+- At 320 px wide the stats table's value column is about 210 px, too narrow for five 44 px stars and Clear, while the section's full width is about 290 px (inferred).
+
+**Acceptance**
+
+- The mockup shows the rating line, the Rated card, and the rating popups as the user approved them, and `node docs/mockups/reelroulette/build/check.mjs` passes, with checks of the control's value text, its keys, the states that hide it, and the popups and their keys.
+- `check.mjs` fails when a page uses an icon that isn't in its font subset, in a check run with one icon renamed to one the subset lacks, then restored.
+
+#### Server slice
+
+**Scope**
+
+- The catalog moves to the next schema version, with its own upgrade step from the version before that adds only a nullable `rating` column to `items`. A new catalog has the column last too.
+- The shipped 2→3 step's sort indexes move into their own constant, so a later change to the indexes a new catalog gets can't change a shipped step.
+- Setting a rating writes it under the library operations lock, reading the value before and after, as a favorite does, and reports whether it changed.
+- Item reads, `POST /api/library/item` and `POST /api/library/query`, send `rating` in stars when the item is rated, from `ToItem`.
+- The library stats read counts the rated items in its one pass.
+
+**Traps**
+
+- No schema version after 3 has shipped (inferred). A catalog already at the version before, such as a development server's, would fail `HasRequiredCatalogSchema` and be moved aside as damaged if that version gained the column, so the column takes its own step.
+- `UpgradeSchema2To3` runs `SortIndexesSql`, the constant `WriteEmptyDatabase` runs for a new catalog, so adding an index to it would change the shipped step and break upgrading a schema-2 catalog, which doesn't have a newer index's column yet.
+- `LibraryCatalogMigrationTests` compares an upgraded catalog with a new one through `CatalogSeedTests.DescribeSchema`, column by column in order and index by index, so the new column is last in the new catalog's table too.
+- `OlderSchemaVersions()` covers every version from 2 to the one before current, so `CatalogSeed` needs tables for the version before and for the new version.
+- `ListPageSql` and the item readers read columns by position.
+- Adding the column costs no space, and rating all 49,000 items of a synthetic catalog added about 0.3 MB (measured).
+- `ToItem` leaves `peakDb` out when there is none.
+- `ReadStatsGroups` is one `GROUP BY source_id, media_type` pass behind `GET /api/library/stats`.
+- Backups of the previous schema version stay in `backups/`, untrimmed, after an upgrade.
+
+**Acceptance**
+
+- A catalog at each older version opens upgraded and imports upgraded with the rating column, and matches a new catalog's schema, in the catalog upgrade tests.
+- The 2→3 step runs its own index SQL, not the constant a new catalog runs, checked by reading it, and a schema-2 catalog still upgrades, in the catalog upgrade tests.
+- Setting, changing, and clearing a rating stores it, and setting the same value again reports no change, in server tests of setting a rating.
+- Item reads send `rating` in stars for a rated item and leave it out for an unrated one, in server tests of both reads.
+- Library stats count the rated items, in server tests of library stats.
+- `dotnet test ReelRoulette.sln` passes.
+
+#### Contract slice
+
+**Scope**
+
+- `POST /api/rating` takes `itemId`, the item's catalog id as `POST /api/favorite` takes it, `rating`, in stars, or null to clear, and `clientId`.
+  - It answers 400 for an empty item id or a rating that isn't a multiple of 0.5 from 0.5 to 5, and 404 for an item that isn't in the library.
+  - It answers with the item's id, its rating, and the revision of the event it published, as the favorite route does.
+- It publishes `itemRatingChanged` only when the rating changed, with `itemId`, `path`, `rating`, `previousRating`, and the request's `clientId`, no rating being null.
+- The library stats response carries the rated count.
+- `LibraryProjectionItem` names `rating`, sent only for a rated item, and the fields the server always sends that it doesn't name yet: `fullPath`, `isFavorite`, `isBlacklisted`, `playCount`, `fingerprintAlgorithm`, `fingerprintVersion`, and `tags`.
+- OpenAPI, the generated WebUI types, and `docs/api.md`, which describes the event types.
+
+**Traps**
+
+- `PublishItemState` in `ServerHostComposition.cs` publishes `itemStateChanged` for every favorite or blacklist request that finds its item, even when nothing changed, so other devices pop up a change that didn't happen.
+- `clientId` comes from the request body, trimmed by `NormalizeOptionalIdentity`, an empty one counting as none.
+- `Spec_ListsEveryMappedApiAndControlRoute` fails for a route the server maps that the spec doesn't list, and for one the spec lists that the server doesn't serve.
+- `OpenApiSpec.AssertMatchesSchema` needs a payload's fields and its schema's to be the same set, so the event's schema and payload type change together, and so do the stats response's (`GetLibraryStats_ResponseMatchesSpec`).
+- `LibraryProjectionItem` allows extra properties, so the fields it doesn't name are missing from the generated WebUI types, and `ItemIdContractTests.LibraryItems_CarryLoudnessAndPeak_AsTheSchemaNamesThem` reads the names it has.
+- `npm run verify:contracts` only checks that the generated types match the OpenAPI file.
+
+**Acceptance**
+
+- The route sets, changes, and clears a rating, answers 400 and 404 as described, and publishes `itemRatingChanged` with the previous rating and the trimmed `clientId`, matching its schema, only when the rating changed, in server tests of the rating route.
+- The stats response with the rated count matches its schema, in `GetLibraryStats_ResponseMatchesSpec`.
+- `LibraryProjectionItem` names `rating` and the fields the server always sends, in a contract test reading its names.
+- `npm run verify:contracts` passes, and `docs/api.md` describes the route, the event, and the fields, checked by reading it.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### WebUI slice
+
+**Scope**
+
+- The rating control in the Current file section, as the Decisions describe, on its own line under the path, shown only while the section shows its stats rows.
+- A new value shows at once. A click, tap, or drag sends it when it is set; arrow-key steps are sent once the keys pause, when focus leaves the control, or when the item changes, so stepping from 1 to 4 stars sends one request.
+- While the control has focus, its keys stay its own, so the left and right arrows change its rating instead of going to the previous or next item.
+- A rating goes to the item it was set on, even when another item plays before it is sent.
+- A request that fails puts the rating back and shows "Rating update failed: {error}" in the in-app notice, or "Rating update failed ({status})." when the server refuses it, as a favorite's failure does.
+- `itemRatingChanged` is registered with the event stream. It updates the control, unless a change made here is still waiting to be sent, and reloads the Stats tab as the favorite event does.
+- The rating popups as the Decisions word them: Your actions with the key `rating`, so a second rating replaces the first, and Other devices for an event whose `clientId` isn't this device's, or that has none, with the file name left out of `last.log`.
+- The Rated card after Blacklisted, and the Settings tab's Other devices description naming rating changes.
+
+**Traps**
+
+- The Stats tab has no control today. `fileRows()` in `src/stats/statsModel.ts` builds plain-text rows, so the rating needs its own markup in `FileStats` (`src/ui/StatsTab.tsx`).
+- In `src/stats/statsTab.ts` the view's `file` is null with nothing playing, and its `rows` are null for a file the server no longer has, while the server is held back or asks for pairing, and until the playing item's read arrives.
+- `toggleFlag` in `src/playback/player.ts` changes nothing until the server answers, so nothing in the app yet shows a value before its request lands.
+- The `itemStateChanged` handler in `src/playback/player.ts` words its Other devices popup from the favorite and blacklist flags alone, with the key `sync:{itemId}`.
+- `src/events/sseClient.ts` listens only to the event types in the handlers `src/state/serverConnection.ts` passes it, and moves the resume revision on only for them.
+- The Stats tab reloads through `createCoalescedRefresh` (`src/stats/coalescedRefresh.ts`), 250 ms after the first request of a burst.
+- WebUI Keyboard Shortcuts binds Left and Right to the previous and next item.
+- The panel's resize handle (`PanelHandle` in `src/ui/Panel.tsx`) takes the arrow keys, Home, and End and gives `aria-valuetext`, and the Settings tab's sliders are named by their label alone, with the value as shown as their value text.
+- The WebUI loads the full Material Symbols font, so `star` and `star_half` need no font change, and `.material-symbol-icon.is-filled` uses optical size 20.
+- Interactive elements are 44 px on every pointer; on a phone on its side (`short-screen`) text buttons shrink to 38 px and icon buttons keep their size.
+
+**Acceptance**
+
+- A click or tap on a star's left or right half sets half a star less or the whole star, a drag sets the value on release, the keys step, clear, and set as described, and Clear clears, with the slider's value and value text following, in Stats screen tests of the rating control.
+- The control is absent with nothing playing, for a file the server no longer has, while the server is held back or asks for pairing, and while the item loads, in Stats screen tests of each state.
+- Arrow-key steps send one request once they pause or focus leaves, and a rating set before another item plays goes to the item it was set on, in Stats screen tests.
+- While the control has focus, the left and right arrows change its rating and don't go to the previous or next item, in keyboard tests of the rating control.
+- A failed request puts the rating back and shows its notice, in Stats screen tests.
+- A rating change pops up as Your actions on this device and as Other devices for another device's event or one without a client id, and a second rating replaces the first popup, in WebUI tests of the rating popups.
+- Another device's rating updates the control, in Stats screen tests.
+- The Rated card shows the stats' rated count, in Stats screen tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check on the user's phone.
+
+#### Release checks
+
+- Manual: On the iPad and an Android phone, setting half-star ratings by tapping each half and by dragging, and clearing one, works, and a second device shows each change with its Other devices popup.
+- Manual: In a desktop browser, hovering the stars previews the rating and a click sets it.
+
+#### Not included
+
+- A rating on the player, which is WebUI Player Rating.
+- Rating keys, which is WebUI Player Rating.
+- Filtering and sorting by rating, which is Rating Filter and Sort.
+- Weighting random picks by rating, which is Rating-Weighted Random Picks.
+- Ratings on library tiles, which is WebUI Ratings on Tiles.
+- Rating several items at once, which is WebUI Multi-Select and Bulk Actions.
+- Ratings in duplicate review, which is Admin Refresh, Backup, and Duplicate Review.
+- Reading ratings from media files and writing them back, which is File Metadata Sync.
+- Ratings kept per account, which is Per-Account Library Data.
+
+### M12k3 - WebUI Player Rating
+
+- **Status**: ⏳ Planned
+- **Goal**: The player shows the playing item's rating, and the player and rating keys set it without opening the Stats tab.
+- **Depends on**: Item Ratings, whose rating route, event, and star control it uses, and WebUI Keyboard Shortcuts, whose shortcut handling the rating keys use and whose shortcut reference lists them.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- The player shows the playing item's rating and sets it by mouse, touch, and keyboard.
+- Before the app is built, its design is settled in the mockup and approved on a desktop browser, the iPad, and an Android phone: where it sits on the player, how it shows the rating at a glance, how it sets one by mouse, touch, and keyboard, and how it looks at phone widths and on a phone on its side.
+- It sets a rating as Item Ratings' control does, with the same popups.
+- It shows and hides with the player's other controls.
+- Rating keys set the playing item's rating as Item Ratings' control does, with its popups, and do nothing while nothing plays:
+  - Shift+1 to Shift+5 set 1 to 5 stars, and Shift+0 clears the rating.
+  - `-` and `=` step the rating down and up by half a star.
+  - Shift and a digit are matched by the key's position (`event.code`), since Shift changes the character a digit key gives.
+- The shortcut reference lists the rating keys, and the mockup's reference shows them.
+
+#### Traps
+
+- The player's top corners hold the bell at the left, and the panel button, favorite, and blacklist at the right, with the panel button at the left beside the bell while the panel is on the left, each 44 px (`.overlay-btn` in `src/styles.css`).
+- The player's indicator sits between them with `max-width: calc(100% - 336px)`, and on a player narrower than 600 px (`NARROW_PLAYER_BELOW_WIDTH` in `src/panel/panelHost.ts`) it drops below them.
+- On a 360 px phone about 144 px is left between the two corner groups, which the indicator uses (inferred).
+- The swipe gestures skip touches inside `#overlay-controls` (`src/ui/Player.tsx`), so a control there doesn't trigger next or previous.
+- The Stats tab is one tap away, through the header's file name.
+- With Shift held, a digit key's `event.key` is the shifted character, such as "!" on a US layout (inferred).
+- WebUI Keyboard Shortcuts binds 1 to 5 to the panel tabs, so Shift and a digit must not also open a tab (inferred).
+
+#### Acceptance
+
+- The player shows the playing item's rating and sets it as the approved mockup shows, by mouse, touch, and keyboard, with Item Ratings' popups, in Player screen tests.
+- The player's rating follows a rating set in the Stats tab or on another device, in Player screen tests.
+- It shows and hides with the player's controls, in Player screen tests.
+- Shift+1 to Shift+5 set 1 to 5 stars, Shift+0 clears the rating, and `-` and `=` step it by half a star, on the playing item with Item Ratings' popups, and they do nothing while nothing plays, in keyboard tests per binding.
+- The shortcut reference lists the rating keys, in the test that the reference lists every binding.
+- The mockup shows the player's rating as approved and matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check on the user's phone.
+
+#### Release checks
+
+- Manual: On the iPad and an Android phone, in both orientations, the player's rating shows the playing item's rating and sets one by touch.
+
+### M12k4 - Rating Filter and Sort
 
 - **Status**: ⏳ Planned
 - **Goal**: Browse and random play can be limited to items rated at or above a minimum, and the Library tab sorts by rating.
-- **Depends on**: Item Ratings, and Browser-Playable Filter, whose FilterState field and preset matching cases this milestone's follow.
+- **Depends on**: Item Ratings.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -1076,7 +1082,7 @@ Last milestone completed: M12i6
 - `minRating`, in stars or null for no minimum, and `includeUnrated` fields in the FilterState schema, applied by the server in the list query, its counts, and random selection.
 - A shared fixture locks how the server's filter parser and the WebUI read `minRating`, such as a number or a string, a value between half steps, one out of range, and null, and Core and WebUI tests read it.
 - A Rating sort mode, with unrated items last in both directions.
-- The sort's two indexes, one per direction, come with a catalog schema step from 6 to 7, in their own constant.
+- The sort's two indexes, one per direction, come with the catalog's move to the next schema version, with its upgrade step from the version before, and go in their own constant.
 - OpenAPI and generated WebUI types.
 
 **Traps**
@@ -1139,7 +1145,7 @@ Last milestone completed: M12i6
 
 - Weighting random picks by rating, which is Rating-Weighted Random Picks.
 
-### M12k3 - Rating-Weighted Random Picks
+### M12k5 - Rating-Weighted Random Picks
 
 - **Status**: ⏳ Planned
 - **Goal**: Random picks can favor higher-rated items, with the server deciding the weights.
@@ -1305,7 +1311,7 @@ Last milestone completed: M12i6
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI selects several library items, or every item that matches, and favorites, blacklists, rates, tags, clears the playback stats of, or removes them all at once.
-- **Depends on**: WebUI Grid Row Reuse, which updates a tile in place, so selection marks are tile updates, and WebUI Grid Scrollbar Seek, whose placeholder tiles show selection once their page loads, and WebUI Tags and Filter Tabs, whose Tags tab edits several items, and WebUI Keyboard Shortcuts, whose Esc order it extends, and Item Ratings, whose rating and star control Rate… uses, and Rating Filter and Sort, whose rating change kind in the tile effect rule the bulk rating event goes through.
+- **Depends on**: WebUI Grid Row Reuse, which updates a tile in place, so selection marks are tile updates, and WebUI Tags and Filter Tabs, whose Tags tab edits several items, and Item Ratings, whose rating and star control Rate… uses, and Rating Filter and Sort, whose rating change kind in the tile effect rule the bulk rating event goes through.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -1473,7 +1479,7 @@ Last milestone completed: M12i6
 
 - **Status**: ⏳ Planned
 - **Goal**: With Loop on, the user can set a start and an end marker on a video's scrub bar, and the video repeats between them.
-- **Depends on**: WebUI Autoplay Modes, whose Timer mode's repeating stretch the markers define while they are set, WebUI Player Controls, whose controls stay shown while the scrub bar is dragged, and WebUI Keyboard Shortcuts, whose keys the markers' own keys have to fit around.
+- **Depends on**: WebUI Autoplay Modes, whose Timer mode's repeating stretch the markers define while they are set.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
@@ -1511,7 +1517,7 @@ Last milestone completed: M12i6
 
 - **Status**: ⏳ Planned
 - **Goal**: Each device chooses a profile from a picker in the header, a named view of the library that shows only the sources picked for it.
-- **Depends on**: Per-Preset Preset Writes, whose preset ids each profile remembers its preset by, Item Ratings, whose rating event gains the item's source id, Rating Filter and Sort, whose catalog schema step comes before this one's, WebUI Keyboard Shortcuts, whose Esc order and shortcut reference the picker's key joins, and WebUI Multi-Select and Bulk Actions, whose ids-only query, selection, and bulk events follow the active profile.
+- **Depends on**: Per-Preset Preset Writes, whose preset ids each profile remembers its preset by, Item Ratings, whose rating event gains the item's source id, WebUI Keyboard Shortcuts, whose shortcut handling the picker's key uses and whose shortcut reference lists it, and WebUI Multi-Select and Bulk Actions, whose ids-only query, selection, and bulk events follow the active profile.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -1582,7 +1588,7 @@ Last milestone completed: M12i6
 
 **Scope**
 
-- The catalog moves to schema version 8, with its own upgrade step from 7 that adds `profiles` (id, position, name, its folded form, color, and whether it follows all sources) and `profile_sources` (profile id and source id), and seeds the default profile under a fixed id as "Main" in `#ef7f22`. A new catalog has them too.
+- The catalog moves to the next schema version, with its own upgrade step from the version before that adds `profiles` (id, position, name, its folded form, color, and whether it follows all sources) and `profile_sources` (profile id and source id), and seeds the default profile under a fixed id as "Main" in `#ef7f22`. A new catalog has them too.
 - The catalog's required tables go by schema version, as its item columns do.
 - The profile store lists, creates, updates, and deletes profiles under the library operations lock.
   - A name another profile has, ignoring case, is refused.
@@ -1599,10 +1605,10 @@ Last milestone completed: M12i6
 
 **Traps**
 
-- Rating Filter and Sort moves the catalog to schema version 7, and none of 4 to 7 has shipped (inferred). A catalog already at 7, such as a development server's, would fail `HasRequiredCatalogSchema` and be moved aside as damaged if version 7 gained the tables, so they take their own step.
-- `HasRequiredCatalogSchema` checks one `CatalogTables` list at every version (`LibraryCatalogStore.cs`), so adding the new tables to it would make a catalog at 2 to 7 fail the check and be moved aside to `library.db.refused`.
-- `ItemColumnsBySchemaVersion` needs an entry for 8 even though `items` doesn't change, since both schema checks look the version up there.
-- `OlderSchemaVersions()` covers every version from 2 to the one before current, so `CatalogSeed` needs a schema 7 seed, and `CatalogSeedTests.DescribeSchema` compares an upgraded catalog with a new one table by table.
+- No schema version after 3 has shipped (inferred). A catalog already at the version before, such as a development server's, would fail `HasRequiredCatalogSchema` and be moved aside as damaged if that version gained the tables, so they take their own step.
+- `HasRequiredCatalogSchema` checks one `CatalogTables` list at every version (`LibraryCatalogStore.cs`), so adding the new tables to it would make a catalog at any older version fail the check and be moved aside to `library.db.refused`.
+- `ItemColumnsBySchemaVersion` needs an entry for the new version even though `items` doesn't change, since both schema checks look the version up there.
+- `OlderSchemaVersions()` covers every version from 2 to the one before current, so `CatalogSeed` needs tables for the version before and for the new version, and `CatalogSeedTests.DescribeSchema` compares an upgraded catalog with a new one table by table.
 - The catalog has no foreign keys.
 - `QueryList` calls `BuildWhere` three times and `QueryRandomCandidates` once (`LibraryCatalogListQuery.cs`, `LibraryCatalogSession.cs`), and `searchBaselineCount` is built without the filter, so a source condition inside `AppendFilter` would leave that count covering the whole library.
 - `FromClause` joins only enabled sources, and the filter's source list is an OR group inside `AppendFilter`, so a filter limited to a disabled source finds nothing (measured).
@@ -1617,7 +1623,7 @@ Last milestone completed: M12i6
 
 **Acceptance**
 
-- A catalog at each version from 2 to 7 opens upgraded and imports upgraded with the profile tables and the default profile, matches a new catalog's schema, and isn't moved aside, in the catalog upgrade tests.
+- A catalog at each older version opens upgraded and imports upgraded with the profile tables and the default profile, matches a new catalog's schema, and isn't moved aside, in the catalog upgrade tests.
 - Profiles are listed, created, updated, and deleted, a taken name is refused ignoring case, and the default profile can't be deleted or limited, in profile store tests.
 - A profile that follows all sources includes a newly imported source, and a chosen list doesn't, in profile store tests.
 - The library query's page, both counts, its ids-only option, and random picks keep only the profile's sources, a filter naming only sources it hides finds nothing, and a request without a profile or with an unknown one sees every source, in server tests of the profile's sources.
@@ -1752,7 +1758,7 @@ Last milestone completed: M12i6
 
 **Scope**
 
-- The catalog moves to schema version 9, with its own upgrade step from 8 that adds whether new profiles show it to `tags`, `categories`, and `presets`, on by default and last in each table, and three tables of the profiles that differ, keyed by the tag's folded name, the category's id, and the preset's id. A new catalog has them too.
+- The catalog moves to the next schema version, with its own upgrade step from the version before that adds whether new profiles show it to `tags`, `categories`, and `presets`, on by default and last in each table, and three tables of the profiles that differ, keyed by the tag's folded name, the category's id, and the preset's id. A new catalog has them too.
 - Visibility changes in the same transaction as the write that causes it:
   - a tag rename moves the tag's rows to its new name;
   - a rename that merges into another tag leaves the result "All profiles", with no profile differing;
@@ -1765,7 +1771,7 @@ Last milestone completed: M12i6
 
 **Traps**
 
-- Library Profiles moves the catalog to schema version 8, which hasn't shipped (inferred), so visibility takes its own step, for the reason Library Profiles' Server slice gives.
+- No schema version after 3 has shipped (inferred), so visibility takes its own step, for the reason Library Profiles' Server slice gives.
 - Tags are identified by their folded name, `name_fold`, and `item_tags` refers to them by it. Categories have a string id that the client gives, and Uncategorized is seeded with `sort_order` `int.MaxValue` (`LibraryCatalogStore.cs`, `LibraryCatalogSession.cs`).
 - `RenameTag` updates the renamed tag's row in place and, when the new name is taken, deletes the other row (`LibraryCatalogSession.cs`).
 - `InsertCatalogTagIfMissing` creates tags without a request of their own, from item-tag adds and Auto Tag apply.
@@ -1776,7 +1782,7 @@ Last milestone completed: M12i6
 
 **Acceptance**
 
-- A catalog at each version from 2 to 8 opens upgraded and imports upgraded with visibility, every existing tag, category, and preset showing in every profile, and matches a new catalog's schema, in the catalog upgrade tests.
+- A catalog at each older version opens upgraded and imports upgraded with visibility, every existing tag, category, and preset showing in every profile, and matches a new catalog's schema, in the catalog upgrade tests.
 - A tag rename keeps its visibility, a merge leaves it "All profiles", and deleting a tag, category, preset, or profile removes its rows, in server tests of each write.
 - In a profile, the library query, its counts, and random picks ignore conditions on hidden tags, directly or through their category, as the shared fixture's cases say, in Core tests of the fixture and server tests of each read.
 - Auto Tag's scan uses only visible tags, in server tests of the scan.
@@ -1861,7 +1867,7 @@ Last milestone completed: M12i6
 
 - **Status**: ⏳ Planned
 - **Goal**: Everything the Operator page does, apart from its logs, moves into a full-page admin section of the WebUI.
-- **Depends on**: WebUI Responsive Layout and Panels, whose header the admin icon joins, and Library Profiles, whose profile button the admin icon follows, and WebUI Auto-Pause and Photo Scrub Bar, whose Auto-Pause the admin view follows, and WebUI In-App Dialogs, whose confirmation the control token change uses, and WebUI Field Validation Pattern, whose pattern its settings fields use, and Catalog Open and Backup Safety, whose library state and message the admin section shows, and WebUI Notifications, whose bell and popups the admin view uses, and WebUI Multi-Select and Bulk Actions, whose control-token prompt its gate reuses.
+- **Depends on**: WebUI Responsive Layout and Panels, whose header the admin icon joins, and WebUI Auto-Pause and Photo Scrub Bar, whose Auto-Pause the admin view follows, and WebUI In-App Dialogs, whose confirmation the control token change uses, and WebUI Field Validation Pattern, whose pattern its settings fields use, and Catalog Open and Backup Safety, whose library state and message the admin section shows, and WebUI Notifications, whose bell and popups the admin view uses, and WebUI Multi-Select and Bulk Actions, whose control-token prompt its gate reuses.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Slices
@@ -2867,8 +2873,8 @@ Last milestone completed: M12i6
 ### P4 - File Metadata Sync
 
 - **Status**: ⏳ Planned
-- **Goal**: Import tags and metadata from media files and write them back, through the server.
-- **Depends on**: Item Ratings, whose rating it reads from and writes to media files, and Extended Metadata, whose fields it reads from and writes to media files, and it may be dropped rather than built.
+- **Goal**: Import tags and metadata from media files and write them back, through the server. It may be dropped rather than built.
+- **Depends on**: Item Ratings, whose rating it reads from and writes to media files, and Extended Metadata, whose fields it reads from and writes to media files.
 
 #### Scope
 
@@ -3591,7 +3597,7 @@ Last milestone completed: M12i6
 
 - **Status**: ⏳ Planned
 - **Goal**: Logged-in users change their own PIN from the WebUI.
-- **Depends on**: Account Administration.
+- **Depends on**: PIN Login API and Sessions, whose sessions and lockout the PIN change uses.
 
 #### Scope
 
@@ -3616,7 +3622,7 @@ Last milestone completed: M12i6
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI asks for a PIN before any library or player surface when it is not opened from the server machine.
-- **Depends on**: Self-Service PIN Change.
+- **Depends on**: PIN Login API and Sessions, whose login route, sessions, and lockout it uses, and Admin First-Run Setup, whose setup-incomplete answer it shows.
 
 #### Scope
 
@@ -3979,8 +3985,7 @@ Last milestone completed: M12i6
 ### P52 - Long-Press Tooltips on Touch Screens
 
 - **Status**: ⏳ Planned
-- **Goal**: On a touch screen, long-pressing an element with a tooltip shows the tooltip as a tip beside the element, so icon names and disabled buttons' reasons can be read without a mouse.
-- **Depends on**: Animations, which goes ahead of it, and it is low priority.
+- **Goal**: On a touch screen, long-pressing an element with a tooltip shows the tooltip as a tip beside the element, so icon names and disabled buttons' reasons can be read without a mouse. Low priority, after Animations.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
@@ -4080,8 +4085,8 @@ Last milestone completed: M12i6
 ### P54 - Extended Metadata
 
 - **Status**: ⏳ Planned
-- **Goal**: Each item can have a title, year, genre, creator or artist, album or series, and comment, stored in the catalog and edited in the app, for one item or several at once.
-- **Depends on**: Profile Tag and Preset Visibility, whose catalog schema step, the last of v0.15.0's, comes before this one's, and WebUI Multi-Select and Bulk Actions, whose selection edits several items at once, and it starts soon after v0.15.0 ships.
+- **Goal**: Each item can have a title, year, genre, creator or artist, album or series, and comment, stored in the catalog and edited in the app, for one item or several at once. Soon after v0.15.0 ships.
+- **Depends on**: WebUI Multi-Select and Bulk Actions, whose selection edits several items at once.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -4122,7 +4127,7 @@ Last milestone completed: M12i6
 
 **Scope**
 
-- The metadata columns on `items`, in a catalog schema step after Profile Tag and Preset Visibility's, with its own upgrade step from the one before in the catalog's upgrade chain.
+- The metadata columns on `items`, as the catalog moves to the next schema version, with its own upgrade step from the version before.
 - Name sort orders by a stored sort key of the title, or else the file's name, with its index.
 - Search matches the title as well as the file's name and relative path.
 - A year range in the FilterState schema, applied in the list query, its counts, and random selection.
@@ -4132,7 +4137,7 @@ Last milestone completed: M12i6
 
 **Traps**
 
-- The catalog is at schema version 5 today. Item Ratings moves it to 6, Rating Filter and Sort to 7, Library Profiles to 8, and Profile Tag and Preset Visibility to 9.
+- Item Ratings, Rating Filter and Sort, Library Profiles, and Profile Tag and Preset Visibility each move the catalog to a new schema version.
 - Per-Account Library Data adds a catalog schema step too, so whichever of the two lands second takes the next version (inferred).
 - Name order sorts by the stored `items.file_name_sort_key`, from `LibraryCatalogNameSortKey.Compute`, which orders like OrdinalIgnoreCase, and every other sort's index ties on it (`BuildOrderBy` in `LibraryCatalogListQuery.cs` and `SortIndexesSql` in `LibraryCatalogStore.cs`).
 - The refresh pipeline's `nameSortKeys` stage recomputes every stored key when the catalog's `name_sort_key_version` differs from `LibraryCatalogNameSortKey.Version` (`RefreshPipelineService.cs`).
