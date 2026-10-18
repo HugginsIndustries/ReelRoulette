@@ -14,7 +14,7 @@ The WebUI is the only client on every device from v0.15.0, which removes the des
 - **v0.16.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access, and give each account its own favorites, ratings, history, tags, presets, and profiles. P28b, P28c, P28d, P28e, P28f, P28m, P28g, P28h, P28j, P28n, P28k, P28l.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
 - **v0.18.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for the WebUI. P2a, P2b, P2c, P2d, P2f, P2g, P2h.
-- **Unscheduled backlog**: P1, P4, P5, P6, P9a, P9b, P10, P33, P35, P36, P50, P51, P52, P53a, P53b, P54.
+- **Unscheduled backlog**: P1, P4, P5, P6, P9a, P9b, P10, P33, P35, P36, P50, P51, P52, P53a, P53b, P54, P55.
 
 ## Document Purpose
 
@@ -1052,20 +1052,56 @@ Last milestone completed: M12i7
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
-### M12l1 - WebUI Grid Row Reuse
+### M12l1 - WebUI Grid Row Reuse and Zoom
 
 - **Status**: ⏳ Planned
-- **Goal**: The WebUI library grid updates only the rows and tiles that change, so it no longer flickers on an iPad or after a hard refresh.
+- **Goal**: The WebUI library grid updates only the rows and tiles that change, so it no longer flickers on an iPad or after a hard refresh, and Ctrl+scroll or a pinch over it changes its row height.
 - **Depends on**: WebUI Library Tab, so it is built in the Preact Library tab, whose width changes whenever the side panel is resized.
 - **Design**: `docs/mockups/reelroulette/`.
 
-#### Scope
+#### Decisions
+
+- Ctrl+scroll over the library grid, which a laptop trackpad pinch also sends, and a two-finger pinch on touch screens step the grid's target row height between 100 and 300 px, 160 by default.
+- The row height is kept per device.
+- The rows' minimum and maximum heights scale with the target row height.
+- The tile under the pointer, or under the pinch's center, stays in place as the rows reflow.
+- Ctrl+scroll never zooms the page anywhere in the app; Ctrl with + and - still zoom it.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ⏳ Planned | Ctrl+scroll and a pinch changing the library grid's row height, approved by the user. |
+| Row reuse | ⏳ Planned | Grid rows and tiles kept and updated in place instead of rebuilt through `innerHTML`, so the grid no longer flickers on an iPad or after a hard refresh. |
+| Grid zoom | ⏳ Planned | Ctrl+scroll, a trackpad pinch, and a touch pinch stepping the grid's row height, kept per device, and Ctrl+scroll never zooming the page. |
+
+#### Mockup slice
+
+**Scope**
+
+- Ctrl+scroll and a pinch over the library grid step its row height in `docs/mockups/reelroulette/`, keeping the tile under the pointer or the pinch's center in place.
+- Ctrl+scroll never zooms the mockup's page.
+- The size of a step, for a wheel notch and for a pinch, is settled in the mockup.
+- The user approves the design on a desktop browser, the iPad, and an Android phone before the app is built.
+
+**Traps**
+
+- The mockup's grid aims for rows of 160 px, from 100 to 240 (`TILE_SIZE` in `build/layout.src.html`).
+- The mockup's design table says "Rows 100–240 px, aiming for 160." (`build/index.src.html`).
+
+**Acceptance**
+
+- The mockup shows Ctrl+scroll and a pinch over the grid stepping its row height from 100 to 300 px with the tile under the pointer held in place, as the user approved it, and `node docs/mockups/reelroulette/build/check.mjs` passes, with checks of the row height's steps and limits and of Ctrl+wheel never zooming the page.
+
+#### Row reuse slice
+
+**Scope**
 
 - Keep row elements that stay visible, add and remove only the rows that enter or leave, and update a patched tile in place.
 - Grid rows stop going through `innerHTML`.
 - Apart from that, grid layout, scrolling, focus, and tile behavior stay as they are.
 
-#### Traps
+**Traps**
 
 - Each change of visible rows replaces the rows' HTML through `innerHTML`, which recreates every tile image.
 - The WebUI Preact Migration's library overlay keeps the grid controller's row HTML.
@@ -1076,7 +1112,7 @@ Last milestone completed: M12i7
 - On an iPad with the WebUI installed as an app, the grid flickers dark each time it re-renders its visible rows while scrolling, about seven times for a screen-height drag in landscape with three to four rows on screen. Desktop browsers and Firefox on Android are fine. Each re-render rebuilds every visible row's HTML, including images that were already showing (measured before promotion).
 - In desktop browsers, before and after the WebUI Preact Migration, after a hard refresh (Ctrl+F5), which bypasses the image cache, the grid flickers when it opens and on every scroll, because each row rebuild requests its thumbnails again. Desktop browsers are fine only while the thumbnails are cached (measured).
 
-#### Acceptance
+**Acceptance**
 
 - Scrolling keeps the image elements of rows that stay visible, in WebUI tests for row reuse.
 - A favorite, blacklist, playback, or tag patch updates only the affected tile, in WebUI tests for tile patching.
@@ -1086,21 +1122,57 @@ Last milestone completed: M12i7
 - Before-and-after timings for rendering a large window in a browser are recorded.
 - `npm run verify` passes, and a spot check on the user's own iPad and desktop browser, without the VM: on the iPad with the WebUI installed as an app, scrolling the library grid a screen height in landscape shows no flicker, and in the desktop browser, after a hard refresh (Ctrl+F5), opening the library and scrolling the grid shows no flicker.
 
+#### Grid zoom slice
+
+**Scope**
+
+- Ctrl+scroll, a trackpad pinch, and a two-finger pinch over the library grid step its target row height, as the approved mockup shows, in the grid's layout and controller (`src/library/libraryGridLayout.ts`, `src/library/libraryGridController.ts`).
+- The row height is kept in the per-device store (`src/state/deviceStore.ts`).
+- Ctrl+wheel is cancelled everywhere in the app, so neither Ctrl+scroll nor a trackpad pinch zooms the page, and Ctrl with + and - is left to the browser.
+
+**Traps**
+
+- The target, minimum, and maximum row heights are module constants (`TARGET_ROW_HEIGHT`, `MIN_ROW_HEIGHT`, and `MAX_ROW_HEIGHT` in `src/library/libraryGridLayout.ts`).
+- The grid has no wheel or touch handlers and sets no `touch-action`, and the viewport meta in `index.html` allows zoom.
+- A pinch over the grid zooms the page (inferred).
+- The player cancels every wheel event over the media area, Ctrl+wheel included, and turns away Safari's pinch by cancelling `gesturestart` (`src/ui/Player.tsx`).
+- Chrome and Firefox send a trackpad pinch as wheel events with `ctrlKey` set, while Safari on a Mac sends `gesturestart` and `gesturechange` instead (inferred).
+- Until the Row reuse slice lands, each row height change replaces every visible row's HTML, which recreates every tile image and would flicker on an iPad at each step (inferred).
+- A row height change rebuilds the layout for every loaded item, which takes 2.7 to 7.8 ms for 49,000 items in Node 24 with the layout and virtualizer modules alone (measured).
+- Before the WebUI Library Tab set rows of 160 px, from 100 to 240, the grid aimed at 300 px rows, from 200 to 400.
+- The server's thumbnails are at most 480 px on their long edge (`ThumbnailMaxEdge` in `RefreshPipelineService.cs`).
+- A 16:9 tile at 300 px rows, about 533 px wide, shows its thumbnail slightly scaled up, more on high-density screens (inferred).
+
+**Acceptance**
+
+- Ctrl+wheel over the grid steps the target row height between 100 and 300 px, from 160 by default, with the minimum and maximum scaling with it, in WebUI tests of grid zoom.
+- A two-finger pinch over the grid steps the row height, in WebUI tests of grid zoom with touch events.
+- The tile under the pointer, or under the pinch's center, keeps its place as the rows reflow, in WebUI tests of grid zoom.
+- The row height is kept per device and restored on reload, in WebUI tests of grid zoom with the per-device store.
+- Ctrl+wheel is cancelled everywhere in the app, and Ctrl with + and - is not, in WebUI tests of the page zoom guard.
+- At 160 px the layout matches the one before this slice for the same items and width, in layout tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check in the desktop browser with Ctrl+scroll and on the iPad with a pinch.
+
 #### Release checks
 
 - Manual: On an iPad with the WebUI installed as an app, scrolling the library grid a screen height in landscape shows no flicker.
 - Manual: In a desktop browser, after a hard refresh (Ctrl+F5), opening the library and scrolling the grid shows no flicker.
+- Manual: In a desktop browser, Ctrl+scroll over the library grid changes the row height, keeping the tile under the pointer in place, without zooming the page.
+- Manual: On the iPad and an Android phone, a pinch over the library grid changes the row height without zooming the page.
 
 #### Not included
 
 - Extending the layout for appended pages instead of rebuilding it, since a rebuild measured a few milliseconds per page.
 - Placeholder tiles and loading the page at the scroll position, which is WebUI Grid Scrollbar Seek.
+- Zooming into the playing photo or video, which is Player Zoom and Pan.
+- Thumbnails larger than 480 px for tall rows, since the 480 px thumbnails are only slightly scaled up at 300 px rows.
 
 ### M12l2 - WebUI Ratings on Tiles
 
 - **Status**: ⏳ Planned
 - **Goal**: Library tiles show each item's rating.
-- **Depends on**: Item Ratings, WebUI Grid Row Reuse, which updates a tile in place, and Rating Filter and Sort, whose rating change kind in the tile effect rule decides whether a rating change patches a tile or reloads the window.
+- **Depends on**: Item Ratings, WebUI Grid Row Reuse and Zoom, which updates a tile in place, and Rating Filter and Sort, whose rating change kind in the tile effect rule decides whether a rating change patches a tile or reloads the window.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
@@ -1126,7 +1198,7 @@ Last milestone completed: M12i7
 
 - **Status**: ⏳ Planned
 - **Goal**: Dragging the library grid's scrollbar reaches any part of the results without loading every page before it.
-- **Depends on**: WebUI Grid Row Reuse.
+- **Depends on**: WebUI Grid Row Reuse and Zoom.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Slices
@@ -1184,7 +1256,7 @@ Last milestone completed: M12i7
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI selects several library items, or every item that matches, and favorites, blacklists, rates, tags, clears the playback stats of, or removes them all at once.
-- **Depends on**: WebUI Grid Row Reuse, which updates a tile in place, so selection marks are tile updates, and WebUI Tags and Filter Tabs, whose Tags tab edits several items, and Item Ratings, whose rating and star control Rate… uses, and Rating Filter and Sort, whose rating change kind in the tile effect rule the bulk rating event goes through.
+- **Depends on**: WebUI Grid Row Reuse and Zoom, which updates a tile in place, so selection marks are tile updates, and WebUI Tags and Filter Tabs, whose Tags tab edits several items, and Item Ratings, whose rating and star control Rate… uses, and Rating Filter and Sort, whose rating change kind in the tile effect rule the bulk rating event goes through.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -2504,7 +2576,7 @@ Last milestone completed: M12i7
 
 - **Status**: ⏳ Planned
 - **Goal**: Every part of the WebUI works from the keyboard alone, and keyboard focus is always visible, in the brand orange.
-- **Depends on**: WebUI In-App Dialogs, WebUI Drag Reordering, WebUI Responsive Layout and Panels, WebUI Library Tab, WebUI Tags and Filter Tabs, WebUI Auto-Pause and Photo Scrub Bar, WebUI Notifications, WebUI Settings Panel, WebUI Admin Section, Log Viewer Redesign, Recovery Page and Operator Retirement, Admin Refresh, Backup, and Duplicate Review, Admin Source Management, Admin Library Catalog Transfer, WebUI Stats Panel, WebUI Ambient Mode, WebUI Volume and Enhanced Audio, WebUI Player Controls, WebUI Keyboard Shortcuts, Testing Suite Overhaul, WebUI Grid Row Reuse, WebUI Multi-Select and Bulk Actions, Item Ratings, WebUI Player Rating, Rating Filter and Sort, WebUI Loop Range, whose markers can be set from the keyboard, Library Profiles, whose picker and profile dialog it reaches, and Profile Tag and Preset Visibility, whose Show in and profile dialog tabs it reaches.
+- **Depends on**: WebUI In-App Dialogs, WebUI Drag Reordering, WebUI Responsive Layout and Panels, WebUI Library Tab, WebUI Tags and Filter Tabs, WebUI Auto-Pause and Photo Scrub Bar, WebUI Notifications, WebUI Settings Panel, WebUI Admin Section, Log Viewer Redesign, Recovery Page and Operator Retirement, Admin Refresh, Backup, and Duplicate Review, Admin Source Management, Admin Library Catalog Transfer, WebUI Stats Panel, WebUI Ambient Mode, WebUI Volume and Enhanced Audio, WebUI Player Controls, WebUI Keyboard Shortcuts, Testing Suite Overhaul, WebUI Grid Row Reuse and Zoom, WebUI Multi-Select and Bulk Actions, Item Ratings, WebUI Player Rating, Rating Filter and Sort, WebUI Loop Range, whose markers can be set from the keyboard, Library Profiles, whose picker and profile dialog it reaches, and Profile Tag and Preset Visibility, whose Show in and profile dialog tabs it reaches.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Scope
@@ -2520,7 +2592,7 @@ Last milestone completed: M12i7
 - The arrow keys move between tiles, left and right in order and up and down to the nearest tile in the next row, without playing the previous or next item.
 - Tab from a tile reaches its check icon, which shows as hovering shows it, and Space or Enter toggles it, starting selection as a click does, with focus staying on it. Tab again leaves the grid.
 - Enter or Space on a tile still chooses it.
-- Selection updates the tiles in place, as WebUI Grid Row Reuse patches a tile, so focus is never lost to a redraw.
+- Selection updates the tiles in place, as WebUI Grid Row Reuse and Zoom patches a tile, so focus is never lost to a redraw.
 - Every other screen works from the keyboard, each control in a sensible Tab order and with an accessible name: the player's controls and seek bar; the notifications bell, its list with Clear, Close, and Notification settings, and the popups' Dismiss; the panel button and tab row, where the arrow keys, Home, and End move between tabs; the header's profile button and its picker, and Add and Edit Profile, whose tab row the arrow keys, Home, and End move along as the panel's do, with its color palette and its Tags and Presets checkboxes, and Show in in Edit Tag, Edit Category, and Edit Preset; the Library controls; the Filter tab and its sections; the Tags tab, its chips, category headers, and drag handles, and Auto Tag; the Stats tab; the Settings tab, including the Ambient mode settings section and its sliders and the Keyboard shortcuts section; the in-app dialogs; the admin view, its sections, the Log Viewer, duplicate review, and the control-token gate; and the recovery page.
 - What covers the page keeps Tab inside it while open and returns focus where it was on close: the panel as a full-screen overlay, as Auto Tag and the in-app dialogs already do.
 - A button that disables itself when pressed moves focus to a sensible place instead of dropping it to the page: the Filter tab's Discard changes, Clear all filters, and Apply beside the player, and the Tags tab's Save.
@@ -4075,3 +4147,37 @@ Last milestone completed: M12i7
 #### Not included
 
 - Reading metadata from media files and writing it back, which is File Metadata Sync.
+
+### P55 - Player Zoom and Pan
+
+- **Status**: ⏳ Planned
+- **Goal**: The playing photo or video can be zoomed into and the zoomed view panned, by Ctrl+scroll or a trackpad pinch on a desktop and a pinch on touch screens.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- Ctrl+scroll or a trackpad pinch on a desktop, and a two-finger pinch on touch screens, zoom into the playing photo or video.
+- The zoomed view can be panned.
+- The mockup comes first, and the user reviews it on a desktop browser, the iPad, and an Android phone before the app is built.
+
+#### Traps
+
+- Two fingers dragged up or down over the player change the volume a step per 30 px (`src/playback/mediaGestures.ts`), so a pinch must be told apart from that drag.
+- Ctrl+scroll and a trackpad pinch over the player change the volume, since the player's wheel handler passes every wheel event to the volume, Ctrl held or not (`onWheel` in `src/ui/Player.tsx`).
+- A swipe left or right over the player plays the next or previous item (`src/playback/mediaGestures.ts`), so panning must not be taken for one.
+- WebUI Keyboard Shortcuts adds double-tap seeking on either half of the player, so panning must not clash with it.
+- When the zoom resets, such as on the next item, isn't settled.
+- The player claims its touches (`touch-action: none` on `.media-container` in `src/styles.css`) and turns away Safari's pinch by cancelling `gesturestart` (`src/ui/Player.tsx`), so a pinch over it never zooms the page.
+
+#### Acceptance
+
+- Ctrl+scroll, a trackpad pinch, and a touch pinch zoom into the playing photo and video, in WebUI tests of player zoom.
+- Panning moves the zoomed view, in WebUI tests of player zoom.
+- A pinch is told apart from a two-finger volume drag, and panning from a swipe and a double-tap, in gesture tests.
+- The zoom resets as the approved mockup shows, in WebUI tests of player zoom.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check in a desktop browser and on the iPad.
+
+#### Release checks
+
+- Manual: In a desktop browser with Ctrl+scroll and on the iPad with a pinch, zooming into a playing video and panning it works, and a swipe outside a zoomed view still plays the next item.

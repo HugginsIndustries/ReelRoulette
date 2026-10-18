@@ -19,12 +19,8 @@ Instructions:
 
 Commit Message:
 
-M12i7: Add the WebUI's scroll wheel and two-finger drag volume, with the muted-volume rules for the slider and every gesture
+Docs: Plan grid zoom in WebUI Grid Row Reuse and Zoom, and add a Player Zoom and Pan backlog item
 
-- WebUI: the scroll wheel over the player changes the volume a step per notch, a trackpad's small deltas adding up, and a two-finger drag a step per 30 px. Each shows the controls, works on a photo and on iOS from the start, and never scrolls or zooms the page.
-- WebUI: a volume indicator, centered over the player outside the controls, shows the volume for the wheel and a two-finger drag, not the slider, and fades out 800 ms after the last change.
-- WebUI: Mute moves the slider to 0 and remembers the volume. Raising the volume while muted unmutes from 0, lowering it while muted changes nothing, and lowering it to 0 mutes, unmuting then restoring the volume from before that drag or notch.
-- WebUI: the Settings tab's Audio section offers a volume step of 1, 2, 5, or 10%, 5 by default, kept on each device. A two-finger touch is never taken for a swipe or a tap.
-- Mockup: the slider, the wheel, a two-finger drag, and [ and ] follow the muted-volume rules, with checks for each, reviewed by the user on devices.
-- MILESTONES.md: WebUI Volume and Enhanced Audio is complete, with the Volume gestures slice taking the muted-volume rules and the user's spot check in the iPad's installed app, and moves to MILESTONES-COMPLETED.md. WebUI Keyboard Shortcuts takes the same rules for [ and ] and the volume step hint's later wording, and WebUI Player Controls counts the wheel and a two-finger drag as activity.
-- Testing checklist: the milestone's two Enhanced audio and iPad volume checks join the release's manual checks.
+- M12l1 is renamed WebUI Grid Row Reuse and Zoom, with its references, and splits into Mockup, Row reuse, and Grid zoom slices. Row reuse keeps the entry's existing scope, traps, and acceptance.
+- Grid zoom: Ctrl+scroll over the library grid, a trackpad pinch, and a touch pinch step the target row height between 100 and 300 px, 160 by default, kept per device, with the minimum and maximum scaling with it and the tile under the pointer held in place. Ctrl+scroll never zooms the page anywhere; Ctrl with + and - still does.
+- Add backlog item P55 Player Zoom and Pan, with its open questions as traps: telling a pinch from the two-finger volume drag, Ctrl+scroll's volume over the player, the swipe and double-tap seek, and when the zoom resets.
