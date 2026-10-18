@@ -6,6 +6,262 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12i7 - WebUI Volume and Enhanced Audio
+
+- **Status**: ✅ Complete
+- **Goal**: The WebUI has a volume control on every device, by slider, scroll wheel, and two-finger drag, through an Enhanced audio gain stage that also gives iPhone and iPad an in-app volume.
+- **Depends on**: WebUI Settings Panel, whose Audio section holds its settings, and WebUI In-App Dialogs, whose notice reports a gain stage that can't start.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- The audio spike's report comes first, before the controls are built, since Enhanced audio is on by default, so every device's audio moves to Web Audio in one release, and the mockup tried the path only with a synthesized chord, not a real media element.
+- With Enhanced audio on, every device routes the player's audio through a Web Audio gain stage (`createMediaElementSource` into a `GainNode`), so all devices behave the same and WebUI Loudness Normalization adds its stage to a path already in use everywhere.
+- Nothing narrower than about 425 px is supported, the width below which the transport row wraps Fullscreen to a second line, and the Pixel's viewport is 448 px wide. So the volume slider always sits in the seek row, with no layout for a narrower player and no minimum width for the scrub bar.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Audio spike | ✅ Complete | A report on a real video routed through the gain stage in each target browser and device. |
+| Mockup | ✅ Complete | Mute in the seek row, the volume indicator, a 10% volume step, and the gain stage starting on `pointerup`, in the mockup, reviewed by the user on devices. |
+| Volume | ✅ Complete | The Enhanced audio gain stage and setting, the volume slider, Mute in the seek row, the notice when the gain stage can't start, and their per-device settings. |
+| Volume gestures | ✅ Complete | Scroll wheel and two-finger drag volume with a volume indicator, the volume steps, kept per device, and the muted-volume rules for the slider and every gesture. |
+
+#### Audio spike slice
+
+**Scope**
+
+- Route a real video through the gain stage (`createMediaElementSource` into a `GainNode`) in a throwaway page under `artifacts/scratch/`, served over the LAN as the mockup is.
+- Try it in Safari and Firefox on the iPad, Chrome and Firefox on Android, and Chrome, Firefox, and Safari on a desktop.
+- Report silent output, sound drifting from the picture, behavior in iOS pseudo-fullscreen, and resuming after the app was in the background.
+- The report decides whether WebUI Loudness Normalization stays in v0.15.0.
+
+**Traps**
+
+- WebKit has had bugs where a media element routed through Web Audio plays silent (inferred).
+
+**Acceptance**
+
+- The audio spike's report names each browser and device tried and what it found, and is written before the Volume slice starts.
+
+**Evidence**
+
+- A throwaway page under `artifacts/scratch/` played a generated video, with a beep and a white flash at every whole second over a steady hum, through the gain stage, with the mockup's 15 ms glide and 60 ms fade-out. It loaded each item as the player does: pause, `src = ""`, a 200 ms pick request, the new source, then `play()`. An analyser on the element's signal and the page's event log recorded what happened.
+- Firefox on Linux: every step passed: sound, sync at the start and after a minute, volume and mute without crackles, play and pause without pops, fullscreen, Next and autoplay's next item without a tap, and playing on in the background. Output latency was 55 ms.
+- Firefox on the Pixel: every step passed, with random pops and crackles. Output latency was 15 ms. Firefox paused the video on its own twice, once about 6 s into a background trip and once while showing, and not again over about 6 minutes of the follow-up.
+- Pixel follow-up, same clip, volume, and speaker: played directly, without the gain stage, it had no random pops, though changing its volume or mute crackled. Through the gain stage the random pops came back, at the default latency and with `latencyHint: "playback"`, which left the output latency at 15 ms. With the larger buffer, play, pause, mute, and volume changes crackled too. None of the three sounded good on the Pixel's speaker.
+- Chrome on the Pixel, the browser the app is installed from there, through the gain stage: no random pops, sync passed, and the video's clock didn't drift. Output latency was 24 ms.
+- The iPad's installed app, and Safari on the iPad as an extra run: every step passed, pseudo-fullscreen included. Output latency was 11 ms. Leaving the app paused the video and put the audio context in `interrupted`, and coming back resumed both without a tap. A video paused before leaving stayed paused.
+- On every device the analyser read the clip's own level through the gain stage, so nothing played silent. Over 1 to 5 minutes of playing, the video's clock and the audio clock stayed within their sampling step, so the sound didn't drift from the picture.
+- On a touch screen, `pointerdown` carried no user activation in Firefox on the Pixel or Safari on the iPad, while `pointerup`, `touchend`, and `click` did. The audio context ran 140 to 220 ms after the first tap there, and 39 ms after a mouse `pointerdown` on Linux.
+- The gain stage worked in every browser tried, iOS included, and sounded worse than direct playback only in Firefox on Android.
+- Waived: Chrome on a desktop, Firefox on the iPad, and Safari on a desktop, which were dropped to keep to the standard test environment's browsers.
+- Docs: the Volume slice's Traps take the measured facts, and the release checks of this milestone and of WebUI Loudness Normalization name the standard test devices.
+
+#### Mockup slice
+
+**Scope**
+
+- Mute moves from the transport row to the seek row, between the time and the volume slider, in `layout.src.html`.
+  - It keeps its 44 px target without making the seek row taller: its box reaches into the gap above the row and the controls' padding below it, so the rest of the controls, and the popups that rise above them, stay where they are.
+- A volume indicator, centered over the player, shows the volume as a percentage, with Mute's icon, while the scroll wheel, a two-finger drag, or the [ and ] keys change it, on a photo too. The slider doesn't show it.
+  - It is an element of its own, outside `#overlay-controls`, so it shows while the controls are hidden.
+  - It shows at about 70% opacity, fades in over 120 ms, and fades out over 250 ms, 800 ms after the volume stops changing. With reduced motion it shows and hides at once.
+  - It is hidden from screen readers, since the slider carries the value.
+- The gain stage starts on `pointerup` and `keydown`, in place of `pointerdown` and `keydown`.
+- The Settings tab's volume steps add 10 percent, so they are 1, 2, 5, and 10 percent, with 5 still the default.
+- `index.src.html`'s notes name Mute's place in the seek row and the volume indicator, and say that nothing narrower than about 425 px is supported.
+- `check.mjs` checks each of these, and its label for Enhanced audio's section names Audio.
+- The user judges Mute in the seek row on the Pixel, and the volume indicator, in the mockup review, which settles their look.
+
+**Traps**
+
+- Mute sits in the transport row between Next and Loop (`#mute-btn` in `layout.src.html`).
+- The seek row's sliders are 24 px tall, and the popups at the bottom rise 112 px above the player while its controls show, so a 44 px Mute that made the row taller would push the controls into them by about 20 px (inferred).
+- The mockup starts the gain stage on `pointerdown` and `keydown`, and the audio checks in `check.mjs` dispatch `pointerdown` to start it.
+- On a touch screen, `pointerdown` carries no user activation in Firefox on Android or Safari on the iPad, while `pointerup`, `touchend`, and `click` do (measured).
+- The mockup's [ and ] keys move the slider without a popup.
+- The player's indicator (`.player-indicator`) holds one lasting state at a time, and some states hide with the controls (`follows-controls`), so the volume indicator is an element of its own.
+- `check.mjs` runs the pages in happy-dom, which computes styles but lays nothing out.
+- `volume_up` and `volume_off` are in the mockup's icon subset (`ICONS` in `build_font.py`).
+
+**Acceptance**
+
+- Mute sits in the seek row between the time and the volume slider, the transport row has no Mute, and Mute doesn't make the seek row taller, in `check.mjs`'s seek row checks.
+- The volume indicator shows the percentage centered over the player, outside the controls, for the scroll wheel, a two-finger drag, and [ and ], on a photo too and while the controls are hidden, not for the slider, fades out after the volume stops changing, and has no transition with reduced motion, in `check.mjs`'s indicator checks.
+- A `pointerdown` alone doesn't start the gain stage, and a `pointerup` does, in `check.mjs`'s audio checks.
+- The volume step offers 1, 2, 5, and 10 percent, with 5 chosen by default, in `check.mjs`'s settings checks.
+- `python3 docs/mockups/reelroulette/build/build_pages.py` and `node docs/mockups/reelroulette/build/check.mjs` pass.
+- The user has reviewed the mockup on their devices before the Volume slice starts.
+
+**Evidence**
+
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passed all 1256 checks, at 1280 and 390 px and in the iOS, Enhanced audio, failed start, and loudness runs.
+- Each new check failed when what it guards was broken, in 19 mutations, each in its own copy of the mockup under `artifacts/scratch/`: Mute back in the transport row; Mute making the row taller; the indicator not showing, inside the controls, off center, read out by screen readers, with an icon that ignores Mute, hidden with the controls, not shown on a photo or for a two-finger drag, never fading, shown by the slider, fading out slower, or fading with reduced motion; [ and ] without it; the gain stage starting on `pointerdown`, or not on `pointerup`; and the volume steps without 10%, or with another default (measured).
+- The proof found that the photo, two-finger drag, and [ checks passed on an indicator still showing from the step before, and that the icon check ran unmuted, so it couldn't tell Mute's icon from the speaker. Each now starts with the indicator hidden, and the icon check runs muted.
+- Mute's margins are `margin: -10px 0` rather than `margin-block`, which happy-dom doesn't expand into the top and bottom margins that `check.mjs` reads.
+- The user reviewed the mockup on their devices and approved it, adding 10 percent to the volume steps. The indicator's look and fades stay as planned.
+- Docs: the mockup's index notes say nothing narrower than about 425 px is supported, and the testing checklist's check of a flagged section's tab badge runs on the Pixel.
+
+#### Volume slice
+
+**Scope**
+
+- A volume slider at the end of the seek row. With Enhanced audio on, it sets the gain stage, on every device, which is also how iOS, where Safari makes a media element's volume read-only, gets one.
+  - It stays enabled on a photo, as Mute does, and the level set there is the next video's, as the mockup shows.
+  - It is 84 px wide on every screen and sits the seek row's 12 px gap from Mute.
+  - It goes from 0 to 100%, and starts at 100%, the level a video plays at without the app.
+- Mute moves from the transport row to the seek row, between the time and the volume slider, as the mockup shows.
+- Changing the volume, by the slider or otherwise, sends no notification.
+- On iOS, the gain stage gives the app its own volume relative to the system volume.
+- The gain stage starts on the first tap or key, on `pointerup` or `keydown`, since Web Audio needs one.
+- On iOS the volume slider shows from the start, since the player's controls don't appear, hide, or move on their own, and a control may hide only because of a user setting.
+  - Before the gain stage runs, moving it sets the volume, which the gain stage applies when it starts, as the drag's `pointerup` starts it.
+- Enhanced audio, a per-device setting in the Settings tab's Audio section, on by default.
+  - Its description names only what it does here: "Processes audio in the app, so in-app volume works on iPhone and iPad."
+  - Off, audio plays directly, without the gain stage: WebUI Loudness Normalization's option is disabled, and where the element's volume is read-only, as on iOS, the volume slider hides, since this user setting turns off the in-app volume there.
+  - Turning it off plays through a new media element, as the mockup does, which takes over the video at its position, playing or paused as it was.
+- No silent fallback: if the gain stage can't start, an in-app notice says "Audio processing couldn't start on this device. Turn off Enhanced audio to play sound directly, without in-app volume on iPhone and iPad.", with OK and **Turn off Enhanced audio**, which turns the setting off for this device.
+- The gain never jumps, since a jump in level is a click.
+  - Each volume change, Mute included, glides to its level over a few tens of milliseconds (`setTargetAtTime` with a time constant of about 15 ms, in the mockup).
+  - Play starts from silence and fades in, and pause fades out and pauses the video once it is silent, about 60 ms later in the mockup.
+- Enhanced audio and the volume survive a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
+
+**Traps**
+
+- The WebUI has a mute button and no volume control (measured).
+- Mute sits in the transport row between Next and Loop (`src/ui/Player.tsx`).
+- The player renders its `<video>` once and never replaces it, and the player and ambient mode hold it from when they attach (`player.attach` and `ambient.attach` in `src/ui/Player.tsx`).
+- The in-app notice has one OK, and a confirmation has Cancel and its action (`src/dialogs/dialogs.ts`), so neither has OK beside another action.
+- The Settings tab has no Audio section; it goes after Playback, in the mockup's place (`SettingsTab` in `src/ui/SettingsTab.tsx`).
+- Apple's Safari documentation says a media element's `volume` can't be set from script on iOS and always reads 1, but on the iPad, in iPadOS 26.6, it can be set: with Enhanced audio off, the slider shows and changes the volume there (measured). The probe, which sets a probe element's volume and reads it back, as the mockup does, handles both, so the slider hides only where the volume really is read-only.
+- The mockup tries the gain stage with a stand-in sound, a soft chord it plays with videos through the same path.
+- In the mockup, stepping the volume crackled and play and pause popped, on every device (measured).
+- In every served setup the WebUI's media comes from the page's own origin, since the runtime config's `apiBaseUrl` is the scheme and host the browser used (`WebRuntimeConfig.Build`), so localhost, the LAN address, the mDNS name, and an HTTPS proxy are all same-origin.
+- The player's `<video>` has no `crossorigin` attribute (`VIDEO_FLAGS` in `src/ui/Player.tsx`), and same-origin media needs none to play through the gain stage (inferred).
+- An element routed through Web Audio stays routed: the player's `src = ""` and a new source, Next, and autoplay's next item without a tap all play through the gain stage, in Firefox on Linux and Android and on the iPad (measured).
+- On a touch screen, `pointerdown` carries no user activation in Firefox on Android or Safari on the iPad, while `pointerup`, `touchend`, and `click` do (measured).
+- On the iPad, in Safari and the installed app, leaving the app pauses the video and puts the audio context in an `interrupted` state. Coming back returns it to `running` and resumes a video that was playing, without a tap (measured).
+- On the iPad, the video's time starts moving about 0.37 s after its `playing` event, so a fade-in started on `playing` has finished before the sound starts there, and no pop was heard (measured).
+- In Firefox on Android, audio through the gain stage has random pops and crackles that the same video played directly doesn't, at the default latency and with `latencyHint: "playback"`, which left the output latency at 15 ms (measured).
+- Chrome on Android plays through the gain stage without those pops, at 24 ms output latency (measured).
+- Played directly, Firefox on Android crackles when the element's volume or `muted` changes (measured).
+
+**Acceptance**
+
+- The volume slider sits at the end of the seek row, goes from 0 to 100%, starts at 100%, and sets the volume, and Mute sits between the time and the slider, in WebUI tests.
+- On a photo the volume slider stays enabled, and the next video plays at the level set there, in a WebUI test that a volume set on a photo applies to the next video.
+- Changing the volume with the slider sends no notification, in WebUI tests.
+- With Enhanced audio on, every device plays through the gain stage, which starts on a tap's `pointerup` or a key, not a `pointerdown`. On iOS the volume slider shows from the start, and a volume set before the gain stage runs is the one it starts at. Shown by tests that the gain stage starts on the first tap and that on iOS the slider shows from the start and its volume applies once the stage starts.
+- The gain glides to each new level and fades in on play and out on pause, so nothing crackles or pops, in tests that the gain only glides and that play and pause fade it in and out.
+- With Enhanced audio off, audio plays directly, and where the element's volume is read-only, as on iOS, the volume slider hides. Turning it off keeps the video at its position, playing or paused as it was. If the gain stage can't start, the notice's **Turn off Enhanced audio** turns it off for the device. Shown by tests for Enhanced audio on and off, for the new element taking over the video, and for the notice when the gain stage can't start.
+- After a page refresh, Enhanced audio and the volume are each as they were, in tests for a page refresh keeping each setting this slice adds.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check.
+
+**Evidence**
+
+- `npm run verify` passed: the contracts are fresh, the typecheck is clean, 1543 tests passed in 75 files, 1518 in 74 before, and the build and its output check passed (measured).
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the mockup, and `node docs/mockups/reelroulette/build/check.mjs` passed all 1256 checks (measured).
+- `audioStage.test.ts` covers the gain stage starting on `pointerup` or `keydown`, not `pointerdown`; the gain only gliding, fading in on play and out on pause, and a play during the fade gliding back; the element's own volume and mute without the stage; the slider showing on iOS from the start and hiding only while Enhanced audio is off; a new element asked for once the video went through the stage; the notice and its action; and the settings read back by a new page.
+- The player's unit tests cover a new element taking over a playing or a paused video at its position, and a photo leaving it empty, and a fading pause counting as paused. The screen tests cover the seek row's order and spacing, Mute's 44 px without a taller row, the slider at 100% from 0 to 100% with no notification, the gain stage on a tap or a key, the gain following the volume and Mute, the fades, a photo's level for the next video, iOS with Enhanced audio on and off, the takeover playing and paused, the notice, Enhanced audio in Audio after Playback, and a page refresh keeping both settings. A dialogs unit test covers a notice with an action.
+- Each new test failed when what it guards was broken, in 14 mutations, each restored from a copy under `artifacts/scratch/`: the stage starting on `pointerdown`; the gain jumping; pause not fading; play not starting from silence; the iOS slider waiting for the stage; Enhanced audio not kept; the notice's action not turning it off; no new element once it is off; the takeover losing the position or not playing; a fading pause counting as playing; Mute's margins and the slider's width dropped; and the notice's action button missing (measured).
+- The mockup's two changed iOS checks failed in a copy with the old rule, the slider waiting for the gain stage (measured).
+- Existing tests that changed: the player's Mute unit tests call the audio stage; the starting markup snapshot takes Mute in the seek row, the slider, and the Audio section; the Settings sections test names Audio; the seek row test takes Mute and the slider; and the per-device keys test also changes the volume and Enhanced audio and takes their keys.
+- The page's first tap or key now starts the gain stage, which relays `audio=gain-stage-started`, so the two tag dialog tests and the per-device keys test, which count log lines or server calls, tap the page first, and pages the tests mount without the harness get its fake Web Audio, since happy-dom has none.
+- Deviation: only the gain stage's start and failure are relayed. Turning Enhanced audio on or off, and the new element taking over, relay nothing, since no other setting change is relayed and the per-device settings test holds that changing a setting tells the server nothing.
+- The new element takes Loop from the player's own state, as every video does, not from the element before it.
+- The mockup's volume starts at 100%, and on iOS its slider shows from the start, the scroll wheel setting the volume the gain stage starts at. The index notes say the player's controls don't appear, hide, or move on their own, and a control may hide only because of a user setting. The mockup keeps Enhanced audio's description naming loudness normalization, which WebUI Loudness Normalization ships.
+- Docs: `CONTEXT.md`, the domain inventory, and the dev setup's note that the Vite dev server can play silent through Enhanced audio.
+- The user's spot check in the iPad's installed app passed: the slider shows from the start, dragging it changes the volume without crackles, pause and play don't pop, Mute in the seek row works, and turning Enhanced audio off in Settings keeps the video playing from the same spot, with sound (measured).
+- On the iPad, in iPadOS 26.6, with Enhanced audio off, the slider shows and changes the volume, so a media element's volume can be set there (measured).
+- The user found that the Pixel's installed app, in Chrome, plays through the gain stage without audio issues.
+- The user observed that turning Enhanced audio off blanks the video for about a second while the new element loads, then it plays on from the same spot, and turning it on continues without a blank.
+
+#### Volume gestures slice
+
+**Scope**
+
+- The Settings tab's Audio section offers volume steps of 1, 2, 5, or 10 percent, 5 by default, used by the scroll wheel, a two-finger drag, and the [ and ] keys that WebUI Keyboard Shortcuts binds.
+- The scroll wheel over the player changes the volume by the volume step, one step per notch.
+  - A trackpad's small deltas add up into notches, so a light swipe doesn't jump the volume.
+  - The mockup counts a line- or page-unit event, or one of at least 50 px, as a whole notch, and otherwise a notch per 100 px.
+  - Scrolling counts as activity and shows the controls, so the volume slider is visible while it changes.
+  - On a photo it sets the next video's level, as the slider does, and over the player the page never scrolls.
+- On a touch screen, dragging up or down with two fingers on the player changes the volume the same way, on a photo too, a step per 30 px in the mockup, and shows the controls.
+  - The player claims its touches (`touch-action: none`) and turns away Safari's own pinch gesture, so the browser doesn't zoom there.
+- The volume indicator shows the volume as a percentage, centered over the player, while the scroll wheel or a two-finger drag changes it, on a photo too, with the look the mockup review settled. The slider doesn't show it.
+  - It is on its own layer, apart from the controls, so it shows while they're hidden.
+  - It fades in and out quickly and fades out shortly after the volume stops changing. With reduced motion it shows and hides at once.
+- Changing the volume by the scroll wheel or a two-finger drag sends no notification.
+- On iOS the scroll wheel and a two-finger drag work from the start, as the slider does, before the gain stage runs, setting the volume it starts at.
+- The volume step survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
+- The muted-volume rules, for the slider, the scroll wheel, and a two-finger drag, and for the [ and ] keys in the mockup, built in the mockup first and reviewed by the user on devices before the WebUI follows:
+  - Mute moves the volume slider to 0, still enabled, and remembers the volume; unmuting restores it.
+  - Raising the volume while muted unmutes and starts from 0, so the remembered volume isn't restored. Lowering it while muted changes nothing.
+  - Lowering it to 0 while not muted counts as muting: Mute shows muted, and unmuting restores the volume from before the change that reached 0, which is a slider drag's or a two-finger drag's starting volume, or the volume before the last wheel notch or [ press.
+  - A slider drag is one change from its press to its release, a two-finger drag one from the second finger landing to the fingers lifting, and each wheel notch, [ or ] press, and key step on the focused slider a change of its own.
+  - A drag that starts muted, raises the volume, and comes back to 0 leaves the remembered volume as it was before the drag.
+  - Lowering while muted by the scroll wheel, a two-finger drag, or [ still shows the controls and the volume indicator, at 0% with Mute's icon, as a step at 100% does.
+  - The volume kept per device is 1 to 100 percent, since 0 is muted, and one kept as 0 reads as the default.
+- The audio stage (`src/playback/audioStage.ts`) holds the rules, the volume step, and when the volume indicator shows, so the slider, the gestures, and WebUI Keyboard Shortcuts' keys share them.
+- The volume step's hint reads "For the scroll wheel and a two-finger drag over the player." until WebUI Keyboard Shortcuts binds [ and ].
+
+**Traps**
+
+- The player's indicator (`.player-indicator`), at the top center, holds one lasting state at a time, and some states hide with the controls (`follows-controls` in `src/styles.css`), so the volume indicator is an element of its own.
+- The controls hide through the media container's `controls-visible` class, which shows `#overlay-controls`, so an element outside `#overlay-controls` stays shown while they're hidden.
+- The media area reads only a touch's first point for its swipes and taps (`createMediaGestures` in `src/playback/mediaGestures.ts`), and the mockup stops reading a swipe once a second finger lands, so a two-finger drag isn't taken for a swipe or a tap.
+- The media area's touch listeners are passive, so they can't cancel a touch (`src/ui/Player.tsx`). The mockup cancels a two-finger drag's `touchmove` and Safari's `gesturestart`.
+- The mockup's volume step hint, "Also for the scroll wheel and a two-finger drag over the player.", counts the [ and ] keys, which WebUI Keyboard Shortcuts adds.
+- The mockup's Mute leaves the slider where it was (`toggleMute` in `layout.src.html`), and its slider, scroll wheel, two-finger drag, and [ and ] change the volume while muted without unmuting.
+- The WebUI's slider reaches 0 without muting, and its Mute leaves the slider where it was (`setVolume` and `toggleMute` in `src/playback/audioStage.ts`).
+- The audio stage's gain and the element's volume already play nothing while muted (`level` and `applyToElement` in `src/playback/audioStage.ts`), so the rules change only the volume and Mute they're given.
+- `check.mjs`'s first wheel notch check runs muted and expects the volume to rise a step from 50, and its photo check mutes before moving the slider, so both change with the rules.
+- Every press ends in a `pointerup` or `pointercancel` in the page, wherever it's let go (inferred), so the slider's drag can end there, and a key step on the focused slider comes without a press.
+
+**Acceptance**
+
+- The Settings tab's Audio section offers volume steps of 1, 2, 5, and 10 percent, with 5 the default, in WebUI tests.
+- The scroll wheel over the player changes the volume by the volume step, one step per notch with a trackpad's small deltas added up, without scrolling the page; on a touch screen a two-finger drag does too, without zooming. Each shows the controls, and on a photo each sets the next video's level. Shown by wheel tests for notches, added-up trackpad deltas, and a photo, and two-finger drag tests, a photo's among them.
+- Changing the volume by the scroll wheel or a two-finger drag sends no notification, in WebUI tests.
+- The volume indicator shows the volume centered over the player for the scroll wheel and a two-finger drag, on a photo too and while the controls are hidden, not for the slider, and fades out after the volume stops changing, in wheel, two-finger drag, and slider tests with fake timers.
+- After a page refresh, the volume step is as it was, in a test for a page refresh keeping it.
+- Mute moves the slider to 0, still enabled, and unmuting restores the volume; raising the volume while muted, by the slider, the scroll wheel, or a two-finger drag, unmutes from 0; lowering it while muted changes nothing; and lowering it to 0 while not muted mutes, unmuting restoring the volume from before the change. Shown by audio stage tests for each rule, and player screen tests for the slider, the scroll wheel, and a two-finger drag.
+- The mockup follows the same rules for the slider, the scroll wheel, a two-finger drag, and [ and ], in `check.mjs`'s volume checks, and the user has reviewed them on their devices before the WebUI part starts.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check in the iPad's installed app: a two-finger drag over the player changes the volume and shows the indicator, and dragging the slider to 0 and then tapping Mute brings the volume back to where the drag started.
+
+**Evidence**
+
+- `npm run verify` passed: the contracts are fresh, the typecheck is clean, 1569 tests passed in 75 files, 1543 before, and the build and its output check passed (measured).
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the mockup, and `node docs/mockups/reelroulette/build/check.mjs` passed all 1272 checks, 1256 before (measured).
+- The mockup's new checks each failed when the rule it guards was broken, in 11 mutations, each in its own copy of the mockup under `artifacts/scratch/`: Mute leaving the slider; unmuting forgetting the volume; raising keeping Mute on; steps counting from the remembered volume; lowering while muted unmuting; reaching 0 not muting; unmuting restoring the last value instead of the change's start; the slider's press or a two-finger drag's start not starting a change; the indicator showing the remembered volume; and a change starting from the slider's 0 while muted (measured).
+- The mockup's photo check sets the volume before muting, and its first wheel notch check runs unmuted, the indicator's muted icon now checked by lowering while muted.
+- The user reviewed the mockup's muted-volume rules on their devices and approved them.
+- `audioStage.test.ts` covers each muted-volume rule, a drag that starts muted and comes back to 0, Mute ending a change left under way, the gain gliding to each level the rules give, the indicator for steps and not the slider, and the volume step kept with a kept 0 reading as 100%. `mediaGestures.test.ts` covers a two-finger drag as one change, measured afresh when a finger lifts and lands again, a two-finger touch never taken for a swipe or a tap, the wheel's notches and added-up deltas, and neither changing the volume where it can't change.
+- The player's screen tests cover the wheel and a two-finger drag with no notification, a photo, the indicator's place, fade, and reduced motion, iOS from the start and with Enhanced audio off, a cancelled touch ending a two-finger drag, and the rules through the slider, the wheel, and a two-finger drag. The Settings tests cover the volume step's place, choices, hint, wheel step, and page refresh.
+- Each new test failed when what it guards was broken, in 33 mutations, each in its own copy of the WebUI under `artifacts/scratch/`: the ten rule breaks of the mockup's kind, a kept 0 allowed, and the step not kept; the indicator not shown for steps, never fading, shown for the slider, inside the controls, ignoring Mute, off center, or fading with reduced motion; a drag step of 40 px, a drag not one change, two fingers taken for a swipe, no controls shown, a wheel notch of 60 px, a trackpad pause not starting over, and the wheel working where the slider hides; a drag or the wheel not claimed from the browser, a pinch not turned away, no `touch-action`, and the gestures waiting for the gain stage on iOS; the slider's press not starting a change and its release not ending one; and the volume step placed after Enhanced audio or not applied (measured).
+- The tests for a finger that lands again mid-drag and for a cancelled touch failed before the gestures measured a drag afresh on each two-finger touch and the player listened for `touchcancel`: the drag stepped the volume down instead of up, and the drag after a cancel left it at 45% instead of muting (measured).
+- Existing tests that changed: the gesture tests pass every finger and the number still down; the audio stage's per-device test keeps the volume step; the Settings per-device keys test also picks a volume step and takes its key; and the starting markup snapshot takes the volume indicator and Volume step.
+- Deviation: the WebUI ends the slider's drag on the page's next `pointerup` or `pointercancel`, not on its `change` event, since every press ends there and `change` added nothing a test could show. The mockup ends it on either.
+- Docs: `CONTEXT.md`, the domain inventory, the mockup's index notes, and the `[Unreleased]` volume entry.
+- The user's spot check in the iPad's installed app passed: a two-finger drag over the player changed the volume and showed the indicator, and dragging the slider to 0 and then tapping Mute brought the volume back to where the drag started (measured).
+
+#### Release checks
+
+- Manual: With Enhanced audio on, videos play with sound in Firefox on the desktop and in the Pixel's and the iPad's installed apps, and turning it off plays sound directly.
+- Manual: In the iPad's installed app, the volume slider shows from the start, and the slider and a two-finger drag change the video's volume relative to the system volume, without crackles, and play and pause don't pop.
+
+#### Not included
+
+- Loudness normalization, which is WebUI Loudness Normalization.
+- Enhanced audio's description naming loudness normalization, which is WebUI Loudness Normalization.
+- The [ and ] volume keys, which is WebUI Keyboard Shortcuts.
+- Volume above 100%, which is WebUI Volume Boost.
+- Media from another origin, as only the Vite dev server plays it, may play silent through Enhanced audio, and turning Enhanced audio off is the workaround.
+
 ### M12i6 - Per-Preset Preset Writes
 
 - **Status**: ✅ Complete

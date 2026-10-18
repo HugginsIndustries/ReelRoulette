@@ -28,6 +28,11 @@ exports[`page structure > keeps the starting markup 1`] = `
         <div class="empty-state" id="empty-state">
           "Tap to play, or open the panel to choose a preset or filter."
         <div aria-live="polite" class="player-indicator-region" id="player-indicator" role="status">
+        <div aria-hidden="true" class="volume-indicator" id="volume-indicator">
+          <span class="material-symbol-icon">
+            "volume_up"
+          <span id="volume-indicator-text">
+            "100%"
         <div class="overlay-controls" id="overlay-controls">
           <button aria-controls="notify-list" aria-expanded="false" aria-label="Notifications" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn notify-btn" id="notify-btn" title="Notifications" type="button">
             <span class="material-symbol-icon">
@@ -269,6 +274,32 @@ exports[`page structure > keeps the starting markup 1`] = `
             <section aria-labelledby="settings-audio-heading" class="settings-section">
               <h3 id="settings-audio-heading">
                 "Audio"
+              <div class="setting">
+                <span class="setting-label" id="settings-volume-step-label">
+                  "Volume step"
+                <div aria-describedby="settings-volume-step-hint" aria-labelledby="settings-volume-step-label" class="choice-row" role="radiogroup">
+                  <label>
+                    <input aria-labelledby="settings-volume-step-1" name="settings-volume-step" type="radio" value="1">
+                    <span>
+                      <span id="settings-volume-step-1">
+                        "1%"
+                  <label>
+                    <input aria-labelledby="settings-volume-step-2" name="settings-volume-step" type="radio" value="2">
+                    <span>
+                      <span id="settings-volume-step-2">
+                        "2%"
+                  <label>
+                    <input aria-labelledby="settings-volume-step-5" name="settings-volume-step" type="radio" value="5">
+                    <span>
+                      <span id="settings-volume-step-5">
+                        "5%"
+                  <label>
+                    <input aria-labelledby="settings-volume-step-10" name="settings-volume-step" type="radio" value="10">
+                    <span>
+                      <span id="settings-volume-step-10">
+                        "10%"
+                <p class="setting-hint" id="settings-volume-step-hint">
+                  "For the scroll wheel and a two-finger drag over the player."
               <div class="setting">
                 <div class="choice-row">
                   <label>

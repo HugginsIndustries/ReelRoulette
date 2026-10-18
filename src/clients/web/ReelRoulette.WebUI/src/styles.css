@@ -659,7 +659,8 @@ body {
 .now-playing .is-link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 /* The player keeps its rounded corners in every view, fullscreen and a phone on its side too. It is clipped by a rounded
    clip-path as well as overflow: WebKit doesn't clip a layer of its own, such as ambient mode's blurred canvas, to its
-   parent's rounded corners, so on iOS they turned square once ambient mode drew. */
+   parent's rounded corners, so on iOS they turned square once ambient mode drew. It claims its touches, so a two-finger
+   drag changes the volume without the browser scrolling or zooming. */
 .media-container {
   position: relative;
   background: #000;
@@ -673,6 +674,7 @@ body {
   cursor: pointer;
   width: 100%;
   min-height: 0;
+  touch-action: none;
 }
 /* Positioned, so they draw above ambient mode's glow. */
 .media-container video, .media-container img {
@@ -854,6 +856,34 @@ html.theme-light .ambient canvas {
 }
 @media (prefers-reduced-motion: reduce) {
   .player-indicator .material-symbol-icon.spins { animation-duration: 3s; }
+}
+/* The volume indicator: the volume as a percentage, with Mute's icon, centered over the player while the scroll wheel or
+   a two-finger drag changes it. It sits outside the controls, so it shows while they're hidden, at a low opacity so it
+   doesn't cover the picture. It fades in quickly and fades out shortly after the volume stops changing; with reduced
+   motion it shows and hides at once. */
+.volume-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 25;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px 10px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.volume-indicator .material-symbol-icon { font-size: 28px; }
+.volume-indicator.is-shown { opacity: 0.7; transition-duration: 0.12s; }
+@media (prefers-reduced-motion: reduce) {
+  .volume-indicator, .volume-indicator.is-shown { transition: none; }
 }
 /* Notifications: the player's bell, the list of recent messages under it, and the popups beside the player. The bell is
    orange while its list is open. */

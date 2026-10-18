@@ -450,10 +450,15 @@ for (const width of [1280, 390]) {
   const muteLit = () => $("mute-btn").classList.contains("active");
   const muteIcon = () => $("mute-btn").querySelector(".material-symbol-icon").dataset.icon;
   const mutedAtFirst = muteLit();
+  const volumeAtFirst = $("volume").value;
   $("mute-btn").click();
   check(`layout@${width}: before anything plays, Mute is enabled and shows whether sound is muted (${muteIcon()})`,
     !$("mute-btn").disabled && muteLit() === !mutedAtFirst && muteIcon() === (mutedAtFirst ? "volume_up" : "volume_off"));
+  // Mute moves the volume slider to 0, still enabled, and remembers the volume, which unmuting brings back.
+  const sliderWhileMuted = `${$("volume").value}${$("volume").disabled ? " disabled" : ""}`;
   $("mute-btn").click();
+  check(`layout@${width}: Mute moves the volume slider to 0, still enabled, and unmuting brings back the volume (${volumeAtFirst}, ${sliderWhileMuted}, then ${$("volume").value})`,
+    !mutedAtFirst && volumeAtFirst === "100" && sliderWhileMuted === "0" && $("volume").value === volumeAtFirst);
   check(`layout@${width}: there is no status line, and while connected nothing shows on the player and nothing pops up`,
     !$("status") && !document.querySelector(".status") && $("player-indicator").hidden && messages.toasts().length === 0 && messages.entries().length === 0);
   const indicatorRegion = $("player-indicator").parentElement;
@@ -1645,14 +1650,14 @@ for (const width of [1280, 390]) {
   const seek = $("seek");
   check(`layout@${width}: with Autoplay off, a photo's Play and scrub bar are disabled and the time shows 0:00 / 0:00 (${$("time-display").textContent})`,
     $("play-btn").disabled && seek.disabled && $("time-display").textContent === "0:00 / 0:00");
-  // Mute and the volume slider stay enabled on a photo, and what they set there applies to the next video.
-  const mutedOnPhoto = !muteLit();
+  // Mute and the volume slider stay enabled on a photo, and what they set there applies to the next video. The volume
+  // is set first, since moving the slider while muted unmutes.
   const volumeBeforePhoto = $("volume").value;
   const volumeOnPhoto = volumeBeforePhoto === "30" ? "40" : "30";
-  $("mute-btn").click();
   input($("volume"), volumeOnPhoto);
-  check(`layout@${width}: on a photo, Mute and the volume slider stay enabled, and Mute shows whether sound is muted (${muteIcon()})`,
-    !$("mute-btn").disabled && !$("volume").disabled && muteLit() === mutedOnPhoto && muteIcon() === (mutedOnPhoto ? "volume_off" : "volume_up"));
+  $("mute-btn").click();
+  check(`layout@${width}: on a photo, Mute and the volume slider stay enabled, and Mute shows muted with the slider at 0 (${muteIcon()}, ${$("volume").value})`,
+    !$("mute-btn").disabled && !$("volume").disabled && muteLit() && muteIcon() === "volume_off" && $("volume").value === "0");
   $("autoplay-btn").click();
   check(`layout@${width}: turning Autoplay on starts the photo's full time from then (${$("time-display").textContent})`,
     !seek.disabled && !$("play-btn").disabled && Number(seek.value) === 0 && $("time-display").textContent === "0:00 / 0:10" && playIcon() === "pause");
@@ -1707,9 +1712,10 @@ for (const width of [1280, 390]) {
   $("autoplay-btn").click();
   // Space plays or pauses a video as K does, and leaves a focused button to its own action.
   window.mockup.choose(3);
-  check(`layout@${width}: the next video plays with the mute and volume set on the photo (${muteIcon()}, ${$("volume").value})`,
-    muteLit() === mutedOnPhoto && $("volume").value === volumeOnPhoto);
+  const nextVideoSound = `${muteIcon()}, ${$("volume").value}`;
   $("mute-btn").click();
+  check(`layout@${width}: the next video plays muted, as set on the photo, and unmuting brings back the volume set there (${nextVideoSound}, then ${$("volume").value})`,
+    nextVideoSound === "volume_off, 0" && !muteLit() && $("volume").value === volumeOnPhoto);
   input($("volume"), volumeBeforePhoto);
   press(" ");
   check(`layout@${width}: Space pauses a video (${chip()})`, chip().includes("Paused"));
@@ -2246,7 +2252,6 @@ for (const width of [1280, 390]) {
   input($("volume"), "50");
   hideChoice("timeout").click();
   await sleep(10);
-  $("mute-btn").click();
   const wheelPrevented = wheel(-100);
   check(`layout@${width}: a wheel notch up raises the volume a step, shows the controls, and doesn't scroll the page (${volumeNow()})`, volumeNow() === 55 && wheelPrevented && controlsUp());
   // The volume indicator: the percentage, with Mute's icon, centered over the player, outside the controls, at a low
@@ -2258,9 +2263,7 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: the notch shows the volume indicator, centered over the player outside the controls (${volumeText()}, ${indicatorStyle.opacity}, ${indicatorStyle.transform})`,
     volumeShown() && volumeText() === "55%" && volumeIndicator.querySelector(".material-symbol-icon").dataset.icon === muteIcon() &&
     volumeIndicator.parentElement === $("media") && !$("overlay-controls").contains(volumeIndicator) && volumeIndicator.getAttribute("aria-hidden") === "true" &&
-    indicatorStyle.position === "absolute" && indicatorStyle.top === "50%" && indicatorStyle.left === "50%" && indicatorStyle.transform === "translate(-50%, -50%)" &&
-    muteIcon() === "volume_off");
-  $("mute-btn").click();
+    indicatorStyle.position === "absolute" && indicatorStyle.top === "50%" && indicatorStyle.left === "50%" && indicatorStyle.transform === "translate(-50%, -50%)");
   $("media").classList.remove("controls-visible");
   check(`layout@${width}: and it stays shown while the controls are hidden (${window.getComputedStyle(volumeIndicator).opacity})`, volumeShown());
   $("media").classList.add("controls-visible");
@@ -2306,6 +2309,80 @@ for (const width of [1280, 390]) {
     !volumeIndicator.classList.contains("is-shown") && window.getComputedStyle(volumeIndicator).opacity === "0");
   input($("volume"), "60");
   check(`layout@${width}: the slider doesn't show it`, !volumeIndicator.classList.contains("is-shown"));
+  // The muted-volume rules. Raising the volume while muted, by the slider, the wheel, a two-finger drag, or ], unmutes
+  // and starts from 0; lowering it while muted changes nothing; and lowering it to 0 while not muted mutes, unmuting
+  // then bringing back the volume from before the change that reached 0. A slider drag runs from its press to its
+  // release, and a two-finger drag from its second finger to its fingers lifting.
+  const slide = (...values) => {
+    $("volume").dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true }));
+    values.forEach((value) => input($("volume"), String(value)));
+    document.dispatchEvent(new window.PointerEvent("pointerup", { bubbles: true }));
+  };
+  // Each move's distance up, in px; a negative one moves down.
+  const dragTwoFingers = (...ups) => {
+    let y = 300;
+    touches("touchstart", [y, y + 40]);
+    ups.forEach((up) => touches("touchmove", [(y -= up), y + 40]));
+    touches("touchend", []);
+  };
+  const sound = () => `${muteLit() ? "muted" : "unmuted"} ${$("volume").value}`;
+  const unmute = () => {
+    if (muteLit()) $("mute-btn").click();
+    return $("volume").value;
+  };
+  input($("volume"), "60");
+  $("mute-btn").click();
+  slide(10, 30);
+  const slidUp = sound();
+  $("mute-btn").click();
+  check(`layout@${width}: raising the slider while muted unmutes from 0, so Mute then remembers the new volume, not the old (${slidUp}, then ${unmute()})`,
+    slidUp === "unmuted 30" && $("volume").value === "30");
+  const raisedWhileMuted = (raise) => {
+    input($("volume"), "60");
+    $("mute-btn").click();
+    raise();
+    const raised = sound();
+    $("mute-btn").click();
+    return `${raised}, then ${unmute()}`;
+  };
+  const raises = [raisedWhileMuted(() => wheel(-100)), raisedWhileMuted(() => dragTwoFingers(30)), raisedWhileMuted(() => press("]"))];
+  check(`layout@${width}: a wheel notch, a two-finger drag, or ] up while muted unmutes and starts from 0, a step up, and Mute then remembers that (${raises.join("; ")})`,
+    raises.every((raised) => raised === "unmuted 5, then 5"));
+  input($("volume"), "60");
+  $("mute-btn").click();
+  hideVolumeIndicator();
+  wheel(100);
+  const loweredIndicator = `${volumeShown() ? "shown" : "hidden"} ${volumeText()} ${volumeIndicator.querySelector(".material-symbol-icon").dataset.icon}`;
+  dragTwoFingers(-30);
+  press("[");
+  const lowered = sound();
+  check(`layout@${width}: lowering the volume while muted, by a wheel notch, a two-finger drag, or [, changes nothing, though the indicator shows 0% with Mute's icon (${lowered}, ${loweredIndicator}, then ${unmute()})`,
+    lowered === "muted 0" && loweredIndicator === "shown 0% volume_off" && $("volume").value === "60");
+  input($("volume"), "40");
+  slide(25, 10, 0);
+  const slidToZero = `${sound()} ${muteIcon()}`;
+  check(`layout@${width}: dragging the slider to 0 mutes, and unmuting brings back the volume from where the drag started (${slidToZero}, then ${unmute()})`,
+    slidToZero === "muted 0 volume_off" && $("volume").value === "40");
+  $("mute-btn").click();
+  slide(20, 0);
+  const backToZero = sound();
+  check(`layout@${width}: a slider drag that starts muted, raises the volume, and comes back to 0 leaves the remembered volume as it was (${backToZero}, then ${unmute()})`,
+    backToZero === "muted 0" && $("volume").value === "40");
+  input($("volume"), "15");
+  dragTwoFingers(-30, -30, -30);
+  const draggedToZero = sound();
+  check(`layout@${width}: two fingers dragged down to 0 mute, and unmuting brings back the volume from where the drag started (${draggedToZero}, then ${unmute()})`,
+    draggedToZero === "muted 0" && $("volume").value === "15");
+  const steppedToZero = (step) => {
+    input($("volume"), "8");
+    step();
+    step();
+    const stepped = sound();
+    return `${stepped}, then ${unmute()}`;
+  };
+  const stepsToZero = [steppedToZero(() => wheel(100)), steppedToZero(() => press("["))];
+  check(`layout@${width}: a wheel notch or [ down to 0 mutes, and unmuting brings back the volume from before that notch or press (${stepsToZero.join("; ")})`,
+    stepsToZero.every((stepped) => stepped === "muted 0, then 3"));
   // It fades in quickly and out a little slower; with reduced motion it shows and hides at once.
   const allRules = (rules) => [...rules].flatMap((rule) => [rule, ...(rule.cssRules ? allRules(rule.cssRules) : [])]);
   const reducedIndicatorRules = [...document.styleSheets].flatMap((sheet) => [...sheet.cssRules])

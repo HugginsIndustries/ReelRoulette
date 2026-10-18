@@ -1,14 +1,23 @@
-import { computed, signal, type ReadonlySignal } from "@preact/signals";
+import { batch, computed, signal, type ReadonlySignal } from "@preact/signals";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { DeviceStore } from "../state/deviceStore";
 
-/** The per-device store's keys for the volume, whether sound is muted, and Enhanced audio. */
+/** The per-device store's keys for the volume, whether sound is muted, Enhanced audio, and the volume step. */
 export const VOLUME_KEY = "player.volume";
 export const MUTED_KEY = "player.muted";
 export const ENHANCED_AUDIO_KEY = "audio.enhanced";
+export const VOLUME_STEP_KEY = "audio.volumeStep";
 
 /** The volume a device starts at, in percent: full, as the video plays without the app. */
 export const DEFAULT_VOLUME = 100;
+
+/** The volume steps the Settings tab offers, in percent, and the one a device starts with. */
+export const VOLUME_STEPS = [1, 2, 5, 10] as const;
+export type VolumeStep = (typeof VOLUME_STEPS)[number];
+export const DEFAULT_VOLUME_STEP: VolumeStep = 5;
+
+/** The volume indicator fades out this long after the volume stops changing. */
+export const VOLUME_INDICATOR_MS = 800;
 
 /** Each change of the gain glides to its level with this time constant, settling within a few tens of milliseconds. */
 export const GAIN_GLIDE_SECONDS = 0.015;
@@ -86,17 +95,30 @@ export interface AudioStageOptions {
  *
  * The gain never jumps, since a jump in level is a click: each change glides to its level, play fades in from silence,
  * and pause fades out and pauses the video once it is silent.
+ *
+ * The muted-volume rules hold for the slider and every gesture. Mute moves the slider to 0 and remembers the volume,
+ * which unmuting restores. Raising the volume while muted unmutes and starts from 0, so the remembered volume isn't
+ * restored, and lowering it while muted changes nothing. Lowering it to 0 while not muted mutes, and unmuting then
+ * restores the volume from before the change that reached 0: a slider drag or a two-finger drag is one change, from
+ * `beginVolumeChange` to `endVolumeChange`, and each wheel notch and key step on the focused slider is a change of its
+ * own. A drag that starts muted and comes back to 0 so leaves the remembered volume as it was.
  */
 export interface AudioStage {
   /** Enhanced audio, on by default. */
   readonly enhanced: ReadonlySignal<boolean>;
-  /** The volume, a whole percent from 0 to 100. */
+  /** The volume sound plays at when not muted, which Mute remembers: a whole percent from 1 to 100, since 0 is muted. */
   readonly volume: ReadonlySignal<number>;
   /**
    * Sound is muted, which the mute button shows lit with the muted icon. Mute works before anything plays and on a
    * photo too, applying to the next video.
    */
   readonly muted: ReadonlySignal<boolean>;
+  /** The volume the slider and the volume indicator show: the volume, or 0 while muted. */
+  readonly shownVolume: ReadonlySignal<number>;
+  /** The volume step of the scroll wheel and a two-finger drag, in percent. */
+  readonly volumeStep: ReadonlySignal<VolumeStep>;
+  /** The volume indicator shows, from a step until it fades out, `VOLUME_INDICATOR_MS` after the last one. */
+  readonly indicatorShown: ReadonlySignal<boolean>;
   /**
    * The volume slider shows. It hides only while Enhanced audio is off on a device whose element volume is read-only,
    * as on iOS, so it shows there from the start, and a volume set before the gain stage runs applies once it starts.
@@ -107,7 +129,17 @@ export interface AudioStage {
 
   /** Off, the sound plays directly; on, the gain stage starts at once, since the setting's own click is a tap. */
   setEnhanced(on: boolean): void;
+  setVolumeStep(step: VolumeStep): void;
+  /** Starts a slider drag's or a two-finger drag's change, keeping the volume from before it. */
+  beginVolumeChange(): void;
+  endVolumeChange(): void;
+  /** Moves the volume to `percent`, as the slider does, within the change under way or as a change of its own. */
   setVolume(percent: number): void;
+  /**
+   * Moves the volume by whole volume steps, as the scroll wheel and a two-finger drag do, within the change under way
+   * or as a change of its own, and shows the volume indicator, a step down while muted too.
+   */
+  stepVolume(steps: number): void;
   toggleMute(): void;
   /**
    * Takes the video whose sound it plays, applying the volume and mute to it, and listens for the page's first tap or
@@ -151,7 +183,11 @@ function browserAudioContext(): GainStageContext {
 }
 
 function isVolume(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 100;
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 100;
+}
+
+function isVolumeStep(value: unknown): value is VolumeStep {
+  return VOLUME_STEPS.includes(value as VolumeStep);
 }
 
 function isBoolean(value: unknown): value is boolean {
@@ -171,6 +207,9 @@ export function createAudioStage(options: AudioStageOptions): AudioStage {
   const enhanced = signal(device.read(ENHANCED_AUDIO_KEY, true, isBoolean));
   const volume = signal(device.read(VOLUME_KEY, DEFAULT_VOLUME, isVolume));
   const muted = signal(device.read(MUTED_KEY, false, isBoolean));
+  const shownVolume = computed(() => (muted.value ? 0 : volume.value));
+  const volumeStep = signal(device.read(VOLUME_STEP_KEY, DEFAULT_VOLUME_STEP, isVolumeStep));
+  const indicatorShown = signal(false);
   const running = signal(false);
   const volumeShown = computed(() => enhanced.value || !volumeReadOnly);
 
@@ -186,6 +225,9 @@ export function createAudioStage(options: AudioStageOptions): AudioStage {
   /** The gain stage couldn't start; it isn't tried again until Enhanced audio is turned off and on. */
   let failed = false;
   let fadeOut: ReturnType<typeof setTimeout> | null = null;
+  /** The volume from before the slider's or a two-finger drag's change under way. */
+  let volumeBeforeChange: number | null = null;
+  let indicatorFade: ReturnType<typeof setTimeout> | null = null;
 
   function level(): number {
     return muted.peek() ? 0 : volume.peek() / 100;
@@ -221,6 +263,46 @@ export function createAudioStage(options: AudioStageOptions): AudioStage {
     if (running.peek() && audible()) {
       glide(level());
     }
+  }
+
+  /** Keeps the volume and Mute, and the sound follows them. */
+  function keep(nextVolume: number, nextMuted: boolean): void {
+    if (nextVolume === volume.peek() && nextMuted === muted.peek()) return;
+    batch(() => {
+      if (nextVolume !== volume.peek()) {
+        volume.value = nextVolume;
+        device.write(VOLUME_KEY, nextVolume);
+      }
+      if (nextMuted !== muted.peek()) {
+        muted.value = nextMuted;
+        device.write(MUTED_KEY, nextMuted);
+      }
+    });
+    follow();
+  }
+
+  /** Moves the volume the slider shows to `target`, by the muted-volume rules. */
+  function moveVolume(target: number): void {
+    if (!Number.isFinite(target)) return;
+    const next = Math.round(Math.min(100, target));
+    if (next > 0) {
+      keep(next, false);
+    } else if (!muted.peek()) {
+      keep(volumeBeforeChange ?? volume.peek(), true);
+    }
+  }
+
+  function showIndicator(): void {
+    indicatorShown.value = true;
+    if (indicatorFade !== null) clearTimeout(indicatorFade);
+    indicatorFade = setTimeout(() => {
+      indicatorFade = null;
+      indicatorShown.value = false;
+    }, VOLUME_INDICATOR_MS);
+  }
+
+  function endVolumeChange(): void {
+    volumeBeforeChange = null;
   }
 
   function clearFadeOut(): void {
@@ -346,22 +428,35 @@ export function createAudioStage(options: AudioStageOptions): AudioStage {
     enhanced,
     volume,
     muted,
+    shownVolume,
+    volumeStep,
+    indicatorShown,
     volumeShown,
     running,
     setEnhanced,
 
-    setVolume(percent) {
-      const next = Math.round(Math.min(100, Math.max(0, percent)));
-      if (!Number.isFinite(next) || next === volume.peek()) return;
-      volume.value = next;
-      device.write(VOLUME_KEY, next);
-      follow();
+    setVolumeStep(step) {
+      if (!isVolumeStep(step) || step === volumeStep.peek()) return;
+      volumeStep.value = step;
+      device.write(VOLUME_STEP_KEY, step);
+    },
+
+    beginVolumeChange() {
+      volumeBeforeChange = volume.peek();
+    },
+
+    endVolumeChange,
+
+    setVolume: moveVolume,
+
+    stepVolume(steps) {
+      moveVolume(shownVolume.peek() + steps * volumeStep.peek());
+      showIndicator();
     },
 
     toggleMute() {
-      muted.value = !muted.peek();
-      device.write(MUTED_KEY, muted.peek());
-      follow();
+      endVolumeChange();
+      keep(volume.peek(), !muted.peek());
     },
 
     attach(next) {
@@ -380,6 +475,10 @@ export function createAudioStage(options: AudioStageOptions): AudioStage {
     },
 
     detach() {
+      if (indicatorFade !== null) clearTimeout(indicatorFade);
+      indicatorFade = null;
+      indicatorShown.value = false;
+      endVolumeChange();
       listen(activation, false);
       activation = null;
       video?.removeEventListener("play", videoPlay);

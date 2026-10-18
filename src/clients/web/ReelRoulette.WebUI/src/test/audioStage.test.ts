@@ -5,6 +5,7 @@ import {
   GAIN_GLIDE_SECONDS,
   GAIN_STAGE_FAILED_NOTICE,
   TURN_OFF_ENHANCED_AUDIO,
+  VOLUME_INDICATOR_MS,
   type AudioVideoElement,
   type GainStageContext
 } from "../playback/audioStage";
@@ -279,20 +280,174 @@ describe("createAudioStage", () => {
     expect(refused.renewals()).toBe(1);
   });
 
-  it("keeps the volume, Mute, and Enhanced audio on this device, and a new page reads them back", () => {
+  it("keeps the volume, Mute, Enhanced audio, and the volume step on this device, and a new page reads them back", () => {
     const page = setup();
-    expect([page.audio.volume.value, page.audio.muted.value, page.audio.enhanced.value]).toEqual([100, false, true]);
+    expect([page.audio.volume.value, page.audio.muted.value, page.audio.enhanced.value, page.audio.volumeStep.value]).toEqual([100, false, true, 5]);
     page.audio.setVolume(42.4);
     page.audio.toggleMute();
     page.audio.setEnhanced(false);
+    page.audio.setVolumeStep(10);
     expect(Object.fromEntries(page.kept)).toEqual({
       "rr_device.player.volume": "42",
       "rr_device.player.muted": "true",
-      "rr_device.audio.enhanced": "false"
+      "rr_device.audio.enhanced": "false",
+      "rr_device.audio.volumeStep": "10"
     });
 
     const next = setup({ saved: Object.fromEntries(page.kept) });
-    expect([next.audio.volume.value, next.audio.muted.value, next.audio.enhanced.value]).toEqual([42, true, false]);
+    expect([next.audio.volume.value, next.audio.muted.value, next.audio.enhanced.value, next.audio.volumeStep.value]).toEqual([42, true, false, 10]);
+    // While muted, the slider shows 0, and unmuting brings back the kept volume.
+    expect(next.audio.shownVolume.value).toBe(0);
+    next.audio.toggleMute();
+    expect(next.audio.shownVolume.value).toBe(42);
+    // A kept volume outside 1 to 100, 0 among them since 0 is muted, and a volume step not offered read as the defaults.
     expect(setup({ saved: { "rr_device.player.volume": "140" } }).audio.volume.value).toBe(100);
+    expect(setup({ saved: { "rr_device.player.volume": "0" } }).audio.volume.value).toBe(100);
+    expect(setup({ saved: { "rr_device.audio.volumeStep": "3" } }).audio.volumeStep.value).toBe(5);
+  });
+});
+
+describe("the muted-volume rules", () => {
+  /** What the slider shows, and whether sound is muted. */
+  function sound(page: ReturnType<typeof setup>): string {
+    return `${page.audio.muted.value ? "muted" : "unmuted"} ${page.audio.shownVolume.value}`;
+  }
+
+  /** Unmutes, and returns the volume the slider then shows. */
+  function unmute(page: ReturnType<typeof setup>): number {
+    if (page.audio.muted.value) page.audio.toggleMute();
+    return page.audio.shownVolume.value;
+  }
+
+  /** A slider drag through `values`, as one change. */
+  function slide(page: ReturnType<typeof setup>, ...values: number[]): void {
+    page.audio.beginVolumeChange();
+    values.forEach((value) => page.audio.setVolume(value));
+    page.audio.endVolumeChange();
+  }
+
+  it("Mute moves the slider to 0 and remembers the volume, which unmuting restores", () => {
+    const page = setup();
+    page.audio.setVolume(60);
+    page.audio.toggleMute();
+    expect(sound(page)).toBe("muted 0");
+    expect(page.audio.volume.value).toBe(60);
+    page.audio.toggleMute();
+    expect(sound(page)).toBe("unmuted 60");
+  });
+
+  it("raising the volume while muted, by the slider or a step, unmutes and starts from 0, so the remembered volume isn't restored", () => {
+    const page = setup();
+    page.audio.setVolume(60);
+    page.audio.toggleMute();
+    slide(page, 10, 30);
+    expect(sound(page)).toBe("unmuted 30");
+    page.audio.toggleMute();
+    expect(unmute(page)).toBe(30);
+
+    page.audio.setVolume(60);
+    page.audio.toggleMute();
+    page.audio.stepVolume(1);
+    expect(sound(page)).toBe("unmuted 5");
+    page.audio.toggleMute();
+    expect(unmute(page)).toBe(5);
+  });
+
+  it("lowering the volume while muted changes nothing", () => {
+    const page = setup();
+    page.audio.setVolume(60);
+    page.audio.toggleMute();
+    page.audio.stepVolume(-1);
+    slide(page, 0);
+    expect(sound(page)).toBe("muted 0");
+    expect(Object.fromEntries(page.kept)).toMatchObject({ "rr_device.player.volume": "60", "rr_device.player.muted": "true" });
+    expect(unmute(page)).toBe(60);
+  });
+
+  it("lowering it to 0 while not muted mutes, and unmuting restores the volume from before the change: a drag's start, or the volume before the last step", () => {
+    const page = setup();
+    page.audio.setVolume(40);
+    slide(page, 25, 10, 0);
+    expect(sound(page)).toBe("muted 0");
+    expect(Object.fromEntries(page.kept)).toMatchObject({ "rr_device.player.volume": "40", "rr_device.player.muted": "true" });
+    expect(unmute(page)).toBe(40);
+
+    // A two-finger drag is one change of steps.
+    page.audio.setVolume(15);
+    page.audio.beginVolumeChange();
+    page.audio.stepVolume(-1);
+    page.audio.stepVolume(-1);
+    page.audio.stepVolume(-1);
+    page.audio.endVolumeChange();
+    expect(sound(page)).toBe("muted 0");
+    expect(unmute(page)).toBe(15);
+
+    // Each wheel notch or key press, and each key step on the focused slider, is a change of its own.
+    page.audio.setVolume(8);
+    page.audio.stepVolume(-1);
+    page.audio.stepVolume(-1);
+    expect(sound(page)).toBe("muted 0");
+    expect(unmute(page)).toBe(3);
+    page.audio.setVolume(1);
+    page.audio.setVolume(0);
+    expect(sound(page)).toBe("muted 0");
+    expect(unmute(page)).toBe(1);
+  });
+
+  it("a drag that starts muted, raises the volume, and comes back to 0 leaves the remembered volume as it was", () => {
+    const page = setup();
+    page.audio.setVolume(40);
+    page.audio.toggleMute();
+    slide(page, 20, 0);
+    expect(sound(page)).toBe("muted 0");
+    expect(unmute(page)).toBe(40);
+  });
+
+  it("Mute ends a change left under way, so a later step counts from its own start", () => {
+    const page = setup();
+    page.audio.setVolume(40);
+    page.audio.beginVolumeChange();
+    page.audio.setVolume(10);
+    page.audio.toggleMute();
+    page.audio.toggleMute();
+    page.audio.stepVolume(-1);
+    page.audio.stepVolume(-1);
+    expect(sound(page)).toBe("muted 0");
+    expect(unmute(page)).toBe(5);
+  });
+
+  it("glides the gain to each level the rules give, never jumping", async () => {
+    const page = setup();
+    await page.tap();
+    await page.video.play();
+    const context = page.contexts[0]!;
+    page.audio.setVolume(10);
+    page.audio.stepVolume(-2);
+    expect(context.level).toBe(0);
+    page.audio.stepVolume(1);
+    expect(context.level).toBeCloseTo(0.05);
+    expect(context.calls.slice(2).every(([kind]) => kind === "glide")).toBe(true);
+  });
+});
+
+describe("the volume indicator", () => {
+  it("shows for a step, a step down while muted too, until it fades out after the last one, and not for the slider", () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.audio.setVolume(30);
+    expect(page.audio.indicatorShown.value).toBe(false);
+
+    page.audio.stepVolume(1);
+    expect(page.audio.indicatorShown.value).toBe(true);
+    vi.advanceTimersByTime(VOLUME_INDICATOR_MS - 100);
+    page.audio.stepVolume(1);
+    vi.advanceTimersByTime(VOLUME_INDICATOR_MS - 100);
+    expect(page.audio.indicatorShown.value).toBe(true);
+    vi.advanceTimersByTime(100);
+    expect(page.audio.indicatorShown.value).toBe(false);
+
+    page.audio.toggleMute();
+    page.audio.stepVolume(-1);
+    expect([page.audio.indicatorShown.value, page.audio.shownVolume.value]).toEqual([true, 0]);
   });
 });

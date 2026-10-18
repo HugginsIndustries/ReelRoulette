@@ -1206,6 +1206,289 @@ describe("volume and Enhanced audio", () => {
   });
 });
 
+/** Turns the wheel over the player. False when the page wasn't allowed to scroll. */
+function wheel(deltaY: number, deltaMode = 0): boolean {
+  return fireEvent.wheel(mediaArea(), { deltaY, deltaMode });
+}
+
+/**
+ * Two fingers land on the player 40 px apart, one after the other, move by each of `ups` (up is positive), and lift.
+ * Returns whether each move was claimed from the browser.
+ */
+function dragTwoFingers(...ups: number[]): boolean[] {
+  const fingers = (y: number) => [{ clientX: 120, clientY: y }, { clientX: 120, clientY: y + 40 }];
+  let y = 300;
+  fireEvent.touchStart(mediaArea(), { touches: fingers(y).slice(0, 1) });
+  fireEvent.touchStart(mediaArea(), { touches: fingers(y) });
+  const claimed = ups.map((up) => {
+    y -= up;
+    return !fireEvent.touchMove(mediaArea(), { touches: fingers(y) });
+  });
+  fireEvent.touchEnd(mediaArea(), { touches: fingers(y).slice(0, 1), changedTouches: fingers(y).slice(1) });
+  fireEvent.touchEnd(mediaArea(), { touches: [], changedTouches: fingers(y).slice(0, 1) });
+  return claimed;
+}
+
+/** Presses the volume slider, drags it through `values`, and lets it go. */
+function slideVolume(...values: number[]): void {
+  fireEvent.pointerDown(volumeSlider(), { pointerId: 1, button: 0 });
+  values.forEach(moveVolume);
+  fireEvent.pointerUp(document.body, { pointerId: 1, button: 0 });
+}
+
+/** Whether Mute is on, and the volume the slider shows. */
+function sound(): string {
+  return `${isLit("Mute") ? "muted" : "unmuted"} ${volumeSlider().value}`;
+}
+
+/** Turns Mute off, and returns the volume the slider then shows. */
+async function unmute(): Promise<string> {
+  if (isLit("Mute")) await click(button("Mute"));
+  return volumeSlider().value;
+}
+
+function volumeIndicator(): HTMLElement {
+  return document.getElementById("volume-indicator") as HTMLElement;
+}
+
+/** The volume indicator's icon and text while it shows, or null. */
+function indicatorShows(): string | null {
+  const box = volumeIndicator();
+  return box.classList.contains("is-shown") ? `${box.querySelector(".material-symbol-icon")!.textContent} ${box.querySelector("#volume-indicator-text")!.textContent}` : null;
+}
+
+describe("volume gestures", () => {
+  it("the scroll wheel over the player changes the volume a step per notch, adding up a trackpad's small deltas, never scrolls the page, and shows the controls, with no notification", async () => {
+    const server = serverPicking(VIDEO_ITEM);
+    await mountAndPlay(server);
+    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Playing", VIDEO_ITEM, 1)));
+    const linesBefore = server.logLines().length;
+    moveVolume(50);
+    await click(video());
+    expect(controlsShown()).toBe(false);
+
+    expect(wheel(-100)).toBe(false);
+    await flush();
+    expect(volumeSlider().value).toBe("55");
+    expect(controlsShown()).toBe(true);
+    wheel(3, 1);
+    wheel(-30);
+    wheel(-30);
+    wheel(-30);
+    await flush();
+    expect(volumeSlider().value).toBe("50");
+    wheel(-30);
+    await flush();
+    expect(volumeSlider().value).toBe("55");
+    expect(document.querySelectorAll("#toasts .toast")).toHaveLength(0);
+    expect(server.logLines().slice(linesBefore)).toEqual([]);
+  });
+
+  it("two fingers dragged up or down on the player change the volume a step per 30 px, claimed from the browser, and show the controls, with no notification, and a pinch never zooms", async () => {
+    useStylesheet();
+    const server = serverPicking(VIDEO_ITEM);
+    await mountAndPlay(server);
+    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Playing", VIDEO_ITEM, 1)));
+    const linesBefore = server.logLines().length;
+    moveVolume(50);
+    await click(video());
+
+    expect(dragTwoFingers(20, 20, -60, -30)).toEqual([true, true, true, true]);
+    await flush();
+    expect(volumeSlider().value).toBe("45");
+    expect(controlsShown()).toBe(true);
+    expect(currentStyle(mediaArea()).touchAction).toBe("none");
+    expect(fireEvent(mediaArea(), new Event("gesturestart", { bubbles: true, cancelable: true }))).toBe(false);
+    expect(document.querySelectorAll("#toasts .toast")).toHaveLength(0);
+    expect(server.logLines().slice(linesBefore)).toEqual([]);
+  });
+
+  it("a cancelled touch ends a two-finger drag, so the next drag is a change of its own, counted from where it starts, and the next swipe still counts", async () => {
+    await mountAndPlay(serverPicking(VIDEO_ITEM, SECOND_VIDEO));
+    moveVolume(50);
+    const cancelledDrag = () => {
+      const fingers = (y: number) => [{ clientX: 120, clientY: y }, { clientX: 120, clientY: y + 40 }];
+      fireEvent.touchStart(mediaArea(), { touches: fingers(600).slice(0, 1) });
+      fireEvent.touchStart(mediaArea(), { touches: fingers(600) });
+      fireEvent.touchMove(mediaArea(), { touches: fingers(570) });
+      fireEvent.touchCancel(mediaArea(), { touches: [], changedTouches: fingers(570) });
+    };
+    cancelledDrag();
+    await flush();
+    expect(volumeSlider().value).toBe("55");
+
+    // Starting 300 px higher, the next drag counts only its own eleven steps down, and reaching 0 mutes as its change.
+    dragTwoFingers(...Array.from({ length: 11 }, () => -30));
+    await flush();
+    expect(sound()).toBe("muted 0");
+    expect(await unmute()).toBe("55");
+
+    cancelledDrag();
+    await swipe(video(), { x: 300, y: 100 }, { x: 200, y: 110 });
+    expect(video().src).toBe(SECOND_VIDEO_URL);
+  });
+
+  it("on a photo the wheel and a two-finger drag set the volume, with the indicator, never scrolling the page, and the next video plays at it", async () => {
+    const server = serverPicking(PHOTO_ITEM, VIDEO_ITEM);
+    const page = await mount(server);
+    await tapPage();
+    await click(emptyState());
+    expect(photo().style.display).toBe("block");
+    moveVolume(50);
+
+    expect(wheel(-100)).toBe(false);
+    await flush();
+    expect(indicatorShows()).toBe("volume_up 55%");
+    expect(dragTwoFingers(30)).toEqual([true]);
+    await flush();
+    expect(volumeSlider().value).toBe("60");
+    expect(indicatorShows()).toBe("volume_up 60%");
+
+    await click(button("Next"));
+    expect(video().style.display).toBe("block");
+    expect(page.webAudio.gain!.level).toBeCloseTo(0.6);
+  });
+
+  it("the volume indicator shows centered over the player, outside the controls, for the wheel and a two-finger drag, while the controls are hidden too, not for the slider, and fades out 800 ms after the last change", async () => {
+    useFakeClock();
+    useStylesheet();
+    const server = serverPicking(VIDEO_ITEM);
+    await mountAndPlay(server);
+    moveVolume(50);
+    await flush();
+    expect(indicatorShows()).toBe(null);
+    expect(currentStyle(volumeIndicator()).opacity).toBe("0");
+
+    wheel(-100);
+    await flush();
+    expect(indicatorShows()).toBe("volume_up 55%");
+    const box = volumeIndicator();
+    expect(box.parentElement).toBe(mediaArea());
+    expect(document.getElementById("overlay-controls")!.contains(box)).toBe(false);
+    expect(box.getAttribute("aria-hidden")).toBe("true");
+    await click(video());
+    expect(controlsShown()).toBe(false);
+    const style = currentStyle(box);
+    expect([style.position, style.top, style.left, style.transform, style.opacity]).toEqual(["absolute", "50%", "50%", "translate(-50%, -50%)", "0.7"]);
+
+    await vi.advanceTimersByTimeAsync(700);
+    dragTwoFingers(30);
+    await flush();
+    expect(indicatorShows()).toBe("volume_up 60%");
+    await vi.advanceTimersByTimeAsync(700);
+    expect(indicatorShows()).toBe("volume_up 60%");
+    await vi.advanceTimersByTimeAsync(100);
+    expect(indicatorShows()).toBe(null);
+    expect(currentStyle(box).opacity).toBe("0");
+  });
+
+  it("the volume indicator fades in over 120 ms and out over 250 ms, and not at all with reduced motion", async () => {
+    useStylesheet();
+    await mount(serverPicking(VIDEO_ITEM));
+    const rules = Array.from(document.styleSheets).flatMap((sheet) => Array.from(sheet.cssRules));
+    const rule = (selector: string) => rules.find((candidate) => (candidate as CSSStyleRule).selectorText === selector) as CSSStyleRule | undefined;
+    expect([rule(".volume-indicator")?.style.transition, rule(".volume-indicator.is-shown")?.style.transitionDuration]).toEqual(["opacity 0.25s", "0.12s"]);
+    const reduced = rules
+      .filter((candidate): candidate is CSSMediaRule => (candidate as CSSMediaRule).media?.mediaText.includes("prefers-reduced-motion"))
+      .flatMap((candidate) => Array.from(candidate.cssRules) as CSSStyleRule[])
+      .find((candidate) => candidate.selectorText === ".volume-indicator, .volume-indicator.is-shown");
+    expect(reduced?.style.transition).toBe("none");
+  });
+
+  it("on iOS the wheel and a two-finger drag work from the start, setting the volume the gain stage starts at", async () => {
+    stubReadOnlyVolume();
+    const page = await mount(serverPicking(VIDEO_ITEM));
+    wheel(100);
+    dragTwoFingers(-30);
+    await flush();
+    expect(volumeSlider().value).toBe("90");
+    expect(page.webAudio.contexts).toHaveLength(0);
+
+    await tapPage();
+    await click(emptyState());
+    expect(page.webAudio.gain!.level).toBeCloseTo(0.9);
+  });
+
+  it("on iOS with Enhanced audio off, where the slider hides, the wheel and a two-finger drag leave the volume alone, and still never scroll or zoom", async () => {
+    stubReadOnlyVolume();
+    localStorage.setItem("rr_device.audio.enhanced", "false");
+    await mount(serverPicking(VIDEO_ITEM));
+    expect(volumeWrap().hidden).toBe(true);
+    expect(wheel(100)).toBe(false);
+    expect(dragTwoFingers(-30)).toEqual([true]);
+    await flush();
+    expect(volumeSlider().value).toBe("100");
+    expect(indicatorShows()).toBe(null);
+  });
+});
+
+describe("the muted-volume rules", () => {
+  it("Mute moves the slider to 0, still enabled, and unmuting brings the volume back; dragging the slider to 0 mutes, and unmuting brings back where the drag started", async () => {
+    const page = await mount(serverPicking(VIDEO_ITEM));
+    await tapPage();
+    await click(emptyState());
+    const gain = page.webAudio.gain!;
+    moveVolume(60);
+    await flush();
+    await click(button("Mute"));
+    expect(sound()).toBe("muted 0");
+    expect(volumeSlider().disabled).toBe(false);
+    expect(await unmute()).toBe("60");
+
+    moveVolume(40);
+    slideVolume(25, 10, 0);
+    await flush();
+    expect(sound()).toBe("muted 0");
+    expect(iconOf("Mute")).toBe("volume_off");
+    expect(gain.level).toBe(0);
+    expect(await unmute()).toBe("40");
+    expect(gain.level).toBeCloseTo(0.4);
+  });
+
+  it("raising the volume while muted, by the slider, the wheel, or a two-finger drag, unmutes and starts from 0, and lowering it while muted changes nothing", async () => {
+    await mountAndPlay(serverPicking(VIDEO_ITEM));
+    const raisedWhileMuted = async (raise: () => unknown) => {
+      moveVolume(60);
+      await click(button("Mute"));
+      raise();
+      await flush();
+      const raised = sound();
+      await click(button("Mute"));
+      return `${raised}, then ${await unmute()}`;
+    };
+    expect([
+      await raisedWhileMuted(() => slideVolume(30)),
+      await raisedWhileMuted(() => wheel(-100)),
+      await raisedWhileMuted(() => dragTwoFingers(30))
+    ]).toEqual(["unmuted 30, then 30", "unmuted 5, then 5", "unmuted 5, then 5"]);
+
+    moveVolume(60);
+    await click(button("Mute"));
+    wheel(100);
+    dragTwoFingers(-30);
+    await flush();
+    expect(sound()).toBe("muted 0");
+    expect(indicatorShows()).toBe("volume_off 0%");
+    expect(await unmute()).toBe("60");
+  });
+
+  it("a two-finger drag down to 0 mutes, and unmuting brings back where it started; a wheel notch down to 0 mutes, and unmuting brings back the volume before that notch, a slider drag before it having ended where it was let go", async () => {
+    await mountAndPlay(serverPicking(VIDEO_ITEM));
+    moveVolume(15);
+    dragTwoFingers(-30, -30, -30);
+    await flush();
+    expect(sound()).toBe("muted 0");
+    expect(await unmute()).toBe("15");
+
+    slideVolume(8);
+    wheel(100);
+    wheel(100);
+    await flush();
+    expect(sound()).toBe("muted 0");
+    expect(await unmute()).toBe("3");
+  });
+});
+
 describe("seek", () => {
   it("shows the time, moves the slider as the video plays, and seeks from the slider", async () => {
     const server = serverPicking(VIDEO_ITEM);

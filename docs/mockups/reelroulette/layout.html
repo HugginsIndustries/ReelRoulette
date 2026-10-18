@@ -3103,7 +3103,8 @@ const state = {
   loopStopsAutoplay: store.get("loopStopsAutoplay", true),
   seekStep: store.get("seekStep", 5),
   volumeStep: store.get("volumeStep", 5),
-  volume: store.get("volume", 100),
+  // The volume sound plays at when not muted, which Mute remembers: 1 to 100, since 0 is muted.
+  volume: ((kept) => (Number.isInteger(kept) && kept >= 1 && kept <= 100 ? kept : 100))(store.get("volume", 100)),
   serverMachine: store.get("serverMachine", false),
   pairing: store.get("pairing", false),
   iosVolume: store.get("iosVolume", false),
@@ -3513,9 +3514,10 @@ function renderPlayback() {
   $("favorite-btn").classList.toggle("active", !!item?.favorite);
   $("blacklist-btn").classList.toggle("active", !!item?.blacklisted);
   // Mute and the volume slider stay enabled before anything plays and on a photo, where they apply to the next video,
-  // and Mute always shows whether sound is muted.
+  // and Mute always shows whether sound is muted. While it is, the slider sits at 0.
   $("mute-btn").classList.toggle("active", playback.muted);
   setIcon($("mute-btn").querySelector(".material-symbol-icon"), playback.muted ? "volume_off" : "volume_up");
+  $("volume").value = String(shownVolume());
   // The file name opens the Stats tab; its tooltip shows the full name and then "Show stats".
   $("np-name").parentElement.hidden = !item;
   $("np-name").textContent = item ? item.name : "";
@@ -4276,8 +4278,9 @@ media.addEventListener("wheel", (event) => {
   }
   stepVolume(notches);
 }, { passive: false });
-// Two fingers dragged up or down change the volume a step per 30 px. The player claims its touches (touch-action:
-// none), and Safari's own pinch gesture is turned away, so the browser doesn't zoom there.
+// Two fingers dragged up or down change the volume a step per 30 px, as one change from the second finger landing to
+// the fingers lifting. The player claims its touches (touch-action: none), and Safari's own pinch gesture is turned
+// away, so the browser doesn't zoom there.
 const DRAG_NOTCH_PX = 30;
 let twoFinger = null;
 const middleY = (touches) => (touches[0].clientY + touches[1].clientY) / 2;
@@ -4285,6 +4288,7 @@ media.addEventListener("touchstart", (event) => {
   if (event.touches.length !== 2) return;
   swipeStart = null;
   twoFinger = { y: middleY(event.touches), rest: 0 };
+  beginVolumeChange();
 }, { passive: true });
 media.addEventListener("touchmove", (event) => {
   if (!twoFinger || event.touches.length !== 2) return;
@@ -4298,7 +4302,9 @@ media.addEventListener("touchmove", (event) => {
   stepVolume(notches);
 }, { passive: false });
 media.addEventListener("touchend", (event) => {
-  if (event.touches.length === 0) twoFinger = null;
+  if (event.touches.length !== 0 || !twoFinger) return;
+  twoFinger = null;
+  endVolumeChange();
 }, { passive: true });
 media.addEventListener("gesturestart", (event) => event.preventDefault());
 $("overlay-controls").addEventListener("click", (event) => event.stopPropagation());
@@ -4354,7 +4360,9 @@ $("autoplay-btn").addEventListener("click", () => {
   }
   renderPlayback();
 });
+// Mute moves the slider to 0 and remembers the volume, which unmuting restores.
 function toggleMute() {
+  endVolumeChange();
   playback.muted = !playback.muted;
   store.set("muted", playback.muted);
   renderPlayback();
@@ -7066,23 +7074,47 @@ const TAB_KEYS = { 1: "library", 2: "filter", 3: "tags", 4: "stats", 5: "setting
 const isTextField = (el) =>
   el && (el.isContentEditable || el.tagName === "TEXTAREA" || el.tagName === "SELECT" ||
     (el.tagName === "INPUT" && !["checkbox", "radio", "button", "submit"].includes(el.type)));
-// Sets the volume and moves the slider to it.
-function setVolume(value) {
-  state.volume = Math.max(0, Math.min(100, value));
+// The muted-volume rules, for the slider, the scroll wheel, a two-finger drag, and [ and ]. The slider shows the volume,
+// or 0 while muted. Raising it while muted unmutes and starts from 0, so the remembered volume isn't restored, and
+// lowering it while muted changes nothing. Lowering it to 0 while not muted mutes, and unmuting then restores the volume
+// from before the change that reached 0: a slider drag or a two-finger drag is one change, from its press or its second
+// finger to its release, and each wheel notch, [ or ] press, and key step on the focused slider is a change of its own.
+// A drag that starts muted and comes back to 0 so leaves the remembered volume as it was.
+function shownVolume() {
+  return playback.muted ? 0 : state.volume;
+}
+let volumeBeforeChange = null;
+function beginVolumeChange() {
+  volumeBeforeChange = state.volume;
+}
+function endVolumeChange() {
+  volumeBeforeChange = null;
+}
+function moveVolume(target) {
+  const before = volumeBeforeChange ?? state.volume;
+  if (target > 0) {
+    playback.muted = false;
+    state.volume = Math.min(100, Math.round(target));
+  } else if (!playback.muted) {
+    playback.muted = true;
+    state.volume = before;
+  } else {
+    return;
+  }
   store.set("volume", state.volume);
-  $("volume").value = String(state.volume);
-  syncStandInSound();
+  store.set("muted", playback.muted);
+  renderPlayback();
 }
 // The volume indicator shows the volume as a percentage, with Mute's icon, while the scroll wheel, a two-finger drag, or
-// [ and ] step it, on a photo too, where they set the next video's level. The slider doesn't show it. It fades out
-// 800 ms after the last step.
+// [ and ] step it, on a photo too, where they set the next video's level, and at 0% for a step down while muted. The
+// slider doesn't show it. It fades out 800 ms after the last step.
 const VOLUME_INDICATOR_MS = 800;
 let volumeIndicatorTimer = 0;
 function stepVolumeWithIndicator(steps) {
-  setVolume(state.volume + steps * state.volumeStep);
+  moveVolume(shownVolume() + steps * state.volumeStep);
   const indicator = $("volume-indicator");
   setIcon(indicator.querySelector(".material-symbol-icon"), playback.muted ? "volume_off" : "volume_up");
-  $("volume-indicator-text").textContent = `${state.volume}%`;
+  $("volume-indicator-text").textContent = `${shownVolume()}%`;
   indicator.classList.add("is-shown");
   clearTimeout(volumeIndicatorTimer);
   volumeIndicatorTimer = setTimeout(() => indicator.classList.remove("is-shown"), VOLUME_INDICATOR_MS);
@@ -7137,12 +7169,13 @@ document.addEventListener("keydown", (event) => {
 });
 
 // ---- Volume and pairing ----
-$("volume").value = String(state.volume);
-$("volume").addEventListener("input", (event) => {
-  state.volume = Number(event.target.value);
-  store.set("volume", state.volume);
-  syncStandInSound();
-});
+$("volume").value = String(shownVolume());
+$("volume").addEventListener("pointerdown", beginVolumeChange);
+$("volume").addEventListener("input", (event) => moveVolume(Number(event.target.value)));
+// A drag ends where it's let go: on the slider's change, or the pointer's release wherever it is.
+$("volume").addEventListener("change", endVolumeChange);
+document.addEventListener("pointerup", endVolumeChange);
+document.addEventListener("pointercancel", endVolumeChange);
 const pairField = new ValidatedField($("pair-token"), (value) => (value.trim() ? null : { empty: true }));
 holdAction($("pair-btn"), () => [pairField]);
 $("pair").addEventListener("submit", (event) => {

@@ -224,6 +224,38 @@ describe("Enhanced audio", () => {
   });
 });
 
+describe("Volume step", () => {
+  it("sits first in Audio, before Enhanced audio, offering 1, 2, 5, and 10 percent, 5 until chosen, with its hint", async () => {
+    await mount();
+    await openSettings();
+    const group = within(settingsPage()).getByRole("radiogroup", { name: "Volume step", hidden: true });
+    const section = group.closest("section")!;
+    expect(section.querySelector("h3")!.textContent).toBe("Audio");
+    const settings = Array.from(section.querySelectorAll(":scope > .setting"));
+    expect(settings[0]!.contains(group)).toBe(true);
+    expect(settings[1]!.contains(checkbox("Enhanced audio"))).toBe(true);
+    const names = within(group).getAllByRole("radio", { hidden: true }).map((choice) => document.getElementById(choice.getAttribute("aria-labelledby")!)!.textContent);
+    expect(names).toEqual(["1%", "2%", "5%", "10%"]);
+    expect(names.map((name) => radio(name!).checked)).toEqual([false, false, true, false]);
+    expect(document.getElementById(group.getAttribute("aria-describedby")!)!.textContent).toBe("For the scroll wheel and a two-finger drag over the player.");
+  });
+
+  it("sets the step the scroll wheel takes, and is kept after a page refresh", async () => {
+    const page = await mount();
+    await openSettings();
+    await click(radio("10%"));
+    moveSlider(volumeSlider(), 50);
+    fireEvent.wheel(document.getElementById("media-container")!, { deltaY: -100 });
+    await settle();
+    expect(volumeSlider().value).toBe("60");
+    page.unmount();
+
+    await mount();
+    await openSettings();
+    expect(radio("10%").checked).toBe(true);
+  });
+});
+
 describe("Autoplay mode and Loop stops autoplay", () => {
   it("sit in Playback around Advance after: Autoplay mode first, Normal until chosen, each mode with its line and the group with its hint, and Loop stops autoplay last, on until turned off, with its hint", async () => {
     await mount();
@@ -1371,6 +1403,7 @@ describe("kept on this device", () => {
     await click(playerButton("Mute"));
     moveSlider(volumeSlider(), 40);
     await click(checkbox("Enhanced audio"));
+    await click(radio("10%"));
 
     expect(page.server.calls.slice(requestsBefore)).toEqual([]);
     expect(storageKeys().filter((key) => !keysBefore.includes(key))).toEqual([
@@ -1379,6 +1412,7 @@ describe("kept on this device", () => {
       "rr_device.appearance.theme",
       "rr_device.appearance.tileNames",
       "rr_device.audio.enhanced",
+      "rr_device.audio.volumeStep",
       "rr_device.notifications.popups",
       "rr_device.panel.autoPause",
       "rr_device.panel.side",

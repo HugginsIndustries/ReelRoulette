@@ -106,6 +106,8 @@ These need a person, real devices, or the Windows VM.
 - [ ] On the Pixel, a flagged section's tab shows its badge whole, without the tab changing width or its row wrapping.
 - [ ] On two devices, saving, renaming, reordering, and deleting a preset on one shows on the other without a reload, a save, rename, or delete with its Other devices popup and a reorder with none, and neither overwrites the other's changes.
 - [ ] On two devices, updating on one the preset the other has applied changes the other's filter and library, with its popup.
+- [ ] With Enhanced audio on, videos play with sound in Firefox on the desktop and in the Pixel's and the iPad's installed apps, and turning it off plays sound directly.
+- [ ] In the iPad's installed app, the volume slider shows from the start, and the slider and a two-finger drag change the video's volume relative to the system volume, without crackles, and play and pause don't pop.
 
 ## Release Flow
 

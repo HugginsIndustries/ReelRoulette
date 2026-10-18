@@ -36,7 +36,8 @@ function stopPropagation(event: Event): void {
  * settings, so their `style`, the glow's `hidden`, the seek slider's value, and the stretch behind it are rendered once
  * and never changed here. The video element is never moved, and is replaced only when the player asks for a new one,
  * once Enhanced audio is off, which then takes over the video. The seek row stays in its place before anything plays
- * and on a photo too, so the controls never move.
+ * and on a photo too, so the controls never move. The player claims its touches (`touch-action: none`), so a two-finger
+ * drag changes the volume without the browser scrolling or zooming, and over it the scroll wheel never scrolls the page.
  */
 export function Player() {
   const { store, player, audio, ambient, fullscreen, notifications } = useApp();
@@ -49,16 +50,34 @@ export function Player() {
   const seekSlider = useRef<HTMLInputElement>(null);
   const seekStretch = useRef<HTMLSpanElement>(null);
   const [controlsVisible, setControlsVisible] = useState(true);
+  /** The volume slider is pressed, so its drag is one volume change until it's let go. */
+  const sliderPressed = useRef(false);
   const gestures = useMemo(
     () =>
       createMediaGestures({
         previous: player.previous,
         next: player.next,
         hasCurrent: () => !!store.current.peek(),
-        toggleControls: () => setControlsVisible((visible) => !visible)
+        toggleControls: () => setControlsVisible((visible) => !visible),
+        showControls: () => setControlsVisible(true),
+        volumeAdjustable: () => audio.volumeShown.peek(),
+        beginVolumeChange: audio.beginVolumeChange,
+        endVolumeChange: audio.endVolumeChange,
+        stepVolume: audio.stepVolume
       }),
     []
   );
+
+  function pressSlider(): void {
+    sliderPressed.current = true;
+    audio.beginVolumeChange();
+  }
+
+  function releaseSlider(): void {
+    if (!sliderPressed.current) return;
+    sliderPressed.current = false;
+    audio.endVolumeChange();
+  }
 
   useLayoutEffect(() => {
     player.attach({
@@ -71,18 +90,43 @@ export function Player() {
     ambient.attach({ layer: ambientLayer.current!, canvas: ambientCanvas.current!, video: video.current!, photo: photo.current! });
     audio.attach(video.current!);
 
-    // Passive, which JSX cannot set, so scrolling never waits for them.
+    // Passive where they never cancel, which JSX cannot set, so the browser never waits for them. A two-finger drag's
+    // move and the wheel cancel the browser's own scroll, and Safari's pinch gesture is turned away.
     const area = container.current!;
     const onTouchStart = (event: TouchEvent) => {
       const startsOnControls = !!(event.target as Element | null)?.closest?.("#overlay-controls");
-      gestures.touchStart(startsOnControls, event.touches?.[0]);
+      gestures.touchStart(startsOnControls, event.touches ?? []);
     };
-    const onTouchEnd = (event: TouchEvent) => gestures.touchEnd(event.changedTouches?.[0]);
+    const onTouchMove = (event: TouchEvent) => {
+      if (gestures.touchMove(event.touches ?? [])) event.preventDefault();
+    };
+    const onTouchEnd = (event: TouchEvent) => gestures.touchEnd(event.changedTouches?.[0], event.touches?.length ?? 0);
+    // A touch the system cancels, as for an app switch, is neither a swipe nor a tap, and ends a two-finger drag.
+    const onTouchCancel = (event: TouchEvent) => gestures.touchEnd(undefined, event.touches?.length ?? 0);
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      gestures.wheel(event);
+    };
+    const onGestureStart = (event: Event) => event.preventDefault();
     area.addEventListener("touchstart", onTouchStart, { passive: true });
+    area.addEventListener("touchmove", onTouchMove, { passive: false });
     area.addEventListener("touchend", onTouchEnd, { passive: true });
+    area.addEventListener("touchcancel", onTouchCancel, { passive: true });
+    area.addEventListener("wheel", onWheel, { passive: false });
+    area.addEventListener("gesturestart", onGestureStart);
+    // The slider's drag ends where it's let go, which may be off the slider. A key step on the focused slider, without a
+    // press, is a change of its own.
+    document.addEventListener("pointerup", releaseSlider);
+    document.addEventListener("pointercancel", releaseSlider);
     return () => {
       area.removeEventListener("touchstart", onTouchStart);
+      area.removeEventListener("touchmove", onTouchMove);
       area.removeEventListener("touchend", onTouchEnd);
+      area.removeEventListener("touchcancel", onTouchCancel);
+      area.removeEventListener("wheel", onWheel);
+      area.removeEventListener("gesturestart", onGestureStart);
+      document.removeEventListener("pointerup", releaseSlider);
+      document.removeEventListener("pointercancel", releaseSlider);
       audio.detach();
       ambient.detach();
       player.detach();
@@ -142,6 +186,7 @@ export function Player() {
       <img id="photo" alt="Photo" style="display:none" ref={photo} onLoad={player.photoLoaded} onError={player.photoFailed} />
       <div id="empty-state" class="empty-state" ref={emptyState}>Tap to play, or open the panel to choose a preset or filter.</div>
       <PlayerIndicator />
+      <VolumeIndicator />
       <div id="overlay-controls" class="overlay-controls" onTouchStart={stopPropagation} onTouchMove={stopPropagation} onTouchEnd={stopPropagation} onClick={stopPropagation}>
         <NotifyButton />
         <PanelButton />
@@ -163,7 +208,18 @@ export function Player() {
           <span id="time-display">{player.timeText}</span>
           <button id="mute-btn" class={lit(OVERLAY_TOGGLE, muted)} aria-label="Mute" title="Mute" onClick={press(audio.toggleMute)}><span class="material-symbol-icon">{muted ? "volume_off" : "volume_up"}</span></button>
           <span id="volume-wrap" class="volume" hidden={!audio.volumeShown.value}>
-            <input type="range" id="volume-slider" min="0" max="100" step="1" value={String(audio.volume.value)} aria-label="Volume" title="Volume" onInput={(event) => audio.setVolume(Number(event.currentTarget.value))} />
+            <input
+              type="range"
+              id="volume-slider"
+              min="0"
+              max="100"
+              step="1"
+              value={String(audio.shownVolume.value)}
+              aria-label="Volume"
+              title="Volume"
+              onPointerDown={pressSlider}
+              onInput={(event) => audio.setVolume(Number(event.currentTarget.value))}
+            />
           </span>
         </div>
       </div>
@@ -199,6 +255,21 @@ function PlayerIndicator() {
           ) : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The volume indicator: the volume as a percentage, with Mute's icon, centered over the player while the scroll wheel
+ * or a two-finger drag changes it, on a photo too. It sits outside the controls, so it shows while they're hidden, and
+ * is hidden from screen readers, since the slider carries the value.
+ */
+function VolumeIndicator() {
+  const { audio } = useApp();
+  return (
+    <div id="volume-indicator" class={audio.indicatorShown.value ? "volume-indicator is-shown" : "volume-indicator"} aria-hidden="true">
+      <span class="material-symbol-icon">{audio.muted.value ? "volume_off" : "volume_up"}</span>
+      <span id="volume-indicator-text">{`${audio.shownVolume.value}%`}</span>
     </div>
   );
 }

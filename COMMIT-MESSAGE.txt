@@ -19,13 +19,12 @@ Instructions:
 
 Commit Message:
 
-M12i7: Add the WebUI's volume slider and Enhanced audio's gain stage, with Mute in the seek row
+M12i7: Add the WebUI's scroll wheel and two-finger drag volume, with the muted-volume rules for the slider and every gesture
 
-- WebUI: a volume slider, 0 to 100% and 100% by default, ends the seek row after Mute, which moves there from the transport row. Both work before anything plays and on a photo, and a volume change sends no notification.
-- WebUI: Enhanced audio, on by default in the Settings tab's new Audio section, plays the sound through a Web Audio gain stage started on the first tap's pointerup or a key. The gain only glides, play fades in, and pause fades out before pausing, so nothing clicks or pops.
-- WebUI: on iOS the slider shows from the start and hides only while Enhanced audio is off where the element's volume is read-only, and a volume set before the gain stage runs is the one it starts at.
-- WebUI: turning Enhanced audio off closes the gain stage and renders a new video element, which takes over the video at its position, playing or paused as it was. A stage that can't start shows a notice whose Turn off Enhanced audio turns it off for the device.
-- WebUI: the volume, Mute, and Enhanced audio are kept on each device, and a notice can offer one action beside its OK.
-- Mockup: the volume starts at 100%, the iOS slider shows from the start, and the index notes say the player's controls don't appear, hide, or move on their own.
-- MILESTONES.md: the Volume slice is complete, with the user's spot check in the iPad's installed app, where a media element's volume turned out settable, and in the Pixel's, which plays through the gain stage without audio issues. Its Scope, Acceptance, and the iPad release check say the iOS slider shows from the start, and Volume gestures takes the same rule. In WebUI Loudness Normalization, Enhanced audio's description and the failure notice name no device.
-- Docs: CONTEXT.md, the domain inventory, the dev setup's note on sound under the Vite dev server, and the changelog.
+- WebUI: the scroll wheel over the player changes the volume a step per notch, a trackpad's small deltas adding up, and a two-finger drag a step per 30 px. Each shows the controls, works on a photo and on iOS from the start, and never scrolls or zooms the page.
+- WebUI: a volume indicator, centered over the player outside the controls, shows the volume for the wheel and a two-finger drag, not the slider, and fades out 800 ms after the last change.
+- WebUI: Mute moves the slider to 0 and remembers the volume. Raising the volume while muted unmutes from 0, lowering it while muted changes nothing, and lowering it to 0 mutes, unmuting then restoring the volume from before that drag or notch.
+- WebUI: the Settings tab's Audio section offers a volume step of 1, 2, 5, or 10%, 5 by default, kept on each device. A two-finger touch is never taken for a swipe or a tap.
+- Mockup: the slider, the wheel, a two-finger drag, and [ and ] follow the muted-volume rules, with checks for each, reviewed by the user on devices.
+- MILESTONES.md: WebUI Volume and Enhanced Audio is complete, with the Volume gestures slice taking the muted-volume rules and the user's spot check in the iPad's installed app, and moves to MILESTONES-COMPLETED.md. WebUI Keyboard Shortcuts takes the same rules for [ and ] and the volume step hint's later wording, and WebUI Player Controls counts the wheel and a two-finger drag as activity.
+- Testing checklist: the milestone's two Enhanced audio and iPad volume checks join the release's manual checks.

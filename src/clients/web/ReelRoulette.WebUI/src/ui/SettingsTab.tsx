@@ -4,6 +4,7 @@ import { APP_VERSION } from "../config/appVersion";
 import { POPUP_POSITIONS, type NotificationKind, type PopupPosition } from "../notifications/notifications";
 import type { PanelSide } from "../panel/panelHost";
 import { AMBIENT_RANGES, AMBIENT_SETTINGS, formatAmbientSetting, type AmbientSetting } from "../playback/ambient";
+import { VOLUME_STEPS, type VolumeStep } from "../playback/audioStage";
 import type { AutoPauseMode } from "../playback/autoPause";
 import { advanceAfterProblem } from "../settings/settings";
 import type { ThemeChoice } from "../settings/theme";
@@ -22,6 +23,8 @@ const AUTOPLAY_MODE_CHOICES: readonly Choice<AutoplayMode>[] = [
   { value: "normal", title: "Normal", description: "Photos advance after the timer; videos play to the end." },
   { value: "timer", title: "Timer", description: "Every item advances after the timer. Pausing a video holds it." }
 ];
+
+const VOLUME_STEP_CHOICES: readonly Choice<`${VolumeStep}`>[] = VOLUME_STEPS.map((step) => ({ value: `${step}`, title: `${step}%` }));
 
 const THEME_OPTIONS: readonly Choice<ThemeChoice>[] = [
   { value: "system", title: "System" },
@@ -221,17 +224,27 @@ function PlaybackSettings() {
   );
 }
 
-/** Enhanced audio, which the audio stage keeps and applies at once. */
+/** The volume step and Enhanced audio, which the audio stage keeps and applies at once. */
 function AudioSettings() {
   const { audio } = useApp();
   return (
-    <Checkbox
-      id="settings-enhanced-audio"
-      label="Enhanced audio"
-      hint="Processes audio in the app, so in-app volume works on iPhone and iPad."
-      checked={audio.enhanced.value}
-      onChange={audio.setEnhanced}
-    />
+    <>
+      <Choices
+        id="settings-volume-step"
+        label="Volume step"
+        choices={VOLUME_STEP_CHOICES}
+        value={`${audio.volumeStep.value}`}
+        onChange={(step) => audio.setVolumeStep(Number(step) as VolumeStep)}
+        hint="For the scroll wheel and a two-finger drag over the player."
+      />
+      <Checkbox
+        id="settings-enhanced-audio"
+        label="Enhanced audio"
+        hint="Processes audio in the app, so in-app volume works on iPhone and iPad."
+        checked={audio.enhanced.value}
+        onChange={audio.setEnhanced}
+      />
+    </>
   );
 }
 
