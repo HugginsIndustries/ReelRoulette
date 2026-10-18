@@ -14,7 +14,7 @@ The WebUI is the only client on every device from v0.15.0, which removes the des
 - **v0.16.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access, and give each account its own favorites, ratings, history, tags, presets, and profiles. P28b, P28c, P28d, P28e, P28f, P28m, P28g, P28h, P28j, P28n, P28k, P28l.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
 - **v0.18.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for the WebUI. P2a, P2b, P2c, P2d, P2f, P2g, P2h.
-- **Unscheduled backlog**: P1, P4, P5, P6, P9a, P9b, P10, P33, P35, P36, P50, P51.
+- **Unscheduled backlog**: P1, P4, P5, P6, P9a, P9b, P10, P33, P35, P36, P50, P51, P52, P53a, P53b, P54.
 
 ## Document Purpose
 
@@ -305,7 +305,7 @@ Last milestone completed: M12i6
 - Ratings on library tiles, which is WebUI Ratings on Tiles.
 - Rating several items at once, which is WebUI Multi-Select and Bulk Actions.
 - Ratings in duplicate review, which is Admin Refresh, Backup, and Duplicate Review.
-- Reading ratings from media files and writing them back, which is File Metadata Sync and Extended Metadata.
+- Reading ratings from media files and writing them back, which is File Metadata Sync.
 - Ratings kept per account, which is Per-Account Library Data.
 
 ### M12i8 - WebUI Volume and Enhanced Audio
@@ -871,7 +871,7 @@ Last milestone completed: M12i6
 ### M12k1 - Browser-Playable Filter
 
 - **Status**: ⏳ Planned
-- **Goal**: Browse and random play can be limited to files a browser can play, and a file the browser cannot play, or one the server can't read, says so instead of "not found".
+- **Goal**: Browse and random play can be limited to files a browser can play, a file the browser cannot play, or one the server can't read, says so instead of "not found", and the Filter and Tags tabs follow tag and source changes without a Refresh.
 - **Depends on**: WebUI Preact Migration, Favorite and Blacklist Filter Modes, whose FilterState schema it adds its field to, and WebUI Notifications, whose Skipped files popups announce the skips, and Per-Preset Preset Writes, whose per-preset writes save its field.
 - **Design**: `docs/mockups/reelroulette/`.
 
@@ -882,14 +882,43 @@ Last milestone completed: M12i6
   - Any other video container, including avi and wmv, is not browser-playable.
   - Photos are always playable.
 - A stored preset without the browser-playable field reads it as off.
+- The Filter tab's General, Tags, and Presets sub-tabs take the panel tabs' look: text, orange with the orange underline when active, and a thin line under the strip.
+  - They keep the red problem badge, the 44 px touch height, and their keyboard behavior.
+  - The mockup's admin navigation takes the same look.
+- The Filter tab's Refresh goes.
+- The Tags tab's Refresh is replaced by a Discard changes icon button, with the undo icon, beside Save, as the Filter tab has beside Apply.
 
 #### Slices
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
+| Mockup | ⏳ Planned | The Filter tab's sub-tabs and the admin navigation in the panel tabs' look, the Filter tab without Refresh, and the Tags tab's Discard changes in place of its Refresh, approved by the user. |
 | Contract | ⏳ Planned | A browser-playable field in the FilterState schema, applied by the server in the list query, its counts, and random selection, and a `503` with its own play error code from the media and play routes for a file the server can't read. |
 | WebUI | ⏳ Planned | The "Only files this browser can play" option in the Filter tab, saved in presets and compared in preset matching. |
+| Filter and Tags tabs | ⏳ Planned | The Filter tab's sub-tabs in the panel tabs' look, its Refresh gone, the Tags tab's Discard changes in place of its Refresh, and both tabs reloading on tag and source events. |
 | Error message | ⏳ Planned | A format-not-supported message for a file the browser can't play, "not found" only for a missing file, a couldn't-load message for any other answer, such as the server's `503` for a file it can't read, and skipping missing and unplayable files during autoplay, Next, Previous, and random picks. |
+
+#### Mockup slice
+
+**Scope**
+
+- In `docs/mockups/reelroulette/`, the Filter tab's sub-tabs take the panel tabs' look, as the Decisions describe.
+- The admin page's navigation takes the same look.
+- The Filter tab's Refresh goes.
+- The Tags tab's Refresh is replaced by the Discard changes icon button beside Save.
+- The user approves the round before the Filter and Tags tabs slice starts.
+
+**Traps**
+
+- The panel tabs are 44 px icon buttons, orange when active with a 3 px orange underline, in a strip with a 1 px line under it (`.panel-tabs` and `.panel-tab` in `build/layout.src.html`).
+- The Filter tab's sub-tabs are bordered buttons in a wrapping strip, the active one with an orange border (`.filter-tabstrip` and `.filter-tab` in `build/common.css`).
+- On a short screen, such as a phone on its side, the sub-tabs are 38 px tall in the mockup and the app (`body.short-screen .filter-tab` in `build/layout.src.html` and `src/styles.css`).
+- The admin navigation is a row of pill-shaped jump links to the admin cards, with no active link (`.admin-nav` in `build/admin.src.html`).
+- The mockup's Refresh buttons are `#filter-refresh` and `#tags-refresh` (`build/layout.src.html`).
+
+**Acceptance**
+
+- The mockup shows the sub-tabs and the admin navigation in the panel tabs' look, the Filter tab without Refresh, and the Tags tab's Discard changes beside Save, as the user approved them, and `node docs/mockups/reelroulette/build/check.mjs` passes, with checks that the Filter tab has no Refresh and that the Tags tab's Discard changes puts back its changes.
 
 #### Contract slice
 
@@ -941,6 +970,37 @@ Last milestone completed: M12i6
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
 
+#### Filter and Tags tabs slice
+
+**Scope**
+
+- The Filter tab's sub-tabs take the approved look in `src/styles.css`, keeping the red problem badge, the 44 px touch height, and their keyboard behavior.
+- The Filter tab's Refresh goes, with its "Filter data refreshed." popup.
+- The Tags tab's Refresh is replaced by the Discard changes icon button beside Save, which works as the Filter tab's does.
+- The Filter tab reloads as opening it does on `tagCatalogChanged` and `sourceStateChanged`, keeping its unsaved changes.
+- The Tags tab reloads on `tagCatalogChanged` only while it has no unsaved changes.
+
+**Traps**
+
+- Opening the Filter tab starts it over from the applied filter and the saved presets when it has no unsaved changes, then loads the sources, tags, and presets, keeping the working copy (`open` and `start` in `src/filter/filterDialog.ts`).
+- The Filter tab's Refresh does nothing while Apply's preset writes are being sent, since its load would replace the saved list the writes land in (`refresh` in `src/filter/filterDialog.ts`).
+- The Filter tab's Discard changes is disabled without unsaved changes and puts back the applied filter and the saved presets without asking (`#filter-discard-btn` in `src/ui/FilterDialog.tsx`).
+- The Tags tab's Refresh asks "Discard changes?" while the tab holds changes, then clears them, closes its dialogs, resets the category order, and follows the playing item (`refresh` in `src/tags/tagEditor.ts`).
+- Both tabs load again when they open, so a tab that is hidden during an event catches up when it next shows.
+- The WebUI's event stream has no handler for `sourceStateChanged`, and `src/events/sseClient.ts` listens only to the event types given handlers in `createEventStream` (`src/state/serverConnection.ts`).
+- Only enabling or disabling a source publishes `sourceStateChanged`, and setting the flag a source already has publishes nothing.
+- On `tagCatalogChanged`, the Tags tab only clears a kept Auto Tag scan that names a tag the catalog no longer has (`src/tags/tagEditor.ts`).
+- The Tags tab's `reload` does nothing while one of its saves is on its way and loads once the save lands, and a tag rename or delete publishes `tagCatalogChanged`, so the tab's own saves bring the event too.
+
+**Acceptance**
+
+- The Filter tab has no Refresh, and the Tags tab's Discard changes puts back its changes and is disabled without them, in Filter and Tags screen tests.
+- The sub-tabs keep the problem badge and their keyboard behavior, in Filter screen tests.
+- The Filter tab reloads on `tagCatalogChanged` and on `sourceStateChanged` as opening it does, keeping its unsaved changes, in WebUI tests of the Filter tab on each event with and without unsaved changes.
+- The Tags tab reloads on `tagCatalogChanged` while it has no unsaved changes, and keeps its changes without reloading while it has some, in WebUI tests of the Tags tab on the event.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check of the sub-tabs on the user's phone.
+
 #### Error message slice
 
 **Scope**
@@ -986,6 +1046,7 @@ Last milestone completed: M12i6
 
 - Codec-level playability detection, which waits for the probe in Server Playback Decision Engine.
 - Playing formats a browser can't, which is WebUI Playback Cutover and Format Resilience.
+- The Filter tab following sources added, renamed, or removed in the admin section, which is Admin Source Management.
 
 ### M12k2 - Rating Filter and Sort
 
@@ -1472,6 +1533,7 @@ Last milestone completed: M12i6
 - Switching while the Filter or Tags tab holds unsaved changes asks "Discard changes?" first.
 - U opens the picker, and the arrow keys and Enter choose a profile.
 - The picker hides with the header, in fullscreen and on a phone on its side, where the user turns the phone upright to switch.
+- Add Profile and Edit Profile's tabs take the tab style that Browser-Playable Filter gives the Filter tab's sub-tabs: text, orange with the orange underline when active, and a thin line under the strip.
 
 #### Slices
 
@@ -1833,6 +1895,7 @@ Last milestone completed: M12i6
 - The admin section ignores profiles: its header shows no profile button, and its requests name no profile, so it covers the whole library.
 - The view keeps the Operator page's responsive layout, restyled to match the rest of the WebUI.
 - Its layout: a bar with a back arrow ("Back to the player"), the title Admin, and at its right end the notifications bell; a row of jump links to its sections; and cards, each titled with its icon, in this order: Server (`dns`), Web access (`lan`), Control (`key`), Library refresh (`sync`), Library transfer (`swap_vert`), Backups (`storage`), Sources (`folder`), Duplicates (`content_paste`), Testing suite (`bug_report`), Connected clients (`group`), Log Viewer (`article`), and API events (`description`).
+- The row of jump links takes the tab style that Browser-Playable Filter gives the Filter tab's sub-tabs and the mockup's admin navigation.
 - Sources, Duplicates, the Log Viewer, and API events take the full width, and on a wide screen the others take half.
 - The cards for refresh, transfer, backups, sources, duplicates, and the Log Viewer arrive with the milestones that build them, in their places.
 - The admin view covers the player, so opening it pauses playback under the Always and Responsive Auto-Pause modes, and leaving it resumes playback only if Auto-Pause paused it, as WebUI Auto-Pause and Photo Scrub Bar describes.
@@ -2258,7 +2321,7 @@ Last milestone completed: M12i6
 
 - **Status**: ⏳ Planned
 - **Goal**: Manage sources from the WebUI admin section, with server routes for what no client can do today, and every open WebUI follows source changes without a reload.
-- **Depends on**: WebUI Admin Section, WebUI Multi-Select and Bulk Actions, whose item removal route it uses, and Library Profiles, whose profiles' source lists a removed source leaves.
+- **Depends on**: WebUI Admin Section, Browser-Playable Filter, whose Filter tab reload on `sourceStateChanged` the new source events reuse, and WebUI Multi-Select and Bulk Actions, whose item removal route it uses, and Library Profiles, whose profiles' source lists a removed source leaves.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -2337,14 +2400,15 @@ Last milestone completed: M12i6
 
 **Scope**
 
-- On a source event, reload the loaded library window, keeping the scroll position as the desktop did, and refresh the Filter tab's source list and the profile dialog's Sources tab.
+- On a source event, reload the loaded library window, keeping the scroll position as the desktop did, and refresh the profile dialog's Sources tab.
+- The Filter tab reloads on the new source events as it does on `sourceStateChanged`.
 - Overlapping resyncs: keep one in flight and coalesce events that arrive meanwhile, since this milestone adds source events that reload every open WebUI.
 
 **Traps**
 
 - The server already applies source state: the list query, random selection, and item play only use enabled sources.
 - The WebUI keeps no source authority of its own; its source checkboxes are a filter choice.
-- The WebUI ignores `sourceStateChanged` and reads `GET /api/sources` only when the filter dialog loads its data.
+- Browser-Playable Filter has the Filter tab reload on `sourceStateChanged` as opening it does, keeping its unsaved changes, and the rest of the WebUI ignores the event.
 - `src/events/sseClient.ts` calls `void handleResyncRequired(...)` for every `resyncRequired` event, so several authoritative reloads can run at once and finish out of order.
 
 **Acceptance**
@@ -2800,35 +2864,33 @@ Last milestone completed: M12i6
 
 - Manual: In the multi-client playback matrix on Linux and on Windows, playback stays stable when transcode capacity is limited.
 
-### P4 - File Metadata Sync and Extended Metadata
+### P4 - File Metadata Sync
 
 - **Status**: ⏳ Planned
 - **Goal**: Import tags and metadata from media files and write them back, through the server.
-- **Depends on**: Item Ratings, whose rating it reads from and writes to media files.
+- **Depends on**: Item Ratings, whose rating it reads from and writes to media files, and Extended Metadata, whose fields it reads from and writes to media files, and it may be dropped rather than built.
 
 #### Scope
 
-- A catalog schema change for the extended metadata columns, to the next schema version, with its own upgrade step from the one before in the catalog's upgrade chain, which WebUI Stats Panel adds.
 - Metadata sync in core and server services:
   - import tags from supported formats during import and refresh,
   - export tags and metadata to files on demand, with an optional auto-export policy,
   - an explicit, configurable merge policy.
 - Metadata sync settings through server settings: auto-import, auto-export, merge strategy, and write confirmation.
-- Extended metadata: genre, year, artist or creator, title, album or series, and comment.
+- Import and export cover Extended Metadata's fields: title, year, genre, creator or artist, album or series, and comment.
 - The rating is Item Ratings' rating, not a new column:
   - Import fills an unrated item's rating from the file's, and the merge policy decides whether a file's rating replaces one already set.
   - A file's rating of 0, XMP's unrated, or −1, XMP's rejected, reads as no rating, and a rejected file isn't blacklisted.
   - Export writes half stars to formats that hold fractions and rounds them for formats that hold whole stars, in a direction this milestone decides.
   - Clearing a rating removes it from the file on export.
-- Metadata shows in library browse and filters, with batch metadata edit through the API.
 - Tags it imports have no profile choice, so they count as "All profiles", as Profile Tag and Preset Visibility sets out.
 - Decides whose rating and tags it reads from and writes to a file once each account has its own, as Per-Account Library Data sets out.
 - Unsupported formats, read-only or locked files, and network paths are handled, with result summaries and structured logs.
 
 #### Traps
 
-- The catalog is at schema version 5 today. Item Ratings moves it to 6, Rating Filter and Sort to 7, Library Profiles to 8, and Profile Tag and Preset Visibility to 9.
 - No metadata library is referenced today.
+- Extended Metadata stores a title only when it is edited, and an item without one shows its file's name.
 - Item Ratings stores a rating as 1 to 10 half stars, with no value for unrated.
 - XMP's `xmp:Rating` is a real number from −1 to 5, where 0 is unrated and −1 rejected; Matroska's RATING tag allows decimals from 0 to 5; and Windows' Rating property is a 1–99 percentage that it shows as whole stars (inferred).
 
@@ -2838,9 +2900,7 @@ Last milestone completed: M12i6
 - The supported formats and field mappings are tested, in format mapping tests, and documented, checked by reading the docs.
 - The merge policy gives the same result for the same inputs, in merge-policy tests.
 - Ratings import and export by the rules above for each supported format, in format mapping tests.
-- Extended metadata is stored by the server and shown and edited in the WebUI.
 - Batch operations follow the conflict and error policy and report success and failure counts with reasons.
-- A catalog at the schema version before opens upgraded and imports upgraded through the new upgrade step, in the upgrade chain's catalog upgrade tests.
 
 ### P5 - Customizable Keyboard Shortcuts
 
@@ -3915,3 +3975,225 @@ Last milestone completed: M12i6
 #### Release checks
 
 - Manual: With Enhanced audio on, a quiet video played above 100% is louder without distortion, in Chrome, Firefox, and Safari on a desktop and on Android and iOS.
+
+### P52 - Long-Press Tooltips on Touch Screens
+
+- **Status**: ⏳ Planned
+- **Goal**: On a touch screen, long-pressing an element with a tooltip shows the tooltip as a tip beside the element, so icon names and disabled buttons' reasons can be read without a mouse.
+- **Depends on**: Animations, which goes ahead of it, and it is low priority.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- On a touch screen, long-pressing any element with a tooltip shows it as a tip beside the element, icon names and disabled buttons' reasons alike.
+- The tip shows while the press is held and for about 1.5 seconds after release.
+- A long press never also presses the button.
+- Elements that already use holding or a long press keep their behavior: dragging presets and tag categories, and the player's taps.
+- Desktop hover is unchanged.
+- The blocked Apply keeps its press-to-show notice.
+- The mockup comes first, and the user reviews it on the iPad and an Android phone before the app is built.
+
+#### Traps
+
+- Tooltips are `title` attributes, which a phone or tablet doesn't show, so the blocked Apply shows its reason in a notice when pressed instead (`blockedReason` on `HeldButton` in `src/ui/FieldValidation.tsx`).
+- `HeldButton` gives a disabled or held action's reason as its `title` and accessible description.
+- A disabled button gets no pointer or click events in some browsers, so its long press has to be caught around it (inferred).
+- Safari on iOS and Chrome on Android show their own callout, menu, or text selection on a long press (inferred).
+- Reordering presets and tag categories starts a drag on pointer down on a row's handle (`src/ui/Reorder.tsx`).
+- The player's taps and swipes are handled in `src/playback/mediaGestures.ts`, which ignores the click the browser sends after a swipe or a handled tap.
+- WebUI Multi-Select and Bulk Actions starts a selection with a long press on a tile.
+
+#### Acceptance
+
+- On a touch screen, a long press on an element with a tooltip shows its tip beside it while held and for about 1.5 seconds after release, without pressing it, in WebUI tests of long-press tips with touch pointers.
+- A long press on a disabled button shows its reason, in WebUI tests of long-press tips on disabled buttons.
+- Dragging presets and tag categories, the player's taps, and the blocked Apply's notice work as before, in their existing tests and WebUI tests of a long press on each.
+- A mouse shows no tip on a long press, in WebUI tests with a mouse pointer.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check on the iPad and an Android phone.
+
+#### Release checks
+
+- Manual: On the iPad and an Android phone, long-pressing an icon button and a disabled button shows its tip without pressing it.
+
+### P53a - Animations
+
+- **Status**: ⏳ Planned
+- **Goal**: The side panel, dialogs, the phone's full-screen overlays, and the bell's list open and close with short animations in one style across devices.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- Animations for the side panel opening and closing, dialogs, the phone's full-screen overlays, and the bell's list.
+- One style across devices, each animation about 150 to 250 ms.
+- The mockup tries both a smooth player resize and a snap beside the panel, for the user to choose.
+- The system's reduced-motion setting turns them off.
+- Closing has a timeout, so nothing stays open in a background tab.
+- The mockup comes first, and the user approves it before the app is built.
+
+#### Traps
+
+- The side panel, dialogs, the phone's full-screen overlays, and the bell's list have no transition or animation in `src/styles.css`, so they open and close at once.
+- Popups fade and slide in over 160 ms and field marks fade over 250 ms, and `prefers-reduced-motion` turns both off (`src/styles.css`).
+- `useFadeOut` keeps a fading element rendered for `FADE_MS`, 250 ms, on a timer rather than waiting for the animation to end, and removes it at once with reduced motion (`src/ui/FieldValidation.tsx`).
+- Browsers hold back animations, and the events that end them, in a background tab, so a close that waits for one can leave the element open (inferred).
+- A smooth player resize changes the video's size on every frame, which may stutter on a phone or tablet (inferred).
+
+#### Acceptance
+
+- The side panel, dialogs, the phone's full-screen overlays, and the bell's list open and close with the approved animations, and at once with reduced motion, in WebUI tests of each with and without reduced motion.
+- A close finishes at its timeout when its animation never ends, in WebUI tests of a close whose animation doesn't end.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check on the user's phone and iPad.
+
+#### Not included
+
+- Animations for other surfaces, such as collapsing sections and tab switches, which is Animation Settings and More Surfaces.
+- Settings that turn animations on or off or adjust them, which is Animation Settings and More Surfaces.
+
+### P53b - Animation Settings and More Surfaces
+
+- **Status**: ⏳ Planned
+- **Goal**: Most other surfaces animate in the style Animations sets, and a Settings section turns animations on or off and adjusts them on each device.
+- **Depends on**: Animations, whose style these animations follow.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- Animations for most other surfaces, such as collapsing sections and tab switches.
+- A Settings section, saved per device, turns animations on or off and adjusts them, possibly with a style per device.
+- Decides whether the system's reduce-motion setting overrides the user's choice.
+
+#### Traps
+
+- The WebUI keeps per-device settings in `localStorage` through `createDeviceStore` (`src/state/deviceStore.ts`).
+- A setting's More chevron already turns over 150 ms, and reduced motion turns that off (`.setting-more-chevron` in `src/styles.css`).
+
+#### Acceptance
+
+- The surfaces it covers animate in the style Animations sets, and with animations off they change at once, in WebUI tests of each.
+- The Settings section's choices are kept on the device across a page refresh, in Settings tab tests.
+- The system's reduce-motion setting and the user's choice combine as this milestone decides, in WebUI tests of each combination.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+### P54 - Extended Metadata
+
+- **Status**: ⏳ Planned
+- **Goal**: Each item can have a title, year, genre, creator or artist, album or series, and comment, stored in the catalog and edited in the app, for one item or several at once.
+- **Depends on**: Profile Tag and Preset Visibility, whose catalog schema step, the last of v0.15.0's, comes before this one's, and WebUI Multi-Select and Bulk Actions, whose selection edits several items at once, and it starts soon after v0.15.0 ships.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- The metadata is stored in the catalog and edited in the app, and editing it never touches media files.
+- A title defaults to the file's name: only an edited title is stored, and clearing it goes back to the name.
+- Sort by name uses the title, through a stored sort key of the title, or else the file's name, with its index.
+- Search matches the title too.
+- People stay tags, with no field of their own.
+- Year filters by a range and sorts.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ⏳ Planned | Editing the metadata of one item or several through multi-select, and where titles show, approved by the user. |
+| Server | ⏳ Planned | The metadata in a new catalog schema step, the title-or-name sort key and its index, the title in search, the year range filter, the year sort with its indexes, and writes for one item or several. |
+| Contract | ⏳ Planned | The metadata on item reads, its writes and their events, the year range in the FilterState schema, and the year sort, in OpenAPI, the generated WebUI types, and `docs/api.md`. |
+| WebUI | ⏳ Planned | Editing the metadata of one item or a selection, titles where the mockup shows them, the year range in the Filter tab, and the year sort. |
+
+#### Mockup slice
+
+**Scope**
+
+- Editing the metadata of one item, and of several at once through multi-select, in `docs/mockups/reelroulette/`.
+- Where titles show in place of file names.
+- The user approves the design before the app is built.
+
+**Traps**
+
+- WebUI Multi-Select and Bulk Actions acts on a selection through its Actions menu, and its Select all selects every item that matches the search and filters, loaded or not.
+
+**Acceptance**
+
+- The mockup shows editing one item and several, and where titles show, as the user approved them, and `node docs/mockups/reelroulette/build/check.mjs` passes, with checks of editing one item and several and of a cleared title going back to the file's name.
+
+#### Server slice
+
+**Scope**
+
+- The metadata columns on `items`, in a catalog schema step after Profile Tag and Preset Visibility's, with its own upgrade step from the one before in the catalog's upgrade chain.
+- Name sort orders by a stored sort key of the title, or else the file's name, with its index.
+- Search matches the title as well as the file's name and relative path.
+- A year range in the FilterState schema, applied in the list query, its counts, and random selection.
+- A stored preset without the year range filters with no year limit.
+- A year sort, with its indexes.
+- Writes set the metadata of one item, or the same fields on several items at once, and publish an event, one for a write to several items, as WebUI Multi-Select and Bulk Actions' bulk rating does.
+
+**Traps**
+
+- The catalog is at schema version 5 today. Item Ratings moves it to 6, Rating Filter and Sort to 7, Library Profiles to 8, and Profile Tag and Preset Visibility to 9.
+- Per-Account Library Data adds a catalog schema step too, so whichever of the two lands second takes the next version (inferred).
+- Name order sorts by the stored `items.file_name_sort_key`, from `LibraryCatalogNameSortKey.Compute`, which orders like OrdinalIgnoreCase, and every other sort's index ties on it (`BuildOrderBy` in `LibraryCatalogListQuery.cs` and `SortIndexesSql` in `LibraryCatalogStore.cs`).
+- The refresh pipeline's `nameSortKeys` stage recomputes every stored key when the catalog's `name_sort_key_version` differs from `LibraryCatalogNameSortKey.Version` (`RefreshPipelineService.cs`).
+- Search matches the folded file name and relative path with `instr` (`AppendSearch` in `LibraryCatalogListQuery.cs`).
+- Every sort has an index, so no sort reads the whole library, and SQLite reads one only when its expression matches the ORDER BY (measured).
+- `BuildOrderBy` sorts the other modes by `COALESCE({column}, 0)` and then the name key, which puts items without a value first ascending and last descending (measured).
+- Item Ratings gives the 2→3 step its own index SQL, and Rating Filter and Sort puts its sort indexes in their own constant, so this step's indexes go in theirs.
+- Library Profiles has the item events carry each item's `sourceId`, so a profile can leave out items in sources it hides.
+
+**Acceptance**
+
+- A catalog at the schema version before opens upgraded and imports upgraded through the new upgrade step, in the upgrade chain's catalog upgrade tests.
+- An item without an edited title sorts by its file's name, one with an edited title sorts by the title, and clearing the title goes back to the name, in server tests of the name sort and of title writes.
+- The name and year sorts read their indexes, in server tests of the sorts and their query plans.
+- Search matches the title, in server tests of search.
+- The year range filters the list query, its counts, and random selection, and a stored preset without it filters with no year limit, in server tests of the year range.
+- Writes to one item and to several store the fields, publish their event, and leave the media files untouched, in server tests of the writes.
+- `dotnet test ReelRoulette.sln` passes.
+
+#### Contract slice
+
+**Scope**
+
+- The metadata on item reads, the writes for one item and several, their events, the year range in the FilterState schema, and the year sort mode, in OpenAPI and the generated WebUI types.
+- `docs/api.md` documents the fields, the writes, and the title-or-name sort.
+
+**Traps**
+
+- `LibraryListSort` rejects an unknown mode with a message that lists the modes (`LibraryOperationsService.cs`).
+
+**Acceptance**
+
+- OpenAPI and the generated WebUI types carry the fields, the writes, their events, the year range, and the year sort, in contract tests.
+- `docs/api.md` documents them, checked by reading it.
+- `npm run verify` passes.
+
+#### WebUI slice
+
+**Scope**
+
+- Editing the metadata of one item, and of several at once through a multi-select selection, as the approved mockup shows.
+- Titles show where the mockup shows them, with the file's name for an item without one.
+- Every open WebUI follows a metadata change from its event.
+- The year range in the Filter tab, saved in presets and compared in preset matching, with its cases in `preset-filter-equality.json`.
+- The year sort in the Library tab.
+
+**Traps**
+
+- Preset equality is locked to `shared/fixtures/preset-filter-equality.json`, which Core's filter comparison and the WebUI's both read, so a case for the year range needs both to compare it.
+- Select all selects every item that matches the search and filters, loaded or not, so an edit to it reaches items no tile shows.
+
+**Acceptance**
+
+- Editing one item and a selection stores the fields, and clearing a title shows the file's name again, in WebUI tests of metadata editing.
+- Titles show in each place the mockup shows them, in screen tests of each place.
+- Another device's metadata change shows without a reload, in WebUI tests of the metadata event.
+- The year range is saved in presets and compared in preset matching, in WebUI tests for the year range and the shared fixture's cases.
+- The year sort orders the Library tab, in Library screen tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check on the user's phone.
+
+#### Not included
+
+- Reading metadata from media files and writing it back, which is File Metadata Sync.

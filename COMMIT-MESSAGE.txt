@@ -19,11 +19,9 @@ Instructions:
 
 Commit Message:
 
-M12i6: Follow preset changes in every open WebUI, follow the applied preset's new filter from another device, and pop up other devices' preset changes
+Docs: Plan long-press tooltips, animations, and extended metadata, and the Filter and Tags tabs' new tab look and live reloads
 
-- On `presetCatalogChanged` and `resyncRequired`, every open WebUI reloads its presets, once for a burst, through `createCoalescedRefresh`, and the preset dropdown and the Filter tab take them, the tab by its merge, shown or not, except while Apply's writes are being sent.
-- When another device changes the filter of the preset a page has applied unchanged, or a resync finds it changed, the applied filter takes the new filter and the library starts over without restarting the Filter tab, whose working filter follows only while it is the applied filter. A deleted applied preset keeps its filter, shown as None*.
-- Another device's added, renamed, updated, and deleted presets pop up as Other devices, told apart by `clientId` and by comparing the reloaded list with each preset as the page held it when its event came, a burst collapsing into one popup, and the applied preset keeping its own for an update it followed or a delete. Logs leave the names out.
-- The Settings tab's Other devices popups name preset changes.
-- The design mockup shows the preset changes from another device, their popups, and the Filter tab's merge, with checks for each, and keeps a preset the list lacks as the app does.
-- M12i6's WebUI events slice, and M12i6, are complete.
+- Add backlog items for long-press tooltips on touch screens (P52, low priority, after animations), animations for the panel, dialogs, overlays, and the bell's list (P53a), animation settings and more animated surfaces (P53b), and extended metadata stored in the catalog and edited in the app (P54, soon after v0.15.0).
+- Narrow P4 to File Metadata Sync, building on Extended Metadata, and rename its references.
+- M12k1 gains a mockup round and a slice that give the Filter tab's sub-tabs and the admin navigation the panel tabs' look, drop the Filter tab's Refresh, replace the Tags tab's Refresh with Discard changes, and reload both tabs on tag and source events.
+- Library Profiles' dialog tabs and the WebUI Admin Section's navigation take the same tab look, and Admin Source Management builds on the Filter tab's reload on `sourceStateChanged`.
