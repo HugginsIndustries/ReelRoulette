@@ -33,7 +33,7 @@ First check that `.version`, without any `-dev.N` suffix, is newer than the late
 
 Run `pwsh ./tools/scripts/reset-checklist.ps1`. It fills Release version from `.version` without the `-dev.N` suffix; check that it names the version being prepared. Fill Tester from `git config user.name`, and Environment with the standard setup below. Show it to the user and ask only whether anything differs this time.
 
-Standard environment: CachyOS desktop (server, WebUI in Firefox); CachyOS laptop on home LAN (WebUI in Firefox via .local); Pixel 8 Pro (WebUI in Firefox over Tailscale); iPad Pro 13-inch M4 (WebUI installed from Safari, over Tailscale); Windows 11 VM (server, Setup.exe install and in-app update from the previous release)
+Standard environment: CachyOS desktop (server, WebUI in Firefox); CachyOS laptop on home LAN (WebUI in Firefox via .local); Pixel 8 Pro (WebUI installed from Chrome, over Tailscale); iPad Pro 13-inch M4 (WebUI installed from Safari, over Tailscale); Windows 11 VM (server, Setup.exe install and in-app update from the previous release)
 
 ## 4. Automated checks
 

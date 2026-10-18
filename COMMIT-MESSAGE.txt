@@ -19,6 +19,9 @@ Instructions:
 
 Commit Message:
 
-Docs: Limit manual checks to the main path on the standard test devices
+M12i7: Record the audio spike's findings on the Web Audio gain stage
 
-- AGENTS.md: manual spot checks, release checks, and what a mockup handover asks the user to look at cover only the main path, on the devices in the pre-release skill's standard environment. Edge cases are left to automated tests, with no manual check for them.
+- MILESTONES.md: the Audio spike slice is complete. A real video through the gain stage had sound, stayed in sync, changed volume without crackles, and came back after the app was in the background in Firefox on Linux and Android and on the iPad, in its installed app and Safari. Firefox on Android added random pops that direct playback doesn't, with a larger buffer too, while Chrome on Android didn't.
+- MILESTONES.md: the Volume slice's Traps take the measured facts: a touch `pointerdown` carries no user activation, iPadOS interrupts and resumes the audio and the video on its own, the iPad's sound starts about 0.37 s after `playing`, and Firefox on Android's pops.
+- MILESTONES.md: the release checks of WebUI Volume and Enhanced Audio and WebUI Loudness Normalization name the standard test devices.
+- Pre-release skill: the standard environment's Pixel runs the WebUI installed from Chrome, the browser the app is installed with there.

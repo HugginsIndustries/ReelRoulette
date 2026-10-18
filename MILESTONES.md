@@ -140,7 +140,7 @@ Last milestone completed: M12i6
 
 ### M12i7 - WebUI Volume and Enhanced Audio
 
-- **Status**: ⏳ Planned
+- **Status**: 🚧 In Progress
 - **Goal**: The WebUI has a volume control on every device, by slider, scroll wheel, and two-finger drag, through an Enhanced audio gain stage that also gives iPhone and iPad an in-app volume.
 - **Depends on**: WebUI Settings Panel, whose Audio section holds its settings, and WebUI In-App Dialogs, whose notice reports a gain stage that can't start.
 - **Design**: `docs/mockups/reelroulette/`.
@@ -154,7 +154,7 @@ Last milestone completed: M12i6
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Audio spike | ⏳ Planned | A report on a real video routed through the gain stage in each target browser and device. |
+| Audio spike | ✅ Complete | A report on a real video routed through the gain stage in each target browser and device. |
 | Server | ⏳ Planned | Cross-origin headers on media responses, and `crossorigin` on the player's media elements, so media from another origin in development isn't silent through Web Audio. |
 | Volume | ⏳ Planned | The Enhanced audio gain stage and setting, the volume slider, Mute in the seek row, scroll wheel and two-finger drag volume with a volume indicator, the volume steps, and their per-device settings. |
 
@@ -174,6 +174,20 @@ Last milestone completed: M12i6
 **Acceptance**
 
 - The audio spike's report names each browser and device tried and what it found, and is written before the Volume slice starts.
+
+**Evidence**
+
+- A throwaway page under `artifacts/scratch/` played a generated video, with a beep and a white flash at every whole second over a steady hum, through the gain stage, with the mockup's 15 ms glide and 60 ms fade-out. It loaded each item as the player does: pause, `src = ""`, a 200 ms pick request, the new source, then `play()`. An analyser on the element's signal and the page's event log recorded what happened.
+- Firefox on Linux: every step passed: sound, sync at the start and after a minute, volume and mute without crackles, play and pause without pops, fullscreen, Next and autoplay's next item without a tap, and playing on in the background. Output latency was 55 ms.
+- Firefox on the Pixel: every step passed, with random pops and crackles. Output latency was 15 ms. Firefox paused the video on its own twice, once about 6 s into a background trip and once while showing, and not again over about 6 minutes of the follow-up.
+- Pixel follow-up, same clip, volume, and speaker: played directly, without the gain stage, it had no random pops, though changing its volume or mute crackled. Through the gain stage the random pops came back, at the default latency and with `latencyHint: "playback"`, which left the output latency at 15 ms. With the larger buffer, play, pause, mute, and volume changes crackled too. None of the three sounded good on the Pixel's speaker.
+- Chrome on the Pixel, the browser the app is installed from there, through the gain stage: no random pops, sync passed, and the video's clock didn't drift. Output latency was 24 ms.
+- The iPad's installed app, and Safari on the iPad as an extra run: every step passed, pseudo-fullscreen included. Output latency was 11 ms. Leaving the app paused the video and put the audio context in `interrupted`, and coming back resumed both without a tap. A video paused before leaving stayed paused.
+- On every device the analyser read the clip's own level through the gain stage, so nothing played silent. Over 1 to 5 minutes of playing, the video's clock and the audio clock stayed within their sampling step, so the sound didn't drift from the picture.
+- On a touch screen, `pointerdown` carried no user activation in Firefox on the Pixel or Safari on the iPad, while `pointerup`, `touchend`, and `click` did. The audio context ran 140 to 220 ms after the first tap there, and 39 ms after a mouse `pointerdown` on Linux.
+- The gain stage worked in every browser tried, iOS included, and sounded worse than direct playback only in Firefox on Android.
+- Waived: Chrome on a desktop, Firefox on the iPad, and Safari on a desktop, which were dropped to keep to the standard test environment's browsers.
+- Docs: the Volume slice's Traps take the measured facts, and the release checks of this milestone and of WebUI Loudness Normalization name the standard test devices.
 
 #### Server slice
 
@@ -240,8 +254,13 @@ Last milestone completed: M12i6
 - `check.mjs` runs the pages in happy-dom, which computes styles but lays nothing out, so it works out the scrub bar's width from the seek row's fixed widths and gaps (inferred).
 - The mockup tries the gain stage with a stand-in sound, a soft chord it plays with videos through the same path.
 - In the mockup, stepping the volume crackled and play and pause popped, on every device (measured).
-- An element routed through Web Audio stays routed (inferred).
-- iOS suspends the audio context while the page is in the background, so the next tap resumes it (inferred).
+- An element routed through Web Audio stays routed: the player's `src = ""` and a new source, Next, and autoplay's next item without a tap all play through the gain stage, in Firefox on Linux and Android and on the iPad (measured).
+- On a touch screen, `pointerdown` carries no user activation in Firefox on Android or Safari on the iPad, while `pointerup`, `touchend`, and `click` do (measured). The mockup starts the gain stage on `pointerdown` and `keydown` only.
+- On the iPad, in Safari and the installed app, leaving the app pauses the video and puts the audio context in an `interrupted` state. Coming back returns it to `running` and resumes a video that was playing, without a tap (measured).
+- On the iPad, the video's time starts moving about 0.37 s after its `playing` event, so a fade-in started on `playing` has finished before the sound starts there, and no pop was heard (measured).
+- In Firefox on Android, audio through the gain stage has random pops and crackles that the same video played directly doesn't, at the default latency and with `latencyHint: "playback"`, which left the output latency at 15 ms (measured).
+- Chrome on Android plays through the gain stage without those pops, at 24 ms output latency (measured).
+- Played directly, Firefox on Android crackles when the element's volume or `muted` changes (measured).
 - The player's indicator (`.player-indicator`), at the top center, holds one lasting state at a time, and some states hide with the controls (`follows-controls` in `src/styles.css`), so the volume indicator is an element of its own.
 - The controls hide through the media container's `controls-visible` class, which shows `#overlay-controls`, so an element outside `#overlay-controls` stays shown while they're hidden.
 
@@ -262,8 +281,8 @@ Last milestone completed: M12i6
 
 #### Release checks
 
-- Manual: With Enhanced audio on, videos play with sound in Chrome, Firefox, and Safari on a desktop and on Android and iOS, including with the WebUI behind an HTTPS proxy, and turning it off plays sound directly.
-- Manual: On the iPad, in Safari and Firefox, the volume slider shows after the first tap, and the slider and a two-finger drag change the video's volume relative to the system volume, without crackles, and play and pause don't pop.
+- Manual: With Enhanced audio on, videos play with sound in Firefox on the desktop and in the Pixel's and the iPad's installed apps, and turning it off plays sound directly.
+- Manual: In the iPad's installed app, the volume slider shows after the first tap, and the slider and a two-finger drag change the video's volume relative to the system volume, without crackles, and play and pause don't pop.
 
 #### Not included
 
@@ -439,9 +458,9 @@ Last milestone completed: M12i6
 
 #### Release checks
 
-- Manual: With loudness normalization on, a loud and a quiet video play at similar loudness in Chrome, Firefox, and Safari on a desktop and on Android and iOS.
-- Manual: A quiet video with loud moments, boosted with Allow limiting on, plays without distortion in Chrome, Firefox, and Safari on a desktop and on Android and iOS.
-- Manual: With Night mode on, quiet and loud moments within a video come closer without audible pumping, in Chrome, Firefox, and Safari on a desktop and on Android and iOS.
+- Manual: With loudness normalization on, a loud and a quiet video play at similar loudness in Firefox on the desktop and in the Pixel's and the iPad's installed apps.
+- Manual: A quiet video with loud moments, boosted with Allow limiting on, plays without distortion in Firefox on the desktop and in the Pixel's and the iPad's installed apps.
+- Manual: With Night mode on, quiet and loud moments within a video come closer without audible pumping, in Firefox on the desktop and in the Pixel's and the iPad's installed apps.
 
 #### Not included
 
