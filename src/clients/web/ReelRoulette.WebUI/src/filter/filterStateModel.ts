@@ -74,8 +74,9 @@ export function filterStateForHeaderPresetSelection(
 export const HEADER_PRESET_NONE_LABEL = "None";
 export const HEADER_PRESET_STARRED_VALUE = "\u0000starred";
 
+/** The preset a filter is named for, by id, or null for None, and how the dropdown and the heading name it. */
 export interface PresetAnchor {
-  baseName: string | null;
+  baseId: string | null;
   starred: boolean;
   label: string;
 }
@@ -87,29 +88,36 @@ export interface PresetListEntry {
 
 export type HeaderPresetPick = "keep" | "default" | "named";
 
-function presetNamesEqual(left: string, right: string): boolean {
-  return left.toLowerCase() === right.toLowerCase();
+/** The saved preset with this id. */
+export function findPresetById<T extends { id: string }>(presets: readonly T[], id: string): T | undefined {
+  return presets.find((preset) => preset.id === id);
 }
 
-/** The saved preset with this name, matched as the preset dropdown matches names, ignoring case. */
-export function findPresetByName<T extends { id: string; name: string }>(presets: readonly T[], name: string): T | undefined {
-  return presets.find((preset) => presetNamesEqual(String(preset.name || preset.id || ""), name));
+/** A preset's name as the dropdown and the heading show it: its name, or its id while it has none. */
+function presetDisplayName(preset: { id: string; name?: string }): string {
+  return String(preset.name || preset.id || "").trim();
 }
 
-/** Whether `filter` is the named saved preset's own filter, unchanged, as the preset dropdown shows it without a star. */
+/** Whether `filter` is the saved preset's own filter, unchanged, as the preset dropdown shows it without a star. */
 export function isPresetOwnFilter(
   filter: FilterState,
   presets: readonly { id: string; name: string; filterState?: ApiFilterState | null }[],
-  name: string | null
+  id: string | null
 ): boolean {
-  const preset = name === null ? undefined : findPresetByName(presets, name);
+  const preset = id === null ? undefined : findPresetById(presets, id);
   return !!preset && filterStatesEqualForPresetMatch(filterStateForHeaderPresetSelection(preset), filter);
 }
 
-function describePresetAnchor(baseName: string | null, starred: boolean): PresetAnchor {
-  const shown = baseName ?? HEADER_PRESET_NONE_LABEL;
+/** The anchor on the preset with `baseId`, named from `presets`, or None while the list doesn't have it. */
+function describePresetAnchor(
+  baseId: string | null,
+  presets: readonly { id: string; name: string }[],
+  starred: boolean
+): PresetAnchor {
+  const preset = baseId === null ? undefined : findPresetById(presets, baseId);
+  const shown = preset ? presetDisplayName(preset) : HEADER_PRESET_NONE_LABEL;
   return {
-    baseName,
+    baseId,
     starred,
     label: starred ? `${shown}*` : shown
   };
@@ -117,43 +125,39 @@ function describePresetAnchor(baseName: string | null, starred: boolean): Preset
 
 /**
  * None for the default filter, which no preset may hold; otherwise the first preset whose filter matches, or else the
- * previous preset, or None, with a star. A server match is not consulted here.
+ * previous preset, starred. The previous preset stays while the list lacks it, as after an empty reply, showing as
+ * None*, so a later list that has it names it again. A server match is not consulted here.
  */
 export function resolvePresetAnchor(
   current: FilterState,
-  presets: readonly { name: string; filterState: FilterState }[],
+  presets: readonly { id: string; name: string; filterState: FilterState }[],
   previousBase: string | null | undefined
 ): PresetAnchor {
   if (isDefaultFilter(current)) {
-    return describePresetAnchor(null, false);
+    return describePresetAnchor(null, presets, false);
   }
   const match = presets.find((preset) => filterStatesEqualForPresetMatch(preset.filterState, current));
-  if (match?.name) {
-    return describePresetAnchor(match.name, false);
+  if (match) {
+    return describePresetAnchor(match.id, presets, false);
   }
-  const base = String(previousBase || "").trim();
-  const existing = base ? presets.find((preset) => presetNamesEqual(preset.name, base)) : undefined;
-  if (existing) {
-    return describePresetAnchor(existing.name, true);
-  }
-  return describePresetAnchor(null, true);
+  return describePresetAnchor(previousBase || null, presets, true);
 }
 
 /**
- * The named preset, or None for null, starred while the filter differs from that preset's filter, or from the default
- * filter for None. A null filter, such as one whose duration text isn't valid, differs from every filter.
+ * The preset with `baseId`, or None for null, starred while the filter differs from that preset's filter, or from the
+ * default filter for None. A null filter, such as one whose duration text isn't valid, differs from every filter.
  */
 export function presetAnchorForFilter(
   filter: FilterState | null,
-  presets: readonly { name: string; filterState: FilterState }[],
-  baseName: string | null
+  presets: readonly { id: string; name: string; filterState: FilterState }[],
+  baseId: string | null
 ): PresetAnchor {
   const matches =
     !!filter &&
-    (baseName === null
+    (baseId === null
       ? isDefaultFilter(filter)
-      : presets.some((preset) => preset.name === baseName && filterStatesEqualForPresetMatch(preset.filterState, filter)));
-  return describePresetAnchor(baseName, !matches);
+      : presets.some((preset) => preset.id === baseId && filterStatesEqualForPresetMatch(preset.filterState, filter)));
+  return describePresetAnchor(baseId, presets, !matches);
 }
 
 export function presetHeading(anchor: PresetAnchor): string {
@@ -170,7 +174,7 @@ export function buildHeaderPresetOptions(
   }
   entries.push({ label: HEADER_PRESET_NONE_LABEL, value: "" });
   for (const preset of presets) {
-    const name = String(preset.name || preset.id || "").trim();
+    const name = presetDisplayName(preset);
     if (!name) {
       continue;
     }
@@ -179,11 +183,7 @@ export function buildHeaderPresetOptions(
   if (anchor.starred) {
     return { entries, selectedValue: HEADER_PRESET_STARRED_VALUE };
   }
-  if (!anchor.baseName) {
-    return { entries, selectedValue: "" };
-  }
-  const selected = presets.find((preset) => presetNamesEqual(String(preset.name || preset.id || ""), anchor.baseName || ""));
-  return { entries, selectedValue: selected?.id ?? "" };
+  return { entries, selectedValue: (anchor.baseId && findPresetById(presets, anchor.baseId)?.id) || "" };
 }
 
 export function headerPresetPick(value: string | null | undefined): HeaderPresetPick {
@@ -196,32 +196,36 @@ export function headerPresetPick(value: string | null | undefined): HeaderPreset
   return "named";
 }
 
-/** Base stored by the filter dialog. The previous base is the dialog's, after the heading has followed the working filter. */
+/**
+ * The preset id the filter dialog's heading names. The previous base is the dialog's, after the heading has followed
+ * the working filter.
+ */
 export function dialogPresetBase(
   working: FilterState,
-  presets: readonly { name: string; filterState: FilterState }[],
+  presets: readonly { id: string; name: string; filterState: FilterState }[],
   dialogBase: string | null | undefined
 ): string | null {
-  return resolvePresetAnchor(working, presets, dialogBase).baseName;
+  return resolvePresetAnchor(working, presets, dialogBase).baseId;
 }
 
 export interface HeaderPresetList {
   filter: FilterState;
-  baseName: string | null;
+  /** The preset the filter is named for, by id, or null for None. */
+  baseId: string | null;
   entries: PresetListEntry[];
   selectedValue: string;
 }
 
 function presetRowsFromHeaderPresets(
-  presets: readonly { id?: string; name?: string; filterState?: ApiFilterState | null }[]
-): { name: string; filterState: FilterState }[] {
-  const rows: { name: string; filterState: FilterState }[] = [];
+  presets: readonly { id: string; name?: string; filterState?: ApiFilterState | null }[]
+): { id: string; name: string; filterState: FilterState }[] {
+  const rows: { id: string; name: string; filterState: FilterState }[] = [];
   for (const preset of presets) {
-    const name = String(preset.name || preset.id || "").trim();
+    const name = presetDisplayName(preset);
     if (!name) {
       continue;
     }
-    rows.push({ name, filterState: withoutAndLocalModes(filterStateFromApiObject(preset.filterState)) });
+    rows.push({ id: preset.id, name, filterState: withoutAndLocalModes(filterStateFromApiObject(preset.filterState)) });
   }
   return rows;
 }
@@ -235,7 +239,7 @@ export function headerPresetListForFilter(
   const options = buildHeaderPresetOptions(anchor, presets);
   return {
     filter: cloneFilterState(filter),
-    baseName: anchor.baseName,
+    baseId: anchor.baseId,
     entries: options.entries,
     selectedValue: options.selectedValue
   };
@@ -255,8 +259,7 @@ export function headerPresetListAfterPick(
   if (pick === "named") {
     const preset = presets.find((candidate) => candidate.id === pickedValue);
     if (preset) {
-      const name = String(preset.name || preset.id || "").trim() || null;
-      return headerPresetListForFilter(filterStateForHeaderPresetSelection(preset), presets, name);
+      return headerPresetListForFilter(filterStateForHeaderPresetSelection(preset), presets, preset.id);
     }
   }
   return headerPresetListForFilter(filter, presets, previousBase);
@@ -576,22 +579,20 @@ export function filterDialogHasUnsavedChanges(working: FilterState, applied: Fil
   return !filterStatesEqualForPresetMatch(working, applied) || presetsChanged;
 }
 
+/** A preset in the Filter tab: the server's id, or a temporary one until Apply creates it, its name, and its filter. */
 export interface PresetRow {
+  id: string;
   name: string;
   filterState: FilterState;
 }
 
-/** Whether two preset lists are the same: in the same order, each with the same name, case counting, and filter. */
+/** Whether two preset lists are the same: in the same order, each with the same id, name, case counting, and filter. */
 export function presetListsEqual(a: readonly PresetRow[], b: readonly PresetRow[]): boolean {
   return (
     a.length === b.length &&
-    a.every((row, index) => row.name === b[index]!.name && filterStatesEqualForPresetMatch(row.filterState, b[index]!.filterState))
+    a.every((row, index) => {
+      const other = b[index]!;
+      return row.id === other.id && row.name === other.name && filterStatesEqualForPresetMatch(row.filterState, other.filterState);
+    })
   );
-}
-
-export function presetsToPostBody(rows: PresetRow[]): components["schemas"]["FilterPresetSnapshot"][] {
-  return rows.map((r) => ({
-    name: r.name,
-    filterState: serializeFilterStateForApi(r.filterState)
-  }));
 }

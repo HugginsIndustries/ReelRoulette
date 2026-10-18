@@ -45,6 +45,20 @@ public sealed class OpenApiRouteContractTests : IDisposable
             $"Missing from openapi.yaml: [{string.Join(", ", missingFromSpec)}]. In openapi.yaml but not served: [{string.Join(", ", notServed)}].");
     }
 
+    // Presets are written one at a time, so the whole-list replace is neither served nor in the spec. The route list
+    // test passes whether the two stay or go together, so this one checks that they went.
+    [Fact]
+    public void WholeListPresetReplace_IsNeitherServedNorSpecified()
+    {
+        var mapped = ReadMappedRoutes();
+        var specified = OpenApiSpec.ReadOperations();
+        Assert.Contains("GET /api/presets", mapped);
+        Assert.Contains("GET /api/presets", specified);
+
+        Assert.DoesNotContain("POST /api/presets", mapped);
+        Assert.DoesNotContain("POST /api/presets", specified);
+    }
+
     [Fact]
     public void FilterStateSchema_NamesEveryFieldTheParserReads()
     {

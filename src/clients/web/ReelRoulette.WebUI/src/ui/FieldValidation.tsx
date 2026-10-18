@@ -351,6 +351,12 @@ export interface HeldButtonProps {
   heldReason: string | null;
   /** Why the action is disabled when no field says why, its title and accessible description while it is disabled. */
   disabledReason?: string | null;
+  /**
+   * Why the action is blocked, for one whose reason has to be seen on a phone or tablet, which shows no tooltip, such as
+   * Apply while presets would take each other's names. It shows as a held action does, ahead of any field that holds it,
+   * with this reason as its title and accessible description, and its press still goes to `onClick`, which shows why.
+   */
+  blockedReason?: string | null;
   onClick: () => void;
   children: ComponentChildren;
 }
@@ -359,15 +365,18 @@ export interface HeldButtonProps {
  * An action that uses fields of the pattern. While it is disabled, it dims and pressing it does nothing. While a
  * field elsewhere holds it, its label, or an icon button's icon, dims, it reads as unavailable, the red icon shows as a
  * badge on its top-right corner, out of its flow, or its unsaved-changes dot turns red when it has one, or a red dot
- * shows with `heldDot`, and its click handler moves to that field instead of acting.
+ * shows with `heldDot`, and its click handler moves to that field instead of acting. A blocked action looks the same,
+ * and its click handler shows why.
  */
-export function HeldButton({ id, class: extraClass, label, dot, heldDot, disabled, heldReason, disabledReason, onClick, children }: HeldButtonProps) {
+export function HeldButton({ id, class: extraClass, label, dot, heldDot, disabled, heldReason, disabledReason, blockedReason, onClick, children }: HeldButtonProps) {
   const describedId = useId();
-  const held = !disabled && heldReason !== null;
-  const reason = held ? heldReason : disabled ? (disabledReason ?? null) : null;
+  const blocked = !disabled && !!blockedReason;
+  const held = !disabled && !blocked && heldReason !== null;
+  const showsProblem = held || blocked;
+  const reason = blocked ? blockedReason! : held ? heldReason : disabled ? (disabledReason ?? null) : null;
   // Only the icon fades out; the button's state and its description change at once. A button with a dot shows none.
-  const iconFade = useFadeOut(held);
-  const classes = ["held-action", extraClass, held ? "shows-problem" : null].filter(Boolean).join(" ");
+  const iconFade = useFadeOut(showsProblem);
+  const classes = ["held-action", extraClass, showsProblem ? "shows-problem" : null].filter(Boolean).join(" ");
   return (
     <>
       <button
@@ -375,7 +384,7 @@ export function HeldButton({ id, class: extraClass, label, dot, heldDot, disable
         type="button"
         class={classes}
         disabled={disabled}
-        aria-disabled={held ? "true" : undefined}
+        aria-disabled={showsProblem ? "true" : undefined}
         aria-describedby={reason !== null ? describedId : undefined}
         aria-label={label}
         title={reason ?? label}

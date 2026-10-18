@@ -2338,10 +2338,15 @@ window.addEventListener("resize", placeAllTips);
  *   for an action with nothing to do, such as Apply with no changes. So does `unavailable()` returning a reason, for
  *   an action that can't be used now when no field says why, such as Add Preset with the default filter; the reason is
  *   its tooltip and accessible description. Disabling wins over holding.
+ * - While it isn't idle, `blocked()` returning a reason blocks it, for an action whose reason has to be seen on a phone
+ *   or tablet, which shows no tooltip, such as Apply while presets would take each other's names: its label dims, it
+ *   reads as unavailable, a dot it has turns red, as a held one's does, the reason is its tooltip and accessible
+ *   description, and pressing it calls `onBlocked(reason)` in place of the action. Blocking wins over everything but
+ *   `idle()`.
  * - Otherwise a flagged field elsewhere holds it: the button's label dims, it reads as unavailable, and the red badge
  *   shows on its top-right corner, or a red dot for an icon button that has one in its place, such as Add Preset.
  *   Pressing it does nothing but take the user to the first field that holds it.
- * Call the returned `refresh()` when what `idle()` or `unavailable()` reads changes.
+ * Call the returned `refresh()` when what `idle()`, `blocked()`, or `unavailable()` reads changes.
  */
 function holdAction(button, fields, options) {
   const opts = options || {};
@@ -2352,25 +2357,34 @@ function holdAction(button, fields, options) {
   button.after(describe);
 
   const unavailable = () => (opts.unavailable ? opts.unavailable() : null);
+  const idle = () => !!(opts.idle && opts.idle());
+  const blockedBy = () => (!idle() && opts.blocked ? opts.blocked() : null);
 
   function disabled() {
-    if (opts.idle && opts.idle()) return true;
+    if (idle()) return true;
+    if (blockedBy()) return false;
     if (unavailable()) return true;
     return fields().some((field) => field.disables) || (opts.beside ? opts.beside().some((field) => field.holds) : false);
   }
 
   function blocker() {
-    return disabled() ? null : fields().find((field) => field.holds) || null;
+    return disabled() || blockedBy() ? null : fields().find((field) => field.holds) || null;
   }
 
   function refresh() {
     button.disabled = disabled();
     const field = blocker();
     const held = !!field;
+    const blocked = blockedBy();
     const why = unavailable();
-    button.classList.toggle("shows-problem", held);
+    button.classList.toggle("shows-problem", held || !!blocked);
     fadeShown(button.querySelector(".btn-problem, .held-dot"), held);
-    if (held) {
+    if (blocked) {
+      button.setAttribute("aria-disabled", "true");
+      describe.textContent = blocked;
+      button.setAttribute("aria-describedby", describe.id);
+      button.title = blocked;
+    } else if (held) {
       button.setAttribute("aria-disabled", "true");
       describe.textContent = opts.reason ? opts.reason(field) : "Correct the field first.";
       button.setAttribute("aria-describedby", describe.id);
@@ -2391,10 +2405,15 @@ function holdAction(button, fields, options) {
   button.addEventListener(
     "click",
     (event) => {
+      const blocked = blockedBy();
       const field = blocker();
-      if (!field) return;
+      if (!blocked && !field) return;
       event.stopImmediatePropagation();
       event.preventDefault();
+      if (blocked) {
+        if (opts.onBlocked) opts.onBlocked(blocked);
+        return;
+      }
       if (opts.beforeReveal) opts.beforeReveal(field);
       field.reveal();
     },
@@ -3182,8 +3201,12 @@ ITEMS.forEach((item) => {
     .filter((chip) => (base.includes(chip.name.toLowerCase()) ? tagRand() < 0.5 : tagRand() < 0.05))
     .map((chip) => chip.key));
 });
-const presets = ["Favorites", "Short clips", "Photos only", "Long videos", "Beach days", "Family", "Not yet watched", "Night shots",
+const PRESET_NAMES = ["Favorites", "Short clips", "Photos only", "Long videos", "Beach days", "Family", "Not yet watched", "Night shots",
   "Trips abroad", "Drone footage", "Concerts", "Kids", "Cooking", "Timelapses", "Winter", "Summer"];
+// The presets by id, in their order, as the app names them: an id of its own, which a rename keeps, and each one's name.
+const presets = PRESET_NAMES.map((_, index) => `preset-${index + 1}`);
+let presetNames = new Map(presets.map((id, index) => [id, PRESET_NAMES[index]]));
+let nextPresetId = presets.length + 1;
 
 // Whole `seconds` as h:mm:ss with hours, or m:ss, its first part padded to `digits`.
 function timeInShape(seconds, withHours, digits) {
@@ -4498,7 +4521,7 @@ const lib = {
   sort: store.get("libSort", "Name"),
   descending: store.get("libDescending", false),
   search: "",
-  preset: store.get("libPreset", "")
+  preset: store.get("libPresetId", "")
 };
 const DIRECTION_LABELS = {
   Name: ["A–Z", "Z–A"],
@@ -4512,7 +4535,7 @@ let presetsLoading = true;
 function saveLibState() {
   store.set("libSort", lib.sort);
   store.set("libDescending", lib.descending);
-  store.set("libPreset", lib.preset);
+  store.set("libPresetId", lib.preset);
 }
 // What the grid says in place of tiles: today's messages, and the server's own when it fails the compatibility check
 // or runs without a library. While the server asks for pairing, its load answers 401 and the grid shows nothing.
@@ -4768,16 +4791,17 @@ function renderLibPresets() {
   if (presetsLoading) return add("", "Loading...");
   select.disabled = false;
   const anchor = presetAnchor(appliedValue || DEFAULT_FILTER, lib.preset, presetSnapshot, savedPresetFilters);
-  if (anchor.starred) add("*", anchorLabel(anchor));
+  if (anchor.starred) add("*", anchorLabel(anchor, savedPresetNames));
   add("", "None");
-  presetSnapshot.forEach((name) => add(name, name));
-  select.value = anchor.starred ? "*" : anchor.name;
+  presetSnapshot.forEach((id) => add(id, savedPresetNames.get(id)));
+  select.value = anchor.starred ? "*" : anchor.id;
 }
 $("lib-preset").addEventListener("change", (event) => {
   if (event.target.value === "*") return;
   lib.preset = event.target.value;
   saveLibState();
   presets.splice(0, presets.length, ...presetSnapshot);
+  presetNames = new Map(savedPresetNames);
   presetFilters = new Map(savedPresetFilters);
   applyFilterValue(lib.preset ? savedPresetFilters.get(lib.preset) : DEFAULT_FILTER);
   takeSnapshot();
@@ -4794,10 +4818,11 @@ $("lib-mode").addEventListener("change", (event) => store.set("libMode", event.t
 
 // ---- Filter tab ----
 const filterBody = $("filter-body");
+// A name another preset than `own`, an id, has, ignoring case, is taken.
 function checkPresetName(value, own) {
   const name = value.trim();
   if (!name) return { empty: true };
-  if (presets.some((preset) => preset !== own && preset.toLowerCase() === name.toLowerCase())) {
+  if (presets.some((id) => id !== own && presetNames.get(id).toLowerCase() === name.toLowerCase())) {
     return { message: "Use a name no other preset has." };
   }
   return null;
@@ -4825,9 +4850,10 @@ const PRESET_FILTERS = {
   Winter: { include: ["weather-snow"] },
   Summer: { include: ["weather-sunny"] }
 };
-// The tab's presets' filters, and the saved ones, which Discard changes and Clear all put back.
-let presetFilters = new Map(presets.map((name) => [name, { ...DEFAULT_FILTER, ...PRESET_FILTERS[name] }]));
+// The tab's presets' filters, by id, and the saved names and filters, which Discard changes and Clear all put back.
+let presetFilters = new Map(presets.map((id) => [id, { ...DEFAULT_FILTER, ...PRESET_FILTERS[presetNames.get(id)] }]));
 let savedPresetFilters = new Map(presetFilters);
+let savedPresetNames = new Map(presetNames);
 // The applied filter, its fields, the saved presets, the applied tags, and the applied match modes, which Discard changes
 // puts back.
 let appliedValue = null;
@@ -4838,10 +4864,10 @@ let localSnapshot = new Map();
 // Tag filters: each tag included or excluded, by key; and the categories matched with ANY (OR).
 const filterTagState = new Map();
 let filterLocalModes = new Map();
-// The preset the tab works from, which the heading names and Apply makes the dropdown's. It starts over from the
+// The preset the tab works from, by id, which the heading names and Apply makes the dropdown's. It starts over from the
 // dropdown's.
 let tabBase = lib.preset;
-// The preset Choose Preset has chosen, which Load and Update act on, or "" for None. It stays where the user puts it
+// The preset Choose Preset has chosen, by id, which Load and Update act on, or "" for None. It stays where the user puts it
 // while the Presets section stays in view, and starts over on the preset the heading names when the tab starts over or
 // the section comes into view.
 let chosenPreset = lib.preset;
@@ -4865,14 +4891,14 @@ function notePresetsView() {
   presetsWereInView = inView;
 }
 // The preset a filter is named for, as the app names it: None for the default filter; otherwise the first preset whose
-// filter matches; otherwise the preset it came from, or None, starred.
-function presetAnchor(value, base, names, filters) {
-  if (sameFilter(value, DEFAULT_FILTER)) return { name: "", starred: false };
-  const match = names.find((name) => sameFilter(filters.get(name), value));
-  if (match) return { name: match, starred: false };
-  return { name: names.includes(base) ? base : "", starred: true };
+// filter matches; otherwise the preset it came from, or None, starred. Presets go by id.
+function presetAnchor(value, base, ids, filters) {
+  if (sameFilter(value, DEFAULT_FILTER)) return { id: "", starred: false };
+  const match = ids.find((id) => sameFilter(filters.get(id), value));
+  if (match) return { id: match, starred: false };
+  return { id: ids.includes(base) ? base : "", starred: true };
 }
-const anchorLabel = (anchor) => `${anchor.name || "None"}${anchor.starred ? "*" : ""}`;
+const anchorLabel = (anchor, names) => `${(anchor.id && names.get(anchor.id)) || "None"}${anchor.starred ? "*" : ""}`;
 
 function showSub(sub) {
   document.querySelectorAll(".filter-tab").forEach((tab) => {
@@ -4988,7 +5014,7 @@ function applyFilterValue(value) {
 const filterIsDefault = () => sameFilter(filterValue(), DEFAULT_FILTER);
 
 // Whether the tab holds changes to apply, compared with the applied filter and the saved presets, so a change put back
-// is none: its filter, typed durations included, and its preset list by order, name, and filter. Without one, Apply and
+// is none: its filter, typed durations included, and its preset list by order, id, name, and filter. Without one, Apply and
 // Discard changes are disabled; with one, Apply turns orange with the dot, as the tab and the panel button show it. Clear
 // all is disabled while the filter is the default one, Load while it is the chosen preset's, and Add Preset and Update
 // while it is the default one or a preset's, saying why.
@@ -4996,7 +5022,8 @@ function filterChanges() {
   if (!appliedValue) return false;
   const value = filterValue();
   const presetList = presets.length !== presetSnapshot.length ||
-    presets.some((name, i) => name !== presetSnapshot[i] || !sameFilter(presetFilters.get(name), savedPresetFilters.get(name)));
+    presets.some((id, i) => id !== presetSnapshot[i] || presetNames.get(id) !== savedPresetNames.get(id) ||
+      !sameFilter(presetFilters.get(id), savedPresetFilters.get(id)));
   return !sameFilter(value, appliedValue) || presetList;
 }
 let applyHold = null;
@@ -5019,9 +5046,9 @@ function renderApply() {
   // filter, with each duration as its field reads, differs from that preset's, so text passed through while typing
   // doesn't change the preset. Choose Preset doesn't follow it.
   const anchor = presetAnchor(workingValue(), tabBase, presets, presetFilters);
-  tabBase = anchor.name;
-  const named = anchor.name ? presetFilters.get(anchor.name) : DEFAULT_FILTER;
-  $("filter-heading").textContent = `Preset: ${anchorLabel({ name: anchor.name, starred: !sameFilter(filterValue(), named) })}`;
+  tabBase = anchor.id;
+  const named = anchor.id ? presetFilters.get(anchor.id) : DEFAULT_FILTER;
+  $("filter-heading").textContent = `Preset: ${anchorLabel({ id: anchor.id, starred: !sameFilter(filterValue(), named) }, presetNames)}`;
   const generalTab = document.querySelector('.filter-tab[data-sub="general"]');
   const generalProblem = flagModesField.flagged || minField.flagged || maxField.flagged;
   generalTab.classList.toggle("has-problem", generalProblem);
@@ -5038,8 +5065,55 @@ function generalReason(field, ending) {
   if (field === flagModesField) return `Change Favorites or Blacklisted ${ending}.`;
   return `Correct the ${field === minField ? "minimum" : "maximum"} duration ${ending}.`;
 }
+// Apply saves each changed preset by id, each rename after the rename that frees its name and each filter update after
+// the update that frees its filter. Presets that would take each other's names, or filters, in a loop, two swapping or
+// three rotating, can't be saved in any order, and the walk that orders them finds the loop, whatever its size. It
+// returns the loop's presets in the list's order, or null.
+function changeLoop(valueOf, savedValueOf, same) {
+  const changed = presets.filter((id) => presetSnapshot.includes(id) && !same(valueOf(id), savedValueOf(id)));
+  const done = new Set();
+  const path = [];
+  function walk(id) {
+    if (done.has(id)) return null;
+    if (path.includes(id)) return path.slice(path.indexOf(id));
+    path.push(id);
+    for (const freer of changed.filter((other) => other !== id && same(savedValueOf(other), valueOf(id)))) {
+      const loop = walk(freer);
+      if (loop) return loop;
+    }
+    path.pop();
+    done.add(id);
+    return null;
+  }
+  for (const id of changed) {
+    const loop = walk(id);
+    if (loop) return presets.filter((each) => loop.includes(each));
+  }
+  return null;
+}
+const sameName = (a, b) => a.toLowerCase() === b.toLowerCase();
+function quotedNames(ids) {
+  const names = ids.map((id) => `"${presetNames.get(id)}"`);
+  return names.length === 2 ? names.join(" and ") : `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`;
+}
+// Why Apply is blocked, names first, naming each preset in the loop, or null.
+function loopReason() {
+  const names = changeLoop((id) => presetNames.get(id), (id) => savedPresetNames.get(id), sameName);
+  if (names) {
+    return `Presets ${quotedNames(names)} would take each other's names. Apply in two steps: give one of them another name, apply, then rename it.`;
+  }
+  const filters = changeLoop((id) => presetFilters.get(id), (id) => savedPresetFilters.get(id), sameFilter);
+  if (filters) {
+    return `Presets ${quotedNames(filters)} would take each other's filters. Apply in two steps: give one of them another filter, apply, then update it.`;
+  }
+  return null;
+}
+// A loop blocks Apply, which turns its dot red, as a held Apply does, and pressing it shows the reason in a notice, since
+// a phone or tablet shows no tooltip.
 applyHold = holdAction($("filter-apply"), () => [flagModesField, minField, maxField], {
   idle: () => !filterChanges(),
+  blocked: loopReason,
+  onBlocked: (reason) => void noticeDialog({ message: reason }),
   reason: (field) => generalReason(field, "to apply"),
   beforeReveal: () => showSub("general")
 });
@@ -5050,8 +5124,8 @@ applyHold = holdAction($("filter-apply"), () => [flagModesField, minField, maxFi
 function presetReason() {
   if (filterIsDefault()) return "Choose a filter to save as a preset.";
   const value = filterValue();
-  const holder = presets.find((name) => sameFilter(presetFilters.get(name), value));
-  return holder ? `Preset "${holder}" already has this filter.` : null;
+  const holder = presets.find((id) => sameFilter(presetFilters.get(id), value));
+  return holder ? `Preset "${presetNames.get(holder)}" already has this filter.` : null;
 }
 addPresetHold = holdAction($("filter-add-preset"), () => [nameField, flagModesField, minField, maxField], {
   beside: () => [nameField],
@@ -5077,6 +5151,7 @@ filterBody.addEventListener("change", (event) => {
 function takeSnapshot() {
   snapshot = [...filterBody.querySelectorAll("input, select")].map((el) => [el, el.value, el.checked, el.disabled]);
   presetSnapshot = presets.slice();
+  savedPresetNames = new Map(presetNames);
   savedPresetFilters = new Map(presetFilters);
   tagSnapshot = new Map(filterTagState);
   localSnapshot = new Map(filterLocalModes);
@@ -5090,6 +5165,7 @@ function restoreSnapshot() {
     el.disabled = disabled;
   });
   presets.splice(0, presets.length, ...presetSnapshot);
+  presetNames = new Map(savedPresetNames);
   presetFilters = new Map(savedPresetFilters);
   filterTagState.clear();
   tagSnapshot.forEach((value, key) => filterTagState.set(key, value));
@@ -5127,7 +5203,7 @@ $("filter-apply").addEventListener("click", () => {
   if (state.situation === "reconnecting") return void noticeDialog({ message: "Saving presets failed: Couldn't reach the server." });
   if (state.pairing || heldBack()) return;
   // The dropdown takes the preset the tab names.
-  lib.preset = presetAnchor(filterValue(), tabBase, presets, presetFilters).name;
+  lib.preset = presetAnchor(filterValue(), tabBase, presets, presetFilters).id;
   resetUncheckedModes();
   takeSnapshot();
   startOver();
@@ -5153,6 +5229,7 @@ $("filter-discard").addEventListener("click", () => {
 $("filter-clear").addEventListener("click", () => {
   applyFilterValue(DEFAULT_FILTER);
   presets.splice(0, presets.length, ...presetSnapshot);
+  presetNames = new Map(savedPresetNames);
   presetFilters = new Map(savedPresetFilters);
   tabBase = "";
   renderPresets();
@@ -5174,7 +5251,7 @@ $("filter-load-preset").addEventListener("click", () => {
 });
 // Update saves the tab's filter into the chosen preset until Apply saves the list.
 $("filter-update-preset").addEventListener("click", () => {
-  acknowledge(`Updated preset "${chosenPreset}" locally — Apply to save.`, "filter");
+  acknowledge(`Updated preset "${presetNames.get(chosenPreset)}" locally — Apply to save.`, "filter");
   presetFilters.set(chosenPreset, filterValue());
   renderApply();
 });
@@ -5187,10 +5264,10 @@ function presetsChanged() {
 function renderPresets() {
   const select = $("filter-preset-select");
   select.textContent = "";
-  ["None", ...presets].forEach((name, index) => {
+  ["", ...presets].forEach((id) => {
     const option = document.createElement("option");
-    option.value = index ? name : "";
-    option.textContent = name;
+    option.value = id;
+    option.textContent = id ? presetNames.get(id) : "None";
     select.append(option);
   });
   // Choose Preset shows the chosen preset, or None once the list no longer has it.
@@ -5202,10 +5279,11 @@ function renderPresets() {
     list.append(Object.assign(document.createElement("span"), { className: "filter-hint", textContent: "No presets" }));
     return;
   }
-  presets.forEach((name, index) => {
+  presets.forEach((id, index) => {
+    const name = presetNames.get(id);
     const row = document.createElement("div");
     row.className = "filter-preset-row";
-    row.dataset.key = name;
+    row.dataset.key = id;
     const label = document.createElement("span");
     label.className = "filter-preset-name";
     label.textContent = name;
@@ -5224,40 +5302,39 @@ makeSortable({
   list: $("filter-preset-list"),
   rowSelector: ".filter-preset-row",
   keyOf: (row) => row.dataset.key,
-  labelOf: (key) => key,
+  labelOf: (key) => presetNames.get(key),
   commit: (keys) => {
     presets.splice(0, presets.length, ...keys);
     presetsChanged();
   }
 });
+// A rename keeps the preset's id, so the heading's preset and the chosen one keep naming it.
 function openEditPreset(index) {
   const own = presets[index];
   nameDialog({
     title: "Edit Preset",
     label: "Preset Name",
-    value: own,
+    value: presetNames.get(own),
     check: (value) => checkPresetName(value, own),
     onSave: (name) => {
-      presets[presets.indexOf(own)] = name;
-      presetFilters.set(name, presetFilters.get(own));
-      if (name !== own) presetFilters.delete(own);
-      if (tabBase === own) tabBase = name;
-      if (chosenPreset === own) chosenPreset = name;
+      presetNames.set(own, name);
       presetsChanged();
     },
-    deleteMessage: () => `Delete preset "${own}"?`,
+    deleteMessage: () => `Delete preset "${presetNames.get(own)}"?`,
     onDelete: () => {
       presets.splice(presets.indexOf(own), 1);
-      presetFilters.delete(own);
       if (tabBase === own) tabBase = "";
       presetsChanged();
     }
   });
 }
-// Add Preset adds the preset last and moves to its drag handle: a button, so no on-screen keyboard opens.
+// Add Preset adds the preset last, with an id of its own, and moves to its drag handle: a button, so no on-screen
+// keyboard opens.
 $("filter-add-preset").addEventListener("click", () => {
-  presets.push(nameField.input.value.trim());
-  presetFilters.set(presets.at(-1), filterValue());
+  const id = `preset-${nextPresetId++}`;
+  presets.push(id);
+  presetNames.set(id, nameField.input.value.trim());
+  presetFilters.set(id, filterValue());
   nameField.reset("");
   presetsChanged();
   $("filter-preset-list").lastElementChild?.querySelector(".drag-handle")?.focus();
@@ -6034,7 +6111,7 @@ const TESTS = {
   "refresh-failed": () => notes.notify({ kind: "refresh", level: "warning", text: "Library refresh failed", detail: "Source \"Videos\" is unavailable: /media/videos was not found.", key: "refresh" }),
   skips: () => notes.notify({ kind: "skips", text: "Skipped a file this browser can't play.", detail: sampleName(), key: "skip" }),
   connection: () => notes.notify({ kind: "connection", text: "Reconnected.", key: "connection" }),
-  notice: () => noticeDialog({ message: "Saving presets failed (500)." }),
+  notice: () => noticeDialog({ message: "Saving presets failed: The preset change couldn't be saved." }),
   burst: () => {
     acknowledge("Filters applied.", "filter");
     notes.notify({ kind: "devices", text: "Added to favorites on another device", detail: ITEMS[1].name });

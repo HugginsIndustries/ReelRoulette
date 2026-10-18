@@ -1,15 +1,16 @@
 import { batch, signal, type ReadonlySignal } from "@preact/signals";
-import { errorText, UnauthorizedError } from "../api/serverRequest";
+import { errorText, readJson, refusalReason, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { Library } from "../library/library";
 import type { Notifications } from "../notifications/notifications";
 import type { PanelHost } from "../panel/panelHost";
 import { moveEntry } from "../reorder/reorder";
 import type { AppApi } from "../state/appApi";
-import type { AppStore } from "../state/appStore";
+import type { ApiPreset, AppStore } from "../state/appStore";
 import type { DeviceStore } from "../state/deviceStore";
 import type { ServerConnection } from "../state/serverConnection";
 import type { TagCatalog } from "../tags/tagCatalog";
+import type { components } from "../types/openapi.generated";
 import {
   actionBlock,
   createFieldReveal,
@@ -29,7 +30,7 @@ import {
   filterWithGeneralDraft,
   filterWithTypedDurations,
   generalDraftFromFilter,
-  namesEqualIgnoringCase,
+  presetLoopReason,
   presetRowsFromApi,
   sharedFilterReason,
   toggleFilterTag,
@@ -51,12 +52,15 @@ import {
   presetAnchorForFilter,
   presetHeading,
   presetListsEqual,
-  presetsToPostBody,
+  serializeFilterStateForApi,
   withoutAndLocalModes,
   type FilterState,
   type PresetRow,
   type TagMatchMode
 } from "./filterStateModel";
+import { mergePresetLists, planPresetWrites, type PresetWrite } from "./presetWrites";
+
+type Schemas = components["schemas"];
 
 const EXPANDED_CATEGORIES_KEY = "filter.expandedTagCategories";
 
@@ -68,25 +72,26 @@ interface FilterDialogState {
   general: GeneralDraft;
   sources: FilterSource[];
   tagModel: FilterTagModel | null;
+  /** The tab's presets, by id. One added since the last Apply has a temporary id until Apply creates it. */
   presets: PresetRow[];
   /**
-   * The saved preset list the tab's list compares with: taken when the tab starts over, when Refresh takes the
-   * server's list, and after Apply saves it.
+   * The saved preset list the tab's list compares with, and Apply works out its writes from: the server's list as last
+   * taken, when the tab starts over or takes a loaded list by the merge, and with each of Apply's writes that lands.
    */
   savedPresets: PresetRow[];
-  /** The preset the heading names, which Apply makes the active preset, or null for None. */
+  /** The id of the preset the heading names, which Apply makes the active preset, or null for None. */
   headingPreset: string | null;
   /**
-   * The preset Choose Preset has chosen, which Load and Update act on, or null for None. A choice lasts while the Presets
-   * section stays in view, and Choose Preset starts over on the heading's preset each time the section comes into view,
-   * and when the tab starts over or Apply applies.
+   * The id of the preset Choose Preset has chosen, which Load and Update act on, or null for None. A choice lasts while
+   * the Presets section stays in view, and Choose Preset starts over on the heading's preset each time the section comes
+   * into view, and when the tab starts over or Apply applies.
    */
   chosenPreset: string | null;
   /** The tag categories expanded in the Tags section, which this device remembers; every other one is collapsed. */
   expanded: ReadonlySet<string>;
   newPresetName: string;
-  /** Edit Preset: the preset it edits, by index, and the name typed in it, or null while it is closed. */
-  presetEdit: { index: number; name: string } | null;
+  /** Edit Preset: the preset it edits, by id, and the name typed in it, or null while it is closed. */
+  presetEdit: { id: string; name: string } | null;
 }
 
 /**
@@ -95,6 +100,12 @@ interface FilterDialogState {
  */
 export interface FilterActionBlock extends ActionBlock<GeneralField> {
   reason?: string;
+  /**
+   * Apply only: presets that would take each other's names, or filters, in a loop block it, saying `reason`. It shows as
+   * unavailable, as a held Apply does, yet stays pressable, since a phone or tablet shows no tooltip: pressing it shows
+   * `reason` in a notice, logged as `logText`, which leaves the presets' names out.
+   */
+  blocked?: { logText: string };
 }
 
 /** What the dialog shows. Each change replaces it. */
@@ -165,15 +176,18 @@ export interface FilterDialog {
   /** Shows a section. The Presets section coming into view starts Choose Preset over on the heading's preset. */
   showTab(tab: FilterDialogTab): void;
   /**
-   * Loads the sources, tags, and presets again, keeping the working filter, and the preset list while it differs
-   * from the saved one. Before they have loaded once, it loads them as showing the tab does. It does nothing
-   * while the server fails the compatibility check or runs without a library.
+   * Loads the sources, tags, and presets again, keeping the working filter, and takes the loaded preset list by the
+   * merge, which keeps the tab's preset changes and takes the server's version of every other preset. Before they have
+   * loaded once, it loads them as showing the tab does. It does nothing while the server fails the compatibility check
+   * or runs without a library, or while Apply's preset writes are being sent.
    */
   refresh(): Promise<void>;
   /**
-   * Saves a preset list that differs from the saved one, applies the working filter, closes the panel as the overlay,
-   * and starts the library over. While a field it uses is not valid, it moves to that field instead. A save that fails
-   * keeps the tab as it is and applies nothing.
+   * Saves each preset the tab changed, one write at a time, applies the working filter, closes the panel as the
+   * overlay, and starts the library over. While a field it uses is not valid, it moves to that field instead, and while
+   * presets would take each other's names or filters, it shows why in a notice instead. At the first write the server
+   * refuses, it says why, takes the server's list by the merge, keeping the changes that didn't land, and applies
+   * nothing; the writes that landed stay saved. While its preset writes are being sent, a second Apply does nothing.
    */
   apply(): Promise<void>;
   /** Puts back the applied filter and the saved presets at once, without asking, and the tab stays open. */
@@ -192,8 +206,8 @@ export interface FilterDialog {
   setLocalMatch(categoryId: string, mode: TagMatchMode): void;
   /** Expands or collapses a tag category, which this device remembers. */
   toggleCategory(collapseKey: string): void;
-  /** Chooses the preset Load and Update act on, by name, or None for an empty name. It loads nothing. */
-  choosePreset(name: string): void;
+  /** Chooses the preset Load and Update act on, by id, or None for an empty id. It loads nothing. */
+  choosePreset(id: string): void;
   /**
    * Loads the chosen preset's filter into the tab, or the default filter for None, keeping the preset list. Apply then
    * applies it.
@@ -209,8 +223,8 @@ export interface FilterDialog {
   addPreset(): boolean;
   /** Moves the preset at `from` to `to`, until Apply saves the list. */
   movePreset(from: number, to: number): void;
-  /** Opens Edit Preset on a preset, with its name. */
-  editPreset(index: number): void;
+  /** Opens Edit Preset on the preset with this id, with its name. */
+  editPreset(id: string): void;
   /** Takes the name typed in Edit Preset. */
   typePresetName(text: string): void;
   /**
@@ -256,18 +270,25 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
   const tab = signal<FilterDialogTab | null>(null);
   const view = signal<FilterDialogView | null>(null);
   const reveal = createFieldReveal<FilterField>();
+  /** How many presets Add Preset has added, which numbers their temporary ids. */
+  let unsavedPresets = 0;
+  /**
+   * Apply's preset writes are being sent. A second Apply would send them again from the saved list as it was, and a
+   * Refresh would replace the saved list the writes are landing in, so both do nothing until the writes finish.
+   */
+  let savingPresets = false;
 
   /**
    * Works out the heading, the unsaved changes, whether the filter is the default one, and the fields' and actions'
    * problems. The heading's preset follows the working filter: None for the default filter, a saved preset with the
    * same filter, or else the last preset. The heading stars it while the filter, with each duration as its field reads,
    * differs from its filter, as while a duration's text isn't valid. The chosen preset stays where it was put, or None
-   * once the list no longer has it.
+   * once the list no longer has it. Presets go by id.
    */
   function settled(state: FilterDialogState): FilterDialogView {
     const problems = filterFieldProblems(state.general, state.newPresetName, state.presets);
     const edit = state.presetEdit;
-    const presetEditProblem = edit ? editPresetNameProblem(edit.name, state.presets, edit.index) : null;
+    const presetEditProblem = edit ? editPresetNameProblem(edit.name, state.presets, edit.id) : null;
     const applied = store.appliedFilter.peek();
     const presetsChanged = !presetListsEqual(state.presets, state.savedPresets);
     // A duration still being typed isn't in the working filter yet, so it counts as its field reads. Text that isn't
@@ -276,16 +297,20 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     // The preset follows the working filter, so text passed through while typing, such as an emptied field, doesn't
     // change it; only the heading's star follows the text.
     const headingPreset = dialogPresetBase(state.working, state.presets, state.headingPreset);
-    const chosen = state.presets.find((row) => row.name === state.chosenPreset);
+    const chosen = state.presets.find((row) => row.id === state.chosenPreset);
     const defaultFilter = !!typed && isDefaultFilter(typed);
     // No preset may hold the default filter or another preset's, so Add Preset and Update check every preset, the
     // chosen one too, since updating a preset with the filter it has changes nothing.
     const holder = typed ? state.presets.find((row) => filterStatesEqualForPresetMatch(row.filterState, typed)) : undefined;
     const filterReason = defaultFilter ? DEFAULT_FILTER_PRESET_REASON : holder ? sharedFilterReason(holder.name) : null;
+    // Presets that would take each other's names, or filters, in a loop can't be saved in any order, which the walk that
+    // orders Apply's writes finds, whatever the loop's size.
+    const plan = presetsChanged ? planPresetWrites(state.savedPresets, state.presets) : null;
+    const loop = plan?.loop ? presetLoopReason(plan.loop, state.presets) : null;
     return {
       ...state,
       headingPreset,
-      chosenPreset: chosen?.name ?? null,
+      chosenPreset: chosen?.id ?? null,
       heading: presetHeading(presetAnchorForFilter(typed, state.presets, headingPreset)),
       presetsChanged,
       applied,
@@ -300,7 +325,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         newPresetName: isFlagged(problems.newPresetName)
       },
       actions: {
-        apply: blockOf("apply", problems, null),
+        apply: loop ? { disabled: false, heldBy: null, reason: loop.text, blocked: { logText: loop.logText } } : blockOf("apply", problems, null),
         addPreset: blockOf("addPreset", problems, filterReason),
         // Update has nothing to write into on None, which it says before the filter's reasons.
         updatePreset: blockOf("updatePreset", problems, chosen ? filterReason : NO_CHOSEN_PRESET_REASON)
@@ -322,12 +347,17 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
 
   /**
    * Says whether the action can't proceed. A disabled action does nothing; a held one moves to the first field that
-   * holds it, showing its section. Nothing pops up or is relayed: the field's icon and tooltip say what it expects.
+   * holds it, showing its section, and nothing pops up or is relayed: the field's icon and tooltip say what it expects.
+   * Apply blocked by a loop of presets shows why in a notice.
    */
   function blocked(action: FilterAction): boolean {
     const block = view.peek()?.actions[action];
     if (!block) {
       return false;
+    }
+    if (block.blocked) {
+      void dialogs.notice(block.reason!, block.blocked.logText);
+      return true;
     }
     if (block.heldBy) {
       // The section is chosen before the move, which shows it and focuses the field at once, within the press.
@@ -373,24 +403,143 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
   function workingFromHeader(): Pick<FilterDialogState, "working" | "headingPreset"> {
     return {
       working: cloneFilterState(store.appliedFilter.peek()),
-      headingPreset: store.activePresetName.peek()
+      headingPreset: store.activePresetId.peek()
     };
   }
 
   /**
    * Takes loaded sources, tags, and presets, keeping the working filter, the General fields as they are, such as a
    * duration still being typed, with only their sources checked again for the loaded sources, and the source list they
-   * were filled from, and the preset list while it differs from the saved one. Otherwise the loaded list is the saved
-   * one.
+   * were filled from. The presets are taken by the merge.
    */
   function takeRemote(current: FilterDialogView, remote: Awaited<ReturnType<typeof loadRemote>>): void {
     update({
       sources: remote.sources,
       tagModel: remote.tagModel,
-      presets: current.presetsChanged ? current.presets : remote.presets,
-      savedPresets: current.presetsChanged ? current.savedPresets : remote.presets,
+      ...presetsTaking(current, remote.presets),
       general: { ...current.general, sourceChecked: generalDraftFromFilter(current.working, remote.sources).sourceChecked }
     });
+  }
+
+  /**
+   * A loaded preset list, taken by the merge: the tab keeps its preset changes, and takes the server's version of every
+   * other preset, and the loaded list becomes the saved one. With no preset changes, the tab's list is the loaded one.
+   */
+  function presetsTaking(current: FilterDialogState, loaded: PresetRow[]): Pick<FilterDialogState, "presets" | "savedPresets"> {
+    return { presets: mergePresetLists(current.presets, current.savedPresets, loaded), savedPresets: loaded };
+  }
+
+  /** Loads the presets again and takes them by the merge, unless they don't load. */
+  async function reloadPresets(): Promise<void> {
+    if (await connection.loadPresets()) {
+      const current = view.peek();
+      if (current) {
+        update(presetsTaking(current, presetRowsFromApi(store.presets.peek())));
+      }
+    }
+  }
+
+  /** Sends one of Apply's preset writes, by id, with this device's client id. */
+  function sendWrite(write: PresetWrite): Promise<Response> {
+    const clientId = store.identity.clientId;
+    const route = (id: string, action: string) => `/api/presets/${encodeURIComponent(id)}/${action}`;
+    switch (write.kind) {
+      case "delete":
+        return api.post(route(write.id, "delete"), { clientId } satisfies Schemas["DeletePresetRequest"]);
+      case "rename":
+        return api.post(route(write.id, "rename"), { name: write.name, clientId } satisfies Schemas["RenamePresetRequest"]);
+      case "update":
+        return api.post(route(write.id, "update"), {
+          filterState: serializeFilterStateForApi(write.filterState),
+          clientId
+        } satisfies Schemas["UpdatePresetFilterRequest"]);
+      case "create":
+        return api.post("/api/presets/create", {
+          name: write.name,
+          filterState: serializeFilterStateForApi(write.filterState),
+          clientId
+        } satisfies Schemas["CreatePresetRequest"]);
+      case "reorder":
+        // After the creates, so each new preset has the id the server gave it.
+        return api.post("/api/presets/reorder", {
+          presetIds: view.peek()!.presets.map((row) => row.id),
+          clientId
+        } satisfies Schemas["ReorderPresetsRequest"]);
+    }
+  }
+
+  /** The saved list takes a write that landed, and a new preset takes the id the server gave it, wherever the tab has it. */
+  async function takeLanded(write: PresetWrite, response: Response): Promise<void> {
+    const current = view.peek()!;
+    const saved = current.savedPresets;
+    switch (write.kind) {
+      case "delete":
+        update({ savedPresets: saved.filter((row) => row.id !== write.id) });
+        return;
+      case "rename":
+        update({ savedPresets: saved.map((row) => (row.id === write.id ? { ...row, name: write.name } : row)) });
+        return;
+      case "update":
+        update({ savedPresets: saved.map((row) => (row.id === write.id ? { ...row, filterState: cloneFilterState(write.filterState) } : row)) });
+        return;
+      case "reorder": {
+        const savedById = new Map(saved.map((row) => [row.id, row]));
+        update({ savedPresets: current.presets.map((row) => savedById.get(row.id) ?? row) });
+        return;
+      }
+      case "create": {
+        const id = String(((await readJson(response)) as ApiPreset).id);
+        const after = view.peek()!;
+        const renamed = (ref: string | null) => (ref === write.id ? id : ref);
+        update({
+          presets: after.presets.map((row) => (row.id === write.id ? { ...row, id } : row)),
+          savedPresets: [...after.savedPresets, { id, name: write.name, filterState: cloneFilterState(write.filterState) }],
+          headingPreset: renamed(after.headingPreset),
+          chosenPreset: renamed(after.chosenPreset),
+          presetEdit: after.presetEdit?.id === write.id ? { ...after.presetEdit, id } : after.presetEdit
+        });
+      }
+    }
+  }
+
+  /**
+   * Sends the tab's preset changes, one write at a time in order, and says whether every one landed. Each that lands is
+   * saved, so only what didn't land stays unsaved. At the first write the server refuses, it says why, with the
+   * server's reason, and takes the server's list by the merge. A write that couldn't reach the server keeps the tab's
+   * list as the writes left it, and a 401 shows only the pairing prompt. While it runs, Apply and Refresh do nothing.
+   */
+  async function savePresets(): Promise<boolean> {
+    const current = view.peek()!;
+    const plan = planPresetWrites(current.savedPresets, current.presets);
+    if (!plan.writes) {
+      return false;
+    }
+    savingPresets = true;
+    try {
+      for (const write of plan.writes) {
+        try {
+          const response = await sendWrite(write);
+          if (!response.ok) {
+            // The server's reason can name a preset, which the log leaves out.
+            const logText = `Saving presets failed (${response.status}).`;
+            const reason = await refusalReason(response);
+            void dialogs.notice(reason ? `Saving presets failed: ${reason}` : logText, logText);
+            await reloadPresets();
+            return false;
+          }
+          await takeLanded(write, response);
+        } catch (saveError) {
+          // A 401 shows only the pairing prompt, which the request has asked for.
+          if (!(saveError instanceof UnauthorizedError)) {
+            void dialogs.notice(`Saving presets failed: ${errorText(saveError)}`);
+          }
+          return false;
+        }
+      }
+      return true;
+    } finally {
+      savingPresets = false;
+    }
   }
 
   /**
@@ -510,7 +659,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     },
 
     async refresh() {
-      if (store.heldBack.peek()) {
+      if (store.heldBack.peek() || savingPresets) {
         return;
       }
       if (!view.peek()) {
@@ -533,40 +682,24 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
 
     async apply() {
       const before = view.peek();
-      if (!before || store.heldBack.peek() || blocked("apply")) {
+      if (!before || store.heldBack.peek() || savingPresets || blocked("apply")) {
         return;
       }
       update({ working: readGeneral(before) });
-      if (view.peek()!.presetsChanged) {
-        try {
-          const response = await api.post("/api/presets", presetsToPostBody(view.peek()!.presets));
-          if (!response.ok) {
-            void dialogs.notice(`Saving presets failed (${response.status}).`);
-            return;
-          }
-          const presets = await api.getJson("/api/presets");
-          store.presets.value = Array.isArray(presets) ? presets : [];
-          const saved = presetRowsFromApi(store.presets.peek());
-          update({ presets: saved, savedPresets: saved });
-        } catch (saveError) {
-          // A 401 shows only the pairing prompt, which the request has asked for.
-          if (!(saveError instanceof UnauthorizedError)) {
-            void dialogs.notice(`Saving presets failed: ${errorText(saveError)}`);
-          }
-          return;
-        }
+      if (view.peek()!.presetsChanged && !(await savePresets())) {
+        return;
       }
 
       const current = view.peek()!;
       const working = readGeneral(current);
       // One batch, so the device's memory takes the applied filter and its preset once.
       batch(() => {
-        store.activePresetName.value = dialogPresetBase(working, current.presets, current.headingPreset);
+        store.activePresetId.value = dialogPresetBase(working, current.presets, current.headingPreset);
         store.appliedFilter.value = cloneFilterState(working);
       });
       // Choose Preset starts over on the applied preset, as the tab does.
-      update({ working, headingPreset: store.activePresetName.peek(), chosenPreset: store.activePresetName.peek() });
-      await connection.loadPresets();
+      update({ working, headingPreset: store.activePresetId.peek(), chosenPreset: store.activePresetId.peek() });
+      await reloadPresets();
       void panel.closeIfOverlay();
       notifications.notify({ kind: "actions", text: "Filters applied.", key: "filter" });
       await library.commitQuery();
@@ -675,8 +808,8 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       });
     },
 
-    choosePreset(name) {
-      update({ chosenPreset: name || null });
+    choosePreset(id) {
+      update({ chosenPreset: id || null });
     },
 
     loadPreset() {
@@ -684,9 +817,9 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       if (!current || current.loadDisabled) {
         return;
       }
-      const chosen = current.presets.find((row) => row.name === current.chosenPreset);
+      const chosen = current.presets.find((row) => row.id === current.chosenPreset);
       const working = chosen ? cloneFilterState(chosen.filterState) : createDefaultFilterState();
-      update({ working, headingPreset: chosen?.name ?? null, general: generalDraftFromFilter(working, current.sources) });
+      update({ working, headingPreset: chosen?.id ?? null, general: generalDraftFromFilter(working, current.sources) });
     },
 
     updatePreset() {
@@ -694,7 +827,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       if (!current || blocked("updatePreset")) {
         return;
       }
-      const index = current.presets.findIndex((row) => row.name === current.chosenPreset);
+      const index = current.presets.findIndex((row) => row.id === current.chosenPreset);
       if (index < 0) {
         return;
       }
@@ -725,7 +858,8 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       const working = readGeneral(current);
       update({
         working,
-        presets: [...current.presets, { name, filterState: cloneFilterState(working) }],
+        // A temporary id, which no server id can be, until Apply creates the preset.
+        presets: [...current.presets, { id: `unsaved-${++unsavedPresets}`, name, filterState: cloneFilterState(working) }],
         newPresetName: ""
       });
       tab.value = "presets";
@@ -741,10 +875,10 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       update({ presets: moveEntry(current.presets, from, to) });
     },
 
-    editPreset(index) {
-      const row = view.peek()?.presets[index];
+    editPreset(id) {
+      const row = view.peek()?.presets.find((preset) => preset.id === id);
       if (row) {
-        update({ presetEdit: { index, name: row.name } });
+        update({ presetEdit: { id, name: row.name } });
       }
     },
 
@@ -758,7 +892,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     savePresetEdit() {
       const current = view.peek();
       const edit = current?.presetEdit;
-      const row = edit ? current.presets[edit.index] : undefined;
+      const row = edit ? current.presets.find((preset) => preset.id === edit.id) : undefined;
       if (!current || !edit || !row || current.presetEditProblem) {
         return;
       }
@@ -767,11 +901,8 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         update({ presetEdit: null });
         return;
       }
-      const presets = current.presets.slice();
-      presets[edit.index] = { ...row, name };
-      // The heading's preset and the chosen one keep naming the renamed preset.
-      const renamed = (preset: string | null) => (preset !== null && namesEqualIgnoringCase(preset, row.name) ? name : preset);
-      update({ presets, headingPreset: renamed(current.headingPreset), chosenPreset: renamed(current.chosenPreset), presetEdit: null });
+      // The heading's preset and the chosen one go by id, so they keep naming the renamed preset.
+      update({ presets: current.presets.map((preset) => (preset === row ? { ...row, name } : preset)), presetEdit: null });
     },
 
     cancelPresetEdit() {
@@ -781,7 +912,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     async deleteEditedPreset() {
       const before = view.peek();
       const edit = before?.presetEdit;
-      const removed = edit ? before.presets[edit.index] : undefined;
+      const removed = edit ? before.presets.find((preset) => preset.id === edit.id) : undefined;
       if (!edit || !removed) {
         return;
       }
@@ -791,10 +922,9 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         return;
       }
       // The heading's preset goes to None, and the chosen one does once the list no longer has it.
-      const named = current.headingPreset && namesEqualIgnoringCase(current.headingPreset, removed.name);
       update({
-        presets: current.presets.filter((_, rowIndex) => rowIndex !== edit.index),
-        headingPreset: named ? null : current.headingPreset,
+        presets: current.presets.filter((preset) => preset.id !== removed.id),
+        headingPreset: current.headingPreset === removed.id ? null : current.headingPreset,
         presetEdit: null
       });
     }

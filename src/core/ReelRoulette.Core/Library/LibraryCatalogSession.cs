@@ -544,22 +544,6 @@ public sealed class LibraryCatalogSession
         return presets;
     }
 
-    /// <summary>Replaces every preset with <paramref name="presets"/>, in their order, each with its id.</summary>
-    public void ReplacePresets(IReadOnlyList<LibraryCatalogPreset> presets)
-    {
-        ArgumentNullException.ThrowIfNull(presets);
-        Commit((connection, transaction) =>
-        {
-            LibraryCatalogStore.Execute(connection, transaction, "DELETE FROM presets;");
-            for (var i = 0; i < presets.Count; i++)
-            {
-                InsertPreset(connection, transaction, i, presets[i]);
-            }
-
-            return true;
-        });
-    }
-
     /// <summary>Adds a preset after every other one.</summary>
     public void CreatePreset(LibraryCatalogPreset preset)
     {

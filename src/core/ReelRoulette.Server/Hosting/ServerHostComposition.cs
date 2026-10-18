@@ -349,12 +349,6 @@ public static class ServerHostComposition
             return Results.Ok(source);
         });
 
-        app.MapPost("/api/presets", (List<FilterPresetSnapshot>? presets, ServerStateService state) =>
-        {
-            state.SetPresetCatalog(presets ?? []);
-            return Results.Ok();
-        });
-
         app.MapPost("/api/presets/create", CreatePreset);
 
         app.MapPost("/api/presets/{presetId}/update", UpdatePreset);

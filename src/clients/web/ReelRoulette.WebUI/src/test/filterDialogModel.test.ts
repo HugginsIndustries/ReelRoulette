@@ -186,7 +186,7 @@ describe("filterWithTypedDurations", () => {
 });
 
 describe("filterFieldProblems", () => {
-  const PRESETS = [{ name: "Favorites", filterState: filter() }];
+  const PRESETS = [{ id: "fav", name: "Favorites", filterState: filter() }];
 
   it("flags a duration that is not valid, read strictly, and not an empty one", () => {
     expect(filterFieldProblems(draft(), "Mine", PRESETS)).toEqual({ flagModes: null, minDuration: null, maxDuration: null, newPresetName: null });
@@ -219,29 +219,29 @@ describe("filterFieldProblems", () => {
 
 describe("editPresetNameProblem", () => {
   const PRESETS = [
-    { name: "Favorites", filterState: filter() },
-    { name: "Beach days", filterState: filter() }
+    { id: "fav", name: "Favorites", filterState: filter() },
+    { id: "beach", name: "Beach days", filterState: filter() }
   ];
 
   it("finds an empty name required, without a flag", () => {
     for (const text of ["", "   "]) {
-      expect(editPresetNameProblem(text, PRESETS, 1), JSON.stringify(text)).toBe(EMPTY_FIELD);
-      expect(isFlagged(editPresetNameProblem(text, PRESETS, 1)), JSON.stringify(text)).toBe(false);
+      expect(editPresetNameProblem(text, PRESETS, "beach"), JSON.stringify(text)).toBe(EMPTY_FIELD);
+      expect(isFlagged(editPresetNameProblem(text, PRESETS, "beach")), JSON.stringify(text)).toBe(false);
     }
   });
 
   it("flags another preset's name, ignoring case and surrounding spaces", () => {
     for (const text of ["Favorites", "favorites ", " FAVORITES"]) {
-      expect(editPresetNameProblem(text, PRESETS, 1), text).toEqual({ message: "Use a name no other preset has." });
-      expect(isFlagged(editPresetNameProblem(text, PRESETS, 1)), text).toBe(true);
+      expect(editPresetNameProblem(text, PRESETS, "beach"), text).toEqual({ message: "Use a name no other preset has." });
+      expect(isFlagged(editPresetNameProblem(text, PRESETS, "beach")), text).toBe(true);
     }
   });
 
   it("accepts the preset's own name in any case, and a name no preset has", () => {
-    expect(editPresetNameProblem("Beach days", PRESETS, 1)).toBeNull();
-    expect(editPresetNameProblem(" BEACH DAYS ", PRESETS, 1)).toBeNull();
-    expect(editPresetNameProblem("Sunny days", PRESETS, 1)).toBeNull();
-    expect(editPresetNameProblem("Beach days", PRESETS, 0)).toEqual({ message: "Use a name no other preset has." });
+    expect(editPresetNameProblem("Beach days", PRESETS, "beach")).toBeNull();
+    expect(editPresetNameProblem(" BEACH DAYS ", PRESETS, "beach")).toBeNull();
+    expect(editPresetNameProblem("Sunny days", PRESETS, "beach")).toBeNull();
+    expect(editPresetNameProblem("Beach days", PRESETS, "fav")).toEqual({ message: "Use a name no other preset has." });
   });
 });
 
@@ -361,20 +361,21 @@ describe("filterTagCategories", () => {
 });
 
 describe("presets and sources", () => {
-  it("names preset rows by name or id and leaves out rows with neither", () => {
+  it("keeps each preset row's id, names it by its name or id, and leaves out rows without an id, which Apply can't write", () => {
     const rows = presetRowsFromApi([
       { id: "p1", name: " Favorites ", filterState: { favoritesMode: "only" } },
       { id: "p2", name: "", filterState: {} },
+      { name: "Nameless id" },
       { name: "" }
     ]);
-    expect(rows.map((row) => row.name)).toEqual(["Favorites", "p2"]);
+    expect(rows.map((row) => [row.id, row.name])).toEqual([["p1", "Favorites"], ["p2", "p2"]]);
     expect(rows[0]!.filterState.favoritesMode).toBe("only");
   });
 
   it("reads preset rows without AND match modes, keeping OR ones", () => {
     const rows = presetRowsFromApi([
-      { name: "Mixed", filterState: { categoryLocalMatchModes: { places: 0, people: 1 } } },
-      { name: "And", filterState: { categoryLocalMatchModes: { places: 0 } } }
+      { id: "mixed", name: "Mixed", filterState: { categoryLocalMatchModes: { places: 0, people: 1 } } },
+      { id: "and", name: "And", filterState: { categoryLocalMatchModes: { places: 0 } } }
     ]);
     expect(rows.map((row) => row.filterState.categoryLocalMatchModes)).toEqual([{ people: 1 }, null]);
   });

@@ -63,10 +63,7 @@ public sealed class LibraryCatalogSchema2Tests
             FileName = "a.mp4"
         }));
         Assert.True(opened.Session.SetThumbnail("item-1", "rev-1", 12, 34));
-        opened.Session.ReplacePresets(
-        [
-            new LibraryCatalogPreset { Name = "Night", FilterStateJson = """{"favoritesOnly":true}""" }
-        ]);
+        opened.Session.CreatePreset(new LibraryCatalogPreset { Id = "night", Name = "Night", FilterStateJson = """{"favoritesOnly":true}""" });
         var jpeg = Path.Combine(dir.Path, "thumbnails", "item-1.jpg");
         Directory.CreateDirectory(Path.GetDirectoryName(jpeg)!);
         File.WriteAllText(jpeg, marker);

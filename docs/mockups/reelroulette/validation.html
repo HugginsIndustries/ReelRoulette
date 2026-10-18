@@ -700,7 +700,7 @@ h1 { font-size: 1.4rem; margin: 0; }
 
   <section class="group">
     <h2>Disabled or held</h2>
-    <p class="group-note">A field that may sit empty, such as a name typed for an action, is never flagged while it is empty: the action that needs it is disabled, dimmed, and pressing it does nothing. A field that must always hold a value for the app to work, such as Advance after in Settings, is flagged when it is emptied, so the user sees it. Any other problem is flagged in its field, with the red icon and the tooltip. An action whose fields all sit right next to it, a field beside its button or the fields of the dialog it is in, is disabled while one of them has a problem, with no icon on the button, since the field says why. An action that uses a field elsewhere, such as Apply, is held instead: its label dims, a red badge shows on its top-right corner without changing its width, and pressing it moves to the field, as the last section shows. The Filter tab's Apply, an icon button and the one held action with an orange dot, dims its icon and turns its dot red instead of showing the badge, and Add Preset and Choose Preset's Update, icon buttons without that dot, dim their icons and show a red dot where Apply's sits. Each red icon, in a field or on the corner of a held action or a Filter section's tab, a held action's red dot, and the tooltip fade in and out, and Apply's dot changes color, over about 250 ms, the icons keeping their place while they fade out; with reduced motion they show and hide at once.</p>
+    <p class="group-note">A field that may sit empty, such as a name typed for an action, is never flagged while it is empty: the action that needs it is disabled, dimmed, and pressing it does nothing. A field that must always hold a value for the app to work, such as Advance after in Settings, is flagged when it is emptied, so the user sees it. Any other problem is flagged in its field, with the red icon and the tooltip. An action whose fields all sit right next to it, a field beside its button or the fields of the dialog it is in, is disabled while one of them has a problem, with no icon on the button, since the field says why. An action that uses a field elsewhere, such as Apply, is held instead: its label dims, a red badge shows on its top-right corner without changing its width, and pressing it moves to the field, as the last section shows. The Filter tab's Apply, an icon button and the one held action with an orange dot, dims its icon and turns its dot red instead of showing the badge, and Add Preset and Choose Preset's Update, icon buttons without that dot, dim their icons and show a red dot where Apply's sits. While its changes would have presets take each other's names or filters, Apply dims its icon and turns its dot red, as while held, its tooltip says why, and pressing it shows why in a notice, since a phone or tablet shows no tooltip. Each red icon, in a field or on the corner of a held action or a Filter section's tab, a held action's red dot, and the tooltip fade in and out, and Apply's dot changes color, over about 250 ms, the icons keeping their place while they fade out; with reduced motion they show and hide at once.</p>
   </section>
 
   <section class="group">
@@ -1303,10 +1303,15 @@ window.addEventListener("resize", placeAllTips);
  *   for an action with nothing to do, such as Apply with no changes. So does `unavailable()` returning a reason, for
  *   an action that can't be used now when no field says why, such as Add Preset with the default filter; the reason is
  *   its tooltip and accessible description. Disabling wins over holding.
+ * - While it isn't idle, `blocked()` returning a reason blocks it, for an action whose reason has to be seen on a phone
+ *   or tablet, which shows no tooltip, such as Apply while presets would take each other's names: its label dims, it
+ *   reads as unavailable, a dot it has turns red, as a held one's does, the reason is its tooltip and accessible
+ *   description, and pressing it calls `onBlocked(reason)` in place of the action. Blocking wins over everything but
+ *   `idle()`.
  * - Otherwise a flagged field elsewhere holds it: the button's label dims, it reads as unavailable, and the red badge
  *   shows on its top-right corner, or a red dot for an icon button that has one in its place, such as Add Preset.
  *   Pressing it does nothing but take the user to the first field that holds it.
- * Call the returned `refresh()` when what `idle()` or `unavailable()` reads changes.
+ * Call the returned `refresh()` when what `idle()`, `blocked()`, or `unavailable()` reads changes.
  */
 function holdAction(button, fields, options) {
   const opts = options || {};
@@ -1317,25 +1322,34 @@ function holdAction(button, fields, options) {
   button.after(describe);
 
   const unavailable = () => (opts.unavailable ? opts.unavailable() : null);
+  const idle = () => !!(opts.idle && opts.idle());
+  const blockedBy = () => (!idle() && opts.blocked ? opts.blocked() : null);
 
   function disabled() {
-    if (opts.idle && opts.idle()) return true;
+    if (idle()) return true;
+    if (blockedBy()) return false;
     if (unavailable()) return true;
     return fields().some((field) => field.disables) || (opts.beside ? opts.beside().some((field) => field.holds) : false);
   }
 
   function blocker() {
-    return disabled() ? null : fields().find((field) => field.holds) || null;
+    return disabled() || blockedBy() ? null : fields().find((field) => field.holds) || null;
   }
 
   function refresh() {
     button.disabled = disabled();
     const field = blocker();
     const held = !!field;
+    const blocked = blockedBy();
     const why = unavailable();
-    button.classList.toggle("shows-problem", held);
+    button.classList.toggle("shows-problem", held || !!blocked);
     fadeShown(button.querySelector(".btn-problem, .held-dot"), held);
-    if (held) {
+    if (blocked) {
+      button.setAttribute("aria-disabled", "true");
+      describe.textContent = blocked;
+      button.setAttribute("aria-describedby", describe.id);
+      button.title = blocked;
+    } else if (held) {
       button.setAttribute("aria-disabled", "true");
       describe.textContent = opts.reason ? opts.reason(field) : "Correct the field first.";
       button.setAttribute("aria-describedby", describe.id);
@@ -1356,10 +1370,15 @@ function holdAction(button, fields, options) {
   button.addEventListener(
     "click",
     (event) => {
+      const blocked = blockedBy();
       const field = blocker();
-      if (!field) return;
+      if (!blocked && !field) return;
       event.stopImmediatePropagation();
       event.preventDefault();
+      if (blocked) {
+        if (opts.onBlocked) opts.onBlocked(blocked);
+        return;
+      }
       if (opts.beforeReveal) opts.beforeReveal(field);
       field.reveal();
     },

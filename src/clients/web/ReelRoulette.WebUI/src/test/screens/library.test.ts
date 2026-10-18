@@ -1437,7 +1437,7 @@ describe("memory", () => {
       server.on("GET", "/api/presets", () => json([BEACH_PRESET]));
     });
     await pickPreset("preset-beach");
-    expect(JSON.parse(localStorage.getItem(REMEMBERED_FILTER_KEY)!)).toMatchObject({ preset: "Beach", unchanged: true });
+    expect(JSON.parse(localStorage.getItem(REMEMBERED_FILTER_KEY)!)).toMatchObject({ presetId: "preset-beach", unchanged: true });
 
     const shore = { ...BEACH_PRESET, filterState: { ...BEACH_PRESET.filterState, selectedTags: ["Shore"] } };
     const second = await refresh(page, libraryItems(3), (server) => {
@@ -1461,7 +1461,7 @@ describe("memory", () => {
       REMEMBERED_FILTER_KEY,
       JSON.stringify({
         filter: { selectedTags: ["Beach"], excludedTags: [], includedSourceIds: [], onlyNeverPlayed: true },
-        preset: "Beach",
+        presetId: "preset-beach",
         unchanged: false
       })
     );
@@ -1476,7 +1476,7 @@ describe("memory", () => {
       REMEMBERED_FILTER_KEY,
       JSON.stringify({
         filter: { selectedTags: [], excludedTags: [], includedSourceIds: ["source-gone"] },
-        preset: null,
+        presetId: null,
         unchanged: false
       })
     );
@@ -1539,7 +1539,7 @@ describe("kept sources", () => {
       REMEMBERED_FILTER_KEY,
       JSON.stringify({
         filter: { selectedTags: [], excludedTags: [], includedSourceIds: ["source-1"] },
-        preset: null,
+        presetId: null,
         unchanged: false
       })
     );
@@ -1567,7 +1567,7 @@ describe("kept sources", () => {
       REMEMBERED_FILTER_KEY,
       JSON.stringify({
         filter: { selectedTags: [], excludedTags: [], includedSourceIds: ["source-2"] },
-        preset: null,
+        presetId: null,
         unchanged: false
       })
     );

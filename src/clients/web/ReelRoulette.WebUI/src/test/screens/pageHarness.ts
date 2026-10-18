@@ -65,6 +65,7 @@ export function unauthorizedLogLine(route: string, current: RelayLogCurrentItem 
 export class FakeServer {
   readonly calls: FetchCall[] = [];
   private readonly routes = new Map<string, Reply>();
+  private readonly fallbacks: Array<(call: FetchCall) => Response | null> = [];
 
   constructor() {
     this.on("GET", "/api/version", () => json(COMPATIBLE_VERSION));
@@ -76,6 +77,15 @@ export class FakeServer {
 
   on(method: string, path: string, reply: Reply): this {
     this.routes.set(`${method} ${path}`, reply);
+    return this;
+  }
+
+  /**
+   * Answers the requests no route takes, such as routes that carry an id, with `reply`, which returns null for one it
+   * doesn't answer, before they answer 404.
+   */
+  fallback(reply: (call: FetchCall) => Response | null): this {
+    this.fallbacks.push(reply);
     return this;
   }
 
@@ -96,7 +106,16 @@ export class FakeServer {
       throw new DOMException("Aborted", "AbortError");
     }
     const reply = this.routes.get(`${method} ${url.pathname}`);
-    return reply ? reply(call) : status(404);
+    if (reply) {
+      return reply(call);
+    }
+    for (const fallback of this.fallbacks) {
+      const answer = fallback(call);
+      if (answer) {
+        return answer;
+      }
+    }
+    return status(404);
   };
 
   requests(method: string, path: string): FetchCall[] {

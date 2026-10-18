@@ -5,7 +5,7 @@ import {
   createDefaultFilterState,
   filterStateFromApiObject,
   filterStatesEqualForPresetMatch,
-  findPresetByName,
+  findPresetById,
   headerPresetListAfterPick,
   headerPresetListForFilter,
   isPresetOwnFilter,
@@ -62,12 +62,16 @@ export type AutoplayMode = "normal" | "timer";
 /** A saved preset as `GET /api/presets` returns it. */
 export type ApiPreset = components["schemas"]["PresetResponse"];
 
-/** The applied filter and its preset, as remembered across a page refresh. Presets themselves stay on the server. */
+/**
+ * The applied filter and its preset, as remembered across a page refresh. Presets themselves stay on the server. A
+ * record from before presets had ids, which names its preset in `preset`, isn't one, so it reads as None with the
+ * default filter.
+ */
 interface RememberedFilter {
   /** The filter as the API takes it. */
   filter: ApiFilterState;
-  /** The preset it came from, or null for None. */
-  preset: string | null;
+  /** The id of the preset it came from, or null for None. */
+  presetId: string | null;
   /** The filter was the preset's own, unchanged, so the next page load applies the preset as the server has it then. */
   unchanged: boolean;
 }
@@ -81,7 +85,7 @@ function isRememberedFilter(value: unknown): value is RememberedFilter {
     !!record.filter &&
     typeof record.filter === "object" &&
     !Array.isArray(record.filter) &&
-    (record.preset === null || typeof record.preset === "string") &&
+    (record.presetId === null || typeof record.presetId === "string") &&
     typeof record.unchanged === "boolean"
   );
 }
@@ -140,8 +144,11 @@ export interface AppStore {
   readonly presetMenu: Signal<PresetMenu>;
   /** Assign a new filter to change it, so the Library tab's Filters line and the device's memory follow. */
   readonly appliedFilter: Signal<FilterState>;
-  /** The saved preset the applied filter came from, or null for None. */
-  readonly activePresetName: Signal<string | null>;
+  /**
+   * The id of the saved preset the applied filter came from, or null for None. It stays while a loaded list lacks the
+   * preset, which the dropdown then shows as None*, until the filter becomes the default or another preset's.
+   */
+  readonly activePresetId: Signal<string | null>;
   readonly randomizationMode: Signal<string>;
   /**
    * The Settings tab's Advance after, in seconds, kept on this device: how long a photo shows, and the timer of Timer
@@ -248,11 +255,11 @@ function readRandomizationMode(storage: StorageLike): string {
 /** The applied filter and its preset as the store has them, read so an effect follows each. */
 function rememberedFilterOf(store: AppStore): RememberedFilter {
   const filter = store.appliedFilter.value;
-  const preset = store.activePresetName.value;
+  const presetId = store.activePresetId.value;
   return {
     filter: serializeFilterStateForApi(filter),
-    preset,
-    unchanged: isPresetOwnFilter(filter, store.presets.value, preset)
+    presetId,
+    unchanged: isPresetOwnFilter(filter, store.presets.value, presetId)
   };
 }
 
@@ -268,7 +275,7 @@ export function createAppStore(options: AppStoreOptions): AppStore {
   const remembered = options.device.read<RememberedFilter | null>(APPLIED_FILTER_KEY, null, isRememberedFilter);
   const restoredFilter = remembered ? withoutAndLocalModes(filterStateFromApiObject(remembered.filter)) : createDefaultFilterState();
   /** The remembered preset that applies again once presets load, unless the filter changes first. */
-  let reapplyPreset = remembered?.unchanged ? remembered.preset : null;
+  let reapplyPreset = remembered?.unchanged ? remembered.presetId : null;
   /** Presets have loaded once, so whether the filter is a preset's own can be told, and the filter is remembered. */
   const presetsLoadedOnce = signal(false);
 
@@ -293,7 +300,7 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     presets: signal<ApiPreset[]>([]),
     presetMenu: signal<PresetMenu>({ entries: [{ label: PRESET_MENU_LOADING, value: "" }], selectedValue: "", message: true }),
     appliedFilter: signal(restoredFilter),
-    activePresetName: signal<string | null>(remembered?.preset ?? null),
+    activePresetId: signal<string | null>(remembered?.presetId ?? null),
     randomizationMode: signal(readRandomizationMode(options.storage)),
     advanceAfterSeconds,
     autoplayMode,
@@ -322,15 +329,15 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     },
 
     syncHeaderPresets() {
-      showPresetList(headerPresetListForFilter(store.appliedFilter.peek(), store.presets.peek(), store.activePresetName.peek()));
+      showPresetList(headerPresetListForFilter(store.appliedFilter.peek(), store.presets.peek(), store.activePresetId.peek()));
     },
 
     presetsLoaded() {
-      const name = reapplyPreset;
+      const id = reapplyPreset;
       reapplyPreset = null;
       // A filter applied since the page loaded replaces the remembered one, which then no longer applies again.
       const unchangedSinceLoad = store.appliedFilter.peek() === restoredFilter;
-      const preset = name !== null && unchangedSinceLoad ? findPresetByName(store.presets.peek(), name) : undefined;
+      const preset = id !== null && unchangedSinceLoad ? findPresetById(store.presets.peek(), id) : undefined;
       if (preset) {
         store.pickHeaderPreset(preset.id);
       } else {
@@ -348,7 +355,7 @@ export function createAppStore(options: AppStoreOptions): AppStore {
       // One batch, so the device's memory takes the pick's result once, not each step on the way.
       const changed = batch(() => {
         const applied = store.appliedFilter.peek();
-        const list = headerPresetListAfterPick(applied, store.presets.peek(), store.activePresetName.peek(), value);
+        const list = headerPresetListAfterPick(applied, store.presets.peek(), store.activePresetId.peek(), value);
         const filterChanged = !filterStatesEqualForPresetMatch(list.filter, applied);
         if (filterChanged) {
           store.appliedFilter.value = list.filter;
@@ -443,7 +450,7 @@ export function createAppStore(options: AppStoreOptions): AppStore {
   });
 
   function showPresetList(list: HeaderPresetList): void {
-    store.activePresetName.value = list.baseName;
+    store.activePresetId.value = list.baseId;
     store.presetMenu.value = { entries: list.entries, selectedValue: list.selectedValue, message: false };
   }
 

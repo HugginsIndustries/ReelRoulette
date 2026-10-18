@@ -225,18 +225,15 @@ public sealed class ServerStateRegressionTests
         try
         {
             var service = new ServerStateService(catalog: CatalogOpen.Host(appDataPath));
-            service.SetPresetCatalog(
-            [
-                new FilterPresetSnapshot
+            var created = service.CreatePreset(
+                "Tag test",
+                System.Text.Json.JsonSerializer.SerializeToElement(new
                 {
-                    Name = "Tag test",
-                    FilterState = System.Text.Json.JsonSerializer.SerializeToElement(new
-                    {
-                        selectedTags = new[] { "TagA" },
-                        excludedTags = new[] { "TagA" }
-                    })
-                }
-            ]);
+                    selectedTags = new[] { "TagA" },
+                    excludedTags = new[] { "TagA" }
+                }),
+                null);
+            Assert.Equal(PresetWriteStatus.Done, created.Status);
 
             Assert.True(service.RenameTagInPresetCatalogOnly("TagA", "TagB"));
             var presets = service.GetPresetCatalogSnapshot();

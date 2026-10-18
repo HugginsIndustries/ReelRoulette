@@ -574,28 +574,6 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
           $ref: "#/components/responses/LibraryUnavailable"
-    post:
-      summary: Replace preset catalog
-      operationId: postPresets
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: "#/components/schemas/FilterPresetSnapshot"
-      responses:
-        "200":
-          description: Preset catalog updated
-        "401":
-          description: Unauthorized when auth is required and request is not paired
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "503":
-          $ref: "#/components/responses/LibraryUnavailable"
 
   /api/presets/create:
     post:
@@ -2954,17 +2932,6 @@ components:
           type: integer
           format: int64
 
-    FilterPresetSnapshot:
-      type: object
-      required:
-        - name
-        - filterState
-      properties:
-        name:
-          type: string
-        filterState:
-          $ref: "#/components/schemas/FilterState"
-
     CreatePresetRequest:
       type: object
       required:
@@ -3658,9 +3625,8 @@ components:
     PresetCatalogChangedPayload:
       type: object
       description: >-
-        Published by each preset create, update, rename, reorder, and delete. The whole-list replace,
-        `POST /api/presets`, publishes none, and tag rename and delete publish none, so clients see the presets
-        they change through `tagCatalogChanged`.
+        Published by each preset create, update, rename, reorder, and delete. Tag rename and delete publish none,
+        so clients see the presets they change through `tagCatalogChanged`.
       required:
         - presetId
         - clientId

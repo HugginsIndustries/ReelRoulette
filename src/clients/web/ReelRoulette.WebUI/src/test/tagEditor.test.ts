@@ -1041,7 +1041,7 @@ describe("saving", () => {
     expect((store.presets.value[0]!.filterState as any).selectedTags).toEqual(["Shore"]);
     expect((store.presets.value[1]!.filterState as any).selectedTags).toEqual(["Beach"]);
     expect(storedFilter.selectedTags).toEqual(["Shore"]);
-    expect(store.activePresetName.value).toBe("Beach days");
+    expect(store.activePresetId.value).toBe("preset-beach");
     expect(session.reloadLoaded).toHaveBeenCalledTimes(1);
 
     context.listeners.itemTagsChanged!({ resolvedItemIds: ["item-1"], addedTags: ["Shore"], removedTags: ["Beach"] });

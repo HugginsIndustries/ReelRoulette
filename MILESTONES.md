@@ -157,7 +157,8 @@ Last milestone completed: M12i5
 - When the Filter tab takes a freshly loaded preset list while it holds unsaved preset changes, presets it hasn't changed take the server's version, and its renames, filter changes, deletes, and new presets stay.
 - The merged list keeps the server's order unless the tab reordered, which keeps the tab's order, with presets new on the server at the end.
 - A preset another device deleted leaves the tab's list, with any unsaved change to it, rather than coming back on Apply.
-- An Apply that would swap two presets' names or filters is blocked in the Filter tab, not supported: Apply is disabled, with a reason naming the two presets and saying to apply the change in two steps.
+- An Apply that would have two or more presets take each other's names, or their filters, in a loop, such as two presets swapping names or three rotating them, is blocked in the Filter tab, not supported. Apply shows as unavailable, with a reason naming each preset in the loop and saying to apply the change in two steps.
+- Pressing Apply while a loop blocks it shows the reason in a notice, since a phone or tablet shows no tooltip and Apply saves the user's work. Add Preset and Update keep their reasons in their tooltips only.
 
 #### Slices
 
@@ -167,7 +168,7 @@ Last milestone completed: M12i5
 | Contract | ✅ Complete | Per-preset routes, the preset id in responses and random requests, and the preset event, in OpenAPI and the generated WebUI types. |
 | WebUI old fields | ✅ Complete | The WebUI reading only the Favorites and Blacklisted modes, `filter-enum-values.json` locking how the server and the WebUI read them, and `filter-mode-resolution.json` moved to the Core tests. |
 | Duplicate filter | ✅ Complete | Add Preset and Update disabled for a filter a preset already has, and Choose Preset only choosing the preset that new Load and Update icon buttons act on, in the mockup and then the app. |
-| WebUI writes | ⏳ Planned | The Filter tab saving each changed preset by id, a refused save showing the server's reason, the active preset remembered by id, and the whole-list replace removed. |
+| WebUI writes | ✅ Complete | The Filter tab saving each changed preset by id, Apply blocked by a loop of names or filters, a refused save showing the server's reason, the active preset remembered by id, and the whole-list replace removed. |
 | WebUI events | ⏳ Planned | Every open WebUI following the preset event, the applied preset following another device's change, and Other devices popups for preset changes. |
 
 #### Server slice
@@ -419,7 +420,8 @@ Last milestone completed: M12i5
 
 - The Filter tab keeps every change until Apply, which sends one write for each preset it changed, by id, and never the whole list: deletes, then renames, then filter updates, then new presets, then one reorder while the order still differs.
 - A rename that takes a name another rename gives up goes after it, and an update that takes a filter another update gives up goes after that one.
-- Apply is disabled while the tab's changes would swap two presets' names, or their filters, with a reason naming the two presets and saying to apply the change in two steps.
+- Apply shows as unavailable while the tab's changes would have presets take each other's names, or their filters, in a loop of two or more, its icon dimmed and its dot red, as a held Apply's, with a reason naming each preset in the loop and saying to apply the change in two steps. The ordering of renames and updates finds the loop, whatever its size.
+- Pressing Apply while a loop blocks it shows the reason in a notice and saves and applies nothing. The notice's log line leaves the presets' names out.
 - Apply stops at the first write the server refuses, reloads the presets, keeps the changes that didn't land as unsaved, and applies nothing. Writes that landed stay saved.
 - A refused save's notice says `Saving presets failed: {the server's reason}`, and its log line leaves the preset's name out, as `Saving presets failed (409).`.
 - Refresh, opening the tab, and a refused save take the server's list by the merge the Decisions describe, in place of keeping the tab's list or taking the server's whole.
@@ -430,7 +432,7 @@ Last milestone completed: M12i5
 - A 401's log line names a preset route's id as `{presetId}`, as it names an item id.
 - Once the WebUI no longer posts it, the whole-list replace, `POST /api/presets`, goes from the server, with `SetPresetCatalog`, Core's `ReplacePresets`, and the `FilterPresetSnapshot` schema, in OpenAPI, the generated WebUI types, `docs/api.md`, and `CONTEXT.md`.
 - The two-device test runs at the unit level: two Filter tabs against one fake server that keeps presets by id.
-- The mockup shows Apply's swap reason first, with this slice's other changes, for the user's review, and the app follows.
+- The mockup shows Apply's loop reason and its notice first, with this slice's other changes, for the user's review, and the app follows.
 
 **Traps**
 
@@ -448,20 +450,58 @@ Last milestone completed: M12i5
 - The screen tests' `FakeServer` keeps no presets, and the Filter tab's tests fake `POST /api/presets` with positional `saved-{n}` ids that some tests expect (`servePresets` in `src/test/screens/filter.test.ts`, `setup` in `src/test/filterDialog.test.ts`).
 - Two pages can share one `FakeServer`, but `MountedPage.clientId()` reads storage live, only the last page mounted is unmounted, and both pages render the same element ids (measured).
 - `requestRoute` in `src/api/serverRequest.ts` names only an item id in a route as a placeholder.
+- No order of the writes lands a loop: the server refuses every order of a loop of two, three, or four renames, while one walk that puts each rename after the one that frees its name finds a loop of any size (measured with a prototype against the server's name rule).
+- A disabled button takes no press, and `HeldButton` disables a button that has a disabling reason (`src/ui/FieldValidation.tsx`), as the mockup's `holdAction` does for an `unavailable` reason (`build/common.js`), so Apply blocked by a loop needs to show as unavailable while staying pressable.
+- The mockup keys presets by name (`build/layout.src.html`), so a name swap there reads as a filter swap and a reorder until its presets have ids (inferred), and its Apply has no `unavailable` reason.
 
 **Acceptance**
 
 - A preset saved on one device while another device has its preset list open is still present after the other device saves a different preset, in a two-session test of concurrent saves.
 - The WebUI never posts the whole preset list, and Apply sends one write for each change, in order, in WebUI tests of each preset write.
 - A delete then an add of one name, a rename then an add of the old name, and a filter moved from one preset to a new one each save, in WebUI tests of the write order.
-- Apply is disabled while the tab's changes swap two presets' names, and while they swap two presets' filters, with the reason naming both presets, in Filter screen tests.
+- Apply shows as unavailable while the tab's changes swap two presets' names, while they swap two presets' filters, and while three presets rotate their names, with the reason naming each preset in the loop, and pressing it shows the reason in a notice and saves and applies nothing, while a chain of renames applies, in Filter screen tests.
 - A save the server refuses for another preset's filter shows the server's reason, logs `Saving presets failed (409).` without the preset's name, keeps the changes that didn't land, and applies nothing, in Filter screen tests.
 - Refresh while the tab holds unsaved changes keeps them and takes the server's version of every other preset, in Filter tab tests.
 - A modified preset still shows "Preset*" after a preset load whose list lacks it is followed by one that has it, and a remembered record from before, which names its preset in `preset`, reads as None with the default filter, in WebUI tests of the remembered filter.
 - A 401 from a preset route logs the route with `{presetId}` in place of the id, in server request tests.
 - `POST /api/presets` is gone from OpenAPI and the server, in contract tests, and `dotnet test ReelRoulette.sln` passes.
-- The mockup's Apply gives the swap reason, the mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- The mockup's Apply gives the loop reason, and its notice when pressed, the mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
+
+**Evidence**
+
+- `dotnet build ReelRoulette.sln` passes with no warnings, and `dotnet test ReelRoulette.sln` passes: 510 Core tests and 7 ServerApp tests.
+- `npm run verify` passes: 1,491 tests in 73 files, the generated types' freshness check, the build, and its output check.
+- `node docs/mockups/reelroulette/build/check.mjs` passes its 1,227 checks, and SystemChecks and `check-milestones.ps1` pass.
+- The user approved the mockup after one review round, which turned a blocked Apply's dot red, as a held Apply's is, in place of keeping it orange.
+- A prototype of the ordering, run against a copy of the server's name rule, found a loop of two, three, and four renames with one walk and no case for its size, while the server refused every order of each loop, 2, 6, and 24 orders, and a chain and a rename of case alone landed (measured). So the check that blocks a swap blocks longer loops at no extra cost, which the user then chose over swaps alone.
+- Written before the per-preset writes, the two-device test failed against the whole-list save: the second device's Apply left the server with `Favorites` and `Known duration`, without the first device's `Unplayed` (measured).
+- Apply's writes are `delete`, `rename`, `update`, `create`, then `reorder`, each with this device's `clientId`. A new preset's temporary id is `unsaved-{n}` until its create answers with the server's id, which its row, the heading's preset, and Choose Preset then take.
+- `presetWrites.test.ts` covers the order, chains, a rename of case alone, the loops, and the merge; `filterDialog.test.ts` covers each write against `src/test/fakePresetServer.ts`, which keeps presets by id and refuses as the server does, two devices, a refusal partway, a write that can't reach the server, a create that landed before a refused reorder, and a second Apply and a Refresh while Apply's writes are being sent; and the Filter screen tests cover the blocked Apply and a refused save.
+- Each new check fails when what it guards is broken, each break made in place and restored byte for byte from a copy in `artifacts/scratch/` (measured):
+  - No loop check fails 6 tests, a check of two-preset loops only fails the 3 rotation tests, and renames sent in the list's order fail the 3 chain tests.
+  - The merge taking the server's list whole fails 8, and keeping the tab's list while it has changes fails 6.
+  - A new preset keeping its temporary id fails 2, and the saved list not taking a landed delete or rename fails the test of a write that can't reach the server, which was added when the rename's break first failed none.
+  - A refusal's notice without the server's reason fails 3, and its log line with the reason 2.
+  - A blocked press that shows nothing fails 3, and a blocked Apply that doesn't look held fails both screen tests.
+  - A second Apply that doesn't wait for the first's writes fails the test of a double press, sending the delete again to a 404, and so does a Refresh that doesn't wait, loading the sources mid-save.
+  - The active preset dropping on a list that lacks it fails 3, a record from before read by its `preset` fails 1, and a 401 without `{presetId}` fails 2.
+  - The removal test fails with the route and its spec entry put back, and with the spec entry alone.
+- Each of the mockup's new checks fails under at least one of seven breaks, each made in a copy of the mockup under `artifacts/scratch/`: no loop check, two-preset loops only, every change waiting on every other, a press that shows nothing, a press that still applies, an orange dot, and the old sample notice (measured).
+- Deviations:
+  - Edit Preset holds the preset's id, as the merge can move rows.
+  - The merge works field by field: a preset the tab renamed takes another device's filter, and one whose filter it changed takes another device's name.
+  - `ServerConnection.loadPresets` says whether the presets loaded, so a refused Apply merges only a list that loaded. A write that can't reach the server, or a 401, keeps the tab's list as the writes that landed left it, without reloading.
+  - Apply reloads the presets once, after applying the filter, as before, taking them by the merge, rather than also between its writes and applying.
+  - Apply and Refresh do nothing while Apply's preset writes are being sent, with no change to how they look, since a second Apply would send the writes again from the saved list as it was, which review found.
+  - `HeldButton` takes a `blockedReason`, and the mockup's `holdAction` a `blocked` reason with `onBlocked`, for an action that looks held and stays pressable.
+  - The remembered preset survives by one rule in `resolvePresetAnchor`: the previous preset stays the anchor while the list lacks it, in the preset dropdown and the Filter tab's heading alike, as **None\***.
+  - `FakeServer` has a fallback for routes that carry an id, which `fakePresetServer.ts` answers.
+  - The unreachable `ValueKind == Undefined` branch of `ToCatalogPreset` went with the whole-list replace, and `MissingOrNullFilterState_KeepsEachRoutesMeaning` seeds its presets and checks them once, since a restart reads the same catalog.
+  - The mockup's presets have ids, and its remembered preset moved to `libPresetId`.
+  - The fake server's refusals compare filters by the WebUI's comparison, which `preset-filter-equality.json` locks to Core's.
+- Until the WebUI events slice, a tab that stays showing doesn't take another device's changes, so a reorder after another device added a preset is refused with `The order must name every preset once.`, and the reload brings that preset in for the next Apply, as a test shows.
+- `CONTEXT.md`, `docs/api.md`, and `docs/domain-inventory.md` describe the per-preset saves, the merge, the blocked Apply, and the active preset by id, with the whole-list replace gone from them and from OpenAPI.
 
 #### WebUI events slice
 

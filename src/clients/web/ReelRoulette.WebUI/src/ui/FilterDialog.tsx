@@ -63,13 +63,17 @@ function sectionFlagged(view: FilterDialogView | null, section: FilterDialogTab)
   return !!view && fields.some((field) => FILTER_FIELD_SECTION[field] === section && view.flagged[field]);
 }
 
-/** An action's state for its button: disabled, with why when no field says it, or held by a field elsewhere. */
+/**
+ * An action's state for its button: disabled, with why when no field says it, held by a field elsewhere, or, for
+ * Apply, blocked by presets that would take each other's names or filters.
+ */
 function heldAction(view: FilterDialogView | null, action: FilterAction) {
   const block = view?.actions[action];
   return {
     disabled: block?.disabled ?? false,
     heldReason: block?.heldBy ? filterHeldReason(action, block.heldBy) : null,
-    disabledReason: block?.reason ?? null
+    disabledReason: block?.reason ?? null,
+    blockedReason: block?.blocked ? (block.reason ?? null) : null
   };
 }
 
@@ -160,7 +164,7 @@ function addedPresetFocus(): HTMLElement | null {
 /** Edit Preset: renames a preset, or deletes it after asking. It shows while the dialog's preset edit is open. */
 function EditPresetDialog({ view }: { view: FilterDialogView }) {
   const { filterDialog } = useApp();
-  const index = view.presetEdit?.index ?? 0;
+  const index = Math.max(0, view.presets.findIndex((preset) => preset.id === view.presetEdit?.id));
   return (
     <NameDialog
       title="Edit Preset"
@@ -412,9 +416,10 @@ function TagChip({ chip }: { chip: FilterTagChip }) {
 
 function PresetsPanel({ view }: { view: FilterDialogView }) {
   const { filterDialog } = useApp();
-  const names = view.presets.map((preset) => preset.name);
+  const ids = view.presets.map((preset) => preset.id);
+  const nameOf = (id: string) => view.presets.find((preset) => preset.id === id)?.name ?? id;
   const chosen = view.chosenPreset ?? "";
-  const reorder = useReorder({ keys: names, nameOf: (name) => name, onMove: (from, to) => filterDialog.movePreset(from, to) });
+  const reorder = useReorder({ keys: ids, nameOf, onMove: (from, to) => filterDialog.movePreset(from, to) });
   // Whether Add Preset added a preset, until its row renders and takes focus.
   const added = useRef(false);
   useLayoutEffect(() => {
@@ -430,8 +435,8 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
         <div class="filter-row">
           <select id="filter-dialog-preset-select" class="ctl grow" aria-label="Choose preset" value={chosen} onChange={(event) => filterDialog.choosePreset(event.currentTarget.value)}>
             <option value="">None</option>
-            {names.map((name) => (
-              <option key={name} value={name}>{name}</option>
+            {view.presets.map((preset) => (
+              <option key={preset.id} value={preset.id}>{preset.name}</option>
             ))}
           </select>
           <button type="button" id="filter-load-preset-btn" class="icon-btn" aria-label="Load preset" title="Load preset" disabled={view.loadDisabled} onClick={() => filterDialog.loadPreset()}>
@@ -460,10 +465,10 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
         <div class="filter-preset-list themed-scrollbar">
           {view.presets.length > 0 ? (
             view.presets.map((preset, index) => (
-              <div key={preset.name} ref={reorder.row(preset.name)} class={reorder.dragging === preset.name ? "filter-preset-row is-dragging" : "filter-preset-row"} data-preset-idx={String(index)}>
-                <DragHandle control={reorder.handle(preset.name)} />
+              <div key={preset.id} ref={reorder.row(preset.id)} class={reorder.dragging === preset.id ? "filter-preset-row is-dragging" : "filter-preset-row"} data-preset-idx={String(index)}>
+                <DragHandle control={reorder.handle(preset.id)} />
                 <span class="filter-preset-name">{preset.name}</span>
-                <button type="button" class="icon-btn" data-preset-edit={String(index)} aria-label={`Edit preset ${preset.name}`} title="Edit preset" onClick={() => filterDialog.editPreset(index)}><span class="material-symbol-icon">edit_note</span></button>
+                <button type="button" class="icon-btn" data-preset-edit={String(index)} aria-label={`Edit preset ${preset.name}`} title="Edit preset" onClick={() => filterDialog.editPreset(preset.id)}><span class="material-symbol-icon">edit_note</span></button>
               </div>
             ))
           ) : (

@@ -172,12 +172,6 @@ public sealed class PairRequest
     public string? Token { get; set; }
 }
 
-public sealed class FilterPresetSnapshot
-{
-    public string Name { get; set; } = string.Empty;
-    public JsonElement FilterState { get; set; }
-}
-
 public sealed class CreatePresetRequest
 {
     public string? Name { get; set; }

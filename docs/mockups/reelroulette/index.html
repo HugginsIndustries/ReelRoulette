@@ -1079,10 +1079,15 @@ window.addEventListener("resize", placeAllTips);
  *   for an action with nothing to do, such as Apply with no changes. So does `unavailable()` returning a reason, for
  *   an action that can't be used now when no field says why, such as Add Preset with the default filter; the reason is
  *   its tooltip and accessible description. Disabling wins over holding.
+ * - While it isn't idle, `blocked()` returning a reason blocks it, for an action whose reason has to be seen on a phone
+ *   or tablet, which shows no tooltip, such as Apply while presets would take each other's names: its label dims, it
+ *   reads as unavailable, a dot it has turns red, as a held one's does, the reason is its tooltip and accessible
+ *   description, and pressing it calls `onBlocked(reason)` in place of the action. Blocking wins over everything but
+ *   `idle()`.
  * - Otherwise a flagged field elsewhere holds it: the button's label dims, it reads as unavailable, and the red badge
  *   shows on its top-right corner, or a red dot for an icon button that has one in its place, such as Add Preset.
  *   Pressing it does nothing but take the user to the first field that holds it.
- * Call the returned `refresh()` when what `idle()` or `unavailable()` reads changes.
+ * Call the returned `refresh()` when what `idle()`, `blocked()`, or `unavailable()` reads changes.
  */
 function holdAction(button, fields, options) {
   const opts = options || {};
@@ -1093,25 +1098,34 @@ function holdAction(button, fields, options) {
   button.after(describe);
 
   const unavailable = () => (opts.unavailable ? opts.unavailable() : null);
+  const idle = () => !!(opts.idle && opts.idle());
+  const blockedBy = () => (!idle() && opts.blocked ? opts.blocked() : null);
 
   function disabled() {
-    if (opts.idle && opts.idle()) return true;
+    if (idle()) return true;
+    if (blockedBy()) return false;
     if (unavailable()) return true;
     return fields().some((field) => field.disables) || (opts.beside ? opts.beside().some((field) => field.holds) : false);
   }
 
   function blocker() {
-    return disabled() ? null : fields().find((field) => field.holds) || null;
+    return disabled() || blockedBy() ? null : fields().find((field) => field.holds) || null;
   }
 
   function refresh() {
     button.disabled = disabled();
     const field = blocker();
     const held = !!field;
+    const blocked = blockedBy();
     const why = unavailable();
-    button.classList.toggle("shows-problem", held);
+    button.classList.toggle("shows-problem", held || !!blocked);
     fadeShown(button.querySelector(".btn-problem, .held-dot"), held);
-    if (held) {
+    if (blocked) {
+      button.setAttribute("aria-disabled", "true");
+      describe.textContent = blocked;
+      button.setAttribute("aria-describedby", describe.id);
+      button.title = blocked;
+    } else if (held) {
       button.setAttribute("aria-disabled", "true");
       describe.textContent = opts.reason ? opts.reason(field) : "Correct the field first.";
       button.setAttribute("aria-describedby", describe.id);
@@ -1132,10 +1146,15 @@ function holdAction(button, fields, options) {
   button.addEventListener(
     "click",
     (event) => {
+      const blocked = blockedBy();
       const field = blocker();
-      if (!field) return;
+      if (!blocked && !field) return;
       event.stopImmediatePropagation();
       event.preventDefault();
+      if (blocked) {
+        if (opts.onBlocked) opts.onBlocked(blocked);
+        return;
+      }
       if (opts.beforeReveal) opts.beforeReveal(field);
       field.reveal();
     },

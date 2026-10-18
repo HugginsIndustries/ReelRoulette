@@ -62,7 +62,8 @@ export interface ServerConnection {
   start(): void;
   /** Closes the event stream and removes the reconnect listeners. */
   stop(): void;
-  loadPresets(): Promise<void>;
+  /** Loads the saved presets and rebuilds the preset dropdown, and says whether they loaded. */
+  loadPresets(): Promise<boolean>;
   /**
    * Pairs with the header's token, saying so in a popup, then checks the version, which loads the presets when it finds
    * the server newly ready, and reconnects the event stream. A pairing that fails, one that couldn't reach the server
@@ -215,9 +216,9 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     return true;
   }
 
-  async function loadPresets(): Promise<void> {
+  async function loadPresets(): Promise<boolean> {
     if (presetsHeldBack()) {
-      return;
+      return false;
     }
 
     try {
@@ -226,18 +227,20 @@ export function createServerConnection(options: ServerConnectionOptions): Server
       // The server failed the compatibility check, or turned out to have no library, while they loaded; the check
       // that finds it ready again loads them again.
       if (presetsHeldBack()) {
-        return;
+        return false;
       }
       store.presetsLoaded();
+      return true;
     } catch (error) {
       // A 401 shows only the pairing prompt, which the request has asked for, and sent its line: the preset dropdown
       // keeps what it shows.
       if (error instanceof UnauthorizedError) {
-        return;
+        return false;
       }
       store.showPresetMenuMessage(PRESET_MENU_LOAD_FAILED);
       // The preset dropdown shows it in place, so it only relays.
       store.relayStatus(`Error loading presets: ${errorText(error)}`);
+      return false;
     }
   }
 

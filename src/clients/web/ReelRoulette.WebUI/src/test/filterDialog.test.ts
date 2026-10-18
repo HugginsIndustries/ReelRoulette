@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import type { ConfirmRequest } from "../dialogs/dialogs";
 import { createFilterDialog } from "../filter/filterDialog";
 import { DEFAULT_FILTER_PRESET_REASON, DURATION_PROBLEM, FLAG_MODES_PROBLEM, NO_CHOSEN_PRESET_REASON } from "../filter/filterDialogModel";
+import type { FilterDialog } from "../filter/filterDialog";
 import { createDefaultFilterState, TAG_MATCH_MODE } from "../filter/filterStateModel";
 import type { NotifyRequest } from "../notifications/notifications";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type ApiPreset } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
+import { createFakePresets, type FakePresets } from "./fakePresetServer";
 import { EMPTY_FIELD } from "../validation/fieldValidation";
 
 const FAVORITES: ApiPreset = { id: "preset-favorites", name: "Favorites", filterState: { favoritesMode: "only" } };
@@ -17,15 +19,22 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-function setup(presets: ApiPreset[] = [FAVORITES]) {
+/** A device's Filter tab against a fake server, which keeps presets by id. Two devices can share `presets`. */
+function setup(presets: ApiPreset[] = [FAVORITES], shared?: FakePresets) {
+  const fakePresets = shared ?? createFakePresets(presets);
   const server = {
-    presets: presets.slice(),
+    /** The server's presets, kept by id, as `fakePresets` holds them; setting them stands for another device's change. */
+    get presets(): ApiPreset[] {
+      return fakePresets.list as ApiPreset[];
+    },
+    set presets(list: ApiPreset[]) {
+      fakePresets.list = list.slice();
+    },
+    fakePresets,
     sourcesStatus: 200,
     /** The tag model's status, and its content type, for a proxy's page in place of JSON. */
     modelStatus: 200,
     modelType: "application/json",
-    /** The preset save's status, or 0 for one that can't reach the server. */
-    saveStatus: 200,
     /** While set, the sources request waits for it, so a test can act while the dialog loads. */
     held: null as Promise<void> | null,
     requests: [] as Array<{ method: string; path: string; body: any }>,
@@ -55,20 +64,7 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
       const body = server.modelType === "application/json" ? JSON.stringify(model) : "<html>Bad gateway</html>";
       return new Response(body, { status: server.modelStatus, headers: { "Content-Type": server.modelType } });
     }
-    if (path === "/api/presets" && method === "POST") {
-      if (server.saveStatus === 0) {
-        throw new TypeError("NetworkError when attempting to fetch resource.");
-      }
-      if (server.saveStatus !== 200) {
-        return json({}, server.saveStatus);
-      }
-      server.presets = body.map((preset: any, index: number) => ({ id: `saved-${index + 1}`, ...preset }));
-      return json(server.presets);
-    }
-    if (path === "/api/presets") {
-      return json(server.presets);
-    }
-    return json({}, 404);
+    return fakePresets.answer(method, path, body) ?? json({}, 404);
   }) as typeof fetch;
 
   /** The one-off messages' texts, in order, and the requests in full. */
@@ -103,6 +99,7 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
       steps.push("loadPresets");
       store.presets.value = (await api.getJson("/api/presets")) as ApiPreset[];
       store.syncHeaderPresets();
+      return true;
     },
     on(event: string, listener: () => void) {
       connectionListeners[event] = listener;
@@ -127,10 +124,12 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
     setItem: (key: string, value: string) => void remembered.set(key, value)
   });
   const confirm = vi.fn(async (_request: ConfirmRequest) => true);
-  /** The messages shown in the in-app notice, in order. */
+  /** The messages shown in the in-app notice, in order, and the line each sent to the log. */
   const notices: string[] = [];
-  const notice = async (message: string) => {
+  const noticeLogs: string[] = [];
+  const notice = async (message: string, logText = message) => {
     notices.push(message);
+    noticeLogs.push(logText);
   };
   /** The panel, which Apply closes as the overlay. */
   const panel = {
@@ -145,7 +144,12 @@ function setup(presets: ApiPreset[] = [FAVORITES]) {
   for (const field of ["flagModes", "minDuration", "maxDuration", "newPresetName"] as const) {
     dialog.reveal.attach(field, () => moves.push(`${field} on ${dialog.tab.peek()}`));
   }
-  return { dialog, view, store, server, messages, notified, notices, steps, library, remembered, confirm, panel, deviceWrites, serverReady, moves };
+  return { dialog, view, store, server, messages, notified, notices, noticeLogs, steps, library, remembered, confirm, panel, deviceWrites, serverReady, moves };
+}
+
+/** The id of the preset at `index` in the tab's list, or one no preset has past its end. */
+function presetIdAt(dialog: FilterDialog, index: number): string {
+  return dialog.view.value?.presets[index]?.id ?? "no-such-preset";
 }
 
 /** An action that is neither disabled nor held. */
@@ -519,7 +523,7 @@ describe("General tab", () => {
   it("flags Favorites only with Blacklisted only, and no other pairing, and holds every action that uses it", async () => {
     const { dialog, view, messages, library, moves } = setup([FAVORITES, RECENT]);
     await dialog.open();
-    dialog.choosePreset("Recent");
+    dialog.choosePreset(RECENT.id);
     dialog.typeNewPresetName("Mine");
 
     dialog.changeGeneral({ favoritesOn: true, favoritesChoice: "only", blacklistedOn: true, blacklistedChoice: "excluded" });
@@ -605,12 +609,12 @@ describe("Presets tab", () => {
     expect(view().newPresetName).toBe("");
     expect(dialog.tab.value).toBe("presets");
 
-    dialog.editPreset(2);
+    dialog.editPreset(presetIdAt(dialog, 2));
     dialog.typePresetName("Ours");
     dialog.savePresetEdit();
     expect(view().heading).toBe("Preset: Ours");
 
-    dialog.editPreset(2);
+    dialog.editPreset(presetIdAt(dialog, 2));
     confirm.mockResolvedValueOnce(false);
     await dialog.deleteEditedPreset();
     expect(view().presets).toHaveLength(3);
@@ -687,7 +691,7 @@ describe("Presets tab", () => {
   it("holds Add Preset and Update on a duration that is not valid", async () => {
     const { dialog, view, messages, moves } = setup([FAVORITES, RECENT]);
     await dialog.open();
-    dialog.choosePreset("Recent");
+    dialog.choosePreset(RECENT.id);
     dialog.loadPreset();
     dialog.typeNewPresetName("Mine");
     dialog.typeDuration("max", "1:75");
@@ -719,7 +723,7 @@ describe("Presets tab", () => {
     await dialog.open();
     dialog.changeGeneral({ minText: "abc" });
 
-    dialog.editPreset(1);
+    dialog.editPreset(presetIdAt(dialog, 1));
     await dialog.deleteEditedPreset();
 
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites"]);
@@ -735,7 +739,7 @@ describe("Presets tab", () => {
     expect(notices).toEqual([]);
     expect(messages).toEqual([]);
 
-    dialog.choosePreset("Recent");
+    dialog.choosePreset(RECENT.id);
     dialog.loadPreset();
     dialog.changeGeneral({ favoritesOn: true });
     expect(view().heading).toBe("Preset: Recent*");
@@ -756,13 +760,13 @@ describe("Presets tab", () => {
   it("updates the preset Choose Preset has chosen, not the one the heading names", async () => {
     const { dialog, view, notified } = setup([FAVORITES, RECENT]);
     await dialog.open();
-    dialog.choosePreset("Recent");
+    dialog.choosePreset(RECENT.id);
     dialog.loadPreset();
     dialog.changeGeneral({ maxText: "10:00" });
     expect(view().heading).toBe("Preset: Recent*");
     const recent = structuredClone(view().presets[1]!.filterState);
 
-    dialog.choosePreset("Favorites");
+    dialog.choosePreset(FAVORITES.id);
     dialog.updatePreset();
     expect(notified.at(-1)?.text).toBe('Updated preset "Favorites" locally — Apply to save.');
     expect(view().presets[0]!.filterState).toEqual(view().working);
@@ -777,25 +781,25 @@ describe("Edit Preset", () => {
     await dialog.open();
     expect(view().presetEdit).toBeNull();
 
-    dialog.editPreset(1);
-    expect(view().presetEdit).toEqual({ index: 1, name: "Recent" });
+    dialog.editPreset(presetIdAt(dialog, 1));
+    expect(view().presetEdit).toEqual({ id: RECENT.id, name: "Recent" });
     expect(view().presetEditProblem).toBeNull();
     expect(view().presetEditFlagged).toBe(false);
     dialog.typePresetName("Fresh");
-    expect(view().presetEdit).toEqual({ index: 1, name: "Fresh" });
+    expect(view().presetEdit).toEqual({ id: RECENT.id, name: "Fresh" });
     dialog.cancelPresetEdit();
     expect(view().presetEdit).toBeNull();
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
     expect(view().presetsChanged).toBe(false);
 
-    dialog.editPreset(2);
+    dialog.editPreset(presetIdAt(dialog, 2));
     expect(view().presetEdit).toBeNull();
 
-    dialog.editPreset(0);
+    dialog.editPreset(presetIdAt(dialog, 0));
     dialog.close();
     expect(view().presetEdit).toBeNull();
     await dialog.open();
-    dialog.editPreset(0);
+    dialog.editPreset(presetIdAt(dialog, 0));
     await dialog.open();
     expect(view().presetEdit).toBeNull();
   });
@@ -803,19 +807,19 @@ describe("Edit Preset", () => {
   it("flags another preset's name, ignoring case, finds an empty name required without a flag, and saves neither", async () => {
     const { dialog, view, messages } = setup([FAVORITES, RECENT]);
     await dialog.open();
-    dialog.editPreset(1);
+    dialog.editPreset(presetIdAt(dialog, 1));
 
     dialog.typePresetName("favorites ");
     expect(view().presetEditProblem).toEqual({ message: "Use a name no other preset has." });
     expect(view().presetEditFlagged).toBe(true);
     dialog.savePresetEdit();
-    expect(view().presetEdit).toEqual({ index: 1, name: "favorites " });
+    expect(view().presetEdit).toEqual({ id: RECENT.id, name: "favorites " });
 
     dialog.typePresetName("   ");
     expect(view().presetEditProblem).toBe(EMPTY_FIELD);
     expect(view().presetEditFlagged).toBe(false);
     dialog.savePresetEdit();
-    expect(view().presetEdit).toEqual({ index: 1, name: "   " });
+    expect(view().presetEdit).toEqual({ id: RECENT.id, name: "   " });
 
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
     expect(view().presetsChanged).toBe(false);
@@ -830,7 +834,7 @@ describe("Edit Preset", () => {
   it("just closes on Save with the name unchanged, without a change", async () => {
     const { dialog, view } = setup([FAVORITES, RECENT]);
     await dialog.open();
-    dialog.editPreset(1);
+    dialog.editPreset(presetIdAt(dialog, 1));
     dialog.typePresetName("  Recent ");
 
     dialog.savePresetEdit();
@@ -841,40 +845,40 @@ describe("Edit Preset", () => {
     expect(view().unsaved).toBe(false);
   });
 
-  it("renames to the trimmed name, the heading and chosen preset follow, and Apply saves the list", async () => {
+  it("renames to the trimmed name, the heading and chosen preset follow, and Apply saves the rename", async () => {
     const { dialog, view, server } = setup([FAVORITES, RECENT]);
     await dialog.open();
-    dialog.choosePreset("Recent");
+    dialog.choosePreset(RECENT.id);
     dialog.loadPreset();
-    dialog.editPreset(1);
+    dialog.editPreset(presetIdAt(dialog, 1));
     dialog.typePresetName("  Fresh ");
 
     dialog.savePresetEdit();
 
     expect(view().presetEdit).toBeNull();
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Fresh"]);
-    expect(view()).toMatchObject({ headingPreset: "Fresh", chosenPreset: "Fresh" });
+    expect(view()).toMatchObject({ headingPreset: RECENT.id, chosenPreset: RECENT.id });
     expect(view().heading).toBe("Preset: Fresh");
     expect(view().presetsChanged).toBe(true);
     expect(view().unsaved).toBe(true);
 
     await dialog.apply();
-    const saves = server.requests.filter((request) => request.method === "POST" && request.path === "/api/presets");
-    expect(saves.map((save) => save.body.map((preset: any) => preset.name))).toEqual([["Favorites", "Fresh"]]);
+    expect(server.fakePresets.summaries()).toEqual(["rename preset-recent Fresh"]);
+    expect(server.presets.map((preset) => preset.name)).toEqual(["Favorites", "Fresh"]);
   });
 
   it("asks before Delete about the preset as it opened, stays open with the typed name on Cancel, and deletes it on confirm", async () => {
     const { dialog, view, confirm } = setup([FAVORITES, RECENT]);
     await dialog.open();
-    dialog.choosePreset("Recent");
+    dialog.choosePreset(RECENT.id);
     dialog.loadPreset();
-    dialog.editPreset(1);
+    dialog.editPreset(presetIdAt(dialog, 1));
     dialog.typePresetName("Other");
 
     confirm.mockResolvedValueOnce(false);
     await dialog.deleteEditedPreset();
     expect(confirm).toHaveBeenCalledWith({ message: 'Delete preset "Recent"?', confirmLabel: "Delete", danger: true });
-    expect(view().presetEdit).toEqual({ index: 1, name: "Other" });
+    expect(view().presetEdit).toEqual({ id: RECENT.id, name: "Other" });
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
     expect(view().presetsChanged).toBe(false);
 
@@ -888,8 +892,276 @@ describe("Edit Preset", () => {
   });
 });
 
+describe("two devices", () => {
+  it("keep a preset one saved while the other, with its preset list open, saves a different one", async () => {
+    const shared = createFakePresets([FAVORITES]);
+    const first = setup([FAVORITES], shared);
+    const second = setup([FAVORITES], shared);
+    await first.dialog.open();
+    await second.dialog.open();
+
+    first.dialog.changeGeneral({ onlyNeverPlayed: true });
+    first.dialog.typeNewPresetName("Unplayed");
+    first.dialog.addPreset();
+    await first.dialog.apply();
+    second.dialog.changeGeneral({ onlyKnownDuration: true });
+    second.dialog.typeNewPresetName("Known duration");
+    second.dialog.addPreset();
+    await second.dialog.apply();
+
+    expect(shared.list.map((preset) => preset.name)).toEqual(["Favorites", "Unplayed", "Known duration"]);
+    expect(second.view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Unplayed", "Known duration"]);
+  });
+});
+
+describe("per-preset writes", () => {
+  /** A device's tab on Favorites, Recent, and Long. */
+  async function opened() {
+    const device = setup([FAVORITES, RECENT, LONG]);
+    await device.dialog.open();
+    return device;
+  }
+
+  function rename(dialog: FilterDialog, id: string, name: string): void {
+    dialog.editPreset(id);
+    dialog.typePresetName(name);
+    dialog.savePresetEdit();
+  }
+
+  /** The default filter with `change` made, as Load on None and the General fields give it. */
+  function filterTo(dialog: FilterDialog, change: Parameters<FilterDialog["changeGeneral"]>[0]): void {
+    dialog.choosePreset("");
+    dialog.loadPreset();
+    dialog.changeGeneral(change);
+  }
+
+  /** Writes that filter into the preset with `id`, as Update does. */
+  function update(dialog: FilterDialog, id: string, change: Parameters<FilterDialog["changeGeneral"]>[0]): void {
+    filterTo(dialog, change);
+    dialog.choosePreset(id);
+    dialog.updatePreset();
+  }
+
+  /** Adds a preset with that filter, as Add Preset does. */
+  function add(dialog: FilterDialog, name: string, change: Parameters<FilterDialog["changeGeneral"]>[0]): void {
+    filterTo(dialog, change);
+    dialog.typeNewPresetName(name);
+    dialog.addPreset();
+  }
+
+  it("sends one write for each change, in order, and the server's list becomes the tab's", async () => {
+    const { dialog, view, server, notices } = await opened();
+    dialog.editPreset(LONG.id);
+    await dialog.deleteEditedPreset();
+    rename(dialog, RECENT.id, "Fresh");
+    update(dialog, FAVORITES.id, { onlyKnownDuration: true });
+    add(dialog, "Mine", { onlyKnownLoudness: true });
+    dialog.movePreset(2, 0);
+
+    await dialog.apply();
+
+    expect(notices).toEqual([]);
+    expect(server.fakePresets.summaries()).toEqual([
+      "delete preset-long",
+      "rename preset-recent Fresh",
+      "update preset-favorites",
+      "create Mine",
+      "reorder preset-4,preset-favorites,preset-recent"
+    ]);
+    expect(server.fakePresets.writes.every((write) => write.body.clientId === "client-1")).toBe(true);
+    expect(server.presets.map((preset) => [preset.id, preset.name])).toEqual([
+      ["preset-4", "Mine"],
+      ["preset-favorites", "Favorites"],
+      ["preset-recent", "Fresh"]
+    ]);
+    expect(view().presets.map((preset) => preset.id)).toEqual(["preset-4", "preset-favorites", "preset-recent"]);
+    expect(view().presetsChanged).toBe(false);
+  });
+
+  it("saves a delete then an add of one name, a rename then an add of the old name, and a filter moved to a new preset", async () => {
+    const deleted = await opened();
+    deleted.dialog.editPreset(RECENT.id);
+    await deleted.dialog.deleteEditedPreset();
+    add(deleted.dialog, "Recent", { onlyKnownDuration: true });
+    await deleted.dialog.apply();
+    expect(deleted.server.fakePresets.summaries()).toEqual(["delete preset-recent", "create Recent"]);
+
+    const renamedAway = await opened();
+    rename(renamedAway.dialog, RECENT.id, "Fresh");
+    add(renamedAway.dialog, "Recent", { onlyKnownDuration: true });
+    await renamedAway.dialog.apply();
+    expect(renamedAway.server.fakePresets.summaries()).toEqual(["rename preset-recent Fresh", "create Recent"]);
+
+    const moved = await opened();
+    update(moved.dialog, FAVORITES.id, { onlyKnownDuration: true });
+    add(moved.dialog, "Mine", { favoritesOn: true });
+    await moved.dialog.apply();
+    expect(moved.server.fakePresets.summaries()).toEqual(["update preset-favorites", "create Mine"]);
+
+    expect([...deleted.notices, ...renamedAway.notices, ...moved.notices]).toEqual([]);
+  });
+
+  it("saves a chain of renames, each after the one that frees its name, though the list has them the other way round", async () => {
+    const { dialog, server, notices } = await opened();
+    rename(dialog, LONG.id, "Longest");
+    rename(dialog, RECENT.id, "Long");
+    rename(dialog, FAVORITES.id, "Recent");
+
+    await dialog.apply();
+
+    expect(notices).toEqual([]);
+    expect(server.fakePresets.summaries()).toEqual([
+      "rename preset-long Longest",
+      "rename preset-recent Long",
+      "rename preset-favorites Recent"
+    ]);
+  });
+
+  it("blocks Apply while presets would take each other's names or filters, saying why in a notice whose log leaves their names out", async () => {
+    const swapped = await opened();
+    rename(swapped.dialog, FAVORITES.id, "Spare");
+    rename(swapped.dialog, RECENT.id, "Favorites");
+    rename(swapped.dialog, FAVORITES.id, "Recent");
+    const names = 'Presets "Recent" and "Favorites" would take each other\'s names. Apply in two steps: give one of them another name, apply, then rename it.';
+    expect(swapped.view().actions.apply).toEqual({
+      ...FREE,
+      reason: names,
+      blocked: { logText: "Presets would take each other's names. Apply in two steps." }
+    });
+    await swapped.dialog.apply();
+    expect(swapped.notices).toEqual([names]);
+    expect(swapped.noticeLogs).toEqual(["Presets would take each other's names. Apply in two steps."]);
+    expect(swapped.server.fakePresets.writes).toEqual([]);
+    expect(swapped.store.appliedFilter.value).toEqual(createDefaultFilterState());
+    expect(swapped.library.commitQuery).not.toHaveBeenCalled();
+
+    const rotated = await opened();
+    rename(rotated.dialog, LONG.id, "Spare");
+    rename(rotated.dialog, RECENT.id, "Long");
+    rename(rotated.dialog, FAVORITES.id, "Recent");
+    rename(rotated.dialog, LONG.id, "Favorites");
+    expect(rotated.view().actions.apply.reason).toBe(
+      'Presets "Recent", "Long", and "Favorites" would take each other\'s names. Apply in two steps: give one of them another name, apply, then rename it.'
+    );
+
+    const filters = await opened();
+    update(filters.dialog, FAVORITES.id, { onlyKnownDuration: true });
+    update(filters.dialog, RECENT.id, { favoritesOn: true });
+    update(filters.dialog, FAVORITES.id, { onlyNeverPlayed: true });
+    await filters.dialog.apply();
+    expect(filters.notices).toEqual([
+      'Presets "Favorites" and "Recent" would take each other\'s filters. Apply in two steps: give one of them another filter, apply, then update it.'
+    ]);
+    expect(filters.noticeLogs).toEqual(["Presets would take each other's filters. Apply in two steps."]);
+    expect(filters.server.fakePresets.writes).toEqual([]);
+  });
+
+  it("stops at the first write the server refuses, saying why, and keeps only what didn't land as unsaved, applying nothing", async () => {
+    const { dialog, view, server, store, notices, noticeLogs, library } = await opened();
+    rename(dialog, RECENT.id, "Fresh");
+    update(dialog, FAVORITES.id, { onlyKnownDuration: true });
+    // Another device saves that filter in a preset of its own first.
+    server.presets = [...server.presets, { id: "preset-other", name: "Other", filterState: { onlyKnownDuration: true } }];
+
+    await dialog.apply();
+
+    expect(server.fakePresets.summaries()).toEqual(["rename preset-recent Fresh", "update preset-favorites (409)"]);
+    expect(notices).toEqual(['Saving presets failed: Preset "Other" already has this filter.']);
+    expect(noticeLogs).toEqual(["Saving presets failed (409)."]);
+    // The rename landed, so the saved list has it; the update didn't, so the tab still holds it.
+    expect(view().savedPresets.map((preset) => preset.name)).toEqual(["Favorites", "Fresh", "Long", "Other"]);
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Fresh", "Long", "Other"]);
+    expect(view().presets[0]!.filterState.onlyKnownDuration).toBe(true);
+    expect(view().presetsChanged).toBe(true);
+    expect(store.appliedFilter.value).toEqual(createDefaultFilterState());
+    expect(library.commitQuery).not.toHaveBeenCalled();
+  });
+
+  it("keeps the writes that landed as saved when a later one can't reach the server, so the next Apply doesn't send them again", async () => {
+    const { dialog, view, server, notices } = await opened();
+    dialog.editPreset(LONG.id);
+    await dialog.deleteEditedPreset();
+    rename(dialog, RECENT.id, "Fresh");
+    update(dialog, FAVORITES.id, { onlyKnownDuration: true });
+    server.fakePresets.writeFailure = "unreachable";
+    server.fakePresets.writesBeforeFailure = 2;
+
+    await dialog.apply();
+
+    expect(notices).toEqual(["Saving presets failed: Couldn't reach the server."]);
+    expect(view().savedPresets.map((preset) => [preset.name, preset.filterState.favoritesMode])).toEqual([
+      ["Favorites", "only"],
+      ["Fresh", "off"]
+    ]);
+    expect(view().presetsChanged).toBe(true);
+    server.fakePresets.writeFailure = null;
+    await dialog.apply();
+    expect(server.fakePresets.summaries()).toEqual(["delete preset-long", "rename preset-recent Fresh", "update preset-favorites"]);
+  });
+
+  it("keeps the id the server gave a new preset when a later write is refused, so the reload doesn't add it twice", async () => {
+    const { dialog, view, server, notices } = await opened();
+    add(dialog, "Mine", { onlyKnownDuration: true });
+    dialog.movePreset(3, 0);
+    server.presets = [...server.presets, { id: "preset-other", name: "Other", filterState: { onlyKnownLoudness: true } }];
+
+    await dialog.apply();
+
+    expect(server.fakePresets.summaries()).toEqual(["create Mine", "reorder preset-4,preset-favorites,preset-recent,preset-long (409)"]);
+    expect(notices).toEqual(["Saving presets failed: The order must name every preset once."]);
+    expect(view().presets.map((preset) => preset.id)).toEqual(["preset-4", "preset-favorites", "preset-recent", "preset-long", "preset-other"]);
+    expect(view().headingPreset).toBe("preset-4");
+
+    await dialog.apply();
+    expect(server.fakePresets.summaries().at(-1)).toBe("reorder preset-4,preset-favorites,preset-recent,preset-long,preset-other");
+    expect(server.presets.map((preset) => preset.name)).toEqual(["Mine", "Favorites", "Recent", "Long", "Other"]);
+  });
+
+  it("does nothing on a second Apply or a Refresh while Apply's writes are being sent", async () => {
+    const { dialog, view, server, notices } = await opened();
+    dialog.editPreset(LONG.id);
+    await dialog.deleteEditedPreset();
+    add(dialog, "Mine", { onlyKnownDuration: true });
+    const sourceLoads = () => server.requests.filter((request) => request.path === "/api/sources").length;
+    const loadsBefore = sourceLoads();
+
+    // A double press, and a Refresh, while the first Apply's delete is on its way.
+    const first = dialog.apply();
+    const second = dialog.apply();
+    const refreshed = dialog.refresh();
+    await Promise.all([first, second, refreshed]);
+
+    expect(server.fakePresets.summaries()).toEqual(["delete preset-long", "create Mine"]);
+    expect(notices).toEqual([]);
+    expect(sourceLoads()).toBe(loadsBefore);
+    expect(view().presets.map((preset) => preset.id)).toEqual(["preset-favorites", "preset-recent", "preset-4"]);
+    expect(view().presetsChanged).toBe(false);
+  });
+
+  it("Refresh keeps the tab's preset changes and takes the server's version of every other preset", async () => {
+    const { dialog, view, server } = await opened();
+    rename(dialog, RECENT.id, "Fresh");
+    // Another device changes Favorites' and Recent's filters and deletes Long.
+    server.presets = [
+      { ...FAVORITES, filterState: { onlyKnownLoudness: true } },
+      { ...RECENT, filterState: { mediaTypeFilter: 1 } }
+    ];
+
+    await dialog.refresh();
+
+    expect(view().presets.map((preset) => [preset.name, preset.filterState.onlyKnownLoudness, preset.filterState.mediaTypeFilter])).toEqual([
+      ["Favorites", true, 0],
+      ["Fresh", false, 1]
+    ]);
+    expect(view().presetsChanged).toBe(true);
+    await dialog.apply();
+    expect(server.fakePresets.summaries()).toEqual(["rename preset-recent Fresh"]);
+    expect(server.presets.map((preset) => preset.name)).toEqual(["Favorites", "Fresh"]);
+  });
+});
+
 describe("applying", () => {
-  it("saves changed presets, applies the filter, reloads presets, closes the panel as the overlay, and then starts the library over", async () => {
+  it("saves each changed preset, never the whole list, applies the filter, reloads presets, closes the panel as the overlay, and then starts the library over", async () => {
     const { dialog, store, server, steps, notified, panel } = setup([FAVORITES]);
     await dialog.open();
     dialog.changeGeneral({ favoritesOn: true, onlyNeverPlayed: true });
@@ -899,13 +1171,14 @@ describe("applying", () => {
 
     await dialog.apply();
 
-    expect(server.requests.filter((request) => request.method === "POST" && request.path === "/api/presets")[0]!.body.map(
-      (preset: any) => preset.name
-    )).toEqual(["Favorites", "Unplayed favorites"]);
+    expect(server.fakePresets.summaries()).toEqual(["create Unplayed favorites"]);
+    expect(server.fakePresets.writes[0]!.body).toMatchObject({ clientId: "client-1", filterState: { favoritesMode: "only", onlyNeverPlayed: true } });
+    expect(server.requests.some((request) => request.method === "POST" && request.path === "/api/presets")).toBe(false);
     expect(steps).toEqual(["loadPresets", "closeIfOverlay", "commitQuery favoritesMode=only"]);
     expect(store.appliedFilter.value).toMatchObject({ favoritesMode: "only", onlyNeverPlayed: true });
-    expect(store.activePresetName.value).toBe("Unplayed favorites");
-    expect(store.presetMenu.value.selectedValue).toBe("saved-2");
+    // The new preset takes the id the server gave it.
+    expect(store.activePresetId.value).toBe("preset-2");
+    expect(store.presetMenu.value.selectedValue).toBe("preset-2");
     expect(panel.closeIfOverlay).toHaveBeenCalledTimes(1);
     expect(notified.at(-1)).toEqual({ kind: "actions", text: "Filters applied.", key: "filter" });
   });
@@ -914,17 +1187,18 @@ describe("applying", () => {
     const { dialog, store, deviceWrites } = setup([FAVORITES]);
     store.presetsLoaded();
     await dialog.open();
-    dialog.choosePreset("Favorites");
+    dialog.choosePreset(FAVORITES.id);
     dialog.loadPreset();
 
     await dialog.apply();
 
-    expect(store.activePresetName.value).toBe("Favorites");
+    expect(store.activePresetId.value).toBe(FAVORITES.id);
     expect(deviceWrites).toEqual(["rr_device.filter.applied"]);
   });
   it("keeps the dialog open and applies nothing when the presets cannot be saved", async () => {
     const { dialog, view, store, server, messages, notices, library, panel } = setup([FAVORITES]);
-    server.saveStatus = 500;
+    // A refusal without a reason, as for a body the server can't read.
+    server.fakePresets.writeFailure = { status: 500 };
     await dialog.open();
     dialog.changeGeneral({ onlyNeverPlayed: true });
     dialog.typeNewPresetName("Unplayed");
@@ -947,7 +1221,7 @@ describe("applying", () => {
     dialog.changeGeneral({ onlyNeverPlayed: true });
     dialog.typeNewPresetName("Unplayed");
     dialog.addPreset();
-    server.saveStatus = 0;
+    server.fakePresets.writeFailure = "unreachable";
 
     await dialog.apply();
 
@@ -958,22 +1232,21 @@ describe("applying", () => {
     expect(library.commitQuery).not.toHaveBeenCalled();
   });
 
-  it("Refresh keeps a preset list Apply hasn't saved, as an unsaved change, and Apply then saves it", async () => {
+  it("Refresh keeps the tab's order, with a preset another device added at the end, and Apply then sends one reorder", async () => {
     const { dialog, view, server, store } = setup([FAVORITES, RECENT]);
     await dialog.open();
     dialog.movePreset(0, 1);
     server.presets = [FAVORITES, RECENT, LONG];
 
     await dialog.refresh();
-    expect(view().presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites"]);
+    expect(view().presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites", "Long"]);
     expect(view().presetsChanged).toBe(true);
     expect(view().unsaved).toBe(true);
     expect(store.presets.peek().map((preset) => preset.name)).toEqual(["Favorites", "Recent", "Long"]);
 
     await dialog.apply();
-    const saves = server.requests.filter((request) => request.method === "POST" && request.path === "/api/presets");
-    expect(saves).toHaveLength(1);
-    expect(saves[0]!.body.map((preset: any) => preset.name)).toEqual(["Recent", "Favorites"]);
+    expect(server.fakePresets.summaries()).toEqual(["reorder preset-recent,preset-favorites,preset-long"]);
+    expect(server.presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites", "Long"]);
   });
 
   it("Refresh takes the server's preset list while there are no preset changes", async () => {
@@ -992,7 +1265,7 @@ describe("applying", () => {
     dialog.changeGeneral({ onlyNeverPlayed: true });
     dialog.movePreset(0, 1);
     dialog.typeNewPresetName("Draft");
-    dialog.editPreset(0);
+    dialog.editPreset(presetIdAt(dialog, 0));
     expect(view().unsaved).toBe(true);
 
     dialog.discardChanges();
@@ -1008,7 +1281,7 @@ describe("applying", () => {
     expect(view().presetEdit).toBeNull();
     expect(view().heading).toBe("Preset: Favorites");
     expect(view().unsaved).toBe(false);
-    expect(server.requests.filter((request) => request.method === "POST" && request.path === "/api/presets")).toHaveLength(0);
+    expect(server.fakePresets.writes).toHaveLength(0);
     expect(store.appliedFilter.value).toMatchObject({ favoritesMode: "only", onlyNeverPlayed: false });
     expect(library.commitQuery).not.toHaveBeenCalled();
   });
@@ -1103,8 +1376,7 @@ describe("unsaved state", () => {
   };
   const EVERY_SOURCE: ApiPreset = { id: "preset-every", name: "Every source", filterState: { includedSourceIds: ["source-1", "source-2"] } };
 
-  const presetSaves = (server: ReturnType<typeof setup>["server"]) =>
-    server.requests.filter((request) => request.method === "POST" && request.path === "/api/presets");
+  const presetSaves = (server: ReturnType<typeof setup>["server"]) => server.fakePresets.writes;
 
   it("a Local match mode set back to AND leaves no entry, so the filter matches its preset again, and once applied too", async () => {
     const { dialog, view, store } = setup([BEACH_LEFTOVER]);
@@ -1176,11 +1448,11 @@ describe("unsaved state", () => {
     dialog.movePreset(1, 0);
     expect(view()).toMatchObject(unchanged);
 
-    dialog.editPreset(0);
+    dialog.editPreset(presetIdAt(dialog, 0));
     dialog.typePresetName("favorites");
     dialog.savePresetEdit();
     expect(view()).toMatchObject({ presetsChanged: true, unsaved: true });
-    dialog.editPreset(0);
+    dialog.editPreset(presetIdAt(dialog, 0));
     dialog.typePresetName("Favorites");
     dialog.savePresetEdit();
     expect(view()).toMatchObject(unchanged);
@@ -1189,7 +1461,7 @@ describe("unsaved state", () => {
     dialog.typeNewPresetName("Draft");
     dialog.addPreset();
     expect(view()).toMatchObject({ presetsChanged: true, unsaved: true });
-    dialog.editPreset(2);
+    dialog.editPreset(presetIdAt(dialog, 2));
     await dialog.deleteEditedPreset();
     dialog.changeGeneral({ maxText: "" });
     expect(view()).toMatchObject(unchanged);
@@ -1288,7 +1560,7 @@ describe("presets need a filter of their own", () => {
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
     expect(notices).toEqual([]);
 
-    dialog.choosePreset("Favorites");
+    dialog.choosePreset(FAVORITES.id);
     expect(view().actions).toMatchObject({ addPreset: noDefault, updatePreset: noDefault });
 
     // A duration counts as its field reads, before the field is left.
@@ -1318,10 +1590,10 @@ describe("Choose Preset and Load", () => {
     await dialog.open();
     expect(view()).toMatchObject({ chosenPreset: null, loadDisabled: true });
 
-    dialog.choosePreset("Recent");
-    expect(view()).toMatchObject({ chosenPreset: "Recent", headingPreset: null, loadDisabled: false, unsaved: false });
+    dialog.choosePreset(RECENT.id);
+    expect(view()).toMatchObject({ chosenPreset: RECENT.id, headingPreset: null, loadDisabled: false, unsaved: false });
     dialog.loadPreset();
-    expect(view()).toMatchObject({ headingPreset: "Recent", heading: "Preset: Recent", loadDisabled: true, unsaved: true });
+    expect(view()).toMatchObject({ headingPreset: RECENT.id, heading: "Preset: Recent", loadDisabled: true, unsaved: true });
     expect(view().general.onlyNeverPlayed).toBe(true);
 
     // A duration counts as its field reads.
@@ -1342,30 +1614,30 @@ describe("Choose Preset and Load", () => {
   it("starts Choose Preset over on the heading's preset each time the Presets section comes into view, and when Apply applies", async () => {
     const { dialog, view } = setup([FAVORITES, RECENT]);
     await dialog.open();
-    dialog.choosePreset("Recent");
+    dialog.choosePreset(RECENT.id);
     dialog.loadPreset();
     dialog.changeGeneral({ favoritesOn: true });
     expect(view().heading).toBe("Preset: Recent*");
 
     dialog.showTab("presets");
-    dialog.choosePreset("Favorites");
+    dialog.choosePreset(FAVORITES.id);
     // Showing the section it is on keeps the choice.
     dialog.showTab("presets");
-    expect(view().chosenPreset).toBe("Favorites");
+    expect(view().chosenPreset).toBe(FAVORITES.id);
     dialog.showTab("tags");
     dialog.showTab("presets");
-    expect(view().chosenPreset).toBe("Recent");
+    expect(view().chosenPreset).toBe(RECENT.id);
 
     // The tab showing on the section, with unsaved changes too.
-    dialog.choosePreset("Favorites");
+    dialog.choosePreset(FAVORITES.id);
     dialog.close();
     await dialog.open();
-    expect(view()).toMatchObject({ unsaved: true, chosenPreset: "Recent" });
+    expect(view()).toMatchObject({ unsaved: true, chosenPreset: RECENT.id });
 
     dialog.showTab("general");
-    dialog.choosePreset("Favorites");
+    dialog.choosePreset(FAVORITES.id);
     await dialog.apply();
-    expect(view().chosenPreset).toBe("Recent");
+    expect(view().chosenPreset).toBe(RECENT.id);
   });
 });
 
@@ -1379,19 +1651,19 @@ describe("the heading while a duration is typed", () => {
     // Each text on the way stars Long, the empty one included, though it reads as the default filter.
     for (const text of ["10:", "10", "1", "", "2", "20", "20:", "20:0", "20:00"]) {
       dialog.typeDuration("min", text);
-      expect(view()).toMatchObject({ heading: "Preset: Long*", headingPreset: "Long" });
+      expect(view()).toMatchObject({ heading: "Preset: Long*", headingPreset: LONG.id });
     }
     dialog.changeGeneral({ minText: "20:00" });
-    expect(view()).toMatchObject({ heading: "Preset: Long*", headingPreset: "Long" });
+    expect(view()).toMatchObject({ heading: "Preset: Long*", headingPreset: LONG.id });
     await dialog.apply();
-    expect(store.activePresetName.value).toBe("Long");
+    expect(store.activePresetId.value).toBe(LONG.id);
     expect(store.presetMenu.value.entries[0]!.label).toBe("Long*");
   });
 
   it("stars the heading as the duration's field reads, as the unsaved changes follow it, and for text that isn't valid", async () => {
     const { dialog, view } = setup([FAVORITES, RECENT]);
     await dialog.open();
-    dialog.choosePreset("Recent");
+    dialog.choosePreset(RECENT.id);
     dialog.loadPreset();
     await dialog.apply();
     expect(view()).toMatchObject({ heading: "Preset: Recent", unsaved: false });

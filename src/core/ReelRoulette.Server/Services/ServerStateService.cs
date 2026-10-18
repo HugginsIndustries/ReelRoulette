@@ -123,38 +123,6 @@ public sealed class ServerStateService
     }
 
     /// <summary>
-    /// Replaces every preset with the posted list, keeping each preset's id by its name, ignoring case, and giving a
-    /// new name a new id. A preset without a name is left out, and so is one named as an earlier one.
-    /// </summary>
-    public void SetPresetCatalog(IEnumerable<FilterPresetSnapshot>? presets)
-    {
-        lock (_filterSessionLock)
-        {
-            var ids = _presetCatalog.ToDictionary(preset => preset.Name, preset => preset.Id, StringComparer.OrdinalIgnoreCase);
-            var replaced = (presets ?? [])
-                .Where(preset => !string.IsNullOrWhiteSpace(preset.Name))
-                .GroupBy(preset => preset.Name.Trim(), StringComparer.OrdinalIgnoreCase)
-                .Select(group => new StoredPreset
-                {
-                    Id = ids.TryGetValue(group.Key, out var id) ? id : NewPresetId(),
-                    Name = group.Key,
-                    FilterState = group.First().FilterState
-                })
-                .ToList();
-            try
-            {
-                WriteCatalog(session => session.ReplacePresets(replaced.Select(ToCatalogPreset).ToList()));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to persist preset catalog.");
-            }
-
-            _presetCatalog = replaced;
-        }
-    }
-
-    /// <summary>
     /// Adds a preset after every other one, with a new id. It is refused for an empty name or another preset's,
     /// ignoring case, for a filter state that is not an object, and for the default filter or another preset's.
     /// </summary>
@@ -552,7 +520,7 @@ public sealed class ServerStateService
         {
             Id = preset.Id,
             Name = preset.Name,
-            FilterStateJson = preset.FilterState.ValueKind == JsonValueKind.Undefined ? "{}" : preset.FilterState.GetRawText()
+            FilterStateJson = preset.FilterState.GetRawText()
         };
     }
 

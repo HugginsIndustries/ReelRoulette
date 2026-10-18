@@ -75,9 +75,12 @@ export function createServerRequester(send: typeof fetch, onUnauthorized: (route
 /** Routes that end in an item id, which `requestRoute` names as `{itemId}`. */
 const ITEM_ID_ROUTES: readonly string[] = ["/api/play/"];
 
+/** The routes that name a preset by id, which `requestRoute` names as `{presetId}`. */
+const PRESET_ID_ROUTE = /^\/api\/presets\/[^/]+\/(update|rename|delete)$/;
+
 /**
  * The request's method and route, such as "POST /api/play/{itemId}": without the server, any path the server is
- * reached under before `/api/`, the query, or an item id, so a log line can name it.
+ * reached under before `/api/`, the query, or an item or preset id, so a log line can name it.
  */
 export function requestRoute(input: RequestInfo | URL, init?: RequestInit): string {
   const request = typeof Request !== "undefined" && input instanceof Request ? input : null;
@@ -86,7 +89,11 @@ export function requestRoute(input: RequestInfo | URL, init?: RequestInit): stri
   const apiStart = path.indexOf("/api/");
   const route = apiStart >= 0 ? path.slice(apiStart) : path;
   const idRoute = ITEM_ID_ROUTES.find((prefix) => route.startsWith(prefix));
-  return `${method} ${idRoute ? `${idRoute}{itemId}` : route}`;
+  if (idRoute) {
+    return `${method} ${idRoute}{itemId}`;
+  }
+  const presetRoute = PRESET_ID_ROUTE.exec(route);
+  return `${method} ${presetRoute ? `/api/presets/{presetId}/${presetRoute[1]}` : route}`;
 }
 
 /** The one `last.log` line for a 401, naming the request's route as `requestRoute` does. */
@@ -116,6 +123,16 @@ export async function readJson<T = any>(response: Response): Promise<T> {
       throw new UnexpectedResponseError(described);
     }
     throw error;
+  }
+}
+
+/** The server's reason for refusing a request, from its `{ "error": ... }` body, or null when it gave none. */
+export async function refusalReason(response: Response): Promise<string | null> {
+  try {
+    const body = await readJson<{ error?: unknown }>(response);
+    return typeof body?.error === "string" && body.error.trim() ? body.error : null;
+  } catch {
+    return null;
   }
 }
 

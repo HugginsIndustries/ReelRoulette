@@ -2013,7 +2013,7 @@ describe("saving", () => {
       setup: (fake) => {
         serveLibrary(fake);
         fake.on("GET", "/api/presets", () => json([BEACH_PRESET]));
-        fake.on("POST", "/api/presets", () => json({}));
+        fake.on("POST", "/api/presets/create", (call) => json({ id: "preset-mine", name: call.body.name, filterState: call.body.filterState }));
       }
     });
     await pickPreset("preset-beach");
@@ -2033,10 +2033,10 @@ describe("saving", () => {
 
     await click(panelTab("Filter"));
     await click(byId("filter-apply-btn"));
-    const posted = server.requests("POST", "/api/presets").at(-1)!.body;
-    expect(posted.map((preset: any) => [preset.name, preset.filterState.selectedTags])).toEqual([
-      ["Beach days", ["Shore"]],
-      ["Mine", ["Shore"]]
+    // Beach days took the rename on the server, and its saved copy in the tab too, so Apply only creates Mine.
+    const presetWrites = server.calls.filter((call) => call.method === "POST" && call.path.startsWith("/api/presets"));
+    expect(presetWrites.map((call) => [call.path, call.body.name, call.body.filterState.selectedTags])).toEqual([
+      ["/api/presets/create", "Mine", ["Shore"]]
     ]);
     const pick = await nextPick(server);
     expect(pick.filterState.selectedTags).toEqual(["Shore"]);
@@ -2092,7 +2092,7 @@ describe("saving", () => {
     expect(selectedPresetLabel()).toBe("Beach days");
     expect(JSON.parse(localStorage.getItem("rr_device.filter.applied")!)).toMatchObject({
       filter: { selectedTags: ["Shore"] },
-      preset: "Beach days",
+      presetId: "preset-beach",
       unchanged: true
     });
     const pick = await nextPick(server);

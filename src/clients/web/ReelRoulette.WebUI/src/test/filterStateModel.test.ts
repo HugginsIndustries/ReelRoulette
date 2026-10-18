@@ -20,7 +20,6 @@ import {
   formatDurationForDisplay,
   parseServerDuration,
   parseTypedDuration,
-  presetsToPostBody,
   serializeFilterStateForApi,
   MEDIA_TYPE_FILTER,
   TAG_MATCH_MODE,
@@ -142,7 +141,7 @@ describe("filterStateModel", () => {
     expect(filterStatesEqualForPresetMatch(storedPreset, and)).toBe(true);
     expect(filterStatesEqualForPresetMatch(and, storedPreset)).toBe(true);
     expect(filterStatesEqualForPresetMatch(storedPreset, or)).toBe(false);
-    expect(resolvePresetAnchor(and, [{ name: "Stored", filterState: storedPreset }], null).label).toBe("Stored");
+    expect(resolvePresetAnchor(and, [{ id: "stored", name: "Stored", filterState: storedPreset }], null).label).toBe("Stored");
     expect(storedPreset.globalMatchMode).toBeNull();
   });
 
@@ -158,7 +157,7 @@ describe("filterStateModel", () => {
     expect(serializeFilterStateForApi(orTextPreset)).not.toHaveProperty("tagMatchMode");
     expect(filterStatesEqualForPresetMatch(orTextPreset, andTextPreset)).toBe(true);
     expect(filterStatesEqualForPresetMatch(current, orTextPreset)).toBe(true);
-    expect(resolvePresetAnchor(current, [{ name: "Web OR", filterState: orTextPreset }], null).label).toBe("Web OR");
+    expect(resolvePresetAnchor(current, [{ id: "web-or", name: "Web OR", filterState: orTextPreset }], null).label).toBe("Web OR");
   });
 
   it("the Filter tab has no unsaved changes after switching the global mode away and back from an unset applied filter", () => {
@@ -174,14 +173,6 @@ describe("filterStateModel", () => {
     expect(applied.globalMatchMode).toBeNull();
   });
 
-  it("presetsToPostBody wraps filterState", () => {
-    const rows = [{ name: "P1", filterState: createDefaultFilterState() }];
-    const body = presetsToPostBody(rows);
-    expect(body).toHaveLength(1);
-    expect(body[0].name).toBe("P1");
-    expect(body[0].filterState.blacklistedMode).toBe("excluded");
-  });
-
   it("the preset dropdown's None selects the default filter and a named preset selects that filter", () => {
     const none = filterStateForHeaderPresetSelection(null);
     expect(none).toEqual(createDefaultFilterState());
@@ -192,10 +183,10 @@ describe("filterStateModel", () => {
     expect(named.blacklistedMode).toBe("off");
   });
 
-  it("classifies None, a named preset, a starred base, and a missing base", () => {
-    const youtube = { name: "YouTube", filterState: { ...createDefaultFilterState(), favoritesMode: "only" as const } };
+  it("classifies None, a named preset, a starred base, and a missing base, which stays as None*", () => {
+    const youtube = { id: "yt", name: "YouTube", filterState: { ...createDefaultFilterState(), favoritesMode: "only" as const } };
     const presets = [youtube];
-    const cleanNone = resolvePresetAnchor(createDefaultFilterState(), presets, "YouTube");
+    const cleanNone = resolvePresetAnchor(createDefaultFilterState(), presets, "yt");
     expect(cleanNone.label).toBe("None");
     expect(presetHeading(cleanNone)).toBe("Preset: None");
     expect(buildHeaderPresetOptions(cleanNone, [{ id: "yt", name: "YouTube" }]).entries.map((entry) => entry.label)).toEqual([
@@ -208,7 +199,7 @@ describe("filterStateModel", () => {
     expect(presetHeading(cleanNamed)).toBe("Preset: YouTube");
 
     const dirty = { ...createDefaultFilterState(), favoritesMode: "only" as const, onlyNeverPlayed: true };
-    const starred = resolvePresetAnchor(dirty, presets, "YouTube");
+    const starred = resolvePresetAnchor(dirty, presets, "yt");
     expect(starred.label).toBe("YouTube*");
     expect(presetHeading(starred)).toBe("Preset: YouTube*");
     const starredOptions = buildHeaderPresetOptions(starred, [{ id: "yt", name: "YouTube" }]);
@@ -216,22 +207,23 @@ describe("filterStateModel", () => {
     expect(starredOptions.selectedValue).toBe(HEADER_PRESET_STARRED_VALUE);
     expect(headerPresetPick(starredOptions.selectedValue)).toBe("keep");
 
-    const missing = resolvePresetAnchor(dirty, presets, "Gone");
+    const missing = resolvePresetAnchor(dirty, presets, "gone");
     expect(missing.label).toBe("None*");
+    expect(missing.baseId).toBe("gone");
     expect(presetHeading(missing)).toBe("Preset: None*");
     expect(buildHeaderPresetOptions(missing, [{ id: "yt", name: "YouTube" }]).entries[0]?.label).toBe("None*");
   });
 
   it("keeps the dialog base on a dirty edit and adopts a preset the filter comes to match", () => {
-    const youtube = { name: "YouTube", filterState: { ...createDefaultFilterState(), favoritesMode: "only" as const } };
-    const favorites = { name: "Favorites", filterState: { ...createDefaultFilterState(), onlyNeverPlayed: true } };
+    const youtube = { id: "yt", name: "YouTube", filterState: { ...createDefaultFilterState(), favoritesMode: "only" as const } };
+    const favorites = { id: "fav", name: "Favorites", filterState: { ...createDefaultFilterState(), onlyNeverPlayed: true } };
     const presets = [youtube, favorites];
     const dirty = { ...favorites.filterState, favoritesMode: "only" as const };
 
-    expect(dialogPresetBase(dirty, presets, "Favorites")).toBe("Favorites");
-    expect(dialogPresetBase(dirty, presets, "YouTube")).toBe("YouTube");
+    expect(dialogPresetBase(dirty, presets, "fav")).toBe("fav");
+    expect(dialogPresetBase(dirty, presets, "yt")).toBe("yt");
     expect(dialogPresetBase(dirty, presets, null)).toBeNull();
-    expect(dialogPresetBase(favorites.filterState, presets, "YouTube")).toBe("Favorites");
+    expect(dialogPresetBase(favorites.filterState, presets, "yt")).toBe("fav");
   });
 
   it("rebuilds the preset dropdown's list without a starred row after None or a named preset", () => {
@@ -241,28 +233,28 @@ describe("filterStateModel", () => {
       filterState: { ...createDefaultFilterState(), favoritesMode: "only" as const }
     };
     const dirty = { ...createDefaultFilterState(), favoritesMode: "only" as const, onlyNeverPlayed: true };
-    const before = headerPresetListForFilter(dirty, [youtube], "YouTube");
+    const before = headerPresetListForFilter(dirty, [youtube], "yt");
     expect(before.selectedValue).toBe(HEADER_PRESET_STARRED_VALUE);
 
-    const named = headerPresetListAfterPick(dirty, [youtube], "YouTube", "yt");
+    const named = headerPresetListAfterPick(dirty, [youtube], "yt", "yt");
     expect(named.entries.some((entry) => entry.value === HEADER_PRESET_STARRED_VALUE)).toBe(false);
     expect(named.selectedValue).toBe("yt");
-    expect(named.baseName).toBe("YouTube");
+    expect(named.baseId).toBe("yt");
     expect(named.filter.favoritesMode).toBe("only");
     expect(named.filter.onlyNeverPlayed).toBe(false);
 
-    const none = headerPresetListAfterPick(dirty, [youtube], "YouTube", "");
+    const none = headerPresetListAfterPick(dirty, [youtube], "yt", "");
     expect(none.filter).toEqual(createDefaultFilterState());
-    expect(none.baseName).toBeNull();
+    expect(none.baseId).toBeNull();
     expect(none.selectedValue).toBe("");
     expect(none.entries.some((entry) => entry.value === HEADER_PRESET_STARRED_VALUE)).toBe(false);
 
-    const kept = headerPresetListAfterPick(dirty, [youtube], "YouTube", HEADER_PRESET_STARRED_VALUE);
+    const kept = headerPresetListAfterPick(dirty, [youtube], "yt", HEADER_PRESET_STARRED_VALUE);
     expect(kept.filter.onlyNeverPlayed).toBe(true);
-    expect(kept.baseName).toBe("YouTube");
+    expect(kept.baseId).toBe("yt");
     expect(kept.selectedValue).toBe(HEADER_PRESET_STARRED_VALUE);
 
-    const unknown = headerPresetListAfterPick(dirty, [youtube], "YouTube", "missing");
+    const unknown = headerPresetListAfterPick(dirty, [youtube], "yt", "missing");
     expect(unknown.filter.onlyNeverPlayed).toBe(true);
     expect(unknown.selectedValue).toBe(HEADER_PRESET_STARRED_VALUE);
   });
@@ -377,9 +369,9 @@ describe("AND match modes read for use", () => {
     const described: FilterState = { ...createDefaultFilterState(), selectedTags: ["Beach"] };
 
     expect(filterStateForHeaderPresetSelection(leftover).categoryLocalMatchModes).toBeNull();
-    expect(isPresetOwnFilter(described, [leftover], "Beach")).toBe(true);
-    const list = headerPresetListForFilter(described, [leftover], "Beach");
-    expect(list).toMatchObject({ baseName: "Beach", selectedValue: "p-beach" });
+    expect(isPresetOwnFilter(described, [leftover], "p-beach")).toBe(true);
+    const list = headerPresetListForFilter(described, [leftover], "p-beach");
+    expect(list).toMatchObject({ baseId: "p-beach", selectedValue: "p-beach" });
     expect(list.entries.map((entry) => entry.label)).toEqual(["None", "Beach"]);
     const picked = headerPresetListAfterPick(createDefaultFilterState(), [leftover], null, "p-beach");
     expect(picked.filter.categoryLocalMatchModes).toBeNull();
@@ -387,14 +379,15 @@ describe("AND match modes read for use", () => {
 });
 
 describe("presetListsEqual", () => {
-  const favorites = { name: "Favorites", filterState: { ...createDefaultFilterState(), favoritesMode: "only" as const } };
-  const recent = { name: "Recent", filterState: { ...createDefaultFilterState(), onlyNeverPlayed: true } };
+  const favorites = { id: "fav", name: "Favorites", filterState: { ...createDefaultFilterState(), favoritesMode: "only" as const } };
+  const recent = { id: "recent", name: "Recent", filterState: { ...createDefaultFilterState(), onlyNeverPlayed: true } };
 
-  it("compares by order, by name with case counting, and by filter as presets match", () => {
+  it("compares by order, by id, by name with case counting, and by filter as presets match", () => {
     expect(presetListsEqual([favorites, recent], [favorites, recent])).toBe(true);
     expect(presetListsEqual([favorites, recent], [recent, favorites])).toBe(false);
     expect(presetListsEqual([favorites, recent], [favorites])).toBe(false);
     expect(presetListsEqual([favorites], [{ ...favorites, name: "favorites" }])).toBe(false);
+    expect(presetListsEqual([favorites], [{ ...favorites, id: "other" }])).toBe(false);
     expect(presetListsEqual([favorites], [{ ...favorites, filterState: createDefaultFilterState() }])).toBe(false);
     const sameFilter = { ...favorites, filterState: { ...favorites.filterState, globalMatchMode: null } };
     expect(presetListsEqual([favorites], [sameFilter])).toBe(true);

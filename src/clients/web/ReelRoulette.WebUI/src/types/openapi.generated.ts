@@ -327,8 +327,7 @@ export interface paths {
         /** Get available presets */
         get: operations["getPresets"];
         put?: never;
-        /** Replace preset catalog */
-        post: operations["postPresets"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1587,10 +1586,6 @@ export interface components {
             /** Format: int64 */
             revision: number;
         };
-        FilterPresetSnapshot: {
-            name: string;
-            filterState: components["schemas"]["FilterState"];
-        };
         CreatePresetRequest: {
             /** @description Trimmed before it is saved. */
             name: string;
@@ -1901,7 +1896,7 @@ export interface components {
             categories: components["schemas"]["TagCategorySnapshot"][];
             tags: components["schemas"]["TagSnapshot"][];
         };
-        /** @description Published by each preset create, update, rename, reorder, and delete. The whole-list replace, `POST /api/presets`, publishes none, and tag rename and delete publish none, so clients see the presets they change through `tagCatalogChanged`. */
+        /** @description Published by each preset create, update, rename, reorder, and delete. Tag rename and delete publish none, so clients see the presets they change through `tagCatalogChanged`. */
         PresetCatalogChangedPayload: {
             /** @description The preset created, updated, renamed, or deleted, or null when the presets were reordered. */
             presetId: string | null;
@@ -2760,38 +2755,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PresetResponse"][];
                 };
-            };
-            /** @description Unauthorized when auth is required and request is not paired */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            503: components["responses"]["LibraryUnavailable"];
-        };
-    };
-    postPresets: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FilterPresetSnapshot"][];
-            };
-        };
-        responses: {
-            /** @description Preset catalog updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Unauthorized when auth is required and request is not paired */
             401: {

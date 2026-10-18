@@ -258,39 +258,16 @@ public sealed class PresetCatalogTests : IDisposable
         AssertUnchanged(state, before, revision);
     }
 
-    [Fact]
-    public void WholeListReplace_KeepsEachPresetsIdByItsName()
-    {
-        var state = SeededState(out var ids);
-
-        state.SetPresetCatalog(
-        [
-            new FilterPresetSnapshot { Name = "ann", FilterState = Filter(AnnFilter) },
-            new FilterPresetSnapshot { Name = "Photos", FilterState = Filter("""{"mediaTypeFilter":2}""") },
-            new FilterPresetSnapshot { Name = "Night", FilterState = Filter("""{"favoritesMode":"excluded"}""") }
-        ]);
-
-        var presets = state.GetPresetCatalogSnapshot();
-        Assert.Equal(["ann", "Photos", "Night"], presets.Select(preset => preset.Name));
-        Assert.Equal(ids[2], presets[0].Id);
-        Assert.DoesNotContain(presets[1].Id, ids);
-        Assert.False(string.IsNullOrEmpty(presets[1].Id));
-        Assert.Equal(ids[0], presets[2].Id);
-        Assert.Equal(Describe(state), Describe(Restarted()));
-    }
-
     // A tag rename onto another tag's name, or a tag delete, can leave presets with one filter, or with the default
     // filter. Neither is refused, and each preset keeps its id. The tag routes publish the tag catalog's change, so
     // these publish no preset change.
     [Fact]
     public void TagRenameAndDelete_LeavingPresetsWithOneFilterOrTheDefaultFilter_StillLand()
     {
-        var state = SeededState(out _);
-        state.SetPresetCatalog(
-        [
-            new FilterPresetSnapshot { Name = "Bob", FilterState = Filter("""{"selectedTags":["Bob"]}""") },
-            new FilterPresetSnapshot { Name = "Robert", FilterState = Filter("""{"selectedTags":["Robert"]}""") }
-        ]);
+        CatalogSeed.Write(
+            _tempDir,
+            presets: [new SeedPreset("Bob", """{"selectedTags":["Bob"]}"""), new SeedPreset("Robert", """{"selectedTags":["Robert"]}""")]);
+        var state = Restarted();
         var ids = state.GetPresetCatalogSnapshot().Select(preset => preset.Id).ToList();
         var revision = state.GetCurrentRevision();
 

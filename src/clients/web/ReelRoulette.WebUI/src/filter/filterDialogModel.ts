@@ -17,6 +17,7 @@ import {
   type PresetRow,
   type TagMatchMode
 } from "./filterStateModel";
+import type { PresetLoop } from "./presetWrites";
 
 /** The key the Uncategorized row's collapsed state is stored under. */
 export const UNCATEGORIZED_COLLAPSE_KEY = "__filter_uncategorized__";
@@ -304,16 +305,35 @@ export function filterFieldProblems(
 }
 
 /**
- * The problem of the name typed in Edit Preset for the preset at `index`, or null while it is valid: empty, or another
+ * The problem of the name typed in Edit Preset for the preset with `id`, or null while it is valid: empty, or another
  * preset's name, ignoring case. The preset's own name is valid, in any case.
  */
-export function editPresetNameProblem(text: string, presets: readonly PresetRow[], index: number): FieldProblem | null {
+export function editPresetNameProblem(text: string, presets: readonly PresetRow[], id: string): FieldProblem | null {
   const name = text.trim();
   if (!name) {
     return EMPTY_FIELD;
   }
-  const taken = presets.some((row, rowIndex) => rowIndex !== index && namesEqualIgnoringCase(row.name, name));
+  const taken = presets.some((row) => row.id !== id && namesEqualIgnoringCase(row.name, name));
   return taken ? { message: PRESET_NAME_PROBLEM } : null;
+}
+
+/** Names in quotes, as `"A" and "B"` or `"A", "B", and "C"`. */
+function quotedNames(names: readonly string[]): string {
+  const quoted = names.map((name) => `"${name}"`);
+  return quoted.length <= 2 ? quoted.join(" and ") : `${quoted.slice(0, -1).join(", ")}, and ${quoted.at(-1)}`;
+}
+
+/**
+ * Why a loop of presets blocks Apply, naming each preset in it, in the tab's order, and its log line, which leaves
+ * their names out.
+ */
+export function presetLoopReason(loop: PresetLoop, presets: readonly PresetRow[]): { text: string; logText: string } {
+  const names = loop.ids.map((id) => presets.find((row) => row.id === id)?.name ?? id);
+  const [what, other, finish] = loop.kind === "names" ? ["names", "another name", "rename it"] : ["filters", "another filter", "update it"];
+  return {
+    text: `Presets ${quotedNames(names)} would take each other's ${what}. Apply in two steps: give one of them ${other}, apply, then ${finish}.`,
+    logText: `Presets would take each other's ${what}. Apply in two steps.`
+  };
 }
 
 /**
@@ -413,14 +433,15 @@ export function filterTagCategories(
   return blocks;
 }
 
-/** The dialog's preset rows from the presets `GET /api/presets` returned. */
+/** The dialog's preset rows, by id, from the presets `GET /api/presets` returned. */
 export function presetRowsFromApi(
   presets: readonly { id?: string; name?: string; filterState?: ApiFilterState | null }[]
 ): PresetRow[] {
   return (Array.isArray(presets) ? presets : [])
     .map((preset) => ({
+      id: String(preset.id || ""),
       name: String(preset.name || preset.id || "").trim() || String(preset.id || ""),
       filterState: withoutAndLocalModes(filterStateFromApiObject(preset.filterState))
     }))
-    .filter((row) => row.name);
+    .filter((row) => row.id && row.name);
 }

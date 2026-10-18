@@ -406,6 +406,14 @@ for (const width of [1280, 390]) {
   const button = (root, label) => [...root.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith(label));
   const pressEscape = (dialog) => dialog.dispatchEvent(new window.Event("cancel", { cancelable: true }));
   const notice = () => topDialog()?.querySelector(".dialog-message")?.textContent || "";
+  // Presets go by id, so a check finds one by the name it shows: an option's value, a row, or a row's name.
+  const presetValue = (select, name) => [...select.options].find((option) => option.textContent === name)?.value ?? "missing";
+  const choosePresetNamed = (name) => change($("filter-preset-select"), presetValue($("filter-preset-select"), name));
+  // happy-dom keeps `selectedOptions` as it was when a check sets `value`, so the name is read from the value.
+  const presetNameIn = (select) => [...select.options].find((option) => option.value === select.value)?.textContent;
+  const chosenPresetName = () => presetNameIn($("filter-preset-select"));
+  const presetRowName = (row) => row?.querySelector(".filter-preset-name")?.textContent;
+  const presetRowNamed = (name) => [...document.querySelectorAll(".filter-preset-row")].find((row) => presetRowName(row) === name);
   const dismissNotices = () => {
     for (const dialog of openDialogs().reverse()) button(dialog, "OK")?.click();
   };
@@ -754,7 +762,7 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: with the default filter on None, Load is disabled quietly, Add Preset says why, and Update says it needs a preset (${$("filter-heading").textContent}, ${$("filter-update-preset").title})`,
     $("filter-heading").textContent === "Preset: None" && $("filter-preset-select").value === "" && clearOff() && loadOffQuietly() &&
     saysWhy("filter-add-preset", defaultReason) && saysWhy("filter-update-preset", "Choose a preset to update."));
-  change($("filter-preset-select"), "Favorites");
+  choosePresetNamed("Favorites");
   check(`layout@${width}: choosing Favorites loads nothing and is no change, enables Load, and Update gives the default filter's reason (${$("filter-heading").textContent}, ${$("filter-update-preset").title})`,
     $("filter-heading").textContent === "Preset: None" && !$("filter-fav").checked && noChangesShown() &&
     enabledQuietly("filter-load-preset", "Load preset") && saysWhy("filter-update-preset", defaultReason));
@@ -766,7 +774,7 @@ for (const width of [1280, 390]) {
   change(neverPlayedBox(), true);
   check(`layout@${width}: a filter no preset has enables all three, with no reason left, and Choose Preset stays on Favorites`,
     enabledQuietly("filter-add-preset", "Add preset") && enabledQuietly("filter-update-preset", "Update preset") &&
-    enabledQuietly("filter-load-preset", "Load preset") && $("filter-preset-select").value === "Favorites");
+    enabledQuietly("filter-load-preset", "Load preset") && chosenPresetName() === "Favorites");
   $("filter-load-preset").click();
   check(`layout@${width}: Load puts Favorites' filter in the tab (${$("filter-heading").textContent})`,
     $("filter-fav").checked && !neverPlayedBox().checked && $("filter-heading").textContent === "Preset: Favorites" && loadOffQuietly());
@@ -775,7 +783,7 @@ for (const width of [1280, 390]) {
   $("filter-load-preset").click();
   check(`layout@${width}: Load on None puts the default filter in the tab and keeps the preset list's changes (${$("filter-heading").textContent})`,
     !$("filter-fav").checked && $("filter-heading").textContent === "Preset: None" && loadOffQuietly() && changesShown() &&
-    document.querySelectorAll(".filter-preset-row")[1].dataset.key === "Favorites");
+    presetRowName(document.querySelectorAll(".filter-preset-row")[1]) === "Favorites");
   key(presetHandle(1), "ArrowUp");
   input($("filter-new-preset"), "");
   document.querySelector('[data-sub="tags"]').click();
@@ -856,14 +864,14 @@ for (const width of [1280, 390]) {
     !document.querySelector('[data-subpanel="general"]').hidden && document.activeElement === min && !$("panel").hidden && messages.entries().length === messagesBeforeApply);
   input(min, "1:30");
   document.querySelector('[data-sub="presets"]').click();
-  const presetNames = () => [...document.querySelectorAll(".filter-preset-row")].map((r) => r.dataset.key).join(",");
+  const presetNames = () => [...document.querySelectorAll(".filter-preset-row")].map(presetRowName).join(",");
   const rowButtons = [...document.querySelector(".filter-preset-row").querySelectorAll("button")].map((b) => b.title).join(",");
   check(`layout@${width}: preset rows have a handle and Edit only (${rowButtons})`, rowButtons === "Drag to reorder,Edit preset");
   check(`layout@${width}: the mockup has many presets (${document.querySelectorAll(".filter-preset-row").length})`, document.querySelectorAll(".filter-preset-row").length >= 12);
   key(document.querySelector(".filter-preset-row .drag-handle"), "ArrowDown");
   check(`layout@${width}: ArrowDown on a preset's handle moves it and keeps focus on it`,
-    presetNames().startsWith("Short clips,Favorites,Photos only,Long videos,") && document.activeElement?.closest(".filter-preset-row")?.dataset.key === "Favorites" && !apply.disabled && apply.classList.contains("has-pending"));
-  document.querySelector('.filter-preset-row[data-key="Long videos"] [title="Edit preset"]').click();
+    presetNames().startsWith("Short clips,Favorites,Photos only,Long videos,") && presetRowName(document.activeElement?.closest(".filter-preset-row")) === "Favorites" && !apply.disabled && apply.classList.contains("has-pending"));
+  presetRowNamed("Long videos").querySelector('[title="Edit preset"]').click();
   const presetDialog = topDialog();
   const presetName = presetDialog?.querySelector("input");
   input(presetName, "favorites");
@@ -899,6 +907,71 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: closing resumes playback`, overlay ? chip().includes("Playing") : true);
   if ($("panel").hidden) $("panel-btn").click();
   check(`layout@${width}: reopening comes back on the last tab (Filter)`, !$("tab-filter").hidden);
+  // Presets that would take each other's names, or filters, in a loop can't be saved in any order, so Apply shows as
+  // unavailable, turning its dot red as a held Apply does, names each preset in the loop, and says to apply in two steps. Pressing it
+  // shows the reason in a notice, since a phone or tablet shows no tooltip, and saves and applies nothing. A chain of
+  // renames, each taking the name the next one frees, applies.
+  document.querySelector('[data-sub="presets"]').click();
+  const renamePreset = (from, to) => {
+    presetRowNamed(from).querySelector('[title="Edit preset"]').click();
+    input(topDialog().querySelector("input"), to);
+    button(topDialog(), "Save").click();
+  };
+  const blockedSaying = (reason) => !apply.disabled && apply.getAttribute("aria-disabled") === "true" && apply.title === reason &&
+    document.getElementById(apply.getAttribute("aria-describedby") || "none")?.textContent === reason &&
+    apply.classList.contains("has-pending") && applyDot() && apply.classList.contains("shows-problem") && applyDotColor() === errorColor();
+  const savedPresetList = () => [...$("lib-preset").options].map((option) => option.textContent).join(",");
+  const savedBeforeLoops = savedPresetList();
+  renamePreset("Favorites", "Spare");
+  renamePreset("Short clips", "Favorites");
+  renamePreset("Spare", "Short clips");
+  const nameSwap = 'Presets "Favorites" and "Short clips" would take each other\'s names. Apply in two steps: give one of them another name, apply, then rename it.';
+  check(`layout@${width}: two presets swapping names block Apply, whose dot turns red as a held Apply's does, naming both (${apply.title}, ${applyDotColor()})`,
+    blockedSaying(nameSwap));
+  apply.click();
+  check(`layout@${width}: pressing the blocked Apply shows the reason in a notice, and saves and applies nothing (${notice()})`,
+    notice() === nameSwap && newest() === nameSwap && savedPresetList() === savedBeforeLoops && !$("panel").hidden && blockedSaying(nameSwap));
+  dismissNotices();
+  $("filter-discard").click();
+  renamePreset("Photos only", "Spare");
+  renamePreset("Favorites", "Photos only");
+  renamePreset("Short clips", "Favorites");
+  renamePreset("Spare", "Short clips");
+  check(`layout@${width}: three presets rotating names block Apply, naming all three in the list's order (${apply.title})`,
+    blockedSaying('Presets "Favorites", "Photos only", and "Short clips" would take each other\'s names. Apply in two steps: give one of them another name, apply, then rename it.'));
+  $("filter-discard").click();
+  renamePreset("Photos only", "Pictures");
+  renamePreset("Favorites", "Photos only");
+  renamePreset("Short clips", "Favorites");
+  check(`layout@${width}: a chain of renames doesn't block Apply (${apply.title})`,
+    changesShown() && !apply.hasAttribute("aria-disabled") && apply.title === "Apply");
+  $("filter-discard").click();
+  // Two presets swap filters through a filter of Favorites' own on the way, since no two presets may share one.
+  choosePresetNamed("Favorites");
+  $("filter-load-preset").click();
+  change(neverPlayedBox(), true);
+  $("filter-update-preset").click();
+  choosePresetNamed("Short clips");
+  change(neverPlayedBox(), false);
+  $("filter-update-preset").click();
+  choosePresetNamed("Favorites");
+  change($("filter-fav"), false);
+  change(document.querySelectorAll('input[name="media"]')[1], true);
+  input($("filter-max"), "2:00");
+  change($("filter-max"), "2:00");
+  $("filter-update-preset").click();
+  const filterSwap = 'Presets "Short clips" and "Favorites" would take each other\'s filters. Apply in two steps: give one of them another filter, apply, then update it.';
+  check(`layout@${width}: two presets swapping filters block Apply, naming both (${apply.title})`, blockedSaying(filterSwap));
+  apply.click();
+  check(`layout@${width}: and pressing it shows the filters' reason in a notice (${notice()})`,
+    notice() === filterSwap && savedPresetList() === savedBeforeLoops);
+  dismissNotices();
+  choosePresetNamed("Short clips");
+  change(neverPlayedBox(), true);
+  $("filter-update-preset").click();
+  check(`layout@${width}: giving one of them another filter breaks the loop, and Apply can apply again (${apply.title})`,
+    changesShown() && !apply.hasAttribute("aria-disabled") && apply.title === "Apply");
+  $("filter-discard").click();
 
   // Favorites and Blacklisted each choose only or excluded.
   document.querySelector('[data-sub="general"]').click();
@@ -942,7 +1015,7 @@ for (const width of [1280, 390]) {
   // loaded first.
   openTab("filter");
   document.querySelector('[data-sub="presets"]').click();
-  change($("filter-preset-select"), "Favorites");
+  choosePresetNamed("Favorites");
   $("filter-load-preset").click();
   document.querySelector('[data-sub="general"]').click();
   change($("filter-fav"), true);
@@ -1012,7 +1085,7 @@ for (const width of [1280, 390]) {
   $("filter-add-preset").click();
   const addedPreset = $("filter-preset-list").lastElementChild;
   check(`layout@${width}: Add Preset adds the preset last and moves to its drag handle`,
-    addedPreset?.dataset.key === "Unique name" && document.activeElement === addedPreset.querySelector(".drag-handle") && $("filter-new-preset").value === "");
+    presetRowName(addedPreset) === "Unique name" && document.activeElement === addedPreset.querySelector(".drag-handle") && $("filter-new-preset").value === "");
   await applyFilter(false, "only", true, "excluded");
 
   // An empty duration field means no limit: the rows have no boxes, and the placeholders say so.
@@ -1100,7 +1173,7 @@ for (const width of [1280, 390]) {
   openTab("library");
 
   // Choosing a preset applies its filter, and a change to that filter stars it.
-  const choosePreset = (value) => change($("lib-preset"), value);
+  const choosePreset = (name) => change($("lib-preset"), name ? presetValue($("lib-preset"), name) : "");
   choosePreset("Photos only");
   await tick();
   check(`layout@${width}: choosing a preset in the Library tab applies its filter (${tiles().length} tiles)`,
@@ -1114,14 +1187,14 @@ for (const width of [1280, 390]) {
   // while the section stays in view.
   const presetsSub = () => document.querySelector('[data-sub="presets"]');
   presetsSub().click();
-  check(`layout@${width}: the Presets section shows Choose Preset on the base of the heading's starred preset (${$("filter-heading").textContent}, ${$("filter-preset-select").value})`,
-    $("filter-heading").textContent === "Preset: Photos only*" && $("filter-preset-select").value === "Photos only");
+  check(`layout@${width}: the Presets section shows Choose Preset on the base of the heading's starred preset (${$("filter-heading").textContent}, ${chosenPresetName()})`,
+    $("filter-heading").textContent === "Preset: Photos only*" && chosenPresetName() === "Photos only");
   const wayIn = (way, comeBack) => {
-    change($("filter-preset-select"), "Beach days");
-    const kept = $("filter-preset-select").value;
+    choosePresetNamed("Beach days");
+    const kept = chosenPresetName();
     comeBack();
-    check(`layout@${width}: ${way} starts Choose Preset over on Photos only, and the choice lasted until then (${kept}, ${$("filter-preset-select").value})`,
-      kept === "Beach days" && $("filter-preset-select").value === "Photos only" && !presetsSub().hidden && presetsSub().classList.contains("is-active"));
+    check(`layout@${width}: ${way} starts Choose Preset over on Photos only, and the choice lasted until then (${kept}, ${chosenPresetName()})`,
+      kept === "Beach days" && chosenPresetName() === "Photos only" && !presetsSub().hidden && presetsSub().classList.contains("is-active"));
   };
   wayIn("its sub-tab", () => {
     document.querySelector('[data-sub="tags"]').click();
@@ -1160,14 +1233,14 @@ for (const width of [1280, 390]) {
   $("filter-apply").click();
   await tick();
   check(`layout@${width}: and in the dropdown once applied (${$("lib-preset").selectedOptions[0]?.textContent})`,
-    $("lib-preset").value === "Photos only" && ![...$("lib-preset").options].some((option) => option.value === "*"));
+    presetNameIn($("lib-preset")) === "Photos only" && ![...$("lib-preset").options].some((option) => option.value === "*"));
   openTab("library");
   choosePreset("");
   await tick();
   check(`layout@${width}: None goes back to the default filter`, $("lib-filters").hidden && !$("filter-fav").checked);
   openTab("filter");
   document.querySelector('[data-sub="presets"]').click();
-  change($("filter-preset-select"), "Favorites");
+  choosePresetNamed("Favorites");
   $("filter-load-preset").click();
   document.querySelector('[data-sub="general"]').click();
   check(`layout@${width}: choosing a preset in the Filter tab and Load loads its filter into the tab`, $("filter-fav").checked && $("filter-fav-mode").value === "only" && $("filter-heading").textContent === "Preset: Favorites");
@@ -1190,7 +1263,7 @@ for (const width of [1280, 390]) {
   };
   const loadPresetInTab = (name) => {
     document.querySelector('[data-sub="presets"]').click();
-    change($("filter-preset-select"), name);
+    choosePresetNamed(name);
     $("filter-load-preset").click();
     document.querySelector('[data-sub="general"]').click();
     return $("filter-heading").textContent;
@@ -1219,8 +1292,8 @@ for (const width of [1280, 390]) {
     $("filter-heading").textContent === "Preset: Photos only*" && saysWhy("filter-add-preset", shortReason) && saysWhy("filter-update-preset", shortReason));
   $("filter-max").dispatchEvent(new window.Event("change", { bubbles: true }));
   $("filter-max").blur();
-  check(`layout@${width}: once the field is read, the heading names Short clips, Choose Preset stays on Photos only, and both still name Short clips (${$("filter-heading").textContent}, ${$("filter-preset-select").value})`,
-    $("filter-heading").textContent === "Preset: Short clips" && $("filter-preset-select").value === "Photos only" &&
+  check(`layout@${width}: once the field is read, the heading names Short clips, Choose Preset stays on Photos only, and both still name Short clips (${$("filter-heading").textContent}, ${chosenPresetName()})`,
+    $("filter-heading").textContent === "Preset: Short clips" && chosenPresetName() === "Photos only" &&
     saysWhy("filter-add-preset", shortReason) && saysWhy("filter-update-preset", shortReason));
   $("filter-discard").click();
   // While the server is unreachable, a browse keeps the tiles already loaded and Apply can't save the presets.
@@ -2772,8 +2845,10 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: a failed refresh is a warning that stays until it's closed (${newest()})`,
     said("Library refresh failed") && !!warning && warning.remaining === 0 && !toastTexts().includes("Library refresh finished"));
   test("notice");
+  // A refused preset save names the server's reason, here its reason for a write the catalog doesn't take.
+  const sampleNotice = "Saving presets failed: The preset change couldn't be saved.";
   check(`layout@${width}: an error shows in the dialog, not a popup, and the list keeps it (${notice()})`,
-    notice() === "Saving presets failed (500)." && newest() === "Saving presets failed (500)." && !toastTexts().includes("Saving presets failed (500)."));
+    notice() === sampleNotice && newest() === sampleNotice && !toastTexts().includes(sampleNotice));
   dismissNotices();
   test("burst");
   check(`layout@${width}: four at once show three, newest last, and the cap closes the oldest that isn't a warning (${toastTexts()})`,

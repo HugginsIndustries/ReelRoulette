@@ -238,9 +238,9 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
           <select aria-label="Choose preset" class="ctl grow" id="filter-dialog-preset-select">
             <option selected="false" value="">
               "None"
-            <option selected="true" value="Rich">
+            <option selected="true" value="preset-rich">
               "Rich"
-            <option selected="false" value="Favorites">
+            <option selected="false" value="preset-favorites">
               "Favorites"
           <button aria-label="Load preset" class="icon-btn" disabled="" id="filter-load-preset-btn" title="Load preset" type="button">
             <span class="material-symbol-icon">
@@ -541,9 +541,9 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
           <select aria-label="Choose preset" class="ctl grow" id="filter-dialog-preset-select">
             <option selected="false" value="">
               "None"
-            <option selected="true" value="Rich">
+            <option selected="true" value="preset-rich">
               "Rich"
-            <option selected="false" value="Favorites">
+            <option selected="false" value="preset-favorites">
               "Favorites"
           <button aria-label="Load preset" class="icon-btn" disabled="" id="filter-load-preset-btn" title="Load preset" type="button">
             <span class="material-symbol-icon">
@@ -844,9 +844,9 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
           <select aria-label="Choose preset" class="ctl grow" id="filter-dialog-preset-select">
             <option selected="false" value="">
               "None"
-            <option selected="true" value="Rich">
+            <option selected="true" value="preset-rich">
               "Rich"
-            <option selected="false" value="Favorites">
+            <option selected="false" value="preset-favorites">
               "Favorites"
           <button aria-label="Load preset" class="icon-btn" disabled="" id="filter-load-preset-btn" title="Load preset" type="button">
             <span class="material-symbol-icon">

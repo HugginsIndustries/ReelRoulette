@@ -19,10 +19,11 @@ Instructions:
 
 Commit Message:
 
-M12i6: Keep presets from sharing a filter in the Filter tab, and split Choose Preset from Load
+M12i6: Save presets one at a time from the Filter tab, block Apply for presets that would trade names or filters, and remove the whole-list replace
 
-- Add Preset and Update are unavailable while the filter, as typed, is the default one or a preset's, the chosen preset's included, and their tooltip names the preset that has it, as the server's refusal will.
-- Choose Preset only chooses the preset that new Load and Update icon buttons act on, and starts over on the heading's preset each time the Presets section comes into view. Load puts the chosen preset's filter, or the default filter for None, in the tab, and Update on None says it needs a preset.
-- Add Preset becomes an icon button, and a held Add Preset or Update shows a red dot where Apply's sits, in place of the badge.
-- The design mockup shows the same, with checks for each way into the Presets section, and M12i6's Duplicate filter slice is complete.
-- Library Profiles' Decisions and its Server and WebUI slices plan each profile's own default filter, which None and Clear all will load and Update on None will change.
+- Apply sends one write for each preset the Filter tab changed, by id: deletes, renames, filter updates, new presets, then one reorder, each rename and update after the one that frees its name or filter. At the first refusal it shows the server's reason, logged with only the status, keeps what didn't land as unsaved, and applies nothing.
+- Presets that would take each other's names or filters, in a loop of any size, block Apply, which shows its dot red and the reason, and its press shows the reason in a notice, as a phone or tablet shows no tooltip.
+- Refresh, opening the tab, and a refused save take the server's list by a merge that keeps the tab's changes and takes the server's version of every other preset.
+- The Filter tab, the preset dropdown, and the remembered active preset go by id, and the remembered preset survives a list that lacks it. A 401's log line names a preset route's id as `{presetId}`.
+- The server's whole-list `POST /api/presets` goes, with `SetPresetCatalog`, Core's `ReplacePresets`, and `FilterPresetSnapshot`, in OpenAPI and the generated types.
+- The design mockup gives presets ids and shows the blocked Apply and its notice, with checks for each, and M12i6's WebUI writes slice is complete.
