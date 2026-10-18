@@ -7,6 +7,7 @@ import { createLibrary, type Library } from "../library/library";
 import { createNotifications, type Notifications } from "../notifications/notifications";
 import { createPanelHost, type PanelHost } from "../panel/panelHost";
 import { createAmbient, type Ambient } from "../playback/ambient";
+import { createAudioStage, type AudioStage } from "../playback/audioStage";
 import { createAutoPause } from "../playback/autoPause";
 import { createPlayer, type Player } from "../playback/player";
 import { createStageFullscreen, type StageFullscreen } from "../playback/stageFullscreen";
@@ -28,9 +29,9 @@ export interface UnsavedTabs {
 }
 
 /**
- * One page's runtime config, shared state, server requests, in-app dialogs, server connection, player, ambient mode's
- * glow, fullscreen, side panel, the panel's library, filter, tag editor, and stats tabs, and the settings its Settings
- * tab sets, with Auto-Pause pausing the player as its mode says while the panel and Auto Tag cover it.
+ * One page's runtime config, shared state, server requests, in-app dialogs, server connection, player, its sound,
+ * ambient mode's glow, fullscreen, side panel, the panel's library, filter, tag editor, and stats tabs, and the settings
+ * its Settings tab sets, with Auto-Pause pausing the player as its mode says while the panel and Auto Tag cover it.
  */
 export interface AppServices {
   config: RuntimeConfig;
@@ -39,6 +40,8 @@ export interface AppServices {
   dialogs: Dialogs;
   connection: ServerConnection;
   player: Player;
+  /** The player's sound: the volume, Mute, and Enhanced audio's gain stage. */
+  audio: AudioStage;
   /** Ambient mode's glow behind the player, which the Settings tab turns on and off and tunes. */
   ambient: Ambient;
   fullscreen: StageFullscreen;
@@ -104,7 +107,16 @@ export function createAppServices(config: RuntimeConfig): AppServices {
       notifications.closeList();
     }
   });
-  const player = createPlayer({ apiBaseUrl: config.apiBaseUrl, store, device, api, connection, dialogs, notifications });
+  const audio = createAudioStage({
+    device,
+    dialogs,
+    relay(level, message) {
+      void api.relayLog(level, message);
+    },
+    // Once Enhanced audio is off, a new video element takes over from the one the gain stage took.
+    renewVideo: () => player.renewVideo()
+  });
+  const player = createPlayer({ apiBaseUrl: config.apiBaseUrl, store, audio, api, connection, dialogs, notifications });
   // After the player, so the player handles an item-state event before the library does.
   const library = createLibrary({ config, store, api, connection, player, dialogs, notifications, panel, device });
   // The tag catalog the Filter and Tags tabs load, which the Stats tab orders a file's tags by.
@@ -187,6 +199,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     dialogs,
     connection,
     player,
+    audio,
     ambient,
     fullscreen,
     panel,

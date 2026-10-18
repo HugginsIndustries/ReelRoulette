@@ -81,6 +81,7 @@ From `src/clients/web/ReelRoulette.WebUI`:
   - PWA service worker: `public/sw.js` (copied to `dist/` root) is registered from `src/main.ts` in secure contexts. Its fetch handler intercepts document navigations only, which satisfies Chromium installability for standalone install on Android Chrome. API calls, the event stream, and media are not intercepted. `ServerApp` sets `Cache-Control: no-store` for `sw.js` when serving WebUI static files.
   - `assets/fonts/MaterialSymbolsOutlined.var.ttf` -> `public/assets/fonts/MaterialSymbolsOutlined.var.ttf`
 - App version: the build and the tests read the repository's `.version` through `scripts/app-version.mjs`, without its leading `v`, for the Settings tab's Diagnostics; a missing or empty `.version` fails the build
+- Sound under `npm run dev`: the Vite dev server plays media from the server's other origin, which can play silent through Enhanced audio's Web Audio gain stage. Try audio with the WebUI the server serves, such as through `run-server.ps1`, or turn Enhanced audio off in the Settings tab while developing.
 
 Optional helper scripts:
 

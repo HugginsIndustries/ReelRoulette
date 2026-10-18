@@ -19,13 +19,13 @@ Instructions:
 
 Commit Message:
 
-M12i7: Complete the volume mockup, with Mute in the seek row and a volume indicator, and split the Volume slice in three
+M12i7: Add the WebUI's volume slider and Enhanced audio's gain stage, with Mute in the seek row
 
-- MILESTONES.md: WebUI Volume and Enhanced Audio splits its Volume slice into Mockup, Volume, and Volume gestures, which takes the scroll wheel, the two-finger drag, the volume indicator, and the volume steps. The Mockup slice is complete, approved by the user.
-- MILESTONES.md: nothing narrower than about 425 px is supported, so the volume slider always sits in the seek row, with no layout for a narrower player and no minimum width for the scrub bar.
-- MILESTONES.md: turning Enhanced audio off moves the video to the new element at its position, playing or paused as it was, and the gain stage starts on `pointerup` or `keydown`.
-- MILESTONES.md: in WebUI Keyboard Shortcuts, [ and ] change the volume on a photo too, with the volume indicator, as the slider, the scroll wheel, and a two-finger drag do.
-- Mockup: Mute moves from the transport row to the seek row, between the time and the volume slider, keeping its 44 px target without making the row taller.
-- Mockup: a volume indicator shows the volume as a percentage, centered over the player, for the scroll wheel, a two-finger drag, and [ and ], and the gain stage starts on `pointerup`, since a touch's `pointerdown` carries no user activation.
-- Mockup: the volume steps add 10 percent, with 5 still the default, and the index notes say nothing narrower than about 425 px is supported. Each new check fails when what it guards is broken.
-- Testing checklist: the check of a flagged section's tab badge runs on the Pixel instead of a phone 360 px wide.
+- WebUI: a volume slider, 0 to 100% and 100% by default, ends the seek row after Mute, which moves there from the transport row. Both work before anything plays and on a photo, and a volume change sends no notification.
+- WebUI: Enhanced audio, on by default in the Settings tab's new Audio section, plays the sound through a Web Audio gain stage started on the first tap's pointerup or a key. The gain only glides, play fades in, and pause fades out before pausing, so nothing clicks or pops.
+- WebUI: on iOS the slider shows from the start and hides only while Enhanced audio is off where the element's volume is read-only, and a volume set before the gain stage runs is the one it starts at.
+- WebUI: turning Enhanced audio off closes the gain stage and renders a new video element, which takes over the video at its position, playing or paused as it was. A stage that can't start shows a notice whose Turn off Enhanced audio turns it off for the device.
+- WebUI: the volume, Mute, and Enhanced audio are kept on each device, and a notice can offer one action beside its OK.
+- Mockup: the volume starts at 100%, the iOS slider shows from the start, and the index notes say the player's controls don't appear, hide, or move on their own.
+- MILESTONES.md: the Volume slice is complete, with the user's spot check in the iPad's installed app, where a media element's volume turned out settable, and in the Pixel's, which plays through the gain stage without audio issues. Its Scope, Acceptance, and the iPad release check say the iOS slider shows from the start, and Volume gestures takes the same rule. In WebUI Loudness Normalization, Enhanced audio's description and the failure notice name no device.
+- Docs: CONTEXT.md, the domain inventory, the dev setup's note on sound under the Vite dev server, and the changelog.

@@ -1070,7 +1070,8 @@ a.icon-btn { text-decoration: none; }
   .pair .vfield { flex: 1 1 auto; width: auto; }
 }
 
-/* Volume, at the end of the seek row; hidden where the browser keeps volume read-only (iOS). */
+/* Volume, at the end of the seek row; hidden only while Enhanced audio is off where the browser keeps volume read-only
+   (iOS), since a control hides only because of a user setting. */
 .volume { display: inline-flex; align-items: center; }
 /* 84 px on every screen, a phone's too. */
 .volume input[type="range"] { flex: none; width: 84px; height: 24px; }
@@ -1458,7 +1459,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
             <span class="seek-wrap" id="seek-wrap"><span class="seek-loop" id="seek-loop" hidden></span><input type="range" id="seek" min="0" max="100" step="any" value="0" aria-label="Seek"></span>
             <span id="time-display"></span>
             <button id="mute-btn" class="overlay-btn" aria-label="Mute" title="Mute"><span class="material-symbol-icon">volume_up</span></button>
-            <span class="volume" id="volume-wrap"><input type="range" id="volume" min="0" max="100" step="1" value="80" aria-label="Volume" title="Volume"></span>
+            <span class="volume" id="volume-wrap"><input type="range" id="volume" min="0" max="100" step="1" value="100" aria-label="Volume" title="Volume"></span>
           </div>
         </div>
       </div>
@@ -1943,7 +1944,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <legend>Situation</legend>
         <label><input type="checkbox" id="mock-pairing"> The server asks for pairing (a token of "wrong" fails)</label>
         <label><input type="checkbox" id="mock-server-machine"> This browser is on the server machine: Show in File Manager, and admin actions without the control token</label>
-        <label><input type="checkbox" id="mock-ios-volume"> Volume is read-only, as on iOS: the slider shows once the Web Audio gain stage starts on the first tap</label>
+        <label><input type="checkbox" id="mock-ios-volume"> Volume is read-only, as on iOS: it works through the Web Audio gain stage, started on the first tap, and the slider hides while Enhanced audio is off</label>
         <label><input type="checkbox" id="mock-sound"> A stand-in sound plays with videos, through the Web Audio gain stage, so the volume can be heard</label>
         <label><input type="checkbox" id="mock-audio-fails"> The Web Audio gain stage fails to start (the next tap shows the notice)</label>
         <label><input type="checkbox" id="mock-short"> A phone on its side (a touch screen under 500 px tall)</label>
@@ -3102,7 +3103,7 @@ const state = {
   loopStopsAutoplay: store.get("loopStopsAutoplay", true),
   seekStep: store.get("seekStep", 5),
   volumeStep: store.get("volumeStep", 5),
-  volume: store.get("volume", 80),
+  volume: store.get("volume", 100),
   serverMachine: store.get("serverMachine", false),
   pairing: store.get("pairing", false),
   iosVolume: store.get("iosVolume", false),
@@ -4055,7 +4056,8 @@ document.addEventListener("keydown", (event) => {
 // a path in use everywhere. The mockup's stand-in sound, a soft looping chord played with videos, goes through it,
 // started on the first tap or key, as Web Audio needs. Without Enhanced audio, the sound plays directly. The slider,
 // the scroll wheel, and a two-finger drag work wherever the volume can change, on a photo too, setting the next
-// video's level.
+// video's level. On iOS they work from the start, before the gain stage runs, setting the level it starts at, since
+// the player's controls don't appear on their own; the slider hides there only while Enhanced audio is off.
 const elementVolumeReadOnly = (() => {
   try {
     const probe = document.createElement("audio");
@@ -4069,7 +4071,7 @@ const elementVolumeReadOnly = (() => {
 // routed through Web Audio stays routed.
 const audio = { context: null, gain: null, element: null, direct: null, url: "", ready: false, failed: false };
 const volumeReadOnly = () => elementVolumeReadOnly || state.iosVolume;
-const volumeAdjustable = () => (state.enhancedAudio && audio.ready) || !volumeReadOnly();
+const volumeAdjustable = () => state.enhancedAudio || !volumeReadOnly();
 function renderVolume() {
   $("volume-wrap").hidden = !volumeAdjustable();
 }

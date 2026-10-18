@@ -54,9 +54,6 @@ exports[`page structure > keeps the starting markup 1`] = `
             <button aria-label="Next" class="overlay-btn icon-glyph-base icon-glyph-button" id="next-btn" title="Next">
               <span class="material-symbol-icon">
                 "skip_next"
-            <button aria-label="Mute" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle" id="mute-btn" title="Mute">
-              <span class="material-symbol-icon">
-                "volume_up"
             <button aria-label="Loop" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle" id="loop-btn" title="Loop">
               <span class="material-symbol-icon">
                 "repeat_one"
@@ -72,6 +69,11 @@ exports[`page structure > keeps the starting markup 1`] = `
               <input aria-label="Seek" disabled="" id="seek-slider" max="100" min="0" step="any" type="range" value="0">
             <span id="time-display">
               "0:00 / 0:00"
+            <button aria-label="Mute" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle" id="mute-btn" title="Mute">
+              <span class="material-symbol-icon">
+                "volume_up"
+            <span class="volume" id="volume-wrap">
+              <input aria-label="Volume" id="volume-slider" max="100" min="0" step="1" title="Volume" type="range">
       <div aria-live="polite" class="toasts" data-pos="bottom-center" id="toasts" role="status">
     <div aria-controls="panel" aria-label="Resize panel" aria-orientation="vertical" aria-valuemax="612" aria-valuemin="360" aria-valuenow="420" aria-valuetext="420 pixels" class="panel-handle" hidden="" id="panel-handle" role="separator" tabindex="0">
       <span class="handle-grip">
@@ -264,6 +266,16 @@ exports[`page structure > keeps the starting markup 1`] = `
                     "Loop stops autoplay"
                 <p class="setting-hint" id="settings-loop-stops-autoplay-hint">
                   "With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances."
+            <section aria-labelledby="settings-audio-heading" class="settings-section">
+              <h3 id="settings-audio-heading">
+                "Audio"
+              <div class="setting">
+                <div class="choice-row">
+                  <label>
+                    <input aria-describedby="settings-enhanced-audio-hint" id="settings-enhanced-audio" type="checkbox">
+                    "Enhanced audio"
+                <p class="setting-hint" id="settings-enhanced-audio-hint">
+                  "Processes audio in the app, so in-app volume works on iPhone and iPad."
             <section aria-labelledby="settings-appearance-heading" class="settings-section">
               <h3 id="settings-appearance-heading">
                 "Appearance"

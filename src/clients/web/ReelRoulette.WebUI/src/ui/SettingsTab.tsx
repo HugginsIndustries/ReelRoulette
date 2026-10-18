@@ -74,8 +74,8 @@ const AUTO_PAUSE_CHOICES: readonly Choice<AutoPauseMode>[] = [
 
 /**
  * The panel's Settings tab: the settings kept on this device, in the mockup's sections, and Diagnostics. Each setting
- * applies as it changes, so there is no Save. Sections that later work fills go in the mockup's places: Audio and
- * Player controls after Playback, and Keyboard shortcuts before Diagnostics.
+ * applies as it changes, so there is no Save. Sections that later work fills go in the mockup's places: Player controls
+ * after Audio, and Keyboard shortcuts before Diagnostics.
  */
 export function SettingsTab() {
   return (
@@ -86,6 +86,9 @@ export function SettingsTab() {
       <div id="settings-body" class="settings-body themed-scrollbar">
         <Section id="playback" title="Playback">
           <PlaybackSettings />
+        </Section>
+        <Section id="audio" title="Audio">
+          <AudioSettings />
         </Section>
         <Section id="appearance" title="Appearance">
           <AppearanceSettings />
@@ -215,6 +218,20 @@ function PlaybackSettings() {
         onChange={store.setLoopStopsAutoplay}
       />
     </>
+  );
+}
+
+/** Enhanced audio, which the audio stage keeps and applies at once. */
+function AudioSettings() {
+  const { audio } = useApp();
+  return (
+    <Checkbox
+      id="settings-enhanced-audio"
+      label="Enhanced audio"
+      hint="Processes audio in the app, so in-app volume works on iPhone and iPad."
+      checked={audio.enhanced.value}
+      onChange={audio.setEnhanced}
+    />
   );
 }
 

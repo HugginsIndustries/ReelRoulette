@@ -7,15 +7,12 @@ import { playbackTraceLine } from "../logging/relayLogLines";
 import type { Notifications } from "../notifications/notifications";
 import type { AppApi } from "../state/appApi";
 import type { AppStore, PlayingItem } from "../state/appStore";
-import type { DeviceStore } from "../state/deviceStore";
 import { playRefusalNotice } from "../state/lastingStates";
 import type { ServerConnection } from "../state/serverConnection";
+import type { AudioStage } from "./audioStage";
 import { basenameFromPath, formatPlaybackPosition } from "./nowPlaying";
 import { createPhotoTimer } from "./photoTimer";
 import { createRandomPicker, randomPickRequest } from "./randomPick";
-
-/** The per-device store's key for whether sound is muted. */
-const MUTED_KEY = "player.muted";
 
 /** An element the player shows and hides by setting its `display`. */
 export interface ShownElement {
@@ -25,13 +22,15 @@ export interface ShownElement {
 /** The parts of the `<video>` element the player drives. */
 export interface VideoElement extends ShownElement {
   src: string;
-  muted: boolean;
   loop: boolean;
   currentTime: number;
   readonly duration: number;
   readonly paused: boolean;
   play(): Promise<void>;
   pause(): void;
+  /** With `load()`, empties an element a new one has taken over from, without the error an empty `src` gives. */
+  removeAttribute(name: "src"): void;
+  load(): void;
 }
 
 export interface PhotoElement extends ShownElement {
@@ -51,7 +50,7 @@ export interface SeekStretchElement {
 
 /**
  * The player's elements. The player sets their sources, playback, and `display` itself: it sets the source and
- * shows the element, then a video's loop and mute, then calls `play()`.
+ * shows the element, then a video's loop, then calls `play()`. The audio stage sets the video's volume and mute.
  */
 export interface PlayerElements {
   video: VideoElement;
@@ -100,10 +99,10 @@ export interface Player {
   readonly playButton: ReadonlySignal<PlayButtonView>;
   readonly seekBar: ReadonlySignal<SeekBarView>;
   /**
-   * Sound is muted, which the mute button shows lit with the muted icon. Mute works before anything plays and on a
-   * photo too, applying to the next video. It is kept on this device.
+   * Counts the times a new `<video>` element has taken over the video, which the page renders it by, so each count
+   * renders a new one.
    */
-  readonly muted: ReadonlySignal<boolean>;
+  readonly videoKey: ReadonlySignal<number>;
   readonly favorite: ReadonlySignal<boolean>;
   readonly blacklisted: ReadonlySignal<boolean>;
   /**
@@ -117,6 +116,17 @@ export interface Player {
   attach(elements: PlayerElements): void;
   /** Stops the photo timer and lets go of the elements. */
   detach(): void;
+  /**
+   * A new `<video>` element takes over the video, as one must once Enhanced audio is off, since an element that has
+   * played through the gain stage never leaves it. Notes where the video is and whether it plays, and renders a new
+   * element.
+   */
+  renewVideo(): void;
+  /**
+   * The new element rendered: it plays the video on from where it was, playing or paused as it was, and the element
+   * before it is emptied.
+   */
+  takeOverVideo(video: VideoElement): void;
   playCurrent(options?: PlayOptions): void;
   pickRandom(): Promise<void>;
   /**
@@ -127,7 +137,6 @@ export interface Player {
   /** Steps forward in history, or picks at its end. */
   next(): void;
   previous(): void;
-  toggleMute(): void;
   toggleLoop(): void;
   toggleAutoplay(): void;
   toggleFavorite(): Promise<void>;
@@ -161,8 +170,8 @@ export interface Player {
 export interface PlayerOptions {
   apiBaseUrl: string;
   store: AppStore;
-  /** Keeps whether sound is muted on this device. */
-  device: DeviceStore;
+  /** Plays and pauses the video, so its sound fades in and out, and sets its volume and mute. */
+  audio: Pick<AudioStage, "play" | "pause" | "pausing" | "cancelPause">;
   api: AppApi;
   connection: ServerConnection;
   /**
@@ -200,7 +209,7 @@ function absolutizeMediaUrl(apiBaseUrl: string, mediaUrl: string): string {
 }
 
 export function createPlayer(options: PlayerOptions): Player {
-  const { store, device, api, connection, dialogs, notifications } = options;
+  const { store, audio, api, connection, dialogs, notifications } = options;
   const apiBaseUrl = String(options.apiBaseUrl || "").replace(/\/+$/, "");
   const frames: FrameScheduler = options.frames ?? {
     request: (callback) => requestAnimationFrame(callback),
@@ -218,7 +227,7 @@ export function createPlayer(options: PlayerOptions): Player {
 
   const playButton = signal<PlayButtonView>({ disabled: false, showsPause: false });
   const seekBar = signal<SeekBarView>({ disabled: true, label: "Seek" });
-  const muted = signal(device.read(MUTED_KEY, false, (value): value is boolean => typeof value === "boolean"));
+  const videoKey = signal(0);
   const favorite = signal(false);
   const blacklisted = signal(false);
   const timeText = signal(NO_TIME);
@@ -249,6 +258,12 @@ export function createPlayer(options: PlayerOptions): Player {
   let stretching = false;
   /** Timer mode's stretch went back to its start from the video's end, so the `playing` that follows is a repeat's. */
   let stretchRestarting = false;
+  /** The video's source, which a new element takes over. */
+  let videoSource = "";
+  /** Where the video was when a new element took over, which it seeks to once its metadata has loaded. */
+  let resumeAt: number | null = null;
+  /** Where the video was, and whether it played, when a new element was asked for. */
+  let renewal: { position: number; playing: boolean } | null = null;
 
   function trace(level: string, message: string, context: Record<string, unknown> = {}): void {
     void api.relayLog(level, playbackTraceLine(message, store.current.peek(), store.playAttemptId.peek(), context));
@@ -271,6 +286,11 @@ export function createPlayer(options: PlayerOptions): Player {
 
   function videoShown(): boolean {
     return elements !== null && elements.video.style.display !== "none";
+  }
+
+  /** The video is paused, or its pause is fading out, which already counts. */
+  function videoPaused(): boolean {
+    return !elements || elements.video.paused || audio.pausing();
   }
 
   /**
@@ -372,7 +392,7 @@ export function createPlayer(options: PlayerOptions): Player {
       }
     }
     stretching = applies;
-    if (videoTimerApplies() && videoStarted && !video.paused) {
+    if (videoTimerApplies() && videoStarted && !videoPaused()) {
       videoTimer.resume();
     } else {
       videoTimer.hold();
@@ -428,7 +448,7 @@ export function createPlayer(options: PlayerOptions): Player {
       seekBar.value = { disabled: !barShown, label: "Photo timer" };
       showPhotoTime();
     } else {
-      playButton.value = { disabled: false, showsPause: !!store.current.peek() && videoShown() && !elements!.video.paused };
+      playButton.value = { disabled: false, showsPause: !!store.current.peek() && videoShown() && !videoPaused() };
       seekBar.value = { disabled: !videoShown() || videoLengthUnknown(), label: "Seek" };
     }
     moveBarWhilePlaying();
@@ -439,7 +459,7 @@ export function createPlayer(options: PlayerOptions): Player {
    * moves smoothly, and stops once it pauses. The time it shows still changes once a second.
    */
   function moveBarWhilePlaying(): void {
-    const moves = photoShown() ? photoBarShown() && photoTimer.running : videoShown() && !elements!.video.paused;
+    const moves = photoShown() ? photoBarShown() && photoTimer.running : videoShown() && !videoPaused();
     if (moves && frameId === null) {
       frameId = frames.request(moveBar);
     } else if (!moves) {
@@ -574,6 +594,9 @@ export function createPlayer(options: PlayerOptions): Player {
     stretchRestarting = false;
     armed = null;
     mediaFailed.value = false;
+    resumeAt = null;
+    // A new item stops the last at once, so a pause still fading out has nothing left to do.
+    audio.cancelPause();
     video.pause();
     video.src = "";
     photo.src = "";
@@ -595,6 +618,7 @@ export function createPlayer(options: PlayerOptions): Player {
     } else {
       // Until its metadata gives its length.
       timeText.value = NO_TIME;
+      videoSource = mediaUrl;
       video.src = mediaUrl;
       video.style.display = "block";
       armed = { mediaType: "video", id: item.id, attemptId };
@@ -603,10 +627,9 @@ export function createPlayer(options: PlayerOptions): Player {
       videoTimer.hold();
       stretching = stretchApplies();
       syncVideo();
-      video.muted = muted.peek();
       // A browser that won't play it, as when it blocks autoplay, leaves it waiting for the user. A rejection that
       // arrives after another attempt has started is that earlier play's, cut short by the new source.
-      void video.play().catch(() => {
+      void audio.play(video).catch(() => {
         if (store.playAttemptId.peek() === attemptId) {
           mediaSettled();
         }
@@ -783,7 +806,7 @@ export function createPlayer(options: PlayerOptions): Player {
   return {
     playButton,
     seekBar,
-    muted,
+    videoKey,
     favorite,
     blacklisted,
     timeText,
@@ -800,6 +823,42 @@ export function createPlayer(options: PlayerOptions): Player {
       armed = null;
       elements = null;
       store.loading.releaseAll();
+    },
+
+    renewVideo() {
+      if (!elements) return;
+      renewal = { position: elements.video.currentTime, playing: !videoPaused() };
+      videoKey.value += 1;
+    },
+
+    takeOverVideo(next) {
+      if (!elements || elements.video === next) return;
+      const previous = elements.video;
+      const { position, playing } = renewal ?? { position: previous.currentTime, playing: !videoPaused() };
+      renewal = null;
+      audio.cancelPause();
+      previous.pause();
+      previous.removeAttribute("src");
+      previous.load();
+      elements.video = next;
+      next.style.display = previous.style.display;
+      // Only a video playing now, loaded or still loading, moves to the new element; a photo, or nothing yet, leaves it
+      // empty.
+      if (armedFor("video") && videoShown()) {
+        next.src = videoSource;
+        resumeAt = position;
+        if (playing) {
+          const attemptId = store.playAttemptId.peek();
+          store.loading.hold("media");
+          void audio.play(next).catch(() => {
+            if (store.playAttemptId.peek() === attemptId) {
+              mediaSettled();
+            }
+          });
+        }
+      }
+      showPlayState();
+      syncVideo();
     },
 
     playCurrent,
@@ -824,11 +883,11 @@ export function createPlayer(options: PlayerOptions): Player {
       }
       if (elements && videoShown()) {
         handBackToUser();
-        if (elements.video.paused) {
-          void elements.video.play().catch(() => {});
+        if (videoPaused()) {
+          void audio.play(elements.video).catch(() => {});
         } else {
           // A video the user pauses while it still loads no longer shows Loading….
-          elements.video.pause();
+          audio.pause(elements.video);
           mediaSettled();
         }
         showPlayState();
@@ -838,14 +897,6 @@ export function createPlayer(options: PlayerOptions): Player {
 
     next,
     previous,
-
-    toggleMute() {
-      muted.value = !muted.peek();
-      device.write(MUTED_KEY, muted.peek());
-      if (elements) {
-        elements.video.muted = muted.peek();
-      }
-    },
 
     toggleLoop() {
       store.setLoop(!store.loop.peek());
@@ -902,8 +953,8 @@ export function createPlayer(options: PlayerOptions): Player {
         autoHeldPhoto = photoTimer.running;
         photoTimer.hold();
       } else if (elements && videoShown()) {
-        autoPausedVideo = !elements.video.paused;
-        elements.video.pause();
+        autoPausedVideo = !videoPaused();
+        audio.pause(elements.video);
         syncVideo();
       }
       showPlayState();
@@ -924,7 +975,7 @@ export function createPlayer(options: PlayerOptions): Player {
         showPlayState();
       } else if (resumeVideo && elements && videoShown()) {
         trace("info", "auto-resume", { mediaType: "video" });
-        void elements.video.play().catch(() => {});
+        void audio.play(elements.video).catch(() => {});
         showPlayState();
         syncVideo();
       }
@@ -973,6 +1024,11 @@ export function createPlayer(options: PlayerOptions): Player {
 
     videoMetadataLoaded() {
       if (!armedFor("video") || !elements) return;
+      // A new element that took over the video goes on from where the one before it was.
+      if (resumeAt !== null) {
+        elements.video.currentTime = resumeAt;
+        resumeAt = null;
+      }
       if (!videoLengthUnknown()) {
         elements.seekSlider.max = String(elements.video.duration || 100);
       }
@@ -996,7 +1052,7 @@ export function createPlayer(options: PlayerOptions): Player {
       if (stretching) {
         stretchRestarting = true;
         elements.video.currentTime = stretchStart;
-        void elements.video.play().catch(() => {
+        void audio.play(elements.video).catch(() => {
           stretchRestarting = false;
         });
         return;

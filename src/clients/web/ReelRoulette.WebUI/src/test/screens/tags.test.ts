@@ -19,6 +19,7 @@ import {
   scrollOnFocus,
   selectedPresetLabel,
   settle,
+  tapPage,
   unauthorizedLogLine,
   status,
   stubRowLayout,
@@ -1389,6 +1390,8 @@ describe("Edit Tags", () => {
   it("Edit Category opens on the name, flags a name another category has, and renames", async () => {
     const { tags } = await mountTags();
     await openEditor();
+    // The page's first tap starts the gain stage, which relays a line of its own.
+    await tapPage();
     const logsBefore = mountedServer!.logLines().length;
 
     await editCategory("Places");
@@ -1684,6 +1687,8 @@ describe("Edit Tags", () => {
     expect(savePending()).toBe(false);
 
     await click(chipButton("Beach", "Edit tag"));
+    // The page's first tap starts the gain stage, which relays a line of its own.
+    await tapPage();
     const logsBefore = mountedServer!.logLines().length;
     await typeInto(modalName(), "   ");
     expect(fieldProblem(modalName())).toBeNull();

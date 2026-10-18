@@ -775,6 +775,15 @@ html.theme-light .ambient canvas {
   margin: 0;
 }
 .overlay-seek-row input[type="range"]:disabled { cursor: default; }
+/* Mute keeps its 44 px target without making the row taller than its 24 px sliders: its box reaches into the gap above
+   the row and the controls' padding below it, so the transport row, and the popups that rise above the controls, stay
+   where they are. */
+.overlay-seek-row .overlay-btn { flex: none; margin: -10px 0; }
+/* The volume slider, at the end of the seek row, 84 px wide on every screen. It hides only while Enhanced audio is off
+   where the browser keeps a media element's volume read-only, as on iOS. */
+.volume { display: inline-flex; align-items: center; }
+.volume[hidden] { display: none; }
+.overlay-seek-row .volume input[type="range"] { flex: none; width: 84px; }
 /* The scrub bar's wrapper holds the stretch Timer mode repeats while Loop holds autoplay, shown faintly behind the bar's
    track. The thumb's center runs from half its width in from each end, so the stretch is inset by that much to line
    up with it. */

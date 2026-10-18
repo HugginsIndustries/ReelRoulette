@@ -23,7 +23,8 @@ import {
   stubFullscreenApi,
   stubLayoutSize,
   stubSafeAreaInsets,
-  useStylesheet
+  useStylesheet,
+  stubWebAudio
 } from "./pageHarness";
 
 const VIDEO_ITEM = {
@@ -46,6 +47,7 @@ let unmountServices: (() => void) | null = null;
  */
 async function mountWithServices(server = new FakeServer()): Promise<AppServices> {
   vi.stubGlobal("fetch", server.fetch);
+  stubWebAudio();
   const root = document.createElement("div");
   root.id = "app";
   document.body.appendChild(root);

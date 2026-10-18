@@ -1,6 +1,7 @@
 import { signal } from "@preact/signals";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPanelHost } from "../panel/panelHost";
+import { createAudioStage } from "../playback/audioStage";
 import { autoPauseWants, createAutoPause, type AutoPauseMode } from "../playback/autoPause";
 import { createPlayer, type PlayerElements } from "../playback/player";
 import { createAppApi } from "../state/appApi";
@@ -59,7 +60,6 @@ function fakeViewport(size: Size) {
 function fakeVideo() {
   const video = {
     src: "",
-    muted: false,
     loop: false,
     currentTime: 0,
     duration: Number.NaN,
@@ -71,7 +71,9 @@ function fakeVideo() {
     },
     pause() {
       video.paused = true;
-    }
+    },
+    removeAttribute() {},
+    load() {}
   };
   return video;
 }
@@ -94,10 +96,19 @@ function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
   store.setAdvanceAfter(15);
   const api = createAppApi("http://server", { onUnauthorized: () => {}, fetch: fetchImpl });
   const connection = { on() {} } as unknown as ServerConnection;
+  // Its gain stage never starts, so the video plays and pauses directly.
+  const audio = createAudioStage({
+    device,
+    dialogs: { noticeWithAction: () => Promise.resolve(false) },
+    relay: () => {},
+    renewVideo: () => {},
+    volumeReadOnly: false,
+    activation: new EventTarget()
+  });
   const player = createPlayer({
     apiBaseUrl: "http://server/",
     store,
-    device,
+    audio,
     api,
     connection,
     dialogs: { notice: () => Promise.resolve() },

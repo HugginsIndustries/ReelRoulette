@@ -2325,7 +2325,7 @@ for (const width of [1280, 390]) {
     .map((rule) => rule.selectorText);
   check(`layout@${width}: and only the player's own rule sets its corners, so they stay rounded in fullscreen and on a phone on its side (${playerCornerRules.join(" | ")})`,
     playerCornerRules.join() === ".media-container");
-  input($("volume"), "80");
+  input($("volume"), "100");
 
   // Ambient mode: on by default, with its settings in an expandable section beside the toggle. It samples at the
   // update rate while a video plays, holds while the video is paused or the tab is hidden, and samples a photo once.
@@ -3002,24 +3002,29 @@ for (const width of [1280, 390]) {
 }
 
 {
-  // iOS: a media element's volume is read-only, so the volume works through a Web Audio gain stage. The slider shows
-  // once the stage starts on the first tap, and the wheel and the slider then set its gain.
+  // iOS: a media element's volume is read-only, so the volume works through a Web Audio gain stage, started on the
+  // first tap. The slider shows from the start, since a control hides only because of a user setting, and a volume set
+  // before the stage runs is the level it starts at; the wheel and the slider then set its gain.
   const { setup, gains, mediaCalls } = standInAudio();
   const { document, errors, window } = await load("layout", 390, "?instant", setup);
   const $ = (id) => document.getElementById(id);
   document.getElementById("mock-ios-volume").click();
   window.mockup.choose(3);
   const wheelUp = () => $("media").dispatchEvent(new window.WheelEvent("wheel", { deltaY: -100, bubbles: true, cancelable: true }));
-  const volumeBefore = Number($("volume").value);
+  $("volume").value = "50";
+  $("volume").dispatchEvent(new window.Event("input"));
   wheelUp();
-  check("ios: with the volume read-only and no gain stage yet, the slider is hidden and the wheel does nothing", $("volume-wrap").hidden && Number($("volume").value) === volumeBefore && gains.length === 0);
+  const volumeBefore = Number($("volume").value);
+  check(`ios: with the volume read-only and no gain stage yet, the slider shows and the wheel sets the volume (${volumeBefore})`,
+    !$("volume-wrap").hidden && volumeBefore === 55 && gains.length === 0);
   // A touch's pointerdown carries no user activation on iOS, so the gain stage waits for its pointerup.
   document.body.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
   await new Promise((resolve) => setTimeout(resolve, 5));
-  check(`ios: a tap's pointerdown doesn't start the gain stage (${gains.length} gain nodes)`, gains.length === 0 && $("volume-wrap").hidden);
+  check(`ios: a tap's pointerdown doesn't start the gain stage, and the slider stays (${gains.length} gain nodes)`, gains.length === 0 && !$("volume-wrap").hidden);
   document.body.dispatchEvent(new window.PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }));
   await new Promise((resolve) => setTimeout(resolve, 5));
-  check(`ios: its pointerup starts the gain stage, and the slider shows (${gains.length} gain node)`, gains.length === 1 && !$("volume-wrap").hidden);
+  check(`ios: its pointerup starts the gain stage at the volume set before it (${gains.length} gain node, gain ${gains[0]?.gain.value})`,
+    gains.length === 1 && !$("volume-wrap").hidden && Math.abs(gains[0].gain.value - volumeBefore / 100) < 1e-9);
   wheelUp();
   check(`ios: the wheel then raises the volume, and the gain follows it (${$("volume").value}, gain ${gains[0]?.gain.value})`,
     Number($("volume").value) === Math.min(100, volumeBefore + 5) && Math.abs(gains[0].gain.value - Number($("volume").value) / 100) < 1e-9);

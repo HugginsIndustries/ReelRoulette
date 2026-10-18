@@ -31,8 +31,8 @@ export function advanceAfterProblem(text: string): FieldProblem | null {
 /**
  * The Settings tab's settings that no other part of the page keeps: the Auto-Pause mode, the theme, ambient mode and its
  * settings, and whether tiles show their file names. Each applies as it changes and is kept on this device. The panel
- * keeps its side, the store Advance after and the autoplay settings, the player its buttons' state, and the
- * notifications service the popup settings.
+ * keeps its side, the store Advance after and the autoplay settings, the player its buttons' state, the audio stage
+ * Enhanced audio, and the notifications service the popup settings.
  */
 export interface Settings {
   readonly autoPauseMode: ReadonlySignal<AutoPauseMode>;

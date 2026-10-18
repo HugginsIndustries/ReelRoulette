@@ -157,7 +157,7 @@ Last milestone completed: M12i6
 | --- | --- | --- |
 | Audio spike | ✅ Complete | A report on a real video routed through the gain stage in each target browser and device. |
 | Mockup | ✅ Complete | Mute in the seek row, the volume indicator, a 10% volume step, and the gain stage starting on `pointerup`, in the mockup, reviewed by the user on devices. |
-| Volume | ⏳ Planned | The Enhanced audio gain stage and setting, the volume slider, Mute in the seek row, the notice when the gain stage can't start, and their per-device settings. |
+| Volume | ✅ Complete | The Enhanced audio gain stage and setting, the volume slider, Mute in the seek row, the notice when the gain stage can't start, and their per-device settings. |
 | Volume gestures | ⏳ Planned | Scroll wheel and two-finger drag volume with a volume indicator, and the volume steps, kept per device. |
 
 #### Audio spike slice
@@ -243,14 +243,16 @@ Last milestone completed: M12i6
 - A volume slider at the end of the seek row. With Enhanced audio on, it sets the gain stage, on every device, which is also how iOS, where Safari makes a media element's volume read-only, gets one.
   - It stays enabled on a photo, as Mute does, and the level set there is the next video's, as the mockup shows.
   - It is 84 px wide on every screen and sits the seek row's 12 px gap from Mute.
-  - It goes from 0 to 100%.
+  - It goes from 0 to 100%, and starts at 100%, the level a video plays at without the app.
 - Mute moves from the transport row to the seek row, between the time and the volume slider, as the mockup shows.
 - Changing the volume, by the slider or otherwise, sends no notification.
 - On iOS, the gain stage gives the app its own volume relative to the system volume.
-- The gain stage starts on the first tap or key, on `pointerup` or `keydown`, since Web Audio needs one. On iOS the volume slider shows once it runs.
+- The gain stage starts on the first tap or key, on `pointerup` or `keydown`, since Web Audio needs one.
+- On iOS the volume slider shows from the start, since the player's controls don't appear, hide, or move on their own, and a control may hide only because of a user setting.
+  - Before the gain stage runs, moving it sets the volume, which the gain stage applies when it starts, as the drag's `pointerup` starts it.
 - Enhanced audio, a per-device setting in the Settings tab's Audio section, on by default.
   - Its description names only what it does here: "Processes audio in the app, so in-app volume works on iPhone and iPad."
-  - Off, audio plays directly, without the gain stage: WebUI Loudness Normalization's option is disabled, and on iOS the volume controls are hidden, as today.
+  - Off, audio plays directly, without the gain stage: WebUI Loudness Normalization's option is disabled, and where the element's volume is read-only, as on iOS, the volume slider hides, since this user setting turns off the in-app volume there.
   - Turning it off plays through a new media element, as the mockup does, which takes over the video at its position, playing or paused as it was.
 - No silent fallback: if the gain stage can't start, an in-app notice says "Audio processing couldn't start on this device. Turn off Enhanced audio to play sound directly, without in-app volume on iPhone and iPad.", with OK and **Turn off Enhanced audio**, which turns the setting off for this device.
 - The gain never jumps, since a jump in level is a click.
@@ -265,7 +267,7 @@ Last milestone completed: M12i6
 - The player renders its `<video>` once and never replaces it, and the player and ambient mode hold it from when they attach (`player.attach` and `ambient.attach` in `src/ui/Player.tsx`).
 - The in-app notice has one OK, and a confirmation has Cancel and its action (`src/dialogs/dialogs.ts`), so neither has OK beside another action.
 - The Settings tab has no Audio section; it goes after Playback, in the mockup's place (`SettingsTab` in `src/ui/SettingsTab.tsx`).
-- On iOS a media element's `volume` can't be set from script and always reads 1, as Apple's Safari documentation says. The mockup tells a read-only volume by setting a probe element's volume and reading it back.
+- Apple's Safari documentation says a media element's `volume` can't be set from script on iOS and always reads 1, but on the iPad, in iPadOS 26.6, it can be set: with Enhanced audio off, the slider shows and changes the volume there (measured). The probe, which sets a probe element's volume and reads it back, as the mockup does, handles both, so the slider hides only where the volume really is read-only.
 - The mockup tries the gain stage with a stand-in sound, a soft chord it plays with videos through the same path.
 - In the mockup, stepping the volume crackled and play and pause popped, on every device (measured).
 - In every served setup the WebUI's media comes from the page's own origin, since the runtime config's `apiBaseUrl` is the scheme and host the browser used (`WebRuntimeConfig.Build`), so localhost, the LAN address, the mDNS name, and an HTTPS proxy are all same-origin.
@@ -280,15 +282,34 @@ Last milestone completed: M12i6
 
 **Acceptance**
 
-- The volume slider sits at the end of the seek row, goes from 0 to 100%, and sets the volume, and Mute sits between the time and the slider, in WebUI tests.
+- The volume slider sits at the end of the seek row, goes from 0 to 100%, starts at 100%, and sets the volume, and Mute sits between the time and the slider, in WebUI tests.
 - On a photo the volume slider stays enabled, and the next video plays at the level set there, in a WebUI test that a volume set on a photo applies to the next video.
 - Changing the volume with the slider sends no notification, in WebUI tests.
-- With Enhanced audio on, every device plays through the gain stage, which starts on the first tap. On iOS the volume slider shows once it runs and sets the gain. Shown by a test that the gain stage starts on the first tap and the slider then shows.
+- With Enhanced audio on, every device plays through the gain stage, which starts on a tap's `pointerup` or a key, not a `pointerdown`. On iOS the volume slider shows from the start, and a volume set before the gain stage runs is the one it starts at. Shown by tests that the gain stage starts on the first tap and that on iOS the slider shows from the start and its volume applies once the stage starts.
 - The gain glides to each new level and fades in on play and out on pause, so nothing crackles or pops, in tests that the gain only glides and that play and pause fade it in and out.
-- With Enhanced audio off, audio plays directly, and on iOS the volume controls hide. Turning it off keeps the video at its position, playing or paused as it was. If the gain stage can't start, the notice's **Turn off Enhanced audio** turns it off for the device. Shown by tests for Enhanced audio on and off, for the new element taking over the video, and for the notice when the gain stage can't start.
+- With Enhanced audio off, audio plays directly, and where the element's volume is read-only, as on iOS, the volume slider hides. Turning it off keeps the video at its position, playing or paused as it was. If the gain stage can't start, the notice's **Turn off Enhanced audio** turns it off for the device. Shown by tests for Enhanced audio on and off, for the new element taking over the video, and for the notice when the gain stage can't start.
 - After a page refresh, Enhanced audio and the volume are each as they were, in tests for a page refresh keeping each setting this slice adds.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check.
+
+**Evidence**
+
+- `npm run verify` passed: the contracts are fresh, the typecheck is clean, 1543 tests passed in 75 files, 1518 in 74 before, and the build and its output check passed (measured).
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the mockup, and `node docs/mockups/reelroulette/build/check.mjs` passed all 1256 checks (measured).
+- `audioStage.test.ts` covers the gain stage starting on `pointerup` or `keydown`, not `pointerdown`; the gain only gliding, fading in on play and out on pause, and a play during the fade gliding back; the element's own volume and mute without the stage; the slider showing on iOS from the start and hiding only while Enhanced audio is off; a new element asked for once the video went through the stage; the notice and its action; and the settings read back by a new page.
+- The player's unit tests cover a new element taking over a playing or a paused video at its position, and a photo leaving it empty, and a fading pause counting as paused. The screen tests cover the seek row's order and spacing, Mute's 44 px without a taller row, the slider at 100% from 0 to 100% with no notification, the gain stage on a tap or a key, the gain following the volume and Mute, the fades, a photo's level for the next video, iOS with Enhanced audio on and off, the takeover playing and paused, the notice, Enhanced audio in Audio after Playback, and a page refresh keeping both settings. A dialogs unit test covers a notice with an action.
+- Each new test failed when what it guards was broken, in 14 mutations, each restored from a copy under `artifacts/scratch/`: the stage starting on `pointerdown`; the gain jumping; pause not fading; play not starting from silence; the iOS slider waiting for the stage; Enhanced audio not kept; the notice's action not turning it off; no new element once it is off; the takeover losing the position or not playing; a fading pause counting as playing; Mute's margins and the slider's width dropped; and the notice's action button missing (measured).
+- The mockup's two changed iOS checks failed in a copy with the old rule, the slider waiting for the gain stage (measured).
+- Existing tests that changed: the player's Mute unit tests call the audio stage; the starting markup snapshot takes Mute in the seek row, the slider, and the Audio section; the Settings sections test names Audio; the seek row test takes Mute and the slider; and the per-device keys test also changes the volume and Enhanced audio and takes their keys.
+- The page's first tap or key now starts the gain stage, which relays `audio=gain-stage-started`, so the two tag dialog tests and the per-device keys test, which count log lines or server calls, tap the page first, and pages the tests mount without the harness get its fake Web Audio, since happy-dom has none.
+- Deviation: only the gain stage's start and failure are relayed. Turning Enhanced audio on or off, and the new element taking over, relay nothing, since no other setting change is relayed and the per-device settings test holds that changing a setting tells the server nothing.
+- The new element takes Loop from the player's own state, as every video does, not from the element before it.
+- The mockup's volume starts at 100%, and on iOS its slider shows from the start, the scroll wheel setting the volume the gain stage starts at. The index notes say the player's controls don't appear, hide, or move on their own, and a control may hide only because of a user setting. The mockup keeps Enhanced audio's description naming loudness normalization, which WebUI Loudness Normalization ships.
+- Docs: `CONTEXT.md`, the domain inventory, and the dev setup's note that the Vite dev server can play silent through Enhanced audio.
+- The user's spot check in the iPad's installed app passed: the slider shows from the start, dragging it changes the volume without crackles, pause and play don't pop, Mute in the seek row works, and turning Enhanced audio off in Settings keeps the video playing from the same spot, with sound (measured).
+- On the iPad, in iPadOS 26.6, with Enhanced audio off, the slider shows and changes the volume, so a media element's volume can be set there (measured).
+- The user found that the Pixel's installed app, in Chrome, plays through the gain stage without audio issues.
+- The user observed that turning Enhanced audio off blanks the video for about a second while the new element loads, then it plays on from the same spot, and turning it on continues without a blank.
 
 #### Volume gestures slice
 
@@ -306,6 +327,7 @@ Last milestone completed: M12i6
   - It is on its own layer, apart from the controls, so it shows while they're hidden.
   - It fades in and out quickly and fades out shortly after the volume stops changing. With reduced motion it shows and hides at once.
 - Changing the volume by the scroll wheel or a two-finger drag sends no notification.
+- On iOS the scroll wheel and a two-finger drag work from the start, as the slider does, before the gain stage runs, setting the volume it starts at.
 - The volume step survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
 
 **Traps**
@@ -329,7 +351,7 @@ Last milestone completed: M12i6
 #### Release checks
 
 - Manual: With Enhanced audio on, videos play with sound in Firefox on the desktop and in the Pixel's and the iPad's installed apps, and turning it off plays sound directly.
-- Manual: In the iPad's installed app, the volume slider shows after the first tap, and the slider and a two-finger drag change the video's volume relative to the system volume, without crackles, and play and pause don't pop.
+- Manual: In the iPad's installed app, the volume slider shows from the start, and the slider and a two-finger drag change the video's volume relative to the system volume, without crackles, and play and pause don't pop.
 
 #### Not included
 
@@ -431,7 +453,9 @@ Last milestone completed: M12i6
   - The fields are setting's fields of the field validation pattern, which WebUI Settings Panel adds (`createSettingField` and `SettingTextField`): a value that is not valid is flagged and not kept, the one in use stays, and a valid one is saved on Enter or when the field is left. Reset to defaults shows the saved values again in the fields.
   - Each setting survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
 - The Stats tab's Adjustment row shows the adjustment applied to the current file, signed, such as "+6.0 dB" or "-4.5 dB", with "(limited by peak)" when the headroom limits a boost. It reads "Off" while normalization or Enhanced audio is off, and "N/A" for a file without loudness data, and it follows the settings as they change.
-- Enhanced audio's description becomes "Processes audio in the app, for in-app volume on iPhone and iPad and loudness normalization."
+- Enhanced audio's description becomes "Processes audio in the app, for loudness normalization."
+- The gain stage's failure notice becomes "Audio processing couldn't start on this device. Turn off Enhanced audio to play sound directly."
+  - Neither it nor the description names a device: the iPad's media element volume can be set in iPadOS 26.6 (measured), no iPhone has been measured, and the app finds a read-only volume at runtime.
 
 **Traps**
 
@@ -453,7 +477,7 @@ Last milestone completed: M12i6
 - Under Automatic, the gain before the library's baseline arrives is as the plan defines, in a WebUI test.
 - The settings are in the Settings tab's Audio section with their choices, ranges, and defaults, the option is disabled while Enhanced audio is off, Manual's field shows only under Manual, a value outside a field's range is flagged with the field validation pattern, Reset to defaults restores the defaults, and each setting survives a page refresh, in WebUI tests for each setting.
 - The Stats tab's Adjustment shows the applied adjustment, signed, with "(limited by peak)" when the headroom limits a boost, "Off" while normalization or Enhanced audio is off, and "N/A" for a file without loudness data, and it follows the settings as they change, in WebUI tests of the Adjustment in each case.
-- Enhanced audio's description names loudness normalization, in WebUI tests.
+- Enhanced audio's description names loudness normalization, and it and the gain stage's failure notice have their new texts, in WebUI tests.
 - The setting is hidden in a browser where it cannot work, and that browser is named in this entry.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check.
@@ -468,7 +492,7 @@ Last milestone completed: M12i6
 - Its compressor's values are fixed, with no settings beyond on and off. They are provisional until the Listening check slice settles them, and until then development builds have temporary controls for them.
 - Turning it on or off glides, without a click.
 - It survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
-- Enhanced audio's description becomes "Processes audio in the app, for in-app volume on iPhone and iPad, loudness normalization, and Night mode."
+- Enhanced audio's description becomes "Processes audio in the app, for loudness normalization and Night mode."
 
 **Traps**
 

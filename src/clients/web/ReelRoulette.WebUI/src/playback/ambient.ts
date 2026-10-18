@@ -122,6 +122,11 @@ export interface Ambient {
   attach(elements: AmbientElements): void;
   /** Stops sampling and fading, and lets go of the elements. */
   detach(): void;
+  /**
+   * Copies from a new `<video>` element that has taken over the video, keeping what the glow shows, and copies its
+   * picture again once it has one, a paused video's too.
+   */
+  replaceVideo(video: AmbientElements["video"]): void;
 }
 
 /** A video's `readyState` once it has a picture to copy. */
@@ -286,6 +291,12 @@ export function createAmbient(options: AmbientOptions): Ambient {
       elements = null;
       from = null;
       to = null;
+    },
+
+    replaceVideo(video) {
+      if (!elements) return;
+      elements = { ...elements, video };
+      sampledAttempt = null;
     }
   };
 }

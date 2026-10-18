@@ -232,19 +232,24 @@ function ConfirmDialog({ dialog, answer }: { dialog: Extract<OpenDialog, { kind:
   );
 }
 
-/** Something the user must see, with one OK. */
+/** Something the user must see, with one OK, and after it the notice's action when it offers one. OK starts focused. */
 function NoticeDialog({ dialog, answer }: { dialog: Extract<OpenDialog, { kind: "notice" }>; answer: (confirmed: boolean) => void }) {
   const messageId = useId();
   const ok = useRef<HTMLButtonElement>(null);
   return (
-    <Dialog role="alertdialog" labelledBy={messageId} onCancel={() => answer(true)} initialFocus={ok}>
+    <Dialog role="alertdialog" labelledBy={messageId} onCancel={() => answer(false)} initialFocus={ok}>
       <div class="dialog-body">
         <p id={messageId} class="dialog-message">{dialog.message}</p>
         <div class="dialog-actions">
           <span class="dialog-spacer" />
-          <button ref={ok} type="button" onClick={() => answer(true)}>
+          <button ref={ok} type="button" onClick={() => answer(false)}>
             OK
           </button>
+          {dialog.action ? (
+            <button type="button" onClick={() => answer(true)}>
+              {dialog.action}
+            </button>
+          ) : null}
         </div>
       </div>
     </Dialog>

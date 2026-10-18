@@ -255,6 +255,133 @@ export function stubCanvas(): FakeCanvases {
   return { copiesOf: (image) => drawn.filter((source) => source === image).length };
 }
 
+/** One change to a gain: a glide to a level with its time constant, or a set at a time. */
+export type GainCall = ["glide", number, number] | ["set", number];
+
+/** A gain stage's gain: its level after the changes made to it, each change, and how often its value was set directly. */
+export interface FakeGain {
+  readonly level: number;
+  readonly calls: readonly GainCall[];
+  /** A direct set of the value is a jump in level, which is a click. */
+  readonly directSets: number;
+}
+
+/** One audio context the page built: its state, and the elements it routed through its gain stage. */
+export interface FakeAudioContextRecord {
+  readonly state: string;
+  readonly routed: readonly HTMLMediaElement[];
+  readonly gains: readonly FakeGain[];
+}
+
+/**
+ * A stand-in for Web Audio, which happy-dom lacks, that every mounted page gets. An audio context starts suspended and
+ * runs once resumed. With `unavailable`, building one throws, as where a browser has no Web Audio; with `refuseStart`,
+ * resuming one rejects.
+ */
+export class FakeWebAudio {
+  unavailable = false;
+  refuseStart = false;
+  readonly contexts: FakeAudioContextRecord[] = [];
+
+  /** The newest gain stage's gain, or null before the page built one. */
+  get gain(): FakeGain | null {
+    return this.contexts.at(-1)?.gains.at(-1) ?? null;
+  }
+
+  /** The `AudioContext` class the page builds its gain stage with. */
+  contextClass(): unknown {
+    const audio = this;
+    return class FakeAudioContext {
+      state = "suspended";
+      readonly destination = {};
+      readonly routed: HTMLMediaElement[] = [];
+      readonly gains: FakeGain[] = [];
+
+      constructor() {
+        if (audio.unavailable) {
+          throw new Error("Web Audio is unavailable");
+        }
+        audio.contexts.push(this);
+      }
+
+      get currentTime(): number {
+        return performance.now() / 1000;
+      }
+
+      resume(): Promise<void> {
+        if (audio.refuseStart) {
+          return Promise.reject(new DOMException("Not allowed", "NotAllowedError"));
+        }
+        if (this.state !== "closed") {
+          this.state = "running";
+        }
+        return Promise.resolve();
+      }
+
+      close(): Promise<void> {
+        this.state = "closed";
+        return Promise.resolve();
+      }
+
+      createMediaElementSource(element: HTMLMediaElement) {
+        this.routed.push(element);
+        return { connect: (node: unknown) => node };
+      }
+
+      createGain() {
+        const gain = {
+          level: 1,
+          calls: [] as GainCall[],
+          directSets: 0
+        };
+        const param = {
+          get value() {
+            return gain.level;
+          },
+          set value(level: number) {
+            gain.directSets += 1;
+            gain.level = level;
+          },
+          setValueAtTime(level: number) {
+            gain.calls.push(["set", level]);
+            gain.level = level;
+          },
+          setTargetAtTime(level: number, _start: number, timeConstant: number) {
+            gain.calls.push(["glide", level, timeConstant]);
+            gain.level = level;
+          }
+        };
+        this.gains.push(gain);
+        return { gain: param, connect: (next: unknown) => next };
+      }
+    };
+  }
+}
+
+/** Gives the page `webAudio`, or a new Web Audio whose contexts start when resumed, as a browser's would. */
+export function stubWebAudio(webAudio = new FakeWebAudio()): FakeWebAudio {
+  vi.stubGlobal("AudioContext", webAudio.contextClass());
+  return webAudio;
+}
+
+/** Makes a media element's volume read-only, as on iOS, where setting it changes nothing and it always reads 1. */
+export function stubReadOnlyVolume(): void {
+  stubProperty(HTMLMediaElement.prototype, "volume", { get: () => 1, set() {} });
+}
+
+/**
+ * A tap's end anywhere on the page, which starts the gain stage, as a touch's `pointerup` carries user activation. Lets
+ * the page settle, with real or fake timers.
+ */
+export async function tapPage(): Promise<void> {
+  fireEvent.pointerUp(document.body, { pointerId: 1, button: 0, pointerType: "touch" });
+  if (vi.isFakeTimers()) {
+    await vi.advanceTimersByTimeAsync(0);
+  } else {
+    await settle();
+  }
+}
+
 /** Makes the page's tab read as hidden or shown, as `document.hidden` says. Returns a function that changes it. */
 export function stubTabHidden(hidden: boolean): (hidden: boolean) => void {
   let value = hidden;
@@ -507,12 +634,16 @@ export interface MountedPage {
   stream(): FakeEventSource;
   clientId(): string;
   sessionId(): string;
+  /** The page's Web Audio. */
+  webAudio: FakeWebAudio;
   unmount(): void;
 }
 
 export interface MountOptions {
   server?: FakeServer;
   config?: Partial<RuntimeConfig>;
+  /** Defaults to a Web Audio whose contexts start when resumed. */
+  webAudio?: FakeWebAudio;
 }
 
 /**
@@ -553,6 +684,7 @@ export function mountPage(options: MountOptions = {}): MountedPage {
   const server = options.server ?? new FakeServer();
   vi.stubGlobal("fetch", server.fetch);
   vi.stubGlobal("EventSource", FakeEventSource);
+  const webAudio = stubWebAudio(options.webAudio);
   // The page asks and tells in its own dialog, so a browser dialog fails the test that opened it.
   for (const name of ["alert", "confirm", "prompt"]) {
     vi.stubGlobal(name, () => {
@@ -583,6 +715,7 @@ export function mountPage(options: MountOptions = {}): MountedPage {
     },
     clientId,
     sessionId,
+    webAudio,
     unmount() {
       dispose();
       root.remove();

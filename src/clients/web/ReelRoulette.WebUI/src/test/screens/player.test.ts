@@ -27,7 +27,12 @@ import {
   stubFullscreenApi,
   stubLayoutSize,
   stubTabHidden,
+  stubReadOnlyVolume,
+  stubWebAudio,
+  tapPage,
   useStylesheet,
+  FakeWebAudio,
+  type FakeGain,
   type MountedPage
 } from "./pageHarness";
 
@@ -133,6 +138,19 @@ function photoTimerBar(): HTMLInputElement {
 
 function seekRow(): HTMLElement {
   return document.getElementById("seek-row") as HTMLElement;
+}
+
+/** The volume slider, at the end of the seek row. */
+function volumeSlider(): HTMLInputElement {
+  return screen.getByRole("slider", { name: "Volume", hidden: true }) as HTMLInputElement;
+}
+
+function volumeWrap(): HTMLElement {
+  return document.getElementById("volume-wrap") as HTMLElement;
+}
+
+function moveVolume(value: number): void {
+  fireEvent.input(volumeSlider(), { target: { value: String(value) } });
 }
 
 function timeDisplay(): string {
@@ -250,6 +268,7 @@ let unmountServices: (() => void) | null = null;
  */
 async function mountWithServices(server = new FakeServer()): Promise<AppServices> {
   vi.stubGlobal("fetch", server.fetch);
+  stubWebAudio();
   const root = document.createElement("div");
   root.id = "app";
   document.body.appendChild(root);
@@ -946,6 +965,247 @@ describe("mute", () => {
   });
 });
 
+describe("volume and Enhanced audio", () => {
+  /** The levels the gain glided to, in order. */
+  function glides(gain: FakeGain): number[] {
+    return gain.calls.filter((call) => call[0] === "glide").map((call) => call[1]);
+  }
+
+  /** The gain is never set straight to a level while it plays: each change glides, with a short time constant. */
+  function onlyGlides(gain: FakeGain): boolean {
+    return gain.directSets === 0 && gain.calls.every((call) => call[0] === "set" ? call[1] === 0 : call[2] > 0 && call[2] <= 0.03);
+  }
+
+  /** Opens the panel's Settings tab and turns Enhanced audio off, or on. */
+  async function clickEnhancedAudio(): Promise<void> {
+    if (panel().hidden) {
+      await click(button("Open panel"));
+    }
+    const tabRow = panel().querySelector(".panel-tablist") as HTMLElement;
+    await click(within(tabRow).getByRole("tab", { name: "Settings" }));
+    await click(within(panel()).getByRole("checkbox", { name: "Enhanced audio", hidden: true }));
+  }
+
+  it("has a volume slider from 0 to 100% at full volume until it moves, which sets the volume and sends no notification", async () => {
+    const server = serverPicking(VIDEO_ITEM);
+    await mountAndPlay(server);
+    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Playing", VIDEO_ITEM, 1)));
+    const linesBefore = server.logLines().length;
+
+    expect([volumeSlider().min, volumeSlider().max, volumeSlider().step, volumeSlider().value]).toEqual(["0", "100", "1", "100"]);
+    expect(volumeSlider().title).toBe("Volume");
+    expect(volumeWrap().hidden).toBe(false);
+    // Before the gain stage starts, the sound plays directly, at the element's own volume.
+    moveVolume(40);
+    await flush();
+    expect(volumeSlider().value).toBe("40");
+    expect(video().volume).toBeCloseTo(0.4);
+    expect(document.querySelectorAll("#toasts .toast")).toHaveLength(0);
+    expect(server.logLines().slice(linesBefore)).toEqual([]);
+  });
+
+  it("starts the gain stage on a tap's pointerup, not its pointerdown, and a key starts it too", async () => {
+    const server = serverPicking(VIDEO_ITEM);
+    const page = await mount(server);
+    fireEvent.pointerDown(document.body, { pointerId: 1, button: 0, pointerType: "touch" });
+    await flush();
+    expect(page.webAudio.contexts).toHaveLength(0);
+
+    await tapPage();
+    expect(page.webAudio.contexts).toHaveLength(1);
+    expect(page.webAudio.contexts[0]!.state).toBe("running");
+    expect(page.webAudio.contexts[0]!.routed).toEqual([video()]);
+    await waitFor(() => expect(server.logLines()).toContain("audio=gain-stage-started"));
+
+    const keyed = mountPage({ server: serverPicking(VIDEO_ITEM) });
+    await flush();
+    fireEvent.keyDown(document.body, { key: "Tab" });
+    await flush();
+    expect(keyed.webAudio.contexts).toHaveLength(1);
+  });
+
+  it("through the gain stage, plays at the volume and with Mute by gliding the gain, the element at full volume and unmuted", async () => {
+    const server = serverPicking(VIDEO_ITEM);
+    const page = await mount(server);
+    await tapPage();
+    await click(emptyState());
+    const gain = page.webAudio.gain!;
+    // Play starts from silence and fades in.
+    expect(gain.calls.slice(0, 2)).toEqual([["set", 0], ["set", 0]]);
+    expect(glides(gain)).toEqual([1]);
+    expect([video().volume, video().muted]).toEqual([1, false]);
+
+    moveVolume(50);
+    await flush();
+    expect(gain.level).toBe(0.5);
+    await click(button("Mute"));
+    expect(gain.level).toBe(0);
+    expect([video().volume, video().muted]).toEqual([1, false]);
+    await click(button("Mute"));
+    expect(glides(gain)).toEqual([1, 0.5, 0, 0.5]);
+    expect(onlyGlides(gain)).toBe(true);
+  });
+
+  it("fades the sound out on pause and pauses the video once it is silent, and fades it back in on play", async () => {
+    useFakeClock();
+    const server = serverPicking(VIDEO_ITEM);
+    const page = await mount(server);
+    await tapPage();
+    await click(emptyState());
+    const gain = page.webAudio.gain!;
+
+    await click(button("Play/Pause"));
+    // The button shows Play at once, while the sound fades out.
+    expect(iconOf("Play/Pause")).toBe("play_arrow");
+    expect(video().paused).toBe(false);
+    expect(gain.level).toBe(0);
+    await vi.advanceTimersByTimeAsync(60);
+    expect(video().paused).toBe(true);
+
+    await click(button("Play/Pause"));
+    expect(video().paused).toBe(false);
+    expect(gain.calls.slice(-2)).toEqual([["set", 0], ["glide", 1, 0.015]]);
+
+    // Play while the pause still fades out plays on, the sound gliding back.
+    await click(button("Play/Pause"));
+    await vi.advanceTimersByTimeAsync(30);
+    await click(button("Play/Pause"));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(video().paused).toBe(false);
+    expect(iconOf("Play/Pause")).toBe("pause");
+    expect(gain.level).toBe(1);
+    expect(onlyGlides(gain)).toBe(true);
+  });
+
+  it("on a photo keeps the slider enabled, and the next video plays at the level set there", async () => {
+    const server = serverPicking(PHOTO_ITEM, VIDEO_ITEM);
+    const page = await mount(server);
+    await tapPage();
+    await click(emptyState());
+    expect(photo().style.display).toBe("block");
+    expect(volumeSlider().disabled).toBe(false);
+    moveVolume(30);
+    await flush();
+
+    await click(button("Next"));
+    expect(video().style.display).toBe("block");
+    expect(page.webAudio.gain!.level).toBeCloseTo(0.3);
+    expect(volumeSlider().value).toBe("30");
+  });
+
+  it("on iOS shows the slider from the start, and a volume set before the gain stage starts applies once it does", async () => {
+    stubReadOnlyVolume();
+    const server = serverPicking(VIDEO_ITEM);
+    const page = await mount(server);
+    expect(volumeWrap().hidden).toBe(false);
+    moveVolume(60);
+    await flush();
+    expect(page.webAudio.contexts).toHaveLength(0);
+
+    // A drag's pointerup starts it, as any tap's does.
+    await tapPage();
+    await click(emptyState());
+    expect(volumeWrap().hidden).toBe(false);
+    expect(page.webAudio.gain!.level).toBeCloseTo(0.6);
+  });
+
+  it("on iOS hides the slider while Enhanced audio is off, and keeps Mute", async () => {
+    stubReadOnlyVolume();
+    localStorage.setItem("rr_device.audio.enhanced", "false");
+    const server = serverPicking(VIDEO_ITEM);
+    const page = await mount(server);
+    expect(volumeWrap().hidden).toBe(true);
+    expect(button("Mute").disabled).toBe(false);
+
+    // Directly, Mute is the element's own.
+    await tapPage();
+    await click(emptyState());
+    expect(page.webAudio.contexts).toHaveLength(0);
+    await click(button("Mute"));
+    expect(video().muted).toBe(true);
+  });
+
+  it("turned off, hands a playing video to a new element at its position, whose sound plays directly", async () => {
+    const server = serverPicking(VIDEO_ITEM);
+    const page = await mount(server);
+    await tapPage();
+    await click(emptyState());
+    const routed = video();
+    routed.currentTime = 12;
+    moveVolume(70);
+    await flush();
+
+    await clickEnhancedAudio();
+    const fresh = video();
+    expect(fresh).not.toBe(routed);
+    expect(routed.hasAttribute("src")).toBe(false);
+    expect(routed.paused).toBe(true);
+    expect([fresh.src, fresh.style.display, fresh.paused]).toEqual([VIDEO_URL, "block", false]);
+    Object.defineProperty(fresh, "duration", { configurable: true, value: 65 });
+    fireEvent.loadedMetadata(fresh);
+    await flush();
+    expect(fresh.currentTime).toBe(12);
+    // Its sound plays directly, at the volume, and the gain stage is gone.
+    expect([fresh.volume, fresh.muted]).toEqual([0.7, false]);
+    expect(page.webAudio.contexts.map((context) => context.state)).toEqual(["closed"]);
+    expect(localStorage.getItem("rr_device.audio.enhanced")).toBe("false");
+    expect(openNotices()).toEqual([]);
+
+    // Turned back on, the new element plays through a new gain stage.
+    await clickEnhancedAudio();
+    expect(page.webAudio.contexts).toHaveLength(2);
+    expect(page.webAudio.contexts[1]!.routed).toEqual([fresh]);
+    expect(video()).toBe(fresh);
+  });
+
+  it("turned off, keeps a paused video paused on the new element", async () => {
+    useFakeClock();
+    const server = serverPicking(VIDEO_ITEM);
+    await mount(server);
+    await tapPage();
+    await click(emptyState());
+    await click(button("Play/Pause"));
+    await vi.advanceTimersByTimeAsync(60);
+    video().currentTime = 8;
+
+    await clickEnhancedAudio();
+    expect(video().paused).toBe(true);
+    expect(video().src).toBe(VIDEO_URL);
+    expect(iconOf("Play/Pause")).toBe("play_arrow");
+    Object.defineProperty(video(), "duration", { configurable: true, value: 65 });
+    fireEvent.loadedMetadata(video());
+    await flush();
+    expect(video().currentTime).toBe(8);
+  });
+
+  it("says so when the gain stage can't start, once, and its Turn off Enhanced audio turns it off for this device", async () => {
+    const webAudio = new FakeWebAudio();
+    webAudio.unavailable = true;
+    const server = serverPicking(VIDEO_ITEM);
+    mountPage({ server, webAudio });
+    await flush();
+
+    // Its notice offers an action beside OK.
+    const dialogMessages = () => [...document.querySelectorAll("dialog.app-dialog .dialog-message")].map((message) => message.textContent);
+    await tapPage();
+    expect(dialogMessages()).toEqual([
+      "Audio processing couldn't start on this device. Turn off Enhanced audio to play sound directly, without in-app volume on iPhone and iPad."
+    ]);
+    const notice = document.querySelector("dialog.app-dialog") as HTMLElement;
+    expect([...notice.querySelectorAll("button")].map((each) => each.textContent)).toEqual(["OK", "Turn off Enhanced audio"]);
+    expect(document.activeElement?.textContent).toBe("OK");
+    await waitFor(() => expect(server.logLines()).toContain("audio=gain-stage-failed error=Error"));
+
+    await click(within(notice).getByRole("button", { name: "Turn off Enhanced audio" }));
+    expect(dialogMessages()).toEqual([]);
+    expect(localStorage.getItem("rr_device.audio.enhanced")).toBe("false");
+    await tapPage();
+    expect(dialogMessages()).toEqual([]);
+    await click(emptyState());
+    expect(video().paused).toBe(false);
+  });
+});
+
 describe("seek", () => {
   it("shows the time, moves the slider as the video plays, and seeks from the slider", async () => {
     const server = serverPicking(VIDEO_ITEM);
@@ -1405,7 +1665,7 @@ describe("colors", () => {
 });
 
 describe("seek row", () => {
-  it("sets the scrub bar and the time the row's 12 px gap apart, with the time's digits all one width", async () => {
+  it("sets the scrub bar, the time, Mute, and the volume slider the row's 12 px gap apart, with the time's digits all one width", async () => {
     useStylesheet();
     const server = serverPicking(VIDEO_ITEM);
     await mountAndPlay(server);
@@ -1413,14 +1673,33 @@ describe("seek row", () => {
     const wrap = currentStyle(document.getElementById("seek-wrap")!);
     const bar = currentStyle(seekSlider());
     const time = currentStyle(document.getElementById("time-display")!);
+    const volume = currentStyle(volumeSlider());
 
-    expect([...seekRow().children].map((child) => child.id)).toEqual(["seek-wrap", "time-display"]);
+    expect([...seekRow().children].map((child) => child.id)).toEqual(["seek-wrap", "time-display", "mute-btn", "volume-wrap"]);
     expect([row.display, row.gap]).toEqual(["flex", "12px"]);
     // A range input's own margin, 2 px in browsers, would widen the gap, and so would its wrapper's.
-    expect([bar.marginLeft, bar.marginRight]).toEqual(["0px", "0px"]);
+    expect([bar.marginLeft, bar.marginRight, volume.marginLeft, volume.marginRight]).toEqual(["0px", "0px", "0px", "0px"]);
     expect([wrap.marginLeft, wrap.marginRight, wrap.paddingLeft, wrap.paddingRight].every((value) => value === "" || value === "0px")).toBe(true);
     // The time takes its own width, with no minimum or alignment adding space beside it.
     expect([time.minWidth, time.textAlign, time.fontVariantNumeric]).toEqual(["", "", "tabular-nums"]);
+    // The volume slider is 84 px wide on every screen, and doesn't grow as the scrub bar does.
+    expect([volume.width, volume.height, volume.flexGrow]).toEqual(["84px", "24px", "0"]);
+  });
+
+  it("keeps Mute's 44 px target without making the row taller than its sliders, and Mute is no longer in the transport row", async () => {
+    useStylesheet();
+    const server = serverPicking(VIDEO_ITEM);
+    await mount(server);
+    const mute = currentStyle(button("Mute"));
+    const controls = currentStyle(document.getElementById("overlay-controls")!);
+    const px = (value: string) => parseFloat(value);
+
+    expect([mute.width, mute.height]).toEqual(["44px", "44px"]);
+    // Its box reaches into the gap above the row and the controls' padding below it.
+    expect(px(mute.height) + px(mute.marginTop) + px(mute.marginBottom)).toBeLessThanOrEqual(px(currentStyle(seekSlider()).height));
+    expect(-px(mute.marginTop)).toBeLessThanOrEqual(px(controls.gap) + 4);
+    expect(-px(mute.marginBottom)).toBeLessThanOrEqual(px(controls.paddingBottom));
+    expect(document.querySelector(".overlay-controls-transport #mute-btn")).toBeNull();
   });
 });
 

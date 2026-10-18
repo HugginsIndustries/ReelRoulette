@@ -34,11 +34,12 @@ function stopPropagation(event: Event): void {
  * The media area: ambient mode's glow, the video and photo, the empty state, and the controls over them. The player
  * sets the media elements' sources and which of them shows itself, and ambient mode whether its glow shows and its
  * settings, so their `style`, the glow's `hidden`, the seek slider's value, and the stretch behind it are rendered once
- * and never changed here, and the video element is never replaced or moved. The seek row stays in its place before
- * anything plays and on a photo too, so the controls never move.
+ * and never changed here. The video element is never moved, and is replaced only when the player asks for a new one,
+ * once Enhanced audio is off, which then takes over the video. The seek row stays in its place before anything plays
+ * and on a photo too, so the controls never move.
  */
 export function Player() {
-  const { store, player, ambient, fullscreen, notifications } = useApp();
+  const { store, player, audio, ambient, fullscreen, notifications } = useApp();
   const container = useRef<HTMLDivElement>(null);
   const ambientLayer = useRef<HTMLDivElement>(null);
   const ambientCanvas = useRef<HTMLCanvasElement>(null);
@@ -68,6 +69,7 @@ export function Player() {
       seekStretch: seekStretch.current!
     });
     ambient.attach({ layer: ambientLayer.current!, canvas: ambientCanvas.current!, video: video.current!, photo: photo.current! });
+    audio.attach(video.current!);
 
     // Passive, which JSX cannot set, so scrolling never waits for them.
     const area = container.current!;
@@ -81,10 +83,22 @@ export function Player() {
     return () => {
       area.removeEventListener("touchstart", onTouchStart);
       area.removeEventListener("touchend", onTouchEnd);
+      audio.detach();
       ambient.detach();
       player.detach();
     };
   }, []);
+
+  // A new video element, rendered for a new key, takes over the video: its sound plays directly, and the glow copies it.
+  const videoKey = player.videoKey.value;
+  const firstVideoKey = useRef(videoKey);
+  useLayoutEffect(() => {
+    if (videoKey === firstVideoKey.current) return;
+    const next = video.current!;
+    audio.attach(next);
+    player.takeOverVideo(next);
+    ambient.replaceVideo(next);
+  }, [videoKey]);
 
   function onAreaClick(event: MouseEvent): void {
     if (gestures.takeFollowingClick()) {
@@ -100,7 +114,7 @@ export function Player() {
     setControlsVisible((visible) => !visible);
   }
 
-  const muted = player.muted.value;
+  const muted = audio.muted.value;
   const play = player.playButton.value;
   const seekBar = player.seekBar.value;
   // The controls stay shown while the list behind the bell is open.
@@ -111,6 +125,7 @@ export function Player() {
         <canvas width="32" height="18" ref={ambientCanvas}></canvas>
       </div>
       <video
+        key={videoKey}
         id="video"
         {...VIDEO_FLAGS}
         preload="auto"
@@ -136,7 +151,6 @@ export function Player() {
           <button id="prev-btn" class={OVERLAY_BUTTON} aria-label="Previous" title="Previous" onClick={press(player.previous)}><span class="material-symbol-icon">skip_previous</span></button>
           <button id="play-btn" class={`${OVERLAY_BUTTON} overlay-btn-play`} aria-label="Play/Pause" title="Play/Pause" disabled={play.disabled} onClick={press(player.playOrPause)}><span class="material-symbol-icon">{play.showsPause ? "pause" : "play_arrow"}</span></button>
           <button id="next-btn" class={OVERLAY_BUTTON} aria-label="Next" title="Next" onClick={press(player.next)}><span class="material-symbol-icon">skip_next</span></button>
-          <button id="mute-btn" class={lit(OVERLAY_TOGGLE, muted)} aria-label="Mute" title="Mute" onClick={press(player.toggleMute)}><span class="material-symbol-icon">{muted ? "volume_off" : "volume_up"}</span></button>
           <button id="loop-btn" class={lit(OVERLAY_TOGGLE, store.loop.value)} aria-label="Loop" title="Loop" onClick={press(player.toggleLoop)}><span class="material-symbol-icon">repeat_one</span></button>
           <button id="autoplay-btn" class={lit(OVERLAY_TOGGLE, store.autoplay.value)} aria-label="Autoplay" title="Autoplay" onClick={press(player.toggleAutoplay)}><span class="material-symbol-icon">autoplay</span></button>
           <button id="fullscreen-btn" class={OVERLAY_BUTTON} aria-label="Fullscreen" title="Fullscreen" onClick={press(fullscreen.toggle)}><span class="material-symbol-icon">fullscreen</span></button>
@@ -147,6 +161,10 @@ export function Player() {
             <input type="range" id="seek-slider" min="0" max="100" step="any" defaultValue="0" aria-label={seekBar.label} disabled={seekBar.disabled} ref={seekSlider} onInput={(event) => player.seek(event.currentTarget.value)} />
           </span>
           <span id="time-display">{player.timeText}</span>
+          <button id="mute-btn" class={lit(OVERLAY_TOGGLE, muted)} aria-label="Mute" title="Mute" onClick={press(audio.toggleMute)}><span class="material-symbol-icon">{muted ? "volume_off" : "volume_up"}</span></button>
+          <span id="volume-wrap" class="volume" hidden={!audio.volumeShown.value}>
+            <input type="range" id="volume-slider" min="0" max="100" step="1" value={String(audio.volume.value)} aria-label="Volume" title="Volume" onInput={(event) => audio.setVolume(Number(event.currentTarget.value))} />
+          </span>
         </div>
       </div>
     </div>

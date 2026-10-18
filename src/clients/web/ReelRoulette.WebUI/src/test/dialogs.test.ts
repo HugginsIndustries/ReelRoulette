@@ -71,4 +71,21 @@ describe("dialogs", () => {
     void dialogs.notice("Photo file not found.");
     expect(dialogs.open.value.map((dialog) => dialog.message)).toEqual(["No eligible media for current filters.", "Photo file not found."]);
   });
+
+  it("shows a notice that offers an action, relayed and kept as a notice is, settling true for the action and false for OK", async () => {
+    const { dialogs, relayed, recorded } = setup();
+    const chosen = dialogs.noticeWithAction("Audio processing couldn't start on this device.", "Turn off Enhanced audio");
+    const dismissed = dialogs.noticeWithAction("Another problem.", "Fix it");
+    expect(dialogs.open.value).toEqual([
+      { id: 1, kind: "notice", message: "Audio processing couldn't start on this device.", action: "Turn off Enhanced audio" },
+      { id: 2, kind: "notice", message: "Another problem.", action: "Fix it" }
+    ]);
+    expect(relayed).toEqual(["Audio processing couldn't start on this device.", "Another problem."]);
+    expect(recorded).toEqual(relayed);
+
+    dialogs.answer(1, true);
+    dialogs.answer(2, false);
+    await expect(chosen).resolves.toBe(true);
+    await expect(dismissed).resolves.toBe(false);
+  });
 });

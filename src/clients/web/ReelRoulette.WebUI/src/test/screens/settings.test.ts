@@ -21,6 +21,7 @@ import {
   stubElementProperty,
   stubLayoutSize,
   stubReducedMotion,
+  tapPage,
   useStylesheet,
   type MountedPage
 } from "./pageHarness";
@@ -106,6 +107,11 @@ function problemOf(input: HTMLInputElement): string | null {
   return document.getElementById(input.getAttribute("aria-describedby")!)!.textContent;
 }
 
+/** The player's volume slider, at the end of the seek row. */
+function volumeSlider(): HTMLInputElement {
+  return within(document.getElementById("media-container")!).getByRole("slider", { name: "Volume", hidden: true }) as HTMLInputElement;
+}
+
 function playerButton(name: string): HTMLButtonElement {
   return within(document.getElementById("media-container")!).getByRole("button", { name, hidden: true }) as HTMLButtonElement;
 }
@@ -171,11 +177,11 @@ describe("the Settings tab", () => {
     expect(tab("Settings").getAttribute("aria-selected")).toBe("true");
   });
 
-  it("shows Playback, Appearance, Notifications, Panel, and Diagnostics, in that order, then says settings apply at once, with no Save", async () => {
+  it("shows Playback, Audio, Appearance, Notifications, Panel, and Diagnostics, in that order, then says settings apply at once, with no Save", async () => {
     await mount();
     await openSettings();
     const headings = within(settingsPage()).getAllByRole("heading", { level: 3 });
-    expect(headings.map((heading) => heading.textContent)).toEqual(["Playback", "Appearance", "Notifications", "Panel", "Diagnostics"]);
+    expect(headings.map((heading) => heading.textContent)).toEqual(["Playback", "Audio", "Appearance", "Notifications", "Panel", "Diagnostics"]);
     expect(within(settingsPage()).getByText("Settings apply at once and are kept on this device.")).toBeTruthy();
     // Ambient mode settings' Reset to defaults is the tab's only button.
     expect(within(settingsPage()).queryAllByRole("button", { hidden: true }).map((button) => button.textContent)).toEqual(["Reset to defaults"]);
@@ -186,6 +192,35 @@ describe("the Settings tab", () => {
     await openSettings();
     expect(within(settingsPage()).queryByRole("checkbox", { name: /^(loop|autoplay|mute)$/i, hidden: true })).toBeNull();
     expect(settingsPage().querySelectorAll("kbd")).toHaveLength(0);
+  });
+});
+
+describe("Enhanced audio", () => {
+  it("sits in Audio, right after Playback, on until turned off, with its description", async () => {
+    await mount();
+    await openSettings();
+    const box = checkbox("Enhanced audio");
+    const section = box.closest("section")!;
+    expect(section.querySelector("h3")!.textContent).toBe("Audio");
+    expect(section.previousElementSibling?.querySelector("h3")?.textContent).toBe("Playback");
+    expect(box.checked).toBe(true);
+    expect(document.getElementById(box.getAttribute("aria-describedby")!)!.textContent).toBe(
+      "Processes audio in the app, so in-app volume works on iPhone and iPad."
+    );
+  });
+
+  it("keeps Enhanced audio and the volume after a page refresh", async () => {
+    const page = await mount();
+    await openSettings();
+    moveSlider(volumeSlider(), 35);
+    await click(checkbox("Enhanced audio"));
+    expect(checkbox("Enhanced audio").checked).toBe(false);
+    page.unmount();
+
+    await mount();
+    expect(volumeSlider().value).toBe("35");
+    await openSettings();
+    expect(checkbox("Enhanced audio").checked).toBe(false);
   });
 });
 
@@ -1314,6 +1349,8 @@ describe("kept on this device", () => {
   it("keeps each setting only in this browser's storage, and tells the server nothing", async () => {
     const page = await mount();
     await openSettings();
+    // The page's first tap starts the gain stage, which relays a line of its own.
+    await tapPage();
     const keysBefore = storageKeys();
     const requestsBefore = page.server.calls.length;
 
@@ -1332,6 +1369,8 @@ describe("kept on this device", () => {
     await click(playerButton("Autoplay"));
     await click(playerButton("Loop"));
     await click(playerButton("Mute"));
+    moveSlider(volumeSlider(), 40);
+    await click(checkbox("Enhanced audio"));
 
     expect(page.server.calls.slice(requestsBefore)).toEqual([]);
     expect(storageKeys().filter((key) => !keysBefore.includes(key))).toEqual([
@@ -1339,6 +1378,7 @@ describe("kept on this device", () => {
       "rr_device.appearance.ambientSettings",
       "rr_device.appearance.theme",
       "rr_device.appearance.tileNames",
+      "rr_device.audio.enhanced",
       "rr_device.notifications.popups",
       "rr_device.panel.autoPause",
       "rr_device.panel.side",
@@ -1347,7 +1387,8 @@ describe("kept on this device", () => {
       "rr_device.playback.loopStopsAutoplay",
       "rr_device.player.autoplay",
       "rr_device.player.loop",
-      "rr_device.player.muted"
+      "rr_device.player.muted",
+      "rr_device.player.volume"
     ]);
   });
 });

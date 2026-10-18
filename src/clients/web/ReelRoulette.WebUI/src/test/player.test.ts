@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { unauthorizedLogText } from "../api/serverRequest";
 import type { NotifyRequest } from "../notifications/notifications";
+import { createAudioStage, type AudioStage } from "../playback/audioStage";
 import { createPlayer, type PlayerElements } from "../playback/player";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type PlayingItem } from "../state/appStore";
@@ -40,12 +41,15 @@ function fakeVideo() {
   const video = {
     src: "",
     muted: false,
+    volume: 1,
     loop: false,
     currentTime: 0,
     duration: Number.NaN,
     paused: true,
     style: { display: "none" },
     plays: [] as string[],
+    /** Set once the element is emptied, as one a new element has taken over from is. */
+    emptied: false,
     play() {
       video.plays.push(`display=${video.style.display} muted=${video.muted} src=${video.src}`);
       video.paused = false;
@@ -53,7 +57,15 @@ function fakeVideo() {
     },
     pause() {
       video.paused = true;
-    }
+    },
+    removeAttribute(name: string) {
+      if (name === "src") video.src = "";
+    },
+    load() {
+      video.emptied = video.src === "";
+    },
+    addEventListener() {},
+    removeEventListener() {}
   };
   return video;
 }
@@ -112,8 +124,11 @@ function fakeFrames() {
   };
 }
 
-/** A player whose device store starts with `saved`, as the page's `localStorage` would hold it. */
-function setup(saved: Record<string, string> = {}) {
+/**
+ * A player whose device store starts with `saved`, as the page's `localStorage` would hold it. Its sound comes from an
+ * audio stage whose gain stage never starts, so the video plays directly, unless `audio` stands in for it.
+ */
+function setup(saved: Record<string, string> = {}, audioStandIn?: Pick<AudioStage, "play" | "pause" | "pausing" | "cancelPause">) {
   const requests: Array<{ path: string; body: any }> = [];
   const replies = new Map<string, () => Response>();
   const randomAnswers: unknown[] = [];
@@ -181,7 +196,15 @@ function setup(saved: Record<string, string> = {}) {
     }
   };
   const frames = fakeFrames();
-  const player = createPlayer({ apiBaseUrl: "http://server/", store, device, api, connection, dialogs, notifications, frames });
+  const audio = createAudioStage({
+    device,
+    dialogs: { noticeWithAction: () => Promise.resolve(false) },
+    relay: () => {},
+    renewVideo: () => player.renewVideo(),
+    volumeReadOnly: false,
+    activation: new EventTarget()
+  });
+  const player = createPlayer({ apiBaseUrl: "http://server/", store, audio: audioStandIn ?? audio, api, connection, dialogs, notifications, frames });
   const elements = {
     video: fakeVideo(),
     photo: fakePhoto(),
@@ -190,9 +213,11 @@ function setup(saved: Record<string, string> = {}) {
     seekStretch: fakeStretch()
   };
   player.attach(elements satisfies PlayerElements);
+  audio.attach(elements.video);
   return {
     store,
     player,
+    audio,
     elements,
     kept,
     frames,
@@ -232,7 +257,7 @@ afterEach(() => {
 describe("createPlayer", () => {
   it("sets a video's source and shows it, then plays it with the saved mute, and records the play", async () => {
     const page = setup();
-    page.player.toggleMute();
+    page.audio.toggleMute();
     page.play(VIDEO);
 
     const { video, photo, emptyState } = page.elements;
@@ -240,7 +265,7 @@ describe("createPlayer", () => {
     expect([video.style.display, photo.style.display, emptyState.style.display]).toEqual(["block", "none", "none"]);
     expect(page.player.playButton.value).toEqual({ disabled: false, showsPause: true });
     expect(page.player.seekBar.value).toEqual({ disabled: false, label: "Seek" });
-    expect(page.player.muted.value).toBe(true);
+    expect(page.audio.muted.value).toBe(true);
     await vi.waitFor(() =>
       expect(page.requests("/api/record-playback").map((request) => request.body)).toEqual([
         { itemId: "item-video", clientId: "client-1", sessionId: "session-1" }
@@ -265,7 +290,7 @@ describe("createPlayer", () => {
     const { video, photo, seekSlider } = page.elements;
     expect([photo.src, photo.style.display, video.style.display]).toEqual(["http://server/api/media/item-photo?token=t", "block", "none"]);
     expect(video.paused).toBe(true);
-    expect(page.player.muted.value).toBe(false);
+    expect(page.audio.muted.value).toBe(false);
 
     video.duration = 120;
     page.player.videoPlaying();
@@ -825,39 +850,108 @@ describe("createPlayer", () => {
 
   it("Mute shows whether sound is muted before anything plays and on a photo, and applies to the next video", () => {
     const page = setup();
-    expect(page.player.muted.value).toBe(false);
-    page.player.toggleMute();
-    expect(page.player.muted.value).toBe(true);
-    page.player.toggleMute();
-    page.player.toggleMute();
-    expect(page.player.muted.value).toBe(true);
+    expect(page.audio.muted.value).toBe(false);
+    page.audio.toggleMute();
+    expect(page.audio.muted.value).toBe(true);
+    page.audio.toggleMute();
+    page.audio.toggleMute();
+    expect(page.audio.muted.value).toBe(true);
 
     page.play(VIDEO);
     expect(page.elements.video.muted).toBe(true);
-    page.player.toggleMute();
+    page.audio.toggleMute();
     expect(page.elements.video.muted).toBe(false);
-    expect(page.player.muted.value).toBe(false);
+    expect(page.audio.muted.value).toBe(false);
 
     page.play(PHOTO);
-    expect(page.player.muted.value).toBe(false);
-    page.player.toggleMute();
-    expect(page.player.muted.value).toBe(true);
+    expect(page.audio.muted.value).toBe(false);
+    page.audio.toggleMute();
+    expect(page.audio.muted.value).toBe(true);
     page.play(SECOND_VIDEO);
     expect(page.elements.video.plays.at(-1)).toBe("display=block muted=true src=http://server/api/media/item-other?token=t");
   });
 
   it("keeps Mute on this device, so the next page starts with sound muted as it was", () => {
     const page = setup();
-    page.player.toggleMute();
+    page.audio.toggleMute();
     expect(page.kept.get("rr_device.player.muted")).toBe("true");
 
     const next = setup(Object.fromEntries(page.kept));
-    expect(next.player.muted.value).toBe(true);
+    expect(next.audio.muted.value).toBe(true);
     next.play(VIDEO);
     expect(next.elements.video.plays).toEqual(["display=block muted=true src=http://server/api/media/item-video?token=t"]);
 
-    next.player.toggleMute();
+    next.audio.toggleMute();
     expect(next.kept.get("rr_device.player.muted")).toBe("false");
+  });
+
+  it("hands a playing video to a new element, which plays on from where it was, and empties the one before it", () => {
+    const page = setup();
+    page.playVideo(VIDEO, 65);
+    const previous = page.elements.video;
+    previous.currentTime = 20;
+    // With Autoplay off, Loop has the browser repeat the video, the new element too.
+    page.player.toggleLoop();
+
+    page.player.renewVideo();
+    expect(page.player.videoKey.value).toBe(1);
+    const fresh = fakeVideo();
+    page.player.takeOverVideo(fresh);
+    expect(page.elements.video).toBe(fresh);
+    expect([fresh.src, fresh.style.display, fresh.loop, fresh.paused]).toEqual(["http://server/api/media/item-video?token=t", "block", true, false]);
+    expect([previous.src, previous.paused, previous.emptied]).toEqual(["", true, true]);
+    expect(page.store.playAttemptId.value).toBe(1);
+
+    // Its metadata places it where the one before it was.
+    fresh.duration = 65;
+    page.player.videoMetadataLoaded();
+    expect(fresh.currentTime).toBe(20);
+    page.player.videoPlaying();
+    expect(page.player.playButton.value).toEqual({ disabled: false, showsPause: true });
+  });
+
+  it("keeps a paused video paused on the new element, and on a photo leaves the new element empty", () => {
+    const page = setup();
+    page.playVideo(VIDEO, 65);
+    page.player.playOrPause();
+    page.elements.video.currentTime = 8;
+    page.player.renewVideo();
+    const fresh = fakeVideo();
+    page.player.takeOverVideo(fresh);
+    expect([fresh.src, fresh.paused, fresh.plays]).toEqual(["http://server/api/media/item-video?token=t", true, []]);
+    fresh.duration = 65;
+    page.player.videoMetadataLoaded();
+    expect(fresh.currentTime).toBe(8);
+    expect(page.player.playButton.value.showsPause).toBe(false);
+
+    const photoPage = setup();
+    photoPage.play(PHOTO);
+    photoPage.player.renewVideo();
+    const empty = fakeVideo();
+    photoPage.player.takeOverVideo(empty);
+    expect([empty.src, empty.style.display, empty.plays]).toEqual(["", "none", []]);
+  });
+
+  it("counts a video whose pause is fading out as paused, so Play shows at once and Auto-Pause leaves it to the user", () => {
+    let fading = false;
+    const page = setup({}, {
+      play: (video) => video.play(),
+      pause() {
+        fading = true;
+      },
+      pausing: () => fading,
+      cancelPause() {
+        fading = false;
+      }
+    });
+    page.playVideo(VIDEO, 65);
+    page.player.playOrPause();
+    expect(page.elements.video.paused).toBe(false);
+    expect(page.player.playButton.value).toEqual({ disabled: false, showsPause: false });
+
+    page.player.autoPause();
+    page.player.autoResume();
+    expect(page.elements.video.plays).toHaveLength(1);
   });
 
   it("favorites and blacklists the playing item with the device's client id, each clearing the other, and remembers it for history", async () => {

@@ -10,7 +10,7 @@ import { App } from "../../ui/App";
 import { AppContext, useApp } from "../../ui/appContext";
 import { DialogHost, NameDialog } from "../../ui/Dialog";
 import { EMPTY_FIELD, isFlagged, type FieldProblem } from "../../validation/fieldValidation";
-import { API_BASE_URL, FakeEventSource, FakeServer, SSE_URL, pageReady, resetPage, settle, stubFullscreenApi } from "./pageHarness";
+import { API_BASE_URL, FakeEventSource, FakeServer, SSE_URL, pageReady, resetPage, settle, stubFullscreenApi, stubWebAudio } from "./pageHarness";
 
 /** The dialogs in the order the page opened them, so the last one is on top. */
 let opened: HTMLDialogElement[] = [];
@@ -325,6 +325,7 @@ describe("the dialog in the page", () => {
     const server = new FakeServer();
     vi.stubGlobal("fetch", server.fetch);
     vi.stubGlobal("EventSource", FakeEventSource);
+    stubWebAudio();
     const root = document.createElement("div");
     root.id = "app";
     document.body.appendChild(root);
