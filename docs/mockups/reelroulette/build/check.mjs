@@ -1831,6 +1831,10 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: each setting sits in its section`,
     sectionOf("set-advance") === "Playback" && sectionOf("set-ambient") === "Appearance" && document.querySelector('input[name="set-seek"]').closest(".settings-section").querySelector("h3").textContent === "Playback" &&
     document.querySelector('input[name="set-volstep"]').closest(".settings-section").querySelector("h3").textContent === "Audio" && sectionOf("set-hide-after") === "Player controls");
+  const volumeSteps = [...document.querySelectorAll('input[name="set-volstep"]')];
+  check(`layout@${width}: the volume step offers ${volumeSteps.map((radio) => radio.closest("label").textContent.trim()).join(", ")}, with ${volumeSteps.find((radio) => radio.checked)?.value}% chosen by default`,
+    volumeSteps.map((radio) => radio.value).join() === "1,2,5,10" && volumeSteps.map((radio) => radio.closest("label").textContent.trim()).join() === "1%,2%,5%,10%" &&
+    volumeSteps.find((radio) => radio.checked)?.value === "5");
   const settingsText = $("settings-body").textContent;
   check(`layout@${width}: no mockup notes, desktop asides, or key badges in the setting labels`,
     !settingsText.includes("photo duration, renamed") && !settingsText.includes("as on the desktop") && !settingsText.includes("desktop's player view") &&
@@ -2242,8 +2246,26 @@ for (const width of [1280, 390]) {
   input($("volume"), "50");
   hideChoice("timeout").click();
   await sleep(10);
+  $("mute-btn").click();
   const wheelPrevented = wheel(-100);
   check(`layout@${width}: a wheel notch up raises the volume a step, shows the controls, and doesn't scroll the page (${volumeNow()})`, volumeNow() === 55 && wheelPrevented && controlsUp());
+  // The volume indicator: the percentage, with Mute's icon, centered over the player, outside the controls, at a low
+  // opacity, and hidden from screen readers, since the slider carries the value.
+  const volumeIndicator = $("volume-indicator");
+  const volumeText = () => $("volume-indicator-text").textContent;
+  const volumeShown = () => volumeIndicator.classList.contains("is-shown") && window.getComputedStyle(volumeIndicator).opacity === "0.7";
+  const indicatorStyle = window.getComputedStyle(volumeIndicator);
+  check(`layout@${width}: the notch shows the volume indicator, centered over the player outside the controls (${volumeText()}, ${indicatorStyle.opacity}, ${indicatorStyle.transform})`,
+    volumeShown() && volumeText() === "55%" && volumeIndicator.querySelector(".material-symbol-icon").dataset.icon === muteIcon() &&
+    volumeIndicator.parentElement === $("media") && !$("overlay-controls").contains(volumeIndicator) && volumeIndicator.getAttribute("aria-hidden") === "true" &&
+    indicatorStyle.position === "absolute" && indicatorStyle.top === "50%" && indicatorStyle.left === "50%" && indicatorStyle.transform === "translate(-50%, -50%)" &&
+    muteIcon() === "volume_off");
+  $("mute-btn").click();
+  $("media").classList.remove("controls-visible");
+  check(`layout@${width}: and it stays shown while the controls are hidden (${window.getComputedStyle(volumeIndicator).opacity})`, volumeShown());
+  $("media").classList.add("controls-visible");
+  // Each step below starts with the indicator hidden, so it shows only if that step shows it.
+  const hideVolumeIndicator = () => volumeIndicator.classList.remove("is-shown");
   wheel(3, 1);
   check(`layout@${width}: a notch down in lines lowers it a step (${volumeNow()})`, volumeNow() === 50);
   wheel(-30);
@@ -2261,20 +2283,38 @@ for (const width of [1280, 390]) {
     return event.defaultPrevented;
   };
   window.mockup.choose(2);
+  hideVolumeIndicator();
   const photoPrevented = wheel(-100);
+  const photoWheelShown = volumeShown() && volumeText() === "60%";
+  hideVolumeIndicator();
   touches("touchstart", [300, 340]);
   const photoDragPrevented = touches("touchmove", [270, 310]);
   touches("touchend", []);
-  check(`layout@${width}: on a photo the wheel and a two-finger drag set the volume too, a step each, and still don't scroll the page (${volumeNow()})`,
-    volumeNow() === 65 && photoPrevented && photoDragPrevented);
+  check(`layout@${width}: on a photo the wheel and a two-finger drag set the volume too, a step each, and still don't scroll the page, each showing the indicator (${volumeNow()}, ${volumeText()})`,
+    volumeNow() === 65 && photoPrevented && photoDragPrevented && photoWheelShown && volumeShown() && volumeText() === "65%");
   window.mockup.choose(3);
   check(`layout@${width}: and the next video plays at the level set on the photo (${volumeNow()})`, volumeNow() === 65);
   input($("volume"), "55");
+  hideVolumeIndicator();
   touches("touchstart", [300, 340]);
   const dragPrevented = touches("touchmove", [240, 280]);
   touches("touchend", []);
-  check(`layout@${width}: two fingers dragged up 60 px raise it two steps, claimed from the browser (${volumeNow()})`,
-    volumeNow() === 65 && dragPrevented && window.getComputedStyle($("media")).touchAction === "none" && controlsUp());
+  check(`layout@${width}: two fingers dragged up 60 px raise it two steps, claimed from the browser, with the indicator (${volumeNow()}, ${volumeText()})`,
+    volumeNow() === 65 && dragPrevented && window.getComputedStyle($("media")).touchAction === "none" && controlsUp() && volumeShown() && volumeText() === "65%");
+  await sleep(850);
+  check(`layout@${width}: the indicator fades out 800 ms after the volume stops changing (${window.getComputedStyle(volumeIndicator).opacity})`,
+    !volumeIndicator.classList.contains("is-shown") && window.getComputedStyle(volumeIndicator).opacity === "0");
+  input($("volume"), "60");
+  check(`layout@${width}: the slider doesn't show it`, !volumeIndicator.classList.contains("is-shown"));
+  // It fades in quickly and out a little slower; with reduced motion it shows and hides at once.
+  const allRules = (rules) => [...rules].flatMap((rule) => [rule, ...(rule.cssRules ? allRules(rule.cssRules) : [])]);
+  const reducedIndicatorRules = [...document.styleSheets].flatMap((sheet) => [...sheet.cssRules])
+    .filter((rule) => rule.conditionText?.includes("prefers-reduced-motion"))
+    .flatMap((rule) => allRules(rule.cssRules)).filter((rule) => rule.selectorText?.includes(".volume-indicator"));
+  const reducedSelectors = reducedIndicatorRules.filter((rule) => rule.style.transition === "none").flatMap((rule) => rule.selectorText.split(",").map((part) => part.trim()));
+  check(`layout@${width}: the indicator fades in over 120 ms and out over 250 ms, and not at all with reduced motion (${ruleStyle(".volume-indicator", "transition")}, ${ruleStyle(".volume-indicator.is-shown", "transition-duration")}, ${reducedSelectors.join(" | ")})`,
+    ruleStyle(".volume-indicator", "transition") === "opacity 0.25s" && ruleStyle(".volume-indicator.is-shown", "transition-duration") === "0.12s" &&
+    reducedSelectors.includes(".volume-indicator") && reducedSelectors.includes(".volume-indicator.is-shown"));
   check(`layout@${width}: the player is clipped by a rounded shape as well, which keeps its corners on iOS (${window.getComputedStyle($("media")).clipPath})`,
     /^inset\(0(px)? round /.test(window.getComputedStyle($("media")).clipPath));
   // The player keeps its rounded corners in every view: no rule, the browser's fullscreen included, gives it others.
@@ -2386,11 +2426,22 @@ for (const width of [1280, 390]) {
   const timeStyle = styleOf($("time-display"));
   const wrapStyles = [styleOf($("seek-wrap")), styleOf($("volume-wrap"))];
   const sliderMargins = [$("seek"), $("volume")].map((el) => `${styleOf(el).marginLeft} ${styleOf(el).marginRight}`);
-  check(`layout@${width}: the scrub bar, the time, and the volume slider sit the row's 12 px gap apart (gap ${styleOf(seekRow).gap}, slider margins ${sliderMargins.join(", ")}, time ${timeStyle.minWidth || "no minimum"} ${timeStyle.textAlign || "start"} ${timeStyle.fontVariantNumeric})`,
-    [...seekRow.children].map((el) => el.id).join() === "seek-wrap,time-display,volume-wrap" && styleOf(seekRow).gap === "12px" &&
+  check(`layout@${width}: the scrub bar, the time, Mute, and the volume slider sit the row's 12 px gap apart (gap ${styleOf(seekRow).gap}, slider margins ${sliderMargins.join(", ")}, time ${timeStyle.minWidth || "no minimum"} ${timeStyle.textAlign || "start"} ${timeStyle.fontVariantNumeric})`,
+    [...seekRow.children].map((el) => el.id).join() === "seek-wrap,time-display,mute-btn,volume-wrap" && styleOf(seekRow).gap === "12px" &&
     sliderMargins.every((margins) => margins === "0px 0px") &&
     wrapStyles.every((wrapStyle) => [wrapStyle.marginLeft, wrapStyle.marginRight, wrapStyle.paddingLeft, wrapStyle.paddingRight].every(unset)) &&
     timeStyle.minWidth === "" && timeStyle.textAlign === "" && timeStyle.fontVariantNumeric === "tabular-nums");
+  // Mute keeps its 44 px target, and its box reaches into the gap above the row and the padding below it, so the row stays
+  // as tall as its 24 px sliders and the controls don't move. The transport row no longer holds it.
+  const muteStyle = styleOf($("mute-btn"));
+  // A margin no rule sets reads as empty, which is none.
+  const pixels = (value) => parseFloat(value) || 0;
+  const muteRowHeight = pixels(muteStyle.height) + pixels(muteStyle.marginTop) + pixels(muteStyle.marginBottom);
+  check(`layout@${width}: Mute keeps its 44 px target without making the seek row taller than its sliders (${muteStyle.width} by ${muteStyle.height}, ${muteRowHeight} px in the row, sliders ${styleOf($("seek")).height})`,
+    muteStyle.width === "44px" && muteStyle.height === "44px" && muteRowHeight <= parseFloat(styleOf($("seek")).height) && styleOf($("volume")).height === "24px" &&
+    pixels(muteStyle.marginTop) >= -pixels(styleOf(document.querySelector(".overlay-controls")).gap) - 4 &&
+    pixels(muteStyle.marginBottom) >= -pixels(styleOf(document.querySelector(".overlay-controls")).paddingBottom) &&
+    !document.querySelector(".overlay-controls-transport #mute-btn"));
   // No rule, a phone's container query among them, gives the volume slider another width.
   const innerRules = (rules) => [...rules].flatMap((rule) => [rule, ...(rule.cssRules ? innerRules(rule.cssRules) : [])]);
   const volumeWidths = innerRules([...document.styleSheets].flatMap((sheet) => [...sheet.cssRules]))
@@ -2436,9 +2487,11 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: 2 again closes the panel`, $("panel").hidden);
   const volumeBefore = Number($("volume").value);
   const messagesBeforeVolume = messages.entries().length;
+  $("volume-indicator").classList.remove("is-shown");
   press("[");
-  check(`layout@${width}: [ lowers the volume by the step (${volumeBefore} to ${$("volume").value}), with no message`,
-    Number($("volume").value) === volumeBefore - 5 && messages.entries().length === messagesBeforeVolume);
+  check(`layout@${width}: [ lowers the volume by the step (${volumeBefore} to ${$("volume").value}), with no message, and shows the volume indicator (${$("volume-indicator-text").textContent})`,
+    Number($("volume").value) === volumeBefore - 5 && messages.entries().length === messagesBeforeVolume &&
+    $("volume-indicator").classList.contains("is-shown") && $("volume-indicator-text").textContent === `${volumeBefore - 5}%`);
   // The elapsed time takes the total's shape, so its width never changes within an item.
   const shapes = [[0, 0, "0:00 / 0:00"], [36, 97, "0:36 / 1:37"], [587, 1392, "09:47 / 23:12"], [746, 6517, "0:12:26 / 1:48:37"], [3723, 36000, "01:02:03 / 10:00:00"]];
   const shaped = shapes.map(([elapsed, total]) => window.mockup.formatPosition?.(elapsed, total));
@@ -2960,9 +3013,13 @@ for (const width of [1280, 390]) {
   const volumeBefore = Number($("volume").value);
   wheelUp();
   check("ios: with the volume read-only and no gain stage yet, the slider is hidden and the wheel does nothing", $("volume-wrap").hidden && Number($("volume").value) === volumeBefore && gains.length === 0);
-  document.body.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true }));
+  // A touch's pointerdown carries no user activation on iOS, so the gain stage waits for its pointerup.
+  document.body.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
   await new Promise((resolve) => setTimeout(resolve, 5));
-  check(`ios: the first tap starts the gain stage, and the slider shows (${gains.length} gain node)`, gains.length === 1 && !$("volume-wrap").hidden);
+  check(`ios: a tap's pointerdown doesn't start the gain stage (${gains.length} gain nodes)`, gains.length === 0 && $("volume-wrap").hidden);
+  document.body.dispatchEvent(new window.PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }));
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  check(`ios: its pointerup starts the gain stage, and the slider shows (${gains.length} gain node)`, gains.length === 1 && !$("volume-wrap").hidden);
   wheelUp();
   check(`ios: the wheel then raises the volume, and the gain follows it (${$("volume").value}, gain ${gains[0]?.gain.value})`,
     Number($("volume").value) === Math.min(100, volumeBefore + 5) && Math.abs(gains[0].gain.value - Number($("volume").value) / 100) < 1e-9);
@@ -2993,10 +3050,10 @@ for (const width of [1280, 390]) {
   const { document, errors, window } = await load("layout", 1280, "?instant", setup);
   const $ = (id) => document.getElementById(id);
   const toggle = $("set-enhanced-audio");
-  check(`enhanced: Enhanced audio starts on, in Playback, with its description (${toggle.closest(".setting").querySelector(".setting-hint").textContent})`,
+  check(`enhanced: Enhanced audio starts on, in Audio, with its description (${toggle.closest(".setting").querySelector(".setting-hint").textContent})`,
     toggle.checked && toggle.closest(".settings-section").querySelector("h3").textContent === "Audio" &&
     toggle.closest(".setting").querySelector(".setting-hint").textContent === "Processes audio in the app, for in-app volume on iPhone and iPad and loudness normalization.");
-  document.body.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true }));
+  document.body.dispatchEvent(new window.PointerEvent("pointerup", { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 5));
   window.mockup.choose(3);
   const routed = playedBy.at(-1);
@@ -3025,7 +3082,7 @@ for (const width of [1280, 390]) {
   const { document, errors, window } = await load("layout", 390, "?instant", setup);
   const $ = (id) => document.getElementById(id);
   $("mock-audio-fails").click();
-  document.body.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true }));
+  document.body.dispatchEvent(new window.PointerEvent("pointerup", { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 5));
   const notice = [...document.querySelectorAll("dialog.app-dialog")].at(-1);
   const turnOff = notice && [...notice.querySelectorAll("button")].find((b) => b.textContent.trim() === "Turn off Enhanced audio");
@@ -3073,7 +3130,7 @@ for (const width of [1280, 390]) {
     $("set-loud-target").value === "-23" && $("set-loud-auto-value").textContent === "The library's baseline, -20.4 LUFS.");
   check("loudness: the target field uses the full keyboard, since the numeric keypads on iOS have no minus key",
     !$("set-loud-target").hasAttribute("inputmode") && $("set-loud-reduction").getAttribute("inputmode") === "numeric");
-  document.body.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true }));
+  document.body.dispatchEvent(new window.PointerEvent("pointerup", { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 5));
   window.mockup.choose(3);
   const param = gains.at(-1).gain;

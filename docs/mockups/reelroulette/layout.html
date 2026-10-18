@@ -802,8 +802,12 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
 #favorite-btn { right: 64px; }
 #blacklist-btn { right: 12px; }
 .overlay-seek-row { display: flex; align-items: center; gap: 12px; pointer-events: auto; }
-/* The sliders drop a browser's own margin, 2 px, so the bar, the time, and the volume sit the row's gap apart. */
+/* The sliders drop a browser's own margin, 2 px, so the bar, the time, Mute, and the volume sit the row's gap apart. */
 .overlay-seek-row input[type="range"] { flex: 1; min-width: 0; height: 24px; margin: 0; }
+/* Mute keeps its 44 px target without making the row taller than its 24 px sliders: its box reaches into the gap above
+   the row and the controls' padding below it, so the transport row, and the popups that rise above the controls, stay
+   where they are. */
+.overlay-seek-row .overlay-btn { flex: none; margin: -10px 0; }
 /* The scrub bar's wrapper holds the stretch Timer mode repeats while Loop holds autoplay, shown faintly behind the bar's
    track. The thumb's center runs from half its width in from each end, so the stretch lines up with it. */
 .seek-wrap { flex: 1; min-width: 0; display: flex; align-items: center; position: relative; }
@@ -1298,6 +1302,32 @@ body.short-screen .stage:not(.covers-player):not(.fullscreen-pseudo):not(:fullsc
 .player-col.is-narrow .player-indicator { top: 64px; max-width: calc(100% - 24px); }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .player-indicator .material-symbol-icon.spins { animation-duration: 3s; } }
+/* The volume indicator: the volume as a percentage, with Mute's icon, centered over the player while the scroll wheel,
+   a two-finger drag, or [ and ] change it. It sits outside the controls, so it shows while they're hidden, at a low
+   opacity so it doesn't cover the picture. It fades in quickly and fades out shortly after the volume stops changing;
+   with reduced motion it shows and hides at once. */
+.volume-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 25;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px 10px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.volume-indicator .material-symbol-icon { font-size: 28px; }
+.volume-indicator.is-shown { opacity: 0.7; transition-duration: 0.12s; }
+@media (prefers-reduced-motion: reduce) { .volume-indicator, .volume-indicator.is-shown { transition: none; } }
 /* Popups at the bottom move up above the player's controls while those show, and down again when they hide, except
    while the overlay panel covers the player. On a player under 600 px wide, popups at the top start below the
    indicator. */
@@ -1408,6 +1438,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <div id="video" class="fake-video"><div class="subject"></div></div>
         <div id="empty-state" class="empty-state" hidden>Tap to play, or open the panel to choose a preset or filter.</div>
         <div class="player-indicator-region" role="status"><div id="player-indicator" class="player-indicator" hidden></div></div>
+        <div id="volume-indicator" class="volume-indicator" aria-hidden="true"><span class="material-symbol-icon">volume_up</span><span id="volume-indicator-text"></span></div>
         <div id="play-chip" class="mock-chip mock-note"></div>
         <div id="mock-hint" class="mock-hint mock-note">The panel button opens the panel on its last tab.</div>
         <div class="overlay-controls" id="overlay-controls">
@@ -1419,7 +1450,6 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
             <button id="prev-btn" class="overlay-btn" aria-label="Previous" title="Previous"><span class="material-symbol-icon">skip_previous</span></button>
             <button id="play-btn" class="overlay-btn" aria-label="Play/Pause" title="Play/Pause"><span class="material-symbol-icon">pause</span></button>
             <button id="next-btn" class="overlay-btn" aria-label="Next" title="Next"><span class="material-symbol-icon">skip_next</span></button>
-            <button id="mute-btn" class="overlay-btn" aria-label="Mute" title="Mute"><span class="material-symbol-icon">volume_up</span></button>
             <button id="loop-btn" class="overlay-btn" aria-label="Loop" title="Loop"><span class="material-symbol-icon">repeat_one</span></button>
             <button id="autoplay-btn" class="overlay-btn active" aria-label="Autoplay" title="Autoplay"><span class="material-symbol-icon">autoplay</span></button>
             <button id="fullscreen-btn" class="overlay-btn" aria-label="Fullscreen" title="Fullscreen"><span class="material-symbol-icon">fullscreen</span></button>
@@ -1427,6 +1457,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
           <div class="overlay-seek-row">
             <span class="seek-wrap" id="seek-wrap"><span class="seek-loop" id="seek-loop" hidden></span><input type="range" id="seek" min="0" max="100" step="any" value="0" aria-label="Seek"></span>
             <span id="time-display"></span>
+            <button id="mute-btn" class="overlay-btn" aria-label="Mute" title="Mute"><span class="material-symbol-icon">volume_up</span></button>
             <span class="volume" id="volume-wrap"><input type="range" id="volume" min="0" max="100" step="1" value="80" aria-label="Volume" title="Volume"></span>
           </div>
         </div>
@@ -1675,6 +1706,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
                 <label><input type="radio" name="set-volstep" value="1"> 1%</label>
                 <label><input type="radio" name="set-volstep" value="2"> 2%</label>
                 <label><input type="radio" name="set-volstep" value="5"> 5%</label>
+                <label><input type="radio" name="set-volstep" value="10"> 10%</label>
               </div>
               <p class="setting-hint">Also for the scroll wheel and a two-finger drag over the player.</p>
             </div>
@@ -4162,7 +4194,9 @@ function stopDirectSound() {
     // Nothing to stop.
   }
 }
-document.addEventListener("pointerdown", startAudio, true);
+// A touch's pointerdown carries no user activation in Firefox on Android or Safari on iOS, and its pointerup does, so the
+// gain stage starts on pointerup or a key. A mouse's pointerup comes while its pointerdown's activation still holds.
+document.addEventListener("pointerup", startAudio, true);
 document.addEventListener("keydown", startAudio, true);
 // The gain never jumps: a jump in level is a click, so stepping the volume crackled and starting or stopping popped.
 // Each change glides to its level with a 15 ms time constant, settling within a few tens of milliseconds. Play starts
@@ -4217,7 +4251,7 @@ function showControlsForVolume() {
 }
 function stepVolume(notches) {
   showControlsForVolume();
-  if (notches) setVolume(state.volume + notches * state.volumeStep);
+  if (notches) stepVolumeWithIndicator(notches);
 }
 // A mouse wheel sends whole notches: line or page units, or a large pixel delta. A trackpad sends small pixel deltas,
 // which add up to a notch every 100 px, so a light swipe doesn't jump the volume. Over the player the page never
@@ -7030,12 +7064,26 @@ const TAB_KEYS = { 1: "library", 2: "filter", 3: "tags", 4: "stats", 5: "setting
 const isTextField = (el) =>
   el && (el.isContentEditable || el.tagName === "TEXTAREA" || el.tagName === "SELECT" ||
     (el.tagName === "INPUT" && !["checkbox", "radio", "button", "submit"].includes(el.type)));
-// The volume keys move the slider without a popup.
+// Sets the volume and moves the slider to it.
 function setVolume(value) {
   state.volume = Math.max(0, Math.min(100, value));
   store.set("volume", state.volume);
   $("volume").value = String(state.volume);
   syncStandInSound();
+}
+// The volume indicator shows the volume as a percentage, with Mute's icon, while the scroll wheel, a two-finger drag, or
+// [ and ] step it, on a photo too, where they set the next video's level. The slider doesn't show it. It fades out
+// 800 ms after the last step.
+const VOLUME_INDICATOR_MS = 800;
+let volumeIndicatorTimer = 0;
+function stepVolumeWithIndicator(steps) {
+  setVolume(state.volume + steps * state.volumeStep);
+  const indicator = $("volume-indicator");
+  setIcon(indicator.querySelector(".material-symbol-icon"), playback.muted ? "volume_off" : "volume_up");
+  $("volume-indicator-text").textContent = `${state.volume}%`;
+  indicator.classList.add("is-shown");
+  clearTimeout(volumeIndicatorTimer);
+  volumeIndicatorTimer = setTimeout(() => indicator.classList.remove("is-shown"), VOLUME_INDICATOR_MS);
 }
 document.addEventListener("keydown", (event) => {
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
@@ -7077,7 +7125,7 @@ document.addEventListener("keydown", (event) => {
     seekStartsStretch();
     return renderPlayback();
   }
-  if ((key === "[" || key === "]") && volumeAdjustable()) return handled(), setVolume(state.volume + (key === "]" ? 1 : -1) * state.volumeStep);
+  if ((key === "[" || key === "]") && volumeAdjustable()) return handled(), stepVolumeWithIndicator(key === "]" ? 1 : -1);
   if (key === "p") return handled(), $("panel-btn").click();
   if (TAB_KEYS[key]) {
     handled();

@@ -19,9 +19,13 @@ Instructions:
 
 Commit Message:
 
-M12i7: Drop the Server slice, since the WebUI's media is same-origin in every served setup
+M12i7: Complete the volume mockup, with Mute in the seek row and a volume indicator, and split the Volume slice in three
 
-- MILESTONES.md: WebUI Volume and Enhanced Audio no longer has a Server slice for cross-origin headers on media responses and `crossorigin` on the player. Only the Vite dev server plays media from another origin.
-- MILESTONES.md: its Not included says media from another origin may play silent through Enhanced audio, and turning Enhanced audio off is the workaround.
-- MILESTONES.md: the Volume slice's Traps take the same-origin fact and that the player's video has no `crossorigin`, which it doesn't need.
-- MILESTONES.md: WebUI Loudness Normalization's Traps no longer count on the server's cross-origin headers, and say to try it with the WebUI the server serves.
+- MILESTONES.md: WebUI Volume and Enhanced Audio splits its Volume slice into Mockup, Volume, and Volume gestures, which takes the scroll wheel, the two-finger drag, the volume indicator, and the volume steps. The Mockup slice is complete, approved by the user.
+- MILESTONES.md: nothing narrower than about 425 px is supported, so the volume slider always sits in the seek row, with no layout for a narrower player and no minimum width for the scrub bar.
+- MILESTONES.md: turning Enhanced audio off moves the video to the new element at its position, playing or paused as it was, and the gain stage starts on `pointerup` or `keydown`.
+- MILESTONES.md: in WebUI Keyboard Shortcuts, [ and ] change the volume on a photo too, with the volume indicator, as the slider, the scroll wheel, and a two-finger drag do.
+- Mockup: Mute moves from the transport row to the seek row, between the time and the volume slider, keeping its 44 px target without making the row taller.
+- Mockup: a volume indicator shows the volume as a percentage, centered over the player, for the scroll wheel, a two-finger drag, and [ and ], and the gain stage starts on `pointerup`, since a touch's `pointerdown` carries no user activation.
+- Mockup: the volume steps add 10 percent, with 5 still the default, and the index notes say nothing narrower than about 425 px is supported. Each new check fails when what it guards is broken.
+- Testing checklist: the check of a flagged section's tab badge runs on the Pixel instead of a phone 360 px wide.
