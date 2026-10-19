@@ -140,7 +140,7 @@ Last milestone completed: M12i7
 
 ### M12i8 - WebUI Loudness Normalization
 
-- **Status**: ⏳ Planned
+- **Status**: 🚧 In Progress
 - **Goal**: The WebUI evens out loudness between videos toward a target the user picks, without clipping, and its Night mode evens out loudness within a video, in every browser the WebUI supports.
 - **Depends on**: WebUI Volume and Enhanced Audio, whose gain stage its chain feeds, and WebUI Settings Panel, whose tab holds its settings, and WebUI Stats Panel, whose scan measures the peaks its boost limit reads and whose Stats tab shows its Adjustment row.
 - **Design**: `docs/mockups/reelroulette/`.
@@ -158,8 +158,8 @@ Last milestone completed: M12i7
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Mockup | ⏳ Planned | The new Audio settings, Night mode's included, and the Adjustment row's "(limited by peak)" in the mockup, reviewed by the user on devices. |
-| Automatic baseline | ⏳ Planned | The library statistic Automatic uses, chosen by the user from measured figures, carried by the library stats' baseline loudness. |
+| Mockup | ✅ Complete | The new Audio settings, Night mode's included, and the Adjustment row's "(limited by peak)" in the mockup, reviewed by the user on devices. |
+| Automatic baseline | ⏳ Planned | The library statistic Automatic uses, chosen by the user from measured figures and carried by the library stats' baseline loudness, with digitally silent tracks counted as no audio. |
 | Normalization | ⏳ Planned | The gain rule, its fixed values, the limiter, the loudness normalization settings, and the Stats tab's Adjustment row. |
 | Night mode | ⏳ Planned | A compressor that evens out loudness within a video, and its setting under Enhanced audio. |
 | Listening check | ⏳ Planned | The defaults and Night mode's fixed values, settled by the user's listening check with the full library. |
@@ -184,24 +184,63 @@ Last milestone completed: M12i7
 - The mockup shows the new Audio settings, Night mode, and the Adjustment row's "(limited by peak)", and `python3 docs/mockups/reelroulette/build/build_pages.py` and `node docs/mockups/reelroulette/build/check.mjs` pass.
 - The user has reviewed the mockup on their devices before the Automatic baseline slice starts.
 
+**Evidence**
+
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passed all 1288 checks, up from 1272.
+- Each new or changed check failed when what it guards was broken, in 35 mutations, each in its own copy of the mockup under `artifacts/scratch/` (measured). They covered:
+  - Night mode out of its place.
+  - Enhanced audio's description and the failure notice with their old texts.
+  - Every video's chord at one level, or without the normalization gain.
+  - Normalization off by default, and another Manual default.
+  - A wrong preset level, Allow limiting hint, or Night mode hint, and the numeric keypad on Manual's target.
+  - Night mode on by default or not kept.
+  - A cut held back.
+  - A boost cut short, past the boost limit, with a 3 dB allowance, with the allowance while Allow limiting is off, below 0 dB, without a peak, or without loudness data.
+  - Wrong Quieter, Louder, and Automatic targets, Manual's field never showing, and its target ignored.
+  - The boost's range or whole numbers not enforced, and normalization's off not kept.
+  - A stand-in level that plays past the volume.
+  - Night mode not disabled with Enhanced audio off, or staying disabled after it.
+  - Reset to defaults keeping the boost limit, and the Adjustment without "(limited by peak)".
+- At the new defaults, the mockup's stand-in library has 13 videos cut, 18 boosted in full, and 7 held back by their peak (measured).
+- The user reviewed the mockup on their devices and approved it, with Night mode's hint "Evens out loudness within a video, for quiet listening."
+- The review added one fix: each video's stand-in chord plays at the video's own stand-in loudness, so videos sound different with normalization off and even out toward the target with it on. The chord's own level stands for −10 LUFS, Manual's highest target, so no video plays past it.
+- The mockup also shows the release's final texts for Enhanced audio's description and the gain stage's failure notice, which the Normalization and Night mode slices set.
+- The gain rule settled in the review has no silence floor, and a boost never goes below 0 dB. The Normalization slice's Scope and Acceptance say so.
+- Night mode's compressor isn't in the mockup, since the Listening check slice settles its values.
+- The mockup keeps its loudness settings under new keys, so settings stored in earlier reviews don't carry over.
+- Docs: the mockup's index notes and the field validation page name the new settings.
+
 #### Automatic baseline slice
 
 **Scope**
 
 - The slice's plan measures candidate statistics on a copy of the catalog, such as the server's current baseline, the 75th percentile of audible videos, and their median, and shows the figures to the user, who chooses the one Automatic uses.
+- The measurements also report how many files have a digitally silent track.
+- An audio track the loudness scan measures as digital silence, at ffmpeg's −70.0 LUFS floor with no peak (its `-inf`), counts as no audio, the same as a file without an audio track.
+  - The audio filter, the Stats tab's Videos without audio count, and the baseline treat it as no audio.
+  - The Stats tab shows such a file as it shows a file without an audio track, and the mockup follows.
+  - Existing items are updated from their stored loudness and peak, without a rescan.
+  - A track with a real peak, such as faint hiss, keeps counting as audio.
 - If the choice isn't the server's current baseline, the library stats' `baselineLoudnessLufs` carries the chosen statistic in its place, and its description in OpenAPI and the generated WebUI types changes with it.
 - The Stats tab's Baseline loudness shows the chosen statistic.
 
 **Traps**
 
-- The server's baseline is the 75th percentile of the loudness of videos with audio, near-silent ones included (`ReadBaselineLoudness` in `LibraryCatalogSession.cs`).
+- The server's baseline is the 75th percentile of the loudness of videos with audio (`ReadBaselineLoudness` in `LibraryCatalogSession.cs`), so it includes digitally silent tracks, which this slice counts as no audio, and near-silent ones with a real peak, which stay.
+- The loudness scan stores a silent track's peak as none, since ffmpeg reads it as `-inf` (`ParseLoudnessFromFfmpegOutput` in `RefreshPipelineService.cs`).
+- The audio filter reads `has_audio` in the list query (`LibraryCatalogListQuery.cs`), and the Stats tab's audio counts and the baseline read it in `LibraryCatalogSession.cs`.
+- The Stats tab shows a digitally silent track's True peak as Silent (`truePeakText` in `src/stats/statsModel.ts` and in the mockup's `layout.src.html`), which no file reaches once such a track counts as no audio (inferred).
+- Earlier changes to stored values without a rescan, such as clearing every stored peak, ran as a catalog upgrade step on open.
 - On the developer's catalog the server's baseline is −28.7 LUFS, the 75th percentile of the 8,892 videos louder than −60 LUFS is −27.1, and their median is −38.3 (measured).
 
 **Acceptance**
 
-- The measured figures and the user's choice are recorded before the Normalization slice starts.
+- The measured figures, the number of files with a digitally silent track, and the user's choice are recorded before the Normalization slice starts.
 - `baselineLoudnessLufs` is the chosen statistic, in server tests of the library stats, and `npm run verify:contracts` passes.
 - The Stats tab's Baseline loudness shows the chosen statistic, in a component test.
+- A track at −70.0 LUFS with no peak counts as no audio in the audio filter, the Videos without audio count, and the baseline, and one with a peak keeps counting as audio, in server tests.
+- An existing item with a digitally silent track counts as no audio after the update, without a rescan, in a server test.
+- The Stats tab shows a file with a digitally silent track as a file without an audio track, in a component test, and the mockup matches, with `node docs/mockups/reelroulette/build/check.mjs` passing.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
 #### Normalization slice
@@ -212,9 +251,9 @@ Last milestone completed: M12i7
   - The adjustment needed is the target minus the video's loudness.
   - A cut is applied in full, since turning a video down can't clip or raise its noise.
   - A boost is held to the smallest of the adjustment needed, the boost limit, and the video's headroom: the ceiling minus its peak, plus the limiter allowance when Allow limiting is on.
-  - A video at the silence floor or quieter isn't boosted.
+  - A boost never goes below 0 dB, so a quiet video whose peak leaves no headroom plays without an adjustment rather than turned down.
   - A video without loudness data plays without an adjustment, and one without a peak is only cut, never boosted.
-- The fixed values: a silence floor of −60 LUFS, a ceiling of −1 dBTP, and a limiter allowance of 6 dB.
+- The fixed values: a ceiling of −1 dBTP and a limiter allowance of 6 dB.
 - The limiter is a `DynamicsCompressorNode` with a threshold of −1 dB, a ratio of 20, no knee, and its fastest attack.
 - The plan measures the limiter's own makeup gain and compensates for it, with a lower threshold or a gain after the limiter, so the limiter holds peaks at −1 dB.
 - The normalization gain is set while each video starts from silence, and glides to its new value when a setting changes, so the change reaches the playing video at once without a click.
@@ -248,7 +287,7 @@ Last milestone completed: M12i7
 
 **Acceptance**
 
-- The gain rule passes every case in its WebUI-only fixture: a cut in full, a boost held by the boost limit, by the headroom, and by the headroom plus the allowance, no boost at the silence floor, no adjustment without loudness data, and only a cut without a peak, in WebUI tests reading the fixture.
+- The gain rule passes every case in its WebUI-only fixture: a cut in full, a boost held by the boost limit, by the headroom, and by the headroom plus the allowance, no boost when the peak leaves no headroom, no adjustment without loudness data, and only a cut without a peak, in WebUI tests reading the fixture.
 - With normalization on, the chain runs from the normalization gain through the limiter to the volume stage, and each video plays at its gain, in WebUI audio tests.
 - A settings change glides the playing video's gain to its new value, in WebUI audio tests.
 - Under Automatic, the gain before the library's baseline arrives is as the plan defines, in a WebUI test.

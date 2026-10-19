@@ -1846,8 +1846,9 @@ for (const width of [1280, 390]) {
     !settingsText.includes("photo duration, renamed") && !settingsText.includes("as on the desktop") && !settingsText.includes("desktop's player view") &&
     !$("settings-body").querySelector(".setting-label kbd") && !settingsText.includes("step one frame"));
   check(`layout@${width}: Keyboard shortcuts starts collapsed, with a chevron`, !$("set-shortcuts").open && !!$("set-shortcuts").querySelector("summary .setting-more-chevron"));
-  check(`layout@${width}: Loudness normalization sits in Audio, right under Enhanced audio`,
-    sectionOf("set-loudness") === "Audio" && $("set-loudness").closest(".setting").previousElementSibling === $("set-enhanced-audio").closest(".setting"));
+  check(`layout@${width}: Loudness normalization sits in Audio, right under Enhanced audio, and Night mode right under it`,
+    sectionOf("set-loudness") === "Audio" && $("set-loudness").closest(".setting").previousElementSibling === $("set-enhanced-audio").closest(".setting") &&
+    $("set-night-mode").closest(".setting").previousElementSibling === $("set-loudness").closest(".setting"));
 
   {
     // Autoplay modes and Loop stops autoplay. The check moves the page's clock on, so an item's timer or length passes at
@@ -3083,10 +3084,17 @@ for (const width of [1280, 390]) {
   // first tap. The slider shows from the start, since a control hides only because of a user setting, and a volume set
   // before the stage runs is the level it starts at; the wheel and the slider then set its gain.
   const { setup, gains, mediaCalls } = standInAudio();
-  const { document, errors, window } = await load("layout", 390, "?instant", setup);
+  // Loudness normalization off, so the gain is the volume on the video's stand-in level alone; the loudness run checks
+  // how the two combine.
+  const withoutNormalization = (w) => {
+    setup(w);
+    w.localStorage.setItem("rr-mockup.normalization", "false");
+  };
+  const { document, errors, window } = await load("layout", 390, "?instant", withoutNormalization);
   const $ = (id) => document.getElementById(id);
   document.getElementById("mock-ios-volume").click();
   window.mockup.choose(3);
+  const chord = window.mockup.standInLevel(window.mockup.items[3]);
   const wheelUp = () => $("media").dispatchEvent(new window.WheelEvent("wheel", { deltaY: -100, bubbles: true, cancelable: true }));
   $("volume").value = "50";
   $("volume").dispatchEvent(new window.Event("input"));
@@ -3101,16 +3109,16 @@ for (const width of [1280, 390]) {
   document.body.dispatchEvent(new window.PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }));
   await new Promise((resolve) => setTimeout(resolve, 5));
   check(`ios: its pointerup starts the gain stage at the volume set before it (${gains.length} gain node, gain ${gains[0]?.gain.value})`,
-    gains.length === 1 && !$("volume-wrap").hidden && Math.abs(gains[0].gain.value - volumeBefore / 100) < 1e-9);
+    gains.length === 1 && !$("volume-wrap").hidden && Math.abs(gains[0].gain.value - (volumeBefore / 100) * chord) < 1e-9);
   wheelUp();
   check(`ios: the wheel then raises the volume, and the gain follows it (${$("volume").value}, gain ${gains[0]?.gain.value})`,
-    Number($("volume").value) === Math.min(100, volumeBefore + 5) && Math.abs(gains[0].gain.value - Number($("volume").value) / 100) < 1e-9);
+    Number($("volume").value) === Math.min(100, volumeBefore + 5) && Math.abs(gains[0].gain.value - (Number($("volume").value) / 100) * chord) < 1e-9);
   const param = gains[0].gain;
   const lastCall = () => param.calls.at(-1);
   const glides = (call, level) => call?.[0] === "glide" && Math.abs(call[1] - level) < 1e-9 && call[2] > 0 && call[2] <= 0.03;
   check(`ios: playing a video started the sound from silence and faded it in (${JSON.stringify(param.calls.slice(0, 2))})`,
-    param.calls[0]?.[0] === "set" && param.calls[0][1] === 0 && glides(param.calls[1], volumeBefore / 100) && mediaCalls[0] === "play");
-  check(`ios: a volume step glides to its level instead of jumping (${JSON.stringify(lastCall())})`, glides(lastCall(), Number($("volume").value) / 100));
+    param.calls[0]?.[0] === "set" && param.calls[0][1] === 0 && glides(param.calls[1], (volumeBefore / 100) * chord) && mediaCalls[0] === "play");
+  check(`ios: a volume step glides to its level instead of jumping (${JSON.stringify(lastCall())})`, glides(lastCall(), (Number($("volume").value) / 100) * chord));
   $("play-btn").click();
   const pausedAtOnce = mediaCalls.at(-1) === "pause";
   check(`ios: pause fades the sound out first (${JSON.stringify(lastCall())})`, glides(lastCall(), 0) && !pausedAtOnce);
@@ -3118,7 +3126,7 @@ for (const width of [1280, 390]) {
   check("ios: and stops it once it is silent", mediaCalls.at(-1) === "pause");
   $("play-btn").click();
   check(`ios: play fades it back in from silence (${JSON.stringify(param.calls.slice(-2))})`,
-    param.calls.at(-2)?.[0] === "set" && param.calls.at(-2)[1] === 0 && glides(lastCall(), Number($("volume").value) / 100) && mediaCalls.at(-1) === "play");
+    param.calls.at(-2)?.[0] === "set" && param.calls.at(-2)[1] === 0 && glides(lastCall(), (Number($("volume").value) / 100) * chord) && mediaCalls.at(-1) === "play");
   $("mute-btn").click();
   check("ios: Mute glides the gain to 0", glides(lastCall(), 0) && param.value === 0);
   check(`ios: the gain is never set straight to a level (${param.directSets} direct sets)`, param.directSets === 0);
@@ -3134,7 +3142,7 @@ for (const width of [1280, 390]) {
   const toggle = $("set-enhanced-audio");
   check(`enhanced: Enhanced audio starts on, in Audio, with its description (${toggle.closest(".setting").querySelector(".setting-hint").textContent})`,
     toggle.checked && toggle.closest(".settings-section").querySelector("h3").textContent === "Audio" &&
-    toggle.closest(".setting").querySelector(".setting-hint").textContent === "Processes audio in the app, for in-app volume on iPhone and iPad and loudness normalization.");
+    toggle.closest(".setting").querySelector(".setting-hint").textContent === "Processes audio in the app, for loudness normalization and Night mode.");
   document.body.dispatchEvent(new window.PointerEvent("pointerup", { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 5));
   window.mockup.choose(3);
@@ -3147,7 +3155,9 @@ for (const width of [1280, 390]) {
   const slider = $("volume");
   slider.value = "40";
   slider.dispatchEvent(new window.Event("input"));
-  check(`enhanced: directly, the volume sets the element's own volume (${direct.volume})`, Math.abs(direct.volume - 0.4) < 1e-9 && !$("volume-wrap").hidden);
+  const chord = window.mockup.standInLevel(window.mockup.items[3]);
+  check(`enhanced: directly, the volume sets the element's own volume, on the video's stand-in level (${direct.volume.toFixed(4)})`,
+    Math.abs(direct.volume - 0.4 * chord) < 1e-9 && !$("volume-wrap").hidden);
   $("mock-ios-volume").click();
   check("enhanced: off, on iOS the volume controls hide", $("volume-wrap").hidden);
   $("mock-ios-volume").click();
@@ -3169,7 +3179,8 @@ for (const width of [1280, 390]) {
   const notice = [...document.querySelectorAll("dialog.app-dialog")].at(-1);
   const turnOff = notice && [...notice.querySelectorAll("button")].find((b) => b.textContent.trim() === "Turn off Enhanced audio");
   check(`audio-fails: the next tap shows the notice (${notice?.querySelector(".dialog-message")?.textContent.slice(0, 45)})`,
-    !!notice && notice.querySelector(".dialog-message").textContent.startsWith("Audio processing couldn't start on this device.") && !!turnOff && gains.length === 0 &&
+    !!notice && notice.querySelector(".dialog-message").textContent === "Audio processing couldn't start on this device. Turn off Enhanced audio to play sound directly." &&
+    !!turnOff && gains.length === 0 &&
     document.activeElement?.textContent.trim() === "OK");
   turnOff.click();
   window.mockup.choose(3);
@@ -3179,9 +3190,11 @@ for (const width of [1280, 390]) {
 }
 
 {
-  // Loudness normalization, off by default: its settings sit in an expandable section like Ambient mode's, with the
-  // desktop's defaults, and are disabled while Enhanced audio is off. On, it sets the gain stage by the desktop's formula:
-  // the baseline minus the item's loudness, limited to the boost and the reduction, as a linear gain on the volume.
+  // Loudness normalization, on by default: its settings sit in an expandable section like Ambient mode's, and are
+  // disabled while Enhanced audio is off, as Night mode is. It sets the gain stage by the gain rule: a cut in full, and a
+  // boost held to the smallest of what the item needs, the boost limit, and its headroom, the -1 dBTP ceiling minus its
+  // peak plus 6 dB with Allow limiting on, as a linear gain on the volume and the video's stand-in level. An item
+  // without a peak is only cut.
   const { setup, gains, playedBy } = standInAudio();
   const { document, errors, window } = await load("layout", 1280, "?instant", setup);
   const $ = (id) => document.getElementById(id);
@@ -3201,63 +3214,153 @@ for (const width of [1280, 390]) {
   const stored = (key) => JSON.parse(window.localStorage.getItem("rr-mockup." + key) ?? "null");
   const toggle = $("set-loudness");
   const more = $("set-loudness-more");
-  const baseline = (value) => document.querySelector(`input[name="set-loud-baseline"][value="${value}"]`);
+  const target = (value) => document.querySelector(`input[name="set-loud-target"][value="${value}"]`);
+  const targets = [...document.querySelectorAll('input[name="set-loud-target"]')].map((radio) => radio.closest("label").textContent.trim());
   const labels = [...more.querySelectorAll(".setting-label")].map((el) => el.textContent).join(", ");
-  check(`loudness: the option starts off, with its hint (${$("set-loudness-hint").textContent})`,
-    !toggle.checked && !toggle.disabled && $("set-loudness-hint").textContent === "Evens out loudness between videos.");
-  check(`loudness: its settings are an expandable section with the desktop's defaults (${labels})`,
+  check(`loudness: the option starts on, with its hint (${$("set-loudness-hint").textContent})`,
+    toggle.checked && !toggle.disabled && $("set-loudness-hint").textContent === "Evens out loudness between videos.");
+  check(`loudness: its settings are an expandable section with their defaults (${labels})`,
     more.tagName === "DETAILS" && !more.open && more.querySelector("summary").lastChild.textContent === "Loudness normalization settings" &&
-    !!more.querySelector("summary .setting-more-chevron") && labels === "Maximum reduction, Maximum boost, Baseline, Target" &&
-    $("set-loud-reduction").value === "15" && $("set-loud-boost").value === "5" && baseline("auto").checked && $("set-loud-manual").hidden &&
-    $("set-loud-target").value === "-23" && $("set-loud-auto-value").textContent === "The library's baseline, -20.4 LUFS.");
+    !!more.querySelector("summary .setting-more-chevron") && labels === "Target loudness, Target, Boost quiet videos by up to" &&
+    target("standard").checked && $("set-loud-manual").hidden && $("set-loud-manual-target").value === "-18" && $("set-loud-boost").value === "15" &&
+    $("set-loud-limiting").checked && $("set-loud-reset").closest("fieldset") === $("set-loudness-fields"));
+  check(`loudness: Target loudness offers ${targets.join(", ")}`,
+    targets.join() === "AutomaticThe library's baseline, -20.4 LUFS.,Quieter-23 LUFS,Standard-18 LUFS,Louder-14 LUFS,Manual" &&
+    target("manual").closest(".choice-stack").contains($("set-loud-manual")));
+  check(`loudness: Allow limiting has its hint (${$("set-loud-limiting").closest("label").querySelector("small").textContent})`,
+    $("set-loud-limiting").closest("label").querySelector("small").textContent === "Lets quiet videos with loud moments get louder by limiting those moments.");
   check("loudness: the target field uses the full keyboard, since the numeric keypads on iOS have no minus key",
-    !$("set-loud-target").hasAttribute("inputmode") && $("set-loud-reduction").getAttribute("inputmode") === "numeric");
+    !$("set-loud-manual-target").hasAttribute("inputmode") && $("set-loud-boost").getAttribute("inputmode") === "numeric");
+  const night = $("set-night-mode");
+  check(`loudness: Night mode starts off, with its hint (${$("set-night-mode-hint").textContent})`,
+    !night.checked && !night.disabled && $("set-night-mode-hint").textContent === "Evens out loudness within a video, for quiet listening.");
+  change(night, true);
+  check("loudness: Night mode is kept per device", stored("nightMode") === true);
+  change(night, false);
   document.body.dispatchEvent(new window.PointerEvent("pointerup", { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 5));
-  window.mockup.choose(3);
+  const items = window.mockup.items;
+  const play = (item) => window.mockup.choose(items.indexOf(item));
   const param = gains.at(-1).gain;
   const volume = Number($("volume").value) / 100;
   const close = (a, b) => Math.abs(a - b) < 1e-6;
-  // The Stats tab's Adjustment shows what normalization applies: the baseline difference limited by its settings.
+  // The gain for an item's adjustment: on the volume and the level its stand-in chord plays at, its own loudness.
+  const gainFor = (item, db) => volume * window.mockup.standInLevel(item) * Math.pow(10, db / 20);
+  const signed = (db) => `${db >= 0 ? "+" : ""}${db.toFixed(1)} dB`;
+  // The Stats tab's Adjustment shows what normalization applies.
   const adjustment = () => {
     const dt = [...$("stats-body").querySelectorAll("dt")].find((el) => el.textContent === "Adjustment");
     return dt?.nextElementSibling.textContent;
   };
-  check(`loudness: off, the gain is the volume (${param.level}), and Stats shows the Adjustment as ${adjustment()}`, close(param.level, volume) && adjustment() === "Off");
+  const video = (test) => items.find(test);
+  // Louder than every target, so each one cuts it.
+  const loud = video((item) => item.loudness > -14 && item.peak != null);
+  const roomy = video((item) => item.loudness < -21 && item.peak != null && -1 - item.peak + 6 >= -18 - item.loudness);
+  const peaky = video((item) => item.loudness < -18 && item.peak != null && -1 - item.peak + 6 < -18 - item.loudness && -1 - item.peak > 0);
+  const peakless = video((item) => item.loudness != null && item.loudness < -18 && item.peak == null);
+  // Not the missing file, which playback skips.
+  const unmeasured = video((item) => item.hasAudio === null && !item.missing);
+  check("loudness: the mockup has a loud video, a quiet one with headroom, one limited by its peak, one without a peak, and one not scanned",
+    !!loud && !!roomy && !!peaky && !!peakless && !!unmeasured);
+  // Each video's chord plays at its own stand-in loudness: off, a loud and a quiet video sound different; on, they even
+  // out at the target, and one whose peak holds its boost back stays quieter by the boost it misses.
+  const levelOf = (item) => {
+    play(item);
+    return param.level;
+  };
+  change(toggle, false);
+  const offLoud = levelOf(loud);
+  const offRoomy = levelOf(roomy);
+  check(`loudness: off, each video's chord plays at its own loudness (${offLoud.toFixed(4)} for ${loud.loudness} LUFS, ${offRoomy.toFixed(4)} for ${roomy.loudness} LUFS)`,
+    offLoud > offRoomy && close(offLoud / offRoomy, Math.pow(10, (loud.loudness - roomy.loudness) / 20)));
   change(toggle, true);
-  const loudness = window.mockup.items[3].loudness;
-  const limitedDb = Math.max(-15, Math.min(5, -20.4 - loudness));
-  const expected = Math.min(2, volume * Math.pow(10, limitedDb / 20));
-  check(`loudness: on, the gain follows the item's loudness against the library's baseline (${param.level.toFixed(4)} for ${loudness} LUFS)`,
-    close(param.level, expected) && param.calls.at(-1)[0] === "glide" && stored("loudness") === true);
-  check(`loudness: and Stats shows the limited adjustment it applies (${adjustment()} for a difference of ${(-20.4 - loudness).toFixed(1)} dB)`,
-    adjustment() === `${limitedDb >= 0 ? "+" : ""}${limitedDb.toFixed(1)} dB`);
-  change(baseline("manual"), true);
-  check("loudness: Manual shows the target", !$("set-loud-manual").hidden && stored("loudnessSettings").baseline === "manual");
-  enter($("set-loud-target"), "-50");
-  check(`loudness: a target far below the item is limited to the maximum reduction (${param.level.toFixed(4)}, ${adjustment()})`,
-    close(param.level, volume * Math.pow(10, -15 / 20)) && stored("loudnessSettings").target === -50 && adjustment() === "-15.0 dB");
-  input($("set-loud-reduction"), "31");
-  check("loudness: a reduction outside 1 to 30 is flagged and not kept, and the gain stays",
-    $("set-loud-reduction").getAttribute("aria-invalid") === "true" && stored("loudnessSettings").reduction === 15 && close(param.level, volume * Math.pow(10, -15 / 20)));
-  enter($("set-loud-reduction"), "6");
-  check(`loudness: a reduction of 6 dB applies at once, with the green check (${param.level.toFixed(4)}, ${adjustment()})`,
-    close(param.level, volume * Math.pow(10, -6 / 20)) && stored("loudnessSettings").reduction === 6 && adjustment() === "-6.0 dB" &&
-    $("set-loud-reduction").closest(".vfield").classList.contains("is-saved"));
-  input($("set-loud-target"), "-5");
-  input($("set-loud-boost"), "11");
-  check("loudness: a target above -10 LUFS and a boost above 10 dB are flagged",
-    $("set-loud-target").getAttribute("aria-invalid") === "true" && $("set-loud-boost").getAttribute("aria-invalid") === "true" && stored("loudnessSettings").target === -50);
+  const onLoud = levelOf(loud);
+  const onRoomy = levelOf(roomy);
+  const onPeaky = levelOf(peaky);
+  const missed = -18 - peaky.loudness - (-1 - peaky.peak + 6);
+  check(`loudness: on, they even out at the target (${onLoud.toFixed(4)}, ${onRoomy.toFixed(4)}), and one held back by its peak stays ${missed.toFixed(1)} dB quieter (${onPeaky.toFixed(4)})`,
+    close(onLoud, onRoomy) && close(onPeaky / onLoud, Math.pow(10, -missed / 20)));
+  play(loud);
+  const cut = -18 - loud.loudness;
+  check(`loudness: a loud video is cut in full to Standard's -18 LUFS (${param.level.toFixed(4)}, ${adjustment()} for ${loud.loudness} LUFS)`,
+    close(param.level, gainFor(loud, cut)) && adjustment() === signed(cut));
+  play(roomy);
+  const boost = -18 - roomy.loudness;
+  check(`loudness: a quiet video with headroom is boosted in full (${adjustment()} for ${roomy.loudness} LUFS, ${roomy.peak} dBTP)`,
+    close(param.level, gainFor(roomy, boost)) && adjustment() === signed(boost));
+  enter($("set-loud-boost"), "3");
+  check(`loudness: the boost limit holds it back, without "limited by peak" (${adjustment()})`,
+    close(param.level, gainFor(roomy, 3)) && adjustment() === "+3.0 dB" && stored("normalizationSettings").boostLimit === 3 && param.calls.at(-1)[0] === "glide" &&
+    $("set-loud-boost").closest(".vfield").classList.contains("is-saved"));
+  enter($("set-loud-boost"), "15");
+  play(peaky);
+  const allowed = -1 - peaky.peak + 6;
+  check(`loudness: a quiet video's headroom plus the limiter allowance holds it back (${adjustment()} for ${peaky.loudness} LUFS, ${peaky.peak} dBTP)`,
+    close(param.level, gainFor(peaky, allowed)) && adjustment() === `${signed(allowed)} (limited by peak)`);
+  change($("set-loud-limiting"), false);
+  const headroom = -1 - peaky.peak;
+  check(`loudness: with Allow limiting off, its headroom alone holds it back (${adjustment()})`,
+    close(param.level, gainFor(peaky, headroom)) && adjustment() === `${signed(headroom)} (limited by peak)` && stored("normalizationSettings").allowLimiting === false &&
+    param.calls.at(-1)[0] === "glide");
+  // A peak above the ceiling leaves no headroom: the video plays unadjusted rather than cut.
+  const peakBefore = peaky.peak;
+  peaky.peak = -0.5;
+  play(loud);
+  play(peaky);
+  check(`loudness: a quiet video whose peak is above the ceiling isn't turned down (${adjustment()})`,
+    close(param.level, gainFor(peaky, 0)) && adjustment() === "+0.0 dB (limited by peak)");
+  peaky.peak = peakBefore;
+  change($("set-loud-limiting"), true);
+  play(peakless);
+  check(`loudness: a quiet video without a peak isn't boosted (${adjustment()} for ${peakless.loudness} LUFS)`, close(param.level, gainFor(peakless, 0)) && adjustment() === "+0.0 dB");
+  play(unmeasured);
+  check(`loudness: a video without loudness data plays at the volume (${adjustment()})`, close(param.level, gainFor(unmeasured, 0)) && adjustment() === "N/A");
+  play(loud);
+  change(target("quieter"), true);
+  check(`loudness: Quieter cuts to -23 LUFS (${adjustment()})`, close(param.level, gainFor(loud, -23 - loud.loudness)) && adjustment() === signed(-23 - loud.loudness) &&
+    stored("normalizationSettings").target === "quieter" && param.calls.at(-1)[0] === "glide");
+  change(target("louder"), true);
+  check(`loudness: Louder cuts to -14 LUFS (${adjustment()})`, close(param.level, gainFor(loud, -14 - loud.loudness)) && adjustment() === signed(-14 - loud.loudness));
+  change(target("auto"), true);
+  check(`loudness: Automatic cuts to the library's baseline (${adjustment()})`, close(param.level, gainFor(loud, -20.4 - loud.loudness)) && adjustment() === signed(-20.4 - loud.loudness));
+  change(target("manual"), true);
+  check("loudness: Manual shows its target", !$("set-loud-manual").hidden && stored("normalizationSettings").target === "manual");
+  enter($("set-loud-manual-target"), "-30");
+  check(`loudness: Manual's target applies at once (${param.level.toFixed(4)}, ${adjustment()})`,
+    close(param.level, gainFor(loud, -30 - loud.loudness)) && stored("normalizationSettings").manualTarget === -30 && adjustment() === signed(-30 - loud.loudness));
+  input($("set-loud-manual-target"), "-5");
+  input($("set-loud-boost"), "25");
+  check("loudness: a target above -10 LUFS and a boost above 24 dB are flagged and not kept, and the gain stays",
+    $("set-loud-manual-target").getAttribute("aria-invalid") === "true" && $("set-loud-boost").getAttribute("aria-invalid") === "true" &&
+    stored("normalizationSettings").manualTarget === -30 && stored("normalizationSettings").boostLimit === 15 && close(param.level, gainFor(loud, -30 - loud.loudness)));
+  input($("set-loud-manual-target"), "-51");
+  input($("set-loud-boost"), "2.5");
+  check("loudness: a target below -50 LUFS and a boost that isn't a whole number are flagged",
+    $("set-loud-manual-target").getAttribute("aria-invalid") === "true" && $("set-loud-boost").getAttribute("aria-invalid") === "true");
+  input($("set-loud-manual-target"), "-30");
+  input($("set-loud-boost"), "15");
+  change(toggle, false);
+  check(`loudness: off, the gain is the volume on the video's own level (${param.level.toFixed(4)}), and Stats shows the Adjustment as ${adjustment()}`,
+    close(param.level, gainFor(loud, 0)) && adjustment() === "Off" && stored("normalization") === false);
+  change(toggle, true);
+  // The loudest any video can play at is Manual's highest target, which is no louder than the volume.
+  enter($("set-loud-manual-target"), "-10");
+  enter($("set-loud-boost"), "24");
+  const loudest = Math.max(...items.filter((item) => item.loudness != null && !item.missing).map(levelOf));
+  check(`loudness: at Manual's highest target and the most boost, no video plays past the volume (${loudest.toFixed(4)} at ${volume})`, loudest <= volume + 1e-9);
+  play(loud);
   change($("set-enhanced-audio"), false);
-  check(`loudness: with Enhanced audio off, the option and its settings are disabled, with "${$("set-loudness-hint").textContent}"`,
+  check(`loudness: with Enhanced audio off, the options and their settings are disabled, with "${$("set-loudness-hint").textContent}"`,
     toggle.disabled && toggle.checked && $("set-loudness-fields").disabled && $("set-loudness-hint").textContent === "Needs Enhanced audio." &&
-    !!playedBy.at(-1) && !playedBy.at(-1).paused && adjustment() === "Off");
+    night.disabled && $("set-night-mode-hint").textContent === "Needs Enhanced audio." && !!playedBy.at(-1) && !playedBy.at(-1).paused && adjustment() === "Off");
   change($("set-enhanced-audio"), true);
-  check("loudness: turning Enhanced audio back on enables them", !toggle.disabled && !$("set-loudness-fields").disabled && $("set-loudness-hint").textContent === "Evens out loudness between videos.");
+  check("loudness: turning Enhanced audio back on enables them",
+    !toggle.disabled && !$("set-loudness-fields").disabled && $("set-loudness-hint").textContent === "Evens out loudness between videos." &&
+    !night.disabled && $("set-night-mode-hint").textContent === "Evens out loudness within a video, for quiet listening.");
   $("set-loud-reset").click();
   check("loudness: Reset to defaults restores each setting, with no check, and forgets the stored ones",
-    $("set-loud-reduction").value === "15" && $("set-loud-boost").value === "5" && $("set-loud-target").value === "-23" && baseline("auto").checked &&
-    $("set-loud-manual").hidden && !$("set-loud-boost").hasAttribute("aria-invalid") && stored("loudnessSettings") === null && toggle.checked &&
+    target("standard").checked && $("set-loud-manual").hidden && $("set-loud-manual-target").value === "-18" && $("set-loud-boost").value === "15" &&
+    $("set-loud-limiting").checked && !$("set-loud-manual-target").hasAttribute("aria-invalid") && stored("normalizationSettings") === null && toggle.checked &&
     !more.querySelector(".vfield.is-saved"));
   check(`loudness: no script errors ${errors.join("; ")}`, errors.length === 0);
 }

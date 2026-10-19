@@ -1713,7 +1713,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
             </div>
             <div class="setting">
               <div class="choice-row"><label><input type="checkbox" id="set-enhanced-audio"> Enhanced audio</label></div>
-              <p class="setting-hint">Processes audio in the app, for in-app volume on iPhone and iPad and loudness normalization.</p>
+              <p class="setting-hint">Processes audio in the app, for loudness normalization and Night mode.</p>
             </div>
             <div class="setting" id="set-loudness-setting">
               <div class="choice-row"><label><input type="checkbox" id="set-loudness"> Loudness normalization</label></div>
@@ -1721,23 +1721,31 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
               <details class="setting-more" id="set-loudness-more">
                 <summary><span class="material-symbol-icon setting-more-chevron">chevron_right</span>Loudness normalization settings</summary>
                 <fieldset class="setting-fields" id="set-loudness-fields">
-                  <label class="setting-label" for="set-loud-reduction">Maximum reduction</label>
-                  <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="numeric" id="set-loud-reduction" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>dB</span></div>
-                  <label class="setting-label" for="set-loud-boost">Maximum boost</label>
-                  <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="numeric" id="set-loud-boost" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>dB</span></div>
-                  <span class="setting-label" id="set-loud-baseline-label">Baseline</span>
-                  <div class="choice-stack" role="radiogroup" aria-labelledby="set-loud-baseline-label">
-                    <label><input type="radio" name="set-loud-baseline" value="auto"><span>Automatic<small id="set-loud-auto-value"></small></span></label>
-                    <label><input type="radio" name="set-loud-baseline" value="manual"><span>Manual target</span></label>
+                  <span class="setting-label" id="set-loud-target-label">Target loudness</span>
+                  <div class="choice-stack" role="radiogroup" aria-labelledby="set-loud-target-label">
+                    <label><input type="radio" name="set-loud-target" value="auto"><span>Automatic<small id="set-loud-auto-value"></small></span></label>
+                    <label><input type="radio" name="set-loud-target" value="quieter"><span>Quieter<small>-23 LUFS</small></span></label>
+                    <label><input type="radio" name="set-loud-target" value="standard"><span>Standard<small>-18 LUFS</small></span></label>
+                    <label><input type="radio" name="set-loud-target" value="louder"><span>Louder<small>-14 LUFS</small></span></label>
+                    <label><input type="radio" name="set-loud-target" value="manual"><span>Manual</span></label>
+                    <div class="setting-sub" id="set-loud-manual">
+                      <label class="setting-label" for="set-loud-manual-target">Target</label>
+                      <!-- The full keyboard, since the numeric keypads on iOS have no minus key. -->
+                      <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" id="set-loud-manual-target" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>LUFS</span></div>
+                    </div>
                   </div>
-                  <div class="setting-sub" id="set-loud-manual">
-                    <label class="setting-label" for="set-loud-target">Target</label>
-                    <!-- The full keyboard, since the numeric keypads on iOS have no minus key. -->
-                    <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" id="set-loud-target" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>LUFS</span></div>
+                  <label class="setting-label" for="set-loud-boost">Boost quiet videos by up to</label>
+                  <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="numeric" id="set-loud-boost" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>dB</span></div>
+                  <div class="choice-stack">
+                    <label><input type="checkbox" id="set-loud-limiting"><span>Allow limiting<small>Lets quiet videos with loud moments get louder by limiting those moments.</small></span></label>
                   </div>
                   <button class="btn" type="button" id="set-loud-reset">Reset to defaults</button>
                 </fieldset>
               </details>
+            </div>
+            <div class="setting">
+              <div class="choice-row"><label><input type="checkbox" id="set-night-mode"> Night mode</label></div>
+              <p class="setting-hint" id="set-night-mode-hint">Evens out loudness within a video, for quiet listening.</p>
             </div>
           </div>
           <div class="settings-section">
@@ -3114,7 +3122,8 @@ const state = {
   tileNames: store.get("tileNames", false),
   hideControls: store.get("hideControls", "timeout"),
   enhancedAudio: store.get("enhancedAudio", true),
-  loudness: store.get("loudness", false),
+  normalization: store.get("normalization", true),
+  nightMode: store.get("nightMode", false),
   audioFails: store.get("audioFails", false),
   hideAfter: store.get("hideAfter", 3),
   keepWhilePaused: store.get("keepWhilePaused", true),
@@ -3193,23 +3202,37 @@ ITEMS.forEach((item) => {
   item.path = `${isPhoto(item) ? "/media/phone" : "/media/videos"}/${item.year}/${item.name}`;
 });
 const BASELINE = -20.4;
-// Loudness normalization's settings, with the desktop's defaults: off, at most 15 dB quieter and 5 dB louder, against
-// the library's baseline or a manual target.
-const LOUDNESS_DEFAULTS = { reduction: 15, boost: 5, baseline: "auto", target: -23 };
-const loudnessTuning = { ...LOUDNESS_DEFAULTS, ...store.get("loudnessSettings", {}) };
-// The desktop's formula: the baseline minus the item's loudness, limited to the boost and the reduction. It is the
-// adjustment in dB that normalization applies, or null while normalization or Enhanced audio is off. An item without
-// loudness plays at the volume, an adjustment of 0 dB.
-function loudnessAdjustment(item) {
-  if (!state.loudness || !state.enhancedAudio) return null;
-  if (!item || item.loudness == null) return 0;
-  const baseline = loudnessTuning.baseline === "manual" ? loudnessTuning.target : BASELINE;
-  return Math.max(-loudnessTuning.reduction, Math.min(loudnessTuning.boost, baseline - item.loudness));
+// Loudness normalization's settings: a target, the most a quiet video is boosted by, and whether a boost may go past a
+// video's headroom for the limiter to catch.
+const NORMALIZATION_DEFAULTS = { target: "standard", manualTarget: -18, boostLimit: 15, allowLimiting: true };
+const NORMALIZATION_TARGETS = { quieter: -23, standard: -18, louder: -14 };
+// The ceiling a boost keeps a video's true peak under, and how far past it Allow limiting lets the limiter take it.
+const PEAK_CEILING = -1;
+const LIMITER_ALLOWANCE = 6;
+const normalizationTuning = { ...NORMALIZATION_DEFAULTS, ...store.get("normalizationSettings", {}) };
+function normalizationTarget() {
+  const { target, manualTarget } = normalizationTuning;
+  return target === "auto" ? BASELINE : target === "manual" ? manualTarget : NORMALIZATION_TARGETS[target];
 }
-// As a linear gain on the volume; the result is limited to twice full volume where it is applied.
+// The adjustment in dB that normalization applies to an item, and whether its headroom held a boost back, or null while
+// normalization or Enhanced audio is off. A cut is applied in full, since turning a video down can't clip it. A boost is
+// held to the smallest of what the video needs, the boost limit, and its headroom: the ceiling minus its peak, plus the
+// limiter allowance with Allow limiting on. A boost never goes below 0 dB, and a video without a peak is only cut. An
+// item without loudness plays at the volume, an adjustment of 0 dB.
+function loudnessAdjustment(item) {
+  if (!state.normalization || !state.enhancedAudio) return null;
+  if (!item || item.loudness == null) return { db: 0, limitedByPeak: false };
+  const needed = normalizationTarget() - item.loudness;
+  if (needed <= 0) return { db: needed, limitedByPeak: false };
+  if (item.peak == null) return { db: 0, limitedByPeak: false };
+  const headroom = PEAK_CEILING - item.peak + (normalizationTuning.allowLimiting ? LIMITER_ALLOWANCE : 0);
+  const limit = Math.min(needed, normalizationTuning.boostLimit);
+  return { db: Math.max(0, Math.min(limit, headroom)), limitedByPeak: headroom < limit };
+}
+// As a linear gain on the volume.
 function loudnessGain(item) {
-  const db = loudnessAdjustment(item);
-  return db == null ? 1 : Math.pow(10, db / 20);
+  const adjustment = loudnessAdjustment(item);
+  return adjustment == null ? 1 : Math.pow(10, adjustment.db / 20);
 }
 const NO_LIBRARY_REASON = "The catalog was saved by a newer version of ReelRoulette and was left unchanged.";
 const NO_LIBRARY_MESSAGE = `Running without a library. ${NO_LIBRARY_REASON}`;
@@ -4100,7 +4123,7 @@ function standInSoundUrl() {
     const t = i / rate;
     const swell = 0.5 - 0.5 * Math.cos((2 * Math.PI * t) / seconds);
     const chord = Math.sin(2 * Math.PI * 220 * t) + 0.8 * Math.sin(2 * Math.PI * 277.18 * t) + 0.6 * Math.sin(2 * Math.PI * 329.63 * t);
-    wav.setInt16(44 + i * 2, (chord / 2.4) * swell * 0.35 * 32767, true);
+    wav.setInt16(44 + i * 2, (chord / 2.4) * swell * 0.7 * 32767, true);
   }
   const blob = new Blob([wav], { type: "audio/wav" });
   return URL.createObjectURL ? URL.createObjectURL(blob) : "";
@@ -4146,7 +4169,7 @@ function gainStageFailed() {
   const text = document.createElement("p");
   text.className = "dialog-message";
   text.id = `audio-notice-${Date.now()}`;
-  text.textContent = "Audio processing couldn't start on this device. Turn off Enhanced audio to play sound directly, without in-app volume on iPhone and iPad.";
+  text.textContent = "Audio processing couldn't start on this device. Turn off Enhanced audio to play sound directly.";
   const actions = document.createElement("div");
   actions.className = "dialog-actions";
   const spacer = document.createElement("span");
@@ -4210,8 +4233,15 @@ const GAIN_GLIDE_SECONDS = 0.015;
 const FADE_OUT_MS = 60;
 let fadeOutTimer = 0;
 const glideGain = (level) => audio.gain.gain.setTargetAtTime(level, audio.context.currentTime, GAIN_GLIDE_SECONDS);
+// Each video's chord plays at the video's own stand-in loudness, as a real video would, so videos sound different with
+// normalization off and even out toward the target with it on, apart from boosts the limit or the peak holds back. A
+// video without loudness data plays at the library's baseline. The chord's own level stands for -10 LUFS, the loudest
+// any video plays at: Manual's highest target, and louder than every stand-in video. So nothing plays past the chord's
+// own level, which stays under full scale.
+const STAND_IN_FULL_LUFS = -10;
+const standInLevel = (item) => Math.pow(10, ((item?.loudness ?? BASELINE) - STAND_IN_FULL_LUFS) / 20);
 function syncStandInSound() {
-  const level = playback.muted ? 0 : Math.min(2, (state.volume / 100) * loudnessGain(playback.item));
+  const level = playback.muted ? 0 : Math.min(1, (state.volume / 100) * standInLevel(playback.item) * loudnessGain(playback.item));
   const audible = state.sound && !!playback.item && !isPhoto(playback.item) && playback.playing && !playback.failed;
   try {
     if (!state.enhancedAudio) {
@@ -6754,11 +6784,12 @@ function fileStats(item) {
   if (!isPhoto(item)) {
     statRow(table, "Duration", fmt(item.duration));
     statRow(table, "Has audio", item.hasAudio == null ? "Unknown" : yesNo(item.hasAudio));
-    // What normalization applies, as the desktop showed it: the baseline difference limited by its settings, signed, or
-    // Off while it or Enhanced audio is off, and N/A for a file without loudness data, which plays at the volume.
+    // What normalization applies, signed, with "(limited by peak)" when the headroom held a boost back, or Off while it
+    // or Enhanced audio is off, and N/A for a file without loudness data, which plays at the volume.
     const adjustment = loudnessAdjustment(item);
+    const adjustmentText = (a) => `${a.db >= 0 ? "+" : ""}${a.db.toFixed(1)} dB${a.limitedByPeak ? " (limited by peak)" : ""}`;
     statRow(table, "Loudness", item.hasAudio === false ? "N/A" : item.loudness == null ? "Unknown" : `${item.loudness.toFixed(1)} LUFS`);
-    statRow(table, "Adjustment", item.loudness == null ? "N/A" : adjustment == null ? "Off" : `${adjustment >= 0 ? "+" : ""}${adjustment.toFixed(1)} dB`);
+    statRow(table, "Adjustment", item.loudness == null ? "N/A" : adjustment == null ? "Off" : adjustmentText(adjustment));
     statRow(table, "True peak", truePeakText(item));
   }
   const tags = document.createElement("div");
@@ -6842,55 +6873,68 @@ function rangeCheck(min, max, unit, whole) {
     return ok && n >= min && n <= max ? null : { message: `Use a ${whole ? "whole " : ""}number from ${min} to ${max}${unit}.` };
   };
 }
-// Loudness normalization: its option and its settings are disabled while Enhanced audio is off, since the sound then
-// plays directly. The target shows only while Manual is chosen, as Hide after shows only under Timeout.
+// Loudness normalization and Night mode: each option, and normalization's settings, are disabled while Enhanced audio
+// is off, since the sound then plays directly. Manual's target shows only while Manual is chosen, as Hide after shows
+// only under Timeout.
 function renderLoudness() {
   const off = !state.enhancedAudio;
-  $("set-loudness").checked = state.loudness;
+  $("set-loudness").checked = state.normalization;
   $("set-loudness").disabled = off;
   $("set-loudness-fields").disabled = off;
   $("set-loudness-hint").textContent = off ? "Needs Enhanced audio." : "Evens out loudness between videos.";
-  $("set-loud-manual").hidden = loudnessTuning.baseline !== "manual";
-  document.querySelectorAll('input[name="set-loud-baseline"]').forEach((radio) => (radio.checked = radio.value === loudnessTuning.baseline));
+  $("set-loud-manual").hidden = normalizationTuning.target !== "manual";
+  document.querySelectorAll('input[name="set-loud-target"]').forEach((radio) => (radio.checked = radio.value === normalizationTuning.target));
+  $("set-loud-limiting").checked = normalizationTuning.allowLimiting;
+  $("set-night-mode").checked = state.nightMode;
+  $("set-night-mode").disabled = off;
+  $("set-night-mode-hint").textContent = off ? "Needs Enhanced audio." : "Evens out loudness within a video, for quiet listening.";
   // The Stats tab's Adjustment shows what is applied, so it follows these settings.
   renderStats();
 }
 function initLoudnessSettings() {
   $("set-loud-auto-value").textContent = `The library's baseline, ${BASELINE} LUFS.`;
   $("set-loudness").addEventListener("change", () => {
-    state.loudness = $("set-loudness").checked;
-    store.set("loudness", state.loudness);
+    state.normalization = $("set-loudness").checked;
+    store.set("normalization", state.normalization);
     renderLoudness();
     syncStandInSound();
   });
   const save = () => {
-    store.set("loudnessSettings", loudnessTuning);
+    store.set("normalizationSettings", normalizationTuning);
     renderLoudness();
     syncStandInSound();
   };
   // Settings' fields: a value that is not valid is flagged and not kept, and the one in use stays.
   const fields = [
-    ["set-loud-reduction", "reduction", rangeCheck(1, 30, " dB", true)],
-    ["set-loud-boost", "boost", rangeCheck(0, 10, " dB", true)],
-    ["set-loud-target", "target", rangeCheck(-50, -10, " LUFS", false)]
+    ["set-loud-manual-target", "manualTarget", rangeCheck(-50, -10, " LUFS", false)],
+    ["set-loud-boost", "boostLimit", rangeCheck(0, 24, " dB", true)]
   ].map(([id, key, check]) =>
-    settingField(new ValidatedField($(id), check), () => String(loudnessTuning[key]), (text) => {
-      loudnessTuning[key] = Number(text);
+    settingField(new ValidatedField($(id), check), () => String(normalizationTuning[key]), (text) => {
+      normalizationTuning[key] = Number(text);
       save();
     })
   );
-  document.querySelectorAll('input[name="set-loud-baseline"]').forEach((radio) => {
+  document.querySelectorAll('input[name="set-loud-target"]').forEach((radio) => {
     radio.addEventListener("change", () => {
-      loudnessTuning.baseline = radio.value;
+      normalizationTuning.target = radio.value;
       save();
     });
   });
+  $("set-loud-limiting").addEventListener("change", () => {
+    normalizationTuning.allowLimiting = $("set-loud-limiting").checked;
+    save();
+  });
   $("set-loud-reset").addEventListener("click", () => {
-    Object.assign(loudnessTuning, LOUDNESS_DEFAULTS);
+    Object.assign(normalizationTuning, NORMALIZATION_DEFAULTS);
     fields.forEach((field) => field.show());
-    store.remove("loudnessSettings");
+    store.remove("normalizationSettings");
     renderLoudness();
     syncStandInSound();
+  });
+  // Night mode's compressor isn't in the mockup: its values are settled by listening to real videos.
+  $("set-night-mode").addEventListener("change", () => {
+    state.nightMode = $("set-night-mode").checked;
+    store.set("nightMode", state.nightMode);
   });
   renderLoudness();
 }
@@ -7240,6 +7284,8 @@ $("lib-collapse").addEventListener("click", () => {
 // For build/check.mjs only: random picks take queued item ids first, and the history can be read.
 window.mockup = {
   items: ITEMS,
+  // The level an item's stand-in chord plays at before the volume and normalization, for the volume checks.
+  standInLevel,
   tags: TAGS,
   queue: mockHooks.queue,
   choose: (id) => chooseItem(ITEMS[id]),

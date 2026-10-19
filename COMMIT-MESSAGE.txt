@@ -19,8 +19,11 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan grid zoom in WebUI Grid Row Reuse and Zoom, and add a Player Zoom and Pan backlog item
+M12i8: Complete the loudness normalization mockup, with Night mode and the new gain rule
 
-- M12l1 is renamed WebUI Grid Row Reuse and Zoom, with its references, and splits into Mockup, Row reuse, and Grid zoom slices. Row reuse keeps the entry's existing scope, traps, and acceptance.
-- Grid zoom: Ctrl+scroll over the library grid, a trackpad pinch, and a touch pinch step the target row height between 100 and 300 px, 160 by default, kept per device, with the minimum and maximum scaling with it and the tile under the pointer held in place. Ctrl+scroll never zooms the page anywhere; Ctrl with + and - still does.
-- Add backlog item P55 Player Zoom and Pan, with its open questions as traps: telling a pinch from the two-finger volume drag, Ctrl+scroll's volume over the player, the swipe and double-tap seek, and when the zoom resets.
+- MILESTONES.md: WebUI Loudness Normalization is in progress, and its Mockup slice is complete, approved by the user on their devices, with Night mode's hint "Evens out loudness within a video, for quiet listening."
+- MILESTONES.md: the gain rule drops the silence floor, and a boost never goes below 0 dB, so a quiet video whose peak leaves no headroom plays unadjusted.
+- MILESTONES.md: the Automatic baseline slice counts a digitally silent track, at -70.0 LUFS with no peak, as no audio in the audio filter, the Stats tab, and the baseline, updating existing items without a rescan, and the Stats tab's Silent goes.
+- Mockup: the Audio settings replace the desktop's with Target loudness (Automatic, Quieter, Standard, Louder, or Manual), Boost quiet videos by up to, and Allow limiting, with normalization on by default, and add Night mode.
+- Mockup: each video's stand-in chord plays at its own loudness and follows the new gain rule, so normalization evens videos out, and the Stats tab's Adjustment shows "(limited by peak)".
+- Mockup: Enhanced audio's description and the gain stage's failure notice take their final texts. Each new check fails when what it guards is broken.
