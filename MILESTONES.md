@@ -136,56 +136,7 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 ## Active Milestones
 
-Last milestone completed: M12i8
-
-### M12i9 - WebUI Player Controls
-
-- **Status**: ⏳ Planned
-- **Goal**: The player's controls can hide after a time with no activity, and a Random button picks a new item from anywhere in the history.
-- **Depends on**: WebUI Settings Panel, whose Player controls section holds its settings, and WebUI Volume and Enhanced Audio, whose volume slider keeps the controls shown while it is dragged and whose move of Mute to the seek row frees the place Random takes.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Scope
-
-- The fullscreen button shows the exit icon (`fullscreen_exit`) while the stage is in fullscreen or pseudo-fullscreen. Today it always shows `fullscreen`.
-- Hide player controls, a Settings tab entry in its Player controls section, kept per device:
-  - Timeout, the default: the controls hide after a set time with no activity. Moving the mouse or tapping shows them and restarts the countdown. They stay visible while a mouse or pen pointer is over them, while the scrub bar or volume is being dragged, and while the bell's list, which WebUI Notifications adds, is open, and their countdown starts again when it closes. A touch doesn't count as a pointer over them.
-  - While Timeout is chosen, two settings show under it: Hide after, 1 to 30 seconds and 3 by default, a setting's field of the field validation pattern, which WebUI Settings Panel adds (`createSettingField` and `SettingTextField`), saved on Enter or when the field is left; and Keep visible while paused, on by default.
-  - On click/tap: clicking or tapping the player shows or hides them, as today.
-  - Never: the controls stay visible.
-  - In every mode, hidden controls can't be pressed, so the first tap or click on them only shows them.
-  - With Timeout, a key press counts as activity and shows them, and keyboard focus on a control, focus that `:focus-visible` matches, keeps them shown. Focus that a tap or click leaves on a control doesn't, so after a tap on Play they still hide.
-  - With Timeout, the scroll wheel and a two-finger drag over the player count as activity too: they show the controls and restart the countdown, so the volume slider stays visible while they change the volume.
-- A Random button, with the `casino` icon, sits in the transport row in Mute's old place, right of Next and left of Loop.
-- Random picks a new item as Next does at the end of the history, from anywhere in it.
-- The pick is added at the end of the history, as Next adds one at the end of the queue.
-- The mockup shows the Random button.
-- Hide player controls and its two settings survive a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
-
-#### Traps
-
-- The controls start visible, and a click or tap on the player toggles them (`controlsVisible` in `src/ui/Player.tsx`, `toggleControls` in `src/playback/mediaGestures.ts`).
-- There is no timeout, and hidden controls can still be pressed, since only their container ignores the pointer (`.overlay-controls` in `src/styles.css`).
-- The scroll wheel and a two-finger drag show the controls through `showControls` (`src/playback/mediaGestures.ts`), which `src/ui/Player.tsx` wires to `setControlsVisible(true)`, and the mockup counts them as activity under Timeout (`showControlsForVolume` in `layout.src.html`).
-- A tap on Play left focus on it, and the mockup's first version, which kept the controls shown for any focus on a control, then kept them up until the next tap elsewhere (measured).
-- happy-dom, which the WebUI's screen tests use, matches `:focus-visible` for any focus, including focus a tap leaves, so a test can't tell keyboard focus from a tap's by it; the mockup tracks the last input itself (measured).
-- `pushHistory` in `src/state/appStore.ts` drops every history entry after the current one before it adds a pick, so Random from the middle of the history can't use it as it is.
-- `next` in `src/playback/player.ts` picks a new item only at the end of the history, and a tap on the empty player picks one too.
-- The desktop's Random button always picked a new item, even in the middle of its history (measured).
-- `casino` isn't in the mockup's icon subset, which `build_font.py` cuts from its `ICONS` list into `icons.json` (measured).
-
-#### Acceptance
-
-- The fullscreen button shows the exit icon while the stage is in fullscreen or pseudo-fullscreen, in a test of the fullscreen button's icon.
-- With Hide player controls on Timeout, the controls hide after the Hide after time with no activity, moving the mouse, tapping, the scroll wheel, or a two-finger drag shows them and restarts the countdown, and they stay while a mouse or pen pointer is over them, while keyboard focus is on a control, while the scrub bar or volume is dragged, while the bell's list is open, and, with Keep visible while paused, while paused. A touch over them and focus a tap leaves on Play don't keep them shown. On click/tap toggles them on a click or tap, and Never keeps them visible. Hide after accepts 1 to 30 seconds. Hidden controls can't be pressed. Shown by controls tests for each Hide player controls mode, the countdown, and each thing that keeps the controls shown.
-- Random from the middle of the history adds the pick at the end of the history, keeping the plays ahead, in Player screen tests of Random.
-- After a page refresh, Hide player controls and its two settings are each as they were, in tests for a page refresh keeping each setting this milestone adds.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and a spot check on the user's own browsers and phone, without the VM.
-
-#### Not included
-
-- Random behavior, a choice of where a Random pick goes in the history, which is Random Pick Options.
+Last milestone completed: M12i9
 
 ### M12i10 - WebUI Keyboard Shortcuts
 
@@ -212,7 +163,7 @@ Last milestone completed: M12i8
   - The volume step's hint becomes the mockup's, "Also for the scroll wheel and a two-finger drag over the player.", once [ and ] use it.
 - J and L seek by a seek step preference. The Settings tab offers the desktop's seek steps: 1, 5, or 10 seconds.
 - On a touch screen, double-tapping the left or right half of the player seeks back or forward by the seek step, on a video, and leaves the controls as they were.
-  - A single tap shows or hides the controls once no second tap has come. With nothing playing or on a photo, where a double-tap does nothing, a tap acts at once.
+  - A single tap does what Hide player controls says once no second tap has come: under Timeout it shows the controls, and under On click/tap it shows or hides them. With nothing playing or on a photo, where a double-tap does nothing, a tap acts at once.
 - A seek indicator, as YouTube shows it, for J, L, and double-taps, not for dragging the scrub bar:
   - A forward seek shows it on the right side of the player, reading "+ 10" with a chevron (›) to its right, and a back seek on the left side, reading "− 10" with a chevron (‹) to its left, so the chevron always sits on the side toward the screen's edge.
   - Its text is white, on its own layer apart from the controls, so it shows while they're hidden.
@@ -231,11 +182,11 @@ Last milestone completed: M12i8
 #### Traps
 
 - A seek by the scrub bar starts Timer mode's repeating stretch where it lands through the player's `seek` (`src/playback/player.ts`); a key that moves the video's position some other way leaves the stretch where it was.
-- Besides Escape, which closes overlays, the WebUI handles keys only on the element that has focus: Enter or Space on a library tile and on the header's file name, which opens the Stats tab, the arrow keys, Home, and End on the panel's resize handle, the up and down arrows on drag handles, and Enter in text fields (measured).
+- Besides Escape, which closes overlays, and the player's controls, which count a key press outside a field that takes keys as activity from a `keydown` listener on the page (`src/ui/Player.tsx`, `isTextField` in `src/playback/playerControls.ts`), the WebUI handles keys only on the element that has focus: Enter or Space on a library tile and on the header's file name, which opens the Stats tab, the arrow keys, Home, and End on the panel's resize handle, the up and down arrows on drag handles, and Enter in text fields (measured).
 - The desktop bound K play or pause, J and L seek, Left and Right previous and next, R random, F favorite, B blacklist, A autoplay, M mute, comma and period volume, T tags, P player view, S settings, O import folder, Q quit, F11 fullscreen, and 1 to 5 to show or hide parts of the window. It also swallowed 6 to 8 and Space, which did nothing (measured).
 - The browser keeps Ctrl+Q, Ctrl+O, and F11, for its own fullscreen (inferred).
 - Auto Tag is already an in-app dialog (`src/ui/AutoTag.tsx`): Esc does what its X does and waits while a scan runs, and the stage's Escape handler leaves Esc to any open dialog (`src/ui/Stage.tsx`), so the Esc order needs nothing for it (measured).
-- A tap on the player shows or hides the controls at once (`toggleControls` in `src/playback/mediaGestures.ts`, `onAreaClick` in `src/ui/Player.tsx`), so a single tap must wait to rule out a double-tap.
+- A tap on the player acts at once, through the click that follows it, doing what Hide player controls says (`onAreaClick` in `src/ui/Player.tsx`, `tap` in `src/playback/playerControls.ts`), so a single tap must wait to rule out a double-tap.
 - The browser follows a touch with a click, which the media area ignores after a tap the gestures handled (`takeFollowingClick`).
 - The gestures skip touches that start inside `#overlay-controls` (`src/ui/Player.tsx`), so a tap on a control never counts toward a double-tap.
 - The player claims its touches (`touch-action: none` on `.media-container` in `src/styles.css`), so Safari doesn't zoom the page on a double-tap there (inferred).
@@ -250,7 +201,7 @@ Last milestone completed: M12i8
 - Shortcuts are ignored while a text field has focus, in keyboard tests per binding.
 - [ and ] change the volume by the volume step and show the volume indicator, on a photo too, where they set the next video's level, as the slider, the scroll wheel, and a two-finger drag do, and follow the muted-volume rules, in keyboard tests per binding.
 - J and L seek by the seek step, and the Settings tab offers the desktop's seek step choices, in keyboard tests per binding.
-- A double-tap on the left or right half of a playing video seeks back or forward by the seek step and leaves the controls as they were, and a single tap shows or hides them once the double-tap window passes, or at once with nothing playing or on a photo, in gesture tests with fake timers.
+- A double-tap on the left or right half of a playing video seeks back or forward by the seek step and leaves the controls as they were, and a single tap does what Hide player controls says once the double-tap window passes, or at once with nothing playing or on a photo, in gesture tests with fake timers.
 - The seek indicator shows on the right with "+ {n}" and › for a forward seek and on the left with "− {n}" and ‹ for a back seek, for J, L, and double-taps and not for the scrub bar, adds up consecutive seeks, starts over after about a second or with a seek the other way, shows while the controls are hidden, and shows without the slide with reduced motion, in seek indicator tests with fake timers.
 - While a video is paused, comma and period step one frame back and forward; while it plays, they do nothing. Shown by frame stepping tests with and without the browser's frame timings.
 - While Timer mode repeats a stretch, J, L, a double-tap, and a frame step start it where they land, in keyboard and gesture tests.
@@ -264,7 +215,7 @@ Last milestone completed: M12i8
 #### Release checks
 
 - Manual: In Chrome, Firefox, and Safari on a desktop, every listed shortcut works in normal view, with a panel open, and in fullscreen, and does nothing while typing in a text field.
-- Manual: On the iPad and an Android phone, double-tapping either side of a playing video seeks by the seek step with the seek indicator, a single tap still shows or hides the controls, and the page doesn't zoom.
+- Manual: On the iPad and an Android phone, double-tapping either side of a playing video seeks by the seek step with the seek indicator, a single tap still shows the controls, and the page doesn't zoom.
 
 #### Not included
 

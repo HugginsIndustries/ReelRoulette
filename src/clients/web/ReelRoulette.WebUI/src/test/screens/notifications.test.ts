@@ -3,6 +3,7 @@ import { fireEvent, waitFor, within } from "@testing-library/preact";
 import { h, render as renderInto } from "preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POPUP_SETTINGS_KEY, timeAgo, type NotifyRequest, type PopupSettings } from "../../notifications/notifications";
+import { HIDE_CONTROLS_KEY } from "../../playback/playerControls";
 import { createAppServices, type AppServices } from "../../state/appServices";
 import { RECONNECTING_DETAIL } from "../../state/lastingStates";
 import { App } from "../../ui/App";
@@ -572,7 +573,9 @@ describe("the bell", () => {
     expect(server.requests("POST", "/api/random")).toEqual([]);
   });
 
-  it("keeps the player's controls shown while the list is open", async () => {
+  it("keeps the player's controls shown while the list is open, with Hide player controls on On click/tap", async () => {
+    // On click/tap, so a click on the player hides them.
+    localStorage.setItem(`rr_device.${HIDE_CONTROLS_KEY}`, JSON.stringify("click"));
     const server = new FakeServer();
     server.on("POST", "/api/random", () => json(VIDEO_ITEM));
     server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));

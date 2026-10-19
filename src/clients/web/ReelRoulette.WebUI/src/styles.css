@@ -719,6 +719,8 @@ html.theme-light .ambient canvas {
   opacity: 1;
   pointer-events: none;
 }
+/* Hidden controls can't be pressed, so the first tap or click on them only shows them. */
+.media-container:not(.controls-visible) .overlay-controls * { pointer-events: none; }
 .overlay-controls-row {
   display: flex;
   align-items: center;

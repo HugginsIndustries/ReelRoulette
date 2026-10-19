@@ -853,6 +853,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
             <button id="prev-btn" class="overlay-btn" aria-label="Previous" title="Previous"><span class="material-symbol-icon">skip_previous</span></button>
             <button id="play-btn" class="overlay-btn" aria-label="Play/Pause" title="Play/Pause"><span class="material-symbol-icon">pause</span></button>
             <button id="next-btn" class="overlay-btn" aria-label="Next" title="Next"><span class="material-symbol-icon">skip_next</span></button>
+            <button id="random-btn" class="overlay-btn" aria-label="Random" title="Random"><span class="material-symbol-icon">casino</span></button>
             <button id="loop-btn" class="overlay-btn" aria-label="Loop" title="Loop"><span class="material-symbol-icon">repeat_one</span></button>
             <button id="autoplay-btn" class="overlay-btn active" aria-label="Autoplay" title="Autoplay"><span class="material-symbol-icon">autoplay</span></button>
             <button id="fullscreen-btn" class="overlay-btn" aria-label="Fullscreen" title="Fullscreen"><span class="material-symbol-icon">fullscreen</span></button>
@@ -1986,8 +1987,14 @@ function start(item) {
   setLoading("media", true);
   setTimeout(() => load === mediaLoads && setLoading("media", false), mockHooks.instant ? 0 : 300);
 }
+// A file chosen from the library drops the history after the playing item before it's added.
 function pushHistory(item) {
   history.splice(historyIndex + 1);
+  history.push(item);
+  historyIndex = history.length - 1;
+}
+// A random pick goes at the end of the history, keeping every entry, so Random from the middle keeps the plays ahead.
+function appendHistory(item) {
   history.push(item);
   historyIndex = history.length - 1;
 }
@@ -2023,7 +2030,7 @@ function pickRandom(tries = 0) {
       skipNotice(item);
       return pickRandom(tries + 1);
     }
-    pushHistory(item);
+    appendHistory(item);
     start(item);
     setLoading("pick", false);
   };
@@ -2388,11 +2395,14 @@ media.addEventListener("click", () => {
 });
 
 // ---- When the player's controls hide ----
-// Timeout, the default: they hide after a time with no activity, and moving the mouse, tapping, or a key shows them
-// and restarts the countdown. They stay while a mouse or pen pointer is over them, while keyboard focus is on one, while
-// the scrub bar or volume is dragged, and, with Keep visible while paused, while nothing plays. A touch doesn't count as
-// over them, and focus that a tap or click leaves on a control doesn't hold them: after a tap on Play they still hide. On click/tap: a click or tap on the player
-// shows or hides them, as today. Never: they stay.
+// Timeout, the default: they hide after a time with no activity, and moving the mouse, tapping, a press on the
+// controls, or a key shows them and restarts the countdown. A tap acts through its click, and a touch moving over the
+// player isn't activity, so the controls come back only once the click has landed on the player, and a tap where a
+// hidden button sits only shows them. They stay while a mouse or pen pointer is over them, while keyboard focus is on
+// one, while the scrub bar or volume is dragged, and, with Keep visible while paused, while playback waits for the
+// user, as Play shows: not on a photo whose timer the bar doesn't show, as once it ends and autoplay moves on. A touch
+// doesn't count as over them, and focus that a tap or click leaves on a control doesn't hold them: after a tap on Play
+// they still hide. On click/tap: a click or tap on the player shows or hides them, as today. Never: they stay.
 const overlayControls = $("overlay-controls");
 const CONTROL_PARTS = ".overlay-btn, .overlay-seek-row";
 let hideTimer = 0;
@@ -2404,9 +2414,15 @@ const setControlsShown = (shown) => media.classList.toggle("controls-visible", s
 let keyboardFocus = false;
 document.addEventListener("keydown", () => (keyboardFocus = true), true);
 document.addEventListener("pointerdown", () => (keyboardFocus = false), true);
+// Playback waits for the user while nothing plays and Play is enabled, as in the app: a photo whose timer the bar
+// doesn't show, as once its timer ends and autoplay moves on, doesn't.
+function waitsForUser() {
+  const photo = !!playback.item && isPhoto(playback.item);
+  return !playback.playing && !(photo && !photoBarFills());
+}
 function controlsHeld() {
   const focusHolds = keyboardFocus && overlayControls.contains(document.activeElement);
-  return pointerOnControls || draggingControl || focusHolds || (state.keepWhilePaused && !playback.playing) || notes.listShown();
+  return pointerOnControls || draggingControl || focusHolds || (state.keepWhilePaused && waitsForUser()) || notes.listShown();
 }
 function restartHideCountdown() {
   clearTimeout(hideTimer);
@@ -2422,7 +2438,7 @@ function controlsActivity() {
 }
 function syncControlsToPlayback() {
   if (state.hideControls !== "timeout") return;
-  if (!playback.playing && state.keepWhilePaused) setControlsShown(true);
+  if (waitsForUser() && state.keepWhilePaused) setControlsShown(true);
   restartHideCountdown();
 }
 // A new mode starts with the controls shown.
@@ -2431,7 +2447,8 @@ function applyControlsMode() {
   setControlsShown(true);
   restartHideCountdown();
 }
-media.addEventListener("pointermove", controlsActivity);
+media.addEventListener("pointermove", (event) => event.pointerType !== "touch" && controlsActivity());
+overlayControls.addEventListener("pointerdown", controlsActivity);
 overlayControls.addEventListener("pointerover", (event) => {
   if (event.pointerType !== "mouse" && event.pointerType !== "pen") return;
   if (event.target.closest(CONTROL_PARTS)) pointerOnControls = true;
@@ -2727,6 +2744,8 @@ $("play-btn").addEventListener("click", () => {
 });
 $("next-btn").addEventListener("click", () => goNext());
 $("prev-btn").addEventListener("click", () => goPrevious());
+// Random picks a new item as Next does at the end of the history, from anywhere in it, and adds it at the end.
+$("random-btn").addEventListener("click", () => pickRandom());
 // While Timer mode repeats a stretch, a seek, by the bar, J or L, or a frame step, starts the stretch where it lands,
 // and its timer over from there. A seek that lands at the video's end starts it, and the video, Advance after seconds
 // before the end, or at 0 for a shorter video.

@@ -1,12 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMediaGestures } from "../playback/mediaGestures";
 
-function setup(hasCurrent = true, volumeAdjustable = true) {
+function setup(volumeAdjustable = true) {
   const actions = {
     previous: vi.fn(),
     next: vi.fn(),
-    hasCurrent: () => hasCurrent,
-    toggleControls: vi.fn(),
     showControls: vi.fn(),
     volumeAdjustable: () => volumeAdjustable,
     beginVolumeChange: vi.fn(),
@@ -54,7 +52,6 @@ describe("createMediaGestures", () => {
     touch([100, 100], [151, 80]);
     expect(actions.previous).toHaveBeenCalledTimes(1);
     expect(gestures.takeFollowingClick()).toBe(true);
-    expect(actions.toggleControls).not.toHaveBeenCalled();
   });
 
   it("ignores a move of 50 pixels or less, and one that is mostly vertical", () => {
@@ -62,25 +59,13 @@ describe("createMediaGestures", () => {
     touch([300, 100], [250, 100]);
     touch([300, 100], [230, 171]);
     expect(actions.next).not.toHaveBeenCalled();
-    expect(actions.toggleControls).not.toHaveBeenCalled();
     expect(gestures.takeFollowingClick()).toBe(false);
   });
 
-  it("toggles the controls on a tap once something plays, and ignores the click after it", () => {
+  it("leaves a tap to the click that follows it", () => {
     const { actions, gestures, touch } = setup();
     touch([100, 100], [109, 91]);
-    expect(actions.toggleControls).toHaveBeenCalledTimes(1);
-    expect(gestures.takeFollowingClick()).toBe(true);
-    expect(gestures.takeFollowingClick()).toBe(false);
-
-    touch([100, 100], [110, 100]);
-    expect(actions.toggleControls).toHaveBeenCalledTimes(1);
-  });
-
-  it("lets the click after a tap through when nothing plays", () => {
-    const { actions, gestures, touch } = setup(false);
-    touch([100, 100], [101, 101]);
-    expect(actions.toggleControls).not.toHaveBeenCalled();
+    expect([actions.next, actions.previous, actions.showControls].map((action) => action.mock.calls.length)).toEqual([0, 0, 0]);
     expect(gestures.takeFollowingClick()).toBe(false);
   });
 
@@ -129,7 +114,7 @@ describe("createMediaGestures", () => {
     gestures.touchStart(false, [{ clientX: 300, clientY: 300 }, { clientX: 300, clientY: 340 }]);
     gestures.touchEnd({ clientX: 200, clientY: 300 }, 1);
     gestures.touchEnd({ clientX: 200, clientY: 340 }, 0);
-    expect([actions.toggleControls, actions.next, actions.previous].map((action) => action.mock.calls.length)).toEqual([0, 0, 0]);
+    expect([actions.next, actions.previous].map((action) => action.mock.calls.length)).toEqual([0, 0]);
     expect(gestures.takeFollowingClick()).toBe(false);
 
     gestures.touchStart(false, [{ clientX: 300, clientY: 300 }]);
@@ -157,7 +142,7 @@ describe("createMediaGestures", () => {
   });
 
   it("leaves the volume alone where it can't change, still claiming a two-finger drag", () => {
-    const { actions, gestures, twoFingerDrag } = setup(true, false);
+    const { actions, gestures, twoFingerDrag } = setup(false);
     gestures.wheel({ deltaY: -100, deltaMode: 0 });
     expect(twoFingerDrag(60)).toEqual([true]);
     expect(actions.stepVolume).not.toHaveBeenCalled();

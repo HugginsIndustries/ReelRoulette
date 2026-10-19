@@ -1,7 +1,5 @@
 /** A horizontal move longer than this, and longer than the vertical move, is a swipe. */
 const SWIPE_THRESHOLD_PX = 50;
-/** A touch that moves less than this both ways is a tap. */
-const TAP_THRESHOLD_PX = 10;
 /** A two-finger drag changes the volume a step for each this far up or down. */
 const DRAG_STEP_PX = 30;
 /** A mouse wheel's notch is a line- or page-unit event, or a pixel delta at least this large. */
@@ -23,8 +21,6 @@ export interface WheelDelta {
 export interface MediaGestureActions {
   previous(): void;
   next(): void;
-  hasCurrent(): boolean;
-  toggleControls(): void;
   /** Shows the controls, so the volume slider is visible while the wheel or a two-finger drag changes it. */
   showControls(): void;
   /** The volume can change, which it can't where the volume slider hides. */
@@ -36,11 +32,12 @@ export interface MediaGestureActions {
 }
 
 /**
- * Gestures on the media area. A swipe right plays the previous item and a swipe left the next one, and a tap shows or
- * hides the controls once something plays. The browser follows a touch with a click, which the media area ignores
- * after a swipe or a tap it handled. Two fingers dragged up or down change the volume a step per 30 px, and are never
- * taken for a swipe or a tap. The scroll wheel changes the volume a step per notch, a trackpad's small deltas adding up
- * to notches, so a light swipe doesn't jump it. Each shows the controls.
+ * Gestures on the media area. A swipe right plays the previous item and a swipe left the next one. The browser follows
+ * a touch with a click, which the media area ignores after a swipe; a tap is left to its click, which Chrome sends to
+ * what is under the finger once the touch has ended, so the controls a tap shows can't take it. Two fingers dragged up
+ * or down change the volume a step per 30 px, and are never taken for a swipe or a tap. The scroll wheel changes the
+ * volume a step per notch, a trackpad's small deltas adding up to notches, so a light swipe doesn't jump it. Each shows
+ * the controls.
  */
 export interface MediaGestures {
   /** A finger lands, with every finger now on the screen. */
@@ -51,7 +48,7 @@ export interface MediaGestures {
   touchEnd(touch: TouchPoint | undefined, remaining: number): void;
   /** The wheel turns over the media area, which never scrolls the page. */
   wheel(delta: WheelDelta): void;
-  /** True for the click that follows a swipe or a handled tap. Clears it, so the next click counts. */
+  /** True for the click that follows a swipe. Clears it, so the next click counts. */
   takeFollowingClick(): boolean;
 }
 
@@ -63,7 +60,6 @@ export function createMediaGestures(actions: MediaGestureActions): MediaGestures
   let startX = 0;
   let startY = 0;
   let wasSwipe = false;
-  let handledTap = false;
   let ignoreTouch = false;
   /** A second finger landed, so the touch is neither a swipe nor a tap until every finger lifts. */
   let multiTouch = false;
@@ -150,11 +146,6 @@ export function createMediaGestures(actions: MediaGestureActions): MediaGestures
         } else {
           actions.next();
         }
-      } else if (Math.abs(deltaX) < TAP_THRESHOLD_PX && Math.abs(deltaY) < TAP_THRESHOLD_PX) {
-        if (actions.hasCurrent()) {
-          handledTap = true;
-          actions.toggleControls();
-        }
       }
     },
 
@@ -180,10 +171,6 @@ export function createMediaGestures(actions: MediaGestureActions): MediaGestures
     takeFollowingClick() {
       if (wasSwipe) {
         wasSwipe = false;
-        return true;
-      }
-      if (handledTap) {
-        handledTap = false;
         return true;
       }
       return false;

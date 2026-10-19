@@ -111,6 +111,8 @@ These need a person, real devices, or the Windows VM.
 - [ ] With loudness normalization on, a loud and a quiet video play at similar loudness in Firefox on the desktop and in the Pixel's and the iPad's installed apps.
 - [ ] A quiet video with loud moments, boosted with Allow limiting on, plays without distortion in Firefox on the desktop and in the Pixel's and the iPad's installed apps.
 - [ ] With compression on, quiet and loud moments within a video come closer without audible pumping, in Firefox on the desktop and in the Pixel's and the iPad's installed apps.
+- [ ] On a desktop browser and the Pixel's installed app, the player's controls hide about 3 seconds after the last activity while a video plays, a mouse move or a tap shows them, and autoplay moving on to the next item leaves them hidden; on the Pixel, a tap where a hidden button sits only shows the controls.
+- [ ] On a desktop browser and the Pixel's installed app, Random from the middle of the history plays a new item, after which Previous goes to the item that was last before it, and the fullscreen button shows the exit icon in fullscreen.
 
 ## Release Flow
 

@@ -65,6 +65,7 @@ function fakeVideo() {
     currentTime: 0,
     duration: Number.NaN,
     paused: true,
+    ended: false,
     style: { display: "none" },
     play() {
       video.paused = false;

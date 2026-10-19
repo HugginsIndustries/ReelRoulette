@@ -12,6 +12,7 @@ import { createAutoPause } from "../playback/autoPause";
 import { createCompression, type Compression } from "../playback/compression";
 import { createLoudnessNormalization, type LoudnessNormalization } from "../playback/loudnessNormalization";
 import { createPlayer, type Player } from "../playback/player";
+import { createPlayerControls, type PlayerControls } from "../playback/playerControls";
 import { createStageFullscreen, type StageFullscreen } from "../playback/stageFullscreen";
 import { createSettings, type Settings } from "../settings/settings";
 import { createLibraryBaseline } from "../stats/libraryBaseline";
@@ -32,9 +33,10 @@ export interface UnsavedTabs {
 }
 
 /**
- * One page's runtime config, shared state, server requests, in-app dialogs, server connection, player, its sound and
- * loudness normalization and compression, ambient mode's glow, fullscreen, side panel, the panel's library, filter, tag editor, and stats tabs, and the settings
- * its Settings tab sets, with Auto-Pause pausing the player as its mode says while the panel and Auto Tag cover it.
+ * One page's runtime config, shared state, server requests, in-app dialogs, server connection, player, when its
+ * controls show, its sound and loudness normalization and compression, ambient mode's glow, fullscreen, side panel, the
+ * panel's library, filter, tag editor, and stats tabs, and the settings its Settings tab sets, with Auto-Pause pausing
+ * the player as its mode says while the panel and Auto Tag cover it.
  */
 export interface AppServices {
   config: RuntimeConfig;
@@ -43,6 +45,8 @@ export interface AppServices {
   dialogs: Dialogs;
   connection: ServerConnection;
   player: Player;
+  /** Whether the player's controls show, as Hide player controls and its settings say. */
+  playerControls: PlayerControls;
   /** The player's sound: the volume, Mute, and Enhanced audio's gain stage. */
   audio: AudioStage;
   /** Loudness normalization and its settings, whose gain the audio stage applies. */
@@ -129,6 +133,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     compressor: compression.compressor
   });
   const player = createPlayer({ apiBaseUrl: config.apiBaseUrl, store, audio, api, connection, dialogs, notifications });
+  const playerControls = createPlayerControls({ device, paused: player.paused, listOpen: notifications.listOpen });
   // After the player, so the player handles an item-state event before the library does.
   const library = createLibrary({ config, store, api, connection, player, dialogs, notifications, panel, device });
   // The tag catalog the Filter and Tags tabs load, which the Stats tab orders a file's tags by.
@@ -211,6 +216,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     dialogs,
     connection,
     player,
+    playerControls,
     audio,
     normalization,
     compression,

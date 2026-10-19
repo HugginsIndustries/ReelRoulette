@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { h, render as renderInto } from "preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { statusLogLine } from "../../logging/relayLogLines";
+import { HIDE_CONTROLS_KEY } from "../../playback/playerControls";
 import { createAppServices, type AppServices } from "../../state/appServices";
 import { App } from "../../ui/App";
 import {
@@ -231,6 +232,14 @@ function indicatorState(): string | null {
 
 function controlsShown(): boolean {
   return mediaArea().classList.contains("controls-visible");
+}
+
+/**
+ * Sets Hide player controls to On click/tap before the page mounts, so a click or tap on the player hides the controls,
+ * for tests that need them hidden.
+ */
+function hideControlsOnClick(): void {
+  localStorage.setItem(`rr_device.${HIDE_CONTROLS_KEY}`, JSON.stringify("click"));
 }
 
 function isPseudoFullscreen(): boolean {
@@ -1259,6 +1268,7 @@ function indicatorShows(): string | null {
 
 describe("volume gestures", () => {
   it("the scroll wheel over the player changes the volume a step per notch, adding up a trackpad's small deltas, never scrolls the page, and shows the controls, with no notification", async () => {
+    hideControlsOnClick();
     const server = serverPicking(VIDEO_ITEM);
     await mountAndPlay(server);
     await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Playing", VIDEO_ITEM, 1)));
@@ -1285,6 +1295,7 @@ describe("volume gestures", () => {
   });
 
   it("two fingers dragged up or down on the player change the volume a step per 30 px, claimed from the browser, and show the controls, with no notification, and a pinch never zooms", async () => {
+    hideControlsOnClick();
     useStylesheet();
     const server = serverPicking(VIDEO_ITEM);
     await mountAndPlay(server);
@@ -1350,6 +1361,7 @@ describe("volume gestures", () => {
   });
 
   it("the volume indicator shows centered over the player, outside the controls, for the wheel and a two-finger drag, while the controls are hidden too, not for the slider, and fades out 800 ms after the last change", async () => {
+    hideControlsOnClick();
     useFakeClock();
     useStylesheet();
     const server = serverPicking(VIDEO_ITEM);
@@ -1986,7 +1998,300 @@ describe("seek row", () => {
   });
 });
 
-describe("controls and gestures", () => {
+describe("Random", () => {
+  it("sits between Next and Loop, and from the middle of history picks a new item and adds it at the end, keeping the plays ahead", async () => {
+    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO, PHOTO_ITEM);
+    const { store } = await mountWithServices(server);
+    const transport = [...document.querySelectorAll(".overlay-controls-transport button")].map((control) => control.getAttribute("aria-label"));
+    expect(transport).toEqual(["Previous", "Play/Pause", "Next", "Random", "Loop", "Autoplay", "Fullscreen"]);
+    expect(iconOf("Random")).toBe("casino");
+    expect(button("Random").title).toBe("Random");
+
+    await click(emptyState());
+    await waitFor(() => expect(video().src).toBe(VIDEO_URL));
+    await click(button("Next"));
+    await waitFor(() => expect(video().src).toBe(SECOND_VIDEO_URL));
+    await click(button("Previous"));
+    expect(video().src).toBe(VIDEO_URL);
+
+    await click(button("Random"));
+    await waitFor(() => expect(photo().src).toBe(PHOTO_URL));
+    expect(randomPicks(server)).toBe(3);
+    expect(store.history.value.map((entry) => entry.itemId)).toEqual(["item-video", "item-video-2", "item-photo"]);
+    expect(store.historyIndex.value).toBe(2);
+    await click(button("Previous"));
+    expect(video().src).toBe(SECOND_VIDEO_URL);
+  });
+
+  it("with nothing playing, picks as Play does", async () => {
+    const server = serverPicking(VIDEO_ITEM);
+    await mount(server);
+    await click(button("Random"));
+    await waitFor(() => expect(video().src).toBe(VIDEO_URL));
+    expect(randomPicks(server)).toBe(1);
+  });
+});
+
+describe("Hide player controls", () => {
+  /** Lets `ms` pass on the fake clock. */
+  async function pass(ms: number): Promise<void> {
+    await vi.advanceTimersByTimeAsync(ms);
+  }
+
+  /** Lets the 3 seconds pass, after which the controls are hidden. */
+  async function untilHidden(): Promise<void> {
+    await pass(3000);
+    expect(controlsShown()).toBe(false);
+  }
+
+  function moveMouse(pointerType = "mouse"): void {
+    fireEvent.pointerMove(video(), { pointerType });
+  }
+
+  /** A tap on a control: the pointer lands, focus moves there, it lifts, and the click follows. */
+  async function tap(control: HTMLElement): Promise<void> {
+    fireEvent.pointerDown(control, { pointerType: "touch" });
+    control.focus();
+    fireEvent.pointerUp(control, { pointerType: "touch" });
+    await click(control);
+  }
+
+  it("Timeout, the default, hides them 3 seconds after the last activity while something plays, and hidden they can't be pressed", async () => {
+    useFakeClock();
+    useStylesheet();
+    await mountAndPlay(serverPicking(VIDEO_ITEM));
+    expect(controlsShown()).toBe(true);
+    expect(currentStyle(button("Play/Pause")).pointerEvents).toBe("auto");
+    await pass(2900);
+    expect(controlsShown()).toBe(true);
+    await pass(100);
+    expect(controlsShown()).toBe(false);
+    for (const control of [button("Play/Pause"), button("Random"), seekSlider(), volumeSlider()]) {
+      expect(currentStyle(control).pointerEvents).toBe("none");
+    }
+
+    moveMouse();
+    await flush();
+    expect(controlsShown()).toBe(true);
+    expect(currentStyle(button("Play/Pause")).pointerEvents).toBe("auto");
+  });
+
+  it("moving the mouse, a tap or click on the player, a key press, the scroll wheel, and a two-finger drag show them and restart the countdown", async () => {
+    useFakeClock();
+    await mountAndPlay(serverPicking(VIDEO_ITEM));
+    await untilHidden();
+
+    moveMouse();
+    await pass(2000);
+    moveMouse();
+    await pass(2000);
+    expect(controlsShown()).toBe(true);
+    await pass(1000);
+    expect(controlsShown()).toBe(false);
+
+    // A tap shows them through the click that follows it, and a click never hides them.
+    await swipe(video(), { x: 100, y: 100 }, { x: 102, y: 101 });
+    await click(video());
+    expect(controlsShown()).toBe(true);
+    await untilHidden();
+    await click(video());
+    await click(video());
+    expect(controlsShown()).toBe(true);
+    await untilHidden();
+
+    fireEvent.keyDown(document.body, { key: "x" });
+    await flush();
+    expect(controlsShown()).toBe(true);
+    await untilHidden();
+    // A key typed in a field isn't activity.
+    fireEvent.keyDown(document.getElementById("settings-advance-after")!, { key: "4" });
+    await flush();
+    expect(controlsShown()).toBe(false);
+
+    wheel(-100);
+    await flush();
+    expect(controlsShown()).toBe(true);
+    await untilHidden();
+    dragTwoFingers(30);
+    await flush();
+    expect(controlsShown()).toBe(true);
+    await untilHidden();
+  });
+
+  it("come back for a tap only through the click that follows it, not its touch or a touch moving over the player, so a tap where a hidden button sits only shows them", async () => {
+    useFakeClock();
+    await mountAndPlay(serverPicking(VIDEO_ITEM));
+    await untilHidden();
+
+    // Chrome picks the click's target after the touch ends, so controls shown by then would take the click.
+    fireEvent.pointerMove(video(), { pointerType: "touch" });
+    await flush();
+    expect(controlsShown()).toBe(false);
+    await swipe(video(), { x: 100, y: 100 }, { x: 102, y: 101 });
+    expect(controlsShown()).toBe(false);
+    await click(video());
+    expect(controlsShown()).toBe(true);
+  });
+
+  it("a press on a control restarts the countdown, as a tap on one does on the iPad, where it leaves no focus", async () => {
+    useFakeClock();
+    await mountAndPlay(serverPicking(VIDEO_ITEM));
+    moveMouse();
+    await pass(2000);
+    fireEvent.pointerDown(button("Loop"), { pointerType: "touch" });
+    fireEvent.pointerUp(button("Loop"), { pointerType: "touch" });
+    await click(button("Loop"));
+    expect(document.activeElement).not.toBe(button("Loop"));
+    await pass(2900);
+    expect(controlsShown()).toBe(true);
+    await pass(100);
+    expect(controlsShown()).toBe(false);
+  });
+
+  it("stay while a mouse or pen pointer is over a control, though not a touch, and hide 3 seconds after it leaves", async () => {
+    useFakeClock();
+    await mountAndPlay(serverPicking(VIDEO_ITEM));
+
+    fireEvent.pointerOver(button("Next"), { pointerType: "mouse" });
+    await pass(10000);
+    expect(controlsShown()).toBe(true);
+    // Moving on to another control is still over them.
+    fireEvent.pointerOut(button("Next"), { pointerType: "mouse", relatedTarget: seekSlider() });
+    fireEvent.pointerOver(seekSlider(), { pointerType: "mouse" });
+    await pass(10000);
+    expect(controlsShown()).toBe(true);
+    fireEvent.pointerOut(seekSlider(), { pointerType: "mouse", relatedTarget: video() });
+    await pass(2900);
+    expect(controlsShown()).toBe(true);
+    await pass(100);
+    expect(controlsShown()).toBe(false);
+
+    moveMouse("pen");
+    fireEvent.pointerOver(button("Loop"), { pointerType: "pen" });
+    await pass(10000);
+    expect(controlsShown()).toBe(true);
+    fireEvent.pointerOut(button("Loop"), { pointerType: "pen", relatedTarget: video() });
+    await untilHidden();
+
+    await swipe(video(), { x: 100, y: 100 }, { x: 102, y: 101 });
+    fireEvent.pointerOver(button("Loop"), { pointerType: "touch" });
+    await untilHidden();
+  });
+
+  it("stay while the scrub bar or the volume is dragged, and hide 3 seconds after it's let go", async () => {
+    useFakeClock();
+    await mountAndPlay(serverPicking(VIDEO_ITEM));
+
+    for (const bar of [seekSlider(), volumeSlider()]) {
+      moveMouse();
+      fireEvent.pointerDown(bar, { pointerType: "touch" });
+      await pass(10000);
+      expect(controlsShown()).toBe(true);
+      fireEvent.pointerUp(document, { pointerType: "touch" });
+      await pass(2900);
+      expect(controlsShown()).toBe(true);
+      await pass(100);
+      expect(controlsShown()).toBe(false);
+    }
+  });
+
+  it("stay while keyboard focus is on a control, but not for the focus a tap leaves on Play", async () => {
+    useFakeClock();
+    await mountAndPlay(serverPicking(VIDEO_ITEM));
+
+    // Tab moves focus to Play.
+    fireEvent.keyDown(document.body, { key: "Tab" });
+    button("Play/Pause").focus();
+    await pass(10000);
+    expect(controlsShown()).toBe(true);
+    button("Play/Pause").blur();
+    await pass(2900);
+    expect(controlsShown()).toBe(true);
+    await pass(100);
+    expect(controlsShown()).toBe(false);
+
+    // Two taps on Play pause and play again, leaving focus on it.
+    moveMouse();
+    await tap(button("Play/Pause"));
+    await tap(button("Play/Pause"));
+    expect(document.activeElement).toBe(button("Play/Pause"));
+    expect(video().paused).toBe(false);
+    await untilHidden();
+
+    // A key pressed with that focus makes it keyboard focus, which keeps them.
+    fireEvent.keyDown(button("Play/Pause"), { key: "Shift" });
+    await pass(10000);
+    expect(controlsShown()).toBe(true);
+    // And a pointer pressed elsewhere makes it a pointer's again.
+    fireEvent.pointerDown(document.body, { pointerType: "mouse" });
+    await untilHidden();
+  });
+
+  it("stay while the bell's list is open, and hide 3 seconds after it closes", async () => {
+    useFakeClock();
+    const services = await mountWithServices(serverPicking(VIDEO_ITEM));
+    await click(emptyState());
+    await waitFor(() => expect(video().src).toBe(VIDEO_URL));
+
+    services.notifications.openList();
+    await pass(10000);
+    expect(controlsShown()).toBe(true);
+    services.notifications.closeList();
+    await pass(2900);
+    expect(controlsShown()).toBe(true);
+    await pass(100);
+    expect(controlsShown()).toBe(false);
+  });
+
+  it("with Keep visible while paused, a pause shows them and they stay until it plays again; without it, they hide while paused", async () => {
+    useFakeClock();
+    const services = await mountWithServices(serverPicking(VIDEO_ITEM));
+    // Before anything plays, they stay.
+    await pass(10000);
+    expect(controlsShown()).toBe(true);
+    await click(emptyState());
+    await waitFor(() => expect(video().src).toBe(VIDEO_URL));
+    await untilHidden();
+
+    services.player.playOrPause();
+    await flush();
+    expect(video().paused).toBe(true);
+    expect(controlsShown()).toBe(true);
+    await pass(10000);
+    expect(controlsShown()).toBe(true);
+    services.player.playOrPause();
+    await flush();
+    await pass(2900);
+    expect(controlsShown()).toBe(true);
+    await pass(100);
+    expect(controlsShown()).toBe(false);
+
+    services.playerControls.setKeepWhilePaused(false);
+    services.player.playOrPause();
+    await flush();
+    expect(video().paused).toBe(true);
+    expect(controlsShown()).toBe(false);
+    moveMouse();
+    await untilHidden();
+  });
+
+  it("Never keeps them shown through time and clicks", async () => {
+    localStorage.setItem(`rr_device.${HIDE_CONTROLS_KEY}`, JSON.stringify("never"));
+    useFakeClock();
+    await mountAndPlay(serverPicking(VIDEO_ITEM));
+    await pass(60000);
+    expect(controlsShown()).toBe(true);
+    await click(video());
+    await swipe(video(), { x: 100, y: 100 }, { x: 102, y: 101 });
+    expect(controlsShown()).toBe(true);
+  });
+});
+
+describe("controls and gestures, with Hide player controls on On click/tap", () => {
+  beforeEach(() => {
+    hideControlsOnClick();
+  });
+
   it("a click on the media area hides and shows the controls once something plays, and clicks on the controls do not", async () => {
     const server = serverPicking(VIDEO_ITEM);
     await mount(server);
@@ -2034,13 +2339,15 @@ describe("controls and gestures", () => {
     expect(controlsShown()).toBe(true);
   });
 
-  it("a tap toggles the controls once, without the click that follows toggling them back", async () => {
+  it("a tap toggles the controls through the click that follows it, and its touch alone does nothing", async () => {
     const server = serverPicking(VIDEO_ITEM);
     await mountAndPlay(server);
 
     await swipe(video(), { x: 100, y: 100 }, { x: 105, y: 103 });
-    expect(controlsShown()).toBe(false);
+    expect(controlsShown()).toBe(true);
     await click(video());
+    expect(controlsShown()).toBe(false);
+    await swipe(video(), { x: 100, y: 100 }, { x: 105, y: 103 });
     expect(controlsShown()).toBe(false);
     await click(video());
     expect(controlsShown()).toBe(true);
@@ -2134,6 +2441,25 @@ describe("fullscreen", () => {
     await flush();
     expect(isPseudoFullscreen()).toBe(false);
     expect(page.root.contains(overlay("library-overlay"))).toBe(true);
+  });
+
+  it("shows the exit icon while the stage is in fullscreen or pseudo-fullscreen", async () => {
+    stubFullscreenApi();
+    await mount(serverPicking(VIDEO_ITEM));
+    expect(iconOf("Fullscreen")).toBe("fullscreen");
+    await click(button("Fullscreen"));
+    expect(iconOf("Fullscreen")).toBe("fullscreen_exit");
+    await click(button("Fullscreen"));
+    expect(iconOf("Fullscreen")).toBe("fullscreen");
+
+    resetPage(IPHONE_USER_AGENT);
+    await mount(serverPicking(VIDEO_ITEM));
+    await click(button("Fullscreen"));
+    expect(isPseudoFullscreen()).toBe(true);
+    expect(iconOf("Fullscreen")).toBe("fullscreen_exit");
+    fireEvent.keyDown(document, { key: "Escape" });
+    await flush();
+    expect(iconOf("Fullscreen")).toBe("fullscreen");
   });
 
   it("keeps the overlays inside the fullscreen stage", async () => {
@@ -2404,6 +2730,7 @@ describe("the player's indicator", () => {
   });
 
   it("shows a refresh only while the player's controls show, and other states whether they show or not", async () => {
+    hideControlsOnClick();
     useStylesheet();
     const { store } = await mountWithServices(serverPicking(VIDEO_ITEM));
     await click(emptyState());

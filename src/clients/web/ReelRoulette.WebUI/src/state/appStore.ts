@@ -233,6 +233,11 @@ export interface AppStore {
    * entries after the playing one are dropped.
    */
   pushHistory(item: PlayingItem): void;
+  /**
+   * Makes `item` the playing item, with its last-seen favorite and blacklist, and adds it at the end of the history,
+   * keeping every entry, as a random pick goes there from anywhere in it.
+   */
+  appendHistory(item: PlayingItem): void;
   /** Makes the previous or next history entry the playing item. Returns false at either end of history. */
   stepHistory(step: -1 | 1): boolean;
   on<K extends keyof AppStoreEvents>(event: K, listener: AppStoreEvents[K]): void;
@@ -450,6 +455,14 @@ export function createAppStore(options: AppStoreOptions): AppStore {
       store.current.value = item;
       const history = store.history.peek().slice(0, store.historyIndex.peek() + 1);
       history.push(item);
+      store.history.value = history;
+      store.historyIndex.value = history.length - 1;
+    },
+
+    appendHistory(item) {
+      store.itemStates.applyTo(item);
+      store.current.value = item;
+      const history = [...store.history.peek(), item];
       store.history.value = history;
       store.historyIndex.value = history.length - 1;
     },

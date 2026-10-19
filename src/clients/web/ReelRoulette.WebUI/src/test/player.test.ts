@@ -48,6 +48,7 @@ function fakeVideo() {
     currentTime: 0,
     duration: Number.NaN,
     paused: true,
+    ended: false,
     style: { display: "none" },
     plays: [] as string[],
     /** Set once the element is emptied, as one a new element has taken over from is. */
@@ -55,6 +56,7 @@ function fakeVideo() {
     play() {
       video.plays.push(`display=${video.style.display} muted=${video.muted} src=${video.src}`);
       video.paused = false;
+      video.ended = false;
       return Promise.resolve();
     },
     pause() {
@@ -510,6 +512,41 @@ describe("createPlayer", () => {
     expect(page.elements.video.loop).toBe(false);
     page.player.videoEnded();
     expect(page.requests("/api/random")).toHaveLength(1);
+  });
+
+  it("waits for the user before anything plays, once paused, and at a video's end nothing plays on from, but not while it plays, on a photo without a timer, or as a video moves on from its end", () => {
+    const page = setup();
+    const { video } = page.elements;
+    expect(page.player.paused.value).toBe(true);
+    page.playVideo(VIDEO, 60);
+    expect(page.player.paused.value).toBe(false);
+    page.player.playOrPause();
+    expect(page.player.paused.value).toBe(true);
+    page.player.playOrPause();
+    expect(page.player.paused.value).toBe(false);
+
+    // The browser pauses a video at its end, then sends `ended`. With Autoplay off, nothing plays on from it.
+    const reachEnd = () => {
+      video.paused = true;
+      video.ended = true;
+      page.player.videoPlayStateChanged();
+    };
+    reachEnd();
+    expect(page.player.paused.value).toBe(true);
+
+    // With Autoplay on, its `ended` moves on to the next item, so the pause before it doesn't wait for the user.
+    page.player.toggleAutoplay();
+    page.playVideo(SECOND_VIDEO, 60);
+    reachEnd();
+    expect(page.player.paused.value).toBe(false);
+    page.player.videoEnded();
+    expect(page.requests("/api/random")).toHaveLength(1);
+    expect(page.player.paused.value).toBe(false);
+
+    page.player.toggleAutoplay();
+    page.play(PHOTO);
+    expect(page.player.playButton.value.disabled).toBe(true);
+    expect(page.player.paused.value).toBe(false);
   });
 
   it("pauses a playing video for Auto-Pause and resumes it, and leaves a paused one paused", () => {

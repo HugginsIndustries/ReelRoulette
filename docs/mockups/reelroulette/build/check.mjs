@@ -548,6 +548,19 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: and does nothing at its start`, np() === items[0].name && window.mockup.history().index === 0);
   $("next-btn").click();
   check(`layout@${width}: Next steps forward through the history before picking`, np() === items[2].name && window.mockup.history().index === 1);
+  // Random sits right of Next and left of Loop, and picks from anywhere in the history, adding the pick at the end and
+  // keeping the plays ahead. The pick is the item playing, so the checks below start from the same one.
+  const transportIds = [...document.querySelectorAll(".overlay-controls-transport .overlay-btn")].map((button) => button.id);
+  check(`layout@${width}: Random, with the casino icon, sits between Next and Loop (${transportIds.join()})`,
+    transportIds.join() === "prev-btn,play-btn,next-btn,random-btn,loop-btn,autoplay-btn,fullscreen-btn" &&
+    $("random-btn").querySelector(".material-symbol-icon").dataset.icon === "casino" && $("random-btn").getAttribute("aria-label") === "Random");
+  const historyBeforeRandom = window.mockup.history().ids;
+  queue.push(2);
+  $("random-btn").click();
+  const historyAfterRandom = window.mockup.history();
+  check(`layout@${width}: Random from the middle of the history adds its pick at the end, keeping the plays ahead (${historyAfterRandom.ids.join()})`,
+    np() === items[2].name && historyAfterRandom.ids.join() === [...historyBeforeRandom, 2].join() &&
+    historyAfterRandom.index === historyAfterRandom.ids.length - 1);
   const missing = items.find((item) => item.missing);
   window.mockup.choose(missing.id);
   check(`layout@${width}: choosing a missing file says so and changes nothing (${notice()})`, notice() === "Media not found. The file may have moved or been deleted." && np() === items[2].name);
@@ -2163,6 +2176,21 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: each movement restarts the countdown`, controlsUp());
   await sleep(600);
   check(`layout@${width}: and they hide once it runs out`, !controlsUp());
+  // A touch moving over the player isn't activity, and a tap shows them through its click, which then lands on the
+  // player, so a tap where a hidden button sits only shows them.
+  $("media").dispatchEvent(new window.PointerEvent("pointermove", { bubbles: true, pointerType: "touch" }));
+  check(`layout@${width}: a touch moving over the player doesn't show them`, !controlsUp());
+  $("media").click();
+  check(`layout@${width}: and a tap's click does`, controlsUp());
+  await sleep(1300);
+  // A press on a control restarts the countdown, as a tap on one does on the iPad, where Safari leaves it no focus.
+  moveOverPlayer();
+  await sleep(700);
+  $("loop-btn").dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+  await sleep(700);
+  check(`layout@${width}: a press on a control restarts the countdown`, controlsUp());
+  await sleep(600);
+  check(`layout@${width}: and they hide once it runs out from there`, !controlsUp());
   // The bell is one of the controls, so they stay while its list is open, and the countdown starts over when it closes,
   // even by a tap, which moves no pointer over the player.
   moveOverPlayer();
@@ -2224,6 +2252,19 @@ for (const width of [1280, 390]) {
   check(`layout@${width}: without it, they hide while paused too`, !controlsUp() && window.localStorage.getItem("rr-mockup.keepWhilePaused") === "false");
   change($("set-keep-paused"), true);
   $("play-btn").click();
+  // A photo's timer ending as autoplay moves on isn't a pause, so the controls stay hidden, as in the app.
+  const autoplayWas = $("autoplay-btn").classList.contains("active");
+  const loopWas = $("loop-btn").classList.contains("active");
+  if (!autoplayWas) $("autoplay-btn").click();
+  if (loopWas) $("loop-btn").click();
+  window.mockup.choose(2);
+  queue.push(3);
+  await sleep(1300);
+  input($("seek"), Number($("seek").max) - 0.05);
+  await sleep(200);
+  check(`layout@${width}: a photo's timer ending as autoplay moves on leaves them hidden (${np()})`, !controlsUp() && np() === items[3].name);
+  if (!autoplayWas) $("autoplay-btn").click();
+  if (loopWas) $("loop-btn").click();
   hideChoice("click").click();
   check(`layout@${width}: On click/tap shows the controls and hides Timeout's settings`, controlsUp() && $("set-hide-timeout").hidden);
   $("media").click();

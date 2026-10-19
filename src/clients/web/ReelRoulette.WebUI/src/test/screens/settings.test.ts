@@ -98,6 +98,11 @@ function radio(name: string): HTMLInputElement {
   return within(settingsPage()).getByRole("radio", { name, hidden: true }) as HTMLInputElement;
 }
 
+/** A radio button of the group `group` names, for a choice another group has too, such as Never. */
+function radioOf(group: string, name: string): HTMLInputElement {
+  return within(within(settingsPage()).getByRole("radiogroup", { name: group, hidden: true })).getByRole("radio", { name, hidden: true }) as HTMLInputElement;
+}
+
 /** One of Theme's options, apart from Compression's Strength, which has a Light too. */
 function themeRadio(name: string): HTMLInputElement {
   const group = within(settingsPage()).getByRole("radiogroup", { name: "Theme", hidden: true });
@@ -186,11 +191,11 @@ describe("the Settings tab", () => {
     expect(tab("Settings").getAttribute("aria-selected")).toBe("true");
   });
 
-  it("shows Playback, Audio, Appearance, Notifications, Panel, and Diagnostics, in that order, then says settings apply at once, with no Save", async () => {
+  it("shows Playback, Audio, Player controls, Appearance, Notifications, Panel, and Diagnostics, in that order, then says settings apply at once, with no Save", async () => {
     await mount();
     await openSettings();
     const headings = within(settingsPage()).getAllByRole("heading", { level: 3 });
-    expect(headings.map((heading) => heading.textContent)).toEqual(["Playback", "Audio", "Appearance", "Notifications", "Panel", "Diagnostics"]);
+    expect(headings.map((heading) => heading.textContent)).toEqual(["Playback", "Audio", "Player controls", "Appearance", "Notifications", "Panel", "Diagnostics"]);
     expect(within(settingsPage()).getByText("Settings apply at once and are kept on this device.")).toBeTruthy();
     // Loudness normalization settings' and Ambient mode settings' Reset to defaults and Custom's Reset to Medium are the
     // tab's only buttons.
@@ -975,6 +980,73 @@ describe("Advance after", () => {
   });
 });
 
+describe("Player controls", () => {
+  function hideAfter(): HTMLInputElement {
+    return within(settingsPage()).getByRole("textbox", { name: "Hide after", hidden: true }) as HTMLInputElement;
+  }
+
+  function hideMode(name: string): HTMLInputElement {
+    return radioOf("Hide player controls", name);
+  }
+
+  function timeoutSettings(): HTMLElement {
+    return document.getElementById("settings-hide-timeout")!;
+  }
+
+  it("sits after Audio: Hide player controls on Timeout until changed, each mode with its line, and Hide after at 3 seconds and Keep visible while paused, on, shown only under Timeout", async () => {
+    await mount();
+    await openSettings();
+    const section = hideMode("Timeout").closest("section")!;
+    expect(section.querySelector("h3")!.textContent).toBe("Player controls");
+    const choices = within(settingsPage()).getByRole("radiogroup", { name: "Hide player controls", hidden: true });
+    expect(
+      within(choices)
+        .getAllByRole("radio", { hidden: true })
+        .map((choice) => [choice.getAttribute("value"), (choice as HTMLInputElement).checked, document.getElementById(choice.getAttribute("aria-describedby") ?? "")?.textContent ?? null])
+    ).toEqual([
+      ["timeout", true, "They hide after a time with no activity."],
+      ["click", false, "A click or tap on the player shows or hides them."],
+      ["never", false, null]
+    ]);
+    expect(timeoutSettings().hidden).toBe(false);
+    expect(hideAfter().value).toBe("3");
+    expect(checkbox("Keep visible while paused").checked).toBe(true);
+    expect(timeoutSettings().contains(hideAfter())).toBe(true);
+    expect(timeoutSettings().contains(checkbox("Keep visible while paused"))).toBe(true);
+
+    await click(hideMode("On click/tap"));
+    expect(timeoutSettings().hidden).toBe(true);
+    expect(localStorage.getItem("rr_device.playerControls.hide")).toBe('"click"');
+    await click(hideMode("Never"));
+    expect(timeoutSettings().hidden).toBe(true);
+    await click(hideMode("Timeout"));
+    expect(timeoutSettings().hidden).toBe(false);
+  });
+
+  it("Hide after flags a value that isn't a whole number from 1 to 30 and keeps none of them, and keeps 1 and 30", async () => {
+    await mount();
+    await openSettings();
+    fakeTimers();
+    const input = hideAfter();
+    input.focus();
+
+    for (const text of ["0", "31", "abc", "1.5", ""]) {
+      type(input, text);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect([text, problemOf(input)]).toEqual([text, "Use a whole number from 1 to 30 seconds."]);
+      fireEvent.keyDown(input, { key: "Enter" });
+      await flush();
+      expect([text, localStorage.getItem("rr_device.playerControls.hideAfter")]).toEqual([text, null]);
+    }
+    for (const text of ["1", "30"]) {
+      type(input, text);
+      fireEvent.keyDown(input, { key: "Enter" });
+      await flush();
+      expect([text, problemOf(input), localStorage.getItem("rr_device.playerControls.hideAfter")]).toEqual([text, null, text]);
+    }
+  });
+});
+
 describe("Advance after's saved check", () => {
   /** An icon's or tooltip's state: shown, fading out while still rendered, or gone. */
   function fade(element: Element | null): "shown" | "fading" | "gone" {
@@ -1188,7 +1260,7 @@ describe("Auto-Pause", () => {
     expect(video().paused).toBe(false);
 
     // Never leaves the overlay playing.
-    await click(radio("Never"));
+    await click(radioOf("Auto-Pause", "Never"));
     setViewport(PHONE_VIEWPORT);
     await settle();
     expect(document.getElementById("fullscreen-stage")!.dataset.panelMode).toBe("overlay");
@@ -1792,7 +1864,7 @@ describe("kept on this device", () => {
     await click(radio("Timer"));
     await click(checkbox("Loop stops autoplay"));
     await click(radio("Left"));
-    await click(radio("Never"));
+    await click(radioOf("Auto-Pause", "Never"));
     await click(playerButton("Autoplay"));
     await click(playerButton("Loop"));
     await click(playerButton("Mute"));
@@ -1808,7 +1880,25 @@ describe("kept on this device", () => {
     expect(advanceAfter().value).toBe("42");
     expect([radio("Timer").checked, checkbox("Loop stops autoplay").checked]).toEqual([true, false]);
     expect(radio("Left").checked).toBe(true);
-    expect(radio("Never").checked).toBe(true);
+    expect(radioOf("Auto-Pause", "Never").checked).toBe(true);
+  });
+
+  it("keeps Hide player controls, Hide after, and Keep visible while paused after a page refresh", async () => {
+    const page = await mount();
+    await openSettings();
+    const hideAfter = () => within(settingsPage()).getByRole("textbox", { name: "Hide after", hidden: true }) as HTMLInputElement;
+    type(hideAfter(), "12");
+    fireEvent.keyDown(hideAfter(), { key: "Enter" });
+    await click(checkbox("Keep visible while paused"));
+    await click(radioOf("Hide player controls", "On click/tap"));
+    page.unmount();
+
+    await mount();
+    await openSettings();
+    expect(radioOf("Hide player controls", "On click/tap").checked).toBe(true);
+    await click(radioOf("Hide player controls", "Timeout"));
+    expect(hideAfter().value).toBe("12");
+    expect(checkbox("Keep visible while paused").checked).toBe(false);
   });
 
   it("keeps each setting only in this browser's storage, and tells the server nothing", async () => {

@@ -59,6 +59,9 @@ exports[`page structure > keeps the starting markup 1`] = `
             <button aria-label="Next" class="overlay-btn icon-glyph-base icon-glyph-button" id="next-btn" title="Next">
               <span class="material-symbol-icon">
                 "skip_next"
+            <button aria-label="Random" class="overlay-btn icon-glyph-base icon-glyph-button" id="random-btn" title="Random">
+              <span class="material-symbol-icon">
+                "casino"
             <button aria-label="Loop" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle" id="loop-btn" title="Loop">
               <span class="material-symbol-icon">
                 "repeat_one"
@@ -490,6 +493,45 @@ exports[`page structure > keeps the starting markup 1`] = `
                           "Higher raises the whole sound after compression. At 0 dB, only loud moments are turned down."
                         <button class="btn" id="settings-compression-reset" type="button">
                           "Reset to Medium"
+            <section aria-labelledby="settings-player-controls-heading" class="settings-section">
+              <h3 id="settings-player-controls-heading">
+                "Player controls"
+              <div class="setting">
+                <span class="setting-label" id="settings-hide-controls-label">
+                  "Hide player controls"
+                <div aria-labelledby="settings-hide-controls-label" class="choice-stack" role="radiogroup">
+                  <label>
+                    <input aria-describedby="settings-hide-controls-timeout-description" aria-labelledby="settings-hide-controls-timeout" name="settings-hide-controls" type="radio" value="timeout">
+                    <span>
+                      <span id="settings-hide-controls-timeout">
+                        "Timeout"
+                      <small id="settings-hide-controls-timeout-description">
+                        "They hide after a time with no activity."
+                  <div class="setting-sub" id="settings-hide-timeout">
+                    <label class="setting-label" for="settings-hide-after">
+                      "Hide after"
+                    <div class="filter-row">
+                      <span class="vfield number-field">
+                        <input autocomplete="off" class="ctl" id="settings-hide-after" inputmode="numeric" type="text">
+                        <span aria-live="polite" class="visually-hidden">
+                      <span>
+                        "seconds"
+                    <div class="choice-row">
+                      <label>
+                        <input id="settings-keep-while-paused" type="checkbox">
+                        "Keep visible while paused"
+                  <label>
+                    <input aria-describedby="settings-hide-controls-click-description" aria-labelledby="settings-hide-controls-click" name="settings-hide-controls" type="radio" value="click">
+                    <span>
+                      <span id="settings-hide-controls-click">
+                        "On click/tap"
+                      <small id="settings-hide-controls-click-description">
+                        "A click or tap on the player shows or hides them."
+                  <label>
+                    <input aria-labelledby="settings-hide-controls-never" name="settings-hide-controls" type="radio" value="never">
+                    <span>
+                      <span id="settings-hide-controls-never">
+                        "Never"
             <section aria-labelledby="settings-appearance-heading" class="settings-section">
               <h3 id="settings-appearance-heading">
                 "Appearance"

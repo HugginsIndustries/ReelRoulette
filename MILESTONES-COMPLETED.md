@@ -6,6 +6,90 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12i9 - WebUI Player Controls
+
+- **Status**: ✅ Complete
+- **Goal**: The player's controls can hide after a time with no activity, and a Random button picks a new item from anywhere in the history.
+- **Depends on**: WebUI Settings Panel, whose Player controls section holds its settings, and WebUI Volume and Enhanced Audio, whose volume slider keeps the controls shown while it is dragged and whose move of Mute to the seek row frees the place Random takes.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Scope
+
+- The fullscreen button shows the exit icon (`fullscreen_exit`) while the stage is in fullscreen or pseudo-fullscreen. Today it always shows `fullscreen`.
+- Hide player controls, a Settings tab entry in its Player controls section, kept per device:
+  - Timeout, the default: the controls hide after a set time with no activity. Moving the mouse or tapping shows them and restarts the countdown. They stay visible while a mouse or pen pointer is over them, while the scrub bar or volume is being dragged, and while the bell's list, which WebUI Notifications adds, is open, and their countdown starts again when it closes. A touch doesn't count as a pointer over them.
+  - While Timeout is chosen, two settings show under it: Hide after, 1 to 30 seconds and 3 by default, a setting's field of the field validation pattern, which WebUI Settings Panel adds (`createSettingField` and `SettingTextField`), saved on Enter or when the field is left; and Keep visible while paused, on by default.
+  - On click/tap: clicking or tapping the player shows or hides them, as today.
+  - Never: the controls stay visible.
+  - In every mode, hidden controls can't be pressed, so the first tap or click on them only shows them.
+  - With Timeout, a key press counts as activity and shows them, and keyboard focus on a control, focus that `:focus-visible` matches, keeps them shown. Focus that a tap or click leaves on a control doesn't, so after a tap on Play they still hide.
+  - With Timeout, the scroll wheel and a two-finger drag over the player count as activity too: they show the controls and restart the countdown, so the volume slider stays visible while they change the volume.
+- A Random button, with the `casino` icon, sits in the transport row in Mute's old place, right of Next and left of Loop.
+- Random picks a new item as Next does at the end of the history, from anywhere in it.
+- The pick is added at the end of the history, as Next adds one at the end of the queue.
+- The mockup shows the Random button.
+- Hide player controls and its two settings survive a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
+- Hide player controls and its settings are kept as `playerControls.hide`, `playerControls.hideAfter`, and `playerControls.keepWhilePaused`, by `src/playback/playerControls.ts`, which decides whether the controls show.
+- Keep visible while paused follows Play: the controls stay while playback waits for the user, before anything plays, once the user or Auto-Pause pauses, at the end of a video nothing plays on from, or when the browser won't play it. A photo whose timer the scrub bar doesn't show isn't paused, and neither is a video moving on from its end as it repeats or autoplay goes on (`paused` in `src/playback/player.ts`).
+- Every random pick goes at the end of the history, keeping every entry (`appendHistory` in `src/state/appStore.ts`), so a pick that lands after Previous keeps the plays ahead too. A file chosen from the library still drops them (`pushHistory`).
+- A key pressed in a field that takes keys, such as a text field, a slider, or a dropdown, isn't activity, as in the mockup.
+- Under On click/tap, the scroll wheel and a two-finger drag still show the controls, as before and in the mockup, and in every mode the bell's list keeps them shown.
+- A tap shows or hides the controls through the click that follows it, as in the mockup, and a touch moving over the player isn't activity, so a tap where a hidden button sits only shows them.
+- A press on the controls is activity, in the app and the mockup, so a tap on a control restarts the countdown on the iPad too.
+
+#### Traps
+
+- The controls start visible, and a click or tap on the player toggles them (`controlsVisible` in `src/ui/Player.tsx`, `toggleControls` in `src/playback/mediaGestures.ts`).
+- There is no timeout, and hidden controls can still be pressed, since only their container ignores the pointer (`.overlay-controls` in `src/styles.css`).
+- The scroll wheel and a two-finger drag show the controls through `showControls` (`src/playback/mediaGestures.ts`), which `src/ui/Player.tsx` wires to `setControlsVisible(true)`, and the mockup counts them as activity under Timeout (`showControlsForVolume` in `layout.src.html`).
+- A tap on Play left focus on it, and the mockup's first version, which kept the controls shown for any focus on a control, then kept them up until the next tap elsewhere (measured).
+- happy-dom, which the WebUI's screen tests use, matches `:focus-visible` for any focus, including focus a tap leaves, so a test can't tell keyboard focus from a tap's by it; the mockup tracks the last input itself (measured).
+- `pushHistory` in `src/state/appStore.ts` drops every history entry after the current one before it adds a pick, so Random from the middle of the history can't use it as it is.
+- `next` in `src/playback/player.ts` picks a new item only at the end of the history, and a tap on the empty player picks one too.
+- The desktop's Random button always picked a new item, even in the middle of its history (measured).
+- `casino` isn't in the mockup's icon subset, which `build_font.py` cuts from its `ICONS` list into `icons.json` (measured).
+- The browser pauses a video at its end just before its `ended` event, in the same task, so a paused state read from Play alone would show the controls at every autoplay advance (inferred, from the HTML spec's event order).
+- The Auto-Pause setting has a Never choice too, so the Settings tests find Never within its group.
+- Chrome on Android sends a tap's click to what is under the finger once the touch has ended, so controls shown on `touchend` took the click, and a tap where Next sat with the controls hidden changed the video (measured on the Pixel).
+- Safari on the iPad leaves a button no focus on a tap, so focus entering the controls doesn't count a tap on a control as activity (inferred).
+
+#### Acceptance
+
+- The fullscreen button shows the exit icon while the stage is in fullscreen or pseudo-fullscreen, in a test of the fullscreen button's icon.
+- With Hide player controls on Timeout, the controls hide after the Hide after time with no activity, moving the mouse, tapping, the scroll wheel, or a two-finger drag shows them and restarts the countdown, and they stay while a mouse or pen pointer is over them, while keyboard focus is on a control, while the scrub bar or volume is dragged, while the bell's list is open, and, with Keep visible while paused, while paused. A touch over them and focus a tap leaves on Play don't keep them shown. On click/tap toggles them on a click or tap, and Never keeps them visible. Hide after accepts 1 to 30 seconds. Hidden controls can't be pressed. Shown by controls tests for each Hide player controls mode, the countdown, and each thing that keeps the controls shown.
+- Random from the middle of the history adds the pick at the end of the history, keeping the plays ahead, in Player screen tests of Random.
+- After a page refresh, Hide player controls and its two settings are each as they were, in tests for a page refresh keeping each setting this milestone adds.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check on the iPad's installed app.
+
+#### Evidence
+
+- The mockup has the Random button, with the `casino` icon, between Next and Loop. Random, and R, which calls the same pick, add the pick at the end of the history (`appendHistory`), and a file chosen from the library still drops the items ahead. `build_font.py` adds `casino` to the icon subset, and `icons.json` was regenerated with every other icon's codepoint unchanged (measured). The user approved it on their devices.
+- The mockup counts a press on the controls as activity and not a touch moving over the player, and keeps the controls shown while paused only while Play is enabled, so a photo's autoplay advance leaves them hidden, as the app does.
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passed all 1315 checks, up from 1301. Each of the two new checks, Random's place and icon and Random from the middle of the history adding its pick at the end, failed with what it guards broken, in a copy of the mockup under `artifacts/scratch/`, and the checks that a touch moving over the player doesn't show the controls, that a press on a control restarts the countdown, and that a photo's autoplay advance leaves them hidden failed before the mockup's fix (measured).
+- `playerControls.test.ts` shows Timeout by default with the 3-second countdown, activity, a tap, and the wheel restarting it, Hide after's range kept on the device, each hold and the bell's list keeping the controls shown and their end restarting the countdown, Keep visible while paused on and off, On click/tap, Never, a new mode starting shown, kept and unusable stored values, and which fields take keys.
+- `player.test.ts` shows `paused` before anything plays, after a pause, at a video's end with Autoplay off, and not while playing, on a photo without a timer, or at a video's end that autoplay moves on from. `appStore.test.ts` shows a pick added at the end from the middle of the history, keeping every entry.
+- Player screen tests show Random's place, icon, and name, Random from the middle of the history adding its pick at the end with Previous going to the item that was last before it, Random with nothing playing picking as Play does, the fullscreen exit icon in fullscreen and pseudo-fullscreen, and under Timeout the controls hiding after 3 seconds, hidden controls not taking the pointer, each kind of activity, a tap showing them only through its click and not its touch or a touch moving over the player, a press on a control restarting the countdown, a mouse or pen pointer over a control and not a touch, a scrub bar or volume drag, keyboard focus and not a tap's focus on Play, the bell's list, Keep visible while paused, and Never.
+- Settings screen tests show the Player controls section after Audio with Timeout's line, On click/tap's, and Never, Hide after at 3 seconds and Keep visible while paused on under Timeout only, Hide after flagging anything but a whole number from 1 to 30 and keeping 1 and 30, and the three settings kept after a page refresh.
+- The screen tests that hide the controls with a click on the player now choose On click/tap first, and the page's markup snapshots in `foundation.test.ts`, `filter.test.ts`, and `tags.test.ts` were updated for the Random button, the Player controls section, and the generated ids it shifts.
+- `mediaGestures.test.ts` shows a tap left to the click that follows it.
+- The tests of a tap showing the controls only through its click, under Timeout and under On click/tap, of a touch moving over the player not showing them, of a press on a control restarting the countdown, and of a tap left to its click each failed before their fix (measured).
+- Each guarded behavior broken made its test fail, in six mutations, each restored from a copy under `artifacts/scratch/`: random picks dropping the plays ahead, the pause at a video's end counting as paused, hidden controls taking the pointer, a fixed fullscreen icon, any focus on a control holding them, and no pause hold (measured).
+- `npm run verify` passed 1689 tests in 79 files.
+- The user chose the iPad's installed app for the spot check, in place of their own browsers and phone; the desktop browser and the Pixel are in the release checks.
+- The user's spot check on the iPad's installed app passed: the controls hid about 3 seconds into a video and a tap brought them back, a tap where a hidden button sits only showed them, autoplay moving on left them hidden, Random from the middle of the history added its pick at the end, and fullscreen showed the exit icon (measured).
+- The transport row's seven buttons need a player 400 px wide, which the docked player keeps (`PLAYER_MIN_WIDTH`), so it wraps only on a phone screen narrower than the user's.
+- Docs: `CONTEXT.md`, `docs/domain-inventory.md`, and `CHANGELOG.md` describe Hide player controls and Random.
+
+#### Release checks
+
+- Manual: On a desktop browser and the Pixel's installed app, the player's controls hide about 3 seconds after the last activity while a video plays, a mouse move or a tap shows them, and autoplay moving on to the next item leaves them hidden; on the Pixel, a tap where a hidden button sits only shows the controls.
+- Manual: On a desktop browser and the Pixel's installed app, Random from the middle of the history plays a new item, after which Previous goes to the item that was last before it, and the fullscreen button shows the exit icon in fullscreen.
+
+#### Not included
+
+- Random behavior, a choice of where a Random pick goes in the history, which is Random Pick Options.
+
 ### M12i8 - WebUI Loudness Normalization
 
 - **Status**: ✅ Complete

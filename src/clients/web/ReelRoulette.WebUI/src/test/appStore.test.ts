@@ -253,6 +253,35 @@ describe("createAppStore", () => {
     expect(store.current.value?.itemId).toBe("c");
   });
 
+  it("adds a random pick at the end of history from anywhere in it, keeping every entry, with its last-seen favorite and blacklist", () => {
+    const { store } = setup();
+    const item = (itemId: string): PlayingItem => ({
+      id: `/media/${itemId}.mp4`,
+      itemId,
+      displayName: `${itemId}.mp4`,
+      mediaType: "video",
+      mediaUrl: `/api/media/${itemId}`,
+      isFavorite: false,
+      isBlacklisted: false
+    });
+    store.itemStates.remember("d", { isFavorite: false, isBlacklisted: true });
+
+    store.appendHistory(item("a"));
+    store.appendHistory(item("b"));
+    store.appendHistory(item("c"));
+    expect(store.stepHistory(-1)).toBe(true);
+    expect(store.stepHistory(-1)).toBe(true);
+    expect(store.current.value?.itemId).toBe("a");
+
+    store.appendHistory(item("d"));
+    expect(store.history.value.map((entry) => entry.itemId)).toEqual(["a", "b", "c", "d"]);
+    expect(store.historyIndex.value).toBe(3);
+    expect(store.current.value?.itemId).toBe("d");
+    expect(store.current.value?.isBlacklisted).toBe(true);
+    expect(store.stepHistory(-1)).toBe(true);
+    expect(store.current.value?.itemId).toBe("c");
+  });
+
   it("does not step through history before anything plays", () => {
     const { store } = setup();
     expect(store.stepHistory(1)).toBe(false);

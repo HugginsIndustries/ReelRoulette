@@ -26,6 +26,8 @@ export interface VideoElement extends ShownElement {
   currentTime: number;
   readonly duration: number;
   readonly paused: boolean;
+  /** It played to its end, which the browser pauses it at just before its `ended` event. */
+  readonly ended: boolean;
   play(): Promise<void>;
   pause(): void;
   /** With `load()`, empties an element a new one has taken over from, without the error an empty `src` gives. */
@@ -97,6 +99,12 @@ export interface PlayOptions {
  */
 export interface Player {
   readonly playButton: ReadonlySignal<PlayButtonView>;
+  /**
+   * Playback waits for the user, as Play shows: before anything plays, once the user or Auto-Pause pauses, at the end
+   * of a video nothing plays on from, or when the browser won't play it. Not on a photo whose timer the bar doesn't
+   * show, nor while a video moves on from its end, as it repeats or autoplay goes on.
+   */
+  readonly paused: ReadonlySignal<boolean>;
   readonly seekBar: ReadonlySignal<SeekBarView>;
   /**
    * Counts the times a new `<video>` element has taken over the video, which the page renders it by, so each count
@@ -128,6 +136,7 @@ export interface Player {
    */
   takeOverVideo(video: VideoElement): void;
   playCurrent(options?: PlayOptions): void;
+  /** Picks a new item, as Next does at the end of history and Random from anywhere in it, and adds it at the end. */
   pickRandom(): Promise<void>;
   /**
    * The play button: picks when nothing is playing, otherwise plays or pauses the video, or holds and resumes a
@@ -226,6 +235,7 @@ export function createPlayer(options: PlayerOptions): Player {
   );
 
   const playButton = signal<PlayButtonView>({ disabled: false, showsPause: false });
+  const paused = signal(true);
   const seekBar = signal<SeekBarView>({ disabled: true, label: "Seek" });
   const videoKey = signal(0);
   const favorite = signal(false);
@@ -451,6 +461,11 @@ export function createPlayer(options: PlayerOptions): Player {
       playButton.value = { disabled: false, showsPause: !!store.current.peek() && videoShown() && !videoPaused() };
       seekBar.value = { disabled: !videoShown() || videoLengthUnknown(), label: "Seek" };
     }
+    const play = playButton.peek();
+    // The browser pauses a video at its end just before its `ended`, which repeats it or moves on, so that pause
+    // doesn't wait for the user.
+    const movesOn = videoShown() && elements!.video.ended && (stretching || autoplayGoesOn());
+    paused.value = !play.disabled && !play.showsPause && !movesOn;
     moveBarWhilePlaying();
   }
 
@@ -686,7 +701,8 @@ export function createPlayer(options: PlayerOptions): Player {
       }
 
       // The media holds Loading… before the pick lets go of it, so a pick and its media load are one loading period.
-      store.pushHistory(outcome.item);
+      // A pick goes at the end of history, keeping every entry, wherever in it the press came from.
+      store.appendHistory(outcome.item);
       playCurrent();
     } finally {
       store.loading.release("pick");
@@ -805,6 +821,7 @@ export function createPlayer(options: PlayerOptions): Player {
 
   return {
     playButton,
+    paused,
     seekBar,
     videoKey,
     favorite,

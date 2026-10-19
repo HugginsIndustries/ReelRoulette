@@ -8,7 +8,8 @@ import { VOLUME_STEPS, type VolumeStep } from "../playback/audioStage";
 import type { AutoPauseMode } from "../playback/autoPause";
 import { automaticLine, TARGET_LUFS, type NormalizationTarget } from "../playback/loudnessNormalization";
 import { CUSTOM_RANGES, type CompressionStrength, type CompressorValues } from "../playback/compression";
-import { advanceAfterProblem, boostLimitProblem, manualTargetProblem, numberProblem, wholeNumberProblem } from "../settings/settings";
+import type { HideControlsMode } from "../playback/playerControls";
+import { advanceAfterProblem, boostLimitProblem, hideAfterProblem, manualTargetProblem, numberProblem, wholeNumberProblem } from "../settings/settings";
 import type { ThemeChoice } from "../settings/theme";
 import type { AutoplayMode } from "../state/appStore";
 import type { FieldProblem } from "../validation/fieldValidation";
@@ -138,6 +139,12 @@ const POPUP_TIME_CHOICES: readonly Choice<string>[] = [
   { value: "10", title: "10 seconds" }
 ];
 
+const HIDE_CONTROLS_CHOICES: readonly Choice<HideControlsMode>[] = [
+  { value: "timeout", title: "Timeout", description: "They hide after a time with no activity." },
+  { value: "click", title: "On click/tap", description: "A click or tap on the player shows or hides them." },
+  { value: "never", title: "Never" }
+];
+
 const SIDE_CHOICES: readonly Choice<PanelSide>[] = [
   { value: "left", title: "Left" },
   { value: "right", title: "Right" }
@@ -151,8 +158,8 @@ const AUTO_PAUSE_CHOICES: readonly Choice<AutoPauseMode>[] = [
 
 /**
  * The panel's Settings tab: the settings kept on this device, in the mockup's sections, and Diagnostics. Each setting
- * applies as it changes, so there is no Save. Sections that later work fills go in the mockup's places: Player controls
- * after Audio, and Keyboard shortcuts before Diagnostics.
+ * applies as it changes, so there is no Save. Keyboard shortcuts, which later work fills, goes in the mockup's place,
+ * before Diagnostics.
  */
 export function SettingsTab() {
   return (
@@ -166,6 +173,9 @@ export function SettingsTab() {
         </Section>
         <Section id="audio" title="Audio">
           <AudioSettings />
+        </Section>
+        <Section id="player-controls" title="Player controls">
+          <PlayerControlsSettings />
         </Section>
         <Section id="appearance" title="Appearance">
           <AppearanceSettings />
@@ -564,6 +574,58 @@ function AdvanceAfter() {
         />
         <span>seconds</span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Hide player controls, which the player's controls follow at once. Under Timeout, Hide after, a whole number of seconds
+ * from 1 to 30 saved as a setting's field saves it, and Keep visible while paused show; they keep their values while
+ * another mode is chosen.
+ */
+function PlayerControlsSettings() {
+  const { playerControls: controls, panel } = useApp();
+  const timeout = controls.mode.value === "timeout";
+  return (
+    <div class="setting">
+      <OptionList
+        id="settings-hide-controls"
+        label="Hide player controls"
+        type="radio"
+        choices={HIDE_CONTROLS_CHOICES}
+        isChecked={(mode) => mode === controls.mode.value}
+        onChange={(mode) => controls.setMode(mode)}
+        after={{
+          timeout: (
+            <div class="setting-sub" id="settings-hide-timeout" hidden={!timeout}>
+              <label class="setting-label" for="settings-hide-after">Hide after</label>
+              <div class="filter-row">
+                <SettingTextField
+                  id="settings-hide-after"
+                  class="number-field"
+                  inputMode="numeric"
+                  shown={panel.isOpen.value && panel.tab.value === "settings" && timeout}
+                  saved={() => String(controls.hideAfterSeconds.peek())}
+                  problemOf={hideAfterProblem}
+                  save={(text) => controls.setHideAfter(Number(text.trim()))}
+                />
+                <span>seconds</span>
+              </div>
+              <div class="choice-row">
+                <label>
+                  <input
+                    type="checkbox"
+                    id="settings-keep-while-paused"
+                    checked={controls.keepWhilePaused.value}
+                    onChange={(event) => controls.setKeepWhilePaused(event.currentTarget.checked)}
+                  />
+                  Keep visible while paused
+                </label>
+              </div>
+            </div>
+          )
+        }}
+      />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { signal, type ReadonlySignal } from "@preact/signals";
 import { AMBIENT_KEY, AMBIENT_TUNING_KEY, DEFAULT_AMBIENT_TUNING, readAmbientTuning, type AmbientTuning } from "../playback/ambient";
 import { DEFAULT_AUTO_PAUSE_MODE, isAutoPauseMode, type AutoPauseMode } from "../playback/autoPause";
 import { BOOST_LIMIT_RANGE, MANUAL_TARGET_RANGE } from "../playback/loudnessNormalization";
+import { HIDE_AFTER_RANGE } from "../playback/playerControls";
 import { MAX_ADVANCE_AFTER_SECONDS, MIN_ADVANCE_AFTER_SECONDS } from "../state/appStore";
 import type { DeviceStore } from "../state/deviceStore";
 import type { FieldProblem } from "../validation/fieldValidation";
@@ -44,6 +45,11 @@ export function advanceAfterProblem(text: string): FieldProblem | null {
   return wholeNumberProblem(text, MIN_ADVANCE_AFTER_SECONDS, MAX_ADVANCE_AFTER_SECONDS, "seconds");
 }
 
+/** Hide after's problem: it takes a whole number of seconds from 1 to 30. */
+export function hideAfterProblem(text: string): FieldProblem | null {
+  return wholeNumberProblem(text, HIDE_AFTER_RANGE.min, HIDE_AFTER_RANGE.max, "seconds");
+}
+
 /** Manual's target's problem: it takes a number of LUFS from -50 to -10. */
 export function manualTargetProblem(text: string): FieldProblem | null {
   return numberProblem(text, MANUAL_TARGET_RANGE.min, MANUAL_TARGET_RANGE.max, "LUFS");
@@ -57,8 +63,9 @@ export function boostLimitProblem(text: string): FieldProblem | null {
 /**
  * The Settings tab's settings that no other part of the page keeps: the Auto-Pause mode, the theme, ambient mode and its
  * settings, and whether tiles show their file names. Each applies as it changes and is kept on this device. The panel
- * keeps its side, the store Advance after and the autoplay settings, the player its buttons' state, the audio stage
- * Enhanced audio, loudness normalization its own settings, and the notifications service the popup settings.
+ * keeps its side, the store Advance after and the autoplay settings, the player its buttons' state, the player's
+ * controls Hide player controls and its settings, the audio stage Enhanced audio, loudness normalization its own
+ * settings, and the notifications service the popup settings.
  */
 export interface Settings {
   readonly autoPauseMode: ReadonlySignal<AutoPauseMode>;
