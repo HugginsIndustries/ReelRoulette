@@ -110,6 +110,7 @@ internal static class CatalogSeed
             3 => Schema3,
             4 => Schema4,
             5 => Schema5,
+            6 => Schema6,
             _ => throw new ArgumentOutOfRangeException(nameof(schemaVersion), schemaVersion, "The seed has no tables for this schema version.")
         };
 
@@ -542,6 +543,9 @@ internal static class CatalogSeed
     private const string Schema4 = "CREATE TABLE items (\n" + Schema4ItemColumns + "\n);\n" + SharedTables + Schema2Presets + SortIndexes;
 
     private const string Schema5 = "CREATE TABLE items (\n" + Schema4ItemColumns + "\n);\n" + SharedTables + Schema5Presets + SortIndexes;
+
+    /// <summary>Schema version 6 changed stored values only, so its tables are version 5's.</summary>
+    private const string Schema6 = Schema5;
 
     private const string SortIndexes =
         """

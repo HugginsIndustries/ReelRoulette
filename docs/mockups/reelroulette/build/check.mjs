@@ -1740,7 +1740,6 @@ for (const width of [1280, 390]) {
   const videoWhere = (test) => items.findIndex((item) => item.type === "video" && playable(item) && test(item));
   const audioCases = [
     ["a measured video", (item) => item.hasAudio === true && item.loudness > -70 && item.peak != null, (item) => `Yes, ${item.loudness.toFixed(1)} LUFS, ${item.peak.toFixed(1)} dBTP`],
-    ["a silent video", (item) => item.hasAudio === true && item.loudness === -70, () => "Yes, -70.0 LUFS, Silent"],
     ["a video without a peak yet", (item) => item.hasAudio === true && item.loudness > -70 && item.peak == null, (item) => `Yes, ${item.loudness.toFixed(1)} LUFS, Not measured`],
     ["a video without audio", (item) => item.hasAudio === false, () => "No, N/A, N/A"],
     ["a video not scanned yet", (item) => item.hasAudio == null, () => "Unknown, Unknown, Not measured"]
@@ -3222,7 +3221,7 @@ for (const width of [1280, 390]) {
   check(`loudness: its settings are an expandable section with their defaults (${labels})`,
     more.tagName === "DETAILS" && !more.open && more.querySelector("summary").lastChild.textContent === "Loudness normalization settings" &&
     !!more.querySelector("summary .setting-more-chevron") && labels === "Target loudness, Target, Boost quiet videos by up to" &&
-    target("standard").checked && $("set-loud-manual").hidden && $("set-loud-manual-target").value === "-18" && $("set-loud-boost").value === "15" &&
+    target("auto").checked && $("set-loud-manual").hidden && $("set-loud-manual-target").value === "-18" && $("set-loud-boost").value === "15" &&
     $("set-loud-limiting").checked && $("set-loud-reset").closest("fieldset") === $("set-loudness-fields"));
   check(`loudness: Target loudness offers ${targets.join(", ")}`,
     targets.join() === "AutomaticThe library's baseline, -20.4 LUFS.,Quieter-23 LUFS,Standard-18 LUFS,Louder-14 LUFS,Manual" &&
@@ -3262,6 +3261,8 @@ for (const width of [1280, 390]) {
   const unmeasured = video((item) => item.hasAudio === null && !item.missing);
   check("loudness: the mockup has a loud video, a quiet one with headroom, one limited by its peak, one without a peak, and one not scanned",
     !!loud && !!roomy && !!peaky && !!peakless && !!unmeasured);
+  // The gain rule's checks run at Standard's -18 LUFS. Automatic, the default, is checked with the other targets.
+  change(target("standard"), true);
   // Each video's chord plays at its own stand-in loudness: off, a loud and a quiet video sound different; on, they even
   // out at the target, and one whose peak holds its boost back stays quieter by the boost it misses.
   const levelOf = (item) => {
@@ -3359,7 +3360,7 @@ for (const width of [1280, 390]) {
     !night.disabled && $("set-night-mode-hint").textContent === "Evens out loudness within a video, for quiet listening.");
   $("set-loud-reset").click();
   check("loudness: Reset to defaults restores each setting, with no check, and forgets the stored ones",
-    target("standard").checked && $("set-loud-manual").hidden && $("set-loud-manual-target").value === "-18" && $("set-loud-boost").value === "15" &&
+    target("auto").checked && $("set-loud-manual").hidden && $("set-loud-manual-target").value === "-18" && $("set-loud-boost").value === "15" &&
     $("set-loud-limiting").checked && !$("set-loud-manual-target").hasAttribute("aria-invalid") && stored("normalizationSettings") === null && toggle.checked &&
     !more.querySelector(".vfield.is-saved"));
   check(`loudness: no script errors ${errors.join("; ")}`, errors.length === 0);

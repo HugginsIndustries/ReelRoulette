@@ -29,7 +29,6 @@ describe("stats model", () => {
 
   it.each([
     ["a measured video", { hasAudio: true, integratedLoudness: -23.44, peakDb: -1.25 }, "-23.4 LUFS", "-1.3 dBTP"],
-    ["a silent track at the -70 LUFS floor", { hasAudio: true, integratedLoudness: -70 }, "-70.0 LUFS", "Silent"],
     ["a track without a peak yet", { hasAudio: true, integratedLoudness: -30 }, "-30.0 LUFS", "Not measured"],
     ["a track with audio and no loudness", { hasAudio: true }, "Unknown", "Not measured"],
     ["a video without audio", { hasAudio: false }, "N/A", "N/A"],

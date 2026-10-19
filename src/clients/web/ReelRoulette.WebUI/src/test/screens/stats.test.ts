@@ -226,7 +226,7 @@ describe("Stats tab", () => {
 
   it.each([
     ["a measured video", { hasAudio: true, integratedLoudness: -23.4, peakDb: -1.2 }, ["Yes", "-23.4 LUFS", "-1.2 dBTP"]],
-    ["a silent track", { hasAudio: true, integratedLoudness: -70, peakDb: undefined }, ["Yes", "-70.0 LUFS", "Silent"]],
+    ["a digitally silent track, sent as no audio", { hasAudio: false, integratedLoudness: undefined, peakDb: undefined }, ["No", "N/A", "N/A"]],
     ["a track without a peak", { hasAudio: true, integratedLoudness: -30, peakDb: undefined }, ["Yes", "-30.0 LUFS", "Not measured"]],
     ["a video without audio", { hasAudio: false, integratedLoudness: undefined, peakDb: undefined }, ["No", "N/A", "N/A"]],
     ["a video not scanned yet", { hasAudio: undefined, integratedLoudness: undefined, peakDb: undefined }, ["Unknown", "Unknown", "Not measured"]]

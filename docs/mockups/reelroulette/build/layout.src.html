@@ -1521,12 +1521,12 @@ ITEMS.forEach((item) => {
   item.loudness = isPhoto(item) ? null : -(12 + Math.round(statRand() * 180) / 10);
   item.peak = isPhoto(item) ? null : -(Math.round(statRand() * 60) / 10);
   // As the server's loudness scan leaves them: no loudness or peak for a video without audio; a few videos not scanned
-  // yet, whose audio isn't known; a silent one at the -70 LUFS floor, whose true peak ffmpeg measures as -inf and the
-  // server stores as none; and a few without a peak yet.
+  // yet, whose audio isn't known; a digitally silent one, at the -70 LUFS floor with a true peak of -inf, which the
+  // server counts as a video without audio; and a few without a peak yet.
   if (!isPhoto(item)) {
     if (!item.hasAudio) Object.assign(item, { loudness: null, peak: null });
     else if (item.id % 25 === 13) Object.assign(item, { hasAudio: null, loudness: null, peak: null });
-    else if (item.id % 25 === 19) Object.assign(item, { loudness: -70, peak: null });
+    else if (item.id % 25 === 19) Object.assign(item, { hasAudio: false, loudness: null, peak: null });
     else if (item.id % 11 === 6) item.peak = null;
   }
   item.missing = item.id === 13;
@@ -1536,7 +1536,7 @@ ITEMS.forEach((item) => {
 const BASELINE = -20.4;
 // Loudness normalization's settings: a target, the most a quiet video is boosted by, and whether a boost may go past a
 // video's headroom for the limiter to catch.
-const NORMALIZATION_DEFAULTS = { target: "standard", manualTarget: -18, boostLimit: 15, allowLimiting: true };
+const NORMALIZATION_DEFAULTS = { target: "auto", manualTarget: -18, boostLimit: 15, allowLimiting: true };
 const NORMALIZATION_TARGETS = { quieter: -23, standard: -18, louder: -14 };
 // The ceiling a boost keeps a video's true peak under, and how far past it Allow limiting lets the limiter take it.
 const PEAK_CEILING = -1;
@@ -5060,12 +5060,11 @@ function playedAgo(at) {
   const days = Math.floor(hours / 24);
   return `${days} ${days === 1 ? "day" : "days"} ago`;
 }
-// The scan's true peak. ffmpeg measures a silent track's as -inf, which the server stores as none, so a track at the
-// -70 LUFS floor without one is Silent.
+// The scan's true peak, N/A without audio, or Not measured. A digitally silent track has no audio, since the server
+// counts it as a video without audio.
 function truePeakText(item) {
   if (item.hasAudio === false) return "N/A";
-  if (item.peak != null) return `${item.peak.toFixed(1)} dBTP`;
-  return item.hasAudio && item.loudness != null && item.loudness <= -70 ? "Silent" : "Not measured";
+  return item.peak != null ? `${item.peak.toFixed(1)} dBTP` : "Not measured";
 }
 // What the Stats tab says in place of its library stats, as the Library tab does in place of its tiles: nothing while
 // the server asks for pairing, the server's own message while it fails the compatibility check or runs without a

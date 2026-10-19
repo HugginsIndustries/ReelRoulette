@@ -151,7 +151,8 @@ Last milestone completed: M12i7
 - The gain is worked out only in the WebUI, from the server's loudness and peak and the device's settings, so its rule is locked to a WebUI-only fixture of loudness, peak, settings, and the resulting gain.
 - The audio chain runs from the video through the normalization gain, Night mode's compressor, and the limiter, to the volume stage and its fades from WebUI Volume and Enhanced Audio.
 - The limiter is in the chain whenever normalization or Night mode is on. Allow limiting only decides whether a boost may go past a video's headroom for the limiter to catch.
-- The defaults (normalization on, Standard, a 15 dB boost limit, and Allow limiting on, with Night mode off) and Night mode's fixed values are provisional until the Listening check slice settles them, with the full library.
+- Automatic's target is the library's baseline, the 75th percentile of the integrated loudness of videos with audio, which the library stats' `baselineLoudnessLufs` carries. It plays louder overall than the median, which would leave the typical video as it is and turn the loud half down.
+- The defaults (normalization on, Automatic, a 15 dB boost limit, and Allow limiting on, with Night mode off) and Night mode's fixed values are provisional until the Listening check slice settles them, with the full library.
 - If the audio spike in WebUI Volume and Enhanced Audio doesn't find the gain stage reliable, including on iOS, this milestone moves to the release after v0.15.0.
 
 #### Slices
@@ -159,7 +160,7 @@ Last milestone completed: M12i7
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Mockup | ✅ Complete | The new Audio settings, Night mode's included, and the Adjustment row's "(limited by peak)" in the mockup, reviewed by the user on devices. |
-| Automatic baseline | ⏳ Planned | The library statistic Automatic uses, chosen by the user from measured figures and carried by the library stats' baseline loudness, with digitally silent tracks counted as no audio. |
+| Automatic baseline | ✅ Complete | The library statistic Automatic uses, chosen by the user from measured figures and carried by the library stats' baseline loudness, with digitally silent tracks counted as no audio. |
 | Normalization | ⏳ Planned | The gain rule, its fixed values, the limiter, the loudness normalization settings, and the Stats tab's Adjustment row. |
 | Night mode | ⏳ Planned | A compressor that evens out loudness within a video, and its setting under Enhanced audio. |
 | Listening check | ⏳ Planned | The defaults and Night mode's fixed values, settled by the user's listening check with the full library. |
@@ -243,6 +244,30 @@ Last milestone completed: M12i7
 - The Stats tab shows a file with a digitally silent track as a file without an audio track, in a component test, and the mockup matches, with `node docs/mockups/reelroulette/build/check.mjs` passing.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
+**Evidence**
+
+- On a copy of the developer's catalog, 10,647 videos had audio, 884 of them digitally silent, every one at −70.0 LUFS with no peak, and 96 more at −70.0 with a real peak, from −95.4 to −12.2 dBTP, which keep counting as audio (measured).
+- The library had grown since the Traps' figures: 8,992 videos are louder than −60 LUFS, whose 75th percentile is −27.1 and median −38.3 (measured).
+- The candidates over the 9,763 videos that count as audio after this slice, as Automatic's target under the provisional gain rule (measured):
+  - The 75th percentile, −27.8 LUFS (−28.7 with the silent tracks counted): 25% cut, 60% within 3 dB of the target, and 80% at a 24 dB boost limit.
+  - The median, −40.5: 50% cut, 90% within 3 dB, and 98% at a 24 dB boost limit.
+  - The median weighted by duration, −26.5: 56% within 3 dB, and 76% at a 24 dB boost limit.
+  - Standard's −18 LUFS, for comparison: 34% within 3 dB.
+- The user chose the 75th percentile, so `baselineLoudnessLufs`, its OpenAPI description, and the generated WebUI types are unchanged, and `ReadListedItemAndBaseline_CoverHeaderReaders_WithoutBuildingTheCatalogDocument` and the Stats tab's component test of Baseline loudness keep covering it.
+- The user also made Automatic the default target, which the Decisions and the Normalization slice's Scope and Acceptance now say.
+- The loudness scan's parser counts a track at the −70 LUFS floor with no peak as no audio, in `ParseLoudness_ReadsADigitallySilentTrack_AsNoAudio`, and one with a peak as audio, in `ParseLoudness_ReadsATrackAtTheFloorWithAPeak_AsAudio`.
+- `LoudnessStage_StoresADigitallySilentTrackAsNoAudio_AndAFaintOneAsAudio_ForEveryReader` scans real `ebur128` output and shows the audio filter in both modes, the audio counts, the baseline, and the item read.
+- The catalog moves to schema version 6, whose upgrade step stores a video scanned under loudness analysis version 2 at −70.0 LUFS or quieter with no peak as no audio, in `Open_Schema5Catalog_StoresADigitallySilentVideoAsNoAudio_AndKeepsAFaintOneAsAudio`, which also shows each reader.
+- Each new test failed with its change removed: the parser rule, its peak condition, the step's update, and the step's analysis version condition (measured).
+- The step's SQL on a second copy of the catalog changed exactly 884 videos, leaving 9,763 with audio and 7,838 without, and a baseline of −27.8 LUFS (measured).
+- A real ffmpeg scan of `anullsrc` audio now reads as no audio, so `Refresh_PersistsStageColumnsWithoutBuildingTheCatalogDocument` gives its test video a sine tone (measured).
+- The upgrade tests that run for every older version seed the Night preset in the shape its version stored, since a version 5 catalog already has the Favorites and Blacklisted modes.
+- The Stats tab's True peak no longer shows Silent. Its component test of a digitally silent track uses the item the server sends, the same as a file without an audio track, so the server tests of the item read are what guard it.
+- The mockup's stand-in silent video has no audio, its True peak no longer shows Silent, and Automatic is its default target. `node docs/mockups/reelroulette/build/check.mjs` passed all 1286 checks, down from 1288 with the silent video's case gone at both widths.
+- With the mockup's default set back to Standard, its default and Reset to defaults checks failed (measured).
+- `dotnet build ReelRoulette.sln` had no warnings, `dotnet test ReelRoulette.sln` passed 515 Core and 7 ServerApp tests, SystemChecks passed, and `npm run verify` passed 1568 tests in 75 files.
+- Docs: `CONTEXT.md`, `docs/api.md`, `docs/domain-inventory.md`, `docs/dev-setup.md`, and `CHANGELOG.md` describe digitally silent tracks and schema version 6.
+
 #### Normalization slice
 
 **Scope**
@@ -257,11 +282,11 @@ Last milestone completed: M12i7
 - The limiter is a `DynamicsCompressorNode` with a threshold of −1 dB, a ratio of 20, no knee, and its fastest attack.
 - The plan measures the limiter's own makeup gain and compensates for it, with a lower threshold or a gain after the limiter, so the limiter holds peaks at −1 dB.
 - The normalization gain is set while each video starts from silence, and glides to its new value when a setting changes, so the change reaches the playing video at once without a click.
-- The plan defines the gain under Automatic before the library's baseline arrives.
+- The plan defines the gain under Automatic, the default target, before the library's baseline arrives.
 - Settings, per device, in the Settings tab's Audio section:
   - A **Loudness normalization** checkbox under Enhanced audio, on by default, and disabled while Enhanced audio is off, since audio then plays directly. Its hint is "Evens out loudness between videos.", which reads "Needs Enhanced audio." while it is disabled.
   - An expandable "Loudness normalization settings" section, like Ambient mode's.
-  - **Target loudness**: Automatic, Quieter (−23 LUFS), Standard (−18 LUFS), Louder (−14 LUFS), or Manual, with Standard the default. Automatic's line is "The library's baseline, {n} LUFS.", from the statistic the Automatic baseline slice chose.
+  - **Target loudness**: Automatic, Quieter (−23 LUFS), Standard (−18 LUFS), Louder (−14 LUFS), or Manual, with Automatic the default. Automatic's line is "The library's baseline, {n} LUFS.", from the library stats' `baselineLoudnessLufs`.
   - Manual's target field shows only while Manual is chosen, as Hide after shows only under Timeout. It takes −50 to −10 LUFS, starts at −18, and uses the full keyboard, since its values are negative.
   - **Boost quiet videos by up to**, from 0 to 24 dB, 15 by default.
   - **Allow limiting**, on by default, with the hint "Lets quiet videos with loud moments get louder by limiting those moments."
@@ -278,6 +303,7 @@ Last milestone completed: M12i7
 - On the developer's catalog, 1,636 of the 10,528 videos with audio are at −60 LUFS or quieter, and the other 8,892 have a median of −38.3 LUFS (measured).
 - Videos under 30 seconds have a median of −49.1 LUFS, and videos of 10 to 60 minutes −26.7 (measured).
 - Before any limit from peaks, a −18 LUFS target with a 15 dB boost limit brings 46% of those 8,892 videos within 3 dB of the target and leaves 60% short of it, and a −23 LUFS target leaves 50% short (measured).
+- The figures above were measured before the Automatic baseline slice. The 1,636 include the digitally silent tracks that slice counts as no audio, and the library has grown since, so that slice's Evidence has the current figures: 9,763 videos with audio, 8,992 of them louder than −60 LUFS, and how each candidate target fares.
 - Web Audio clips a signal above full scale at the output (inferred).
 - `DynamicsCompressorNode` is not a brick-wall limiter, since it has no look-ahead, and browsers may implement it differently (inferred).
 - `DynamicsCompressorNode` applies its own makeup gain, worked out from its curve: about +0.6 dB at a −1 dB threshold and a ratio of 20, so the limiter holds peaks near −0.4 dBFS rather than −1 (inferred).
@@ -291,7 +317,7 @@ Last milestone completed: M12i7
 - With normalization on, the chain runs from the normalization gain through the limiter to the volume stage, and each video plays at its gain, in WebUI audio tests.
 - A settings change glides the playing video's gain to its new value, in WebUI audio tests.
 - Under Automatic, the gain before the library's baseline arrives is as the plan defines, in a WebUI test.
-- The settings are in the Settings tab's Audio section with their choices, ranges, and defaults, the option is disabled while Enhanced audio is off, Manual's field shows only under Manual, a value outside a field's range is flagged with the field validation pattern, Reset to defaults restores the defaults, and each setting survives a page refresh, in WebUI tests for each setting.
+- The settings are in the Settings tab's Audio section with their choices, ranges, and defaults, with Automatic the default target, the option is disabled while Enhanced audio is off, Manual's field shows only under Manual, a value outside a field's range is flagged with the field validation pattern, Reset to defaults restores the defaults, and each setting survives a page refresh, in WebUI tests for each setting.
 - The Stats tab's Adjustment shows the applied adjustment, signed, with "(limited by peak)" when the headroom limits a boost, "Off" while normalization or Enhanced audio is off, and "N/A" for a file without loudness data, and it follows the settings as they change, in WebUI tests of the Adjustment in each case.
 - Enhanced audio's description names loudness normalization, and it and the gain stage's failure notice have their new texts, in WebUI tests.
 - The setting is hidden in a browser where it cannot work, and that browser is named in this entry.
@@ -774,7 +800,7 @@ Last milestone completed: M12i7
 | --- | --- | --- |
 | Mockup | ⏳ Planned | The rating in the Stats tab's Current file section, the Rated card, the rating popups, and a check that every icon the mockup uses is in its font subset, approved on a desktop browser, the iPad, and an Android phone. |
 | Server | ⏳ Planned | The rating column in a new catalog schema step, the shipped 2→3 step's index SQL frozen, setting a rating in the catalog, `rating` on item reads, and the rated count in the stats read. |
-| Contract | ⏳ Planned | The rating route and its `itemRatingChanged` event, the rated count in the stats response, and `rating` and the fields the server always sends named in `LibraryProjectionItem`, in OpenAPI and the generated WebUI types. |
+| Contract | ⏳ Planned | The rating route and its `itemRatingChanged` event, the rated count in the stats response, and `rating`, `hasAudio`, and the fields the server always sends named in `LibraryProjectionItem`, in OpenAPI and the generated WebUI types. |
 | WebUI | ⏳ Planned | The rating control in the Current file section, its popups and event handling, and the Rated card. |
 
 #### Mockup slice
@@ -848,6 +874,7 @@ Last milestone completed: M12i7
 - It publishes `itemRatingChanged` only when the rating changed, with `itemId`, `path`, `rating`, `previousRating`, and the request's `clientId`, no rating being null.
 - The library stats response carries the rated count.
 - `LibraryProjectionItem` names `rating`, sent only for a rated item, and the fields the server always sends that it doesn't name yet: `fullPath`, `isFavorite`, `isBlacklisted`, `playCount`, `fingerprintAlgorithm`, `fingerprintVersion`, and `tags`.
+- `LibraryProjectionItem` also names `hasAudio`, sent once the loudness scan has looked at a video: false for a file without an audio track or one whose track the scan measured as digital silence, and true otherwise.
 - OpenAPI, the generated WebUI types, and `docs/api.md`, which describes the event types.
 
 **Traps**
@@ -863,7 +890,7 @@ Last milestone completed: M12i7
 
 - The route sets, changes, and clears a rating, answers 400 and 404 as described, and publishes `itemRatingChanged` with the previous rating and the trimmed `clientId`, matching its schema, only when the rating changed, in server tests of the rating route.
 - The stats response with the rated count matches its schema, in `GetLibraryStats_ResponseMatchesSpec`.
-- `LibraryProjectionItem` names `rating` and the fields the server always sends, in a contract test reading its names.
+- `LibraryProjectionItem` names `rating`, `hasAudio`, and the fields the server always sends, in a contract test reading its names.
 - `npm run verify:contracts` passes, and `docs/api.md` describes the route, the event, and the fields, checked by reading it.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 

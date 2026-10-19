@@ -34,6 +34,8 @@ public sealed class RefreshPipelineService : BackgroundService
         @"(?:^|\s)(?:Peak|True peak):\s*(?<value>-?\d+(?:\.\d+)?)\s*dBFS\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    /// <summary>The integrated loudness ffmpeg's <c>ebur128</c> reports for digital silence, its floor.</summary>
+    private const double DigitalSilenceLufs = -70.0;
 
     private readonly ServerStateService _state;
     private readonly ILogger<RefreshPipelineService> _logger;
@@ -2409,7 +2411,9 @@ public sealed class RefreshPipelineService : BackgroundService
     /// <summary>
     /// Reads ffmpeg's <c>ebur128</c> summary: the integrated loudness from its <c>I:</c> line and the true
     /// peak from its <c>Peak:</c> line. A silent track's peak reads <c>-inf</c>, which no number matches, so
-    /// it has none. Null when the file has audio but the summary has no loudness.
+    /// it has none. A digitally silent track, at the -70 LUFS floor with no peak, counts as no audio, the
+    /// same as a file without an audio track; a track at the floor with a real peak, such as faint hiss,
+    /// keeps counting as audio. Null when the file has audio but the summary has no loudness.
     /// </summary>
     internal static FileLoudnessInfo? ParseLoudnessFromFfmpegOutput(string output, int exitCode = 0)
     {
@@ -2470,6 +2474,11 @@ public sealed class RefreshPipelineService : BackgroundService
             return null;
         }
 
+        if (integratedLoudness.Value <= DigitalSilenceLufs && !peakDb.HasValue)
+        {
+            return new FileLoudnessInfo { HasAudio = false };
+        }
+
         return new FileLoudnessInfo
         {
             HasAudio = true,
@@ -2513,7 +2522,7 @@ public sealed class RefreshPipelineService : BackgroundService
         /// <summary>Integrated loudness in LUFS, or null when the scan measured none.</summary>
         public double? IntegratedLoudness { get; init; }
 
-        /// <summary>True peak in dBTP, or null when the scan measured none, as for a silent track.</summary>
+        /// <summary>True peak in dBTP, or null when the scan measured none, as for a file without audio.</summary>
         public double? PeakDb { get; init; }
 
         public bool IsError { get; init; }

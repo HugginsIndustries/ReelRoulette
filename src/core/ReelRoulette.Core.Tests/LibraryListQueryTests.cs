@@ -1130,6 +1130,43 @@ public sealed class LibraryListQueryTests
             $"{filterJson}: expected [{string.Join(", ", expected)}], listed [{string.Join(", ", listedIds)}] of {listed.TotalCount}, eligible [{string.Join(", ", eligibleIds)}].");
     }
 
+    /// <summary>
+    /// How the API reads audio from the catalog in the server data folder <paramref name="directory"/>, one line
+    /// each: the ids the library query's audio filter lists in each mode, in ordinal order; the library stats'
+    /// video audio counts and baseline loudness; and each of <paramref name="itemIds"/> as the item read returns it.
+    /// </summary>
+    internal static List<string> DescribeAudioReads(string directory, params string[] itemIds)
+    {
+        var operations = new LibraryOperationsService(LibraryCatalogHost.Open(directory), NullLogger<LibraryOperationsService>.Instance, directory);
+
+        string Listed(AudioFilterModeValue mode)
+        {
+            using var filter = JsonDocument.Parse($$"""{"audioFilter":{{(int)mode}}}""");
+            var outcome = operations.QueryLibrary(new LibraryQueryRequest { FilterState = filter.RootElement.Clone(), Limit = 50 });
+            Assert.True(outcome.Accepted, outcome.Error);
+            var ids = outcome.Body!["items"]!.AsArray().Select(item => item!["id"]!.GetValue<string>()).Order(StringComparer.Ordinal);
+            return string.Join(", ", ids);
+        }
+
+        string Read(string id)
+        {
+            var item = operations.ReadLibraryItem(id);
+            Assert.NotNull(item);
+            string Value(string field) => item![field]?.ToJsonString() ?? "none";
+            return $"{id} hasAudio={Value("hasAudio")} loudness={Value("integratedLoudness")} peak={Value("peakDb")}";
+        }
+
+        var stats = operations.GetLibraryStats().Global;
+        return
+        [
+            "with audio: " + Listed(AudioFilterModeValue.WithAudioOnly),
+            "without audio: " + Listed(AudioFilterModeValue.WithoutAudioOnly),
+            $"videos with audio={stats.VideosWithAudio} without audio={stats.VideosWithoutAudio}",
+            "baseline=" + stats.BaselineLoudnessLufs.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            .. itemIds.Select(Read)
+        ];
+    }
+
     private static RefreshPipelineService CreateRefresh(string appData)
     {
         var settings = new CoreSettingsService(

@@ -19,11 +19,11 @@ Instructions:
 
 Commit Message:
 
-M12i8: Complete the loudness normalization mockup, with Night mode and the new gain rule
+M12i8: Count digitally silent tracks as no audio, and make Automatic the default target
 
-- MILESTONES.md: WebUI Loudness Normalization is in progress, and its Mockup slice is complete, approved by the user on their devices, with Night mode's hint "Evens out loudness within a video, for quiet listening."
-- MILESTONES.md: the gain rule drops the silence floor, and a boost never goes below 0 dB, so a quiet video whose peak leaves no headroom plays unadjusted.
-- MILESTONES.md: the Automatic baseline slice counts a digitally silent track, at -70.0 LUFS with no peak, as no audio in the audio filter, the Stats tab, and the baseline, updating existing items without a rescan, and the Stats tab's Silent goes.
-- Mockup: the Audio settings replace the desktop's with Target loudness (Automatic, Quieter, Standard, Louder, or Manual), Boost quiet videos by up to, and Allow limiting, with normalization on by default, and add Night mode.
-- Mockup: each video's stand-in chord plays at its own loudness and follows the new gain rule, so normalization evens videos out, and the Stats tab's Adjustment shows "(limited by peak)".
-- Mockup: Enhanced audio's description and the gain stage's failure notice take their final texts. Each new check fails when what it guards is broken.
+- Server: the loudness scan counts a track at the -70 LUFS floor with no peak as no audio, and the catalog's schema version 6 step stores existing ones that way without a rescan. A faint track with a real peak still counts as audio.
+- Server: the audio filter, the library stats' audio counts and baseline, and the item read follow, in new parser, loudness stage, and upgrade tests, each shown to fail without its change.
+- WebUI: the Stats tab's True peak no longer shows Silent, since a digitally silent file shows as a file without audio.
+- Mockup: the stand-in silent video has no audio, and Automatic is the default target.
+- MILESTONES.md: the Automatic baseline slice is complete, with the measured statistics and the user's choice of the 75th percentile, and Automatic becomes the provisional default target. Item Ratings' Contract slice also names `hasAudio` in `LibraryProjectionItem`.
+- Docs: CONTEXT.md, docs/api.md, docs/domain-inventory.md, docs/dev-setup.md, and CHANGELOG.md describe digitally silent tracks and schema version 6.

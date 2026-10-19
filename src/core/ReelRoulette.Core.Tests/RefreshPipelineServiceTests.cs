@@ -306,7 +306,7 @@ public sealed class RefreshPipelineServiceTests
             items:
             [
                 ExistingVideo(scope, "measured") with { HasAudio = true, IntegratedLoudness = -20.0, PeakDb = -5.0, LoudnessAnalysisVersion = 1 },
-                ExistingVideo(scope, "silent") with { HasAudio = true, IntegratedLoudness = -70.0, PeakDb = -5.0, LoudnessAnalysisVersion = 1 },
+                ExistingVideo(scope, "no-peak") with { HasAudio = true, IntegratedLoudness = -30.0, PeakDb = -5.0, LoudnessAnalysisVersion = 1 },
                 ExistingVideo(scope, "no-audio")
             ]);
         var service = CreateService(new ServerStateService(), scope.RootPath);
@@ -314,7 +314,7 @@ public sealed class RefreshPipelineServiceTests
         service.SetLoudnessAnalyzer((path, _, _) => Path.GetFileNameWithoutExtension(path) switch
         {
             "measured" => Measured(-20.0, -1.5),
-            "silent" => Measured(-70.0, null),
+            "no-peak" => Measured(-30.0, null),
             _ => Task.FromResult<RefreshPipelineService.FileLoudnessInfo?>(new RefreshPipelineService.FileLoudnessInfo { HasAudio = false })
         });
 
@@ -322,14 +322,51 @@ public sealed class RefreshPipelineServiceTests
 
         var measured = RefreshItem(scope.RootPath, "measured");
         Assert.Equal((true, -20.0, -1.5), (measured.HasAudio, measured.IntegratedLoudness, measured.PeakDb));
-        var silent = RefreshItem(scope.RootPath, "silent");
-        Assert.Equal((true, -70.0, (double?)null), (silent.HasAudio, silent.IntegratedLoudness, silent.PeakDb));
+        var noPeak = RefreshItem(scope.RootPath, "no-peak");
+        Assert.Equal((true, -30.0, (double?)null), (noPeak.HasAudio, noPeak.IntegratedLoudness, noPeak.PeakDb));
         var noAudio = RefreshItem(scope.RootPath, "no-audio");
         Assert.Equal((false, (double?)null, (double?)null), (noAudio.HasAudio, noAudio.IntegratedLoudness, noAudio.PeakDb));
-        Assert.All(new[] { measured, silent, noAudio }, item => Assert.Equal(LibraryCatalogStore.LoudnessAnalysisVersion, item.LoudnessAnalysisVersion));
+        Assert.All(new[] { measured, noPeak, noAudio }, item => Assert.Equal(LibraryCatalogStore.LoudnessAnalysisVersion, item.LoudnessAnalysisVersion));
         Assert.Equal(
             "Loudness scan complete (3 files, 3 updated, 1 without audio)",
             service.GetStatus().Stages.Single(stage => stage.Stage == "loudnessScan").Message);
+    }
+
+    // Counted as audio, the digitally silent track would move the baseline, the 75th percentile, to -30.
+    [Fact]
+    public async Task LoudnessStage_StoresADigitallySilentTrackAsNoAudio_AndAFaintOneAsAudio_ForEveryReader()
+    {
+        using var scope = new DataFolderScope();
+        CatalogSeed.Write(
+            scope.RootPath,
+            sources: [new SeedSource("on", scope.RootPath)],
+            items: new[] { "silent", "faint", "loud", "quiet" }.Select(id => ExistingVideo(scope, id) with { SourceId = "on" }));
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        service.AssumeFfmpegAvailable();
+        service.SetLoudnessAnalyzer((path, _, _) => Task.FromResult(RefreshPipelineService.ParseLoudnessFromFfmpegOutput(
+            Path.GetFileNameWithoutExtension(path) switch
+            {
+                "silent" => Ebur128Output("-70.0", "    Peak:       -inf dBFS"),
+                "faint" => Ebur128Output("-70.0", "    Peak:      -80.3 dBFS"),
+                "loud" => Ebur128Output("-20.0", "    Peak:       -1.5 dBFS"),
+                _ => Ebur128Output("-30.0", "    Peak:       -9.0 dBFS")
+            })));
+
+        await InvokeLoudnessStageAsync(service);
+
+        Assert.Equal(
+            "Loudness scan complete (4 files, 4 updated, 1 without audio)",
+            service.GetStatus().Stages.Single(stage => stage.Stage == "loudnessScan").Message);
+        Assert.Equal(
+            [
+                "with audio: faint, loud, quiet",
+                "without audio: silent",
+                "videos with audio=3 without audio=1",
+                "baseline=-20",
+                "silent hasAudio=false loudness=none peak=none",
+                "faint hasAudio=true loudness=-70 peak=-80.3"
+            ],
+            LibraryListQueryTests.DescribeAudioReads(scope.RootPath, "silent", "faint"));
     }
 
     [Fact]
@@ -1017,14 +1054,25 @@ public sealed class RefreshPipelineServiceTests
     }
 
     [Fact]
-    public void ParseLoudness_HasNoPeak_ForASilentTrack()
+    public void ParseLoudness_ReadsADigitallySilentTrack_AsNoAudio()
     {
         var parsed = RefreshPipelineService.ParseLoudnessFromFfmpegOutput(Ebur128Output("-70.0", "    Peak:       -inf dBFS"), exitCode: 0);
 
         Assert.NotNull(parsed);
+        Assert.False(parsed!.HasAudio);
+        Assert.Null(parsed.IntegratedLoudness);
+        Assert.Null(parsed.PeakDb);
+    }
+
+    [Fact]
+    public void ParseLoudness_ReadsATrackAtTheFloorWithAPeak_AsAudio()
+    {
+        var parsed = RefreshPipelineService.ParseLoudnessFromFfmpegOutput(Ebur128Output("-70.0", "    Peak:      -80.3 dBFS"), exitCode: 0);
+
+        Assert.NotNull(parsed);
         Assert.True(parsed!.HasAudio);
         Assert.Equal(-70.0, parsed.IntegratedLoudness);
-        Assert.Null(parsed.PeakDb);
+        Assert.Equal(-80.3, parsed.PeakDb);
     }
 
     [Fact]
@@ -1467,7 +1515,7 @@ public sealed class RefreshPipelineServiceTests
         startInfo.ArgumentList.Add("-f");
         startInfo.ArgumentList.Add("lavfi");
         startInfo.ArgumentList.Add("-i");
-        startInfo.ArgumentList.Add("anullsrc=r=8000:cl=mono");
+        startInfo.ArgumentList.Add("sine=frequency=440:sample_rate=8000");
         startInfo.ArgumentList.Add("-shortest");
         startInfo.ArgumentList.Add("-t");
         startInfo.ArgumentList.Add("1");

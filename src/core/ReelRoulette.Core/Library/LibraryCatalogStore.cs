@@ -167,7 +167,7 @@ public sealed class LibraryCatalogPreset
 
 public static class LibraryCatalogStore
 {
-    public const int SchemaVersion = 5;
+    public const int SchemaVersion = 6;
 
     /// <summary>
     /// The oldest schema version a release shipped. Open and import upgrade a catalog at it, or at any later
@@ -256,7 +256,8 @@ public static class LibraryCatalogStore
         [2] = Schema2ItemColumns,
         [3] = Schema3ItemColumns,
         [4] = Schema4ItemColumns,
-        [5] = Schema4ItemColumns
+        [5] = Schema4ItemColumns,
+        [6] = Schema4ItemColumns
     };
 
     /// <summary>
@@ -268,7 +269,8 @@ public static class LibraryCatalogStore
     {
         [2] = UpgradeSchema2To3,
         [3] = UpgradeSchema3To4,
-        [4] = UpgradeSchema4To5
+        [4] = UpgradeSchema4To5,
+        [5] = UpgradeSchema5To6
     };
 
     /// <summary>
@@ -473,6 +475,24 @@ public static class LibraryCatalogStore
                 ("$filter", WithFlagModesWritten(filterState)),
                 ("$position", position));
         }
+    }
+
+    /// <summary>
+    /// Schema version 5 to 6: a video whose loudness scan measured digital silence, at the -70 LUFS floor with
+    /// no peak, counts as no audio, as a file without an audio track does, so it is stored without audio or
+    /// loudness. Only videos scanned under loudness analysis version 2, which measures the peak, are changed:
+    /// version 1's peaks were cleared, and those videos are scanned again anyway.
+    /// </summary>
+    private static void UpgradeSchema5To6(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        Execute(
+            connection,
+            transaction,
+            """
+            UPDATE items SET has_audio = 0, integrated_loudness = NULL
+            WHERE media_type = 0 AND has_audio = 1 AND integrated_loudness <= -70.0 AND peak_db IS NULL
+              AND loudness_analysis_version >= 2;
+            """);
     }
 
     private static string WithFlagModesWritten(string filterStateJson)

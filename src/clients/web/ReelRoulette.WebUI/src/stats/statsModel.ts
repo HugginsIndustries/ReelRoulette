@@ -39,12 +39,6 @@ export interface StatsView {
   library: StatsLibraryView;
 }
 
-/**
- * The integrated loudness of a track below `ebur128`'s gate, as a silent track is. Its true peak, -inf, isn't stored,
- * so a track with audio at this loudness and without a peak is silent.
- */
-const SILENT_LOUDNESS_LUFS = -70;
-
 const yesNo = (value: boolean): string => (value ? "Yes" : "No");
 
 /** How long ago `utcMs` was, as Last played says it, or Never for null. */
@@ -80,17 +74,15 @@ export function loudnessText(item: Pick<LibraryProjectionItem, "hasAudio" | "int
   return item.integratedLoudness === null ? "Unknown" : `${item.integratedLoudness.toFixed(1)} LUFS`;
 }
 
-/** The scan's true peak, N/A without audio, Silent for a silent track, or Not measured. */
-export function truePeakText(item: Pick<LibraryProjectionItem, "hasAudio" | "integratedLoudness" | "peakDb">): string {
+/**
+ * The scan's true peak, N/A without audio, or Not measured. A digitally silent track has no audio, since the server
+ * counts it as a file without an audio track.
+ */
+export function truePeakText(item: Pick<LibraryProjectionItem, "hasAudio" | "peakDb">): string {
   if (item.hasAudio === false) {
     return "N/A";
   }
-  if (item.peakDb !== null) {
-    return `${item.peakDb.toFixed(1)} dBTP`;
-  }
-  return item.hasAudio === true && item.integratedLoudness !== null && item.integratedLoudness <= SILENT_LOUDNESS_LUFS
-    ? "Silent"
-    : "Not measured";
+  return item.peakDb === null ? "Not measured" : `${item.peakDb.toFixed(1)} dBTP`;
 }
 
 /**

@@ -37,7 +37,7 @@ public sealed class LibraryCatalogMigrationTests
                 new SeedItem("b", "/media/alpha.jpg") { SourceId = "on", MediaType = 1 }
             ],
             tags: [new SeedTag("Ann")],
-            presets: [new SeedPreset("Night", """{"favoritesOnly":true}""")]);
+            presets: [NightPreset(version)]);
         var before = LibraryCatalogStore.Read(Path.Combine(dir.Path, "library.db"));
 
         var opened = CatalogOpen.Open(dir.Path);
@@ -63,7 +63,7 @@ public sealed class LibraryCatalogMigrationTests
             version,
             items: [new SeedItem("import", "/clips/Import.mp4")],
             standalone: true,
-            presets: [new SeedPreset("Night", """{"favoritesOnly":true}""")]);
+            presets: [NightPreset(version)]);
 
         LibraryCatalogStore.PrepareIncomingFromFile(dir.Path, export);
 
@@ -105,6 +105,54 @@ public sealed class LibraryCatalogMigrationTests
         AssertFiltersAsBefore(presets[1].FilterStateJson, FlagFilterModeValue.Off, FlagFilterModeValue.Excluded);
         Assert.Equal("""{"favoritesMode":"excluded","blacklistedMode":"only"}""", presets[2].FilterStateJson);
         Assert.Equal("null", presets[3].FilterStateJson);
+    }
+
+    // Counted as audio, the digitally silent track would put the baseline, the 75th percentile, at -70. The video
+    // scanned before the peak keeps its values until the next refresh scans it again.
+    [Fact]
+    public void Open_Schema5Catalog_StoresADigitallySilentVideoAsNoAudio_AndKeepsAFaintOneAsAudio()
+    {
+        using var dir = new TempDirectory();
+        CatalogSeed.WriteSchemaVersion(
+            dir.Path,
+            5,
+            sources: [new SeedSource("on", "/media", "On")],
+            items:
+            [
+                new SeedItem("silent", "/media/silent.mp4") { SourceId = "on", HasAudio = true, IntegratedLoudness = -70.0, LoudnessAnalysisVersion = 2 },
+                new SeedItem("faint", "/media/faint.mp4") { SourceId = "on", HasAudio = true, IntegratedLoudness = -70.0, PeakDb = -80.3, LoudnessAnalysisVersion = 2 },
+                new SeedItem("before-peak", "/media/before-peak.mp4") { SourceId = "on", HasAudio = true, IntegratedLoudness = -70.0, LoudnessAnalysisVersion = 1 },
+                new SeedItem("loud", "/media/loud.mp4") { SourceId = "on", HasAudio = true, IntegratedLoudness = -20.0, PeakDb = -1.5, LoudnessAnalysisVersion = 2 },
+                new SeedItem("without-audio", "/media/without-audio.mp4") { SourceId = "on", HasAudio = false, LoudnessAnalysisVersion = 2 },
+                new SeedItem("photo", "/media/photo.jpg") { SourceId = "on", MediaType = 1, LoudnessAnalysisVersion = 0 }
+            ]);
+
+        var opened = CatalogOpen.Open(dir.Path);
+
+        Assert.Equal(LibraryCatalogOpenStatus.Opened, opened.Status);
+        var rows = ReadRows(
+            opened.Session!.DatabasePath,
+            "SELECT id, has_audio, integrated_loudness, peak_db, loudness_analysis_version FROM items ORDER BY id;");
+        Assert.Equal(
+            [
+                "before-peak audio=1 loudness=-70 peak=none version=1",
+                "faint audio=1 loudness=-70 peak=-80.3 version=2",
+                "loud audio=1 loudness=-20 peak=-1.5 version=2",
+                "photo audio=none loudness=none peak=none version=0",
+                "silent audio=0 loudness=none peak=none version=2",
+                "without-audio audio=0 loudness=none peak=none version=2"
+            ],
+            rows.Select(row => $"{row[0]} audio={row[1] ?? "none"} loudness={row[2] ?? "none"} peak={row[3] ?? "none"} version={row[4]}"));
+        Assert.Equal(
+            [
+                "with audio: before-peak, faint, loud, photo",
+                "without audio: photo, silent, without-audio",
+                "videos with audio=3 without audio=2",
+                "baseline=-20",
+                "silent hasAudio=false loudness=none peak=none",
+                "faint hasAudio=true loudness=-70 peak=-80.3"
+            ],
+            LibraryListQueryTests.DescribeAudioReads(dir.Path, "silent", "faint"));
     }
 
     [Fact]
@@ -300,6 +348,14 @@ public sealed class LibraryCatalogMigrationTests
             tags: [new SeedTag("Ann"), new SeedTag("Bo")],
             presets: [new SeedPreset("Night", """{"favoritesOnly":true}""")]);
     }
+
+    /// <summary>
+    /// A Favorites only preset as <paramref name="schemaVersion"/> stored it: before version 5 with the older
+    /// <c>favoritesOnly</c>, and from it with the Favorites and Blacklisted modes.
+    /// </summary>
+    private static SeedPreset NightPreset(int schemaVersion) => schemaVersion < 5
+        ? new SeedPreset("Night", """{"favoritesOnly":true}""")
+        : new SeedPreset("Night", """{"favoritesMode":"only","blacklistedMode":"excluded"}""");
 
     private static void AssertUpgradedNightPreset(LibraryCatalogPreset preset)
     {
