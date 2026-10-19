@@ -62,6 +62,8 @@ export interface ServerConnectionEvents {
    * filter included when the store followed it.
    */
   presetsReloaded: () => void;
+  /** The connection stopped, as when the page closes, so nothing waiting to load again should go on. */
+  stopped: () => void;
 }
 
 export interface ServerConnection {
@@ -115,7 +117,8 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     refreshCompleted: [],
     refreshKeptSources: [],
     resyncRequired: [],
-    presetsReloaded: []
+    presetsReloaded: [],
+    stopped: []
   };
   let eventStream: SseClient | null = null;
   let lastAppliedRefreshRunId: string | null = null;
@@ -588,6 +591,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
       streamOpen = false;
       cancelRecheck();
       store.reconnecting.value = false;
+      emit("stopped");
     },
     loadPresets: () => loadPresets(),
     pair: (token) => pair(token, true),

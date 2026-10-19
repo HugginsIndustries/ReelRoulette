@@ -2693,6 +2693,16 @@ components:
           type: number
           format: double
           nullable: true
+        integratedLoudness:
+          type: number
+          format: double
+          nullable: true
+          description: Integrated loudness in LUFS, measured by the loudness scan, or null when the scan hasn't measured it. A video without audio, a digitally silent one included, has none.
+        peakDb:
+          type: number
+          format: double
+          nullable: true
+          description: The true peak the loudness scan measured, in dBTP, or null when the scan hasn't measured one. A video without audio, a digitally silent one included, has none.
         mediaUrl:
           type: string
         isFavorite:

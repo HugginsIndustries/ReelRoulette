@@ -1,5 +1,6 @@
 import type { LibraryProjectionItem } from "../library/libraryProjectionModel";
 import { compareTagNames } from "../library/tagNameOrder";
+import type { NormalizationAdjustment } from "../playback/loudnessNormalization";
 import { formatPlaybackTime } from "../playback/nowPlaying";
 import type { TagCatalogSnapshot } from "../tags/tagCatalog";
 import { bySortOrderThenName, isUncategorizedCategoryId, normalizeTagKey } from "../tags/tagEditorModel";
@@ -86,10 +87,26 @@ export function truePeakText(item: Pick<LibraryProjectionItem, "hasAudio" | "pea
 }
 
 /**
- * The current file's rows: plays, the time before this play, favorite, and blacklisted, then for a video its duration
- * and audio. The tags follow them, in the tab.
+ * What loudness normalization applies to the playing file, signed, such as "+6.0 dB" or "-4.5 dB", with "(limited by
+ * peak)" when its headroom held a boost back. N/A for a file without loudness data, or while Automatic waits for the
+ * library's baseline, and Off while normalization or Enhanced audio is off.
  */
-export function fileRows(item: LibraryProjectionItem, lastPlayedUtcMs: number | null, nowMs: number): StatsRow[] {
+export function adjustmentText(adjustment: NormalizationAdjustment, enhanced: boolean): string {
+  if (adjustment.kind === "none") {
+    return "N/A";
+  }
+  if (adjustment.kind === "off" || !enhanced) {
+    return "Off";
+  }
+  const signed = `${adjustment.db >= 0 ? "+" : ""}${adjustment.db.toFixed(1)} dB`;
+  return adjustment.limitedByPeak ? `${signed} (limited by peak)` : signed;
+}
+
+/**
+ * The current file's rows: plays, the time before this play, favorite, and blacklisted, then for a video its duration
+ * and audio, with the adjustment normalization applies to it. The tags follow them, in the tab.
+ */
+export function fileRows(item: LibraryProjectionItem, lastPlayedUtcMs: number | null, nowMs: number, adjustment: string): StatsRow[] {
   const rows: StatsRow[] = [
     { label: "Plays", value: String(item.playCount) },
     { label: "Last played", value: playedAgo(lastPlayedUtcMs, nowMs) },
@@ -101,6 +118,7 @@ export function fileRows(item: LibraryProjectionItem, lastPlayedUtcMs: number | 
       { label: "Duration", value: item.durationSeconds === null ? "Unknown" : formatPlaybackTime(item.durationSeconds) },
       { label: "Has audio", value: hasAudioText(item.hasAudio) },
       { label: "Loudness", value: loudnessText(item) },
+      { label: "Adjustment", value: adjustment },
       { label: "True peak", value: truePeakText(item) }
     );
   }

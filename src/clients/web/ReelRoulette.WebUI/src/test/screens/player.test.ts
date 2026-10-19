@@ -1189,7 +1189,7 @@ describe("volume and Enhanced audio", () => {
     const dialogMessages = () => [...document.querySelectorAll("dialog.app-dialog .dialog-message")].map((message) => message.textContent);
     await tapPage();
     expect(dialogMessages()).toEqual([
-      "Audio processing couldn't start on this device. Turn off Enhanced audio to play sound directly, without in-app volume on iPhone and iPad."
+      "Audio processing couldn't start on this device. Turn off Enhanced audio to play sound directly."
     ]);
     const notice = document.querySelector("dialog.app-dialog") as HTMLElement;
     expect([...notice.querySelectorAll("button")].map((each) => each.textContent)).toEqual(["OK", "Turn off Enhanced audio"]);

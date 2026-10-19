@@ -318,6 +318,17 @@ describe("createServerConnection", () => {
     expect(notified).toEqual([{ kind: "connection", text: "Reconnected.", key: "connection" }]);
   });
 
+  it("tells its listeners when it stops, so nothing waiting to load again goes on", async () => {
+    const { connection } = setup();
+    const stopped = vi.fn();
+    connection.on("stopped", stopped);
+    connection.start();
+    await settle();
+    expect(stopped).not.toHaveBeenCalled();
+    connection.stop();
+    expect(stopped).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps saying the server can't be reached once the stream opens, until a version check reaches it", async () => {
     let serverDown = false;
     const { store, connection, sources, statuses, notified } = setup({

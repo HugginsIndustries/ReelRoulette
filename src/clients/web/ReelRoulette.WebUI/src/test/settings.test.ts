@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_AMBIENT_TUNING } from "../playback/ambient";
-import { advanceAfterProblem, createSettings, wholeNumberProblem } from "../settings/settings";
+import { advanceAfterProblem, boostLimitProblem, createSettings, manualTargetProblem, numberProblem, wholeNumberProblem } from "../settings/settings";
 import { createDeviceStore } from "../state/deviceStore";
 
 function memoryStorage(initial: Record<string, string> = {}) {
@@ -34,6 +34,31 @@ describe("advanceAfterProblem", () => {
     expect(advanceAfterProblem("3600")).toBeNull();
     expect(advanceAfterProblem("0")).toEqual({ message: "Use a whole number from 1 to 3600 seconds." });
     expect(advanceAfterProblem("3601")).toEqual({ message: "Use a whole number from 1 to 3600 seconds." });
+  });
+});
+
+describe("numberProblem", () => {
+  it("takes a number in range, negative or decimal, spaces around it included", () => {
+    for (const text of ["-50", "-10", "-23.5", " -18 ", "-010"]) {
+      expect([text, numberProblem(text, -50, -10, "LUFS")]).toEqual([text, null]);
+    }
+  });
+
+  it("says what it takes for anything else, an emptied field included", () => {
+    for (const text of ["-51", "-9.9", "-5", "", " ", "abc", "-", "-18.", ".5", "−18", "-1e1", "+18"]) {
+      expect([text, numberProblem(text, -50, -10, "LUFS")]).toEqual([text, { message: "Use a number from -50 to -10 LUFS." }]);
+    }
+  });
+});
+
+describe("loudness normalization's fields", () => {
+  it("take a target from -50 to -10 LUFS, and a boost limit of a whole number from 0 to 24 dB", () => {
+    expect([manualTargetProblem("-50"), manualTargetProblem("-10"), manualTargetProblem("-30.5")]).toEqual([null, null, null]);
+    expect(manualTargetProblem("-9")).toEqual({ message: "Use a number from -50 to -10 LUFS." });
+    expect([boostLimitProblem("0"), boostLimitProblem("24")]).toEqual([null, null]);
+    for (const text of ["25", "2.5", "-1", ""]) {
+      expect([text, boostLimitProblem(text)]).toEqual([text, { message: "Use a whole number from 0 to 24 dB." }]);
+    }
   });
 });
 

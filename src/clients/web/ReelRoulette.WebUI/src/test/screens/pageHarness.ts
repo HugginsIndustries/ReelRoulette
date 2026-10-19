@@ -61,6 +61,24 @@ export function unauthorizedLogLine(route: string, current: RelayLogCurrentItem 
   return statusLogLine(unauthorizedLogText(route), current, attemptId);
 }
 
+/** The library stats the fake server answers with until a test sets its own: an empty library at the server's baseline. */
+export const LIBRARY_STATS = {
+  global: {
+    totalVideos: 0,
+    totalPhotos: 0,
+    totalMedia: 0,
+    favorites: 0,
+    blacklisted: 0,
+    uniquePlayedMedia: 0,
+    neverPlayedMedia: 0,
+    totalPlays: 0,
+    videosWithAudio: 0,
+    videosWithoutAudio: 0,
+    baselineLoudnessLufs: -18
+  },
+  sources: []
+};
+
 /** Answers the page's requests by method and path. Unknown routes answer 404. */
 export class FakeServer {
   readonly calls: FetchCall[] = [];
@@ -73,6 +91,7 @@ export class FakeServer {
     this.on("POST", "/api/logs/client", () => status(204));
     this.on("POST", "/api/library/query", () => json({ items: [], totalCount: 0, searchBaselineCount: 0 }));
     this.on("POST", "/api/record-playback", () => json({}));
+    this.on("GET", "/api/library/stats", () => json(LIBRARY_STATS));
   }
 
   on(method: string, path: string, reply: Reply): this {
@@ -264,13 +283,28 @@ export interface FakeGain {
   readonly calls: readonly GainCall[];
   /** A direct set of the value is a jump in level, which is a click. */
   readonly directSets: number;
+  /** What it connects to. */
+  readonly next: unknown;
 }
 
-/** One audio context the page built: its state, and the elements it routed through its gain stage. */
+/** The limiter's settings. */
+export interface FakeLimiter {
+  readonly threshold: { value: number };
+  readonly knee: { value: number };
+  readonly ratio: { value: number };
+  readonly attack: { value: number };
+  readonly next: unknown;
+}
+
+/** One audio context the page built: its state, the elements it routed through its gain stage, and its nodes. */
 export interface FakeAudioContextRecord {
   readonly state: string;
+  readonly destination: unknown;
   readonly routed: readonly HTMLMediaElement[];
   readonly gains: readonly FakeGain[];
+  readonly limiters: readonly FakeLimiter[];
+  /** The node the routed video connects to. */
+  readonly sourceNext: unknown;
 }
 
 /**
@@ -283,9 +317,26 @@ export class FakeWebAudio {
   refuseStart = false;
   readonly contexts: FakeAudioContextRecord[] = [];
 
-  /** The newest gain stage's gain, or null before the page built one. */
+  /** The newest gain stage's volume gain, the last before the speakers, or null before the page built one. */
   get gain(): FakeGain | null {
-    return this.contexts.at(-1)?.gains.at(-1) ?? null;
+    const context = this.contexts.at(-1);
+    return context?.gains.find((gain) => gain.next === context.destination) ?? null;
+  }
+
+  /** The newest gain stage's loudness normalization gain, the first after the video, or null before the page built one. */
+  get normalization(): FakeGain | null {
+    const context = this.contexts.at(-1);
+    return context?.gains.find((gain) => gain === context.sourceNext) ?? null;
+  }
+
+  /** The newest gain stage's nodes from the video to the speakers, in order. */
+  chain(): unknown[] {
+    const context = this.contexts.at(-1);
+    const chain: unknown[] = [];
+    for (let node = context?.sourceNext; node && node !== context?.destination; node = (node as { next: unknown }).next) {
+      chain.push(node);
+    }
+    return chain;
   }
 
   /** The `AudioContext` class the page builds its gain stage with. */
@@ -296,6 +347,8 @@ export class FakeWebAudio {
       readonly destination = {};
       readonly routed: HTMLMediaElement[] = [];
       readonly gains: FakeGain[] = [];
+      readonly limiters: FakeLimiter[] = [];
+      sourceNext: unknown = null;
 
       constructor() {
         if (audio.unavailable) {
@@ -325,14 +378,29 @@ export class FakeWebAudio {
 
       createMediaElementSource(element: HTMLMediaElement) {
         this.routed.push(element);
-        return { connect: (node: unknown) => node };
+        return { connect: (node: unknown) => (this.sourceNext = node) };
+      }
+
+      createDynamicsCompressor() {
+        // Web Audio's defaults, which the limiter sets its own in place of.
+        const limiter = {
+          threshold: { value: -24 },
+          knee: { value: 30 },
+          ratio: { value: 12 },
+          attack: { value: 0.003 },
+          next: null as unknown,
+          connect: (next: unknown) => (limiter.next = next)
+        };
+        this.limiters.push(limiter);
+        return limiter;
       }
 
       createGain() {
         const gain = {
           level: 1,
           calls: [] as GainCall[],
-          directSets: 0
+          directSets: 0,
+          next: null as unknown
         };
         const param = {
           get value() {
@@ -351,8 +419,10 @@ export class FakeWebAudio {
             gain.level = level;
           }
         };
-        this.gains.push(gain);
-        return { gain: param, connect: (next: unknown) => next };
+        // The node the page connects is the gain's record too, so the chain can be followed from the video.
+        const node = Object.assign(gain, { gain: param, connect: (next: unknown) => (gain.next = next) });
+        this.gains.push(node);
+        return node;
       }
     };
   }

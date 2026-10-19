@@ -32,6 +32,8 @@ public static class ApiContractMapper
         string displayName,
         string mediaType,
         double? durationSeconds,
+        double? integratedLoudness,
+        double? peakDb,
         string mediaUrl,
         bool isFavorite,
         bool isBlacklisted)
@@ -43,6 +45,8 @@ public static class ApiContractMapper
             DisplayName = displayName,
             MediaType = mediaType,
             DurationSeconds = durationSeconds,
+            IntegratedLoudness = integratedLoudness,
+            PeakDb = peakDb,
             MediaUrl = mediaUrl,
             IsFavorite = isFavorite,
             IsBlacklisted = isBlacklisted

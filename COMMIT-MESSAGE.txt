@@ -19,8 +19,12 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan Date Added and Date Filters, and Random Pick Options in place of Rating-Weighted Random Picks
+M12i8: Add the WebUI's loudness normalization, with its settings and the Stats tab's Adjustment
 
-- MILESTONES.md: Date Added and Date Filters, after Rating Filter and Sort, records each file's date added in a new schema step, adds the Added in and Created in filters with rolling ranges the server resolves in its own time zone, and sorts by Date added and Date created, with the measured cost of the step and the date queries.
-- MILESTONES.md: Random Pick Options replaces Rating-Weighted Random Picks, moving from M12k5 to M12k6. Combinable options in a new Random tab take the place of the five randomization modes, with Shuffle's rolling per-device memory, Reset now, a cycle card, folder spread that skips recent folders, tag spread, and seeded random tests. The catalog numbers and simulations behind each choice are in its Traps.
-- MILESTONES.md: WebUI Player Controls' Random always adds its pick at the end of the history, and Random behavior moves to Random Pick Options. WebUI Keyboard Shortcuts, Library Profiles, Profile Tag and Preset Visibility, Per-Account Library Data, and Client Robustness Findings follow the new options, and the traps on the shipped schema versions are now measured.
+- WebUI: loudness normalization evens out loudness between videos through Enhanced audio's gain stage, toward Automatic, the library's baseline, or Quieter, Standard, Louder, or a Manual target, by a gain rule locked to a WebUI-only fixture: a cut in full, and a boost held to the boost limit and the video's headroom, plus 6 dB with Allow limiting on.
+- WebUI: the gain stage's chain runs through normalization's gain, a limiter at -1 dB, and a gain that takes back the limiter's makeup, to the volume's gain. The limiter stays in the chain, each video's gain is set while it starts silent, and a setting change glides it.
+- WebUI: the Settings tab's Audio section has Loudness normalization and its settings, kept per device and disabled while Enhanced audio is off, and the Stats tab shows each video's Adjustment. Enhanced audio's description and the gain stage's failure notice have their new texts.
+- WebUI: the library's baseline loads from the library stats once the server is ready and after each refresh and resync, and a failed load is tried again every 5 seconds until one succeeds; until it loads, Automatic applies no adjustment.
+- Server: random picks and library plays carry the video's integrated loudness and true peak, in the OpenAPI contract and the generated WebUI types.
+- Mockup: the gain rule follows the WebUI's, so a boost limit of 0 marks nothing limited by peak, and neither does a boost that fits its headroom exactly.
+- Docs: MILESTONES.md lands the Normalization slice with its evidence, keeps the limiter in the chain in the Decisions, has Night mode's compressor stay in the chain too, and settles the slice's criteria for the browsers and for Automatic before the baseline loads. CONTEXT.md, docs/api.md, docs/domain-inventory.md, and CHANGELOG.md describe normalization.

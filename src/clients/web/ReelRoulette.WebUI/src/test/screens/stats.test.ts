@@ -17,6 +17,9 @@ const VIDEO = {
   isBlacklisted: false
 };
 
+/** A random pick, which carries the video's loudness and peak when the scan measured them. */
+type PickedItem = typeof VIDEO & { integratedLoudness?: number; peakDb?: number };
+
 const OTHER_VIDEO = {
   ...VIDEO,
   id: "C:\\media\\beach day.mp4",
@@ -86,11 +89,14 @@ interface StatsPage {
   /** The server's item reads by item id, which a test changes as the server would. */
   items: Map<string, Record<string, unknown>>;
   /** The random picks still to answer, in order; the last one repeats. */
-  picks: (typeof VIDEO)[];
+  picks: PickedItem[];
 }
 
+/** The page loads the library stats once the server is ready, for loudness normalization's baseline. */
+const BASELINE_LOADS = 1;
+
 async function mountStats(
-  options: { play?: boolean; items?: Record<string, unknown>[]; picks?: (typeof VIDEO)[]; setup?: (server: FakeServer) => void } = {}
+  options: { play?: boolean; items?: Record<string, unknown>[]; picks?: PickedItem[]; setup?: (server: FakeServer) => void } = {}
 ): Promise<StatsPage> {
   const server = new FakeServer();
   const items = new Map((options.items ?? [itemRow(VIDEO)]).map((row) => [String(row.id), row]));
@@ -106,6 +112,7 @@ async function mountStats(
   options.setup?.(server);
   const page = mountPage({ server });
   await pageReady(server);
+  await waitFor(() => expect(server.requests("GET", "/api/library/stats")).toHaveLength(BASELINE_LOADS));
   await settle();
   if (options.play !== false) {
     await playNext(picks[0]!, "Tap to play, or open the panel to choose a preset or filter.");
@@ -238,6 +245,51 @@ describe("Stats tab", () => {
     expect([rows().Loudness, rows()["True peak"]]).toEqual(expected.slice(1));
   });
 
+  it.each([
+    ["a loud video, cut in full", { integratedLoudness: -14.44, peakDb: -1 }, "-6.0 dB"],
+    ["a quiet video, boosted in full", { integratedLoudness: -26.44, peakDb: -12 }, "+6.0 dB"],
+    ["a quiet video whose peak holds its boost back", { integratedLoudness: -32.44, peakDb: -4 }, "+9.0 dB (limited by peak)"],
+    ["a video without loudness data", {}, "N/A"]
+  ])("shows the adjustment normalization applies to %s, toward the library's baseline, between Loudness and True peak", async (_, fields, expected) => {
+    await mountStats({ picks: [{ ...VIDEO, ...fields }] });
+    fireEvent.click(document.getElementById("now-playing-name")!);
+
+    await waitFor(() => expect(rows().Adjustment).toBe(expected));
+    const labels = Object.keys(rows());
+    expect(labels.slice(labels.indexOf("Loudness"), labels.indexOf("True peak") + 1)).toEqual(["Loudness", "Adjustment", "True peak"]);
+  });
+
+  it("shows the adjustment Off while normalization or Enhanced audio is off, and follows the settings as they change", async () => {
+    await mountStats({ picks: [{ ...VIDEO, integratedLoudness: -32.44, peakDb: -4 }] });
+    fireEvent.click(document.getElementById("now-playing-name")!);
+    await waitFor(() => expect(rows().Adjustment).toBe("+9.0 dB (limited by peak)"));
+
+    const settingsTab = () => fireEvent.click(document.getElementById("panel-tab-settings")!);
+    const statsTab = () => fireEvent.click(document.getElementById("panel-tab-stats")!);
+    const checkbox = (name: string) => screen.getByRole("checkbox", { name, hidden: true }) as HTMLInputElement;
+    settingsTab();
+    await settle();
+    fireEvent.click(checkbox("Allow limiting"));
+    await settle();
+    statsTab();
+    await waitFor(() => expect(rows().Adjustment).toBe("+3.0 dB (limited by peak)"));
+
+    settingsTab();
+    await settle();
+    fireEvent.click(checkbox("Loudness normalization"));
+    await settle();
+    statsTab();
+    await waitFor(() => expect(rows().Adjustment).toBe("Off"));
+
+    settingsTab();
+    await settle();
+    fireEvent.click(checkbox("Loudness normalization"));
+    fireEvent.click(checkbox("Enhanced audio"));
+    await settle();
+    statsTab();
+    await waitFor(() => expect(rows().Adjustment).toBe("Off"));
+  });
+
   it("follows a new play, and the server's favorite, blacklist, tag, and playback events", async () => {
     const { page, items } = await mountStats({
       items: [itemRow(VIDEO), itemRow(OTHER_VIDEO, { playCount: 7, tags: ["Beach"] })],
@@ -336,7 +388,7 @@ describe("Stats tab", () => {
 
   it("loads only while it shows, and a burst of events loads once, plus once more for events during a load", async () => {
     const { page, server } = await mountStats();
-    const statsLoads = () => server.requests("GET", "/api/library/stats").length;
+    const statsLoads = () => server.requests("GET", "/api/library/stats").length - BASELINE_LOADS;
     emit(page, "itemStateChanged", { itemId: "item-other", isFavorite: false, isBlacklisted: false });
     emit(page, "itemStateChanged", { itemId: "item-video", isFavorite: true, isBlacklisted: false });
     await new Promise((resolve) => setTimeout(resolve, 400));
@@ -385,7 +437,7 @@ describe("Stats tab", () => {
 
     server.on("GET", "/api/library/stats", () => status(500));
     emit(page, "itemStateChanged", { itemId: "item-other", isFavorite: false, isBlacklisted: false });
-    await waitFor(() => expect(server.requests("GET", "/api/library/stats")).toHaveLength(2));
+    await waitFor(() => expect(server.requests("GET", "/api/library/stats")).toHaveLength(BASELINE_LOADS + 2));
     await settle();
     expect(cards()).toHaveLength(11);
     expect(rows().Plays).toBe("1");

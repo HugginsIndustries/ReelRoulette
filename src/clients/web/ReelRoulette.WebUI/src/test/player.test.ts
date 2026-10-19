@@ -1,3 +1,4 @@
+import { signal } from "@preact/signals";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { unauthorizedLogText } from "../api/serverRequest";
 import type { NotifyRequest } from "../notifications/notifications";
@@ -201,6 +202,7 @@ function setup(saved: Record<string, string> = {}, audioStandIn?: Pick<AudioStag
     dialogs: { noticeWithAction: () => Promise.resolve(false) },
     relay: () => {},
     renewVideo: () => player.renewVideo(),
+    normalizationGainDb: signal(0),
     volumeReadOnly: false,
     activation: new EventTarget()
   });

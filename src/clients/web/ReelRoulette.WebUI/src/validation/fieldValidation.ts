@@ -106,6 +106,8 @@ export interface SettingField {
   commit(): void;
   /** The field loses focus or hides: saves a valid value typed since the last save, then shows the value saved. */
   leave(): void;
+  /** Shows the value saved again, dropping what was typed, as after Reset to defaults puts the values back. */
+  show(): void;
 }
 
 export function createSettingField(options: SettingFieldOptions): SettingField {
@@ -152,6 +154,11 @@ export function createSettingField(options: SettingFieldOptions): SettingField {
     leave() {
       saveEdit();
       edited = false;
+      text.value = options.saved();
+    },
+    show() {
+      edited = false;
+      saidSaved(false);
       text.value = options.saved();
     }
   };

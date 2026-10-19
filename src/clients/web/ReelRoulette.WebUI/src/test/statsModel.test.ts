@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseLibraryItem, type LibraryProjectionItem } from "../library/libraryProjectionModel";
-import { fileRows, libraryCards, loudnessText, orderTags, playedAgo, truePeakText, type LibraryStats } from "../stats/statsModel";
+import { adjustmentText, fileRows, libraryCards, loudnessText, orderTags, playedAgo, truePeakText, type LibraryStats } from "../stats/statsModel";
 
 const NOW = Date.parse("2026-10-13T20:00:00Z");
 const MINUTE = 60_000;
@@ -11,7 +11,7 @@ function item(fields: Record<string, unknown>): LibraryProjectionItem {
   return parseLibraryItem({ id: "item-1", sourceId: "s1", fileName: "clip.mp4", mediaType: 0, ...fields })!;
 }
 
-const rowsOf = (from: LibraryProjectionItem) => Object.fromEntries(fileRows(from, from.lastPlayedUtcMs, NOW).map((row) => [row.label, row.value]));
+const rowsOf = (from: LibraryProjectionItem) => Object.fromEntries(fileRows(from, from.lastPlayedUtcMs, NOW, "Off").map((row) => [row.label, row.value]));
 
 describe("stats model", () => {
   it.each([
@@ -38,10 +38,23 @@ describe("stats model", () => {
     expect([loudnessText(scanned), truePeakText(scanned)]).toEqual([loudness, peak]);
   });
 
+  it.each([
+    ["a cut", { kind: "applied", db: -4.5, limitedByPeak: false }, true, "-4.5 dB"],
+    ["a boost", { kind: "applied", db: 6, limitedByPeak: false }, true, "+6.0 dB"],
+    ["a boost the headroom held back", { kind: "applied", db: 3.24, limitedByPeak: true }, true, "+3.2 dB (limited by peak)"],
+    ["no boost, as the peak leaves no headroom", { kind: "applied", db: 0, limitedByPeak: true }, true, "+0.0 dB (limited by peak)"],
+    ["normalization off", { kind: "off" }, true, "Off"],
+    ["Enhanced audio off", { kind: "applied", db: -4.5, limitedByPeak: false }, false, "Off"],
+    ["a file without loudness data", { kind: "none" }, true, "N/A"],
+    ["a file without loudness data, with Enhanced audio off", { kind: "none" }, false, "N/A"]
+  ] as const)("shows the adjustment for %s", (_, adjustment, enhanced, text) => {
+    expect(adjustmentText(adjustment, enhanced)).toBe(text);
+  });
+
   it("lists a video's plays, last played, flags, duration, and audio", () => {
     const video = item({ playCount: 3, isFavorite: true, durationSeconds: 3725, hasAudio: true, integratedLoudness: -20, peakDb: -0.5 });
 
-    expect(fileRows(video, NOW - 2 * DAY, NOW)).toEqual([
+    expect(fileRows(video, NOW - 2 * DAY, NOW, "+2.0 dB")).toEqual([
       { label: "Plays", value: "3" },
       { label: "Last played", value: "2 days ago" },
       { label: "Favorite", value: "Yes" },
@@ -49,6 +62,7 @@ describe("stats model", () => {
       { label: "Duration", value: "1:02:05" },
       { label: "Has audio", value: "Yes" },
       { label: "Loudness", value: "-20.0 LUFS" },
+      { label: "Adjustment", value: "+2.0 dB" },
       { label: "True peak", value: "-0.5 dBTP" }
     ]);
   });

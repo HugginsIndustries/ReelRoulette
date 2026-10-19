@@ -1,6 +1,7 @@
 import { batch, computed, signal, type ReadonlySignal } from "@preact/signals";
 import { errorText, HttpStatusError, UnauthorizedError } from "../api/serverRequest";
 import { parseLibraryItem, type LibraryProjectionItem } from "../library/libraryProjectionModel";
+import type { LoudnessNormalization } from "../playback/loudnessNormalization";
 import { basenameFromPath } from "../playback/nowPlaying";
 import type { AppApi } from "../state/appApi";
 import type { AppStore } from "../state/appStore";
@@ -9,7 +10,7 @@ import type { ServerConnection } from "../state/serverConnection";
 import type { TagCatalog } from "../tags/tagCatalog";
 import { createCoalescedRefresh } from "./coalescedRefresh";
 import { createLastPlayedBeforePlay } from "./lastPlayed";
-import { fileRows, libraryCards, orderTags, type LibraryStats, type StatsLibraryView, type StatsView } from "./statsModel";
+import { adjustmentText, fileRows, libraryCards, orderTags, type LibraryStats, type StatsLibraryView, type StatsView } from "./statsModel";
 
 /**
  * The panel's Stats tab: the playing file's stats and the library's. It loads only while it shows: showing it loads
@@ -31,6 +32,10 @@ export interface StatsTabOptions {
   connection: Pick<ServerConnection, "on">;
   /** The tag catalog the Tags and Filter tabs share, which orders the file's tags. */
   tagCatalog: TagCatalog;
+  /** What loudness normalization applies to the playing file, which the Adjustment row follows. */
+  normalization: Pick<LoudnessNormalization, "adjustment">;
+  /** Enhanced audio, without which nothing is applied. */
+  enhanced: ReadonlySignal<boolean>;
 }
 
 interface LoadedItem {
@@ -39,7 +44,7 @@ interface LoadedItem {
 }
 
 export function createStatsTab(options: StatsTabOptions): StatsTab {
-  const { store, api, connection, tagCatalog } = options;
+  const { store, api, connection, tagCatalog, normalization, enhanced } = options;
   const isOpen = signal(false);
   const stats = signal<LibraryStats | null>(null);
   const loadedItem = signal<LoadedItem | null>(null);
@@ -70,7 +75,9 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
       file = {
         name: basenameFromPath(playing.displayName || playing.id),
         path: playing.id,
-        rows: item ? fileRows(item, lastPlayed.shownFor(item.lastPlayedUtcMs), Date.now()) : null,
+        rows: item
+          ? fileRows(item, lastPlayed.shownFor(item.lastPlayedUtcMs), Date.now(), adjustmentText(normalization.adjustment.value, enhanced.value))
+          : null,
         tags: item ? orderTags(item.tags, tagCatalog.catalog.value) : []
       };
     }

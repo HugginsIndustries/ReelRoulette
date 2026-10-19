@@ -1,12 +1,13 @@
 import { Fragment, type ComponentChildren } from "preact";
-import { useEffect, useRef } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { APP_VERSION } from "../config/appVersion";
 import { POPUP_POSITIONS, type NotificationKind, type PopupPosition } from "../notifications/notifications";
 import type { PanelSide } from "../panel/panelHost";
 import { AMBIENT_RANGES, AMBIENT_SETTINGS, formatAmbientSetting, type AmbientSetting } from "../playback/ambient";
 import { VOLUME_STEPS, type VolumeStep } from "../playback/audioStage";
 import type { AutoPauseMode } from "../playback/autoPause";
-import { advanceAfterProblem } from "../settings/settings";
+import { automaticLine, TARGET_LUFS, type NormalizationTarget } from "../playback/loudnessNormalization";
+import { advanceAfterProblem, boostLimitProblem, manualTargetProblem } from "../settings/settings";
 import type { ThemeChoice } from "../settings/theme";
 import type { AutoplayMode } from "../state/appStore";
 import { useApp } from "./appContext";
@@ -25,6 +26,17 @@ const AUTOPLAY_MODE_CHOICES: readonly Choice<AutoplayMode>[] = [
 ];
 
 const VOLUME_STEP_CHOICES: readonly Choice<`${VolumeStep}`>[] = VOLUME_STEPS.map((step) => ({ value: `${step}`, title: `${step}%` }));
+
+/** Target loudness's choices, Automatic's line naming the library's baseline once it has loaded. */
+function targetChoices(baseline: number | null): Choice<NormalizationTarget>[] {
+  return [
+    { value: "automatic", title: "Automatic", description: automaticLine(baseline) },
+    { value: "quieter", title: "Quieter", description: `${TARGET_LUFS.quieter} LUFS` },
+    { value: "standard", title: "Standard", description: `${TARGET_LUFS.standard} LUFS` },
+    { value: "louder", title: "Louder", description: `${TARGET_LUFS.louder} LUFS` },
+    { value: "manual", title: "Manual" }
+  ];
+}
 
 const THEME_OPTIONS: readonly Choice<ThemeChoice>[] = [
   { value: "system", title: "System" },
@@ -123,7 +135,7 @@ function Section({ id, title, children }: { id: string; title: string; children:
 /**
  * A labeled list of radio buttons, for one value, or checkboxes, for each of a set. Each is named by its choice's title
  * alone, with its line, when it has one, as its description, so a screen reader reads them apart. The group's hint,
- * when it has one, is its description.
+ * when it has one, is its description. A choice may have more after it, such as the field it shows.
  */
 function OptionList<T extends string>(props: {
   id: string;
@@ -134,8 +146,9 @@ function OptionList<T extends string>(props: {
   onChange: (value: T, checked: boolean) => void;
   disabled?: boolean;
   describedBy?: string;
+  after?: Partial<Record<T, ComponentChildren>>;
 }) {
-  const { id, label, type, choices, isChecked, onChange, disabled, describedBy } = props;
+  const { id, label, type, choices, isChecked, onChange, disabled, describedBy, after } = props;
   const stacked = choices.some((choice) => choice.description);
   return (
     <>
@@ -157,13 +170,16 @@ function OptionList<T extends string>(props: {
             onChange: (event: Event) => onChange(choice.value, (event.currentTarget as HTMLInputElement).checked)
           };
           return (
-            <label key={choice.value}>
-              {type === "radio" ? <input type="radio" {...input} /> : <input type="checkbox" {...input} />}
-              <span>
-                <span id={`${id}-${choice.value}`}>{choice.title}</span>
-                {choice.description ? <small id={`${id}-${choice.value}-description`}>{choice.description}</small> : null}
-              </span>
-            </label>
+            <Fragment key={choice.value}>
+              <label>
+                {type === "radio" ? <input type="radio" {...input} /> : <input type="checkbox" {...input} />}
+                <span>
+                  <span id={`${id}-${choice.value}`}>{choice.title}</span>
+                  {choice.description ? <small id={`${id}-${choice.value}-description`}>{choice.description}</small> : null}
+                </span>
+              </label>
+              {after?.[choice.value] ?? null}
+            </Fragment>
           );
         })}
       </div>
@@ -224,7 +240,10 @@ function PlaybackSettings() {
   );
 }
 
-/** The volume step and Enhanced audio, which the audio stage keeps and applies at once. */
+/**
+ * The volume step and Enhanced audio, which the audio stage keeps and applies at once, and Loudness normalization, which
+ * its gain stage applies.
+ */
 function AudioSettings() {
   const { audio } = useApp();
   return (
@@ -240,11 +259,128 @@ function AudioSettings() {
       <Checkbox
         id="settings-enhanced-audio"
         label="Enhanced audio"
-        hint="Processes audio in the app, so in-app volume works on iPhone and iPad."
+        hint="Processes audio in the app, for loudness normalization."
         checked={audio.enhanced.value}
         onChange={audio.setEnhanced}
       />
+      <LoudnessNormalization />
     </>
+  );
+}
+
+/**
+ * Loudness normalization, on by default, and its Loudness normalization settings, which start closed: Target loudness,
+ * the boost limit, and Allow limiting, which apply at once, whether normalization is on or off, and are kept on this
+ * device. Everything here is disabled while Enhanced audio is off, since the sound then plays directly. Manual's target
+ * shows only while Manual is chosen. Reset to defaults puts the settings back, leaving normalization on or off, and the
+ * fields show them.
+ */
+function LoudnessNormalization() {
+  const { audio, normalization, panel } = useApp();
+  const [resets, setResets] = useState(0);
+  const off = !audio.enhanced.value;
+  const settings = normalization.settings.value;
+  const shown = panel.isOpen.value && panel.tab.value === "settings";
+  const manual = settings.target === "manual";
+  return (
+    <div class="setting">
+      <div class="choice-row">
+        <label>
+          <input
+            type="checkbox"
+            id="settings-loudness"
+            checked={normalization.enabled.value}
+            disabled={off}
+            aria-describedby="settings-loudness-hint"
+            onChange={(event) => normalization.setEnabled(event.currentTarget.checked)}
+          />
+          Loudness normalization
+        </label>
+      </div>
+      <p class="setting-hint" id="settings-loudness-hint">
+        {off ? "Needs Enhanced audio." : "Evens out loudness between videos."}
+      </p>
+      <details class="setting-more" id="settings-loudness-more">
+        <summary>
+          <span class="material-symbol-icon setting-more-chevron" aria-hidden="true">chevron_right</span>
+          Loudness normalization settings
+        </summary>
+        <fieldset class="setting-fields" disabled={off}>
+          <OptionList
+            id="settings-loudness-target"
+            label="Target loudness"
+            type="radio"
+            choices={targetChoices(normalization.baseline.value)}
+            isChecked={(target) => target === settings.target}
+            disabled={off}
+            onChange={(target) => normalization.updateSettings({ target })}
+            after={{
+              manual: (
+                <div class="setting-sub" id="settings-loudness-manual" hidden={!manual}>
+                  <label class="setting-label" for="settings-loudness-manual-target">Target</label>
+                  <div class="filter-row">
+                    {/* The full keyboard, since the numeric keypads on iOS have no minus key. */}
+                    <SettingTextField
+                      id="settings-loudness-manual-target"
+                      class="number-field"
+                      shown={shown && manual}
+                      revision={resets}
+                      saved={() => String(normalization.settings.peek().manualTarget)}
+                      problemOf={manualTargetProblem}
+                      save={(text) => normalization.updateSettings({ manualTarget: Number(text.trim()) })}
+                    />
+                    <span>LUFS</span>
+                  </div>
+                </div>
+              )
+            }}
+          />
+          <label class="setting-label" for="settings-loudness-boost">Boost quiet videos by up to</label>
+          <div class="filter-row">
+            <SettingTextField
+              id="settings-loudness-boost"
+              class="number-field"
+              inputMode="numeric"
+              shown={shown}
+              revision={resets}
+              saved={() => String(normalization.settings.peek().boostLimit)}
+              problemOf={boostLimitProblem}
+              save={(text) => normalization.updateSettings({ boostLimit: Number(text.trim()) })}
+            />
+            <span>dB</span>
+          </div>
+          <div class="choice-stack">
+            <label>
+              <input
+                type="checkbox"
+                id="settings-loudness-limiting"
+                checked={settings.allowLimiting}
+                disabled={off}
+                aria-labelledby="settings-loudness-limiting-label"
+                aria-describedby="settings-loudness-limiting-description"
+                onChange={(event) => normalization.updateSettings({ allowLimiting: event.currentTarget.checked })}
+              />
+              <span>
+                <span id="settings-loudness-limiting-label">Allow limiting</span>
+                <small id="settings-loudness-limiting-description">Lets quiet videos with loud moments get louder by limiting those moments.</small>
+              </span>
+            </label>
+          </div>
+          <button
+            class="btn"
+            type="button"
+            id="settings-loudness-reset"
+            disabled={off}
+            onClick={() => {
+              normalization.resetSettings();
+              setResets((count) => count + 1);
+            }}
+          >
+            Reset to defaults
+          </button>
+        </fieldset>
+      </details>
+    </div>
   );
 }
 

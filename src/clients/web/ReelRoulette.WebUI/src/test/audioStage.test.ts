@@ -1,9 +1,11 @@
+import { signal } from "@preact/signals";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createAudioStage,
   FADE_OUT_MS,
   GAIN_GLIDE_SECONDS,
   GAIN_STAGE_FAILED_NOTICE,
+  LIMITER_MAKEUP_DB,
   TURN_OFF_ENHANCED_AUDIO,
   VOLUME_INDICATOR_MS,
   type AudioVideoElement,
@@ -39,17 +41,58 @@ function fakeVideo() {
 
 type GainCall = ["set", number] | ["glide", number, number];
 
-/** A stand-in for Web Audio's context: it records the elements it routes and each change to its gain. */
+/** A node the fake context built: what it connects to, and for a gain, each change to it and the level it is at. */
+interface FakeGain {
+  kind: "gain";
+  calls: GainCall[];
+  level: number;
+  next: unknown;
+}
+
+interface FakeLimiter {
+  kind: "limiter";
+  threshold: { value: number };
+  knee: { value: number };
+  ratio: { value: number };
+  attack: { value: number };
+  next: unknown;
+}
+
+/**
+ * A stand-in for Web Audio's context: it records the elements it routes, the nodes it builds and how they connect, and
+ * each change to a gain. `calls` and `level` are the volume's gain's, the last before the speakers.
+ */
 function fakeContext(options: { refuse?: boolean } = {}) {
-  const calls: GainCall[] = [];
+  const destination = { kind: "destination" };
+  const nodes: Array<FakeGain | FakeLimiter> = [];
+  const source = { next: null as unknown };
   const context = {
     state: "suspended",
     currentTime: 0,
-    destination: {},
+    destination,
     routed: [] as unknown[],
-    calls,
-    level: 1,
     resumes: 0,
+    /** The nodes from the routed video to the speakers, in order. */
+    chain(): Array<FakeGain | FakeLimiter> {
+      const chain: Array<FakeGain | FakeLimiter> = [];
+      for (let node = source.next as FakeGain | FakeLimiter | null; node && node !== (destination as unknown); node = node.next as FakeGain | FakeLimiter | null) {
+        chain.push(node);
+      }
+      return chain;
+    },
+    /** Loudness normalization's gain, the first after the video. */
+    get normalization(): FakeGain {
+      return source.next as FakeGain;
+    },
+    get volume(): FakeGain {
+      return nodes.find((node): node is FakeGain => node.kind === "gain" && node.next === destination)!;
+    },
+    get calls(): GainCall[] {
+      return context.volume.calls;
+    },
+    get level(): number {
+      return context.volume.level;
+    },
     resume() {
       context.resumes += 1;
       if (options.refuse) return Promise.reject(new DOMException("Not allowed", "NotAllowedError"));
@@ -62,29 +105,51 @@ function fakeContext(options: { refuse?: boolean } = {}) {
     },
     createMediaElementSource(element: unknown) {
       context.routed.push(element);
-      return { connect: (node: unknown) => node };
+      return { connect: (node: unknown) => (source.next = node) };
     },
     createGain() {
-      return {
+      const node: FakeGain & { gain: unknown; connect(next: unknown): unknown } = {
+        kind: "gain",
+        calls: [],
+        level: 1,
+        next: null,
         gain: {
           setValueAtTime(level: number) {
-            calls.push(["set", level]);
-            context.level = level;
+            node.calls.push(["set", level]);
+            node.level = level;
           },
           setTargetAtTime(level: number, _start: number, timeConstant: number) {
-            calls.push(["glide", level, timeConstant]);
-            context.level = level;
+            node.calls.push(["glide", level, timeConstant]);
+            node.level = level;
           }
         },
-        connect: (next: unknown) => next
+        connect: (next: unknown) => (node.next = next)
       };
+      nodes.push(node);
+      return node;
+    },
+    createDynamicsCompressor() {
+      // Web Audio's defaults, which the limiter must not keep.
+      const node: FakeLimiter & { connect(next: unknown): unknown } = {
+        kind: "limiter",
+        threshold: { value: -24 },
+        knee: { value: 30 },
+        ratio: { value: 12 },
+        attack: { value: 0.003 },
+        next: null,
+        connect: (next: unknown) => (node.next = next)
+      };
+      nodes.push(node);
+      return node;
     }
   };
   return context;
 }
 
 /** An audio stage on a device whose store starts with `saved`, with each context it builds, the notices it shows, and the lines it relays. */
-function setup(options: { saved?: Record<string, string>; volumeReadOnly?: boolean; refuse?: boolean; unavailable?: boolean; turnOff?: boolean } = {}) {
+function setup(
+  options: { saved?: Record<string, string>; volumeReadOnly?: boolean; refuse?: boolean; unavailable?: boolean; turnOff?: boolean; normalizationGainDb?: number } = {}
+) {
   const kept = new Map(Object.entries(options.saved ?? {}));
   const device = createDeviceStore({ getItem: (key) => kept.get(key) ?? null, setItem: (key, value) => void kept.set(key, value) });
   const contexts: Array<ReturnType<typeof fakeContext>> = [];
@@ -92,6 +157,7 @@ function setup(options: { saved?: Record<string, string>; volumeReadOnly?: boole
   const relayed: string[] = [];
   let renewals = 0;
   const activation = new EventTarget();
+  const normalizationGainDb = signal(options.normalizationGainDb ?? 0);
   const audio = createAudioStage({
     device,
     dialogs: {
@@ -102,6 +168,7 @@ function setup(options: { saved?: Record<string, string>; volumeReadOnly?: boole
     },
     relay: (_level, message) => relayed.push(message),
     renewVideo: () => void (renewals += 1),
+    normalizationGainDb,
     volumeReadOnly: options.volumeReadOnly ?? false,
     createContext() {
       if (options.unavailable) throw new Error("Web Audio is unavailable");
@@ -120,6 +187,7 @@ function setup(options: { saved?: Record<string, string>; volumeReadOnly?: boole
     contexts,
     notices,
     relayed,
+    normalizationGainDb,
     renewals: () => renewals,
     async tap(type: "pointerdown" | "pointerup" | "keydown" = "pointerup") {
       activation.dispatchEvent(new Event(type));
@@ -266,6 +334,8 @@ describe("createAudioStage", () => {
     await unavailable.tap();
     await unavailable.tap();
     expect(unavailable.notices).toEqual([{ message: GAIN_STAGE_FAILED_NOTICE, action: TURN_OFF_ENHANCED_AUDIO }]);
+    // It names no device, since the app finds a read-only volume at runtime.
+    expect(GAIN_STAGE_FAILED_NOTICE).toBe("Audio processing couldn't start on this device. Turn off Enhanced audio to play sound directly.");
     expect(unavailable.relayed).toEqual(["audio=gain-stage-failed error=Error"]);
     expect(unavailable.audio.enhanced.value).toBe(true);
 
@@ -304,6 +374,74 @@ describe("createAudioStage", () => {
     expect(setup({ saved: { "rr_device.player.volume": "140" } }).audio.volume.value).toBe(100);
     expect(setup({ saved: { "rr_device.player.volume": "0" } }).audio.volume.value).toBe(100);
     expect(setup({ saved: { "rr_device.audio.volumeStep": "3" } }).audio.volumeStep.value).toBe(5);
+  });
+});
+
+describe("loudness normalization's chain", () => {
+  const glide = (level: number): GainCall => ["glide", level, GAIN_GLIDE_SECONDS];
+  const gain = (db: number) => Math.pow(10, db / 20);
+
+  it("runs from the video through normalization's gain, the limiter at the ceiling, and the gain that takes back its makeup, to the volume's gain", async () => {
+    const page = setup({ normalizationGainDb: -6 });
+    await page.tap();
+    const context = page.contexts[0]!;
+    const chain = context.chain();
+    expect(chain.map((node) => node.kind)).toEqual(["gain", "limiter", "gain", "gain"]);
+    expect(chain[0]).toBe(context.normalization);
+    expect(chain[3]).toBe(context.volume);
+    expect(context.volume.next).toBe(context.destination);
+
+    const limiter = chain[1] as FakeLimiter;
+    expect([limiter.threshold.value, limiter.knee.value, limiter.ratio.value, limiter.attack.value]).toEqual([-1, 0, 20, 0]);
+    // Web Audio's makeup gain for that curve: the inverse of its gain at full scale, -0.95 dB, to the power 0.6.
+    expect(LIMITER_MAKEUP_DB).toBeCloseTo(0.57, 9);
+    expect((chain[2] as FakeGain).calls).toEqual([["set", gain(-LIMITER_MAKEUP_DB)]]);
+    expect(context.normalization.calls).toEqual([["set", gain(-6)]]);
+  });
+
+  it("keeps the limiter in the chain with normalization off, at no gain", async () => {
+    const page = setup({ normalizationGainDb: 0 });
+    await page.tap();
+    expect(page.contexts[0]!.chain().map((node) => node.kind)).toEqual(["gain", "limiter", "gain", "gain"]);
+    expect(page.contexts[0]!.normalization.level).toBe(1);
+  });
+
+  it("starts each video at its own gain, set while it starts from silence", async () => {
+    const page = setup({ normalizationGainDb: -6 });
+    await page.tap();
+    await page.audio.play(page.video);
+    const context = page.contexts[0]!;
+    expect(context.normalization.calls).toEqual([["set", gain(-6)], ["set", gain(-6)]]);
+
+    // The next video, a quiet one: the player stops the last at once and plays the new one, which starts silent.
+    page.video.pause();
+    page.normalizationGainDb.value = 9;
+    await page.audio.play(page.video);
+    expect(context.normalization.calls.at(-1)).toEqual(["set", gain(9)]);
+    expect(context.normalization.level).toBeCloseTo(gain(9), 9);
+    expect(context.volume.calls.slice(-2)).toEqual([["set", 0], glide(1)]);
+  });
+
+  it("glides the playing video's gain to each new value as a setting changes, never jumping, and leaves the volume as it is", async () => {
+    const page = setup({ normalizationGainDb: 4 });
+    await page.tap();
+    await page.audio.play(page.video);
+    const context = page.contexts[0]!;
+    const volumeCalls = context.volume.calls.length;
+
+    page.normalizationGainDb.value = 2.5;
+    page.normalizationGainDb.value = 0;
+    expect(context.normalization.calls.slice(2)).toEqual([glide(gain(2.5)), glide(1)]);
+    expect(context.volume.calls).toHaveLength(volumeCalls);
+  });
+
+  it("starts a gain stage turned on during a video at that video's gain", async () => {
+    const page = setup({ saved: { "rr_device.audio.enhanced": "false" }, normalizationGainDb: -3 });
+    await page.audio.play(page.video);
+    page.normalizationGainDb.value = -4.5;
+    page.audio.setEnhanced(true);
+    await Promise.resolve();
+    expect(page.contexts[0]!.normalization.calls).toEqual([["set", gain(-4.5)]]);
   });
 });
 

@@ -152,6 +152,8 @@ public sealed class LibraryPlaybackService
             displayName: string.IsNullOrWhiteSpace(selected.FileName) ? Path.GetFileName(selected.FullPath) : selected.FileName,
             mediaType: MediaTypeName(selected.MediaType),
             durationSeconds: DurationSeconds(selected.DurationTicks),
+            integratedLoudness: selected.IntegratedLoudness,
+            peakDb: selected.PeakDb,
             mediaUrl: $"/api/media/{token}",
             isFavorite: selected.IsFavorite,
             isBlacklisted: selected.IsBlacklisted);
@@ -234,6 +236,8 @@ public sealed class LibraryPlaybackService
             displayName: string.IsNullOrWhiteSpace(match.FileName) ? Path.GetFileName(match.FullPath) : match.FileName,
             mediaType: MediaTypeName(match.MediaType),
             durationSeconds: DurationSeconds(match.DurationTicks),
+            integratedLoudness: match.IntegratedLoudness,
+            peakDb: match.PeakDb,
             mediaUrl: $"/api/media/{token}",
             isFavorite: match.IsFavorite,
             isBlacklisted: match.IsBlacklisted);

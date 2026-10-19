@@ -3209,6 +3209,9 @@ const NORMALIZATION_TARGETS = { quieter: -23, standard: -18, louder: -14 };
 // The ceiling a boost keeps a video's true peak under, and how far past it Allow limiting lets the limiter take it.
 const PEAK_CEILING = -1;
 const LIMITER_ALLOWANCE = 6;
+// How far short of a boost the headroom must fall to hold it back, so a boost that fits it exactly isn't flagged for a
+// subtraction's rounding error, as -18 - -32.7 is 14.700000000000003 against a headroom of 14.7.
+const HEADROOM_TOLERANCE = 1e-9;
 const normalizationTuning = { ...NORMALIZATION_DEFAULTS, ...store.get("normalizationSettings", {}) };
 function normalizationTarget() {
   const { target, manualTarget } = normalizationTuning;
@@ -3217,8 +3220,9 @@ function normalizationTarget() {
 // The adjustment in dB that normalization applies to an item, and whether its headroom held a boost back, or null while
 // normalization or Enhanced audio is off. A cut is applied in full, since turning a video down can't clip it. A boost is
 // held to the smallest of what the video needs, the boost limit, and its headroom: the ceiling minus its peak, plus the
-// limiter allowance with Allow limiting on. A boost never goes below 0 dB, and a video without a peak is only cut. An
-// item without loudness plays at the volume, an adjustment of 0 dB.
+// limiter allowance with Allow limiting on. A boost never goes below 0 dB, and a video without a peak is only cut. The
+// headroom holds a boost back only when the boost limit allows one. An item without loudness plays at the volume, an
+// adjustment of 0 dB.
 function loudnessAdjustment(item) {
   if (!state.normalization || !state.enhancedAudio) return null;
   if (!item || item.loudness == null) return { db: 0, limitedByPeak: false };
@@ -3227,7 +3231,7 @@ function loudnessAdjustment(item) {
   if (item.peak == null) return { db: 0, limitedByPeak: false };
   const headroom = PEAK_CEILING - item.peak + (normalizationTuning.allowLimiting ? LIMITER_ALLOWANCE : 0);
   const limit = Math.min(needed, normalizationTuning.boostLimit);
-  return { db: Math.max(0, Math.min(limit, headroom)), limitedByPeak: headroom < limit };
+  return { db: Math.max(0, Math.min(limit, headroom)), limitedByPeak: limit > 0 && headroom < limit - HEADROOM_TOLERANCE };
 }
 // As a linear gain on the volume.
 function loudnessGain(item) {

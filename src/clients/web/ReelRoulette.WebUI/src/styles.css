@@ -1165,6 +1165,10 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
 /* A setting's own fields in its expandable group, disabled together while the setting can't apply. */
 .setting-fields { border: 0; margin: 0; padding: 4px 0 0; min-width: 0; display: grid; gap: 4px; }
 .setting-fields .setting-label { margin: 4px 0 0; font-weight: 400; font-size: 0.88rem; }
+.setting-fields .btn { justify-self: start; margin-top: 6px; }
+/* A choice's own field, under it, which shows only while it is chosen, such as Manual's target. */
+.setting-sub { display: grid; gap: 4px; margin: 0 0 6px 26px; }
+.setting-sub[hidden] { display: none; }
 .setting-fields:disabled, .choice-row label:has(input:disabled) { opacity: 0.55; }
 .setting-fields:disabled .choice-row label:has(input:disabled) { opacity: 1; }
 #settings-popup-position { justify-self: start; min-width: 12rem; }

@@ -3310,8 +3310,22 @@ for (const width of [1280, 390]) {
   play(peaky);
   check(`loudness: a quiet video whose peak is above the ceiling isn't turned down (${adjustment()})`,
     close(param.level, gainFor(peaky, 0)) && adjustment() === "+0.0 dB (limited by peak)");
+  // With no boost allowed, the headroom has nothing to hold back.
+  enter($("set-loud-boost"), "0");
+  check(`loudness: with a boost limit of 0, its peak holds nothing back (${adjustment()})`,
+    close(param.level, gainFor(peaky, 0)) && adjustment() === "+0.0 dB");
+  enter($("set-loud-boost"), "15");
   peaky.peak = peakBefore;
   change($("set-loud-limiting"), true);
+  // A boost that fits the headroom exactly, in the tenths of a dB the scan measures, isn't held back by a subtraction's
+  // rounding: -18 - -32.7 is 14.700000000000003 against a headroom of 14.7.
+  const loudnessBefore = peaky.loudness;
+  Object.assign(peaky, { loudness: -32.7, peak: -9.7 });
+  play(loud);
+  play(peaky);
+  check(`loudness: a boost that just fits the headroom isn't limited by peak (${adjustment()} for -32.7 LUFS, -9.7 dBTP)`,
+    close(param.level, gainFor(peaky, 14.7)) && adjustment() === "+14.7 dB");
+  Object.assign(peaky, { loudness: loudnessBefore, peak: peakBefore });
   play(peakless);
   check(`loudness: a quiet video without a peak isn't boosted (${adjustment()} for ${peakless.loudness} LUFS)`, close(param.level, gainFor(peakless, 0)) && adjustment() === "+0.0 dB");
   play(unmeasured);

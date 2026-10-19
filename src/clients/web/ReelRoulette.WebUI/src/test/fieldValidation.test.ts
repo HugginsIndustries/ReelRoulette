@@ -157,6 +157,19 @@ describe("a setting's field", () => {
     expect([field.text.value, field.justSaved.value]).toEqual(["15", false]);
   });
 
+  it("shows the value saved again when asked, as after Reset to defaults, dropping what was typed and saying nothing saved", () => {
+    const { field, kept } = setup();
+    field.input("42");
+    field.commit();
+    field.input("abc");
+    kept.value = 15;
+    field.show();
+    expect([field.text.value, field.problem.value, field.justSaved.value]).toEqual(["15", null, false]);
+    // What was typed before is gone, so leaving saves nothing.
+    field.leave();
+    expect(kept.saves).toEqual(["42"]);
+  });
+
   it("stops saying it saved as soon as the field is typed in again", () => {
     vi.useFakeTimers();
     const { field } = setup();

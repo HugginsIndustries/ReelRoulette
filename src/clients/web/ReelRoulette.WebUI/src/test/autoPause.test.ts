@@ -102,6 +102,7 @@ function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
     dialogs: { noticeWithAction: () => Promise.resolve(false) },
     relay: () => {},
     renewVideo: () => {},
+    normalizationGainDb: signal(0),
     volumeReadOnly: false,
     activation: new EventTarget()
   });

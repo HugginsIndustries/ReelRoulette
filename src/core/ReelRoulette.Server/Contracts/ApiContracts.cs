@@ -96,6 +96,8 @@ public sealed class RandomResponse
     public string DisplayName { get; set; } = string.Empty;
     public string MediaType { get; set; } = "video";
     public double? DurationSeconds { get; set; }
+    public double? IntegratedLoudness { get; set; }
+    public double? PeakDb { get; set; }
     public string MediaUrl { get; set; } = string.Empty;
     public bool IsFavorite { get; set; }
     public bool IsBlacklisted { get; set; }

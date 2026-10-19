@@ -1469,6 +1469,16 @@ export interface components {
             mediaType: "video" | "photo";
             /** Format: double */
             durationSeconds?: number | null;
+            /**
+             * Format: double
+             * @description Integrated loudness in LUFS, measured by the loudness scan, or null when the scan hasn't measured it. A video without audio, a digitally silent one included, has none.
+             */
+            integratedLoudness?: number | null;
+            /**
+             * Format: double
+             * @description The true peak the loudness scan measured, in dBTP, or null when the scan hasn't measured one. A video without audio, a digitally silent one included, has none.
+             */
+            peakDb?: number | null;
             mediaUrl: string;
             isFavorite: boolean;
             isBlacklisted: boolean;

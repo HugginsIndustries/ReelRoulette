@@ -1,0 +1,87 @@
+[
+  {
+    "name": "a loud video is cut in full",
+    "input": { "loudness": -12, "peak": -0.5, "targetLufs": -18, "boostLimit": 15, "allowLimiting": true },
+    "expected": { "db": -6, "limitedByPeak": false }
+  },
+  {
+    "name": "a cut ignores the boost limit and the peak",
+    "input": { "loudness": -8.5, "peak": 2, "targetLufs": -27.8, "boostLimit": 0, "allowLimiting": false },
+    "expected": { "db": -19.3, "limitedByPeak": false }
+  },
+  {
+    "name": "a video at the target plays as it is",
+    "input": { "loudness": -18, "peak": -3, "targetLufs": -18, "boostLimit": 15, "allowLimiting": true },
+    "expected": { "db": 0, "limitedByPeak": false }
+  },
+  {
+    "name": "a quiet video with headroom is boosted in full",
+    "input": { "loudness": -30, "peak": -20, "targetLufs": -18, "boostLimit": 15, "allowLimiting": true },
+    "expected": { "db": 12, "limitedByPeak": false }
+  },
+  {
+    "name": "the boost limit holds a boost back",
+    "input": { "loudness": -40, "peak": -30, "targetLufs": -18, "boostLimit": 15, "allowLimiting": true },
+    "expected": { "db": 15, "limitedByPeak": false }
+  },
+  {
+    "name": "a boost limit of 0 boosts nothing",
+    "input": { "loudness": -30, "peak": -20, "targetLufs": -18, "boostLimit": 0, "allowLimiting": true },
+    "expected": { "db": 0, "limitedByPeak": false }
+  },
+  {
+    "name": "with a boost limit of 0, a peak that leaves no headroom holds nothing back",
+    "input": { "loudness": -30, "peak": 0, "targetLufs": -18, "boostLimit": 0, "allowLimiting": false },
+    "expected": { "db": 0, "limitedByPeak": false }
+  },
+  {
+    "name": "with Allow limiting off, the headroom alone holds a boost back",
+    "input": { "loudness": -30, "peak": -6, "targetLufs": -18, "boostLimit": 15, "allowLimiting": false },
+    "expected": { "db": 5, "limitedByPeak": true }
+  },
+  {
+    "name": "with Allow limiting on, the headroom plus the limiter allowance holds a boost back",
+    "input": { "loudness": -30, "peak": -6, "targetLufs": -18, "boostLimit": 15, "allowLimiting": true },
+    "expected": { "db": 11, "limitedByPeak": true }
+  },
+  {
+    "name": "the allowance lets a boost go past the headroom in full when it is enough",
+    "input": { "loudness": -24, "peak": -3, "targetLufs": -18, "boostLimit": 15, "allowLimiting": true },
+    "expected": { "db": 6, "limitedByPeak": false }
+  },
+  {
+    "name": "a boost that just fits the headroom isn't held back by it",
+    "input": { "loudness": -24, "peak": -1, "targetLufs": -18, "boostLimit": 15, "allowLimiting": true },
+    "expected": { "db": 6, "limitedByPeak": false }
+  },
+  {
+    "name": "a boost that just fits the headroom in tenths of a dB isn't held back by it, past rounding",
+    "input": { "loudness": -32.7, "peak": -9.7, "targetLufs": -18, "boostLimit": 15, "allowLimiting": true },
+    "expected": { "db": 14.7, "limitedByPeak": false }
+  },
+  {
+    "name": "a quiet video whose peak leaves no headroom isn't boosted or turned down",
+    "input": { "loudness": -30, "peak": 0, "targetLufs": -18, "boostLimit": 15, "allowLimiting": false },
+    "expected": { "db": 0, "limitedByPeak": true }
+  },
+  {
+    "name": "a quiet video whose peak is past even the allowance isn't turned down",
+    "input": { "loudness": -30, "peak": 6, "targetLufs": -18, "boostLimit": 15, "allowLimiting": true },
+    "expected": { "db": 0, "limitedByPeak": true }
+  },
+  {
+    "name": "a quiet video without a peak isn't boosted",
+    "input": { "loudness": -30, "peak": null, "targetLufs": -18, "boostLimit": 15, "allowLimiting": true },
+    "expected": { "db": 0, "limitedByPeak": false }
+  },
+  {
+    "name": "a loud video without a peak is still cut",
+    "input": { "loudness": -10, "peak": null, "targetLufs": -18, "boostLimit": 15, "allowLimiting": true },
+    "expected": { "db": -8, "limitedByPeak": false }
+  },
+  {
+    "name": "a video without loudness data has no adjustment",
+    "input": { "loudness": null, "peak": -3, "targetLufs": -18, "boostLimit": 15, "allowLimiting": true },
+    "expected": null
+  }
+]

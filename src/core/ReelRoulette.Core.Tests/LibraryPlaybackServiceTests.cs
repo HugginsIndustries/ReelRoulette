@@ -304,6 +304,68 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
     }
 
     [Fact]
+    public void TrySelectRandom_CarriesTheItemsMeasuredLoudnessAndPeak()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var mediaPath = Path.Combine(_tempDir, "measured.mp4");
+        File.WriteAllBytes(mediaPath, [0x01, 0x02]);
+
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("m1", mediaPath)
+                {
+                    FileName = "measured.mp4",
+                    HasAudio = true,
+                    IntegratedLoudness = -23.4,
+                    PeakDb = -1.2,
+                    SourceId = "s1"
+                }
+            ]);
+
+        var service = CreateService();
+        var ok = service.TrySelectRandom(
+            new RandomRequest { PresetId = string.Empty, FilterState = ParseJson("{}") },
+            [],
+            out var response,
+            out _,
+            out _);
+
+        Assert.True(ok);
+        Assert.NotNull(response);
+        Assert.Equal(-23.4, response!.IntegratedLoudness);
+        Assert.Equal(-1.2, response.PeakDb);
+    }
+
+    [Fact]
+    public void TrySelectRandom_CarriesNoLoudnessOrPeak_ForAnItemTheScanHasNotMeasured()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var mediaPath = Path.Combine(_tempDir, "unmeasured.mp4");
+        File.WriteAllBytes(mediaPath, [0x01, 0x02]);
+
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items: [new SeedItem("u1", mediaPath) { FileName = "unmeasured.mp4", SourceId = "s1" }]);
+
+        var service = CreateService();
+        var ok = service.TrySelectRandom(
+            new RandomRequest { PresetId = string.Empty, FilterState = ParseJson("{}") },
+            [],
+            out var response,
+            out _,
+            out _);
+
+        Assert.True(ok);
+        Assert.NotNull(response);
+        Assert.Null(response!.IntegratedLoudness);
+        Assert.Null(response.PeakDb);
+    }
+
+    [Fact]
     public void BuildRandomizationScopeKey_ShouldIsolateSessionsForSameClient()
     {
         var a = LibraryPlaybackService.BuildRandomizationScopeKey("client-1", "session-a");
@@ -396,6 +458,41 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         Assert.NotNull(response);
         Assert.Equal(mediaPath, response!.Id);
         Assert.StartsWith("/api/media/", response.MediaUrl, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryPlayItem_CarriesTheItemsMeasuredLoudnessAndPeak_AndNeitherForAnUnmeasuredItem()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var measuredPath = Path.Combine(_tempDir, "measured.mp4");
+        var unmeasuredPath = Path.Combine(_tempDir, "unmeasured.mp4");
+        File.WriteAllBytes(measuredPath, [0x01, 0x02]);
+        File.WriteAllBytes(unmeasuredPath, [0x01, 0x02]);
+
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("m1", measuredPath)
+                {
+                    FileName = "measured.mp4",
+                    HasAudio = true,
+                    IntegratedLoudness = -23.4,
+                    PeakDb = -1.2,
+                    SourceId = "s1"
+                },
+                new SeedItem("u1", unmeasuredPath) { FileName = "unmeasured.mp4", SourceId = "s1" }
+            ]);
+
+        var service = CreateService();
+        Assert.True(service.TryPlayItem("m1", false, out var measured, out _, out _, out _));
+        Assert.True(service.TryPlayItem("u1", false, out var unmeasured, out _, out _, out _));
+
+        Assert.Equal(-23.4, measured!.IntegratedLoudness);
+        Assert.Equal(-1.2, measured.PeakDb);
+        Assert.Null(unmeasured!.IntegratedLoudness);
+        Assert.Null(unmeasured.PeakDb);
     }
 
     [Fact]

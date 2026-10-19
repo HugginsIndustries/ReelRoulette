@@ -183,8 +183,11 @@ describe("the Settings tab", () => {
     const headings = within(settingsPage()).getAllByRole("heading", { level: 3 });
     expect(headings.map((heading) => heading.textContent)).toEqual(["Playback", "Audio", "Appearance", "Notifications", "Panel", "Diagnostics"]);
     expect(within(settingsPage()).getByText("Settings apply at once and are kept on this device.")).toBeTruthy();
-    // Ambient mode settings' Reset to defaults is the tab's only button.
-    expect(within(settingsPage()).queryAllByRole("button", { hidden: true }).map((button) => button.textContent)).toEqual(["Reset to defaults"]);
+    // Loudness normalization settings' and Ambient mode settings' Reset to defaults are the tab's only buttons.
+    expect(within(settingsPage()).queryAllByRole("button", { hidden: true }).map((button) => [button.id, button.textContent])).toEqual([
+      ["settings-loudness-reset", "Reset to defaults"],
+      ["settings-ambient-reset", "Reset to defaults"]
+    ]);
   });
 
   it("has no entry that turns Loop, Autoplay, or Mute on or off, which the player's buttons do, and no key badge in a label", async () => {
@@ -205,7 +208,7 @@ describe("Enhanced audio", () => {
     expect(section.previousElementSibling?.querySelector("h3")?.textContent).toBe("Playback");
     expect(box.checked).toBe(true);
     expect(document.getElementById(box.getAttribute("aria-describedby")!)!.textContent).toBe(
-      "Processes audio in the app, so in-app volume works on iPhone and iPad."
+      "Processes audio in the app, for loudness normalization."
     );
   });
 
@@ -253,6 +256,223 @@ describe("Volume step", () => {
     await mount();
     await openSettings();
     expect(radio("10%").checked).toBe(true);
+  });
+});
+
+describe("Loudness normalization", () => {
+  /** A video at -30 LUFS with its peak at -20 dBTP, which a boost of up to 25 dB, with the allowance, doesn't clip. */
+  const QUIET_VIDEO = { ...VIDEO_ITEM, integratedLoudness: -30, peakDb: -20 };
+
+  /** A server whose library's baseline is -27.8 LUFS, and whose random pick is `item`. */
+  function serverWith(item: unknown = QUIET_VIDEO): FakeServer {
+    const server = new FakeServer();
+    server.on("GET", "/api/library/stats", () => json({ global: { baselineLoudnessLufs: -27.8 }, sources: [] }));
+    server.on("POST", "/api/random", () => json(item));
+    return server;
+  }
+
+  function loudnessBox(): HTMLInputElement {
+    return checkbox("Loudness normalization");
+  }
+
+  function hintOf(input: HTMLInputElement): string {
+    return document.getElementById(input.getAttribute("aria-describedby")!)!.textContent!;
+  }
+
+  function loudnessSettings(): HTMLDetailsElement {
+    return document.getElementById("settings-loudness-more") as HTMLDetailsElement;
+  }
+
+  function manualTarget(): HTMLInputElement {
+    return within(settingsPage()).getByRole("textbox", { name: "Target", hidden: true }) as HTMLInputElement;
+  }
+
+  function boostLimit(): HTMLInputElement {
+    return within(settingsPage()).getByRole("textbox", { name: "Boost quiet videos by up to", hidden: true }) as HTMLInputElement;
+  }
+
+  function enter(input: HTMLInputElement, text: string): void {
+    type(input, text);
+    fireEvent.keyDown(input, { key: "Enter" });
+  }
+
+  /** The settings as this device keeps them, or null while it keeps none. */
+  function keptSettings(): Record<string, unknown> | null {
+    const raw = localStorage.getItem("rr_device.audio.normalizationSettings");
+    return raw === null ? null : JSON.parse(raw);
+  }
+
+  const gain = (db: number) => Math.pow(10, db / 20);
+
+  it("sits in Audio right under Enhanced audio, on by default, with its hint, and its settings beside it, closed at first", async () => {
+    await mount(serverWith());
+    await openSettings();
+    const box = loudnessBox();
+    expect([box.checked, box.disabled]).toEqual([true, false]);
+    expect(hintOf(box)).toBe("Evens out loudness between videos.");
+    expect(box.closest(".setting")!.previousElementSibling).toBe(checkbox("Enhanced audio").closest(".setting"));
+    const more = loudnessSettings();
+    expect(more.open).toBe(false);
+    expect(more.querySelector("summary")!.textContent).toBe("chevron_rightLoudness normalization settings");
+    expect(box.closest(".setting")!.contains(more)).toBe(true);
+  });
+
+  it("offers Automatic, the library's baseline, by default, Quieter, Standard, Louder, and Manual, a 15 dB boost limit, and Allow limiting on", async () => {
+    await mount(serverWith());
+    await openSettings();
+    const choices = ["Automatic", "Quieter", "Standard", "Louder", "Manual"].map((name) => {
+      const choice = radio(name);
+      const description = choice.getAttribute("aria-describedby");
+      return [name, choice.checked, description ? document.getElementById(description)!.textContent : null];
+    });
+    expect(choices).toEqual([
+      ["Automatic", true, "The library's baseline, -27.8 LUFS."],
+      ["Quieter", false, "-23 LUFS"],
+      ["Standard", false, "-18 LUFS"],
+      ["Louder", false, "-14 LUFS"],
+      ["Manual", false, null]
+    ]);
+    expect(radio("Automatic").closest('[role="radiogroup"]')!.getAttribute("aria-labelledby")).toBe("settings-loudness-target-label");
+    expect(document.getElementById("settings-loudness-target-label")!.textContent).toBe("Target loudness");
+    expect(boostLimit().value).toBe("15");
+    expect(boostLimit().getAttribute("inputmode")).toBe("numeric");
+    const limiting = checkbox("Allow limiting");
+    expect(limiting.checked).toBe(true);
+    expect(hintOf(limiting)).toBe("Lets quiet videos with loud moments get louder by limiting those moments.");
+  });
+
+  it("says only the library's baseline under Automatic until its loudness loads", async () => {
+    const server = new FakeServer();
+    server.on("GET", "/api/library/stats", () => json({}, 500));
+    await mount(server);
+    await openSettings();
+    expect(document.getElementById(radio("Automatic").getAttribute("aria-describedby")!)!.textContent).toBe("The library's baseline.");
+  });
+
+  it("shows Manual's target only while Manual is chosen, starting at -18 LUFS, with the full keyboard, since its values are negative", async () => {
+    await mount(serverWith());
+    await openSettings();
+    const manual = document.getElementById("settings-loudness-manual")!;
+    expect(manual.hidden).toBe(true);
+    await click(radio("Manual"));
+    expect(manual.hidden).toBe(false);
+    expect(radio("Manual").closest('[role="radiogroup"]')!.contains(manual)).toBe(true);
+    expect(manualTarget().value).toBe("-18");
+    expect(manualTarget().hasAttribute("inputmode")).toBe(false);
+    await click(radio("Standard"));
+    expect(manual.hidden).toBe(true);
+    expect(keptSettings()?.target).toBe("standard");
+  });
+
+  it("flags a target outside -50 to -10 LUFS and a boost limit that isn't a whole number from 0 to 24 dB, keeping none of them", async () => {
+    await mount(serverWith());
+    await openSettings();
+    await click(radio("Manual"));
+    for (const text of ["-5", "-51", "", "abc"]) {
+      enter(manualTarget(), text);
+      await settle();
+      expect([text, problemOf(manualTarget())]).toEqual([text, "Use a number from -50 to -10 LUFS."]);
+    }
+    for (const text of ["25", "2.5", "-1", ""]) {
+      enter(boostLimit(), text);
+      await settle();
+      expect([text, problemOf(boostLimit())]).toEqual([text, "Use a whole number from 0 to 24 dB."]);
+    }
+    fireEvent.blur(boostLimit());
+    await settle();
+    expect([boostLimit().value, problemOf(boostLimit())]).toEqual(["15", null]);
+    expect(keptSettings()).toEqual({ target: "manual", manualTarget: -18, boostLimit: 15, allowLimiting: true });
+
+    enter(manualTarget(), "-30.5");
+    enter(boostLimit(), "6");
+    await settle();
+    expect(keptSettings()).toEqual({ target: "manual", manualTarget: -30.5, boostLimit: 6, allowLimiting: true });
+  });
+
+  it("is disabled with its settings while Enhanced audio is off, saying it needs Enhanced audio, and stays as it was", async () => {
+    await mount(serverWith());
+    await openSettings();
+    await click(checkbox("Enhanced audio"));
+    const box = loudnessBox();
+    expect([box.checked, box.disabled]).toEqual([true, true]);
+    expect(hintOf(box)).toBe("Needs Enhanced audio.");
+    expect((loudnessSettings().querySelector("fieldset") as HTMLFieldSetElement).disabled).toBe(true);
+    expect([radio("Standard").disabled, checkbox("Allow limiting").disabled]).toEqual([true, true]);
+    expect((document.getElementById("settings-loudness-reset") as HTMLButtonElement).disabled).toBe(true);
+
+    await click(checkbox("Enhanced audio"));
+    expect([loudnessBox().checked, loudnessBox().disabled, hintOf(loudnessBox())]).toEqual([true, false, "Evens out loudness between videos."]);
+    expect((loudnessSettings().querySelector("fieldset") as HTMLFieldSetElement).disabled).toBe(false);
+  });
+
+  it("Reset to defaults puts every setting back and shows them in the fields, leaving normalization off", async () => {
+    await mount(serverWith());
+    await openSettings();
+    await click(loudnessBox());
+    await click(radio("Manual"));
+    enter(manualTarget(), "-30");
+    enter(boostLimit(), "6");
+    await click(checkbox("Allow limiting"));
+    // A value that is not valid, typed and not left, goes too.
+    type(manualTarget(), "-5");
+
+    await click(document.getElementById("settings-loudness-reset")!);
+    expect(radio("Automatic").checked).toBe(true);
+    expect(document.getElementById("settings-loudness-manual")!.hidden).toBe(true);
+    expect([manualTarget().value, problemOf(manualTarget()), boostLimit().value]).toEqual(["-18", null, "15"]);
+    expect(checkbox("Allow limiting").checked).toBe(true);
+    // No field says it saved: a check left from an earlier save fades out.
+    expect(settingsPage().querySelector("#settings-loudness-more .vfield-saved:not(.is-fading-out)")).toBeNull();
+    expect([...settingsPage().querySelectorAll('#settings-loudness-more [aria-live="polite"]')].map((region) => region.textContent)).toEqual(["", ""]);
+    expect(keptSettings()).toEqual({ target: "automatic", manualTarget: -18, boostLimit: 15, allowLimiting: true });
+    expect(loudnessBox().checked).toBe(false);
+  });
+
+  it("keeps normalization and each of its settings after a page refresh", async () => {
+    const page = await mount(serverWith());
+    await openSettings();
+    await click(loudnessBox());
+    await click(radio("Manual"));
+    enter(manualTarget(), "-30.5");
+    enter(boostLimit(), "6");
+    await click(checkbox("Allow limiting"));
+    page.unmount();
+
+    await mount(serverWith());
+    await openSettings();
+    expect([loudnessBox().checked, radio("Manual").checked, manualTarget().value, boostLimit().value, checkbox("Allow limiting").checked]).toEqual([
+      false,
+      true,
+      "-30.5",
+      "6",
+      false
+    ]);
+  });
+
+  it("applies at once to the playing video: its gain follows the rule toward the target, gliding as a setting changes, through the limiter", async () => {
+    const page = await mount(serverWith());
+    await tapPage();
+    fireEvent.click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
+    await settle();
+    const normalization = () => page.webAudio.normalization!;
+    // Toward Automatic's -27.8 LUFS, a boost of 2.2 dB, set while the video starts silent.
+    expect(normalization().calls.filter(([kind]) => kind === "set").at(-1)![1]).toBeCloseTo(gain(2.2), 9);
+    expect(page.webAudio.chain()).toHaveLength(4);
+    expect(page.webAudio.contexts.at(-1)!.limiters.map((limiter) => [limiter.threshold.value, limiter.knee.value, limiter.ratio.value, limiter.attack.value])).toEqual([
+      [-1, 0, 20, 0]
+    ]);
+
+    await openSettings();
+    await click(radio("Standard"));
+    expect(normalization().calls.at(-1)).toEqual(["glide", gain(12), expect.any(Number)]);
+    enter(boostLimit(), "6");
+    await settle();
+    expect(normalization().calls.at(-1)).toEqual(["glide", gain(6), expect.any(Number)]);
+    await click(loudnessBox());
+    expect(normalization().calls.at(-1)).toEqual(["glide", 1, expect.any(Number)]);
+    // The limiter stays in the chain, and nothing jumped.
+    expect(page.webAudio.chain()).toHaveLength(4);
+    expect(normalization().directSets).toBe(0);
   });
 });
 

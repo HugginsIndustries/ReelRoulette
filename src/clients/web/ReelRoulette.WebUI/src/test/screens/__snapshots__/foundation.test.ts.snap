@@ -306,7 +306,83 @@ exports[`page structure > keeps the starting markup 1`] = `
                     <input aria-describedby="settings-enhanced-audio-hint" id="settings-enhanced-audio" type="checkbox">
                     "Enhanced audio"
                 <p class="setting-hint" id="settings-enhanced-audio-hint">
-                  "Processes audio in the app, so in-app volume works on iPhone and iPad."
+                  "Processes audio in the app, for loudness normalization."
+              <div class="setting">
+                <div class="choice-row">
+                  <label>
+                    <input aria-describedby="settings-loudness-hint" id="settings-loudness" type="checkbox">
+                    "Loudness normalization"
+                <p class="setting-hint" id="settings-loudness-hint">
+                  "Evens out loudness between videos."
+                <details class="setting-more" id="settings-loudness-more">
+                  <summary>
+                    <span aria-hidden="true" class="material-symbol-icon setting-more-chevron">
+                      "chevron_right"
+                    "Loudness normalization settings"
+                  <fieldset class="setting-fields">
+                    <span class="setting-label" id="settings-loudness-target-label">
+                      "Target loudness"
+                    <div aria-labelledby="settings-loudness-target-label" class="choice-stack" role="radiogroup">
+                      <label>
+                        <input aria-describedby="settings-loudness-target-automatic-description" aria-labelledby="settings-loudness-target-automatic" name="settings-loudness-target" type="radio" value="automatic">
+                        <span>
+                          <span id="settings-loudness-target-automatic">
+                            "Automatic"
+                          <small id="settings-loudness-target-automatic-description">
+                            "The library's baseline, -18.0 LUFS."
+                      <label>
+                        <input aria-describedby="settings-loudness-target-quieter-description" aria-labelledby="settings-loudness-target-quieter" name="settings-loudness-target" type="radio" value="quieter">
+                        <span>
+                          <span id="settings-loudness-target-quieter">
+                            "Quieter"
+                          <small id="settings-loudness-target-quieter-description">
+                            "-23 LUFS"
+                      <label>
+                        <input aria-describedby="settings-loudness-target-standard-description" aria-labelledby="settings-loudness-target-standard" name="settings-loudness-target" type="radio" value="standard">
+                        <span>
+                          <span id="settings-loudness-target-standard">
+                            "Standard"
+                          <small id="settings-loudness-target-standard-description">
+                            "-18 LUFS"
+                      <label>
+                        <input aria-describedby="settings-loudness-target-louder-description" aria-labelledby="settings-loudness-target-louder" name="settings-loudness-target" type="radio" value="louder">
+                        <span>
+                          <span id="settings-loudness-target-louder">
+                            "Louder"
+                          <small id="settings-loudness-target-louder-description">
+                            "-14 LUFS"
+                      <label>
+                        <input aria-labelledby="settings-loudness-target-manual" name="settings-loudness-target" type="radio" value="manual">
+                        <span>
+                          <span id="settings-loudness-target-manual">
+                            "Manual"
+                      <div class="setting-sub" hidden="" id="settings-loudness-manual">
+                        <label class="setting-label" for="settings-loudness-manual-target">
+                          "Target"
+                        <div class="filter-row">
+                          <span class="vfield number-field">
+                            <input autocomplete="off" class="ctl" id="settings-loudness-manual-target" type="text">
+                            <span aria-live="polite" class="visually-hidden">
+                          <span>
+                            "LUFS"
+                    <label class="setting-label" for="settings-loudness-boost">
+                      "Boost quiet videos by up to"
+                    <div class="filter-row">
+                      <span class="vfield number-field">
+                        <input autocomplete="off" class="ctl" id="settings-loudness-boost" inputmode="numeric" type="text">
+                        <span aria-live="polite" class="visually-hidden">
+                      <span>
+                        "dB"
+                    <div class="choice-stack">
+                      <label>
+                        <input aria-describedby="settings-loudness-limiting-description" aria-labelledby="settings-loudness-limiting-label" id="settings-loudness-limiting" type="checkbox">
+                        <span>
+                          <span id="settings-loudness-limiting-label">
+                            "Allow limiting"
+                          <small id="settings-loudness-limiting-description">
+                            "Lets quiet videos with loud moments get louder by limiting those moments."
+                    <button class="btn" id="settings-loudness-reset" type="button">
+                      "Reset to defaults"
             <section aria-labelledby="settings-appearance-heading" class="settings-section">
               <h3 id="settings-appearance-heading">
                 "Appearance"

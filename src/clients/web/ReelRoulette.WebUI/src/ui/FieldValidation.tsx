@@ -256,6 +256,11 @@ export interface SettingTextFieldProps extends SettingFieldOptions {
   inputMode?: "numeric" | "decimal" | "text";
   /** False while the field is hidden, as when its tab hides or the panel closes, which may give it no blur. */
   shown: boolean;
+  /**
+   * Changes when the value saved changes from outside the field, as Reset to defaults changes it: the field then shows
+   * the value saved again.
+   */
+  revision?: number;
 }
 
 /**
@@ -265,7 +270,7 @@ export interface SettingTextFieldProps extends SettingFieldOptions {
  * a polite live region says "Saved".
  */
 export function SettingTextField(props: SettingTextFieldProps) {
-  const { id, class: extraClass, inputMode, shown } = props;
+  const { id, class: extraClass, inputMode, shown, revision } = props;
   // The latest render's callbacks, so the field reads what the page holds now.
   const latest = useRef(props);
   latest.current = props;
@@ -281,6 +286,13 @@ export function SettingTextField(props: SettingTextFieldProps) {
       field.leave();
     }
   }, [shown]);
+  const shownRevision = useRef(revision);
+  useEffect(() => {
+    if (revision !== shownRevision.current) {
+      shownRevision.current = revision;
+      field.show();
+    }
+  }, [revision]);
   const problem = field.problem.value;
   const saved = field.justSaved.value;
   const check = useFadeOut(saved);

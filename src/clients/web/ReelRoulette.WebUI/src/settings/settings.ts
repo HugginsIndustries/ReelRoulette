@@ -1,6 +1,7 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
 import { AMBIENT_KEY, AMBIENT_TUNING_KEY, DEFAULT_AMBIENT_TUNING, readAmbientTuning, type AmbientTuning } from "../playback/ambient";
 import { DEFAULT_AUTO_PAUSE_MODE, isAutoPauseMode, type AutoPauseMode } from "../playback/autoPause";
+import { BOOST_LIMIT_RANGE, MANUAL_TARGET_RANGE } from "../playback/loudnessNormalization";
 import { MAX_ADVANCE_AFTER_SECONDS, MIN_ADVANCE_AFTER_SECONDS } from "../state/appStore";
 import type { DeviceStore } from "../state/deviceStore";
 import type { FieldProblem } from "../validation/fieldValidation";
@@ -23,16 +24,36 @@ export function wholeNumberProblem(text: string, min: number, max: number, unit:
   return /^\d+$/.test(trimmed) && value >= min && value <= max ? null : { message: `Use a whole number from ${min} to ${max} ${unit}.` };
 }
 
+/**
+ * A field's text when it is a number from `min` to `max`, a negative or decimal one included, such as "-23.5", or the
+ * problem that says what it takes, such as "Use a number from -50 to -10 LUFS." An emptied field is flagged too.
+ */
+export function numberProblem(text: string, min: number, max: number, unit: string): FieldProblem | null {
+  const trimmed = text.trim();
+  const value = Number(trimmed);
+  return /^-?\d+(\.\d+)?$/.test(trimmed) && value >= min && value <= max ? null : { message: `Use a number from ${min} to ${max} ${unit}.` };
+}
+
 /** Advance after's problem: it takes a whole number of seconds from 1 to 3600. */
 export function advanceAfterProblem(text: string): FieldProblem | null {
   return wholeNumberProblem(text, MIN_ADVANCE_AFTER_SECONDS, MAX_ADVANCE_AFTER_SECONDS, "seconds");
+}
+
+/** Manual's target's problem: it takes a number of LUFS from -50 to -10. */
+export function manualTargetProblem(text: string): FieldProblem | null {
+  return numberProblem(text, MANUAL_TARGET_RANGE.min, MANUAL_TARGET_RANGE.max, "LUFS");
+}
+
+/** The boost limit's problem: it takes a whole number of dB from 0 to 24. */
+export function boostLimitProblem(text: string): FieldProblem | null {
+  return wholeNumberProblem(text, BOOST_LIMIT_RANGE.min, BOOST_LIMIT_RANGE.max, "dB");
 }
 
 /**
  * The Settings tab's settings that no other part of the page keeps: the Auto-Pause mode, the theme, ambient mode and its
  * settings, and whether tiles show their file names. Each applies as it changes and is kept on this device. The panel
  * keeps its side, the store Advance after and the autoplay settings, the player its buttons' state, the audio stage
- * Enhanced audio, and the notifications service the popup settings.
+ * Enhanced audio, loudness normalization its own settings, and the notifications service the popup settings.
  */
 export interface Settings {
   readonly autoPauseMode: ReadonlySignal<AutoPauseMode>;
