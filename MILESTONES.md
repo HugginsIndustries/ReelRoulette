@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI is the only client on every device from v0.15.0, which removes the desktop client. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter, sort, and weight random picks, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12l1, M12l2, M12l3, M12m, M12n1, M12n2, M12n3, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t, M12u.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Random tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12l1, M12l2, M12l3, M12m, M12n1, M12n2, M12n3, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t, M12u.
 - **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.16.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access, and give each account its own favorites, ratings, history, tags, presets, and profiles. P28b, P28c, P28d, P28e, P28f, P28m, P28g, P28h, P28j, P28n, P28k, P28l.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
@@ -401,11 +401,9 @@ Last milestone completed: M12i7
   - With Timeout, the scroll wheel and a two-finger drag over the player count as activity too: they show the controls and restart the countdown, so the volume slider stays visible while they change the volume.
 - A Random button, with the `casino` icon, sits in the transport row in Mute's old place, right of Next and left of Loop.
 - Random picks a new item as Next does at the end of the history, from anywhere in it.
-- Random behavior, a Settings tab entry in its Playback section, kept per device, decides where the pick goes:
-  - Jump, the default: the pick is added at the end of the history, as Next adds one at the end of the queue.
-  - Insert: the pick goes right after the current item, and the plays ahead in the history stay after it.
-- The mockup shows the Random button and Random behavior.
-- Hide player controls, its two settings, and Random behavior survive a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
+- The pick is added at the end of the history, as Next adds one at the end of the queue.
+- The mockup shows the Random button.
+- Hide player controls and its two settings survive a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
 
 #### Traps
 
@@ -414,7 +412,7 @@ Last milestone completed: M12i7
 - The scroll wheel and a two-finger drag show the controls through `showControls` (`src/playback/mediaGestures.ts`), which `src/ui/Player.tsx` wires to `setControlsVisible(true)`, and the mockup counts them as activity under Timeout (`showControlsForVolume` in `layout.src.html`).
 - A tap on Play left focus on it, and the mockup's first version, which kept the controls shown for any focus on a control, then kept them up until the next tap elsewhere (measured).
 - happy-dom, which the WebUI's screen tests use, matches `:focus-visible` for any focus, including focus a tap leaves, so a test can't tell keyboard focus from a tap's by it; the mockup tracks the last input itself (measured).
-- `pushHistory` in `src/state/appStore.ts` drops every history entry after the current one before it adds a pick, so neither Random behavior can use it as it is.
+- `pushHistory` in `src/state/appStore.ts` drops every history entry after the current one before it adds a pick, so Random from the middle of the history can't use it as it is.
 - `next` in `src/playback/player.ts` picks a new item only at the end of the history, and a tap on the empty player picks one too.
 - The desktop's Random button always picked a new item, even in the middle of its history (measured).
 - `casino` isn't in the mockup's icon subset, which `build_font.py` cuts from its `ICONS` list into `icons.json` (measured).
@@ -423,10 +421,14 @@ Last milestone completed: M12i7
 
 - The fullscreen button shows the exit icon while the stage is in fullscreen or pseudo-fullscreen, in a test of the fullscreen button's icon.
 - With Hide player controls on Timeout, the controls hide after the Hide after time with no activity, moving the mouse, tapping, the scroll wheel, or a two-finger drag shows them and restarts the countdown, and they stay while a mouse or pen pointer is over them, while keyboard focus is on a control, while the scrub bar or volume is dragged, while the bell's list is open, and, with Keep visible while paused, while paused. A touch over them and focus a tap leaves on Play don't keep them shown. On click/tap toggles them on a click or tap, and Never keeps them visible. Hide after accepts 1 to 30 seconds. Hidden controls can't be pressed. Shown by controls tests for each Hide player controls mode, the countdown, and each thing that keeps the controls shown.
-- Random from the middle of the history adds the pick at the end with Jump, and right after the current item with the plays ahead kept after it with Insert, in Player screen tests of each Random behavior.
-- After a page refresh, Hide player controls, its two settings, and Random behavior are each as they were, in tests for a page refresh keeping each setting this milestone adds.
+- Random from the middle of the history adds the pick at the end of the history, keeping the plays ahead, in Player screen tests of Random.
+- After a page refresh, Hide player controls and its two settings are each as they were, in tests for a page refresh keeping each setting this milestone adds.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and a spot check on the user's own browsers and phone, without the VM.
+
+#### Not included
+
+- Random behavior, a choice of where a Random pick goes in the history, which is Random Pick Options.
 
 ### M12i10 - WebUI Keyboard Shortcuts
 
@@ -438,7 +440,7 @@ Last milestone completed: M12i7
 #### Scope
 
 - Use the desktop keys.
-- R does what WebUI Player Controls' Random button does, following Random behavior.
+- R does what WebUI Player Controls' Random button does.
 - Ctrl+Q, Ctrl+O, and F11 are not bound, since the browser keeps them.
 - Q quit and O import folder have no WebUI equivalent.
 - Each panel tab has a shortcut: Library, Filter, Tags, Stats, and Settings.
@@ -514,6 +516,7 @@ Last milestone completed: M12i7
 - Rating keys, which is WebUI Player Rating.
 - The Actions menu and selection in the Esc order, after Auto Tag and before the panel, which is WebUI Multi-Select and Bulk Actions.
 - The profile picker's key and its place in the Esc order, which is Library Profiles.
+- The Random tab's key, with the tab keys renumbered 1 to 6, which is Random Pick Options.
 
 ### M12j - Show in File Manager from the WebUI
 
@@ -845,7 +848,7 @@ Last milestone completed: M12i7
 
 **Traps**
 
-- No schema version after 3 has shipped (inferred). A catalog already at the version before, such as a development server's, would fail `HasRequiredCatalogSchema` and be moved aside as damaged if that version gained the column, so the column takes its own step.
+- No schema version after 3 has shipped: v0.14.0 shipped 2 and v0.14.1 shipped 3 (measured). A catalog already at the version before, such as a development server's, would fail `HasRequiredCatalogSchema` and be moved aside as damaged if that version gained the column, so the column takes its own step.
 - `UpgradeSchema2To3` runs `SortIndexesSql`, the constant `WriteEmptyDatabase` runs for a new catalog, so adding an index to it would change the shipped step and break upgrading a schema-2 catalog, which doesn't have a newer index's column yet.
 - `LibraryCatalogMigrationTests` compares an upgraded catalog with a new one through `CatalogSeedTests.DescribeSchema`, column by column in order and index by index, so the new column is last in the new catalog's table too.
 - `OlderSchemaVersions()` covers every version from 2 to the one before current, so `CatalogSeed` needs tables for the version before and for the new version.
@@ -943,7 +946,7 @@ Last milestone completed: M12i7
 - A rating on the player, which is WebUI Player Rating.
 - Rating keys, which is WebUI Player Rating.
 - Filtering and sorting by rating, which is Rating Filter and Sort.
-- Weighting random picks by rating, which is Rating-Weighted Random Picks.
+- Weighting random picks by rating, which is Random Pick Options.
 - Ratings on library tiles, which is WebUI Ratings on Tiles.
 - Rating several items at once, which is WebUI Multi-Select and Bulk Actions.
 - Ratings in duplicate review, which is Admin Refresh, Backup, and Duplicate Review.
@@ -1082,41 +1085,406 @@ Last milestone completed: M12i7
 
 #### Not included
 
-- Weighting random picks by rating, which is Rating-Weighted Random Picks.
+- Weighting random picks by rating, which is Random Pick Options.
 
-### M12k5 - Rating-Weighted Random Picks
+### M12k5 - Date Added and Date Filters
 
 - **Status**: ⏳ Planned
-- **Goal**: Random picks can favor higher-rated items, with the server deciding the weights.
-- **Depends on**: Item Ratings.
+- **Goal**: The catalog records when each file was added, and browse and random play can filter and sort by the date added and the date created.
 - **Design**: `docs/mockups/reelroulette/`.
 
-#### Scope
+#### Decisions
 
-- Random selection can weight eligible items by their rating, with the filters still deciding which items are eligible.
-- The server decides the weights; the WebUI only chooses the setting.
-- Before the app is built, these are settled and recorded in this entry, and the setting is shown in the mockup and approved:
-  - whether rating weighting is a new randomization mode or an option on the existing modes;
-  - the weight an unrated item gets;
-  - how strongly the rating pulls the picks;
-  - how it combines with the play-count and recency weighting and with Smart shuffle.
+- A file's date added is when the refresh's source stage or a source import first inserts its row.
+- A file already in the catalog when it upgrades takes its modified time as its date added.
+- Importing a source gives all its files the same date added, and their date created tells them apart.
+- A file's date created is its modified time (`last_write_time_utc`), which is what "created" usually means for media files.
+- The API, the WebUI, and the fixtures call it `DateCreated`, and the code's comments say it is the modified time.
+- The Library tab's sort offers Date added and Date created: `DateAdded` sorts by the date added, and a new `DateCreated` sorts by the modified time, which `DateAdded` reads today.
+- Two filters, Added in and Created in, can be used together. Each is Last 7 days, Last 30 days, Last 90 days, This year, or a custom range of two dates from the device's date picker.
+- A filter stores the choice, never resolved dates, so a preset with Last 30 days always means the last 30 days, and preset matching compares the choice.
+- The server resolves a range in its own time zone, to whole days: Last {N} days is today and the {N − 1} days before it, This year starts on 1 January, and a custom range covers its first and last days.
+- A custom range needs both dates, and one that ends before it starts is flagged with the field validation pattern.
+- A file without a date is outside every range of that date.
 
-#### Traps
+#### Slices
 
-- The randomization modes are PureRandom, WeightedRandom, SmartShuffle, SpreadMode, and WeightedWithSpread (`RandomizationModeValue`).
-- `SelectWeighted` in `RandomSelectionEngineCore.cs` weighs each item by `playScore * 0.6 + recency * 0.8`, times the spread factor in WeightedWithSpread, with a floor of 0.05, where `playScore` is `1 / (1 + plays)` and `recency` grows with the days since the last play, up to 30.
-- Weights are worked out on every pick, with no state kept.
-- `RandomCandidatesSql` reads only each eligible item's id, full path, play count, and last played, so it needs the rating too.
-- Smart shuffle's bag is a uniform shuffle of the eligible ids, built again only when the eligible set or the mode changes, so weighting it needs a weighted fill.
-- The randomization mode is a separate request field, `randomizationMode`, not part of FilterState, and `ParseRandomizationMode` in `LibraryPlaybackService.cs` reads an unknown or empty mode as SmartShuffle.
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ⏳ Planned | Added in and Created in in the Filter tab with the custom range's date picker, their Filters line wording, and Date added and Date created in the sort list, approved on a desktop browser, the iPad, and an Android phone. |
+| Server | ⏳ Planned | The date added column in a new catalog schema step with its sort indexes, the modified-time sort indexes renamed for Date created, and the date added written when a row is inserted. |
+| Contract | ⏳ Planned | `addedIn` and `createdIn` in the FilterState schema, applied by the server in the list query, its counts, and random selection, the `DateAdded` and `DateCreated` sorts, a shared fixture for reading the fields, OpenAPI, the generated WebUI types, and `docs/api.md`. |
+| WebUI | ⏳ Planned | Added in and Created in in the Filter tab and the Filters line, saved in presets and compared in preset matching, and the two date sorts with their direction labels. |
 
-#### Acceptance
+#### Mockup slice
 
-- Over many seeded picks, items are picked in proportion to the settled weights, unrated items included, in randomization tests.
-- The filters still decide which items can be picked, in server tests of random selection with a filter.
-- The WebUI offers the setting as the approved mockup shows and sends it with each pick, in WebUI tests.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+**Scope**
+
+- In `docs/mockups/reelroulette/`, Added in and Created in in the Filter tab, each with its choices and the custom range's From and To from the device's date picker, flagged with the field validation pattern when the range ends before it starts.
+- Where they sit in the Filter tab, in the General section or a section of their own, is settled in the mockup.
+- The Filters line's wording for each choice is settled in the mockup.
+- Date added and Date created in the Library tab's sort list, in place of today's Date added, with their direction labels.
+- The mockup's items get a date added and a date created from each item's id, so the filters and sorts work on them.
+- Any new icon goes in the mockup's icon subset.
+- Before the app is built, the user approves the design on a desktop browser, the iPad, and an Android phone, including the date picker on each.
+
+**Traps**
+
+- The mockup's items have no dates, and its Date added sort uses a key made up for it (`layout.src.html`).
+- Drawing the dates from `statRand` would shift every random value drawn after them (inferred).
+- No date input exists in the WebUI or the mockup (measured).
+- `<input type="date">` opens each platform's own picker, so its look can only be judged on the devices (inferred).
+- `check.mjs` runs the pages in happy-dom, with no layout.
+- `calendar_today`, `date_range`, `calendar_month`, and `event` aren't in the mockup's icon subset, which `build_font.py` cuts from its `ICONS` list (measured).
+- The Filter tab's General section holds Basic Filters, Media Type, Sources, Audio Filter, and Duration Filter, and Browser-Playable Filter and Rating Filter and Sort add to it.
+- `renderFilterSummary` builds the mockup's Filters line (`layout.src.html`).
+
+**Acceptance**
+
+- The mockup shows Added in and Created in, their Filters line wording, and both date sorts as the user approved them, and `node docs/mockups/reelroulette/build/check.mjs` passes, with checks of each choice on the mockup's items, the custom range's flag, the Filters line wording, and both sorts' order.
+
+#### Server slice
+
+**Scope**
+
+- The catalog moves to the next schema version, with its own upgrade step from the version before that adds a nullable `date_added_utc` column last in `items`, sets it to each item's `last_write_time_utc`, and adds the date added sort indexes, one per direction, on `COALESCE(date_added_utc, 0)` and the name key. A new catalog has the same.
+- The step renames the modified-time sort indexes from `idx_items_date_added_asc` and `idx_items_date_added_desc` to `idx_items_date_created_asc` and `idx_items_date_created_desc`.
+- The new and renamed indexes go in a constant of their own, run for a new catalog and by the new step.
+- `InsertItem` writes the date added, the time the row is inserted, for the refresh's source stage and for source import.
+
+**Traps**
+
+- No schema version after 3 has shipped: v0.14.0 shipped 2 and v0.14.1 shipped 3 (measured). A catalog already at the version before, such as a development server's, would fail `HasRequiredCatalogSchema` and be moved aside as damaged if that version gained the column, so the column takes its own step.
+- Item Ratings gives the shipped 2→3 step its own index SQL, so a change to the indexes a new catalog gets can't change that step.
+- `ItemColumnsBySchemaVersion` needs the column for the new version.
+- `OlderSchemaVersions()` covers every version from 2 to the one before current, so `CatalogSeed` needs tables for the version before and for the new version.
+- `LibraryCatalogMigrationTests` compares an upgraded catalog with a new one through `CatalogSeedTests.DescribeSchema`, column by column in order and each index's SQL as text, so the column is last in a new catalog's table and each index's SQL is the same in both.
+- SQLite can't rename an index, so renaming one drops and creates it.
+- On a copy of the developer's 49,228-item catalog the step took about 590 ms in one transaction, and the catalog grew from 94.2 to 100.9 MB, 3.06 MB per new index (measured).
+- Every new row goes through `InsertItem` (`LibraryCatalogSession.cs`), which names its columns. The refresh's source stage calls it through `InsertDiscoveredItem` (`RefreshPipelineService.cs`), and source import through `ImportSourceFolder`.
+- The refresh keeps a file's row when it moves or is renamed within one source, matched by a ready fingerprint, the same media type and size, and the same fingerprint (`PersistMovedItem` and `UpdateItemIdentity`), so the file keeps its date added.
+- A move to another source, or a move of a file whose content also changed, is a delete and an insert, so the file gets a new date added.
+- Every item in the developer's catalog has a ready fingerprint (measured).
+- Source import inserts rows with no modified time or size and starts no refresh, so an imported file has no date created until the next refresh's fingerprint stage writes it.
+- No client calls `POST /api/sources/import` yet, and Admin Source Management is the first.
+- Catalog transfer and backup restore upgrade an older catalog through the same steps, so they get the backfill.
+- A refresh writes a file's modified time again whenever it changes (`SetLastWriteTime`), so a file's date created moves when the file is modified.
+- The developer's modified times cluster on the days batches were copied, 12,042 files on one day in 2018 and 6,161 on one day in June 2026, so after the step a file's date added is often its copy day too (measured).
+
+**Acceptance**
+
+- A catalog at each older version opens upgraded and imports upgraded with the column set to each item's modified time and both pairs of indexes, and matches a new catalog's schema, in the catalog upgrade tests.
+- A file the refresh's source stage finds and a file a source import adds get the time they were inserted as their date added, and a file moved within a source keeps its date added, in server tests of the source stage and of source import.
+- `dotnet test ReelRoulette.sln` passes.
+
+#### Contract slice
+
+**Scope**
+
+- `addedIn` and `createdIn` in the FilterState schema, each null for no limit, a preset (`last7Days`, `last30Days`, `last90Days`, or `thisYear`), or a custom range of `from` and `to` dates, applied by the server in the list query, its counts, and random selection.
+- The server resolves each range as the Decisions describe, with a clock and a time zone that tests can set.
+- A date condition is written on `COALESCE({column}, 0)`, the expression its sort index has.
+- `DateAdded` sorts by the date added and `DateCreated` by the modified time, each reading its own index in both directions.
+- `TryParseSort`'s message for an unknown mode lists `DateCreated`.
+- A shared fixture under `shared/fixtures/` locks how the server's filter parser and the WebUI read `addedIn` and `createdIn`: each preset, a custom range, a range that ends before it starts, an unknown preset, a date that isn't one, and null. Core and WebUI tests read it.
+- OpenAPI, the generated WebUI types, and `docs/api.md`, which describes the fields, the time zone and whole days, and both sorts.
+
+**Traps**
+
+- FilterState goes through `FilterStateModel` (`FilteringContracts.cs`), `LibraryListFilterParser`, and `AppendFilter` in `LibraryCatalogListQuery.cs`, which the list query, its counts, and random selection share.
+- `FilterStateSchema_NamesEveryFieldTheParserReads` finds the fields the parser reads by the text `(element, "name"`, so a field with fields of its own is read through a helper called that way.
+- `AppendFilter` is static and has no clock, and `QueryRandomCandidates` builds its own `LibraryListRequest` (`LibraryCatalogSession.cs`), so the clock and the time zone have to reach both (inferred).
+- Nothing in the server or the WebUI handles time zones today, and only backup file names and log timestamps use local time (measured).
+- A date condition uses an index only when it is written on the index's expression: on the developer's catalog a 30-day count on `COALESCE(items.last_write_time_utc, 0)` took 0.1 ms, and on the plain column, which scans the table, 10.8 ms (measured).
+- Random selection with a date condition was never slower than without one (measured).
+- The catalog has no `sqlite_stat1`, and without it a play-count sort with a 7-day condition walked the whole play-count index in 21.3 ms, and a name sort with a 365-day condition took 62.3 ms at offset 10,000 (measured).
+- Counts are cached by the WHERE text and its values until the next catalog write, 64 entries at most, all dropped when full. A bound that changed with every request would miss on every page and move the range between pages, while a bound at the start of a day stays the same all day (inferred).
+- `COALESCE` reads a missing date as 0, so a range leaves out files without that date.
+- Of the developer's 49,228 files, 140 were modified in the last 7 days, 475 in the last 30, 1,449 in the last 90, and 10,786 this year (measured).
+- `BuildOrderBy` sorts `DateAdded` by `COALESCE(items.last_write_time_utc, 0)` today, with the indexes `idx_items_date_added_asc` and `idx_items_date_added_desc`.
+- The sort modes are the `LibraryListSort` names, which `TryParseSort` (`LibraryOperationsService.cs`) matches ignoring case, and its message for an unknown mode lists them by hand.
+- A device that remembers the `DateAdded` sort keeps it, and right after the upgrade it orders as before, since the date added starts as the modified time (inferred).
+- `npm run verify:contracts` only checks that the generated types match the OpenAPI file.
+
+**Acceptance**
+
+- Each preset and a custom range of Added in and Created in keep only files whose date falls in the range, each alone and both together, and without them results are unchanged, in server tests for the fields in the list query, its counts, and random selection with a set clock and time zone.
+- Last {N} days, This year, and a custom range resolve to whole days in the server's time zone, in Core tests of range resolution.
+- A stored preset without the fields filters with no date limit, in server tests of a stored preset without them.
+- The server's parser reads the fields as the shared fixture says, in Core tests of the fixture.
+- `DateAdded` and `DateCreated` order by their dates in both directions and read their indexes, and a date condition reads its index, in server tests of the sorts and their query plans.
+- OpenAPI and the generated WebUI types carry the fields and the sorts, in contract tests, and `docs/api.md` describes them, checked by reading it.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### WebUI slice
+
+**Scope**
+
+- Added in and Created in in the Filter tab, as the approved mockup places them, each with None, the four presets, and Custom range, whose From and To take the device's date picker (`<input type="date">`).
+- With Custom range chosen, an empty date or a range that ends before it starts is flagged with the field validation pattern and holds Apply, Add Preset, and Update, as a duration that isn't valid does.
+- Both are saved in presets and compared in preset matching by the choice, never resolved dates, with cases in `preset-filter-equality.json`.
+- The Filters line names each as the mockup words it.
+- Date added and Date created in the Library tab's sort, each with "Newest → Oldest" and "Oldest → Newest" in `sort-direction-labels.json`.
+- The WebUI reads the fields as the shared fixture says.
+
+**Traps**
+
+- `serializeFilterStateForApi`, `filterStateFromApiObject`, and `filterStatesEqualForPresetMatch` in `src/filter/filterStateModel.ts` write, read, and compare FilterState, and a field the serializer writes joins preset matching.
+- Core's filter comparison (`FilterStateComparison.cs`), behind the preset routes' refusal of a filter another preset holds, reads `shared/fixtures/preset-filter-equality.json` too, so the date cases need it to compare the fields.
+- The Filter tab's fields with problems go through `filterFieldProblems` and `FilterField` (`src/filter/filterDialogModel.ts`).
+- `filterSummaryParts` (`src/filter/filterSummaryModel.ts`) builds the Filters line in an order its comment documents.
+- The sort modes are `LIBRARY_SORT_MODES` in `src/library/libraryBrowseModel.ts`, and the sort's options are written out again in `src/ui/LibraryOverlay.tsx`.
+- `libraryBrowseModel.test.ts` requires every sort mode in `sort-direction-labels.json` in both directions.
+- The WebUI remembers its sort per device and drops a remembered mode that isn't in its list, falling back to Name ascending (`isRememberedSort` in `src/library/library.ts`).
+- Dates change only in a refresh, and a finished refresh reloads the loaded window once, so the tile effect rule (`library-tile-effect.json`) needs no date change kind (inferred).
+- A rolling range moves with the clock without an event, so a window loaded before midnight keeps its tiles until it next reloads (inferred).
+
+**Acceptance**
+
+- Added in and Created in are saved in presets and compared in preset matching by the choice, so Last 30 days matches Last 30 days and not the same days as a custom range, in tests of `preset-filter-equality.json`.
+- A custom range with an empty date, or one that ends before it starts, is flagged and holds Apply, Add Preset, and Update, in Filter screen tests.
+- The Filters line names each choice as the mockup words it, in Library screen tests.
+- Date added and Date created show their direction labels, in tests of `sort-direction-labels.json`.
+- The WebUI reads the fields as the shared fixture says, in WebUI filter model tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check of the date picker on the user's phone.
+
+#### Release checks
+
+- Manual: In the WebUI, Added in and Created in limit browse and random play, a preset saved with Last 30 days keeps it rolling, and Date added and Date created order the library.
+
+#### Not included
+
+- Showing a file's dates in the Stats tab.
+- A file's real creation time, from the file system or its metadata.
+- Ranges in the device's own time zone.
+- Favoring newly added or newly created files in random picks, which is Random Pick Options.
+
+### M12k6 - Random Pick Options
+
+- **Status**: ⏳ Planned
+- **Goal**: Random picks combine options, set per device in a new Random tab, in place of the five randomization modes, with the server deciding the picks.
+- **Depends on**: Item Ratings, whose rating Favor higher rated reads, Date Added and Date Filters, whose date added Favor newly added reads, WebUI Player Controls, whose Random button gets Random behavior, and WebUI Keyboard Shortcuts, whose panel tab keys it renumbers.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- One Random, with options that combine, replaces the five randomization modes: Shuffle, Spread by folder, Spread by tags, Favor less played, Favor newly added, Favor newly created, and Favor higher rated. With every option off, picks are pure random.
+- Each old mode is a combination: Pure random has every option off, Smart shuffle is Shuffle, Weighted random is Favor less played, Spread is Spread by folder, and Weighted with spread is Favor less played with Spread by folder.
+- The defaults are Shuffle on and Spread on by folder only.
+- The server decides the picks. The WebUI only sets the options, kept per device and not in presets, and sends them with each pick.
+- A pick goes in this order: the filter decides the eligible files, Shuffle leaves out the files picked within its memory window, Spread by folder leaves out the files of recently used folders, the Favor options and tag spread weigh the rest, and one weighted roll picks.
+- Shuffle: nothing repeats until every eligible file has played, or until its memory window has passed.
+- Remember plays for, under Shuffle, is 1 day, 7 days, 30 days (the default), 90 days, or until everything has played. It is rolling: a file can be picked again that long after it was last picked on this device.
+- The server keeps in memory, per device by `clientId`, each file picked on that device and when.
+- A pick older than the window drops out, and a change to the eligible set or to the options keeps the rest.
+- Every random pick goes into the memory, whether Shuffle is on or not, and a server restart clears it.
+- When every eligible file has been picked within the window, those files start a new cycle and their picks are cleared, but the most recent pick is never picked again right away.
+- Reset now clears this device's shuffle memory at once.
+- Spread by folder skips the folders of the last 16 picks, or of half the eligible set's folder count when that is smaller, and every other file is equally likely.
+- A folder is the file's immediate parent.
+- When the skipped folders hold every file left to pick, the skip is ignored.
+- Spread by tags is All tags, where a file sharing tags with recent picks is less likely and rarer tags count for more, or By category, where only the chosen categories' tags count.
+- "No tags" counts as a tag of its own, so untagged files are spread too, and under By category a file with none of the chosen categories' tags counts as having no tags.
+- The chosen categories are kept by id, so a renamed category stays chosen.
+- Favor newly added and Favor newly created each give recently added or created files a fixed share of the picks, newer ones more likely.
+- With both on, each takes its own share, and when no such file is left to pick, the pick is as usual.
+- Favor less played and Favor higher rated multiply each file's weight: less played by today's Weighted random weighting of play count and last played, and higher rated by the rating, with an unrated file weighted as 2.5 stars.
+- The shares, how long a file counts as recent, how strongly less played and the rating pull, and how strongly and over how many picks tag spread pulls are settled in the Mockup slice and recorded here.
+- The Random tab sits between the Filter and Tags tabs, with the dice icon (`casino`).
+- It holds the cycle card, every option, Spread's folder and tag choices with the category list, Remember plays for, Reset now, and Random behavior.
+- Options apply at once, with no Apply, and nothing goes in the Settings tab.
+- The cycle card, at the top of the Random tab and styled like the Stats tab's cards, shows this device's current Shuffle cycle: the files picked this cycle, those eligible now under the current filter, those remaining until the cycle restarts, and the memory window.
+- Picked this cycle counts the eligible files picked within the window, so picked and remaining add up to eligible.
+- The cycle card opens and closes, is open by default, and keeps that state per device.
+- Each pick's response carries the cycle card's numbers, and opening the Random tab fetches them once.
+- Random behavior decides where a Random pick goes in the history: Jump, the default, adds it at the end, and Insert puts it right after the current item, with the plays ahead kept after it. It applies to the player's Random button and to R, and is kept per device.
+- The Library tab's randomization dropdown goes.
+- A Random line under the Filters line, in its style, such as "Random: Shuffle · Spread by folder", always shows, opens the Random tab as the Filters line opens the Filter tab, and hides with the Filters line when the controls collapse.
+- The panel tab keys are 1 to 6 in tab order: Library, Filter, Random, Tags, Stats, and Settings. T and S still open Tags and Settings.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ⏳ Planned | The Random tab with the cycle card, every option, Remember plays for, Reset now, and Random behavior, the Random line, the Library tab without the randomization dropdown, the renumbered tab keys, and the settled strengths, approved on a desktop browser, the iPad, and an Android phone. |
+| Engine | ⏳ Planned | The options, Shuffle's rolling memory and cycles, folder and tag spread, the Favor shares and weights, and the cycle numbers in Core, with tests whose randomness is seeded or scripted. |
+| Contract | ⏳ Planned | The options in place of `randomizationMode` on `POST /api/random`, the cycle numbers in its response, the cycle and reset routes, the candidate read with both dates, the rating, and item tags, state per device, the pick log line, OpenAPI, the generated WebUI types, and `docs/api.md`. |
+| WebUI | ⏳ Planned | The Random tab with its cycle card and Random behavior, the Random line, the options kept per device and sent with each pick, the randomization dropdown removed, and the tab keys renumbered. |
+
+#### Mockup slice
+
+**Scope**
+
+- In `docs/mockups/reelroulette/`, the Random tab between Filter and Tags with the `casino` icon, holding the cycle card, Shuffle with Remember plays for and Reset now under it, Spread by folder, Spread by tags with All tags, By category, and the category list, the four Favor options, and Random behavior, as the Decisions describe.
+- The cycle card's look, and how it shows while Shuffle is off, are settled in the mockup.
+- The Random line under the Filters line, its wording for each combination of options, every option off included, and its opening the Random tab.
+- The Library tab without the randomization dropdown, at every width and on a phone on its side.
+- The panel tab keys 1 to 6, and the shortcut reference's rows for them.
+- `casino` and any other new icon in the mockup's icon subset.
+- The mockup's picks stay uniform, since its 72 items are too few to show the options' effect.
+- The strengths the Decisions leave open are settled from simulations of each candidate on a copy of the developer's catalog, showing the share of picks each kind of file gets, and recorded in the Decisions.
+- Before the app is built, the user approves the design on a desktop browser, the iPad, and an Android phone.
+
+**Traps**
+
+- The mockup's randomization dropdown is `#lib-mode` in `.lib-pair` (`layout.src.html`), and the page script restores and saves it, so removing only its markup makes the script throw.
+- `check.mjs` reads `#lib-mode` and checks the Library tab's controls in the order `lib-preset,lib-mode,lib-sort,lib-dir,lib-search`.
+- On a phone on its side, the mockup's Library tab controls are a two-column grid, which the dropdown's removal leaves with three items.
+- `showTab` in `layout.src.html` names the five tab pages.
+- WebUI Keyboard Shortcuts' mockup binds 1 to 5 (`TAB_KEYS`), and `check.mjs` checks that 3 opens Tags and 4 opens Stats, and that the shortcut reference has 17 rows.
+- `renderFilterSummary` builds the mockup's Filters line (`#lib-filters`), which the controls' collapse hides.
+- The mockup's `pickRandom` picks uniformly from the filtered items, and its 72 items are `ITEMS` in `layout.src.html`.
+- WebUI Player Controls adds `casino` to the mockup's icon subset for its Random button.
+- On the developer's library, a boost for new files of ×4 at day 0, halving every 14 days, gave the 184 files under 14 days old 1.3% of picks, while after a 5,000-file import ×4 gave the import 28% of picks on day one and ×10 gave it 49% (measured), so newness takes a fixed share rather than a multiplier.
+- Six 44 px tabs and Close need 336 px, and the side panel's 360 px minimum leaves 344 px (inferred from `src/styles.css`).
+- `check.mjs` runs the pages in happy-dom with no layout, so the tab row's fit can only be judged on the devices.
+
+**Acceptance**
+
+- The mockup shows the Random tab, the cycle card, the Random line, and the Library tab without the randomization dropdown as the user approved them, and `node docs/mockups/reelroulette/build/check.mjs` passes, with checks of each option's control, Remember plays for, Reset now, the cycle card opening and closing, the Random line's wording and its opening the Random tab, and the keys 1 to 6.
+- The settled strengths, with the simulations they came from, are recorded in the Decisions, checked by reading them.
+
+#### Engine slice
+
+**Scope**
+
+- In `ReelRoulette.Core`'s randomization, an options type replaces `RandomizationModeValue`, and each pick follows the order the Decisions give.
+- Shuffle's memory per device holds each picked file's id and pick time, applies the window on each pick, drops picks past it, starts a new cycle for the eligible files once every one has been picked within the window, and leaves the most recent pick out of the new cycle's first pick.
+- Spread by folder with its skip of recent folders, and Spread by tags with All tags, By category, and "no tags" as a tag.
+- The Favor shares and weights, with the strengths the Mockup slice settles.
+- The cycle numbers: picked this cycle, eligible now, remaining, and the window.
+- Each file's folder, its tags, and each tag's rarity are kept per eligible set rather than worked out on every pick.
+- Tests set every draw with a seeded or scripted `Random` and test the weights as exact values.
+
+**Traps**
+
+- The modes are PureRandom, WeightedRandom, SmartShuffle, SpreadMode, and WeightedWithSpread (`RandomizationModeValue` in `RandomizationContracts.cs`), dispatched in `SelectItem` (`RandomSelectionEngineCore.cs`).
+- `SelectWeighted` weighs each item by `playScore * 0.6 + recency * 0.8`, with a floor of 0.05, where `playScore` is `1 / (1 + plays)` and `recency` grows with the days since the last play, up to 30.
+- Today's Spread multiplies the weight of each file in a folder used in the last 16 picks by `1 / (1 + 1.5 × uses)`, so big folders keep their share: in 20,000 simulated picks on the developer's library the biggest folder took 6.5%, against 11.7% at pure random (measured).
+- Skipping the last 16 folders with every other file equal gave that folder 4.2% of picks, the ten biggest folders 17.8%, single-file folders 0.3%, and no folder again within 10 picks (measured).
+- With Shuffle, skipping recent folders ended a cycle with at most 10 picks in a row from one folder on the developer's presets, except where one folder held most of a preset, 71% or 95%, where every way of spreading ends with a long run from it (measured).
+- Smart shuffle's bag is a shuffled queue of every eligible id, built again whenever the eligible ids or the mode change (`EnsureStateForEligibleSet`): on 1,000 items, one item leaving the set after 400 picks brought 236 repeats in the next 600 picks (measured).
+- Blacklisting a file under the default filter, a refresh that adds or removes a file, a rolling date filter at midnight, and a profile switch each change the eligible set (inferred).
+- At 49,179 eligible items, a Smart shuffle pick took 9.9 ms, since it builds a dictionary of every item, and a Spread pick 16.8 ms, since it works out every file's folder (measured).
+- At 49,179 eligible items, every file's folder took 21 ms, grouping by folder 1.4 ms, all four Favor weights 7 ms, leaving out 5,000 picked ids 4.5 ms, tag spread's rarity and penalty 26 ms, a weighted roll 0.13 ms, and the eligible set's signature 1.7 ms (measured).
+- A set of picked ids takes 132 KB per 1,000 ids (measured).
+- `GetFolderKey` is the lowercased `Path.GetDirectoryName` of the path.
+- In the developer's catalog 85% of eligible files have a tag, most just one, the most common tag is on 45.7% of files, and 7,234 files have none, 78% of them in one flat folder (measured).
+- With All tags over the last 8 picks and untagged files left out, the untagged share of picks rose from 14.8% to 22.7% and that flat folder's from 11.7% to 17.8% (measured).
+- 201 of the developer's 212 People tags have 90% of their files in one folder, so By category on People nearly repeats Spread by folder (measured).
+- About 47 files are played a day on the developer's library, so a whole-library cycle would take about 3 years, while a preset's ends in days or weeks (measured).
+- Shortening the window drops the older picks, so lengthening it again doesn't bring them back (inferred).
+- `RandomSelectionEngineCoreTests` already sets each draw with `ScriptedRandom` and seeds the Smart shuffle tests.
+
+**Acceptance**
+
+- With every option off, every eligible file is equally likely, and each old mode's combination picks as the Decisions describe, in engine tests with a scripted `Random`.
+- Shuffle picks no file twice within the window, starts a new cycle once every eligible file has been picked within it without picking the most recent one first, drops a pick past the window, and keeps its memory through a change to the eligible set or the options, in engine tests of Shuffle.
+- Spread by folder never picks from a folder of the last 16 picks, or of half the folders when that is smaller, unless those folders hold every file left, in engine tests of folder spread.
+- Spread by tags lowers files sharing tags with recent picks, rarer tags more, counts "no tags" as a tag, and counts only the chosen categories under By category, in engine tests of the weights as exact values.
+- Favor newly added and Favor newly created take their shares, and Favor less played and Favor higher rated multiply the weights as settled, an unrated file as 2.5 stars, in engine tests of the shares and weights.
+- The cycle numbers count the picked, eligible, and remaining files and give the window, in engine tests of the cycle numbers.
+- `dotnet test ReelRoulette.sln` passes.
+
+#### Contract slice
+
+**Scope**
+
+- `POST /api/random` takes the options in place of `randomizationMode`: Shuffle with its window in days, 1, 7, 30, or 90, or none for until everything has played; Spread by folder; Spread by tags, off, all tags, or by category with the category ids; and the four Favor options.
+- A missing option reads as its default.
+- A category id the catalog doesn't have is ignored.
+- `POST /api/random`'s response carries the cycle card's numbers, in a response schema of its own, since `POST /api/play/{itemId}` answers with `RandomResponse`.
+- A cycle route answers with this device's cycle numbers for a filter and the options, for the Random tab to fetch when it opens.
+- A reset route clears this device's shuffle memory.
+- `RandomizationModeValue` and `ParseRandomizationMode` go, and the tests that rely on Smart shuffle being the default, `FilterStateTests.PickIds` and the pick log test, follow the new defaults.
+- The candidate read adds the date added, the modified time, and the rating, and tag spread reads every `item_tags` row once and keeps the eligible files' tags in memory.
+- The server keeps random-pick state per `clientId` in place of the client and session, and drops a device's state once its window has emptied it.
+- That fixes "Shuffle states pile up for every client session" in `ISSUES.md`.
+- The pick's `last.log` line names the options in place of the mode.
+- The service takes its `Random` from its constructor, so tests pass a seeded or scripted one. This replaces `TrySelectRandom_WeightedRandom_PrefersNeverPlayedItemInTheEligibleSet`, which fails about 1 run in 425, with seeded tests.
+- OpenAPI, the generated WebUI types, and `docs/api.md`, which describes the options, the cycle numbers, and both routes.
+
+**Traps**
+
+- `RandomRequest.RandomizationMode` is a free string (`ApiContracts.cs`), OpenAPI declares it as a nullable string with no values, and `docs/api.md` never mentions it (measured).
+- `ParseRandomizationMode` (`LibraryPlaybackService.cs`) reads an empty or unknown mode as SmartShuffle.
+- `LibraryPlaybackService` keeps its states in `_clientRandomizationStates`, keyed by `BuildRandomizationScopeKey(clientId, sessionId)`, and never removes one.
+- The WebUI keeps its session id in `sessionStorage`, so each new tab, and each relaunch of the installed app, brings a new session id (inferred for the relaunch).
+- Today's Smart shuffle state for the developer's 49,179 eligible items holds 5.0 MB (measured).
+- `QueryRandomCandidates` took 54 ms median at 49,179 eligible items, and reading three more columns added 6 to 17 ms (measured).
+- Reading every `item_tags` row took 12 to 22 ms, and reading them joined to the candidates 65 to 81 ms (measured).
+- Picks use `Random.Shared`. The flaky test gives the never-played item weight 1.4 and the heavily played one the floor of 0.05, and needs 35 wins in 40 picks, so it fails about 0.24% of runs (computed).
+- The test that each mode picks every eligible item is unseeded too, and fails about 2 runs in a million for WeightedRandom (computed).
+- `ItemIdContractTests` checks the random and play routes' responses against `RandomResponse` with `OpenApiSpec.AssertMatchesSchema`, which needs the fields returned and the schema's to be the same set.
+- `Spec_ListsEveryMappedApiAndControlRoute` fails for a route the server maps that the spec doesn't list, and for one the spec lists that the server doesn't serve.
+- `npm run verify:contracts` only checks that the generated types match the OpenAPI file.
+
+**Acceptance**
+
+- `POST /api/random` picks with the options it is sent and the defaults for missing ones, and ignores an unknown category id, in server tests of random selection with each option.
+- A device's state is kept by `clientId` across session ids and dropped once its window has emptied it, in server tests of the state.
+- The response carries the cycle numbers, the cycle route answers them for a filter, and the reset route clears the device's memory, in server tests of each, and the response and routes match their schemas, in contract tests.
+- No random test depends on an unseeded `Random`, checked by reading the tests, and `TrySelectRandom_WeightedRandom_PrefersNeverPlayedItemInTheEligibleSet` is gone.
+- The pick's `last.log` line names the options, in the pick log test.
+- `npm run verify:contracts` passes, and `docs/api.md` describes the options, the cycle numbers, and both routes, checked by reading it.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### WebUI slice
+
+**Scope**
+
+- The Random tab between Filter and Tags with `casino`, as the approved mockup shows it, with the options applying at once.
+- The cycle card at its top, open by default with its open state kept per device, updated from each pick's response, and fetched from the cycle route once each time the tab opens and again after Reset now.
+- Reset now clears this device's memory through the reset route.
+- The category list comes from the shared tag catalog, which the tab loads when none has loaded, as the Stats tab does.
+- The options, Remember plays for included, are kept per device under one per-device store key and sent with each pick. `rr_randomizationMode` and `AppStoreOptions.storage` go, with no carry-over.
+- Random behavior, Jump or Insert, in the Random tab, kept per device, places the pick of the player's Random button and of R.
+- The Library tab's randomization dropdown goes, and its controls are laid out as the mockup shows, on a phone on its side too.
+- The Random line under the Filters line, always shown, opening the Random tab, and hidden with the Filters line when the controls collapse.
+- The panel tab keys are 1 to 6 in tab order, and the shortcut reference lists them.
+- `CONTEXT.md` and `docs/domain-inventory.md` describe the Random tab and the Library tab without the dropdown.
+
+**Traps**
+
+- The randomization mode is kept in `localStorage` under the bare key `rr_randomizationMode`, outside the per-device store, and `AppStoreOptions.storage` exists only for it, with eight test files passing a stub for it (`src/state/appStore.ts`).
+- `randomPick.test.ts` checks the request body's keys in order.
+- `library.test.ts` checks the exact `localStorage` keys after startup, so the options aren't written without a user action.
+- The preset and randomization dropdowns share `.library-controls-pair`, a row from a 414 px container (`src/styles.css`), which a library screen test matches by its text, and on a phone on its side the controls are a two-column grid that the dropdown's removal leaves with three items.
+- `FilterSummary` in `src/ui/LibraryOverlay.tsx` builds the Filters line from `filterSummaryParts` (`src/filter/filterSummaryModel.ts`) and opens the Filter tab through `library.openFilterTab()`, and the collapse toggle's `aria-controls` names the Filters line and the controls.
+- The panel's tabs are `PANEL_TABS` (`src/panel/panelHost.ts`) and `TABS` (`src/ui/Panel.tsx`), each page has its ref and section, and `connectTabs` takes hooks for every tab.
+- The remembered tab is kept by its id (`panel.tab`), so a new tab leaves a remembered one valid.
+- Panel screen, Stats screen, and `panelHost` tests list the five tabs.
+- Six 44 px tabs and Close need 336 px, and the side panel's 360 px minimum leaves 344 px (inferred from `src/styles.css`).
+- WebUI Player Controls' Random adds its pick at the end of the history from anywhere in it, and `pushHistory` in `src/state/appStore.ts` drops every entry after the current one before it adds a pick, so Insert needs a history step of its own (inferred).
+- The shared tag catalog (`src/tags/tagCatalog.ts`) feeds the Stats tab, which loads it only when none has loaded.
+- The cycle card follows the Stats tab's cards (`src/ui/StatsTab.tsx`).
+- WebUI Keyboard Shortcuts binds 1 to 5 to the tabs and T and S to Tags and Settings, and its reference lists every binding.
+
+**Acceptance**
+
+- The Random tab sets each option, Remember plays for, and Random behavior, each applying at once and kept per device after a page refresh, and each pick sends the options, in Random screen tests and tests for a page refresh keeping them.
+- The cycle card updates from each pick's response, fetches once when the tab opens and after Reset now, and keeps its open state per device, open by default, in Random screen tests.
+- Reset now calls the reset route, in Random screen tests.
+- The category list shows the tag catalog's categories and keeps the chosen ones by id, in Random screen tests.
+- Random from the middle of the history adds the pick at the end with Jump, and right after the current item with the plays ahead kept after it with Insert, for the Random button and R, in Player screen tests and keyboard tests.
+- The Library tab has no randomization dropdown, and the Random line always shows, opens the Random tab, and hides with the Filters line, in Library screen tests.
+- 1 to 6 open Library, Filter, Random, Tags, Stats, and Settings, and the shortcut reference lists them, in keyboard tests per binding.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check on the user's phone.
+
+#### Release checks
+
+- Manual: On a desktop browser, the iPad, and an Android phone, the Random tab's options change the picks at once, the Random line names them and opens the tab, and they're kept after a page refresh.
+
+#### Not included
+
+- Random options kept per profile.
+- Random options saved in presets.
+- Shuffle memory that survives a server restart.
+- Spreading by a folder other than a file's immediate parent.
+- Lasting random-pick totals and other library-wide stats, a possible future addition to the Stats tab.
+- Random picks from each account's own data, which is Per-Account Library Data.
 
 ### M12l1 - WebUI Grid Row Reuse and Zoom
 
@@ -1539,7 +1907,7 @@ Last milestone completed: M12i7
 - The default profile always shows everything and can't be deleted. It is listed first, starts as "Main" in the brand orange (`#ef7f22`), takes the name and color the user sets, and its Edit Profile dialog has only the General tab.
 - Profiles are stored in `library.db`, since they refer to source ids, tag names, and preset ids that mean something only in one catalog, so they travel with catalog export, import, and backups.
 - Each request that lists, counts, or picks items names the active profile in an optional `profileId`. Without one, or with an id the catalog doesn't have, the server uses the default profile, so a device that was offline when its profile was deleted keeps working.
-- The server applies the active profile's sources to the library query and its counts, its ids-only option, random picks, library stats, and Auto Tag's scan, together with enabled sources and any filter or preset. A filter or preset naming a source the profile hides just leaves it out, and when nothing remains the library shows its usual empty message.
+- The server applies the active profile's sources to the library query and its counts, its ids-only option, random picks and their cycle numbers, library stats, and Auto Tag's scan, together with enabled sources and any filter or preset. A filter or preset naming a source the profile hides just leaves it out, and when nothing remains the library shows its usual empty message.
 - Item reads, library play, media, and thumbnails name no profile: the playing item, history, and queue carry on across a switch, and only the next random pick uses the new profile.
 - The event stream names no profile, and the WebUI applies its profile to the events it receives, since every event goes to every subscriber through one shared history and a stream per profile would have to reconnect on every switch.
 - Other devices popups, and the refresh's notice of kept folders, leave out items and folders in sources the active profile hides. The item events carry each item's `sourceId` for this.
@@ -1607,7 +1975,7 @@ Last milestone completed: M12i7
   - Deleting a profile deletes its source rows in the same transaction.
 - A profile that follows all sources includes a source added later, and a chosen list doesn't.
 - Each profile's own default filter is stored with it in `profiles`, and the profile store reads and writes it, as the Decisions describe.
-- The server resolves the request's profile to its sources, and `BuildWhere` adds them as a condition outside the filter, so the library query's page, `totalCount`, `searchBaselineCount`, its ids-only option, and random picks keep only the profile's sources.
+- The server resolves the request's profile to its sources, and `BuildWhere` adds them as a condition outside the filter, so the library query's page, `totalCount`, `searchBaselineCount`, its ids-only option, random picks, and Random Pick Options' cycle numbers keep only the profile's sources.
 - Auto Tag's scan keeps only the profile's sources: a full-library scan reads every item in them, and a scan with no path list their enabled ones.
 - Library stats count only enabled sources, as lists, counts, and random picks do: the totals and the baseline loudness leave disabled sources out, while each source's own row in the per-source list still counts its items, which Admin Source Management shows.
 - With a profile, the stats' totals count only its sources. The baseline loudness stays library-wide, since it is loudness normalization's target and isn't a count.
@@ -1616,7 +1984,7 @@ Last milestone completed: M12i7
 
 **Traps**
 
-- No schema version after 3 has shipped (inferred). A catalog already at the version before, such as a development server's, would fail `HasRequiredCatalogSchema` and be moved aside as damaged if that version gained the tables, so they take their own step.
+- No schema version after 3 has shipped: v0.14.0 shipped 2 and v0.14.1 shipped 3 (measured). A catalog already at the version before, such as a development server's, would fail `HasRequiredCatalogSchema` and be moved aside as damaged if that version gained the tables, so they take their own step.
 - `HasRequiredCatalogSchema` checks one `CatalogTables` list at every version (`LibraryCatalogStore.cs`), so adding the new tables to it would make a catalog at any older version fail the check and be moved aside to `library.db.refused`.
 - `ItemColumnsBySchemaVersion` needs an entry for the new version even though `items` doesn't change, since both schema checks look the version up there.
 - `OlderSchemaVersions()` covers every version from 2 to the one before current, so `CatalogSeed` needs tables for the version before and for the new version, and `CatalogSeedTests.DescribeSchema` compares an upgraded catalog with a new one table by table.
@@ -1628,7 +1996,7 @@ Last milestone completed: M12i7
 - WebUI Loudness Normalization's Automatic target reads that baseline, so leaving disabled sources out shifts it a little (inferred).
 - Item Ratings counts the rated items in that grouped pass, so the rated count follows the profile with the others (inferred).
 - Auto Tag's scan has its own SQL, with its own enabled check only for a scan with no path list, and duplicate scan has another (`LibraryCatalogSession.cs`), which the admin section keeps covering the whole library.
-- Smart shuffle's bag is kept per `clientId` and `sessionId` and built again when the eligible ids change (`LibraryPlaybackService.cs`, `RandomSelectionEngineCore.cs`), so a switch starts it over as a filter change does.
+- Random Pick Options keeps each device's shuffle memory by `clientId` through changes of the eligible set (`LibraryPlaybackService.cs`, `RandomSelectionEngineCore.cs`), so a switch doesn't start Shuffle over, and the cycle card counts the new profile's eligible files from the next pick (inferred).
 - `ImportSourceFolder` gives a new source a new GUID and keeps an existing root's id, and the catalog import's source remap rewrites only paths, so a profile's source ids survive an import.
 - Route handlers pass their parameters to the services, and nothing carries per-request data into them.
 
@@ -1637,7 +2005,7 @@ Last milestone completed: M12i7
 - A catalog at each older version opens upgraded and imports upgraded with the profile tables and the default profile, matches a new catalog's schema, and isn't moved aside, in the catalog upgrade tests.
 - Profiles are listed, created, updated, and deleted, a taken name is refused ignoring case, and the default profile can't be deleted or limited, in profile store tests.
 - A profile that follows all sources includes a newly imported source, and a chosen list doesn't, in profile store tests.
-- The library query's page, both counts, its ids-only option, and random picks keep only the profile's sources, a filter naming only sources it hides finds nothing, and a request without a profile or with an unknown one sees every source, in server tests of the profile's sources.
+- The library query's page, both counts, its ids-only option, random picks, and the random cycle numbers keep only the profile's sources, a filter naming only sources it hides finds nothing, and a request without a profile or with an unknown one sees every source, in server tests of the profile's sources.
 - Auto Tag's scan keeps only the profile's sources, in server tests of the scan.
 - Library stats' totals and baseline leave disabled sources out while each source's row keeps its own counts, and with a profile the totals count only its sources, in server tests of library stats.
 - Each profile write publishes `profilesChanged`, in server tests of each write.
@@ -1648,7 +2016,7 @@ Last milestone completed: M12i7
 **Scope**
 
 - `GET /api/profiles` lists the profiles, and POST routes, like the other write routes, create, update, and delete one.
-- An optional `profileId` on `POST /api/library/query`, its ids-only option included, `POST /api/random`, and `POST /api/autotag/scan`, and as a query parameter on `GET /api/library/stats`.
+- An optional `profileId` on `POST /api/library/query`, its ids-only option included, `POST /api/random`, Random Pick Options' cycle route, and `POST /api/autotag/scan`, and as a query parameter on `GET /api/library/stats`.
 - `profilesChanged` with the whole profile list and `clientId`.
 - `sourceId` on `itemStateChanged` and `itemRatingChanged`, and each item's source id on the bulk favorite and blacklist event and the bulk rating event.
 - OpenAPI, the generated WebUI types, and `docs/api.md`, which describes the routes, the field, and the events.
@@ -1734,7 +2102,7 @@ Last milestone completed: M12i7
 
 - **Status**: ⏳ Planned
 - **Goal**: Each profile shows only the tags, categories, and presets chosen for it, and in a profile a filter or preset leaves out its conditions on the tags the profile hides.
-- **Depends on**: Library Profiles, and Per-Preset Preset Writes, whose preset ids and per-preset routes a preset's visibility and update use.
+- **Depends on**: Library Profiles, Per-Preset Preset Writes, whose preset ids and per-preset routes a preset's visibility and update use, and Random Pick Options, whose tag spread and category list it limits to the profile's tags.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -1754,7 +2122,7 @@ Last milestone completed: M12i7
 - The "modified" marker ignores the conditions on hidden tags and hidden sources.
 - Presets are account-wide: Update changes the preset everywhere it shows.
 - Editing an item's tags leaves its hidden tags untouched.
-- Auto Tag and the Stats tab see only the profile's visible tags.
+- Auto Tag, the Stats tab, and random picks' tag spread see only the profile's visible tags.
 - Reordering categories or presets in a profile moves them only among the places the visible ones held, and hidden ones keep their places.
 
 #### Slices
@@ -1776,13 +2144,14 @@ Last milestone completed: M12i7
   - deleting a tag, a category, a preset, or a profile deletes its rows, and a deleted category's tags keep their own.
 - After parsing a filter, and before the library query, its counts, and random picks read it, the server leaves out its selected and excluded tags that the profile hides, directly or through their category, and its match modes for hidden categories.
 - Auto Tag's scan uses only the profile's visible tags.
+- Random picks' tag spread counts only the tags and categories the profile shows, and leaves out a chosen category it hides.
 - The per-preset update, given a profile, keeps the stored preset's conditions on what the profile hides, as the Decisions describe.
 - Every visibility change publishes `profilesChanged`.
 - Core tests read `shared/fixtures/profile-filter-projection.json`.
 
 **Traps**
 
-- No schema version after 3 has shipped (inferred), so visibility takes its own step, for the reason Library Profiles' Server slice gives.
+- No schema version after 3 has shipped: v0.14.1 shipped 3 (measured). So visibility takes its own step, for the reason Library Profiles' Server slice gives.
 - Tags are identified by their folded name, `name_fold`, and `item_tags` refers to them by it. Categories have a string id that the client gives, and Uncategorized is seeded with `sort_order` `int.MaxValue` (`LibraryCatalogStore.cs`, `LibraryCatalogSession.cs`).
 - `RenameTag` updates the renamed tag's row in place and, when the new name is taken, deletes the other row (`LibraryCatalogSession.cs`).
 - `InsertCatalogTagIfMissing` creates tags without a request of their own, from item-tag adds and Auto Tag apply.
@@ -1797,6 +2166,7 @@ Last milestone completed: M12i7
 - A tag rename keeps its visibility, a merge leaves it "All profiles", and deleting a tag, category, preset, or profile removes its rows, in server tests of each write.
 - In a profile, the library query, its counts, and random picks ignore conditions on hidden tags, directly or through their category, as the shared fixture's cases say, in Core tests of the fixture and server tests of each read.
 - Auto Tag's scan uses only visible tags, in server tests of the scan.
+- In a profile, tag spread counts only visible tags and categories, in server tests of random selection in a profile.
 - A preset updated in a profile keeps its conditions on the tags, categories, and sources the profile hides, empty source lists included, in server tests of the preset update.
 - `dotnet test ReelRoulette.sln` passes.
 
@@ -1835,7 +2205,8 @@ Last milestone completed: M12i7
   - in the Filter tab's tags and presets, where conditions on hidden tags stay out of its block of tags the catalog doesn't have;
   - in the Tags tab, an item's hidden tags included;
   - in the Library tab's preset dropdown, where a remembered preset the profile hides shows **None\*** with its filter kept, as a deleted one does, and in the Filters line's tag counts;
-  - in Auto Tag and the Stats tab's tag chips.
+  - in Auto Tag and the Stats tab's tag chips;
+  - in the Random tab's category list.
 - Applying a filter or preset in a profile leaves out its conditions on hidden tags, as the shared fixture says.
 - The "modified" marker compares a preset with its conditions on hidden tags and sources left out.
 - A new tag, category, or preset name is checked against the whole catalog, hidden ones included, as the approved mockup words it.
@@ -1844,7 +2215,7 @@ Last milestone completed: M12i7
 
 **Traps**
 
-- The shared tag catalog signal (`src/tags/tagCatalog.ts`) feeds only the Stats tab; the Filter and Tags tabs render from their own models, so each one leaves out hidden tags itself.
+- The shared tag catalog signal (`src/tags/tagCatalog.ts`) feeds the Stats tab and Random Pick Options' category list; the Filter and Tags tabs render from their own models, so each one leaves out hidden tags itself.
 - The Filter tab lists a selected or excluded tag the catalog doesn't have in an Uncategorized block (`src/filter/filterDialogModel.ts`).
 - A category reorder sends each changed category's place in the list shown as its `sortOrder` (`src/library/tagSave.ts`), which would collide with hidden categories' places.
 - New tag and category names are checked against what the editor shows (`src/tags/tagEditorModel.ts`), and the server merges a tag given a taken name, so a new tag named like a hidden one would merge into it.
@@ -1857,7 +2228,7 @@ Last milestone completed: M12i7
 - The Tags and Presets tabs show and change which tags, categories, and presets a profile shows, with a category's tags greyed while it is off, and Add Profile starts with the "All profiles" ones checked, in profile dialog tests.
 - The creation question shows only once a second profile exists, and each answer creates the tag, category, or preset as it says, in Tags and Filter screen tests.
 - Show in changes a tag's, category's, or preset's profiles with the dialog's Save or Apply, in Tags and Filter screen tests.
-- Hidden tags, categories, and presets show in no tab, a filter's conditions on hidden tags stay out of the Filter tab, and a remembered preset the profile hides shows **None\***, in Filter, Tags, Library, and Stats screen tests.
+- Hidden tags, categories, and presets show in no tab, a filter's conditions on hidden tags stay out of the Filter tab, and a remembered preset the profile hides shows **None\***, in Filter, Tags, Library, Random, and Stats screen tests.
 - Applying a filter or preset leaves out conditions on hidden tags as the shared fixture says, in WebUI tests of the fixture.
 - The "modified" marker ignores hidden tags and sources, in WebUI preset matching tests.
 - A name a hidden tag, category, or preset has is flagged, in Tags and Filter screen tests.
@@ -3749,7 +4120,7 @@ Last milestone completed: M12i7
 - The first account takes the default profile's name and color, and from then on each account's default profile has the account's name and color.
 - A new account starts with no favorites, ratings, history, tags, categories, or presets, and with one default profile.
 - Item-state, rating, playback, tag, preset, and profile events, and Other devices popups, go only to the same account's devices.
-- Random picks, Smart shuffle, rating-weighted picks, library stats, and Auto Tag use the account's own data.
+- Random picks, with every option, library stats, and Auto Tag use the account's own data.
 - A profile's sources come from those its account may see.
 - Decides what a catalog import or a backup restore does with data for account ids the account store doesn't have.
 - Decides whose favorites, ratings, plays, and tags duplicate review shows and Select Best compares.
@@ -3759,7 +4130,7 @@ Last milestone completed: M12i7
 - Favorite, blacklist, play count, and last played are columns of `items`, and Item Ratings adds the rating there too.
 - `item_tags` refers to tags by their folded name.
 - Every event goes to every subscriber through one shared history of 256 events (`ServerStateService.cs`), so sending events per account needs a filter per subscriber.
-- Smart shuffle's bag is kept per client and session (`LibraryPlaybackService.cs`).
+- Random Pick Options keeps each device's shuffle memory by `clientId` (`LibraryPlaybackService.cs`), so a device that switches accounts keeps one memory (inferred).
 - Account Store keeps accounts out of `library.db`, so catalog export carries no PIN hashes and import doesn't replace accounts.
 
 #### Acceptance
@@ -3897,7 +4268,7 @@ Last milestone completed: M12i7
 #### Traps
 
 - `src/api/coreApi.ts` keeps the client id in `localStorage` and the session id in `sessionStorage`, and `sseClient.ts` puts both in the event stream URL, where proxy access logs record them.
-- They identify a randomization scope and are not credentials today.
+- Random Pick Options keys each device's random-pick state by the client id alone, and neither id is a credential today.
 
 #### Acceptance
 

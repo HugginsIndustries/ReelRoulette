@@ -19,11 +19,8 @@ Instructions:
 
 Commit Message:
 
-M12i8: Count digitally silent tracks as no audio, and make Automatic the default target
+Docs: Plan Date Added and Date Filters, and Random Pick Options in place of Rating-Weighted Random Picks
 
-- Server: the loudness scan counts a track at the -70 LUFS floor with no peak as no audio, and the catalog's schema version 6 step stores existing ones that way without a rescan. A faint track with a real peak still counts as audio.
-- Server: the audio filter, the library stats' audio counts and baseline, and the item read follow, in new parser, loudness stage, and upgrade tests, each shown to fail without its change.
-- WebUI: the Stats tab's True peak no longer shows Silent, since a digitally silent file shows as a file without audio.
-- Mockup: the stand-in silent video has no audio, and Automatic is the default target.
-- MILESTONES.md: the Automatic baseline slice is complete, with the measured statistics and the user's choice of the 75th percentile, and Automatic becomes the provisional default target. Item Ratings' Contract slice also names `hasAudio` in `LibraryProjectionItem`.
-- Docs: CONTEXT.md, docs/api.md, docs/domain-inventory.md, docs/dev-setup.md, and CHANGELOG.md describe digitally silent tracks and schema version 6.
+- MILESTONES.md: Date Added and Date Filters, after Rating Filter and Sort, records each file's date added in a new schema step, adds the Added in and Created in filters with rolling ranges the server resolves in its own time zone, and sorts by Date added and Date created, with the measured cost of the step and the date queries.
+- MILESTONES.md: Random Pick Options replaces Rating-Weighted Random Picks, moving from M12k5 to M12k6. Combinable options in a new Random tab take the place of the five randomization modes, with Shuffle's rolling per-device memory, Reset now, a cycle card, folder spread that skips recent folders, tag spread, and seeded random tests. The catalog numbers and simulations behind each choice are in its Traps.
+- MILESTONES.md: WebUI Player Controls' Random always adds its pick at the end of the history, and Random behavior moves to Random Pick Options. WebUI Keyboard Shortcuts, Library Profiles, Profile Tag and Preset Visibility, Per-Account Library Data, and Client Robustness Findings follow the new options, and the traps on the shipped schema versions are now measured.
