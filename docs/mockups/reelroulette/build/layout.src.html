@@ -1115,7 +1115,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
             </div>
             <div class="setting">
               <div class="choice-row"><label><input type="checkbox" id="set-enhanced-audio"> Enhanced audio</label></div>
-              <p class="setting-hint">Processes audio in the app, for loudness normalization and Night mode.</p>
+              <p class="setting-hint">Processes audio in the app, for loudness normalization and compression.</p>
             </div>
             <div class="setting" id="set-loudness-setting">
               <div class="choice-row"><label><input type="checkbox" id="set-loudness"> Loudness normalization</label></div>
@@ -1145,9 +1145,43 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
                 </fieldset>
               </details>
             </div>
-            <div class="setting">
-              <div class="choice-row"><label><input type="checkbox" id="set-night-mode"> Night mode</label></div>
-              <p class="setting-hint" id="set-night-mode-hint">Evens out loudness within a video, for quiet listening.</p>
+            <div class="setting" id="set-compression-setting">
+              <div class="choice-row"><label><input type="checkbox" id="set-compression"> Compression</label></div>
+              <p class="setting-hint" id="set-compression-hint">Evens out loudness within a video.</p>
+              <details class="setting-more" id="set-compression-more">
+                <summary><span class="material-symbol-icon setting-more-chevron">chevron_right</span>Compression settings</summary>
+                <fieldset class="setting-fields" id="set-compression-fields">
+                  <span class="setting-label" id="set-comp-preset-label">Strength</span>
+                  <div class="choice-stack" role="radiogroup" aria-labelledby="set-comp-preset-label">
+                    <label><input type="radio" name="set-comp-preset" value="light"><span>Light<small>Evens out the loudest moments a little.</small></span></label>
+                    <label><input type="radio" name="set-comp-preset" value="medium"><span>Medium<small>Brings loud and quiet moments closer.</small></span></label>
+                    <label><input type="radio" name="set-comp-preset" value="strong"><span>Strong<small>Keeps loud and quiet moments close, for quiet listening.</small></span></label>
+                    <label><input type="radio" name="set-comp-preset" value="custom"><span>Custom<small>Set each value yourself.</small></span></label>
+                    <div class="setting-sub" id="set-comp-custom">
+                      <label class="setting-label" for="set-comp-threshold">Threshold</label>
+                      <!-- The full keyboard, since the numeric keypads on iOS have no minus key. -->
+                      <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" id="set-comp-threshold" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>dB</span></div>
+                      <p class="setting-hint">Lower turns down more of the sound; higher, only the loudest moments.</p>
+                      <label class="setting-label" for="set-comp-ratio">Ratio</label>
+                      <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="decimal" id="set-comp-ratio" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>to 1</span></div>
+                      <p class="setting-hint">Higher turns loud moments down harder.</p>
+                      <label class="setting-label" for="set-comp-knee">Knee</label>
+                      <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="decimal" id="set-comp-knee" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>dB</span></div>
+                      <p class="setting-hint">Higher starts turning down more gradually, for a softer effect.</p>
+                      <label class="setting-label" for="set-comp-attack">Attack</label>
+                      <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="numeric" id="set-comp-attack" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>ms</span></div>
+                      <p class="setting-hint">Lower catches sudden loud sounds faster; higher lets their first moment through.</p>
+                      <label class="setting-label" for="set-comp-release">Release</label>
+                      <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="numeric" id="set-comp-release" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>ms</span></div>
+                      <p class="setting-hint">Lower brings the sound back up faster; higher sounds smoother.</p>
+                      <label class="setting-label" for="set-comp-makeup">Makeup gain</label>
+                      <div class="filter-row"><span class="vfield number-field"><input class="ctl" type="text" inputmode="decimal" id="set-comp-makeup" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span><span>dB</span></div>
+                      <p class="setting-hint">Higher raises the whole sound after compression. At 0 dB, only loud moments are turned down.</p>
+                      <button class="btn" type="button" id="set-comp-reset">Reset to Medium</button>
+                    </div>
+                  </div>
+                </fieldset>
+              </details>
             </div>
           </div>
           <div class="settings-section">
@@ -1455,7 +1489,7 @@ const state = {
   hideControls: store.get("hideControls", "timeout"),
   enhancedAudio: store.get("enhancedAudio", true),
   normalization: store.get("normalization", true),
-  nightMode: store.get("nightMode", false),
+  compression: store.get("compression", false),
   audioFails: store.get("audioFails", false),
   hideAfter: store.get("hideAfter", 3),
   keepWhilePaused: store.get("keepWhilePaused", true),
@@ -1545,6 +1579,17 @@ const LIMITER_ALLOWANCE = 6;
 // subtraction's rounding error, as -18 - -32.7 is 14.700000000000003 against a headroom of 14.7.
 const HEADROOM_TOLERANCE = 1e-9;
 const normalizationTuning = { ...NORMALIZATION_DEFAULTS, ...store.get("normalizationSettings", {}) };
+// Compression's presets: where it starts turning sound down, how strongly, its knee, how quickly it acts and lets go, in
+// ms, and its makeup gain, each preset's the lift Web Audio's compressor gives it, which the app cancels and applies
+// itself. Medium is the default, and Custom starts at Medium's values and keeps its own.
+const COMPRESSION_PRESETS = {
+  light: { threshold: -18, ratio: 2, knee: 6, attack: 5, release: 250, makeup: 4.5 },
+  medium: { threshold: -24, ratio: 4, knee: 6, attack: 5, release: 250, makeup: 9.7 },
+  strong: { threshold: -30, ratio: 8, knee: 6, attack: 5, release: 250, makeup: 14.6 }
+};
+const compressionTuning = ((kept) => ({ preset: kept.preset ?? "medium", custom: { ...COMPRESSION_PRESETS.medium, ...kept.custom } }))(
+  store.get("compressionSettings", {})
+);
 function normalizationTarget() {
   const { target, manualTarget } = normalizationTuning;
   return target === "auto" ? BASELINE : target === "manual" ? manualTarget : NORMALIZATION_TARGETS[target];
@@ -5208,9 +5253,9 @@ function rangeCheck(min, max, unit, whole) {
     return ok && n >= min && n <= max ? null : { message: `Use a ${whole ? "whole " : ""}number from ${min} to ${max}${unit}.` };
   };
 }
-// Loudness normalization and Night mode: each option, and normalization's settings, are disabled while Enhanced audio
-// is off, since the sound then plays directly. Manual's target shows only while Manual is chosen, as Hide after shows
-// only under Timeout.
+// Loudness normalization and compression: each option, and its settings, are disabled while Enhanced audio is off,
+// since the sound then plays directly. Manual's target shows only while Manual is chosen, as Hide after shows only
+// under Timeout, and Custom's values only while Custom is.
 function renderLoudness() {
   const off = !state.enhancedAudio;
   $("set-loudness").checked = state.normalization;
@@ -5220,9 +5265,12 @@ function renderLoudness() {
   $("set-loud-manual").hidden = normalizationTuning.target !== "manual";
   document.querySelectorAll('input[name="set-loud-target"]').forEach((radio) => (radio.checked = radio.value === normalizationTuning.target));
   $("set-loud-limiting").checked = normalizationTuning.allowLimiting;
-  $("set-night-mode").checked = state.nightMode;
-  $("set-night-mode").disabled = off;
-  $("set-night-mode-hint").textContent = off ? "Needs Enhanced audio." : "Evens out loudness within a video, for quiet listening.";
+  $("set-compression").checked = state.compression;
+  $("set-compression").disabled = off;
+  $("set-compression-fields").disabled = off;
+  $("set-compression-hint").textContent = off ? "Needs Enhanced audio." : "Evens out loudness within a video.";
+  $("set-comp-custom").hidden = compressionTuning.preset !== "custom";
+  document.querySelectorAll('input[name="set-comp-preset"]').forEach((radio) => (radio.checked = radio.value === compressionTuning.preset));
   // The Stats tab's Adjustment shows what is applied, so it follows these settings.
   renderStats();
 }
@@ -5266,10 +5314,39 @@ function initLoudnessSettings() {
     renderLoudness();
     syncStandInSound();
   });
-  // Night mode's compressor isn't in the mockup: its values are settled by listening to real videos.
-  $("set-night-mode").addEventListener("change", () => {
-    state.nightMode = $("set-night-mode").checked;
-    store.set("nightMode", state.nightMode);
+  // Compression doesn't change the mockup's stand-in sound, which only shows normalization's levels.
+  $("set-compression").addEventListener("change", () => {
+    state.compression = $("set-compression").checked;
+    store.set("compression", state.compression);
+  });
+  const saveCompression = () => {
+    store.set("compressionSettings", compressionTuning);
+    renderLoudness();
+  };
+  // Custom's values are settings' fields too. Choosing another option keeps them, and Reset to Medium puts back Medium's.
+  const customFields = [
+    ["set-comp-threshold", "threshold", rangeCheck(-100, 0, " dB", false)],
+    ["set-comp-ratio", "ratio", rangeCheck(1, 20, "", false)],
+    ["set-comp-knee", "knee", rangeCheck(0, 40, " dB", false)],
+    ["set-comp-attack", "attack", rangeCheck(0, 1000, " ms", true)],
+    ["set-comp-release", "release", rangeCheck(0, 1000, " ms", true)],
+    ["set-comp-makeup", "makeup", rangeCheck(0, 24, " dB", false)]
+  ].map(([id, key, check]) =>
+    settingField(new ValidatedField($(id), check), () => String(compressionTuning.custom[key]), (text) => {
+      compressionTuning.custom[key] = Number(text);
+      saveCompression();
+    })
+  );
+  document.querySelectorAll('input[name="set-comp-preset"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      compressionTuning.preset = radio.value;
+      saveCompression();
+    });
+  });
+  $("set-comp-reset").addEventListener("click", () => {
+    Object.assign(compressionTuning.custom, COMPRESSION_PRESETS.medium);
+    customFields.forEach((field) => field.show());
+    saveCompression();
   });
   renderLoudness();
 }

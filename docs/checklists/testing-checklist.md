@@ -108,6 +108,9 @@ These need a person, real devices, or the Windows VM.
 - [ ] On two devices, updating on one the preset the other has applied changes the other's filter and library, with its popup.
 - [ ] With Enhanced audio on, videos play with sound in Firefox on the desktop and in the Pixel's and the iPad's installed apps, and turning it off plays sound directly.
 - [ ] In the iPad's installed app, the volume slider shows from the start, and the slider and a two-finger drag change the video's volume relative to the system volume, without crackles, and play and pause don't pop.
+- [ ] With loudness normalization on, a loud and a quiet video play at similar loudness in Firefox on the desktop and in the Pixel's and the iPad's installed apps.
+- [ ] A quiet video with loud moments, boosted with Allow limiting on, plays without distortion in Firefox on the desktop and in the Pixel's and the iPad's installed apps.
+- [ ] With compression on, quiet and loud moments within a video come closer without audible pumping, in Firefox on the desktop and in the Pixel's and the iPad's installed apps.
 
 ## Release Flow
 

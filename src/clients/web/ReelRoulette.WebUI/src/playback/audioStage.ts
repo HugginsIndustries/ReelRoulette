@@ -1,6 +1,7 @@
 import { batch, computed, signal, type ReadonlySignal } from "@preact/signals";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { DeviceStore } from "../state/deviceStore";
+import { compressionGainDb, COMPRESSOR_OFF, type CompressorSetting } from "./compression";
 import { dbToGain } from "./loudnessNormalization";
 
 /** The per-device store's keys for the volume, whether sound is muted, Enhanced audio, and the volume step. */
@@ -27,8 +28,8 @@ export const GAIN_GLIDE_SECONDS = 0.015;
 export const FADE_OUT_MS = 60;
 
 /**
- * The limiter after the normalization gain, which holds the peaks a boost pushes past the ceiling: a compressor with
- * its fastest attack, no knee, and a ratio of 20, at the ceiling.
+ * The limiter after the normalization gain and compression, which holds the peaks a boost or compression's makeup gain
+ * pushes past the ceiling: a compressor with its fastest attack, no knee, and a ratio of 20, at the ceiling.
  */
 export const LIMITER_THRESHOLD_DB = -1;
 export const LIMITER_RATIO = 20;
@@ -41,6 +42,13 @@ export const LIMITER_ATTACK_SECONDS = 0;
  * under the threshold passes as it is.
  */
 export const LIMITER_MAKEUP_DB = -0.6 * LIMITER_THRESHOLD_DB * (1 - 1 / LIMITER_RATIO);
+
+/**
+ * Compression glides on and off, and to new values, with this time constant, settling within about half a second. It is
+ * slower than the gains' since the compressor may change its makeup gain in steps, once per block of samples, which a
+ * slow glide keeps small.
+ */
+export const COMPRESSION_GLIDE_SECONDS = 0.15;
 
 export const GAIN_STAGE_FAILED_NOTICE = "Audio processing couldn't start on this device. Turn off Enhanced audio to play sound directly.";
 export const TURN_OFF_ENHANCED_AUDIO = "Turn off Enhanced audio";
@@ -70,15 +78,18 @@ export interface GainStageNode {
   connect(destination: unknown): unknown;
 }
 
-export interface LimiterParam {
+export interface CompressorParam {
   value: number;
+  setTargetAtTime(target: number, startTime: number, timeConstant: number): unknown;
 }
 
-export interface LimiterNode {
-  readonly threshold: LimiterParam;
-  readonly knee: LimiterParam;
-  readonly ratio: LimiterParam;
-  readonly attack: LimiterParam;
+/** A `DynamicsCompressorNode`, the limiter's and compression's. */
+export interface CompressorNode {
+  readonly threshold: CompressorParam;
+  readonly knee: CompressorParam;
+  readonly ratio: CompressorParam;
+  readonly attack: CompressorParam;
+  readonly release: CompressorParam;
   connect(destination: unknown): unknown;
 }
 
@@ -88,7 +99,7 @@ export interface GainStageContext {
   readonly destination: unknown;
   createMediaElementSource(element: AudioVideoElement): { connect(destination: unknown): unknown };
   createGain(): GainStageNode;
-  createDynamicsCompressor(): LimiterNode;
+  createDynamicsCompressor(): CompressorNode;
   resume(): Promise<void>;
   close(): Promise<void>;
 }
@@ -109,6 +120,8 @@ export interface AudioStageOptions {
   renewVideo(): void;
   /** Loudness normalization's gain for the playing video, in dB, 0 while it is off or has no adjustment. */
   normalizationGainDb: ReadonlySignal<number>;
+  /** Whether compression is on, and its compressor's values. */
+  compressor: ReadonlySignal<CompressorSetting>;
   /** The media element's volume can't be set from script, as on iOS. Defaults to `elementVolumeReadOnly()`. */
   volumeReadOnly?: boolean;
   /** Builds the gain stage's audio context, or throws where there is none. Defaults to the browser's `AudioContext`. */
@@ -124,14 +137,16 @@ export interface AudioStageOptions {
  * stage starts on the first tap or key, as Web Audio needs one. Off, or until the stage runs, the sound plays directly
  * at the element's own volume and mute.
  *
- * The stage's chain runs from the video through loudness normalization's gain, then the limiter, which holds the peaks
- * a boost pushes past the ceiling, and the gain that takes back the limiter's makeup, to the volume's gain. The limiter
- * stays in the chain, since with normalization off it touches only peaks above its threshold, and changing the chain's
- * connections while it plays could click.
+ * The stage's chain runs from the video through loudness normalization's gain, then compression's compressor and the
+ * gain after it, which takes back Web Audio's makeup gain and applies compression's own, then the limiter, which holds
+ * the peaks a boost or compression's makeup gain pushes past the ceiling, and the gain that takes back the limiter's
+ * makeup, to the volume's gain. Compression and the limiter stay in the chain: off, the compressor applies no
+ * compression and the gain after it none, and with normalization off the limiter touches only peaks above its
+ * threshold, while changing the chain's connections as it plays could click.
  *
  * The gain never jumps, since a jump in level is a click: each change of the volume or of normalization's gain glides to
  * its level, play fades in from silence, and pause fades out and pauses the video once it is silent. A video starts at
- * its own normalization gain, set while it is silent.
+ * its own normalization gain, set while it is silent. Compression glides on and off, and to new values.
  *
  * The muted-volume rules hold for the slider and every gesture. Mute moves the slider to 0 and remembers the volume,
  * which unmuting restores. Raising the volume while muted unmutes and starts from 0, so the remembered volume isn't
@@ -237,7 +252,7 @@ function errorType(error: unknown): string {
 }
 
 export function createAudioStage(options: AudioStageOptions): AudioStage {
-  const { device, dialogs, relay, renewVideo, normalizationGainDb } = options;
+  const { device, dialogs, relay, renewVideo, normalizationGainDb, compressor } = options;
   const createContext = options.createContext ?? browserAudioContext;
   const volumeReadOnly = options.volumeReadOnly ?? elementVolumeReadOnly();
 
@@ -257,6 +272,9 @@ export function createAudioStage(options: AudioStageOptions): AudioStage {
   let gain: GainStageNode | null = null;
   /** Loudness normalization's gain, first in the chain. */
   let normalization: GainStageNode | null = null;
+  /** Compression's compressor, after normalization's gain, and the gain after it. */
+  let compression: CompressorNode | null = null;
+  let compressionGain: GainStageNode | null = null;
   /**
    * The element the gain stage took, which plays through it, or nowhere once the stage is closed, until a new one takes
    * over.
@@ -282,6 +300,32 @@ export function createAudioStage(options: AudioStageOptions): AudioStage {
   /** Normalization's gain for the playing video, as a gain node takes it. */
   function normalizationLevel(): number {
     return dbToGain(normalizationGainDb.peek());
+  }
+
+  /**
+   * Compression's compressor as it is now, and the gain after it, in dB: its values while compression is on, and no
+   * compression and no gain while it is off.
+   */
+  function compressionSettings() {
+    const { on, values } = compressor.peek();
+    return on ? { ...values, gainDb: compressionGainDb(values) } : { ...values, ...COMPRESSOR_OFF, gainDb: 0 };
+  }
+
+  /**
+   * Compression's compressor and the gain after it glide to their settings, so turning it on or off, or a new value,
+   * reaches the sound at once without a click. The gain can't follow Web Audio's makeup exactly while the compressor's
+   * settings move, so the level may swell briefly as it glides.
+   */
+  function glideCompression(): void {
+    if (!compression || !compressionGain || !context) return;
+    const settings = compressionSettings();
+    const now = context.currentTime;
+    compression.threshold.setTargetAtTime(settings.thresholdDb, now, COMPRESSION_GLIDE_SECONDS);
+    compression.knee.setTargetAtTime(settings.kneeDb, now, COMPRESSION_GLIDE_SECONDS);
+    compression.ratio.setTargetAtTime(settings.ratio, now, COMPRESSION_GLIDE_SECONDS);
+    compression.attack.setTargetAtTime(settings.attackSeconds, now, COMPRESSION_GLIDE_SECONDS);
+    compression.release.setTargetAtTime(settings.releaseSeconds, now, COMPRESSION_GLIDE_SECONDS);
+    compressionGain.gain.setTargetAtTime(dbToGain(settings.gainDb), now, COMPRESSION_GLIDE_SECONDS);
   }
 
   /** The video's sound can be heard: it plays, and no pause is fading it out. */
@@ -363,6 +407,8 @@ export function createAudioStage(options: AudioStageOptions): AudioStage {
     context = null;
     gain = null;
     normalization = null;
+    compression = null;
+    compressionGain = null;
     running.value = false;
     if (closing) {
       void closing.close().catch(() => {});
@@ -402,6 +448,15 @@ export function createAudioStage(options: AudioStageOptions): AudioStage {
       routed = video;
       normalization = created.createGain();
       normalization.gain.setValueAtTime(normalizationLevel(), created.currentTime);
+      compression = created.createDynamicsCompressor();
+      const settings = compressionSettings();
+      compression.threshold.value = settings.thresholdDb;
+      compression.knee.value = settings.kneeDb;
+      compression.ratio.value = settings.ratio;
+      compression.attack.value = settings.attackSeconds;
+      compression.release.value = settings.releaseSeconds;
+      compressionGain = created.createGain();
+      compressionGain.gain.setValueAtTime(dbToGain(settings.gainDb), created.currentTime);
       const limiter = created.createDynamicsCompressor();
       limiter.threshold.value = LIMITER_THRESHOLD_DB;
       limiter.knee.value = LIMITER_KNEE_DB;
@@ -412,7 +467,9 @@ export function createAudioStage(options: AudioStageOptions): AudioStage {
       gain = created.createGain();
       gain.gain.setValueAtTime(0, created.currentTime);
       source.connect(normalization);
-      normalization.connect(limiter);
+      normalization.connect(compression);
+      compression.connect(compressionGain);
+      compressionGain.connect(limiter);
       limiter.connect(makeup);
       makeup.connect(gain);
       gain.connect(created.destination);
@@ -492,6 +549,8 @@ export function createAudioStage(options: AudioStageOptions): AudioStage {
       normalization.gain.setTargetAtTime(normalizationLevel(), context.currentTime, GAIN_GLIDE_SECONDS);
     }
   });
+  // Turning compression on or off, or a change of its strength or values, reaches the sound at once, gliding to it.
+  compressor.subscribe(() => glideCompression());
 
   return {
     enhanced,

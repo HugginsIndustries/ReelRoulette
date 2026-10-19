@@ -287,12 +287,19 @@ export interface FakeGain {
   readonly next: unknown;
 }
 
-/** The limiter's settings. */
-export interface FakeLimiter {
-  readonly threshold: { value: number };
-  readonly knee: { value: number };
-  readonly ratio: { value: number };
-  readonly attack: { value: number };
+/** A compressor's setting: the value it is at, and each glide to a new one. */
+export interface FakeCompressorParam {
+  readonly value: number;
+  readonly glides: readonly GainCall[];
+}
+
+/** A compressor's settings, the limiter's or compression's. */
+export interface FakeCompressor {
+  readonly threshold: FakeCompressorParam;
+  readonly knee: FakeCompressorParam;
+  readonly ratio: FakeCompressorParam;
+  readonly attack: FakeCompressorParam;
+  readonly release: FakeCompressorParam;
   readonly next: unknown;
 }
 
@@ -302,7 +309,8 @@ export interface FakeAudioContextRecord {
   readonly destination: unknown;
   readonly routed: readonly HTMLMediaElement[];
   readonly gains: readonly FakeGain[];
-  readonly limiters: readonly FakeLimiter[];
+  /** Compression's compressor and the limiter, in the order the page built them. */
+  readonly compressors: readonly FakeCompressor[];
   /** The node the routed video connects to. */
   readonly sourceNext: unknown;
 }
@@ -347,7 +355,7 @@ export class FakeWebAudio {
       readonly destination = {};
       readonly routed: HTMLMediaElement[] = [];
       readonly gains: FakeGain[] = [];
-      readonly limiters: FakeLimiter[] = [];
+      readonly compressors: FakeCompressor[] = [];
       sourceNext: unknown = null;
 
       constructor() {
@@ -382,17 +390,26 @@ export class FakeWebAudio {
       }
 
       createDynamicsCompressor() {
-        // Web Audio's defaults, which the limiter sets its own in place of.
-        const limiter = {
-          threshold: { value: -24 },
-          knee: { value: 30 },
-          ratio: { value: 12 },
-          attack: { value: 0.003 },
+        const param = (value: number) => ({
+          value,
+          glides: [] as GainCall[],
+          setTargetAtTime(target: number, _start: number, timeConstant: number) {
+            this.glides.push(["glide", target, timeConstant]);
+            this.value = target;
+          }
+        });
+        // Web Audio's defaults, which the limiter and compression's compressor set their own in place of.
+        const compressor = {
+          threshold: param(-24),
+          knee: param(30),
+          ratio: param(12),
+          attack: param(0.003),
+          release: param(0.25),
           next: null as unknown,
-          connect: (next: unknown) => (limiter.next = next)
+          connect: (next: unknown) => (compressor.next = next)
         };
-        this.limiters.push(limiter);
-        return limiter;
+        this.compressors.push(compressor);
+        return compressor;
       }
 
       createGain() {

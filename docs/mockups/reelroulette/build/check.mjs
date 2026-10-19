@@ -1845,9 +1845,9 @@ for (const width of [1280, 390]) {
     !settingsText.includes("photo duration, renamed") && !settingsText.includes("as on the desktop") && !settingsText.includes("desktop's player view") &&
     !$("settings-body").querySelector(".setting-label kbd") && !settingsText.includes("step one frame"));
   check(`layout@${width}: Keyboard shortcuts starts collapsed, with a chevron`, !$("set-shortcuts").open && !!$("set-shortcuts").querySelector("summary .setting-more-chevron"));
-  check(`layout@${width}: Loudness normalization sits in Audio, right under Enhanced audio, and Night mode right under it`,
+  check(`layout@${width}: Loudness normalization sits in Audio, right under Enhanced audio, and Compression right under it`,
     sectionOf("set-loudness") === "Audio" && $("set-loudness").closest(".setting").previousElementSibling === $("set-enhanced-audio").closest(".setting") &&
-    $("set-night-mode").closest(".setting").previousElementSibling === $("set-loudness").closest(".setting"));
+    $("set-compression").closest(".setting").previousElementSibling === $("set-loudness").closest(".setting"));
 
   {
     // Autoplay modes and Loop stops autoplay. The check moves the page's clock on, so an item's timer or length passes at
@@ -3141,7 +3141,7 @@ for (const width of [1280, 390]) {
   const toggle = $("set-enhanced-audio");
   check(`enhanced: Enhanced audio starts on, in Audio, with its description (${toggle.closest(".setting").querySelector(".setting-hint").textContent})`,
     toggle.checked && toggle.closest(".settings-section").querySelector("h3").textContent === "Audio" &&
-    toggle.closest(".setting").querySelector(".setting-hint").textContent === "Processes audio in the app, for loudness normalization and Night mode.");
+    toggle.closest(".setting").querySelector(".setting-hint").textContent === "Processes audio in the app, for loudness normalization and compression.");
   document.body.dispatchEvent(new window.PointerEvent("pointerup", { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 5));
   window.mockup.choose(3);
@@ -3190,7 +3190,7 @@ for (const width of [1280, 390]) {
 
 {
   // Loudness normalization, on by default: its settings sit in an expandable section like Ambient mode's, and are
-  // disabled while Enhanced audio is off, as Night mode is. It sets the gain stage by the gain rule: a cut in full, and a
+  // disabled while Enhanced audio is off, as Compression is. It sets the gain stage by the gain rule: a cut in full, and a
   // boost held to the smallest of what the item needs, the boost limit, and its headroom, the -1 dBTP ceiling minus its
   // peak plus 6 dB with Allow limiting on, as a linear gain on the volume and the video's stand-in level. An item
   // without a peak is only cut.
@@ -3230,12 +3230,12 @@ for (const width of [1280, 390]) {
     $("set-loud-limiting").closest("label").querySelector("small").textContent === "Lets quiet videos with loud moments get louder by limiting those moments.");
   check("loudness: the target field uses the full keyboard, since the numeric keypads on iOS have no minus key",
     !$("set-loud-manual-target").hasAttribute("inputmode") && $("set-loud-boost").getAttribute("inputmode") === "numeric");
-  const night = $("set-night-mode");
-  check(`loudness: Night mode starts off, with its hint (${$("set-night-mode-hint").textContent})`,
-    !night.checked && !night.disabled && $("set-night-mode-hint").textContent === "Evens out loudness within a video, for quiet listening.");
-  change(night, true);
-  check("loudness: Night mode is kept per device", stored("nightMode") === true);
-  change(night, false);
+  const compression = $("set-compression");
+  check(`loudness: Compression starts off, with its hint (${$("set-compression-hint").textContent})`,
+    !compression.checked && !compression.disabled && $("set-compression-hint").textContent === "Evens out loudness within a video.");
+  change(compression, true);
+  check("loudness: Compression is kept per device", stored("compression") === true);
+  change(compression, false);
   document.body.dispatchEvent(new window.PointerEvent("pointerup", { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 5));
   const items = window.mockup.items;
@@ -3367,17 +3367,99 @@ for (const width of [1280, 390]) {
   change($("set-enhanced-audio"), false);
   check(`loudness: with Enhanced audio off, the options and their settings are disabled, with "${$("set-loudness-hint").textContent}"`,
     toggle.disabled && toggle.checked && $("set-loudness-fields").disabled && $("set-loudness-hint").textContent === "Needs Enhanced audio." &&
-    night.disabled && $("set-night-mode-hint").textContent === "Needs Enhanced audio." && !!playedBy.at(-1) && !playedBy.at(-1).paused && adjustment() === "Off");
+    compression.disabled && $("set-compression-fields").disabled && $("set-compression-hint").textContent === "Needs Enhanced audio." && !!playedBy.at(-1) && !playedBy.at(-1).paused && adjustment() === "Off");
   change($("set-enhanced-audio"), true);
   check("loudness: turning Enhanced audio back on enables them",
     !toggle.disabled && !$("set-loudness-fields").disabled && $("set-loudness-hint").textContent === "Evens out loudness between videos." &&
-    !night.disabled && $("set-night-mode-hint").textContent === "Evens out loudness within a video, for quiet listening.");
+    !compression.disabled && !$("set-compression-fields").disabled && $("set-compression-hint").textContent === "Evens out loudness within a video.");
   $("set-loud-reset").click();
   check("loudness: Reset to defaults restores each setting, with no check, and forgets the stored ones",
     target("auto").checked && $("set-loud-manual").hidden && $("set-loud-manual-target").value === "-18" && $("set-loud-boost").value === "15" &&
     $("set-loud-limiting").checked && !$("set-loud-manual-target").hasAttribute("aria-invalid") && stored("normalizationSettings") === null && toggle.checked &&
     !more.querySelector(".vfield.is-saved"));
   check(`loudness: no script errors ${errors.join("; ")}`, errors.length === 0);
+}
+
+{
+  // Compression's settings sit in an expandable section like Loudness normalization's: Strength is Light, Medium, by
+  // default, Strong, or Custom. Custom's values show only while Custom is chosen, start at Medium's, are kept while
+  // another option is chosen, and Reset to Medium puts back Medium's.
+  const { document, errors, window } = await load("layout", 1280, "?instant");
+  const $ = (id) => document.getElementById(id);
+  const change = (el, value) => {
+    el.checked = value;
+    el.dispatchEvent(new window.Event("change", { bubbles: true }));
+  };
+  const enter = (el, value) => {
+    el.value = value;
+    el.dispatchEvent(new window.Event("input"));
+    el.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  };
+  const stored = () => JSON.parse(window.localStorage.getItem("rr-mockup.compressionSettings") ?? "null");
+  const more = $("set-compression-more");
+  const custom = $("set-comp-custom");
+  const preset = (value) => document.querySelector(`input[name="set-comp-preset"][value="${value}"]`);
+  const presets = [...document.querySelectorAll('input[name="set-comp-preset"]')].map((radio) => radio.closest("label").textContent.trim());
+  const fields = ["threshold", "ratio", "knee", "attack", "release", "makeup"].map((name) => $(`set-comp-${name}`));
+  const values = () => fields.map((field) => field.value).join();
+  const MEDIUM = { threshold: -24, ratio: 4, knee: 6, attack: 5, release: 250, makeup: 9.7 };
+  const labels = [...custom.querySelectorAll(".setting-label")].map((label) => label.textContent).join();
+  const units = fields.map((field) => field.closest(".filter-row").lastElementChild.textContent).join();
+  const hints = [...custom.querySelectorAll(".setting-hint")].map((hint) => hint.textContent);
+  check(`compression: its settings are an expandable section, closed at first, with Strength's options (${presets.join(", ")})`,
+    more.tagName === "DETAILS" && !more.open && more.querySelector("summary").lastChild.textContent === "Compression settings" &&
+    !!more.querySelector("summary .setting-more-chevron") && $("set-compression").closest(".setting").contains(more) &&
+    $("set-comp-preset-label").textContent === "Strength" &&
+    presets.join("|") === "LightEvens out the loudest moments a little.|MediumBrings loud and quiet moments closer.|" +
+      "StrongKeeps loud and quiet moments close, for quiet listening.|CustomSet each value yourself.");
+  check(`compression: Medium is chosen by default, and Custom's values hide under Custom, at Medium's (${values()})`,
+    preset("medium").checked && custom.hidden && preset("custom").closest(".choice-stack").contains(custom) && values() === Object.values(MEDIUM).join());
+  check(`compression: Custom's values have their labels, units, and hints (${labels})`,
+    labels === "Threshold,Ratio,Knee,Attack,Release,Makeup gain" && units === "dB,to 1,dB,ms,ms,dB" &&
+    hints.join("|") === "Lower turns down more of the sound; higher, only the loudest moments.|Higher turns loud moments down harder.|" +
+      "Higher starts turning down more gradually, for a softer effect.|Lower catches sudden loud sounds faster; higher lets their first moment through.|" +
+      "Lower brings the sound back up faster; higher sounds smoother.|Higher raises the whole sound after compression. At 0 dB, only loud moments are turned down." &&
+    custom.querySelector(".setting-hint").previousElementSibling === fields[0].closest(".filter-row") &&
+    $("set-comp-reset").textContent === "Reset to Medium" && custom.lastElementChild === $("set-comp-reset"));
+  check("compression: Threshold uses the full keyboard, since iOS's numeric keypads have no minus key, and the others a keypad",
+    !fields[0].hasAttribute("inputmode") && fields.slice(1).every((field) => ["decimal", "numeric"].includes(field.getAttribute("inputmode"))));
+  change(preset("custom"), true);
+  check("compression: choosing Custom shows its values, and the choice is kept per device", !custom.hidden && stored()?.preset === "custom");
+  enter(fields[1], "6");
+  enter(fields[5], "3");
+  check("compression: Custom's values are kept per device", stored()?.custom.ratio === 6 && stored()?.custom.makeup === 3);
+  enter(fields[1], "25");
+  enter(fields[3], "2.5");
+  check("compression: a value outside its range, or a fraction of a ms, is flagged and not kept",
+    fields[1].getAttribute("aria-invalid") === "true" && fields[3].getAttribute("aria-invalid") === "true" &&
+    stored()?.custom.ratio === 6 && stored()?.custom.attack === 5);
+  enter(fields[1], "6");
+  enter(fields[3], "5");
+  // Each value outside its range is flagged with the Settings tab's tooltip, which says the range, as Manual's target's does.
+  const messages = fields.map((field) => {
+    enter(field, "5000");
+    const tip = document.getElementById(field.getAttribute("aria-describedby") ?? "");
+    const message = tip && field.closest(".vfield").contains(tip) && tip.getAttribute("role") === "tooltip" ? tip.textContent : null;
+    enter(field, String(MEDIUM[field.id.replace("set-comp-", "")]));
+    return message;
+  });
+  check(`compression: each of Custom's values outside its range is flagged with the tooltip saying its range (${messages.join(" | ")})`,
+    messages.join("|") === "Use a number from -100 to 0 dB.|Use a number from 1 to 20.|Use a number from 0 to 40 dB.|" +
+      "Use a whole number from 0 to 1000 ms.|Use a whole number from 0 to 1000 ms.|Use a number from 0 to 24 dB.");
+  enter(fields[1], "6");
+  enter(fields[5], "3");
+  change(preset("light"), true);
+  check("compression: choosing another option hides Custom's values and keeps them",
+    custom.hidden && stored()?.preset === "light" && stored()?.custom.ratio === 6 && stored()?.custom.makeup === 3);
+  change(preset("custom"), true);
+  check("compression: Custom shows its own values again", fields[1].value === "6" && fields[5].value === "3");
+  $("set-comp-reset").click();
+  check("compression: Reset to Medium puts back Medium's values, staying on Custom",
+    values() === Object.values(MEDIUM).join() && preset("custom").checked && JSON.stringify(stored()?.custom) === JSON.stringify(MEDIUM));
+  change($("set-enhanced-audio"), false);
+  check("compression: with Enhanced audio off, Compression and its settings are disabled", $("set-compression").disabled && $("set-compression-fields").disabled);
+  change($("set-enhanced-audio"), true);
+  check(`compression: no script errors ${errors.join("; ")}`, errors.length === 0);
 }
 
 {

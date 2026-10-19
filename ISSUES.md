@@ -70,6 +70,22 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
   - `filterWithTypedDurations` in `src/clients/web/ReelRoulette.WebUI/src/filter/filterDialogModel.ts` reads each duration as its field's text for the dot, the heading's star, and Apply.
   - The Filter screen tests "a minimum of "1:00" typed, left, and erased with a browser's events…", for both fields and both texts, and the mockup's matching checks replay a browser's events for these steps and pass (measured). The cause is likely how iPadOS orders its events when focus moves by a tap (inferred).
 
+## Field validation pattern
+
+### Field tooltips don't show for fields low on the iPad's screen
+
+- **What goes wrong**: On the iPad's installed app, a flagged field low on the screen shows its red icon but not its tooltip, so the message saying what the field expects never appears. Advance after, near the top of the Settings tab, and the Favorites and Blacklisted pair, a dropdown that opens no keyboard, show theirs, and desktop Firefox and the Pixel's installed app show every field's tooltip (measured). These fields don't show theirs (measured):
+  - The Filter tab's Min and Max durations, at the bottom of that tab.
+  - Loudness normalization settings' Manual target and boost limit.
+  - Compression settings' Custom values.
+- **How to make it happen**: On the iPad's installed app, type a value that isn't valid into one of those fields, such as −5 in Loudness normalization settings' Manual target (measured).
+- **How much it matters**: Moderate. The field is flagged and keeps the value in use, but the user can't see what it expects without trying values.
+- **Since**: v0.15.0, not yet released, whose WebUI added the field validation pattern.
+- **Where**:
+  - `placeTip` in `src/clients/web/ReelRoulette.WebUI/src/ui/FieldValidation.tsx` places the fixed tooltip from its icon's `getBoundingClientRect`. When the keyboard opens, iOS shifts the visual viewport to keep a low field in view, and the tooltip's position likely doesn't account for that shift (inferred).
+  - Rendering the tooltip outside the field's containers, in the page, the open dialog, or the fullscreen stage, didn't help (measured).
+  - The mockup's `ValidatedField` in `docs/mockups/reelroulette/build/common.js` places its tooltip the same way.
+
 ## Server
 
 ### The ffmpeg check can hang on its own output

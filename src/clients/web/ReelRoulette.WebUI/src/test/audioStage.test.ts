@@ -6,11 +6,13 @@ import {
   GAIN_GLIDE_SECONDS,
   GAIN_STAGE_FAILED_NOTICE,
   LIMITER_MAKEUP_DB,
+  COMPRESSION_GLIDE_SECONDS,
   TURN_OFF_ENHANCED_AUDIO,
   VOLUME_INDICATOR_MS,
   type AudioVideoElement,
   type GainStageContext
 } from "../playback/audioStage";
+import { COMPRESSION_PRESETS, compressionGainDb, type CompressorSetting } from "../playback/compression";
 import { createDeviceStore } from "../state/deviceStore";
 
 /** A stand-in for the `<video>` element: `play` and `pause` fire their events as a browser does. */
@@ -49,13 +51,40 @@ interface FakeGain {
   next: unknown;
 }
 
-interface FakeLimiter {
-  kind: "limiter";
-  threshold: { value: number };
-  knee: { value: number };
-  ratio: { value: number };
-  attack: { value: number };
+/** A compressor's setting: the value it is at, and each change to it, a direct set or a glide. */
+interface FakeParam {
+  value: number;
+  calls: GainCall[];
+}
+
+/** A compressor the fake context built, the limiter or compression's, with its settings. */
+interface FakeCompressor {
+  kind: "compressor";
+  threshold: FakeParam;
+  knee: FakeParam;
+  ratio: FakeParam;
+  attack: FakeParam;
+  release: FakeParam;
   next: unknown;
+}
+
+function fakeParam(initial: number): FakeParam & { setTargetAtTime(value: number, start: number, timeConstant: number): void } {
+  let value = initial;
+  const param = {
+    calls: [] as GainCall[],
+    get value() {
+      return value;
+    },
+    set value(next: number) {
+      param.calls.push(["set", next]);
+      value = next;
+    },
+    setTargetAtTime(next: number, _start: number, timeConstant: number) {
+      param.calls.push(["glide", next, timeConstant]);
+      value = next;
+    }
+  };
+  return param;
 }
 
 /**
@@ -64,7 +93,7 @@ interface FakeLimiter {
  */
 function fakeContext(options: { refuse?: boolean } = {}) {
   const destination = { kind: "destination" };
-  const nodes: Array<FakeGain | FakeLimiter> = [];
+  const nodes: Array<FakeGain | FakeCompressor> = [];
   const source = { next: null as unknown };
   const context = {
     state: "suspended",
@@ -73,9 +102,9 @@ function fakeContext(options: { refuse?: boolean } = {}) {
     routed: [] as unknown[],
     resumes: 0,
     /** The nodes from the routed video to the speakers, in order. */
-    chain(): Array<FakeGain | FakeLimiter> {
-      const chain: Array<FakeGain | FakeLimiter> = [];
-      for (let node = source.next as FakeGain | FakeLimiter | null; node && node !== (destination as unknown); node = node.next as FakeGain | FakeLimiter | null) {
+    chain(): Array<FakeGain | FakeCompressor> {
+      const chain: Array<FakeGain | FakeCompressor> = [];
+      for (let node = source.next as FakeGain | FakeCompressor | null; node && node !== (destination as unknown); node = node.next as FakeGain | FakeCompressor | null) {
         chain.push(node);
       }
       return chain;
@@ -129,13 +158,14 @@ function fakeContext(options: { refuse?: boolean } = {}) {
       return node;
     },
     createDynamicsCompressor() {
-      // Web Audio's defaults, which the limiter must not keep.
-      const node: FakeLimiter & { connect(next: unknown): unknown } = {
-        kind: "limiter",
-        threshold: { value: -24 },
-        knee: { value: 30 },
-        ratio: { value: 12 },
-        attack: { value: 0.003 },
+      // Web Audio's defaults, which the limiter and compression's compressor must not keep.
+      const node: FakeCompressor & { connect(next: unknown): unknown } = {
+        kind: "compressor",
+        threshold: fakeParam(-24),
+        knee: fakeParam(30),
+        ratio: fakeParam(12),
+        attack: fakeParam(0.003),
+        release: fakeParam(0.25),
         next: null,
         connect: (next: unknown) => (node.next = next)
       };
@@ -148,7 +178,15 @@ function fakeContext(options: { refuse?: boolean } = {}) {
 
 /** An audio stage on a device whose store starts with `saved`, with each context it builds, the notices it shows, and the lines it relays. */
 function setup(
-  options: { saved?: Record<string, string>; volumeReadOnly?: boolean; refuse?: boolean; unavailable?: boolean; turnOff?: boolean; normalizationGainDb?: number } = {}
+  options: {
+    saved?: Record<string, string>;
+    volumeReadOnly?: boolean;
+    refuse?: boolean;
+    unavailable?: boolean;
+    turnOff?: boolean;
+    normalizationGainDb?: number;
+    compressor?: CompressorSetting;
+  } = {}
 ) {
   const kept = new Map(Object.entries(options.saved ?? {}));
   const device = createDeviceStore({ getItem: (key) => kept.get(key) ?? null, setItem: (key, value) => void kept.set(key, value) });
@@ -158,6 +196,7 @@ function setup(
   let renewals = 0;
   const activation = new EventTarget();
   const normalizationGainDb = signal(options.normalizationGainDb ?? 0);
+  const compressor = signal<CompressorSetting>(options.compressor ?? { on: false, values: COMPRESSION_PRESETS.medium });
   const audio = createAudioStage({
     device,
     dialogs: {
@@ -169,6 +208,7 @@ function setup(
     relay: (_level, message) => relayed.push(message),
     renewVideo: () => void (renewals += 1),
     normalizationGainDb,
+    compressor,
     volumeReadOnly: options.volumeReadOnly ?? false,
     createContext() {
       if (options.unavailable) throw new Error("Web Audio is unavailable");
@@ -188,6 +228,7 @@ function setup(
     notices,
     relayed,
     normalizationGainDb,
+    compressor,
     renewals: () => renewals,
     async tap(type: "pointerdown" | "pointerup" | "keydown" = "pointerup") {
       activation.dispatchEvent(new Event(type));
@@ -377,32 +418,38 @@ describe("createAudioStage", () => {
   });
 });
 
+/**
+ * The gain stage's chain: normalization's gain, compression's compressor and the gain after it, the limiter, the gain
+ * taking back its makeup, and the volume's gain.
+ */
+const CHAIN = ["gain", "compressor", "gain", "compressor", "gain", "gain"];
+
 describe("loudness normalization's chain", () => {
   const glide = (level: number): GainCall => ["glide", level, GAIN_GLIDE_SECONDS];
   const gain = (db: number) => Math.pow(10, db / 20);
 
-  it("runs from the video through normalization's gain, the limiter at the ceiling, and the gain that takes back its makeup, to the volume's gain", async () => {
+  it("runs from the video through normalization's gain, compression, the limiter at the ceiling, and the gain that takes back its makeup, to the volume's gain", async () => {
     const page = setup({ normalizationGainDb: -6 });
     await page.tap();
     const context = page.contexts[0]!;
     const chain = context.chain();
-    expect(chain.map((node) => node.kind)).toEqual(["gain", "limiter", "gain", "gain"]);
+    expect(chain.map((node) => node.kind)).toEqual(CHAIN);
     expect(chain[0]).toBe(context.normalization);
-    expect(chain[3]).toBe(context.volume);
+    expect(chain[5]).toBe(context.volume);
     expect(context.volume.next).toBe(context.destination);
 
-    const limiter = chain[1] as FakeLimiter;
+    const limiter = chain[3] as FakeCompressor;
     expect([limiter.threshold.value, limiter.knee.value, limiter.ratio.value, limiter.attack.value]).toEqual([-1, 0, 20, 0]);
     // Web Audio's makeup gain for that curve: the inverse of its gain at full scale, -0.95 dB, to the power 0.6.
     expect(LIMITER_MAKEUP_DB).toBeCloseTo(0.57, 9);
-    expect((chain[2] as FakeGain).calls).toEqual([["set", gain(-LIMITER_MAKEUP_DB)]]);
+    expect((chain[4] as FakeGain).calls).toEqual([["set", gain(-LIMITER_MAKEUP_DB)]]);
     expect(context.normalization.calls).toEqual([["set", gain(-6)]]);
   });
 
   it("keeps the limiter in the chain with normalization off, at no gain", async () => {
     const page = setup({ normalizationGainDb: 0 });
     await page.tap();
-    expect(page.contexts[0]!.chain().map((node) => node.kind)).toEqual(["gain", "limiter", "gain", "gain"]);
+    expect(page.contexts[0]!.chain().map((node) => node.kind)).toEqual(CHAIN);
     expect(page.contexts[0]!.normalization.level).toBe(1);
   });
 
@@ -442,6 +489,81 @@ describe("loudness normalization's chain", () => {
     page.audio.setEnhanced(true);
     await Promise.resolve();
     expect(page.contexts[0]!.normalization.calls).toEqual([["set", gain(-4.5)]]);
+  });
+});
+
+describe("Compression", () => {
+  const MEDIUM = COMPRESSION_PRESETS.medium;
+  const settingsOf = (values: typeof MEDIUM) => [values.thresholdDb, values.kneeDb, values.ratio, values.attackSeconds, values.releaseSeconds];
+  /** Off, no compression: a ratio of 1 with no knee, at 0 dB, with the strength's attack and release, and no gain. */
+  const OFF = [0, 0, 1, MEDIUM.attackSeconds, MEDIUM.releaseSeconds];
+  const level = (db: number) => Math.pow(10, db / 20);
+
+  /** Compression's compressor and the gain after it, in the newest gain stage. */
+  function compression(page: ReturnType<typeof setup>): { compressor: FakeCompressor; gain: FakeGain } {
+    const chain = page.contexts.at(-1)!.chain();
+    return { compressor: chain[1] as FakeCompressor, gain: chain[2] as FakeGain };
+  }
+
+  function params(compressor: FakeCompressor): FakeParam[] {
+    return [compressor.threshold, compressor.knee, compressor.ratio, compressor.attack, compressor.release];
+  }
+
+  const valuesOf = (compressor: FakeCompressor) => params(compressor).map((param) => param.value);
+  /** Each setting was set once, as the stage started, and never glided. */
+  const setOnce = (compressor: FakeCompressor) => params(compressor).every((param) => param.calls.length === 1 && param.calls[0]![0] === "set");
+
+  it("sits between normalization's gain and the limiter with compression and normalization each on or off: off, no compression and no gain", async () => {
+    for (const on of [false, true]) {
+      for (const normalizationGainDb of [0, -6]) {
+        const label = `compression ${on ? "on" : "off"}, normalization's gain ${normalizationGainDb} dB`;
+        const page = setup({ compressor: { on, values: MEDIUM }, normalizationGainDb });
+        await page.tap();
+        const chain = page.contexts[0]!.chain();
+        const { compressor, gain } = compression(page);
+        expect(chain.map((node) => node.kind), label).toEqual(CHAIN);
+        expect(valuesOf(compressor), label).toEqual(on ? settingsOf(MEDIUM) : OFF);
+        expect(setOnce(compressor), label).toBe(true);
+        // On, the gain takes back Web Audio's makeup and applies the strength's own; off, it applies none.
+        expect(gain.calls, label).toEqual([["set", on ? level(compressionGainDb(MEDIUM)) : 1]]);
+        const limiter = chain[3] as FakeCompressor;
+        expect([limiter.threshold.value, limiter.knee.value, limiter.ratio.value, limiter.attack.value], label).toEqual([-1, 0, 20, 0]);
+      }
+    }
+  });
+
+  it("glides on and off, and to another strength's values, with its own time constant, never jumping, without changing the chain or touching the other gains", async () => {
+    const page = setup({ normalizationGainDb: -6 });
+    await page.tap();
+    await page.audio.play(page.video);
+    const context = page.contexts[0]!;
+    const chain = context.chain();
+    const { compressor, gain } = compression(page);
+    const otherGains = [context.normalization.calls.length, context.volume.calls.length];
+    const glides = (values: number[]): GainCall[] => values.map((value) => ["glide", value, COMPRESSION_GLIDE_SECONDS]);
+    const lastCalls = () => [...params(compressor).map((param) => param.calls.at(-1)), gain.calls.at(-1)];
+    const STRONG = COMPRESSION_PRESETS.strong;
+
+    page.compressor.value = { on: true, values: MEDIUM };
+    expect(lastCalls()).toEqual(glides([...settingsOf(MEDIUM), level(compressionGainDb(MEDIUM))]));
+    page.compressor.value = { on: true, values: STRONG };
+    expect(lastCalls()).toEqual(glides([...settingsOf(STRONG), level(compressionGainDb(STRONG))]));
+    page.compressor.value = { on: false, values: STRONG };
+    expect(lastCalls()).toEqual(glides([0, 0, 1, STRONG.attackSeconds, STRONG.releaseSeconds, 1]));
+    // Only the stage's start set a value directly.
+    expect([...params(compressor), gain].map((node) => node.calls.filter(([kind]) => kind === "set").length)).toEqual([1, 1, 1, 1, 1, 1]);
+    expect(context.chain()).toEqual(chain);
+    expect([context.normalization.calls.length, context.volume.calls.length]).toEqual(otherGains);
+  });
+
+  it("turned on before the gain stage runs, starts with it", async () => {
+    const page = setup();
+    page.compressor.value = { on: true, values: COMPRESSION_PRESETS.light };
+    await page.tap();
+    const { compressor, gain } = compression(page);
+    expect(valuesOf(compressor)).toEqual(settingsOf(COMPRESSION_PRESETS.light));
+    expect(setOnce(compressor)).toBe(true);
+    expect(gain.calls).toEqual([["set", level(compressionGainDb(COMPRESSION_PRESETS.light))]]);
   });
 });
 

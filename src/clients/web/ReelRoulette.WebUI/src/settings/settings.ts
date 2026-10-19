@@ -13,6 +13,11 @@ export const AUTO_PAUSE_KEY = "panel.autoPause";
 /** The per-device store's key for Show file names on tiles. */
 export const TILE_NAMES_KEY = "appearance.tileNames";
 
+/** A range's unit after its maximum, or nothing for a value without one, such as a ratio. */
+function unitText(unit: string): string {
+  return unit ? ` ${unit}` : "";
+}
+
 /**
  * A field's text when it is a whole number from `min` to `max`, or the problem that says what it takes, such as "Use
  * a whole number from 1 to 3600 seconds." An emptied field is flagged too, since a setting's field must always hold a
@@ -21,7 +26,7 @@ export const TILE_NAMES_KEY = "appearance.tileNames";
 export function wholeNumberProblem(text: string, min: number, max: number, unit: string): FieldProblem | null {
   const trimmed = text.trim();
   const value = Number(trimmed);
-  return /^\d+$/.test(trimmed) && value >= min && value <= max ? null : { message: `Use a whole number from ${min} to ${max} ${unit}.` };
+  return /^\d+$/.test(trimmed) && value >= min && value <= max ? null : { message: `Use a whole number from ${min} to ${max}${unitText(unit)}.` };
 }
 
 /**
@@ -31,7 +36,7 @@ export function wholeNumberProblem(text: string, min: number, max: number, unit:
 export function numberProblem(text: string, min: number, max: number, unit: string): FieldProblem | null {
   const trimmed = text.trim();
   const value = Number(trimmed);
-  return /^-?\d+(\.\d+)?$/.test(trimmed) && value >= min && value <= max ? null : { message: `Use a number from ${min} to ${max} ${unit}.` };
+  return /^-?\d+(\.\d+)?$/.test(trimmed) && value >= min && value <= max ? null : { message: `Use a number from ${min} to ${max}${unitText(unit)}.` };
 }
 
 /** Advance after's problem: it takes a whole number of seconds from 1 to 3600. */

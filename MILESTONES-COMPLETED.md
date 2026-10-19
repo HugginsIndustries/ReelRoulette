@@ -6,6 +6,288 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12i8 - WebUI Loudness Normalization
+
+- **Status**: ✅ Complete
+- **Goal**: The WebUI evens out loudness between videos toward a target the user picks, without clipping, and its compression evens out loudness within a video, in every browser the WebUI supports.
+- **Depends on**: WebUI Volume and Enhanced Audio, whose gain stage its chain feeds, and WebUI Settings Panel, whose tab holds its settings, and WebUI Stats Panel, whose scan measures the peaks its boost limit reads and whose Stats tab shows its Adjustment row.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- The WebUI doesn't follow the desktop's normalization: the desktop set LibVLC's volume as if it were linear, which is likely cubic, so its corrections were about tripled (inferred), and its formula on a linear gain stage leaves 58% of audible videos at its 5 dB boost limit (measured).
+- The gain is worked out only in the WebUI, from the server's loudness and peak and the device's settings, so its rule is locked to a WebUI-only fixture of loudness, peak, settings, and the resulting gain.
+- The audio chain runs from the video through the normalization gain, the compressor, a gain that cancels the compressor's own makeup gain and applies compression's Makeup gain, the limiter, and a gain that takes back the limiter's makeup, to the volume stage and its fades from WebUI Volume and Enhanced Audio.
+- The limiter and the gain after it stay in the chain whenever the gain stage runs, with no switch: with normalization off its gain glides to 0 dB, and the limiter only touches peaks above −1 dBFS and adds its small fixed delay, its only look-ahead, both inaudible (inferred). Allow limiting only decides whether a boost may go past a video's headroom for the limiter to catch.
+- Automatic's target is the library's baseline, the 75th percentile of the integrated loudness of videos with audio, which the library stats' `baselineLoudnessLufs` carries. It plays louder overall than the median, which would leave the typical video as it is and turn the loud half down.
+- The defaults are normalization on, Automatic, a 15 dB boost limit, Allow limiting on, and compression off, with Medium its default strength, which the user settled by listening on their own devices with the full library.
+- If the audio spike in WebUI Volume and Enhanced Audio doesn't find the gain stage reliable, including on iOS, this milestone moves to the release after v0.15.0.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ✅ Complete | The new Audio settings, compression's included, and the Adjustment row's "(limited by peak)" in the mockup, reviewed by the user on devices. |
+| Automatic baseline | ✅ Complete | The library statistic Automatic uses, chosen by the user from measured figures and carried by the library stats' baseline loudness, with digitally silent tracks counted as no audio. |
+| Normalization | ✅ Complete | The gain rule, its fixed values, the limiter, the loudness normalization settings, and the Stats tab's Adjustment row. |
+| Compression | ✅ Complete | A compressor that evens out loudness within a video, its setting under Loudness normalization with its Compression settings, and the defaults the user settled by listening. |
+
+#### Mockup slice
+
+**Scope**
+
+- The mockup's Audio section gets the settings the Normalization and Compression slices set out, in place of the desktop's Maximum reduction, Maximum boost, and Baseline.
+- The Stats tab's Adjustment row shows "(limited by peak)" when the headroom limits a boost.
+- The mockup's stand-in sound follows the new gain rule while normalization is on.
+- Compression's hint is drafted in the mockup and approved there by the user.
+- The user reviews the mockup on their devices before the other slices start.
+
+**Traps**
+
+- The mockup's loudness settings are the desktop's, Maximum reduction, Maximum boost, and Baseline with Automatic or a Manual target, and its stand-in sound follows the desktop's formula (`LOUDNESS_DEFAULTS` and `loudnessAdjustment` in `docs/mockups/reelroulette/build/layout.src.html`).
+- The mockup's pages are built from their sources by `build_pages.py`.
+
+**Acceptance**
+
+- The mockup shows the new Audio settings, compression, and the Adjustment row's "(limited by peak)", and `python3 docs/mockups/reelroulette/build/build_pages.py` and `node docs/mockups/reelroulette/build/check.mjs` pass.
+- The user has reviewed the mockup on their devices before the Automatic baseline slice starts.
+
+**Evidence**
+
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passed all 1288 checks, up from 1272.
+- Each new or changed check failed when what it guards was broken, in 35 mutations, each in its own copy of the mockup under `artifacts/scratch/` (measured). They covered:
+  - Compression out of its place.
+  - Enhanced audio's description and the failure notice with their old texts.
+  - Every video's chord at one level, or without the normalization gain.
+  - Normalization off by default, and another Manual default.
+  - A wrong preset level, Allow limiting hint, or compression hint, and the numeric keypad on Manual's target.
+  - Compression on by default or not kept.
+  - A cut held back.
+  - A boost cut short, past the boost limit, with a 3 dB allowance, with the allowance while Allow limiting is off, below 0 dB, without a peak, or without loudness data.
+  - Wrong Quieter, Louder, and Automatic targets, Manual's field never showing, and its target ignored.
+  - The boost's range or whole numbers not enforced, and normalization's off not kept.
+  - A stand-in level that plays past the volume.
+  - Compression not disabled with Enhanced audio off, or staying disabled after it.
+  - Reset to defaults keeping the boost limit, and the Adjustment without "(limited by peak)".
+- At the new defaults, the mockup's stand-in library has 13 videos cut, 18 boosted in full, and 7 held back by their peak (measured).
+- The user reviewed the mockup on their devices and approved it, with compression's hint "Evens out loudness within a video, for quiet listening.", which the Compression slice shortened.
+- The review added one fix: each video's stand-in chord plays at the video's own stand-in loudness, so videos sound different with normalization off and even out toward the target with it on. The chord's own level stands for −10 LUFS, Manual's highest target, so no video plays past it.
+- The mockup also shows the release's final texts for Enhanced audio's description and the gain stage's failure notice, which the Normalization and Compression slices set.
+- The gain rule settled in the review has no silence floor, and a boost never goes below 0 dB. The Normalization slice's Scope and Acceptance say so.
+- The compressor isn't in the mockup's stand-in sound, since its values were settled by listening to real videos.
+- The mockup keeps its loudness settings under new keys, so settings stored in earlier reviews don't carry over.
+- Docs: the mockup's index notes and the field validation page name the new settings.
+
+#### Automatic baseline slice
+
+**Scope**
+
+- The slice's plan measures candidate statistics on a copy of the catalog, such as the server's current baseline, the 75th percentile of audible videos, and their median, and shows the figures to the user, who chooses the one Automatic uses.
+- The measurements also report how many files have a digitally silent track.
+- An audio track the loudness scan measures as digital silence, at ffmpeg's −70.0 LUFS floor with no peak (its `-inf`), counts as no audio, the same as a file without an audio track.
+  - The audio filter, the Stats tab's Videos without audio count, and the baseline treat it as no audio.
+  - The Stats tab shows such a file as it shows a file without an audio track, and the mockup follows.
+  - Existing items are updated from their stored loudness and peak, without a rescan.
+  - A track with a real peak, such as faint hiss, keeps counting as audio.
+- If the choice isn't the server's current baseline, the library stats' `baselineLoudnessLufs` carries the chosen statistic in its place, and its description in OpenAPI and the generated WebUI types changes with it.
+- The Stats tab's Baseline loudness shows the chosen statistic.
+
+**Traps**
+
+- The server's baseline is the 75th percentile of the loudness of videos with audio (`ReadBaselineLoudness` in `LibraryCatalogSession.cs`), so it includes digitally silent tracks, which this slice counts as no audio, and near-silent ones with a real peak, which stay.
+- The loudness scan stores a silent track's peak as none, since ffmpeg reads it as `-inf` (`ParseLoudnessFromFfmpegOutput` in `RefreshPipelineService.cs`).
+- The audio filter reads `has_audio` in the list query (`LibraryCatalogListQuery.cs`), and the Stats tab's audio counts and the baseline read it in `LibraryCatalogSession.cs`.
+- The Stats tab shows a digitally silent track's True peak as Silent (`truePeakText` in `src/stats/statsModel.ts` and in the mockup's `layout.src.html`), which no file reaches once such a track counts as no audio (inferred).
+- Earlier changes to stored values without a rescan, such as clearing every stored peak, ran as a catalog upgrade step on open.
+- On the developer's catalog the server's baseline is −28.7 LUFS, the 75th percentile of the 8,892 videos louder than −60 LUFS is −27.1, and their median is −38.3 (measured).
+
+**Acceptance**
+
+- The measured figures, the number of files with a digitally silent track, and the user's choice are recorded before the Normalization slice starts.
+- `baselineLoudnessLufs` is the chosen statistic, in server tests of the library stats, and `npm run verify:contracts` passes.
+- The Stats tab's Baseline loudness shows the chosen statistic, in a component test.
+- A track at −70.0 LUFS with no peak counts as no audio in the audio filter, the Videos without audio count, and the baseline, and one with a peak keeps counting as audio, in server tests.
+- An existing item with a digitally silent track counts as no audio after the update, without a rescan, in a server test.
+- The Stats tab shows a file with a digitally silent track as a file without an audio track, in a component test, and the mockup matches, with `node docs/mockups/reelroulette/build/check.mjs` passing.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- On a copy of the developer's catalog, 10,647 videos had audio, 884 of them digitally silent, every one at −70.0 LUFS with no peak, and 96 more at −70.0 with a real peak, from −95.4 to −12.2 dBTP, which keep counting as audio (measured).
+- The library had grown since the Traps' figures: 8,992 videos are louder than −60 LUFS, whose 75th percentile is −27.1 and median −38.3 (measured).
+- The candidates over the 9,763 videos that count as audio after this slice, as Automatic's target under the provisional gain rule (measured):
+  - The 75th percentile, −27.8 LUFS (−28.7 with the silent tracks counted): 25% cut, 60% within 3 dB of the target, and 80% at a 24 dB boost limit.
+  - The median, −40.5: 50% cut, 90% within 3 dB, and 98% at a 24 dB boost limit.
+  - The median weighted by duration, −26.5: 56% within 3 dB, and 76% at a 24 dB boost limit.
+  - Standard's −18 LUFS, for comparison: 34% within 3 dB.
+- The user chose the 75th percentile, so `baselineLoudnessLufs`, its OpenAPI description, and the generated WebUI types are unchanged, and `ReadListedItemAndBaseline_CoverHeaderReaders_WithoutBuildingTheCatalogDocument` and the Stats tab's component test of Baseline loudness keep covering it.
+- The user also made Automatic the default target, which the Decisions and the Normalization slice's Scope and Acceptance now say.
+- The loudness scan's parser counts a track at the −70 LUFS floor with no peak as no audio, in `ParseLoudness_ReadsADigitallySilentTrack_AsNoAudio`, and one with a peak as audio, in `ParseLoudness_ReadsATrackAtTheFloorWithAPeak_AsAudio`.
+- `LoudnessStage_StoresADigitallySilentTrackAsNoAudio_AndAFaintOneAsAudio_ForEveryReader` scans real `ebur128` output and shows the audio filter in both modes, the audio counts, the baseline, and the item read.
+- The catalog moves to schema version 6, whose upgrade step stores a video scanned under loudness analysis version 2 at −70.0 LUFS or quieter with no peak as no audio, in `Open_Schema5Catalog_StoresADigitallySilentVideoAsNoAudio_AndKeepsAFaintOneAsAudio`, which also shows each reader.
+- Each new test failed with its change removed: the parser rule, its peak condition, the step's update, and the step's analysis version condition (measured).
+- The step's SQL on a second copy of the catalog changed exactly 884 videos, leaving 9,763 with audio and 7,838 without, and a baseline of −27.8 LUFS (measured).
+- A real ffmpeg scan of `anullsrc` audio now reads as no audio, so `Refresh_PersistsStageColumnsWithoutBuildingTheCatalogDocument` gives its test video a sine tone (measured).
+- The upgrade tests that run for every older version seed the Night preset in the shape its version stored, since a version 5 catalog already has the Favorites and Blacklisted modes.
+- The Stats tab's True peak no longer shows Silent. Its component test of a digitally silent track uses the item the server sends, the same as a file without an audio track, so the server tests of the item read are what guard it.
+- The mockup's stand-in silent video has no audio, its True peak no longer shows Silent, and Automatic is its default target. `node docs/mockups/reelroulette/build/check.mjs` passed all 1286 checks, down from 1288 with the silent video's case gone at both widths.
+- With the mockup's default set back to Standard, its default and Reset to defaults checks failed (measured).
+- `dotnet build ReelRoulette.sln` had no warnings, `dotnet test ReelRoulette.sln` passed 515 Core and 7 ServerApp tests, SystemChecks passed, and `npm run verify` passed 1568 tests in 75 files.
+- Docs: `CONTEXT.md`, `docs/api.md`, `docs/domain-inventory.md`, `docs/dev-setup.md`, and `CHANGELOG.md` describe digitally silent tracks and schema version 6.
+
+#### Normalization slice
+
+**Scope**
+
+- The gain rule, from the video's integrated loudness and peak and the device's settings:
+  - The adjustment needed is the target minus the video's loudness.
+  - A cut is applied in full, since turning a video down can't clip or raise its noise.
+  - A boost is held to the smallest of the adjustment needed, the boost limit, and the video's headroom: the ceiling minus its peak, plus the limiter allowance when Allow limiting is on.
+  - A boost never goes below 0 dB, so a quiet video whose peak leaves no headroom plays without an adjustment rather than turned down.
+  - A video without loudness data plays without an adjustment, and one without a peak is only cut, never boosted.
+- The fixed values: a ceiling of −1 dBTP and a limiter allowance of 6 dB.
+- The limiter is a `DynamicsCompressorNode` with a threshold of −1 dB, a ratio of 20, no knee, and its fastest attack.
+- A gain after the limiter takes back its makeup gain, 0.57 dB by Web Audio's formula at these values, so sound under the threshold passes as it is (`audioStage.ts`).
+- The normalization gain is set while each video starts from silence, and glides to its new value when a setting changes, so the change reaches the playing video at once without a click.
+- Random picks and library plays carry the video's integrated loudness and true peak, so the gain is known before the sound fades in: `RandomResponse`'s `integratedLoudness` and `peakDb`, read by `ReadPlaybackRow` in `LibraryCatalogSession.cs`, in `ApiContracts.cs`, `ApiContractMapper.cs`, `LibraryPlaybackService.cs`, `shared/api/openapi.yaml`, and the generated WebUI types.
+- The library's baseline loads from `GET /api/library/stats` once the server is ready and again after each refresh and resync, not while the server holds back or asks for pairing, and a failed load keeps it, relays `audio=baseline-load-failed`, and is tried again every 5 seconds, quietly, until one succeeds (`src/stats/libraryBaseline.ts`).
+- Under Automatic, until the library's baseline arrives, a video plays without an adjustment, Automatic's line reads "The library's baseline.", and the Adjustment reads "N/A". Its gain glides to the target once the baseline arrives.
+- Settings, per device, in the Settings tab's Audio section:
+  - A **Loudness normalization** checkbox under Enhanced audio, on by default, and disabled while Enhanced audio is off, since audio then plays directly. Its hint is "Evens out loudness between videos.", which reads "Needs Enhanced audio." while it is disabled.
+  - An expandable "Loudness normalization settings" section, like Ambient mode's.
+  - **Target loudness**: Automatic, Quieter (−23 LUFS), Standard (−18 LUFS), Louder (−14 LUFS), or Manual, with Automatic the default. Automatic's line is "The library's baseline, {n} LUFS.", from the library stats' `baselineLoudnessLufs`.
+  - Manual's target field shows only while Manual is chosen, as Hide after shows only under Timeout. It takes −50 to −10 LUFS, starts at −18, and uses the full keyboard, since its values are negative.
+  - **Boost quiet videos by up to**, from 0 to 24 dB, 15 by default.
+  - **Allow limiting**, on by default, with the hint "Lets quiet videos with loud moments get louder by limiting those moments."
+  - A Reset to defaults button, as Ambient mode settings has.
+  - The fields are setting's fields of the field validation pattern, which WebUI Settings Panel adds (`createSettingField` and `SettingTextField`): a value that is not valid is flagged and not kept, the one in use stays, and a valid one is saved on Enter or when the field is left. Reset to defaults shows the saved values again in the fields.
+  - Each setting survives a page refresh in the per-device store that WebUI Responsive Layout and Panels adds.
+- The Stats tab's Adjustment row shows the adjustment applied to the current file, signed, such as "+6.0 dB" or "-4.5 dB", with "(limited by peak)" when the headroom limits a boost. It reads "Off" while normalization or Enhanced audio is off, and "N/A" for a file without loudness data, and it follows the settings as they change.
+- Enhanced audio's description becomes "Processes audio in the app, for loudness normalization."
+- The gain stage's failure notice becomes "Audio processing couldn't start on this device. Turn off Enhanced audio to play sound directly."
+  - Neither it nor the description names a device: the iPad's media element volume can be set in iPadOS 26.6 (measured), no iPhone has been measured, and the app finds a read-only volume at runtime.
+
+**Traps**
+
+- On the developer's catalog, 1,636 of the 10,528 videos with audio are at −60 LUFS or quieter, and the other 8,892 have a median of −38.3 LUFS (measured).
+- Videos under 30 seconds have a median of −49.1 LUFS, and videos of 10 to 60 minutes −26.7 (measured).
+- Before any limit from peaks, a −18 LUFS target with a 15 dB boost limit brings 46% of those 8,892 videos within 3 dB of the target and leaves 60% short of it, and a −23 LUFS target leaves 50% short (measured).
+- The figures above were measured before the Automatic baseline slice. The 1,636 include the digitally silent tracks that slice counts as no audio, and the library has grown since, so that slice's Evidence has the current figures: 9,763 videos with audio, 8,992 of them louder than −60 LUFS, and how each candidate target fares.
+- Web Audio clips a signal above full scale at the output (inferred).
+- `DynamicsCompressorNode` is not a brick-wall limiter: its ratio is at most 20, its only look-ahead is the small fixed delay browsers give it, and browsers may implement it differently (inferred).
+- `DynamicsCompressorNode` applies its own makeup gain, worked out from its curve: about +0.6 dB at a −1 dB threshold and a ratio of 20, so the limiter holds peaks near −0.4 dBFS rather than −1 (inferred).
+- WebUI Stats Panel's scan measures a video of 60 minutes or more over 10 minutes from 20% in, so its peak can miss the loudest moment.
+- Media from another origin, which only the Vite dev server plays, may play silent through the gain stage (inferred), so normalization is tried with the WebUI the server serves.
+- iOS's numeric and decimal keypads have no minus key (inferred).
+- The gain and the Adjustment use the loudness and peak that came with the pick, while the Stats tab reads the item again. A video picked before the loudness scan measured it plays without an adjustment, and its Adjustment reads "N/A" beside its measured Loudness, until a random pick or a library play brings it again; going back to it in history keeps what came with it. The user accepted this, since the next play corrects it.
+
+**Acceptance**
+
+- The gain rule passes every case in its WebUI-only fixture: a cut in full, a boost held by the boost limit, by the headroom, and by the headroom plus the allowance, no boost when the peak leaves no headroom, no adjustment without loudness data, and only a cut without a peak, in WebUI tests reading the fixture.
+- The chain runs from the normalization gain through the limiter and the gain that takes back its makeup to the volume stage, with normalization on or off, and each video plays at its gain, in WebUI audio tests.
+- A settings change glides the playing video's gain to its new value, in WebUI audio tests.
+- Random picks and library plays carry the video's loudness and peak, and neither for a video the scan hasn't measured, in server tests, and `npm run verify:contracts` passes.
+- Under Automatic, a video plays without an adjustment until the library's baseline arrives, and Automatic's line reads "The library's baseline." until then, in WebUI tests.
+- The settings are in the Settings tab's Audio section with their choices, ranges, and defaults, with Automatic the default target, the option is disabled while Enhanced audio is off, Manual's field shows only under Manual, a value outside a field's range is flagged with the field validation pattern, Reset to defaults restores the defaults, and each setting survives a page refresh, in WebUI tests for each setting.
+- The Stats tab's Adjustment shows the applied adjustment, signed, with "(limited by peak)" when the headroom limits a boost, "Off" while normalization or Enhanced audio is off, and "N/A" for a file without loudness data, and it follows the settings as they change, in WebUI tests of the Adjustment in each case.
+- Enhanced audio's description names loudness normalization, and it and the gain stage's failure notice have their new texts, in WebUI tests.
+- No browser the WebUI supports hides the setting, since each has the Web Audio nodes it uses, and this entry's Evidence names them.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass, and one quick spot check.
+
+**Evidence**
+
+- The gain rule (`loudnessAdjustment` in `src/playback/loudnessNormalization.ts`) passes the 17 cases of `src/test/fixtures/loudness-gain-rule.json` in `loudnessNormalization.test.ts`, which also covers the targets, the settings read from the device store with each one outside its range at its default, and Automatic before the baseline arrives.
+- `audioStage.test.ts`'s chain tests show the chain's order and the limiter's values, the makeup taken back, the limiter in the chain with normalization off, each video's gain set while it starts silent and on the stage's start, and a settings change gliding it without touching the volume. A screen test in `settings.test.ts` plays a video through the page's chain and follows its gain as the target, the boost limit, and normalization change.
+- `TrySelectRandom_CarriesTheItemsMeasuredLoudnessAndPeak`, `TrySelectRandom_CarriesNoLoudnessOrPeak_ForAnItemTheScanHasNotMeasured`, and `TryPlayItem_CarriesTheItemsMeasuredLoudnessAndPeak_AndNeitherForAnUnmeasuredItem` show the responses' loudness and peak, and each failed with its change removed (measured).
+- `libraryBaseline.test.ts` covers the baseline's loads, skips, and kept value, and its tries again after a failed load, relaying only the first, which stop once one succeeds, after a 401, while the server holds back, and once the connection stops, and `serverConnection.test.ts` covers the connection telling its listeners it stopped. `settings.test.ts`'s Loudness normalization tests cover each setting, its choices, ranges, defaults, flagged values, the disabled state, Manual's field, Reset to defaults, the page refresh, and Automatic's line before the baseline loads. `statsModel.test.ts` and `stats.test.ts` cover the Adjustment in each case.
+- Each new WebUI test failed with what it guards broken, in 32 mutations, each restored from a copy under `artifacts/scratch/`, or before the code it guards existed (measured). One, a boost that exactly fits its headroom counted as limited by peak, passed at first, so the fixture gained that case.
+- The review of the staged change found that a boost fitting its headroom exactly in tenths of a dB was still counted as limited by peak, from a subtraction's rounding: toward −18 LUFS, a video at −32.7 LUFS peaking at −9.7 dBTP needs 14.700000000000003 dB against a headroom of 14.7. The rule now lets the headroom fall short by up to 1e-9 dB, and the fixture's case for it failed before that (measured).
+- Enhanced audio's new description is in `screens/settings.test.ts`, and the gain stage's new failure notice in `audioStage.test.ts` and `screens/player.test.ts`.
+- The limiter's makeup gain wasn't measured: the user chose Web Audio's formula, the inverse of the curve's gain at full scale to the power 0.6, which gives 0.57 dB here, since a fraction of a dB isn't audible, and the user's listening on their devices, with the limiter in the chain, raised nothing. Its Trap stays inferred.
+- The user kept the limiter and the gain after it in the chain whenever the gain stage runs, in place of switching it out with normalization, and the Decisions and the Compression slice follow.
+- No browser hides the setting: it uses only `GainNode` and `DynamicsCompressorNode`, which Firefox, Chrome, and Safari all have, and WebUI Volume and Enhanced Audio's audio spike ran the gain stage in Firefox on Linux and on the Pixel, Chrome on the Pixel, and Safari and the installed app on the iPad. A device without Web Audio gets the gain stage's failure notice.
+- The mockup's gain rule follows the WebUI's: its headroom holds nothing back while the boost limit is 0, which the WebUI's rule gained during implementation, and a boost that fits its headroom exactly isn't counted as limited by peak. Each of its two new checks failed before the change (measured). It doesn't show Automatic's line before the baseline loads, or the Adjustment's "N/A" while Automatic waits for it, since its baseline is always there. `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passed all 1288 checks, up from 1286.
+- The page now loads the library stats once the server is ready, so the Stats tab's tests count that load. The baseline loads without the Stats tab's 250 ms wait, since a closed test page's delayed load reached the next test's fake server (measured), and its tries again after a failed load stop once the connection stops, as it does when a test page closes.
+- `dotnet build ReelRoulette.sln` had no warnings, `dotnet test ReelRoulette.sln` passed 518 Core and 7 ServerApp tests, SystemChecks passed, and `npm run verify` passed 1637 tests in 77 files.
+- The user's spot check in Firefox on the desktop, with the WebUI that `run-server.ps1` serves, passed: a loud and a quiet video came out about even, the Stats tab's Adjustment showed a signed value, and it read "Off" with normalization off (measured).
+- Docs: `CONTEXT.md`, `docs/api.md`, `docs/domain-inventory.md`, and `CHANGELOG.md` describe loudness normalization and the responses' new fields.
+
+#### Compression slice
+
+**Scope**
+
+- Compression evens out loudness within a video with a compressor (`DynamicsCompressorNode`), in the chain after the normalization gain and before the limiter, with normalization on or off.
+- A gain after the compressor cancels Web Audio's own makeup gain exactly, worked out from the spec's makeup formula for the compressor's current settings, so changing them doesn't change the overall level, and applies compression's Makeup gain on top.
+- The compressor and that gain stay in the chain, as the limiter does. Turning compression off glides the compressor to no compression and the gain to 0 dB, so the chain's connections never change.
+- Turning compression on or off, or a change of its settings, glides without a click. The brief swell in level while it glides, since the gain can't follow Web Audio's makeup exactly as the compressor's settings move, is accepted.
+- Settings, per device, under keys of their own, with nothing carried over from the first build's `audio.nightMode` and `audio.nightModeTuning`:
+  - A **Compression** checkbox right under Loudness normalization, off by default, and disabled while Enhanced audio is off. Its hint is "Evens out loudness within a video.", which reads "Needs Enhanced audio." while it is disabled.
+  - An expandable "Compression settings" section, like Loudness normalization settings, disabled while Enhanced audio is off.
+  - **Strength**: Light, Medium, Strong, or Custom, each with its hint from the mockup, with Medium the default.
+  - The presets have a threshold of −18, −24, and −30 dB, a ratio of 2, 4, and 8, a 6 dB knee, a 5 ms attack, a 250 ms release, and a Makeup gain of 4.5, 9.7, and 14.6 dB, the lift Web Audio's makeup gave each, so the presets sound as the user tested them.
+  - Custom's values show only while Custom is chosen, as Manual's target does: Threshold (−100 to 0 dB, with the full keyboard), Ratio (1 to 20), Knee (0 to 40 dB), Attack and Release (whole ms from 0 to 1000), and Makeup gain (0 to 24 dB), each with its hint from the mockup. They are settings' fields of the field validation pattern.
+  - Custom starts at Medium's values and keeps its own while another option is chosen. Reset to Medium puts back Medium's values and shows them in the fields.
+- Enhanced audio's description becomes "Processes audio in the app, for loudness normalization and compression."
+- The first build's setting and its temporary tuning group become Compression and its settings, in code, tests, and docs, with nothing left under the first build's name: `nightModeTuning.ts`, the audio stage's setting, the Settings tab's setting and its tuning group, and their tests.
+- The mockup gets Compression and its settings first, and the user reviews it before the app changes.
+- The defaults the user settled are the WebUI's and the mockup's.
+
+**Traps**
+
+- A compressor's makeup gain can lift peaks above full scale, which the limiter after it catches (inferred).
+- Changing the audio graph's connections while audio plays can click (inferred).
+- Web Audio's makeup gain is the inverse of the compressor's curve at full scale, to the power 0.6. With a knee, the curve is the one Blink's `DynamicsCompressorKernel` works out, which finds the knee's shape by searching for a slope of 1/ratio at its end, so the cancelling gain must follow that code, not only the formula without a knee (inferred).
+- Firefox and Safari use the compressor code that Chrome's Blink shares with WebKit, so their makeup gain is likely the same (inferred).
+- By that code, Web Audio's makeup is 4.55, 9.65, and 14.56 dB for Light, Medium, and Strong, where the formula without a knee gives 5.4, 10.8, and 15.75 dB (computed by a script following that code, inferred).
+- The compressor may change its makeup gain in steps, once per block of samples, so the first build glides its settings with a 0.15 s time constant. Settings with a larger makeup, such as a −50 dB threshold at a ratio of 20, make each step about twice as large, which may be heard as compression glides (inferred).
+- The field validation pattern sets a field's `aria-describedby` to its problem only while it is flagged (`FieldValidation.tsx`), so Custom's hints can describe their fields while they aren't flagged.
+- The WebUI that `run-server.ps1` builds is served from the server's own origin, while the Vite dev server plays media from another origin, which may play silent through the gain stage (inferred).
+
+**Acceptance**
+
+- The chain runs from the normalization gain through the compressor, the gain that cancels its makeup, and the limiter, with compression and normalization each on or off, and with compression off the compressor applies no compression and the gain is at 0 dB, in WebUI audio tests.
+- The cancelling gain is the inverse of Web Audio's makeup for the compressor's settings, plus the Makeup gain: the formula without a knee, the limiter's 0.57 dB, and the presets' values, in WebUI tests of the makeup.
+- Turning compression on or off, choosing another strength, or changing a Custom value glides without a jump in level, in WebUI audio tests.
+- The checkbox is right under Loudness normalization, off by default, disabled while Enhanced audio is off, and survives a page refresh, in WebUI tests.
+- Strength has its options with their hints and Medium by default, Custom's values show only under Custom, start at Medium's, are kept while another option is chosen, and are flagged outside their ranges with the field validation pattern, Reset to Medium puts them back, and each setting survives a page refresh, in WebUI tests.
+- Enhanced audio's description names compression, in WebUI tests.
+- The defaults are normalization on, Automatic, a 15 dB boost limit, Allow limiting on, and compression off with Medium, in WebUI tests of the defaults.
+- The Settings tab's only buttons are Loudness normalization settings' and Ambient mode settings' Reset to defaults and Custom's Reset to Medium, in the Settings tab's test of its buttons.
+- The user reviews the mockup's Compression settings before the app changes, the mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick spot check.
+
+**Evidence**
+
+- A first build, named Night mode, kept Web Audio's makeup gain and had a temporary tuning group with Light, Medium, and Strong presets and a field for each value. `npm run verify` passed 1644 tests in 77 files.
+- The user's spot check of that build passed on the iPad's installed app: turning it on and off glided with no click, and quiet moments came up (measured).
+- The user listened with the tuning on their own devices with the full library. Compression made most videos noticeably louder overall, though much more even within each video and still consistent between videos (measured). So compression now cancels Web Audio's makeup gain and applies its own, which each preset sets to the lift Web Audio gave it.
+- That listening settled the defaults: normalization on, Automatic, a 15 dB boost limit, Allow limiting on, and compression off with Medium, at the presets' values. The user also renamed Night mode to Compression and made the tuning a feature, Compression settings.
+- The mockup has Compression in place of the first build's setting, with its hint and Enhanced audio's new description, and its Compression settings, kept under new keys. The user approved it on their devices, with clearer hints for Custom's values, which say how higher and lower values change the sound, and each Custom value's message with its range.
+- The user saw a Custom value's red icon without its message on the iPad's installed app. With layout stand-ins in happy-dom, each Custom value shows its message as Manual's target does (measured). On the iPad's installed app no field low on the screen shows its tooltip, Manual target and the boost limit included, which ISSUES.md records as Field tooltips don't show for fields low on the iPad's screen. Rendering the tooltip outside its field's containers didn't help, and wasn't kept (measured).
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passed all 1301 checks, up from 1288. Each of the 13 new or changed checks failed with what it guards broken, in 22 mutations, each in its own copy of the mockup under `artifacts/scratch/` (measured).
+- `webAudioMakeupDb` in `compression.ts` follows the knee curve of Blink's `DynamicsCompressorKernel`. In `compression.test.ts` it gives the script's 4.548, 9.651, and 14.556 dB for the presets, the formula without a knee, the limiter's 0.57 dB, and none with compression off, and each preset's makeup gain is its lift to a tenth of a dB, so the gain after the compressor is within 0.05 dB of 0 dB at each preset.
+- `audioStage.test.ts` shows the chain with compression and normalization each on or off, the compressor off at no compression with the gain after it at 0 dB, and on at the strength's values with the gain taking back Web Audio's makeup and applying the strength's own. It also shows each setting set once as the stage starts, then gliding on and off and to another strength's values with the 0.15 s time constant, without changing the chain or the other gains, and compression turned on before the stage runs applied as it starts.
+- `compression.test.ts` shows the settings' defaults, the strength's values reaching the audio stage, Custom's values kept while another strength is chosen, Reset to Medium, and kept values outside their ranges read as their defaults.
+- `settings.test.ts` shows Compression right under Loudness normalization, off with its hint and its settings closed, Strength's options with their hints and Medium by default, and Custom's values only under Custom, at Medium's, with their units, hints, and keyboards. It also shows each value's range message, Custom's values kept while another strength is chosen, Reset to Medium, the disabled state, each setting kept after a page refresh, the change reaching the playing video's compressor and the gain after it, gliding, Audio's defaults, the tab's buttons, and Enhanced audio's description.
+- Each new and changed WebUI test failed with what it guards broken, in 28 mutations, each restored from a copy under `artifacts/scratch/` (measured).
+- A setting's field can name its hint as its description while it isn't flagged (`describedBy` on `SettingTextField`), and a range message without a unit has no space before its period, for Ratio's "Use a number from 1 to 20." (`settings.ts`).
+- Theme's tests find its options within its own group, since Strength has a Light too, and the page's markup snapshots in `foundation.test.ts`, `filter.test.ts`, and `tags.test.ts` were updated for the Settings tab's new markup and the generated ids it shifts.
+- No browser hides the setting, since it uses only `GainNode` and `DynamicsCompressorNode`, as loudness normalization does.
+- `npm run verify` passed 1657 tests in 78 files.
+- The user's spot check on the iPad's installed app passed, apart from that issue: turning Compression on glided with no click, quiet moments came up, Medium sounded about as loud as the first build, and Custom's fields and hints showed (measured).
+- Docs: `CONTEXT.md`, `docs/domain-inventory.md`, and `CHANGELOG.md` describe compression.
+
+#### Release checks
+
+- Manual: With loudness normalization on, a loud and a quiet video play at similar loudness in Firefox on the desktop and in the Pixel's and the iPad's installed apps.
+- Manual: A quiet video with loud moments, boosted with Allow limiting on, plays without distortion in Firefox on the desktop and in the Pixel's and the iPad's installed apps.
+- Manual: With compression on, quiet and loud moments within a video come closer without audible pumping, in Firefox on the desktop and in the Pixel's and the iPad's installed apps.
+
+#### Not included
+
+- Peak measurement and the loudness rescan, which is WebUI Stats Panel.
+
 ### M12i7 - WebUI Volume and Enhanced Audio
 
 - **Status**: ✅ Complete

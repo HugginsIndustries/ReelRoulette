@@ -7,9 +7,11 @@ import { AMBIENT_RANGES, AMBIENT_SETTINGS, formatAmbientSetting, type AmbientSet
 import { VOLUME_STEPS, type VolumeStep } from "../playback/audioStage";
 import type { AutoPauseMode } from "../playback/autoPause";
 import { automaticLine, TARGET_LUFS, type NormalizationTarget } from "../playback/loudnessNormalization";
-import { advanceAfterProblem, boostLimitProblem, manualTargetProblem } from "../settings/settings";
+import { CUSTOM_RANGES, type CompressionStrength, type CompressorValues } from "../playback/compression";
+import { advanceAfterProblem, boostLimitProblem, manualTargetProblem, numberProblem, wholeNumberProblem } from "../settings/settings";
 import type { ThemeChoice } from "../settings/theme";
 import type { AutoplayMode } from "../state/appStore";
+import type { FieldProblem } from "../validation/fieldValidation";
 import { useApp } from "./appContext";
 import { SettingTextField } from "./FieldValidation";
 
@@ -36,6 +38,66 @@ function targetChoices(baseline: number | null): Choice<NormalizationTarget>[] {
     { value: "louder", title: "Louder", description: `${TARGET_LUFS.louder} LUFS` },
     { value: "manual", title: "Manual" }
   ];
+}
+
+/** Compression's Strength: the presets, Medium by default, and Custom. */
+const STRENGTH_CHOICES: readonly Choice<CompressionStrength>[] = [
+  { value: "light", title: "Light", description: "Evens out the loudest moments a little." },
+  { value: "medium", title: "Medium", description: "Brings loud and quiet moments closer." },
+  { value: "strong", title: "Strong", description: "Keeps loud and quiet moments close, for quiet listening." },
+  { value: "custom", title: "Custom", description: "Set each value yourself." }
+];
+
+/**
+ * One of Custom's values: its field's label, unit, and hint, how many of its unit make the value's, whether it takes only
+ * whole numbers, and its keyboard.
+ */
+interface CustomField {
+  key: keyof CompressorValues;
+  label: string;
+  unit: string;
+  hint: string;
+  scale: number;
+  whole: boolean;
+  inputMode?: "numeric" | "decimal";
+}
+
+const CUSTOM_FIELDS: readonly CustomField[] = [
+  { key: "thresholdDb", label: "Threshold", unit: "dB", hint: "Lower turns down more of the sound; higher, only the loudest moments.", scale: 1, whole: false },
+  { key: "ratio", label: "Ratio", unit: "to 1", hint: "Higher turns loud moments down harder.", scale: 1, whole: false, inputMode: "decimal" },
+  { key: "kneeDb", label: "Knee", unit: "dB", hint: "Higher starts turning down more gradually, for a softer effect.", scale: 1, whole: false, inputMode: "decimal" },
+  {
+    key: "attackSeconds",
+    label: "Attack",
+    unit: "ms",
+    hint: "Lower catches sudden loud sounds faster; higher lets their first moment through.",
+    scale: 1000,
+    whole: true,
+    inputMode: "numeric"
+  },
+  { key: "releaseSeconds", label: "Release", unit: "ms", hint: "Lower brings the sound back up faster; higher sounds smoother.", scale: 1000, whole: true, inputMode: "numeric" },
+  {
+    key: "makeupDb",
+    label: "Makeup gain",
+    unit: "dB",
+    hint: "Higher raises the whole sound after compression. At 0 dB, only loud moments are turned down.",
+    scale: 1,
+    whole: false,
+    inputMode: "decimal"
+  }
+];
+
+/** A Custom value in its field's unit, without a multiplication's rounding error, such as 7.000000000000001 ms. */
+function customText(values: CompressorValues, field: CustomField): string {
+  return String(Number((values[field.key] * field.scale).toFixed(6)));
+}
+
+/** Custom's problem for a field: outside its range, or a fraction of a ms. A ratio's range has no unit. */
+function customProblem(text: string, field: CustomField): FieldProblem | null {
+  const range = CUSTOM_RANGES[field.key];
+  const unit = field.key === "ratio" ? "" : field.unit;
+  const problem = field.whole ? wholeNumberProblem : numberProblem;
+  return problem(text, range.min * field.scale, range.max * field.scale, unit);
 }
 
 const THEME_OPTIONS: readonly Choice<ThemeChoice>[] = [
@@ -241,8 +303,8 @@ function PlaybackSettings() {
 }
 
 /**
- * The volume step and Enhanced audio, which the audio stage keeps and applies at once, and Loudness normalization, which
- * its gain stage applies.
+ * The volume step and Enhanced audio, which the audio stage keeps and applies at once, and Loudness normalization and
+ * Compression, which its gain stage applies.
  */
 function AudioSettings() {
   const { audio } = useApp();
@@ -259,12 +321,109 @@ function AudioSettings() {
       <Checkbox
         id="settings-enhanced-audio"
         label="Enhanced audio"
-        hint="Processes audio in the app, for loudness normalization."
+        hint="Processes audio in the app, for loudness normalization and compression."
         checked={audio.enhanced.value}
         onChange={audio.setEnhanced}
       />
       <LoudnessNormalization />
+      <CompressionSetting />
     </>
+  );
+}
+
+/**
+ * Compression, off by default, which evens out loudness within a video, and its Compression settings, which start
+ * closed: Strength, Medium by default, whose Custom shows its values only while it is chosen. They apply at once,
+ * whether compression is on or off, and are kept on this device. Everything here is disabled while Enhanced audio is
+ * off, since the sound then plays directly. Custom's values start at Medium's and stay while another strength is
+ * chosen, and Reset to Medium puts Medium's back and shows them in the fields.
+ */
+function CompressionSetting() {
+  const { audio, compression, panel } = useApp();
+  const [resets, setResets] = useState(0);
+  const off = !audio.enhanced.value;
+  const settings = compression.settings.value;
+  const shown = panel.isOpen.value && panel.tab.value === "settings";
+  const custom = settings.strength === "custom";
+  return (
+    <div class="setting">
+      <div class="choice-row">
+        <label>
+          <input
+            type="checkbox"
+            id="settings-compression"
+            checked={compression.enabled.value}
+            disabled={off}
+            aria-describedby="settings-compression-hint"
+            onChange={(event) => compression.setEnabled(event.currentTarget.checked)}
+          />
+          Compression
+        </label>
+      </div>
+      <p class="setting-hint" id="settings-compression-hint">
+        {off ? "Needs Enhanced audio." : "Evens out loudness within a video."}
+      </p>
+      <details class="setting-more" id="settings-compression-more">
+        <summary>
+          <span class="material-symbol-icon setting-more-chevron" aria-hidden="true">chevron_right</span>
+          Compression settings
+        </summary>
+        <fieldset class="setting-fields" disabled={off}>
+          <OptionList
+            id="settings-compression-strength"
+            label="Strength"
+            type="radio"
+            choices={STRENGTH_CHOICES}
+            isChecked={(strength) => strength === settings.strength}
+            disabled={off}
+            onChange={(strength) => compression.setStrength(strength)}
+            after={{
+              custom: (
+                <div class="setting-sub" id="settings-compression-custom" hidden={!custom}>
+                  {CUSTOM_FIELDS.map((field) => (
+                    <Fragment key={field.key}>
+                      <label class="setting-label" for={`settings-compression-${field.key}`}>
+                        {field.label}
+                      </label>
+                      <div class="filter-row">
+                        {/* Threshold uses the full keyboard, since the numeric keypads on iOS have no minus key. */}
+                        <SettingTextField
+                          id={`settings-compression-${field.key}`}
+                          class="number-field"
+                          inputMode={field.inputMode}
+                          shown={shown && custom}
+                          revision={resets}
+                          describedBy={`settings-compression-${field.key}-hint`}
+                          saved={() => customText(compression.settings.peek().custom, field)}
+                          problemOf={(text) => customProblem(text, field)}
+                          save={(text) => compression.updateCustom({ [field.key]: Number(text.trim()) / field.scale })}
+                        />
+                        <span>{field.unit}</span>
+                      </div>
+                      <p class="setting-hint" id={`settings-compression-${field.key}-hint`}>
+                        {field.hint}
+                      </p>
+                    </Fragment>
+                  ))}
+                  <button
+                    class="btn"
+                    type="button"
+                    id="settings-compression-reset"
+                    disabled={off}
+                    onClick={() => {
+                      compression.resetCustom();
+                      setResets((count) => count + 1);
+                    }}
+                  >
+                    Reset to Medium
+                  </button>
+                </div>
+              )
+            }}
+          />
+        </fieldset>
+      </details>
+    </div>
   );
 }
 

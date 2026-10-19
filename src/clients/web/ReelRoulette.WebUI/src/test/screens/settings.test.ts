@@ -23,8 +23,11 @@ import {
   stubReducedMotion,
   tapPage,
   useStylesheet,
+  type FakeGain,
   type MountedPage
 } from "./pageHarness";
+import { COMPRESSION_GLIDE_SECONDS } from "../../playback/audioStage";
+import { COMPRESSION_PRESETS, compressionGainDb, webAudioMakeupDb } from "../../playback/compression";
 import { FADE_MS } from "../../ui/FieldValidation";
 import { SETTING_SAVED_MS } from "../../validation/fieldValidation";
 
@@ -93,6 +96,12 @@ function advanceAfter(): HTMLInputElement {
 
 function radio(name: string): HTMLInputElement {
   return within(settingsPage()).getByRole("radio", { name, hidden: true }) as HTMLInputElement;
+}
+
+/** One of Theme's options, apart from Compression's Strength, which has a Light too. */
+function themeRadio(name: string): HTMLInputElement {
+  const group = within(settingsPage()).getByRole("radiogroup", { name: "Theme", hidden: true });
+  return within(group).getByRole("radio", { name, hidden: true }) as HTMLInputElement;
 }
 
 function type(input: HTMLInputElement, text: string): void {
@@ -183,9 +192,11 @@ describe("the Settings tab", () => {
     const headings = within(settingsPage()).getAllByRole("heading", { level: 3 });
     expect(headings.map((heading) => heading.textContent)).toEqual(["Playback", "Audio", "Appearance", "Notifications", "Panel", "Diagnostics"]);
     expect(within(settingsPage()).getByText("Settings apply at once and are kept on this device.")).toBeTruthy();
-    // Loudness normalization settings' and Ambient mode settings' Reset to defaults are the tab's only buttons.
+    // Loudness normalization settings' and Ambient mode settings' Reset to defaults and Custom's Reset to Medium are the
+    // tab's only buttons.
     expect(within(settingsPage()).queryAllByRole("button", { hidden: true }).map((button) => [button.id, button.textContent])).toEqual([
       ["settings-loudness-reset", "Reset to defaults"],
+      ["settings-compression-reset", "Reset to Medium"],
       ["settings-ambient-reset", "Reset to defaults"]
     ]);
   });
@@ -208,7 +219,7 @@ describe("Enhanced audio", () => {
     expect(section.previousElementSibling?.querySelector("h3")?.textContent).toBe("Playback");
     expect(box.checked).toBe(true);
     expect(document.getElementById(box.getAttribute("aria-describedby")!)!.textContent).toBe(
-      "Processes audio in the app, for loudness normalization."
+      "Processes audio in the app, for loudness normalization and compression."
     );
   });
 
@@ -457,8 +468,12 @@ describe("Loudness normalization", () => {
     const normalization = () => page.webAudio.normalization!;
     // Toward Automatic's -27.8 LUFS, a boost of 2.2 dB, set while the video starts silent.
     expect(normalization().calls.filter(([kind]) => kind === "set").at(-1)![1]).toBeCloseTo(gain(2.2), 9);
-    expect(page.webAudio.chain()).toHaveLength(4);
-    expect(page.webAudio.contexts.at(-1)!.limiters.map((limiter) => [limiter.threshold.value, limiter.knee.value, limiter.ratio.value, limiter.attack.value])).toEqual([
+    expect(page.webAudio.chain()).toHaveLength(6);
+    // Compression's compressor, off, then the limiter.
+    expect(
+      page.webAudio.contexts.at(-1)!.compressors.map((compressor) => [compressor.threshold.value, compressor.knee.value, compressor.ratio.value, compressor.attack.value])
+    ).toEqual([
+      [0, 0, 1, 0.005],
       [-1, 0, 20, 0]
     ]);
 
@@ -471,8 +486,206 @@ describe("Loudness normalization", () => {
     await click(loudnessBox());
     expect(normalization().calls.at(-1)).toEqual(["glide", 1, expect.any(Number)]);
     // The limiter stays in the chain, and nothing jumped.
-    expect(page.webAudio.chain()).toHaveLength(4);
+    expect(page.webAudio.chain()).toHaveLength(6);
     expect(normalization().directSets).toBe(0);
+  });
+});
+
+describe("Compression", () => {
+  const MEDIUM_TEXTS = ["-24", "4", "6", "5", "250", "9.7"];
+  const FIELDS = ["Threshold", "Ratio", "Knee", "Attack", "Release", "Makeup gain"];
+
+  function compressionBox(): HTMLInputElement {
+    return checkbox("Compression");
+  }
+
+  function hintOf(input: HTMLInputElement): string {
+    return document.getElementById(input.getAttribute("aria-describedby")!)!.textContent!;
+  }
+
+  function compressionSettings(): HTMLDetailsElement {
+    return document.getElementById("settings-compression-more") as HTMLDetailsElement;
+  }
+
+  /** One of Strength's options, apart from Theme's Light. */
+  function strength(name: string): HTMLInputElement {
+    const group = within(settingsPage()).getByRole("radiogroup", { name: "Strength", hidden: true });
+    return within(group).getByRole("radio", { name, hidden: true }) as HTMLInputElement;
+  }
+
+  function field(name: string): HTMLInputElement {
+    return within(settingsPage()).getByRole("textbox", { name, hidden: true }) as HTMLInputElement;
+  }
+
+  const fieldTexts = () => FIELDS.map((name) => field(name).value);
+
+  function custom(): HTMLElement {
+    return document.getElementById("settings-compression-custom")!;
+  }
+
+  function enter(input: HTMLInputElement, text: string): void {
+    type(input, text);
+    fireEvent.keyDown(input, { key: "Enter" });
+  }
+
+  /** The settings as this device keeps them, or null while it keeps none. */
+  function keptSettings(): Record<string, unknown> | null {
+    const raw = localStorage.getItem("rr_device.audio.compressionSettings");
+    return raw === null ? null : JSON.parse(raw);
+  }
+
+  it("sits in Audio right under Loudness normalization, off by default, with its hint, and its settings beside it, closed at first", async () => {
+    await mount();
+    await openSettings();
+    const box = compressionBox();
+    expect([box.checked, box.disabled]).toEqual([false, false]);
+    expect(hintOf(box)).toBe("Evens out loudness within a video.");
+    expect(box.closest(".setting")!.previousElementSibling).toBe(checkbox("Loudness normalization").closest(".setting"));
+    const more = compressionSettings();
+    expect(more.open).toBe(false);
+    expect(more.querySelector("summary")!.textContent).toBe("chevron_rightCompression settings");
+    expect(box.closest(".setting")!.contains(more)).toBe(true);
+  });
+
+  it("offers Strength's Light, Medium, by default, Strong, and Custom, each with its hint, and Custom's values only under Custom, at Medium's", async () => {
+    await mount();
+    await openSettings();
+    const choices = ["Light", "Medium", "Strong", "Custom"].map((name) => [name, strength(name).checked, hintOf(strength(name))]);
+    expect(choices).toEqual([
+      ["Light", false, "Evens out the loudest moments a little."],
+      ["Medium", true, "Brings loud and quiet moments closer."],
+      ["Strong", false, "Keeps loud and quiet moments close, for quiet listening."],
+      ["Custom", false, "Set each value yourself."]
+    ]);
+    expect(custom().hidden).toBe(true);
+    expect(strength("Custom").closest(".choice-stack")!.contains(custom())).toBe(true);
+    await click(strength("Custom"));
+    expect(custom().hidden).toBe(false);
+    expect(fieldTexts()).toEqual(MEDIUM_TEXTS);
+    expect(FIELDS.map((name) => [field(name).closest(".filter-row")!.lastElementChild!.textContent, hintOf(field(name))])).toEqual([
+      ["dB", "Lower turns down more of the sound; higher, only the loudest moments."],
+      ["to 1", "Higher turns loud moments down harder."],
+      ["dB", "Higher starts turning down more gradually, for a softer effect."],
+      ["ms", "Lower catches sudden loud sounds faster; higher lets their first moment through."],
+      ["ms", "Lower brings the sound back up faster; higher sounds smoother."],
+      ["dB", "Higher raises the whole sound after compression. At 0 dB, only loud moments are turned down."]
+    ]);
+    // The full keyboard for Threshold, since the numeric keypads on iOS have no minus key.
+    expect(FIELDS.map((name) => field(name).getAttribute("inputmode"))).toEqual([null, "decimal", "decimal", "numeric", "numeric", "decimal"]);
+    expect(keptSettings()).toEqual({ strength: "custom", custom: { thresholdDb: -24, ratio: 4, kneeDb: 6, attackSeconds: 0.005, releaseSeconds: 0.25, makeupDb: 9.7 } });
+  });
+
+  it("flags each of Custom's values outside its range with the message saying its range, and keeps the one in use", async () => {
+    await mount();
+    await openSettings();
+    await click(strength("Custom"));
+    const messages = FIELDS.map((name) => {
+      type(field(name), "5000");
+      return problemOf(field(name));
+    });
+    expect(messages).toEqual([
+      "Use a number from -100 to 0 dB.",
+      "Use a number from 1 to 20.",
+      "Use a number from 0 to 40 dB.",
+      "Use a whole number from 0 to 1000 ms.",
+      "Use a whole number from 0 to 1000 ms.",
+      "Use a number from 0 to 24 dB."
+    ]);
+    type(field("Attack"), "2.5");
+    expect(problemOf(field("Attack"))).toBe("Use a whole number from 0 to 1000 ms.");
+    expect(keptSettings()?.custom ?? null).toEqual({ thresholdDb: -24, ratio: 4, kneeDb: 6, attackSeconds: 0.005, releaseSeconds: 0.25, makeupDb: 9.7 });
+  });
+
+  it("keeps Custom's values while another strength is chosen, and Reset to Medium puts back Medium's, staying on Custom", async () => {
+    await mount();
+    await openSettings();
+    await click(strength("Custom"));
+    enter(field("Ratio"), "6");
+    enter(field("Attack"), "12");
+    enter(field("Makeup gain"), "3");
+    await click(strength("Light"));
+    expect(custom().hidden).toBe(true);
+    await click(strength("Custom"));
+    expect(fieldTexts()).toEqual(["-24", "6", "6", "12", "250", "3"]);
+
+    await click(document.getElementById("settings-compression-reset")!);
+    expect(fieldTexts()).toEqual(MEDIUM_TEXTS);
+    expect(strength("Custom").checked).toBe(true);
+    expect(keptSettings()).toEqual({ strength: "custom", custom: { thresholdDb: -24, ratio: 4, kneeDb: 6, attackSeconds: 0.005, releaseSeconds: 0.25, makeupDb: 9.7 } });
+  });
+
+  it("is disabled with its settings while Enhanced audio is off, saying it needs Enhanced audio, and stays as it was", async () => {
+    await mount();
+    await openSettings();
+    await click(compressionBox());
+    await click(checkbox("Enhanced audio"));
+    expect([compressionBox().checked, compressionBox().disabled, hintOf(compressionBox())]).toEqual([true, true, "Needs Enhanced audio."]);
+    expect((compressionSettings().querySelector("fieldset") as HTMLFieldSetElement).disabled).toBe(true);
+    expect(strength("Strong").disabled).toBe(true);
+
+    await click(checkbox("Enhanced audio"));
+    expect([compressionBox().checked, compressionBox().disabled, hintOf(compressionBox())]).toEqual([true, false, "Evens out loudness within a video."]);
+    expect((compressionSettings().querySelector("fieldset") as HTMLFieldSetElement).disabled).toBe(false);
+  });
+
+  it("keeps Compression, its strength, and Custom's values after a page refresh", async () => {
+    const page = await mount();
+    await openSettings();
+    await click(compressionBox());
+    await click(strength("Custom"));
+    enter(field("Threshold"), "-30.5");
+    await click(strength("Strong"));
+    page.unmount();
+
+    await mount();
+    await openSettings();
+    expect([compressionBox().checked, strength("Strong").checked]).toEqual([true, true]);
+    await click(strength("Custom"));
+    expect(field("Threshold").value).toBe("-30.5");
+  });
+
+  it("applies at once to the playing video, gliding its compressor and the gain after it, which takes back Web Audio's makeup and applies the strength's own", async () => {
+    const page = await mount();
+    await tapPage();
+    fireEvent.click(screen.getByText(EMPTY_STATE_TEXT));
+    await settle();
+    const compressor = () => page.webAudio.contexts.at(-1)!.compressors[0]!;
+    const gainAfter = () => page.webAudio.chain()[2] as FakeGain;
+    const glide = (value: number) => ["glide", value, COMPRESSION_GLIDE_SECONDS];
+    const level = (db: number) => Math.pow(10, db / 20);
+    expect(page.webAudio.chain()[1]).toBe(compressor());
+    expect(gainAfter().calls).toEqual([["set", 1]]);
+
+    await openSettings();
+    await click(compressionBox());
+    expect([compressor().threshold.glides.at(-1), compressor().ratio.glides.at(-1)]).toEqual([glide(-24), glide(4)]);
+    expect(gainAfter().calls.at(-1)).toEqual(glide(level(compressionGainDb(COMPRESSION_PRESETS.medium))));
+    await click(strength("Strong"));
+    expect([compressor().threshold.glides.at(-1), compressor().ratio.glides.at(-1)]).toEqual([glide(-30), glide(8)]);
+    await click(strength("Custom"));
+    enter(field("Makeup gain"), "0");
+    await settle();
+    expect(gainAfter().calls.at(-1)).toEqual(glide(level(-webAudioMakeupDb(-24, 6, 4))));
+    await click(compressionBox());
+    expect([compressor().threshold.glides.at(-1), compressor().ratio.glides.at(-1), gainAfter().calls.at(-1)]).toEqual([glide(0), glide(1), glide(1)]);
+    expect(page.webAudio.chain()).toHaveLength(6);
+    expect(gainAfter().directSets).toBe(0);
+  });
+});
+
+describe("Audio's defaults", () => {
+  it("are normalization on toward Automatic, a 15 dB boost limit, Allow limiting on, and compression off with Medium", async () => {
+    await mount();
+    await openSettings();
+    const strengthGroup = within(settingsPage()).getByRole("radiogroup", { name: "Strength", hidden: true });
+    expect([
+      checkbox("Loudness normalization").checked,
+      radio("Automatic").checked,
+      (within(settingsPage()).getByRole("textbox", { name: "Boost quiet videos by up to", hidden: true }) as HTMLInputElement).value,
+      checkbox("Allow limiting").checked,
+      checkbox("Compression").checked,
+      (within(strengthGroup).getByRole("radio", { name: "Medium", hidden: true }) as HTMLInputElement).checked
+    ]).toEqual([true, true, "15", true, false, true]);
   });
 });
 
@@ -1083,7 +1296,7 @@ describe("Theme", () => {
     expect(radio("System").checked).toBe(true);
     expect(pageTheme()).toEqual(DARK);
 
-    await click(radio("Light"));
+    await click(themeRadio("Light"));
     expect(pageTheme()).toEqual(LIGHT);
     expect(localStorage.getItem("rr_device.appearance.theme")).toBe('"light"');
 
@@ -1104,7 +1317,7 @@ describe("Theme", () => {
     expect(pageTheme()).toEqual(DARK);
 
     await openSettings();
-    await click(radio("Light"));
+    await click(themeRadio("Light"));
     setSystemDark(false);
     setSystemDark(true);
     expect(pageTheme()).toEqual(LIGHT);
@@ -1531,7 +1744,7 @@ describe("kept on this device", () => {
   it("keeps the theme and Show file names on tiles after a page refresh", async () => {
     const page = await mount();
     await openSettings();
-    await click(radio("Light"));
+    await click(themeRadio("Light"));
     await click(tileNamesBox());
     page.unmount();
 
@@ -1539,7 +1752,7 @@ describe("kept on this device", () => {
     expect(pageTheme()).toEqual(LIGHT);
     expect(document.getElementById("library-overlay")!.classList.contains("show-tile-names")).toBe(true);
     await openSettings();
-    expect(radio("Light").checked).toBe(true);
+    expect(themeRadio("Light").checked).toBe(true);
     expect(tileNamesBox().checked).toBe(true);
   });
 
@@ -1612,7 +1825,7 @@ describe("kept on this device", () => {
     await click(checkbox("Loop stops autoplay"));
     await click(radio("Left"));
     await click(radio("Always"));
-    await click(radio("Light"));
+    await click(themeRadio("Light"));
     await click(tileNamesBox());
     await click(ambientBox());
     moveSlider(slider("Blur"), 30);

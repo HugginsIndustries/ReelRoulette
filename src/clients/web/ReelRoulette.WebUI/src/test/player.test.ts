@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { unauthorizedLogText } from "../api/serverRequest";
 import type { NotifyRequest } from "../notifications/notifications";
 import { createAudioStage, type AudioStage } from "../playback/audioStage";
+import { COMPRESSION_PRESETS } from "../playback/compression";
 import { createPlayer, type PlayerElements } from "../playback/player";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type PlayingItem } from "../state/appStore";
@@ -203,6 +204,7 @@ function setup(saved: Record<string, string> = {}, audioStandIn?: Pick<AudioStag
     relay: () => {},
     renewVideo: () => player.renewVideo(),
     normalizationGainDb: signal(0),
+    compressor: signal({ on: false, values: COMPRESSION_PRESETS.medium }),
     volumeReadOnly: false,
     activation: new EventTarget()
   });

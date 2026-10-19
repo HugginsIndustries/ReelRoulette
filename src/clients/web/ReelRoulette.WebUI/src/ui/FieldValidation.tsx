@@ -261,6 +261,8 @@ export interface SettingTextFieldProps extends SettingFieldOptions {
    * the value saved again.
    */
   revision?: number;
+  /** The id of the field's hint, which describes it while it isn't flagged; flagged, its problem does. */
+  describedBy?: string;
 }
 
 /**
@@ -270,7 +272,7 @@ export interface SettingTextFieldProps extends SettingFieldOptions {
  * a polite live region says "Saved".
  */
 export function SettingTextField(props: SettingTextFieldProps) {
-  const { id, class: extraClass, inputMode, shown, revision } = props;
+  const { id, class: extraClass, inputMode, shown, revision, describedBy } = props;
   // The latest render's callbacks, so the field reads what the page holds now.
   const latest = useRef(props);
   latest.current = props;
@@ -317,6 +319,7 @@ export function SettingTextField(props: SettingTextFieldProps) {
       {(control) => (
         <input
           {...control}
+          aria-describedby={control["aria-describedby"] ?? describedBy}
           type="text"
           inputMode={inputMode}
           id={id}

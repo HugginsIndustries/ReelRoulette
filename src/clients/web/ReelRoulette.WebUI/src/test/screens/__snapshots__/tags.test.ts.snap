@@ -80,9 +80,9 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
 `;
 
 exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag dialog's > edit tag dialog 1`] = `
-"<dialog aria-labelledby="P0-7" class="app-dialog" open="">
+"<dialog aria-labelledby="P0-13" class="app-dialog" open="">
   <div class="dialog-body">
-    <h3 id="P0-7">
+    <h3 id="P0-13">
       "Edit Tag"
     <label for="tag-edit-name">
       "Tag Name"

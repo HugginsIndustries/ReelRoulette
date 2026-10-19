@@ -19,12 +19,12 @@ Instructions:
 
 Commit Message:
 
-M12i8: Add the WebUI's loudness normalization, with its settings and the Stats tab's Adjustment
+M12i8: Add the WebUI's compression and its settings, completing loudness normalization
 
-- WebUI: loudness normalization evens out loudness between videos through Enhanced audio's gain stage, toward Automatic, the library's baseline, or Quieter, Standard, Louder, or a Manual target, by a gain rule locked to a WebUI-only fixture: a cut in full, and a boost held to the boost limit and the video's headroom, plus 6 dB with Allow limiting on.
-- WebUI: the gain stage's chain runs through normalization's gain, a limiter at -1 dB, and a gain that takes back the limiter's makeup, to the volume's gain. The limiter stays in the chain, each video's gain is set while it starts silent, and a setting change glides it.
-- WebUI: the Settings tab's Audio section has Loudness normalization and its settings, kept per device and disabled while Enhanced audio is off, and the Stats tab shows each video's Adjustment. Enhanced audio's description and the gain stage's failure notice have their new texts.
-- WebUI: the library's baseline loads from the library stats once the server is ready and after each refresh and resync, and a failed load is tried again every 5 seconds until one succeeds; until it loads, Automatic applies no adjustment.
-- Server: random picks and library plays carry the video's integrated loudness and true peak, in the OpenAPI contract and the generated WebUI types.
-- Mockup: the gain rule follows the WebUI's, so a boost limit of 0 marks nothing limited by peak, and neither does a boost that fits its headroom exactly.
-- Docs: MILESTONES.md lands the Normalization slice with its evidence, keeps the limiter in the chain in the Decisions, has Night mode's compressor stay in the chain too, and settles the slice's criteria for the browsers and for Automatic before the baseline loads. CONTEXT.md, docs/api.md, docs/domain-inventory.md, and CHANGELOG.md describe normalization.
+- WebUI: compression evens out loudness within a video through Enhanced audio's gain stage, with a compressor between normalization's gain and the limiter and a gain after it that takes back Web Audio's makeup gain, worked out from the spec's formula over the browsers' shared knee curve, and applies the strength's own makeup gain.
+- WebUI: compression and its gain stay in the chain, at no compression and 0 dB while it is off, and turning it on or off or changing its values glides them with a 0.15 s time constant.
+- WebUI: the Settings tab's Audio section has Compression under Loudness normalization, off by default, and its Compression settings: Light, Medium, the default, Strong, or Custom, whose values show under Custom with their hints and range messages, start at Medium's, and go back with Reset to Medium. They are kept per device and disabled while Enhanced audio is off, and Enhanced audio's description names compression.
+- WebUI: each preset's makeup gain is the lift Web Audio's own makeup gave it, so the presets sound as the user tested them, and the defaults are the ones the user settled by listening.
+- WebUI: a setting's field can name its hint as its description while it isn't flagged, and a range without a unit, such as a ratio's, has no space before its period.
+- Mockup: Compression and its Compression settings, with clearer Custom hints and each Custom value's range message, kept under new keys.
+- Docs: MILESTONES.md renames Night mode to Compression throughout the entry, drops the Listening check slice, carrying what still applies into it, records the user's listening, the settled defaults, and the spot check, updates the chain Decision, and completes the milestone, which moves to MILESTONES-COMPLETED.md with its release checks in the testing checklist. It also corrects WebUI Volume Boost's Trap about the limiter. ISSUES.md records that field tooltips don't show for fields low on the iPad's screen. CONTEXT.md, docs/domain-inventory.md, and CHANGELOG.md describe compression.

@@ -306,7 +306,7 @@ exports[`page structure > keeps the starting markup 1`] = `
                     <input aria-describedby="settings-enhanced-audio-hint" id="settings-enhanced-audio" type="checkbox">
                     "Enhanced audio"
                 <p class="setting-hint" id="settings-enhanced-audio-hint">
-                  "Processes audio in the app, for loudness normalization."
+                  "Processes audio in the app, for loudness normalization and compression."
               <div class="setting">
                 <div class="choice-row">
                   <label>
@@ -383,6 +383,113 @@ exports[`page structure > keeps the starting markup 1`] = `
                             "Lets quiet videos with loud moments get louder by limiting those moments."
                     <button class="btn" id="settings-loudness-reset" type="button">
                       "Reset to defaults"
+              <div class="setting">
+                <div class="choice-row">
+                  <label>
+                    <input aria-describedby="settings-compression-hint" id="settings-compression" type="checkbox">
+                    "Compression"
+                <p class="setting-hint" id="settings-compression-hint">
+                  "Evens out loudness within a video."
+                <details class="setting-more" id="settings-compression-more">
+                  <summary>
+                    <span aria-hidden="true" class="material-symbol-icon setting-more-chevron">
+                      "chevron_right"
+                    "Compression settings"
+                  <fieldset class="setting-fields">
+                    <span class="setting-label" id="settings-compression-strength-label">
+                      "Strength"
+                    <div aria-labelledby="settings-compression-strength-label" class="choice-stack" role="radiogroup">
+                      <label>
+                        <input aria-describedby="settings-compression-strength-light-description" aria-labelledby="settings-compression-strength-light" name="settings-compression-strength" type="radio" value="light">
+                        <span>
+                          <span id="settings-compression-strength-light">
+                            "Light"
+                          <small id="settings-compression-strength-light-description">
+                            "Evens out the loudest moments a little."
+                      <label>
+                        <input aria-describedby="settings-compression-strength-medium-description" aria-labelledby="settings-compression-strength-medium" name="settings-compression-strength" type="radio" value="medium">
+                        <span>
+                          <span id="settings-compression-strength-medium">
+                            "Medium"
+                          <small id="settings-compression-strength-medium-description">
+                            "Brings loud and quiet moments closer."
+                      <label>
+                        <input aria-describedby="settings-compression-strength-strong-description" aria-labelledby="settings-compression-strength-strong" name="settings-compression-strength" type="radio" value="strong">
+                        <span>
+                          <span id="settings-compression-strength-strong">
+                            "Strong"
+                          <small id="settings-compression-strength-strong-description">
+                            "Keeps loud and quiet moments close, for quiet listening."
+                      <label>
+                        <input aria-describedby="settings-compression-strength-custom-description" aria-labelledby="settings-compression-strength-custom" name="settings-compression-strength" type="radio" value="custom">
+                        <span>
+                          <span id="settings-compression-strength-custom">
+                            "Custom"
+                          <small id="settings-compression-strength-custom-description">
+                            "Set each value yourself."
+                      <div class="setting-sub" hidden="" id="settings-compression-custom">
+                        <label class="setting-label" for="settings-compression-thresholdDb">
+                          "Threshold"
+                        <div class="filter-row">
+                          <span class="vfield number-field">
+                            <input aria-describedby="settings-compression-thresholdDb-hint" autocomplete="off" class="ctl" id="settings-compression-thresholdDb" type="text">
+                            <span aria-live="polite" class="visually-hidden">
+                          <span>
+                            "dB"
+                        <p class="setting-hint" id="settings-compression-thresholdDb-hint">
+                          "Lower turns down more of the sound; higher, only the loudest moments."
+                        <label class="setting-label" for="settings-compression-ratio">
+                          "Ratio"
+                        <div class="filter-row">
+                          <span class="vfield number-field">
+                            <input aria-describedby="settings-compression-ratio-hint" autocomplete="off" class="ctl" id="settings-compression-ratio" inputmode="decimal" type="text">
+                            <span aria-live="polite" class="visually-hidden">
+                          <span>
+                            "to 1"
+                        <p class="setting-hint" id="settings-compression-ratio-hint">
+                          "Higher turns loud moments down harder."
+                        <label class="setting-label" for="settings-compression-kneeDb">
+                          "Knee"
+                        <div class="filter-row">
+                          <span class="vfield number-field">
+                            <input aria-describedby="settings-compression-kneeDb-hint" autocomplete="off" class="ctl" id="settings-compression-kneeDb" inputmode="decimal" type="text">
+                            <span aria-live="polite" class="visually-hidden">
+                          <span>
+                            "dB"
+                        <p class="setting-hint" id="settings-compression-kneeDb-hint">
+                          "Higher starts turning down more gradually, for a softer effect."
+                        <label class="setting-label" for="settings-compression-attackSeconds">
+                          "Attack"
+                        <div class="filter-row">
+                          <span class="vfield number-field">
+                            <input aria-describedby="settings-compression-attackSeconds-hint" autocomplete="off" class="ctl" id="settings-compression-attackSeconds" inputmode="numeric" type="text">
+                            <span aria-live="polite" class="visually-hidden">
+                          <span>
+                            "ms"
+                        <p class="setting-hint" id="settings-compression-attackSeconds-hint">
+                          "Lower catches sudden loud sounds faster; higher lets their first moment through."
+                        <label class="setting-label" for="settings-compression-releaseSeconds">
+                          "Release"
+                        <div class="filter-row">
+                          <span class="vfield number-field">
+                            <input aria-describedby="settings-compression-releaseSeconds-hint" autocomplete="off" class="ctl" id="settings-compression-releaseSeconds" inputmode="numeric" type="text">
+                            <span aria-live="polite" class="visually-hidden">
+                          <span>
+                            "ms"
+                        <p class="setting-hint" id="settings-compression-releaseSeconds-hint">
+                          "Lower brings the sound back up faster; higher sounds smoother."
+                        <label class="setting-label" for="settings-compression-makeupDb">
+                          "Makeup gain"
+                        <div class="filter-row">
+                          <span class="vfield number-field">
+                            <input aria-describedby="settings-compression-makeupDb-hint" autocomplete="off" class="ctl" id="settings-compression-makeupDb" inputmode="decimal" type="text">
+                            <span aria-live="polite" class="visually-hidden">
+                          <span>
+                            "dB"
+                        <p class="setting-hint" id="settings-compression-makeupDb-hint">
+                          "Higher raises the whole sound after compression. At 0 dB, only loud moments are turned down."
+                        <button class="btn" id="settings-compression-reset" type="button">
+                          "Reset to Medium"
             <section aria-labelledby="settings-appearance-heading" class="settings-section">
               <h3 id="settings-appearance-heading">
                 "Appearance"

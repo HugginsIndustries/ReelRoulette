@@ -9,6 +9,7 @@ import { createPanelHost, type PanelHost } from "../panel/panelHost";
 import { createAmbient, type Ambient } from "../playback/ambient";
 import { createAudioStage, type AudioStage } from "../playback/audioStage";
 import { createAutoPause } from "../playback/autoPause";
+import { createCompression, type Compression } from "../playback/compression";
 import { createLoudnessNormalization, type LoudnessNormalization } from "../playback/loudnessNormalization";
 import { createPlayer, type Player } from "../playback/player";
 import { createStageFullscreen, type StageFullscreen } from "../playback/stageFullscreen";
@@ -32,7 +33,7 @@ export interface UnsavedTabs {
 
 /**
  * One page's runtime config, shared state, server requests, in-app dialogs, server connection, player, its sound and
- * loudness normalization, ambient mode's glow, fullscreen, side panel, the panel's library, filter, tag editor, and stats tabs, and the settings
+ * loudness normalization and compression, ambient mode's glow, fullscreen, side panel, the panel's library, filter, tag editor, and stats tabs, and the settings
  * its Settings tab sets, with Auto-Pause pausing the player as its mode says while the panel and Auto Tag cover it.
  */
 export interface AppServices {
@@ -46,6 +47,8 @@ export interface AppServices {
   audio: AudioStage;
   /** Loudness normalization and its settings, whose gain the audio stage applies. */
   normalization: LoudnessNormalization;
+  /** Compression and its settings, whose compressor the audio stage applies. */
+  compression: Compression;
   /** Ambient mode's glow behind the player, which the Settings tab turns on and off and tunes. */
   ambient: Ambient;
   fullscreen: StageFullscreen;
@@ -115,13 +118,15 @@ export function createAppServices(config: RuntimeConfig): AppServices {
   // Automatic's target, the library's baseline, loaded from the library stats.
   const baseline = createLibraryBaseline({ store, api, connection, relay });
   const normalization = createLoudnessNormalization({ device, current: store.current, baseline: baseline.lufs });
+  const compression = createCompression({ device });
   const audio = createAudioStage({
     device,
     dialogs,
     relay,
     // Once Enhanced audio is off, a new video element takes over from the one the gain stage took.
     renewVideo: () => player.renewVideo(),
-    normalizationGainDb: normalization.gainDb
+    normalizationGainDb: normalization.gainDb,
+    compressor: compression.compressor
   });
   const player = createPlayer({ apiBaseUrl: config.apiBaseUrl, store, audio, api, connection, dialogs, notifications });
   // After the player, so the player handles an item-state event before the library does.
@@ -208,6 +213,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     player,
     audio,
     normalization,
+    compression,
     ambient,
     fullscreen,
     panel,

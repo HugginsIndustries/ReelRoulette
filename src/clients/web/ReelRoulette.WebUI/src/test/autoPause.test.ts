@@ -2,6 +2,7 @@ import { signal } from "@preact/signals";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPanelHost } from "../panel/panelHost";
 import { createAudioStage } from "../playback/audioStage";
+import { COMPRESSION_PRESETS } from "../playback/compression";
 import { autoPauseWants, createAutoPause, type AutoPauseMode } from "../playback/autoPause";
 import { createPlayer, type PlayerElements } from "../playback/player";
 import { createAppApi } from "../state/appApi";
@@ -103,6 +104,7 @@ function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
     relay: () => {},
     renewVideo: () => {},
     normalizationGainDb: signal(0),
+    compressor: signal({ on: false, values: COMPRESSION_PRESETS.medium }),
     volumeReadOnly: false,
     activation: new EventTarget()
   });
