@@ -5,6 +5,7 @@ import type { NotifyRequest } from "../notifications/notifications";
 import { createAudioStage, type AudioStage } from "../playback/audioStage";
 import { COMPRESSION_PRESETS } from "../playback/compression";
 import { createPlayer, type PlayerElements } from "../playback/player";
+import { SEEK_INDICATOR_MS } from "../playback/seekIndicator";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type PlayingItem } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
@@ -922,6 +923,60 @@ describe("createPlayer", () => {
     video.currentTime = 10;
     page.player.seekBy(5);
     expect(video.currentTime).toBe(10);
+  });
+
+  it("shows the seek indicator for J, L, and a double-tap with the full step at the video's start and end too, and is seekable only where they seek", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    const { video } = page.elements;
+    /** The seconds each side of the seek indicator shows, back then forward, 0 while it's hidden. */
+    const shown = () => [page.player.seekIndicator.back.value, page.player.seekIndicator.forward.value].map((side) => (side.shown ? side.seconds : 0));
+    expect(page.player.seekable()).toBe(false);
+    page.play(VIDEO);
+    expect(page.player.seekable()).toBe(false);
+    page.player.seekBy(-5);
+    expect(shown()).toEqual([0, 0]);
+
+    page.playVideo(VIDEO, 65);
+    expect(page.player.seekable()).toBe(true);
+    page.player.seekBy(-5);
+    expect([video.currentTime, shown()]).toEqual([0, [5, 0]]);
+    await vi.advanceTimersByTimeAsync(SEEK_INDICATOR_MS);
+    video.currentTime = 63;
+    page.player.seekBy(5);
+    page.player.seekBy(5);
+    expect([video.currentTime, shown()]).toEqual([65, [0, 10]]);
+    await vi.advanceTimersByTimeAsync(SEEK_INDICATOR_MS);
+
+    // A frame step and the scrub bar don't show it.
+    page.playVideo(SECOND_VIDEO, 65);
+    video.currentTime = 10;
+    page.player.playOrPause();
+    page.player.stepFrame(1);
+    expect(video.currentTime).toBeCloseTo(10 + 1 / 30, 10);
+    page.player.seek("30");
+    expect([video.currentTime, shown()]).toEqual([30, [0, 0]]);
+
+    page.playVideo(VIDEO, Number.POSITIVE_INFINITY);
+    expect(page.player.seekable()).toBe(false);
+    page.play(PHOTO);
+    expect(page.player.seekable()).toBe(false);
+    page.player.seekBy(5);
+    expect(shown()).toEqual([0, 0]);
+  });
+
+  it("hides the seek indicator as a new item plays, starting its total over", () => {
+    vi.useFakeTimers();
+    const page = setup();
+    const shown = () => [page.player.seekIndicator.back.value, page.player.seekIndicator.forward.value].map((side) => (side.shown ? side.seconds : 0));
+    page.playVideo(VIDEO, 65);
+    page.player.seekBy(5);
+    expect(shown()).toEqual([0, 5]);
+
+    page.playVideo(SECOND_VIDEO, 65);
+    expect(shown()).toEqual([0, 0]);
+    page.player.seekBy(5);
+    expect(shown()).toEqual([0, 5]);
   });
 
   it("does nothing for J, L, or a frame step on a photo", async () => {

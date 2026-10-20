@@ -1,10 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createMediaGestures } from "../playback/mediaGestures";
+import { createMediaGestures, DOUBLE_TAP_MS } from "../playback/mediaGestures";
 
-function setup(volumeAdjustable = true) {
+/** The player's middle across the page, which splits its halves. */
+const MIDDLE_X = 200;
+
+function setup(volumeAdjustable = true, { seekable = false } = {}) {
   const actions = {
     previous: vi.fn(),
     next: vi.fn(),
+    seekable: () => seekable,
+    seek: vi.fn(),
+    middleX: () => MIDDLE_X,
+    tap: vi.fn(),
     showControls: vi.fn(),
     volumeAdjustable: () => volumeAdjustable,
     beginVolumeChange: vi.fn(),
@@ -33,7 +40,14 @@ function setup(volumeAdjustable = true) {
       gestures.touchEnd({ clientX: 120, clientY: y + 40 }, 0);
       return claimed;
     },
-    stepped: () => actions.stepVolume.mock.calls.map(([steps]) => steps)
+    /** A tap at `x` and the click that follows it, which returns whether the gestures took it. */
+    tapAt(x: number): boolean {
+      gestures.touchStart(false, [{ clientX: x, clientY: 100 }]);
+      gestures.touchEnd({ clientX: x, clientY: 102 }, 0);
+      return gestures.takeClick();
+    },
+    stepped: () => actions.stepVolume.mock.calls.map(([steps]) => steps),
+    seeks: () => actions.seek.mock.calls.map(([forward]) => (forward ? "forward" : "back"))
   };
 }
 
@@ -46,12 +60,12 @@ describe("createMediaGestures", () => {
     const { actions, gestures, touch } = setup();
     touch([300, 100], [249, 120]);
     expect(actions.next).toHaveBeenCalledTimes(1);
-    expect(gestures.takeFollowingClick()).toBe(true);
-    expect(gestures.takeFollowingClick()).toBe(false);
+    expect(gestures.takeClick()).toBe(true);
+    expect(gestures.takeClick()).toBe(false);
 
     touch([100, 100], [151, 80]);
     expect(actions.previous).toHaveBeenCalledTimes(1);
-    expect(gestures.takeFollowingClick()).toBe(true);
+    expect(gestures.takeClick()).toBe(true);
   });
 
   it("ignores a move of 50 pixels or less, and one that is mostly vertical", () => {
@@ -59,14 +73,14 @@ describe("createMediaGestures", () => {
     touch([300, 100], [250, 100]);
     touch([300, 100], [230, 171]);
     expect(actions.next).not.toHaveBeenCalled();
-    expect(gestures.takeFollowingClick()).toBe(false);
+    expect(gestures.takeClick()).toBe(false);
   });
 
   it("leaves a tap to the click that follows it", () => {
     const { actions, gestures, touch } = setup();
     touch([100, 100], [109, 91]);
     expect([actions.next, actions.previous, actions.showControls].map((action) => action.mock.calls.length)).toEqual([0, 0, 0]);
-    expect(gestures.takeFollowingClick()).toBe(false);
+    expect(gestures.takeClick()).toBe(false);
   });
 
   it("ignores a touch that starts on the controls, and a touch end without a point", () => {
@@ -77,7 +91,7 @@ describe("createMediaGestures", () => {
     gestures.touchStart(false, [{ clientX: 300, clientY: 100 }]);
     gestures.touchEnd(undefined, 0);
     expect(actions.next).not.toHaveBeenCalled();
-    expect(gestures.takeFollowingClick()).toBe(false);
+    expect(gestures.takeClick()).toBe(false);
   });
 
   it("changes the volume a step per 30 px of a two-finger drag, up raising it, as one change that shows the controls and is claimed from the browser", () => {
@@ -115,7 +129,7 @@ describe("createMediaGestures", () => {
     gestures.touchEnd({ clientX: 200, clientY: 300 }, 1);
     gestures.touchEnd({ clientX: 200, clientY: 340 }, 0);
     expect([actions.next, actions.previous].map((action) => action.mock.calls.length)).toEqual([0, 0]);
-    expect(gestures.takeFollowingClick()).toBe(false);
+    expect(gestures.takeClick()).toBe(false);
 
     gestures.touchStart(false, [{ clientX: 300, clientY: 300 }]);
     expect(gestures.touchMove([{ clientX: 300, clientY: 200 }])).toBe(false);
@@ -139,6 +153,70 @@ describe("createMediaGestures", () => {
     vi.advanceTimersByTime(300);
     gestures.wheel({ deltaY: -40, deltaMode: 0 });
     expect(stepped()).toEqual([1, -1, 1]);
+  });
+
+  it("on a video, takes a tap's click and taps once 300 ms pass without another tap", () => {
+    vi.useFakeTimers();
+    const { actions, tapAt, seeks } = setup(true, { seekable: true });
+    expect(tapAt(100)).toBe(true);
+    vi.advanceTimersByTime(DOUBLE_TAP_MS - 1);
+    expect(actions.tap).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(actions.tap).toHaveBeenCalledTimes(1);
+    expect(seeks()).toEqual([]);
+  });
+
+  it("seeks back on a double-tap on the player's left half and forward on its right, and never taps", () => {
+    vi.useFakeTimers();
+    const { actions, tapAt, seeks } = setup(true, { seekable: true });
+    tapAt(MIDDLE_X - 1);
+    vi.advanceTimersByTime(DOUBLE_TAP_MS - 1);
+    expect(tapAt(MIDDLE_X - 1)).toBe(true);
+    vi.advanceTimersByTime(DOUBLE_TAP_MS);
+    tapAt(MIDDLE_X + 1);
+    vi.advanceTimersByTime(DOUBLE_TAP_MS - 1);
+    tapAt(MIDDLE_X + 1);
+    vi.advanceTimersByTime(DOUBLE_TAP_MS);
+    expect(seeks()).toEqual(["back", "forward"]);
+    expect(actions.tap).not.toHaveBeenCalled();
+  });
+
+  it("seeks again for each further tap within 300 ms of the last, toward its half, so a triple-tap seeks twice, and a tap after that waits again", () => {
+    vi.useFakeTimers();
+    const { actions, tapAt, seeks } = setup(true, { seekable: true });
+    tapAt(300);
+    vi.advanceTimersByTime(250);
+    tapAt(300);
+    vi.advanceTimersByTime(250);
+    tapAt(100);
+    vi.advanceTimersByTime(DOUBLE_TAP_MS);
+    expect(seeks()).toEqual(["forward", "back"]);
+    expect(actions.tap).not.toHaveBeenCalled();
+
+    tapAt(300);
+    vi.advanceTimersByTime(DOUBLE_TAP_MS);
+    expect(seeks()).toEqual(["forward", "back"]);
+    expect(actions.tap).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a click to the media area where nothing can seek, and one no tap came before, as a mouse's", () => {
+    vi.useFakeTimers();
+    const unseekable = setup();
+    expect(unseekable.tapAt(100)).toBe(false);
+    expect(unseekable.tapAt(100)).toBe(false);
+
+    const { actions, gestures, touch, twoFingerDrag, tapAt } = setup(true, { seekable: true });
+    expect(gestures.takeClick()).toBe(false);
+    touch([100, 100], [101, 100], true);
+    expect(gestures.takeClick()).toBe(false);
+    twoFingerDrag(5);
+    expect(gestures.takeClick()).toBe(false);
+    // A swipe's click is taken as before, and doesn't count as a tap.
+    touch([300, 100], [200, 100]);
+    expect(gestures.takeClick()).toBe(true);
+    expect(tapAt(100)).toBe(true);
+    vi.advanceTimersByTime(DOUBLE_TAP_MS);
+    expect([actions.seek.mock.calls.length, actions.tap.mock.calls.length]).toEqual([0, 1]);
   });
 
   it("leaves the volume alone where it can't change, still claiming a two-finger drag", () => {

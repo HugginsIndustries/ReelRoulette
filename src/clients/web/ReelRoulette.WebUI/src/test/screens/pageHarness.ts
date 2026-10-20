@@ -700,10 +700,15 @@ export function currentStyle(element: Element): CSSStyleDeclaration {
   return getComputedStyle(element);
 }
 
+/** The WebUI's stylesheet as written, for a property happy-dom drops when it parses it. */
+export function stylesheetText(): string {
+  return readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../styles.css"), "utf8");
+}
+
 /** Applies the WebUI's stylesheet to the page, so a test can read the styles it gives. */
 export function useStylesheet(): void {
   const style = document.createElement("style");
-  style.textContent = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../styles.css"), "utf8");
+  style.textContent = stylesheetText();
   document.head.append(style);
   restores.push(() => style.remove());
 }

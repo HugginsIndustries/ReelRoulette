@@ -87,7 +87,8 @@ body { height: var(--page-height); overflow: hidden; display: flex; flex-directi
 
 /* The player keeps its rounded corners in every view, fullscreen and a phone on its side too. It is clipped by a rounded
    clip-path as well as overflow: WebKit doesn't clip a layer of its own, such as the blurred ambient canvas, to its
-   parent's rounded corners, so on iOS they turned square once ambient mode drew. */
+   parent's rounded corners, so on iOS they turned square once ambient mode drew. It and its controls show no tap
+   highlight, which Chrome on Android otherwise flashes over what a tap clicks. */
 .media-container {
   position: relative;
   background: #000;
@@ -103,6 +104,7 @@ body { height: var(--page-height); overflow: hidden; display: flex; flex-directi
   min-width: 0;
   container-type: size;
   touch-action: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Ambient mode: a heavily blurred, dimmed copy of the frame fills the black space around it. The glow sits on the
@@ -705,32 +707,55 @@ body.short-screen .stage:not(.covers-player):not(.fullscreen-pseudo):not(:fullsc
 .player-col.is-narrow .player-indicator { top: 64px; max-width: calc(100% - 24px); }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .player-indicator .material-symbol-icon.spins { animation-duration: 3s; } }
-/* The volume indicator: the volume as a percentage, with Mute's icon, centered over the player while the scroll wheel,
-   a two-finger drag, or [ and ] change it. It sits outside the controls, so it shows while they're hidden, at a low
-   opacity so it doesn't cover the picture. It fades in quickly and fades out shortly after the volume stops changing;
-   with reduced motion it shows and hides at once. */
-.volume-indicator {
+/* The volume indicator and the seek indicator share their look: white text with a shadow so it reads on a bright
+   picture, with no background. They sit outside the controls, so they show while those are hidden. They fade in
+   quickly and out more slowly; with reduced motion they show and hide at once. */
+.volume-indicator, .seek-indicator {
   position: absolute;
   top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
   z-index: 25;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 18px 10px 14px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.72);
   color: #fff;
-  font-size: 1.25rem;
+  font-size: 1.5rem;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.25s;
 }
-.volume-indicator .material-symbol-icon { font-size: 28px; }
-.volume-indicator.is-shown { opacity: 0.7; transition-duration: 0.12s; }
-@media (prefers-reduced-motion: reduce) { .volume-indicator, .volume-indicator.is-shown { transition: none; } }
+.volume-indicator .material-symbol-icon, .seek-indicator .material-symbol-icon { font-size: 36px; }
+.volume-indicator.is-shown, .seek-indicator.is-shown { opacity: 1; transition-duration: 0.12s; }
+@media (prefers-reduced-motion: reduce) {
+  .volume-indicator, .volume-indicator.is-shown, .seek-indicator, .seek-indicator.is-shown { transition: none; }
+}
+/* The volume indicator: the volume as a percentage, or Muted while muted, with Mute's icon, centered over the player
+   while the scroll wheel, a two-finger drag, [ and ], or M change it. It fades out shortly after the volume stops
+   changing. */
+.volume-indicator {
+  left: 50%;
+  transform: translate(-50%, -50%);
+  gap: 8px;
+}
+/* The seek indicator, as YouTube shows it, while J, L, or a double-tap seeks: the seek's total with a chevron toward the
+   screen's edge, 24 px in from the player's right for a forward seek and its left for a back seek. Its chevron slides
+   out from beside the number to the edge as it fades in, without the slide with reduced motion, and it fades out a
+   second after the last seek. */
+.seek-indicator {
+  transform: translateY(-50%);
+  gap: 2px;
+}
+.seek-indicator.is-back { left: 24px; }
+.seek-indicator.is-forward { right: 24px; }
+.seek-indicator.is-back.is-shown .material-symbol-icon { animation: seek-chevron-back 0.3s ease-out; }
+.seek-indicator.is-forward.is-shown .material-symbol-icon { animation: seek-chevron-forward 0.3s ease-out; }
+@keyframes seek-chevron-back { from { transform: translateX(10px); } }
+@keyframes seek-chevron-forward { from { transform: translateX(-10px); } }
+@media (prefers-reduced-motion: reduce) {
+  .seek-indicator.is-shown .material-symbol-icon { animation: none; }
+}
 /* Popups at the bottom move up above the player's controls while those show, and down again when they hide, except
    while the overlay panel covers the player. On a player under 600 px wide, popups at the top start below the
    indicator. */
@@ -842,6 +867,8 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <div id="empty-state" class="empty-state" hidden>Tap to play, or open the panel to choose a preset or filter.</div>
         <div class="player-indicator-region" role="status"><div id="player-indicator" class="player-indicator" hidden></div></div>
         <div id="volume-indicator" class="volume-indicator" aria-hidden="true"><span class="material-symbol-icon">volume_up</span><span id="volume-indicator-text"></span></div>
+        <div id="seek-indicator-back" class="seek-indicator is-back" aria-hidden="true"><span class="material-symbol-icon">chevron_left</span><span class="seek-indicator-text"></span></div>
+        <div id="seek-indicator-forward" class="seek-indicator is-forward" aria-hidden="true"><span class="seek-indicator-text"></span><span class="material-symbol-icon">chevron_right</span></div>
         <div id="play-chip" class="mock-chip mock-note"></div>
         <div id="mock-hint" class="mock-hint mock-note">The panel button opens the panel on its last tab.</div>
         <div class="overlay-controls" id="overlay-controls">
@@ -1965,9 +1992,10 @@ function start(item) {
   item.playedBefore = item.lastPlayedAt;
   setTime(0);
   playback.timer = 0;
-  // A new item's repeating stretch starts at its start.
+  // A new item's repeating stretch starts at its start, and the seek indicator's total starts over.
   playback.loopStart = 0;
   playback.stretching = repeatsStretch();
+  hideSeekIndicator();
   playback.failed = isPlayable(item) ? null : "format";
   if (playback.failed) {
     // A file chosen from the library that this browser can't play: its notice, not a popup.
@@ -2368,10 +2396,21 @@ coarse.addEventListener("change", applyLayout);
 // ---- Player controls ----
 // Swipes and taps on the media area, as the WebUI does (mediaGestures.ts): a swipe right plays the previous item and a
 // swipe left the next, past 50 px and more sideways than up or down; the click that follows a swipe is ignored. A tap
-// with nothing playing starts a random pick; otherwise it shows or hides the controls.
+// with nothing playing starts a random pick; otherwise it does what Hide player controls says. A tap acts through the
+// click that follows it. On a video that can seek, that click waits 300 ms to rule out a double-tap, and a single tap
+// acts once no second one came; a tap within 300 ms of the last seeks back by the seek step on the player's left half
+// and forward on its right, leaving the controls as they were, and so does each further one, so a triple-tap seeks
+// twice. A tap with nothing playing, on a photo, or on a video that can't play, and a mouse click, act at once.
+const DOUBLE_TAP_MS = 300;
 let swipeStart = null;
 let afterSwipe = false;
+// Where a tap's touch ended, until its click comes. A mouse click has none.
+let tapX = null;
+// The 300 ms after a tap, in which the next tap seeks; a single tap acts as it ends.
+let tapWindow = 0;
+let singleTapWaits = false;
 media.addEventListener("touchstart", (event) => {
+  tapX = null;
   swipeStart = event.target.closest("#overlay-controls .overlay-btn, .overlay-seek-row") ? null : { x: event.touches[0].clientX, y: event.touches[0].clientY };
 }, { passive: true });
 media.addEventListener("touchend", (event) => {
@@ -2383,17 +2422,71 @@ media.addEventListener("touchend", (event) => {
     afterSwipe = true;
     if (dx > 0) goPrevious();
     else goNext();
+  } else {
+    tapX = event.changedTouches[0].clientX;
   }
 }, { passive: true });
+function tapControls() {
+  if (state.hideControls === "click") media.classList.toggle("controls-visible");
+  else controlsActivity();
+}
 media.addEventListener("click", () => {
   if (afterSwipe) {
     afterSwipe = false;
     return;
   }
+  const x = tapX;
+  tapX = null;
   if (!playback.item) return void pickRandom();
-  if (state.hideControls === "click") media.classList.toggle("controls-visible");
-  else controlsActivity();
+  if (x === null || !seekableVideo()) return tapControls();
+  const seeks = !!tapWindow;
+  clearTimeout(tapWindow);
+  singleTapWaits = !seeks;
+  if (seeks) {
+    const box = media.getBoundingClientRect();
+    seekByStep(x < box.left + box.width / 2 ? -1 : 1);
+  }
+  tapWindow = setTimeout(() => {
+    tapWindow = 0;
+    if (singleTapWaits) tapControls();
+    singleTapWaits = false;
+  }, DOUBLE_TAP_MS);
 });
+
+// J, L, and a double-tap seek a video, not a photo's timer, by the seek step, within its length, and start Timer mode's
+// stretch where they land, as the scrub bar does.
+const seekableVideo = () => !!playback.item && !isPhoto(playback.item) && !playback.failed;
+function seekByStep(direction) {
+  catchUp();
+  playback.time = Math.max(0, Math.min(playback.item.duration, playback.time + direction * state.seekStep));
+  seekStartsStretch();
+  renderTime();
+  showSeekIndicator(direction * state.seekStep);
+}
+// The seek indicator, for J, L, and double-taps, not the scrub bar or a frame step: "+ 5" with a chevron on the player's
+// right for a forward seek, and "− 5" on its left for a back seek. Seeks the same way add up, each counting its full
+// step even at the video's start or end. The indicator fades out a second after the last seek, and the total then
+// starts over, as it does with a seek the other way and with a new item.
+const SEEK_INDICATOR_MS = 1000;
+let seekTotal = 0;
+let seekIndicatorTimer = 0;
+function showSeekIndicator(seconds) {
+  if (Math.sign(seconds) !== Math.sign(seekTotal)) seekTotal = 0;
+  seekTotal += seconds;
+  const forward = seekTotal > 0;
+  const shown = $(forward ? "seek-indicator-forward" : "seek-indicator-back");
+  $(forward ? "seek-indicator-back" : "seek-indicator-forward").classList.remove("is-shown");
+  shown.querySelector(".seek-indicator-text").textContent = `${forward ? "+" : "−"} ${Math.abs(seekTotal)}`;
+  shown.classList.add("is-shown");
+  clearTimeout(seekIndicatorTimer);
+  seekIndicatorTimer = setTimeout(hideSeekIndicator, SEEK_INDICATOR_MS);
+}
+function hideSeekIndicator() {
+  clearTimeout(seekIndicatorTimer);
+  seekTotal = 0;
+  $("seek-indicator-back").classList.remove("is-shown");
+  $("seek-indicator-forward").classList.remove("is-shown");
+}
 
 // ---- When the player's controls hide ----
 // Timeout, the default: they hide after a time with no activity, and moving the mouse, tapping, a press on the
@@ -2747,7 +2840,7 @@ $("next-btn").addEventListener("click", () => goNext());
 $("prev-btn").addEventListener("click", () => goPrevious());
 // Random picks a new item as Next does at the end of the history, from anywhere in it, and adds it at the end.
 $("random-btn").addEventListener("click", () => pickRandom());
-// While Timer mode repeats a stretch, a seek, by the bar, J or L, or a frame step, starts the stretch where it lands,
+// While Timer mode repeats a stretch, a seek, by the bar, J or L, a double-tap, or a frame step, starts the stretch where it lands,
 // and its timer over from there. A seek that lands at the video's end starts it, and the video, Advance after seconds
 // before the end, or at 0 for a shorter video.
 function seekStartsStretch() {
@@ -5586,19 +5679,23 @@ function moveVolume(target) {
   store.set("muted", playback.muted);
   renderPlayback();
 }
-// The volume indicator shows the volume as a percentage, with Mute's icon, while the scroll wheel, a two-finger drag, or
-// [ and ] step it, on a photo too, where they set the next video's level, and at 0% for a step down while muted. The
-// slider doesn't show it. It fades out 800 ms after the last step.
+// The volume indicator shows the volume as a percentage, or Muted while muted, with Mute's icon, while the scroll wheel,
+// a two-finger drag, or [ and ] step it, on a photo too, where they set the next video's level, and Muted for a step
+// down while muted. M shows it too, Muted as it mutes and the volume it restores as it unmutes. The slider and the Mute
+// button don't show it. It fades out 800 ms after the last change.
 const VOLUME_INDICATOR_MS = 800;
 let volumeIndicatorTimer = 0;
-function stepVolumeWithIndicator(steps) {
-  moveVolume(shownVolume() + steps * state.volumeStep);
+function showVolumeIndicator() {
   const indicator = $("volume-indicator");
   setIcon(indicator.querySelector(".material-symbol-icon"), playback.muted ? "volume_off" : "volume_up");
-  $("volume-indicator-text").textContent = `${shownVolume()}%`;
+  $("volume-indicator-text").textContent = playback.muted ? "Muted" : `${shownVolume()}%`;
   indicator.classList.add("is-shown");
   clearTimeout(volumeIndicatorTimer);
   volumeIndicatorTimer = setTimeout(() => indicator.classList.remove("is-shown"), VOLUME_INDICATOR_MS);
+}
+function stepVolumeWithIndicator(steps) {
+  moveVolume(shownVolume() + steps * state.volumeStep);
+  showVolumeIndicator();
 }
 document.addEventListener("keydown", (event) => {
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
@@ -5606,7 +5703,7 @@ document.addEventListener("keydown", (event) => {
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
   const held = event.repeat && !REPEATING_KEYS.includes(key);
   const item = playback.item;
-  const video = !!item && !isPhoto(item) && !playback.failed;
+  const video = seekableVideo();
   // A shortcut's key is the page's, held or not; true for a held key that doesn't repeat, which doesn't act again.
   const handled = () => (event.preventDefault(), held);
   if (event.shiftKey && key === "f") return handled() || $("fullscreen-btn").click();
@@ -5619,13 +5716,7 @@ document.addEventListener("keydown", (event) => {
   if (key === " " && event.target !== document.body &&
     event.target.closest('button, a, input:not([type=range]), select, textarea, summary, [tabindex]:not([tabindex="-1"])')) return;
   if (key === "k" || key === " ") return handled() || $("play-btn").click();
-  if ((key === "j" || key === "l") && video) {
-    if (handled()) return;
-    catchUp();
-    playback.time = Math.max(0, Math.min(item.duration, playback.time + (key === "l" ? 1 : -1) * state.seekStep));
-    seekStartsStretch();
-    return renderTime();
-  }
+  if ((key === "j" || key === "l") && video) return handled() || seekByStep(key === "l" ? 1 : -1);
   // Arrow keys keep their own job on radio buttons, checkboxes, and sliders.
   if ((key === "ArrowLeft" || key === "ArrowRight") && event.target.tagName === "INPUT") return;
   if (key === "ArrowLeft") return handled() || goPrevious();
@@ -5634,7 +5725,7 @@ document.addEventListener("keydown", (event) => {
   if (key === "f") return handled() || toggleFlag("favorite");
   if (key === "b") return handled() || toggleFlag("blacklisted");
   if (key === "a") return handled() || $("autoplay-btn").click();
-  if (key === "m") return handled() || toggleMute();
+  if (key === "m") return handled() || (toggleMute(), showVolumeIndicator());
   // Frame stepping, as YouTube does: the mockup assumes 30 frames a second; the WebUI uses the browser's frame
   // timings (requestVideoFrameCallback) where it provides them.
   if ((key === "," || key === ".") && video && !playback.playing) {

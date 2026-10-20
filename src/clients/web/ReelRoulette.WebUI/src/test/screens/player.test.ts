@@ -3,7 +3,9 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { h, render as renderInto } from "preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { statusLogLine } from "../../logging/relayLogLines";
+import { DOUBLE_TAP_MS } from "../../playback/mediaGestures";
 import { HIDE_CONTROLS_KEY } from "../../playback/playerControls";
+import { SEEK_INDICATOR_MS } from "../../playback/seekIndicator";
 import { createAppServices, type AppServices } from "../../state/appServices";
 import { App } from "../../ui/App";
 import {
@@ -31,6 +33,7 @@ import {
   stubReadOnlyVolume,
   stubWebAudio,
   tapPage,
+  stylesheetText,
   useStylesheet,
   FakeWebAudio,
   type FakeGain,
@@ -1360,7 +1363,7 @@ describe("volume gestures", () => {
     expect(page.webAudio.gain!.level).toBeCloseTo(0.6);
   });
 
-  it("the volume indicator shows centered over the player, outside the controls, for the wheel and a two-finger drag, while the controls are hidden too, not for the slider, and fades out 800 ms after the last change", async () => {
+  it("the volume indicator shows centered over the player, in white with a shadow and no background, outside the controls, for the wheel and a two-finger drag, while the controls are hidden too, not for the slider, and fades out 800 ms after the last change", async () => {
     hideControlsOnClick();
     useFakeClock();
     useStylesheet();
@@ -1381,7 +1384,8 @@ describe("volume gestures", () => {
     await click(video());
     expect(controlsShown()).toBe(false);
     const style = currentStyle(box);
-    expect([style.position, style.top, style.left, style.transform, style.opacity]).toEqual(["absolute", "50%", "50%", "translate(-50%, -50%)", "0.7"]);
+    expect([style.position, style.top, style.left, style.transform, style.opacity]).toEqual(["absolute", "50%", "50%", "translate(-50%, -50%)", "1"]);
+    expect([style.backgroundColor, style.color, style.fontWeight, style.fontVariantNumeric, style.filter]).toEqual(["", "#fff", "600", "tabular-nums", "drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8))"]);
 
     await vi.advanceTimersByTimeAsync(700);
     dragTwoFingers(30);
@@ -1398,13 +1402,14 @@ describe("volume gestures", () => {
     useStylesheet();
     await mount(serverPicking(VIDEO_ITEM));
     const rules = Array.from(document.styleSheets).flatMap((sheet) => Array.from(sheet.cssRules));
-    const rule = (selector: string) => rules.find((candidate) => (candidate as CSSStyleRule).selectorText === selector) as CSSStyleRule | undefined;
+    // The rule whose selector list names the selector, as the volume and seek indicators share their look.
+    const rule = (selector: string) => rules.find((candidate) => (candidate as CSSStyleRule).selectorText?.split(", ").includes(selector)) as CSSStyleRule | undefined;
     expect([rule(".volume-indicator")?.style.transition, rule(".volume-indicator.is-shown")?.style.transitionDuration]).toEqual(["opacity 0.25s", "0.12s"]);
     const reduced = rules
       .filter((candidate): candidate is CSSMediaRule => (candidate as CSSMediaRule).media?.mediaText.includes("prefers-reduced-motion"))
-      .flatMap((candidate) => Array.from(candidate.cssRules) as CSSStyleRule[])
-      .find((candidate) => candidate.selectorText === ".volume-indicator, .volume-indicator.is-shown");
-    expect(reduced?.style.transition).toBe("none");
+      .flatMap((candidate) => Array.from(candidate.cssRules) as CSSStyleRule[]);
+    const reducedRule = (selector: string) => reduced.find((candidate) => candidate.selectorText?.split(", ").includes(selector));
+    expect([reducedRule(".volume-indicator")?.style.transition, reducedRule(".volume-indicator.is-shown")?.style.transition]).toEqual(["none", "none"]);
   });
 
   it("on iOS the wheel and a two-finger drag work from the start, setting the volume the gain stage starts at", async () => {
@@ -1480,7 +1485,7 @@ describe("the muted-volume rules", () => {
     dragTwoFingers(-30);
     await flush();
     expect(sound()).toBe("muted 0");
-    expect(indicatorShows()).toBe("volume_off 0%");
+    expect(indicatorShows()).toBe("volume_off Muted");
     expect(await unmute()).toBe("60");
   });
 
@@ -2373,6 +2378,171 @@ describe("controls and gestures, with Hide player controls on On click/tap", () 
     expect(randomPicks(server)).toBe(1);
     expect(video().src).toBe(VIDEO_URL);
     expect(controlsShown()).toBe(true);
+  });
+
+  it("the player shows no tap highlight, which Chrome on Android flashes over what a tap clicks, and its controls inherit that", () => {
+    // happy-dom drops the property when it parses the stylesheet, so the test reads the player's rule as written.
+    const rule = /\n\.media-container \{([^}]*)\}/.exec(stylesheetText())?.[1] ?? "";
+    expect(rule).toContain("-webkit-tap-highlight-color: transparent;");
+  });
+});
+
+describe("double-tap seeking and the seek indicator", () => {
+  /** Gives the playing video its length, as its metadata does, lets it start, and gives the player a 400 px box. */
+  async function loadVideo(seconds: number): Promise<void> {
+    Object.defineProperty(video(), "duration", { configurable: true, value: seconds });
+    fireEvent.loadedMetadata(video());
+    fireEvent.playing(video());
+    Object.defineProperty(mediaArea(), "getBoundingClientRect", { configurable: true, value: () => new DOMRect(0, 0, 400, 300) });
+    await flush();
+  }
+
+  /** A tap `x` px across the player, whose halves split at 200 px: its touch, then the click that follows it. */
+  async function tapAt(x: number): Promise<void> {
+    fireEvent.touchStart(video(), { touches: [{ clientX: x, clientY: 150 }] });
+    fireEvent.touchEnd(video(), { changedTouches: [{ clientX: x, clientY: 150 }] });
+    await click(video());
+  }
+
+  /** The seek indicator's chevron and text, in their order, while it shows, or null. */
+  function seekIndicatorShows(): string | null {
+    const shown = document.querySelector(".seek-indicator.is-shown");
+    return shown ? Array.from(shown.children, (part) => part.textContent).join(" ") : null;
+  }
+
+  it("a double-tap on the right or left half of a video seeks forward or back by the seek step, leaving hidden controls hidden, and a single tap shows them once 300 ms pass", async () => {
+    useFakeClock();
+    await mountAndPlay(serverPicking(VIDEO_ITEM));
+    await loadVideo(120);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(controlsShown()).toBe(false);
+
+    video().currentTime = 60;
+    await tapAt(300);
+    await vi.advanceTimersByTimeAsync(DOUBLE_TAP_MS - 1);
+    await tapAt(300);
+    expect([video().currentTime, controlsShown()]).toEqual([65, false]);
+    await vi.advanceTimersByTimeAsync(DOUBLE_TAP_MS);
+    await tapAt(100);
+    await tapAt(100);
+    await vi.advanceTimersByTimeAsync(DOUBLE_TAP_MS);
+    expect([video().currentTime, controlsShown()]).toEqual([60, false]);
+
+    await tapAt(100);
+    await vi.advanceTimersByTimeAsync(DOUBLE_TAP_MS - 1);
+    expect([video().currentTime, controlsShown()]).toEqual([60, false]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(controlsShown()).toBe(true);
+  });
+
+  it("with On click/tap, a triple-tap seeks twice by the seek step setting, leaving shown controls shown, and a single tap hides them once 300 ms pass", async () => {
+    hideControlsOnClick();
+    localStorage.setItem("rr_device.player.seekStep", "10");
+    useFakeClock();
+    await mountAndPlay(serverPicking(VIDEO_ITEM));
+    await loadVideo(120);
+    video().currentTime = 60;
+
+    await tapAt(300);
+    await tapAt(300);
+    await tapAt(300);
+    await vi.advanceTimersByTimeAsync(DOUBLE_TAP_MS);
+    expect([video().currentTime, controlsShown()]).toEqual([80, true]);
+
+    await tapAt(300);
+    expect(controlsShown()).toBe(true);
+    await vi.advanceTimersByTimeAsync(DOUBLE_TAP_MS);
+    expect([video().currentTime, controlsShown()]).toEqual([80, false]);
+  });
+
+  it("a tap acts at once on a photo and on a video whose length isn't known", async () => {
+    hideControlsOnClick();
+    await mountAndPlay(serverPicking(VIDEO_ITEM, PHOTO_ITEM));
+    await tapAt(100);
+    expect(controlsShown()).toBe(false);
+    await tapAt(100);
+    expect([video().currentTime, controlsShown()]).toEqual([0, true]);
+
+    await click(button("Next"));
+    await waitFor(() => expect(photo().style.display).not.toBe("none"));
+    await tapAt(100);
+    expect(controlsShown()).toBe(false);
+  });
+
+  it("a double-tap starts Timer mode's repeating stretch where it lands", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    localStorage.setItem("rr_device.playback.autoplayMode", '"timer"');
+    localStorage.setItem("rr_device.playback.advanceAfter", "10");
+    await mount(serverPicking(VIDEO_ITEM));
+    await click(button("Autoplay"));
+    await click(button("Loop"));
+    await click(emptyState());
+    await loadVideo(120);
+    const stretchFrom = () => Number(document.getElementById("seek-loop")!.style.getPropertyValue("--loop-from"));
+    expect(stretchFrom()).toBe(0);
+
+    fireEvent.input(seekSlider(), { target: { value: "65" } });
+    await flush();
+    expect(stretchFrom()).toBe(65 / 120);
+    await tapAt(100);
+    await tapAt(100);
+    expect([video().currentTime, stretchFrom()]).toEqual([60, 0.5]);
+  });
+
+  it("the seek indicator shows '+ {n}' and › on the right and ‹ and '− {n}' on the left, outside the controls and while they're hidden, adds up, and fades out a second after the last seek, and the scrub bar doesn't show it", async () => {
+    hideControlsOnClick();
+    useFakeClock();
+    await mountAndPlay(serverPicking(VIDEO_ITEM));
+    await loadVideo(120);
+    await click(video());
+    expect([controlsShown(), seekIndicatorShows()]).toEqual([false, null]);
+
+    video().currentTime = 60;
+    await tapAt(300);
+    await tapAt(300);
+    await tapAt(300);
+    expect([seekIndicatorShows(), controlsShown()]).toEqual(["+ 10 chevron_right", false]);
+    const box = document.getElementById("seek-indicator-forward")!;
+    expect(box.parentElement).toBe(mediaArea());
+    expect(document.getElementById("overlay-controls")!.contains(box)).toBe(false);
+    expect(box.getAttribute("aria-hidden")).toBe("true");
+    await vi.advanceTimersByTimeAsync(SEEK_INDICATOR_MS - 1);
+    expect(seekIndicatorShows()).toBe("+ 10 chevron_right");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(seekIndicatorShows()).toBe(null);
+
+    await tapAt(100);
+    await tapAt(100);
+    expect(seekIndicatorShows()).toBe("chevron_left − 5");
+    await vi.advanceTimersByTimeAsync(SEEK_INDICATOR_MS);
+    fireEvent.input(seekSlider(), { target: { value: "30" } });
+    await flush();
+    expect([video().currentTime, seekIndicatorShows()]).toEqual([30, null]);
+  });
+
+  it("the seek indicator sits 24 px in from each side in white with a shadow, fades in over 120 ms as its chevron slides out and out over 250 ms, and not at all with reduced motion", async () => {
+    useStylesheet();
+    await mount(serverPicking(VIDEO_ITEM));
+    const back = currentStyle(document.getElementById("seek-indicator-back")!);
+    const forward = currentStyle(document.getElementById("seek-indicator-forward")!);
+    expect([back.left, forward.right, back.top, back.transform, back.opacity]).toEqual(["24px", "24px", "50%", "translateY(-50%)", "0"]);
+    expect([back.backgroundColor, back.color, back.fontWeight, back.fontVariantNumeric, back.filter]).toEqual(["", "#fff", "600", "tabular-nums", "drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8))"]);
+
+    const rules = Array.from(document.styleSheets).flatMap((sheet) => Array.from(sheet.cssRules));
+    // The rule whose selector list names the selector, as the volume and seek indicators share their look.
+    const rule = (selector: string) => rules.find((candidate) => (candidate as CSSStyleRule).selectorText?.split(", ").includes(selector)) as CSSStyleRule | undefined;
+    expect([rule(".seek-indicator")?.style.transition, rule(".seek-indicator.is-shown")?.style.transitionDuration]).toEqual(["opacity 0.25s", "0.12s"]);
+    expect([rule(".seek-indicator.is-back.is-shown .material-symbol-icon")?.style.animation, rule(".seek-indicator.is-forward.is-shown .material-symbol-icon")?.style.animation]).toEqual([
+      "seek-chevron-back 0.3s ease-out",
+      "seek-chevron-forward 0.3s ease-out"
+    ]);
+    const slide = (name: string) => (rules.find((candidate) => (candidate as CSSKeyframesRule).name === name) as CSSKeyframesRule | undefined)?.cssRules[0] as CSSKeyframeRule | undefined;
+    expect([slide("seek-chevron-back")?.style.transform, slide("seek-chevron-forward")?.style.transform]).toEqual(["translateX(10px)", "translateX(-10px)"]);
+    const reduced = rules
+      .filter((candidate): candidate is CSSMediaRule => (candidate as CSSMediaRule).media?.mediaText.includes("prefers-reduced-motion"))
+      .flatMap((candidate) => Array.from(candidate.cssRules) as CSSStyleRule[]);
+    const reducedRule = (selector: string) => reduced.find((candidate) => candidate.selectorText?.split(", ").includes(selector));
+    expect([reducedRule(".seek-indicator")?.style.transition, reducedRule(".seek-indicator.is-shown")?.style.transition, reducedRule(".seek-indicator.is-shown .material-symbol-icon")?.style.animation]).toEqual(["none", "none", "none"]);
   });
 });
 

@@ -165,11 +165,11 @@ export interface AudioStage {
    * photo too, applying to the next video.
    */
   readonly muted: ReadonlySignal<boolean>;
-  /** The volume the slider and the volume indicator show: the volume, or 0 while muted. */
+  /** The volume the slider shows: the volume, or 0 while muted, which the volume indicator shows as Muted. */
   readonly shownVolume: ReadonlySignal<number>;
   /** The volume step of the scroll wheel, a two-finger drag, and the [ and ] keys, in percent. */
   readonly volumeStep: ReadonlySignal<VolumeStep>;
-  /** The volume indicator shows, from a step until it fades out, `VOLUME_INDICATOR_MS` after the last one. */
+  /** The volume indicator shows, from a step or M until it fades out, `VOLUME_INDICATOR_MS` after the last. */
   readonly indicatorShown: ReadonlySignal<boolean>;
   /**
    * The volume slider shows. It hides only while Enhanced audio is off on a device whose element volume is read-only,
@@ -192,7 +192,11 @@ export interface AudioStage {
    * under way or as a change of its own, and shows the volume indicator, a step down while muted too.
    */
   stepVolume(steps: number): void;
-  toggleMute(): void;
+  /**
+   * Turns Mute on or off, as the Mute button does. M (`byKey`) also shows the volume indicator, Muted or the volume
+   * unmuting restores, which the button doesn't, as the slider doesn't.
+   */
+  toggleMute(options?: { byKey?: boolean }): void;
   /**
    * Takes the video whose sound it plays, applying the volume and mute to it, and listens for the page's first tap or
    * key. A new element, once one takes over the video, is attached in its place.
@@ -582,9 +586,10 @@ export function createAudioStage(options: AudioStageOptions): AudioStage {
       showIndicator();
     },
 
-    toggleMute() {
+    toggleMute(options) {
       endVolumeChange();
       keep(volume.peek(), !muted.peek());
+      if (options?.byKey) showIndicator();
     },
 
     attach(next) {

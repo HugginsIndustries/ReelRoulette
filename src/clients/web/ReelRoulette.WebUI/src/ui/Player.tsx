@@ -45,7 +45,7 @@ function stopPropagation(event: Event): void {
  * Hide player controls decides when the controls show; hidden, they can't be pressed, so a first tap only shows them.
  */
 export function Player() {
-  const { store, player, playerControls: controls, audio, ambient, fullscreen } = useApp();
+  const { store, player, playerControls: controls, audio, ambient, fullscreen, settings } = useApp();
   const container = useRef<HTMLDivElement>(null);
   const overlay = useRef<HTMLDivElement>(null);
   const ambientLayer = useRef<HTMLDivElement>(null);
@@ -62,6 +62,13 @@ export function Player() {
       createMediaGestures({
         previous: player.previous,
         next: player.next,
+        seekable: player.seekable,
+        seek: (forward) => player.seekBy((forward ? 1 : -1) * settings.seekStep.peek()),
+        middleX: () => {
+          const box = container.current!.getBoundingClientRect();
+          return box.left + box.width / 2;
+        },
+        tap: controls.tap,
         showControls: controls.show,
         volumeAdjustable: () => audio.volumeShown.peek(),
         beginVolumeChange: audio.beginVolumeChange,
@@ -208,7 +215,7 @@ export function Player() {
   }, [videoKey]);
 
   function onAreaClick(event: MouseEvent): void {
-    if (gestures.takeFollowingClick()) {
+    if (gestures.takeClick()) {
       return;
     }
 
@@ -248,6 +255,7 @@ export function Player() {
       <div id="empty-state" class="empty-state" ref={emptyState}>Tap to play, or open the panel to choose a preset or filter.</div>
       <PlayerIndicator />
       <VolumeIndicator />
+      <SeekIndicator />
       <div id="overlay-controls" class="overlay-controls" ref={overlay} onTouchStart={stopPropagation} onTouchMove={stopPropagation} onTouchEnd={stopPropagation} onClick={stopPropagation}>
         <NotifyButton />
         <PanelButton />
@@ -322,17 +330,41 @@ function PlayerIndicator() {
 }
 
 /**
- * The volume indicator: the volume as a percentage, with Mute's icon, centered over the player while the scroll wheel
- * or a two-finger drag changes it, on a photo too. It sits outside the controls, so it shows while they're hidden, and
- * is hidden from screen readers, since the slider carries the value.
+ * The volume indicator: the volume as a percentage, or Muted while muted, with Mute's icon, centered over the player
+ * while the scroll wheel, a two-finger drag, [ and ], or M change it, on a photo too. It sits outside the controls, so
+ * it shows while they're hidden, and is hidden from screen readers, since the slider carries the value.
  */
 function VolumeIndicator() {
   const { audio } = useApp();
   return (
     <div id="volume-indicator" class={audio.indicatorShown.value ? "volume-indicator is-shown" : "volume-indicator"} aria-hidden="true">
       <span class="material-symbol-icon">{audio.muted.value ? "volume_off" : "volume_up"}</span>
-      <span id="volume-indicator-text">{`${audio.shownVolume.value}%`}</span>
+      <span id="volume-indicator-text">{audio.muted.value ? "Muted" : `${audio.shownVolume.value}%`}</span>
     </div>
+  );
+}
+
+/**
+ * The seek indicator, for J, L, and double-taps: the seek's total in white with a chevron toward the screen's edge, "+ 5"
+ * on the player's right for a forward seek and "− 5" on its left for a back seek. Each side keeps its total as it fades
+ * out. It sits outside the controls, so it shows while they're hidden, and is hidden from screen readers, since the
+ * scrub bar carries the position.
+ */
+function SeekIndicator() {
+  const { player } = useApp();
+  const back = player.seekIndicator.back.value;
+  const forward = player.seekIndicator.forward.value;
+  return (
+    <>
+      <div id="seek-indicator-back" class={back.shown ? "seek-indicator is-back is-shown" : "seek-indicator is-back"} aria-hidden="true">
+        <span class="material-symbol-icon">chevron_left</span>
+        <span class="seek-indicator-text">{back.seconds ? `− ${back.seconds}` : ""}</span>
+      </div>
+      <div id="seek-indicator-forward" class={forward.shown ? "seek-indicator is-forward is-shown" : "seek-indicator is-forward"} aria-hidden="true">
+        <span class="seek-indicator-text">{forward.seconds ? `+ ${forward.seconds}` : ""}</span>
+        <span class="material-symbol-icon">chevron_right</span>
+      </div>
+    </>
   );
 }
 

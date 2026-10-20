@@ -211,7 +211,7 @@ describe("runShortcut", () => {
       "toggleFavorite",
       "toggleBlacklist",
       "toggleAutoplay",
-      "toggleMute",
+      'toggleMute({"byKey":true})',
       "stepFrame(-1)",
       "stepFrame(1)",
       "stepVolume(-1)",

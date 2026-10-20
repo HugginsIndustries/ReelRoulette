@@ -19,9 +19,12 @@ Instructions:
 
 Commit Message:
 
-Chore: Shrink the mockup's check to a smoke check, and leave mockup approval to the user's review on their devices
+M12i10: Add the WebUI's double-tap seeking with a seek indicator, restyle the volume indicator with Muted and M, and complete WebUI Keyboard Shortcuts
 
-- Mockup: `build/check.mjs` is a smoke check that runs in under 2 seconds in place of 114: at 1280 and 390 px each page loads, the side panel, its tabs, and the Filter tab's sections show, Auto Tag, the bell's lists, the Mockup tab, duplicate review, and the token gates open and close, a dialog on each page opens and cancels, an item plays, pauses, and Next picks another, and no script errors occur. Its 1343 per-behavior checks are gone.
-- Mockup: the pages drop the hooks only the old checks used: `window.mockup`, the queue that random picks took first, the ambient sample count, and the admin page's `?instant`. On the main page, `?instant` now runs the library refresh through its stages at once rather than holding it at the first.
-- Docs: AGENTS.md says mockup changes are checked only by the smoke check and approved by the user's review on their devices, adding no checks and no proof that checks fail, and the mockup README describes the smoke check.
-- Docs: MILESTONES.md's planned mockup Acceptance relies on the user's review and the smoke check in place of named checks, Item Ratings no longer adds an icon-subset check, and the Traps that described the old checks are trimmed.
+- WebUI: on a touch screen, a double-tap on either half of a video seeks back or forward by the seek step, and each further quick tap seeks again, leaving the controls as they were. A single tap on a video whose length is known acts after 300 ms, and anywhere else at once, as a mouse click does.
+- WebUI: the seek indicator shows each seek's total at that side for J, L, and double-taps, adding up seeks the same way and starting over after a second, with a seek the other way, or with a new item.
+- WebUI: the volume indicator drops its pill for the seek indicator's white text and shadow at full opacity, the two sharing one style rule, reads Muted in place of 0% while muted, and shows for M but not for the Mute button.
+- WebUI: the player and its controls show no tap highlight, which Chrome on Android flashed over every tap on the player.
+- Mockup: double-tap seeking, the seek indicator, and the volume indicator's new look, Muted, and M, with `chevron_left` added to the icon subset, approved by the user on their devices.
+- Tests: the double-tap gestures, the seek indicator, `seekBy` and `seekable`, a new item hiding the seek indicator, the page's double-taps and indicators, M and the Mute button, and the tap highlight, which a test reads from the stylesheet's text since happy-dom drops it. The markup snapshot takes the seek indicator.
+- Docs: MILESTONES.md records the slice's settled choices and evidence, the user's iPad spot check included, and completes the milestone, which moves to MILESTONES-COMPLETED.md with its release checks, M and the tap highlight among them, in the testing checklist. CONTEXT.md describes double-tap seeking, the seek indicator, the volume indicator, and the tap highlight, docs/domain-inventory.md the first three, and CHANGELOG.md double-tap seeking and the seek indicator.

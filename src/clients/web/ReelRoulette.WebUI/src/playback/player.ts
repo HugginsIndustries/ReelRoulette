@@ -14,6 +14,7 @@ import { createFrameClock, type FramedVideo } from "./frameStep";
 import { basenameFromPath, formatPlaybackPosition } from "./nowPlaying";
 import { createPhotoTimer } from "./photoTimer";
 import { createRandomPicker, randomPickRequest } from "./randomPick";
+import { createSeekIndicator, type SeekIndicator } from "./seekIndicator";
 
 /** An element the player shows and hides by setting its `display`. */
 export interface ShownElement {
@@ -121,6 +122,8 @@ export interface Player {
   readonly timeText: ReadonlySignal<string>;
   /** The video or photo of the attempt playing now failed to load, which hides ambient mode's glow until the next. */
   readonly mediaFailed: ReadonlySignal<boolean>;
+  /** The seek indicator, which J, L, and a double-tap show through `seekBy`. */
+  readonly seekIndicator: Pick<SeekIndicator, "back" | "forward">;
 
   attach(elements: PlayerElements): void;
   /** Stops the photo timer and lets go of the elements. */
@@ -158,10 +161,15 @@ export interface Player {
    */
   seek(value: string): void;
   /**
-   * J and L: seeks a video by `seconds`, back for a negative number, within its length, as a seek by the scrub bar
-   * does. Nothing happens on a photo, or before the video's length is known.
+   * J, L, and a double-tap: seeks a video by `seconds`, back for a negative number, within its length, as a seek by the
+   * scrub bar does, and shows the seek indicator with the full step. Nothing happens unless the video is `seekable`.
    */
   seekBy(seconds: number): void;
+  /**
+   * A video shows and its length is known, so J, L, and a double-tap can seek it, and a tap on it waits to rule out a
+   * double-tap. Not on a photo, before anything plays, or on a video that can't play.
+   */
+  seekable(): boolean;
   /**
    * Comma and period: steps a paused video one frame back (-1) or forward (1), as a seek by the scrub bar does. Nothing
    * happens while it plays, on a photo, before its length is known, or forward from its last frame.
@@ -253,6 +261,7 @@ export function createPlayer(options: PlayerOptions): Player {
   const blacklisted = signal(false);
   const timeText = signal(NO_TIME);
   const mediaFailed = signal(false);
+  const seekIndicator = createSeekIndicator();
   const photoTimer = createPhotoTimer({ onEnd: photoTimerEnded });
   const frameClock = createFrameClock();
   /**
@@ -638,8 +647,9 @@ export function createPlayer(options: PlayerOptions): Player {
     videoTimer.clear();
     videoStarted = false;
     videoTimerDone = false;
-    // A new item's stretch starts at its start, and its frames are timed anew.
+    // A new item's stretch starts at its start, its frames are timed anew, and the seek indicator's total starts over.
     frameClock.reset();
+    seekIndicator.clear();
     stretchStart = 0;
     stretching = false;
     stretchRestarting = false;
@@ -864,6 +874,7 @@ export function createPlayer(options: PlayerOptions): Player {
     blacklisted,
     timeText,
     mediaFailed,
+    seekIndicator,
 
     attach(attached) {
       elements = attached;
@@ -872,6 +883,7 @@ export function createPlayer(options: PlayerOptions): Player {
 
     detach() {
       frameClock.follow(null);
+      seekIndicator.clear();
       photoTimer.clear();
       videoTimer.clear();
       stopMovingBar();
@@ -996,7 +1008,10 @@ export function createPlayer(options: PlayerOptions): Player {
       if (!video) return;
       seekVideoTo(Math.min(video.duration, Math.max(0, video.currentTime + seconds)));
       showTime();
+      seekIndicator.seeked(seconds);
     },
+
+    seekable: () => seekableVideo() !== null,
 
     stepFrame(direction) {
       const video = seekableVideo();

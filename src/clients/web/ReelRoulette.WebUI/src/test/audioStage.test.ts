@@ -710,4 +710,21 @@ describe("the volume indicator", () => {
     page.audio.stepVolume(-1);
     expect([page.audio.indicatorShown.value, page.audio.shownVolume.value]).toEqual([true, 0]);
   });
+
+  it("shows for M, muting and unmuting, until it fades out, and not for the Mute button", () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.audio.toggleMute();
+    page.audio.toggleMute();
+    expect(page.audio.indicatorShown.value).toBe(false);
+
+    page.audio.toggleMute({ byKey: true });
+    expect([page.audio.indicatorShown.value, page.audio.muted.value]).toEqual([true, true]);
+    vi.advanceTimersByTime(VOLUME_INDICATOR_MS - 100);
+    page.audio.toggleMute({ byKey: true });
+    vi.advanceTimersByTime(VOLUME_INDICATOR_MS - 100);
+    expect([page.audio.indicatorShown.value, page.audio.muted.value]).toEqual([true, false]);
+    vi.advanceTimersByTime(100);
+    expect(page.audio.indicatorShown.value).toBe(false);
+  });
 });

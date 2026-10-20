@@ -113,6 +113,8 @@ These need a person, real devices, or the Windows VM.
 - [ ] With compression on, quiet and loud moments within a video come closer without audible pumping, in Firefox on the desktop and in the Pixel's and the iPad's installed apps.
 - [ ] On a desktop browser and the Pixel's installed app, the player's controls hide about 3 seconds after the last activity while a video plays, a mouse move or a tap shows them, and autoplay moving on to the next item leaves them hidden; on the Pixel, a tap where a hidden button sits only shows the controls.
 - [ ] On a desktop browser and the Pixel's installed app, Random from the middle of the history plays a new item, after which Previous goes to the item that was last before it, and the fullscreen button shows the exit icon in fullscreen.
+- [ ] In Firefox on the desktop, K, Space, J and L, M, the left and right arrows, and [ and ] work, and H opens the shortcut reference, in normal view and in fullscreen.
+- [ ] On the iPad and an Android phone, double-tapping either side of a playing video seeks by the seek step with the seek indicator, a single tap still shows the controls, and the page doesn't zoom or flash a tap highlight.
 
 ## Release Flow
 

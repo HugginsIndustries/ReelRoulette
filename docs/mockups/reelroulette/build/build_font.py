@@ -28,7 +28,7 @@ ICONS = ["browse", "filter_alt", "tag", "favorite", "thumb_down", "skip_previous
          "heart_plus", "heart_minus", "delete", "history", "keyboard", "info", "warning", "arrow_back", "download",
          "upload", "power_settings_new", "update", "dns", "storage", "bug_report", "group", "article", "sync",
          "folder", "content_paste", "visibility", "visibility_off", "desktop_windows", "open_in_new", "key",
-         "volume_down", "lan", "shuffle", "radio_button_unchecked", "description", "swap_vert", "restart_alt", "unfold_less", "unfold_more", "tune", "chevron_right", "expand_less", "play_circle",
+         "volume_down", "lan", "shuffle", "radio_button_unchecked", "description", "swap_vert", "restart_alt", "unfold_less", "unfold_more", "tune", "chevron_left", "chevron_right", "expand_less", "play_circle",
          "notifications", "progress_activity", "devices", "cloud_done", "sync_problem", "autorenew", "fast_forward",
          "undo", "filter_alt_off", "select_all", "deselect", "casino"]
 # Shown filled on library tiles: the favorite and blacklist badges, the playing icon, and the selection icon.

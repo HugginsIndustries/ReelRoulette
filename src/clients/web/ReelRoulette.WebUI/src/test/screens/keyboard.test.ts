@@ -110,6 +110,15 @@ function volumeIndicator(): { shown: boolean; text: string } {
   return { shown: indicator.classList.contains("is-shown"), text: document.getElementById("volume-indicator-text")!.textContent ?? "" };
 }
 
+/** Each side of the seek indicator's text while it shows, or null. */
+function seekIndicator(): { back: string | null; forward: string | null } {
+  const side = (id: string) => {
+    const box = document.getElementById(id)!;
+    return box.classList.contains("is-shown") ? box.querySelector(".seek-indicator-text")!.textContent : null;
+  };
+  return { back: side("seek-indicator-back"), forward: side("seek-indicator-forward") };
+}
+
 function panel(): HTMLElement {
   return document.getElementById("panel") as HTMLElement;
 }
@@ -202,6 +211,23 @@ describe("keyboard shortcuts", () => {
     expect(playIcon()).toBe("play_arrow");
   });
 
+  it("J and L show the seek indicator on their side, adding up seeks the same way and starting over the other way, and a frame step doesn't", async () => {
+    await mount(serverPicking(VIDEO_ITEM));
+    await press("k");
+    await loadVideo(65);
+    video().currentTime = 20;
+    await press("l");
+    await press("l");
+    expect(seekIndicator()).toEqual({ back: null, forward: "+ 10" });
+    await press("j");
+    expect(seekIndicator()).toEqual({ back: "− 5", forward: null });
+
+    await press("k");
+    await press(".");
+    expect(video().currentTime).toBeCloseTo(25 + 1 / 30, 10);
+    expect(seekIndicator()).toEqual({ back: "− 5", forward: null });
+  });
+
   it("← and → play the previous and next item, and R picks a new one from the middle of the history", async () => {
     const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO, THIRD_VIDEO);
     await mount(server);
@@ -241,6 +267,22 @@ describe("keyboard shortcuts", () => {
     expect(isLit("Mute")).toBe(false);
   });
 
+  it("M shows the volume indicator, Muted as it mutes and the volume it restores as it unmutes, which the Mute button doesn't", async () => {
+    await mount(serverPicking(VIDEO_ITEM));
+    await press("k");
+    fireEvent.input(volumeSlider(), { target: { value: "55" } });
+
+    await click(button("Mute"));
+    expect([isLit("Mute"), volumeIndicator().shown]).toEqual([true, false]);
+    await click(button("Mute"));
+    expect([isLit("Mute"), volumeIndicator().shown]).toEqual([false, false]);
+
+    await press("m");
+    expect([isLit("Mute"), volumeIndicator()]).toEqual([true, { shown: true, text: "Muted" }]);
+    await press("m");
+    expect([isLit("Mute"), volumeIndicator()]).toEqual([false, { shown: true, text: "55%" }]);
+  });
+
   it("[ and ] step the volume by the volume step and show the volume indicator, by the muted-volume rules", async () => {
     await mount(serverPicking(VIDEO_ITEM));
     await press("k");
@@ -254,7 +296,7 @@ describe("keyboard shortcuts", () => {
     await press("m");
     await press("[");
     expect([volumeSlider().value, isLit("Mute")]).toEqual(["0", true]);
-    expect(volumeIndicator().text).toBe("0%");
+    expect(volumeIndicator().text).toBe("Muted");
     await press("]");
     expect([volumeSlider().value, isLit("Mute")]).toEqual(["5", false]);
     // [ that reaches 0 mutes, and unmuting restores the volume from before that press.

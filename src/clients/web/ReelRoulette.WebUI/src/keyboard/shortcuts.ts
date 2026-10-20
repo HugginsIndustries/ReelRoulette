@@ -239,7 +239,7 @@ export function runShortcut(action: ShortcutAction, services: ShortcutServices):
     case "autoplay":
       return player.toggleAutoplay();
     case "mute":
-      return audio.toggleMute();
+      return audio.toggleMute({ byKey: true });
     case "frameBack":
       return player.stepFrame(-1);
     case "frameForward":

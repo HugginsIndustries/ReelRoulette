@@ -660,7 +660,8 @@ body {
 /* The player keeps its rounded corners in every view, fullscreen and a phone on its side too. It is clipped by a rounded
    clip-path as well as overflow: WebKit doesn't clip a layer of its own, such as ambient mode's blurred canvas, to its
    parent's rounded corners, so on iOS they turned square once ambient mode drew. It claims its touches, so a two-finger
-   drag changes the volume without the browser scrolling or zooming. */
+   drag changes the volume without the browser scrolling or zooming, and it and its controls show no tap highlight,
+   which Chrome on Android otherwise flashes over what a tap clicks. */
 .media-container {
   position: relative;
   background: #000;
@@ -675,6 +676,7 @@ body {
   width: 100%;
   min-height: 0;
   touch-action: none;
+  -webkit-tap-highlight-color: transparent;
 }
 /* Positioned, so they draw above ambient mode's glow. */
 .media-container video, .media-container img {
@@ -859,33 +861,54 @@ html.theme-light .ambient canvas {
 @media (prefers-reduced-motion: reduce) {
   .player-indicator .material-symbol-icon.spins { animation-duration: 3s; }
 }
-/* The volume indicator: the volume as a percentage, with Mute's icon, centered over the player while the scroll wheel or
-   a two-finger drag changes it. It sits outside the controls, so it shows while they're hidden, at a low opacity so it
-   doesn't cover the picture. It fades in quickly and fades out shortly after the volume stops changing; with reduced
-   motion it shows and hides at once. */
-.volume-indicator {
+/* The volume indicator and the seek indicator share their look: white text with a shadow so it reads on a bright
+   picture, with no background. They sit outside the controls, so they show while those are hidden. They fade in
+   quickly and out more slowly; with reduced motion they show and hide at once. */
+.volume-indicator, .seek-indicator {
   position: absolute;
   top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
   z-index: 25;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 18px 10px 14px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.72);
   color: #fff;
-  font-size: 1.25rem;
+  font-size: 1.5rem;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.25s;
 }
-.volume-indicator .material-symbol-icon { font-size: 28px; }
-.volume-indicator.is-shown { opacity: 0.7; transition-duration: 0.12s; }
+.volume-indicator .material-symbol-icon, .seek-indicator .material-symbol-icon { font-size: 36px; }
+.volume-indicator.is-shown, .seek-indicator.is-shown { opacity: 1; transition-duration: 0.12s; }
 @media (prefers-reduced-motion: reduce) {
-  .volume-indicator, .volume-indicator.is-shown { transition: none; }
+  .volume-indicator, .volume-indicator.is-shown, .seek-indicator, .seek-indicator.is-shown { transition: none; }
+}
+/* The volume indicator: the volume as a percentage, or Muted while muted, with Mute's icon, centered over the player
+   while the scroll wheel, a two-finger drag, [ and ], or M change it. It fades out shortly after the volume stops
+   changing. */
+.volume-indicator {
+  left: 50%;
+  transform: translate(-50%, -50%);
+  gap: 8px;
+}
+/* The seek indicator, as YouTube shows it, while J, L, or a double-tap seeks: the seek's total with a chevron toward the
+   screen's edge, 24 px in from the player's right for a forward seek and its left for a back seek. Its chevron slides
+   out from beside the number to the edge as it fades in, without the slide with reduced motion, and it fades out a
+   second after the last seek. */
+.seek-indicator {
+  transform: translateY(-50%);
+  gap: 2px;
+}
+.seek-indicator.is-back { left: 24px; }
+.seek-indicator.is-forward { right: 24px; }
+.seek-indicator.is-back.is-shown .material-symbol-icon { animation: seek-chevron-back 0.3s ease-out; }
+.seek-indicator.is-forward.is-shown .material-symbol-icon { animation: seek-chevron-forward 0.3s ease-out; }
+@keyframes seek-chevron-back { from { transform: translateX(10px); } }
+@keyframes seek-chevron-forward { from { transform: translateX(-10px); } }
+@media (prefers-reduced-motion: reduce) {
+  .seek-indicator.is-shown .material-symbol-icon { animation: none; }
 }
 /* Notifications: the player's bell, the list of recent messages under it, and the popups beside the player. The bell is
    orange while its list is open. */

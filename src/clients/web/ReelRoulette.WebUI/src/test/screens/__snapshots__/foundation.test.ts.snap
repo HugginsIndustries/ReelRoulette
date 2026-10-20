@@ -33,6 +33,14 @@ exports[`page structure > keeps the starting markup 1`] = `
             "volume_up"
           <span id="volume-indicator-text">
             "100%"
+        <div aria-hidden="true" class="seek-indicator is-back" id="seek-indicator-back">
+          <span class="material-symbol-icon">
+            "chevron_left"
+          <span class="seek-indicator-text">
+        <div aria-hidden="true" class="seek-indicator is-forward" id="seek-indicator-forward">
+          <span class="seek-indicator-text">
+          <span class="material-symbol-icon">
+            "chevron_right"
         <div class="overlay-controls" id="overlay-controls">
           <button aria-controls="notify-list" aria-expanded="false" aria-label="Notifications" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn notify-btn" id="notify-btn" title="Notifications" type="button">
             <span class="material-symbol-icon">
