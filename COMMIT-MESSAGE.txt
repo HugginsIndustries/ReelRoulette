@@ -19,11 +19,9 @@ Instructions:
 
 Commit Message:
 
-M12j: Add Show in File Manager and Copy Path to the WebUI's Stats tab, with the server's file manager route and its per-caller capability
+Docs: Move playback sessions to v0.16.0, the structured log migration and Log Viewer to v0.17.0, and Accounts to v0.18.0
 
-- Server: `POST /api/show-in-file-manager/{itemId}` opens the server machine's file manager with the item's file selected, for a direct request from the server machine only: Explorer on Windows, and on Linux the FileManager1 ShowItems D-Bus call, falling back to `xdg-open` on the folder, none through a shell. Other callers, a server without a desktop, unknown ids, and files not on disk are refused with their own codes, and each request writes one `last.log` line without the path.
-- Server: `/api/version` and `/api/capabilities` list `api.showInFileManager` only for a caller the route would accept.
-- WebUI: the Stats tab's path line has Show in File Manager where the server offers it and Copy Path elsewhere, which copies from a hidden text field with `execCommand('copy')` where the Clipboard API is missing, as over plain HTTP from another device. Each pops up as Your actions with the file name, and failures show in the notice.
-- Contract: the route, its refusal codes, and the per-caller capability in `openapi.yaml`, with the regenerated WebUI types.
-- Tests: route tests for each kind of caller, the refusals, and the capability; launcher tests for Explorer's arguments, the escaped file URI, the `xdg-open` fallback, no shell, and the desktop check; WebUI tests for which button shows, the request and popups, copying with and without the Clipboard API, failures, and no path or file name in `last.log`. Four Stats tab tests read the path from its own element now that the button shares its line.
-- Docs: MILESTONES.md corrects the Server slice's Explorer form, file URI, D-Bus library, and desktop check, records each slice's evidence, the user's Linux spot check included, and completes the milestone, which moves to MILESTONES-COMPLETED.md with its release check in the testing checklist. CONTEXT.md, docs/api.md, docs/architecture.md, docs/domain-inventory.md, and CHANGELOG.md describe Show in File Manager and Copy Path, and architecture.md notes that capabilities are worked out per request.
+- Planned Releases: v0.16.0 is Playback sessions (P2a to P2h), v0.17.0 the structured log migration and Log Viewer (P27d to P27g), and v0.18.0 Accounts (the P28 series); v0.15.0 and v0.15.1 are unchanged.
+- P2a no longer depends on Per-User Source Permissions, which now extends its source check to playback sessions once accounts exist.
+- P2g keeps resume positions per server, shared by every device, until accounts exist, and Per-Account Library Data decides whether they become per account.
+- P27e no longer depends on WebUI Login Gate and drops its `LoginSession` flow, which WebUI Login Gate now logs through the structured log API. P27d likewise leaves login and session outcomes to PIN Login API and Sessions, which now logs them.

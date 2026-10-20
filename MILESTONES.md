@@ -11,9 +11,9 @@ The WebUI is the only client on every device from v0.15.0, which removes the des
 
 - **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Random tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12l1, M12l2, M12l3, M12m, M12n1, M12n2, M12n3, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t, M12u.
 - **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
-- **v0.16.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access, and give each account its own favorites, ratings, history, tags, presets, and profiles. P28b, P28c, P28d, P28e, P28f, P28m, P28g, P28h, P28j, P28n, P28k, P28l.
+- **v0.16.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for the WebUI. P2a, P2b, P2c, P2d, P2f, P2g, P2h.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
-- **v0.18.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for the WebUI. P2a, P2b, P2c, P2d, P2f, P2g, P2h.
+- **v0.18.0 — Accounts**: Require an account PIN from LAN and remote clients, with per-user source access, and give each account its own favorites, ratings, history, tags, presets, and profiles. P28b, P28c, P28d, P28e, P28f, P28m, P28g, P28h, P28j, P28n, P28k, P28l.
 - **Unscheduled backlog**: P1, P4, P5, P6, P9a, P9b, P10, P33, P35, P36, P50, P51, P52, P53a, P53b, P54, P55.
 
 ## Document Purpose
@@ -2644,7 +2644,6 @@ Last milestone completed: M12j
 
 - **Status**: ⏳ Planned
 - **Goal**: Establish contract-first playback-session APIs and capability signaling.
-- **Depends on**: Per-User Source Permissions, so every stream session is checked against the user's sources from the start.
 
 #### Scope
 
@@ -2657,6 +2656,10 @@ Last milestone completed: M12j
 - OpenAPI includes the playback-session surfaces and validates, in contract tests.
 - The WebUI detects a server without playback sessions from the capability list, in a capability check against a server without the feature.
 - Generated WebUI types match OpenAPI, and `npm run verify:contracts` passes.
+
+#### Not included
+
+- Checking each stream session against the user's sources once accounts exist, which is Per-User Source Permissions.
 
 ### P2b - Server Playback Decision Engine
 
@@ -2751,7 +2754,7 @@ Last milestone completed: M12j
 - Resume-position query and clear APIs.
 - Resume settings (on or off, threshold windows, retention) through server settings.
 - Loop iterations do not count as plays and do not create resume points.
-- Decides whether resume positions are per account.
+- Resume positions are kept per server, shared by every device, until accounts exist.
 - WebUI playback recovers when the server restarts mid-video: the player notices the media error, waits for the server to come back, requests a fresh media link for the same item, and continues from the same position.
 - Requesting the fresh link does not count as a new play.
 
@@ -2770,6 +2773,10 @@ Last milestone completed: M12j
 - Resume settings are stored and enforced by the server, and documented, checked by reading the docs.
 - After a server restart mid-video, the WebUI continues the same item from the same position without recording a new play, in a WebUI test that a media error during a server restart fetches a fresh link and continues from the same position without recording a play.
 - Loop iterations record no play and create no resume point, in server tests for the loop rule.
+
+#### Not included
+
+- Deciding whether resume positions become per account, which is Per-Account Library Data.
 
 ### P2h - Playback Concurrency, Diagnostics, and Hardening
 
@@ -3162,7 +3169,7 @@ Last milestone completed: M12j
 
 - Structured logs for:
   - Shutdown.
-  - API handlers, and login and session outcomes.
+  - API handlers.
   - Event stream connect and disconnect.
   - Refresh pipeline stages and outcomes: each run's start and end, each stage's duration, and each source's walk time.
   - Catalog open, import, backup, and replace.
@@ -3200,19 +3207,19 @@ Last milestone completed: M12j
 #### Not included
 
 - Logging playback decisions, which is Server Playback Decision Engine.
+- Logging login and session outcomes, which is PIN Login API and Sessions.
 
 ### P27e - WebUI Instrumentation
 
 - **Status**: ⏳ Planned
 - **Goal**: The WebUI logs its key flows as structured entries instead of relaying notification text.
-- **Depends on**: Structured Log API and Privacy Rules, and WebUI Login Gate.
+- **Depends on**: Structured Log API and Privacy Rules.
 
 #### Scope
 
-- Structured logs for app startup and compatibility checks, login, event stream connect and retry, API request failures, and major user actions and error states.
-- Five flows with stable operation names:
+- Structured logs for app startup and compatibility checks, event stream connect and retry, API request failures, and major user actions and error states.
+- Four flows with stable operation names:
   - `BootstrapSession`: startup and compatibility gating.
-  - `LoginSession`: account tile, PIN, and session start.
   - `SseLifecycle`.
   - `RandomPickAndPlay`.
   - `MutateItemState`: favorite, blacklist, and tag-edit apply.
@@ -3228,12 +3235,16 @@ Last milestone completed: M12j
 
 #### Acceptance
 
-- The five flows emit structured entries, with trace linkage on request-scoped steps, shown by one captured entry per flow.
+- The four flows emit structured entries, with trace linkage on request-scoped steps, shown by one captured entry per flow.
 - `MutateItemState` covers favorite, blacklist, and tag-edit apply, shown by one captured entry per `MutateItemState` case.
 - No WebUI string-only logging or `legacy` entry remains, in the guard test.
-- WebUI entries contain no file names, paths, tag names, search text, or PINs, shown by the captured entries.
+- WebUI entries contain no file names, paths, tag names, or search text, shown by the captured entries.
 - A video error's entry carries its error code, and the server's answer when there was one, shown by a captured entry for a missing file and for one the server can't read.
 - `npm run verify` passes.
+
+#### Not included
+
+- Logging the login flow, which is WebUI Login Gate.
 
 ### P27f - Admin Log Viewer
 
@@ -3384,6 +3395,7 @@ Last milestone completed: M12j
 - Remove pairing and the shared pairing token, with no migration; old pairing cookies and tokens fail.
 - Remove query-string tokens.
 - Compare session tokens in constant time.
+- Login, lockout, logout, and session outcomes are logged as structured entries, without the PIN or session token.
 
 #### Traps
 
@@ -3399,6 +3411,7 @@ Last milestone completed: M12j
 - No setting turns authentication off for LAN or remote clients, in server tests.
 - Pairing, the shared pairing token, and query-string tokens are no longer accepted, in server tests that reject old pairing tokens.
 - Logout ends the session, in server tests for logout.
+- Login, lockout, logout, and session outcomes each write a structured entry with no PIN or session token, shown by a captured entry for each.
 - OpenAPI and `docs/api.md` describe the login and session payloads and the lockout error, checked by reading them.
 
 ### P28e - Auth Cutover for API and Admin
@@ -3555,6 +3568,7 @@ Last milestone completed: M12j
 - The gate also has a setup-incomplete message.
 - No session is persisted: the user logs in on every open or reload.
 - API and event stream calls carry the session after login.
+- The login flow logs through the structured log API with the stable operation name `LoginSession`: account tile, PIN, and session start, never the PIN itself.
 
 #### Acceptance
 
@@ -3564,6 +3578,7 @@ Last milestone completed: M12j
 - Before first-run setup is done, the gate shows the setup-incomplete message, in WebUI tests for setup incomplete.
 - Reloading or reopening needs a new login, in WebUI tests for reload.
 - API and event stream traffic uses the logged-in session, in WebUI tests for session use.
+- The login flow writes structured `LoginSession` entries with no PIN, shown by a captured entry for a login.
 - `npm run verify` passes.
 
 #### Release checks
@@ -3590,6 +3605,7 @@ Last milestone completed: M12j
 - Grants are stored in the account store against account ids and catalog source ids.
 - A grant for a source id that is not in the catalog (for example after a catalog import) is ignored and shown as stale in the admin section.
 - Denied sources are enforced through the source access policy on every path it covers, including `GET /api/media/{token}`, `GET /api/thumbnail/{itemId}`, and `POST /api/play/{itemId}`.
+- The check extends to playback sessions, so a session for an item from a denied source is refused.
 - WebUI Notifications' kept-source notice leaves out sources the session's source list doesn't include.
 - Admins and localhost connections see every source.
 - A profile's sources are cut to the sources its account may see: a source the account loses stays in the profile's chosen list, and the policy hides it.
@@ -3598,7 +3614,7 @@ Last milestone completed: M12j
 
 - Admins can grant or deny each user each source in the admin section, in admin section UI tests for permission editing.
 - Denied sources and their items are invisible to that user on every policy path, in policy tests for every path with a denied source.
-- A denied item cannot be streamed, played, or have its thumbnail read, even by a client that knows its id, in direct-id bypass tests.
+- A denied item cannot be streamed, played, opened in a playback session, or have its thumbnail read, even by a client that knows its id, in direct-id bypass tests.
 - The kept-source notice leaves out a kept source missing from the session's source list, in a WebUI test of the notice.
 - Permission changes reach active sessions through events or requery, in server tests.
 - Grants survive account and source renames, and a catalog import leaves grants for missing sources inert, in server tests, including a catalog-import test for stale grants.
@@ -3663,6 +3679,7 @@ Last milestone completed: M12j
 - A profile's sources come from those its account may see.
 - Decides what a catalog import or a backup restore does with data for account ids the account store doesn't have.
 - Decides whose favorites, ratings, plays, and tags duplicate review shows and Select Best compares.
+- Decides whether resume positions, which Resume Position and Session Continuity keeps per server, become per account.
 
 #### Traps
 
