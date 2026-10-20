@@ -25,6 +25,7 @@ export interface FilterState {
   onlyNeverPlayed: boolean;
   onlyKnownDuration: boolean;
   onlyKnownLoudness: boolean;
+  onlyBrowserPlayable: boolean;
   audioFilter: AudioFilterMode;
   mediaTypeFilter: MediaTypeFilter;
   /** true = AND across categories, false = OR; null/absent treated as AND on server via Core */
@@ -44,6 +45,7 @@ export function createDefaultFilterState(): FilterState {
     onlyNeverPlayed: false,
     onlyKnownDuration: false,
     onlyKnownLoudness: false,
+    onlyBrowserPlayable: false,
     audioFilter: AUDIO_FILTER.PlayAll,
     mediaTypeFilter: MEDIA_TYPE_FILTER.All,
     globalMatchMode: true,
@@ -387,6 +389,7 @@ export function serializeFilterStateForApi(state: FilterState): ApiFilterState {
     onlyNeverPlayed: state.onlyNeverPlayed,
     onlyKnownDuration: state.onlyKnownDuration,
     onlyKnownLoudness: state.onlyKnownLoudness,
+    onlyBrowserPlayable: state.onlyBrowserPlayable,
     audioFilter: state.audioFilter,
     mediaTypeFilter: state.mediaTypeFilter,
     globalMatchMode: state.globalMatchMode,
@@ -485,6 +488,9 @@ export function filterStateFromApiObject(raw: ApiFilterState | null | undefined)
   }
   if (typeof o.onlyKnownLoudness === "boolean") {
     base.onlyKnownLoudness = o.onlyKnownLoudness;
+  }
+  if (typeof o.onlyBrowserPlayable === "boolean") {
+    base.onlyBrowserPlayable = o.onlyBrowserPlayable;
   }
 
   base.audioFilter = (readEnumValue(o.audioFilter, AUDIO_FILTER) ?? base.audioFilter) as AudioFilterMode;

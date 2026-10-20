@@ -49,6 +49,9 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
           <label>
             <input checked="false" id="filter-known-loud" type="checkbox">
             "Only videos with known loudness"
+          <label>
+            <input checked="false" id="filter-browser-playable" type="checkbox">
+            "Only files this browser can play"
       <div class="filter-section">
         <h3>
           "Media Type"
@@ -352,6 +355,9 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
           <label>
             <input checked="false" id="filter-known-loud" type="checkbox">
             "Only videos with known loudness"
+          <label>
+            <input checked="false" id="filter-browser-playable" type="checkbox">
+            "Only files this browser can play"
       <div class="filter-section">
         <h3>
           "Media Type"
@@ -655,6 +661,9 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
           <label>
             <input checked="false" id="filter-known-loud" type="checkbox">
             "Only videos with known loudness"
+          <label>
+            <input checked="false" id="filter-browser-playable" type="checkbox">
+            "Only files this browser can play"
       <div class="filter-section">
         <h3>
           "Media Type"

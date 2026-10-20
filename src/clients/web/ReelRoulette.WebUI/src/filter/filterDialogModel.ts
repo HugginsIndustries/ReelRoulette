@@ -25,12 +25,13 @@ export const UNCATEGORIZED_COLLAPSE_KEY = "__filter_uncategorized__";
 /** The General tab's Basic Filters, each a checkbox, in the order they show. */
 export const BASIC_FILTERS: readonly {
   id: string;
-  field: "onlyNeverPlayed" | "onlyKnownDuration" | "onlyKnownLoudness";
+  field: "onlyNeverPlayed" | "onlyKnownDuration" | "onlyKnownLoudness" | "onlyBrowserPlayable";
   label: string;
 }[] = [
   { id: "filter-never-played", field: "onlyNeverPlayed", label: "Only never played" },
   { id: "filter-known-dur", field: "onlyKnownDuration", label: "Only videos with known duration" },
-  { id: "filter-known-loud", field: "onlyKnownLoudness", label: "Only videos with known loudness" }
+  { id: "filter-known-loud", field: "onlyKnownLoudness", label: "Only videos with known loudness" },
+  { id: "filter-browser-playable", field: "onlyBrowserPlayable", label: "Only files this browser can play" }
 ];
 
 /** The General tab's media type choices. The first is no filter. */
@@ -81,6 +82,7 @@ export interface GeneralDraft {
   onlyNeverPlayed: boolean;
   onlyKnownDuration: boolean;
   onlyKnownLoudness: boolean;
+  onlyBrowserPlayable: boolean;
   mediaTypeFilter: MediaTypeFilter;
   audioFilter: AudioFilterMode;
   minText: string;
@@ -160,6 +162,7 @@ export function generalDraftFromFilter(filter: FilterState, sources: readonly Fi
     onlyNeverPlayed: filter.onlyNeverPlayed,
     onlyKnownDuration: filter.onlyKnownDuration,
     onlyKnownLoudness: filter.onlyKnownLoudness,
+    onlyBrowserPlayable: filter.onlyBrowserPlayable,
     mediaTypeFilter: filter.mediaTypeFilter,
     audioFilter: filter.audioFilter,
     minText: filter.minDurationSeconds != null ? formatDurationForDisplay(filter.minDurationSeconds) : "",
@@ -198,6 +201,7 @@ export function filterWithGeneralDraft(
   next.onlyNeverPlayed = draft.onlyNeverPlayed;
   next.onlyKnownDuration = draft.onlyKnownDuration;
   next.onlyKnownLoudness = draft.onlyKnownLoudness;
+  next.onlyBrowserPlayable = draft.onlyBrowserPlayable;
   next.mediaTypeFilter = draft.mediaTypeFilter;
   next.audioFilter = draft.audioFilter;
   next.minDurationSeconds = draftDuration(draft.minText);

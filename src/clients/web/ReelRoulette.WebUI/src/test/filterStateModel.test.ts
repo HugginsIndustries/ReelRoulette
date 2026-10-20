@@ -42,6 +42,15 @@ describe("filterStateModel", () => {
     expect(json).not.toHaveProperty("maxDuration");
   });
 
+  it("writes Only files this browser can play, and reads it as off unless it is true", () => {
+    expect(serializeFilterStateForApi(createDefaultFilterState()).onlyBrowserPlayable).toBe(false);
+    expect(serializeFilterStateForApi({ ...createDefaultFilterState(), onlyBrowserPlayable: true }).onlyBrowserPlayable).toBe(true);
+    expect(filterStateFromApiObject({ onlyBrowserPlayable: true }).onlyBrowserPlayable).toBe(true);
+    expect(filterStateFromApiObject({ onlyBrowserPlayable: false }).onlyBrowserPlayable).toBe(false);
+    expect(filterStateFromApiObject({}).onlyBrowserPlayable).toBe(false);
+    expect(filterStateFromApiObject({ onlyBrowserPlayable: "true" } as unknown as ApiFilterState).onlyBrowserPlayable).toBe(false);
+  });
+
   it("formats a duration under an hour as MM:SS", () => {
     expect(formatDurationForDisplay(65)).toBe("01:05");
   });
@@ -344,7 +353,8 @@ function writtenFixtureFilter(): FilterState {
     globalMatchMode: false,
     includedSourceIds: ["source-1"],
     onlyKnownDuration: false,
-    onlyKnownLoudness: false
+    onlyKnownLoudness: false,
+    onlyBrowserPlayable: true
   };
 }
 

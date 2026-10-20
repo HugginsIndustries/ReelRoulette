@@ -323,6 +323,7 @@ describe("remembered filter", () => {
       blacklistedMode: "only" as const,
       onlyNeverPlayed: true,
       onlyKnownLoudness: true,
+      onlyBrowserPlayable: true,
       audioFilter: 2 as const,
       mediaTypeFilter: 1 as const,
       globalMatchMode: false,

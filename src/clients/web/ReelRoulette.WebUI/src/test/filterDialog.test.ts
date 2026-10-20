@@ -1612,6 +1612,44 @@ describe("presets need a filter of their own", () => {
   });
 });
 
+describe("Only files this browser can play", () => {
+  const PLAYABLE: ApiPreset = { id: "preset-playable", name: "Playable", filterState: { onlyBrowserPlayable: true } };
+
+  it("starts unchecked, marks a change, and Apply applies it and saves it in a new preset", async () => {
+    const { dialog, view, store, server } = setup([FAVORITES]);
+    await dialog.open();
+    expect(view().general.onlyBrowserPlayable).toBe(false);
+    expect(view().unsaved).toBe(false);
+
+    dialog.changeGeneral({ onlyBrowserPlayable: true });
+    expect(view().working.onlyBrowserPlayable).toBe(true);
+    expect(view().unsaved).toBe(true);
+    dialog.typeNewPresetName("Playable");
+    dialog.addPreset();
+    await dialog.apply();
+
+    expect(server.fakePresets.summaries()).toEqual(["create Playable"]);
+    expect(server.fakePresets.writes[0]!.body).toMatchObject({ filterState: { onlyBrowserPlayable: true } });
+    expect(store.appliedFilter.value.onlyBrowserPlayable).toBe(true);
+  });
+
+  it("Load checks it, and a filter that differs from a preset only by it is a preset of its own", async () => {
+    const { dialog, view } = setup([FAVORITES, PLAYABLE]);
+    await dialog.open();
+    dialog.choosePreset(PLAYABLE.id);
+    dialog.loadPreset();
+    expect(view().general.onlyBrowserPlayable).toBe(true);
+    expect(view().heading).toBe("Preset: Playable");
+
+    dialog.choosePreset(FAVORITES.id);
+    dialog.loadPreset();
+    expect(view().general.onlyBrowserPlayable).toBe(false);
+    dialog.changeGeneral({ onlyBrowserPlayable: true });
+    dialog.typeNewPresetName("Playable favorites");
+    expect(view().actions).toMatchObject({ addPreset: FREE, updatePreset: FREE });
+  });
+});
+
 describe("Choose Preset and Load", () => {
   it("choosing loads nothing, and Load loads the chosen preset's filter, or the default filter for None, keeping the preset list, and is disabled while the filter already is that one", async () => {
     const { dialog, view } = setup([FAVORITES, RECENT]);

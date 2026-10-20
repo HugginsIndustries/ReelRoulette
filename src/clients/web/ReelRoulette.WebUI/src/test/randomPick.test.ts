@@ -173,5 +173,8 @@ describe("randomPickRequest", () => {
     const changed = randomPickRequest({ ...inputs, appliedFilter: { ...createDefaultFilterState(), favoritesMode: "only", onlyNeverPlayed: true } });
     expect(changed.presetId).toBeUndefined();
     expect(changed.filterState?.onlyNeverPlayed).toBe(true);
+    const playable = randomPickRequest({ ...inputs, appliedFilter: { ...createDefaultFilterState(), favoritesMode: "only", onlyBrowserPlayable: true } });
+    expect(playable.presetId).toBeUndefined();
+    expect(playable.filterState?.onlyBrowserPlayable).toBe(true);
   });
 });

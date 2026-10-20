@@ -49,5 +49,7 @@
   { "name": "blacklisted only differs from blacklisted off", "left": { "blacklistedMode": "only" }, "right": { "blacklistedMode": "off" }, "same": false },
   { "name": "blacklisted off differs from unset", "left": { "blacklistedMode": "off" }, "right": {}, "same": false },
   { "name": "favorites only differs from favorites excluded", "left": { "favoritesMode": "only" }, "right": { "favoritesMode": "excluded" }, "same": false },
-  { "name": "blacklisted only differs from unset", "left": { "blacklistedMode": "only" }, "right": {}, "same": false }
+  { "name": "blacklisted only differs from unset", "left": { "blacklistedMode": "only" }, "right": {}, "same": false },
+  { "name": "only browser-playable files differs from unset", "left": { "onlyBrowserPlayable": true }, "right": {}, "same": false },
+  { "name": "browser-playable off written out equals unset", "left": { "onlyBrowserPlayable": false }, "right": {}, "same": true }
 ]

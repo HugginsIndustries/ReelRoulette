@@ -30,6 +30,7 @@ describe("filterSummaryParts", () => {
     expect(filterSummaryParts(filter({ onlyNeverPlayed: true }), null)).toEqual(["Only never played"]);
     expect(filterSummaryParts(filter({ onlyKnownDuration: true }), null)).toEqual(["Only videos with known duration"]);
     expect(filterSummaryParts(filter({ onlyKnownLoudness: true }), null)).toEqual(["Only videos with known loudness"]);
+    expect(filterSummaryParts(filter({ onlyBrowserPlayable: true }), null)).toEqual(["Only files this browser can play"]);
   });
 
   it("names a media type or audio choice other than the first by its label", () => {

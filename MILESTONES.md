@@ -166,7 +166,7 @@ Last milestone completed: M12j
 | --- | --- | --- |
 | Mockup | ✅ Complete | The shared tab rule, with the Filter tab's sub-tabs as text tabs, the Filter tab without Refresh, and the Tags tab's Discard changes in place of its Refresh, approved by the user. |
 | Contract | ✅ Complete | A browser-playable field in the FilterState schema, applied by the server in the list query, its counts, and random selection, and a `503` with its own play error code from the media and play routes for a file the server can't read. |
-| WebUI | ⏳ Planned | The "Only files this browser can play" option in the Filter tab, saved in presets and compared in preset matching. |
+| WebUI | ✅ Complete | The "Only files this browser can play" option in the Filter tab, saved in presets and compared in preset matching. |
 | Filter and Tags tabs | ⏳ Planned | The shared tab rule, with the Filter tab's sub-tabs as text tabs, its Refresh gone, the Tags tab's Discard changes in place of its Refresh, and both tabs reloading on tag and source events. |
 | Error message | ⏳ Planned | A format-not-supported message for a file the browser can't play, "not found" only for a missing file, a couldn't-load message for any other answer, such as the server's `503` for a file it can't read, and skipping missing and unplayable files during autoplay, Next, Previous, and random picks. |
 
@@ -298,6 +298,21 @@ Last milestone completed: M12j
 - The option is saved in presets and compared in preset matching, in WebUI tests for the option.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes.
+
+**Evidence**
+
+- `FilterState` in `filterStateModel.ts` has `onlyBrowserPlayable`, off by default, which the WebUI writes and reads in library queries, random picks, presets, and the filter each device remembers. A value that isn't true or false reads as off. Preset matching compares it through the same writer.
+- `BASIC_FILTERS` ends with "Only files this browser can play" (`#filter-browser-playable`), so the Filter tab shows it last in Basic Filters and the Library tab's Filters line names it.
+- `preset-filter-equality.json` has two new cases, the option on differing from unset and off written out equaling unset, which the WebUI's and Core's fixture tests both pass.
+- `filter-state-written.json` writes the option on, and the Filter screen snapshot adds the checkbox and nothing else.
+- New and extended tests:
+  - `filterStateModel.test.ts`: the writer writes the field, and the reader reads true, false, missing, and a string.
+  - `filterDialog.test.ts`'s "Only files this browser can play": it starts unchecked, marks a change, and Apply applies it and posts it in a new preset; Load checks it; and a filter that differs from a preset only by it can be added and updated.
+  - `filterSummaryModel.test.ts`, `appStore.test.ts`'s remembered filter, `libraryQuerySession.test.ts`, and `randomPick.test.ts` cover the Filters line, the per-device round trip, and the library query and random request carrying it.
+- Three deliberate breaks each failed tests, each restored from a copy: the field left out of the writer (8 tests), left out of the reader (5), and the Basic Filters entry removed (2).
+- The mockup's preset follow takes the option like any other field. Before, it kept the tab's checkbox when another device changed the applied preset, from before the app had the field, which left an unsaved change the user didn't make.
+- `CONTEXT.md` names the option in the Filter tab, `docs/api.md` says both comparisons compare it, and the changelog's .m4v and .webm bullet joins the filter's.
+- `npm run verify` passes with 1778 tests, up from 1772, `dotnet test ReelRoulette.sln` passes with 544 core and 19 server app tests, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 
 #### Filter and Tags tabs slice
 

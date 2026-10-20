@@ -73,6 +73,18 @@ function controls(overrides: Partial<LibraryBrowseControls> = {}): LibraryBrowse
 const LAST_PAGE_HEIGHT = 6_000;
 
 describe("libraryQuerySession", () => {
+  it("sends Only files this browser can play with the filter when it applies", async () => {
+    const calls: LibraryQueryRequest[] = [];
+    const session = createLibraryQuerySession(async (request) => {
+      calls.push(request);
+      return page([item("a")], 1, 25);
+    });
+
+    await session.ensureLoaded({ ...createDefaultFilterState(), onlyBrowserPlayable: true }, controls());
+
+    expect(calls[0]?.filterState.onlyBrowserPlayable).toBe(true);
+  });
+
   it("loads the first window and reads header counts from the server totals", async () => {
     const calls: LibraryQueryRequest[] = [];
     const session = createLibraryQuerySession(async (request) => {

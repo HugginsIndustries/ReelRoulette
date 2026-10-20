@@ -5,6 +5,7 @@
     "onlyNeverPlayed": true,
     "onlyKnownDuration": false,
     "onlyKnownLoudness": false,
+    "onlyBrowserPlayable": true,
     "audioFilter": 1,
     "mediaTypeFilter": 1,
     "globalMatchMode": false,

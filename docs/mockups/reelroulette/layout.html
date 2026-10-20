@@ -5612,7 +5612,6 @@ function followAppliedFilter(value) {
   const follows = sameFilter(filterValue(), appliedValue);
   const working = { fields: fields.map((el) => [el, el.value, el.checked]), tags: new Map(filterTagState), local: new Map(filterLocalModes), base: tabBase };
   // The applied filter goes into the tab's fields, which the applied state and the Filters line read.
-  $("filter-playable").checked = applied.playable;
   applyFilterValue(value);
   snapshot = snapshot.map((entry) => (fields.includes(entry[0]) ? [entry[0], entry[0].value, entry[0].checked, entry[0].disabled] : entry));
   tagSnapshot = new Map(filterTagState);
@@ -5620,13 +5619,12 @@ function followAppliedFilter(value) {
   appliedValue = filterValue();
   saveFilterState();
   readApplied();
-  // Only files this browser can play stays as the tab has it, and so does the rest of a working filter that differed.
-  working.fields.forEach(([el, fieldValue, checked]) => {
-    if (follows && el !== $("filter-playable")) return;
-    el.value = fieldValue;
-    el.checked = checked;
-  });
+  // A working filter that differed stays as the user left it.
   if (!follows) {
+    working.fields.forEach(([el, fieldValue, checked]) => {
+      el.value = fieldValue;
+      el.checked = checked;
+    });
     filterTagState.clear();
     working.tags.forEach((mode, key) => filterTagState.set(key, mode));
     filterLocalModes = new Map(working.local);
