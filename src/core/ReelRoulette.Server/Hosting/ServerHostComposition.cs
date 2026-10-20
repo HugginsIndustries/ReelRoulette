@@ -1060,9 +1060,23 @@ public static class ServerHostComposition
             return Results.NotFound(new { error = "Media not found" });
         }
 
-        if (!playback.TryResolveMediaPath(token, out var fullPath) || !File.Exists(fullPath))
+        if (!playback.TryResolveMediaPath(token, out var fullPath))
         {
             return Results.NotFound(new { error = "Media not found" });
+        }
+
+        var fileState = MediaFileProbe.Probe(fullPath, out var readError);
+        if (fileState == MediaFileState.Missing)
+        {
+            return Results.NotFound(new { error = "Media not found" });
+        }
+
+        if (fileState == MediaFileState.Unreadable)
+        {
+            context.RequestServices.GetService<ServerLogService>()?.Append(
+                "warn",
+                $"Media read failed error={readError?.GetType().Name}.");
+            return Results.Json(new { error = "Media can't be read" }, statusCode: StatusCodes.Status503ServiceUnavailable);
         }
 
         // A player with a full buffer stops reading, and stopping the server waits for every open response.

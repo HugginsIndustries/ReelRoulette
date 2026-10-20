@@ -37,6 +37,7 @@ public static class FilterStateComparison
             filter.OnlyNeverPlayed,
             filter.OnlyKnownDuration,
             filter.OnlyKnownLoudness,
+            filter.OnlyBrowserPlayable,
             filter.AudioFilter,
             filter.MediaTypeFilter,
             GlobalMatchMode = filter.GlobalMatchMode ?? true,

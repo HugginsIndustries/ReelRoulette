@@ -173,6 +173,7 @@ public sealed class LibraryPlaybackService
     public const string PlayItemErrorMediaMissing = "play_media_missing";
     public const string PlayItemErrorSourceDisabled = "play_source_disabled";
     public const string PlayItemErrorUnsupportedMedia = "play_unsupported_media";
+    public const string PlayItemErrorMediaUnreadable = "play_media_unreadable";
 
     public bool TryPlayItem(
         string itemId,
@@ -213,7 +214,9 @@ public sealed class LibraryPlaybackService
             return false;
         }
 
-        if (forceMediaMissing || !File.Exists(match.FullPath))
+        Exception? readError = null;
+        var fileState = forceMediaMissing ? MediaFileState.Missing : MediaFileProbe.Probe(match.FullPath, out readError);
+        if (fileState == MediaFileState.Missing)
         {
             statusCode = StatusCodes.Status404NotFound;
             error = "Media file not found";
@@ -221,7 +224,16 @@ public sealed class LibraryPlaybackService
             return false;
         }
 
-        if (!MediaPlayableExtensions.IsPlayableFilePath(match.FullPath))
+        if (fileState == MediaFileState.Unreadable)
+        {
+            _serverLog?.Append("warn", $"Play media read failed item={match.Id} error={readError?.GetType().Name}.");
+            statusCode = StatusCodes.Status503ServiceUnavailable;
+            error = "Media file can't be read";
+            errorCode = PlayItemErrorMediaUnreadable;
+            return false;
+        }
+
+        if (!SupportedMediaExtensions.IsSupportedFilePath(match.FullPath))
         {
             statusCode = StatusCodes.Status415UnsupportedMediaType;
             error = "Unsupported media type";

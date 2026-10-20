@@ -167,9 +167,10 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 
 /* An action that can't proceed: its label, or an icon button's icon, dims, and a red badge on its top-right corner says
    a field is not valid. The badge sits out of the button's flow, so the button keeps its width and its row never
-   wraps. A Filter section's tab shows the same badge while a field in it is flagged. The badge is the outlined icon the
-   fields use, on a disc that hides the border under it. The Filter tab's Apply turns its unsaved-changes dot red
-   instead, and Add Preset and Choose Preset's Update show a red dot in its place. */
+   wraps. A Filter section's tab shows the same badge at the top right of its name while a field in it is flagged. The
+   badge is the outlined icon the fields use; on a button it sits on a disc that hides the border under it. The Filter
+   tab's Apply turns its unsaved-changes dot red instead, and Add Preset and Choose Preset's Update show a red dot in
+   its place. */
 .btn[aria-disabled="true"],
 .icon-btn[aria-disabled="true"] { cursor: not-allowed; }
 .btn[aria-disabled="true"] .btn-label,
@@ -291,25 +292,48 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
   .vfield-tip { transition: none; }
 }
 
-/* The Filter tab's sub-tabs, as today. */
-.filter-tabstrip { display: flex; flex-wrap: wrap; gap: 8px; }
-.filter-tab {
+/* Tabs share one rule: the panel's icon tabs and text tabs, such as the Filter tab's sections. Each is at least a 44 px
+   target with no border or fill, tinted on hover, and the active one is orange with an orange underline just below
+   it. A row of tabs has no line under it. A text tab takes a panel heading's size and weight, in the normal text color
+   until active, so icon tabs never take text styling. */
+.tab {
+  min-width: 44px;
   min-height: 44px;
-  padding: 8px 16px;
-  border: 1px solid var(--control-border);
+  padding: 0;
+  border: 0;
   border-radius: 8px;
-  background: var(--control-bg);
-  color: var(--control-fg);
+  background: transparent;
+  color: var(--icon);
   cursor: pointer;
-  font-size: 1rem;
   position: relative;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
 }
-.filter-tab.is-active {
-  border-color: var(--huggins-orange);
-  box-shadow: 0 0 0 1px var(--huggins-orange-soft-inset) inset;
+.tab:hover { background: rgba(127, 127, 127, 0.16); }
+.tab:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.tab[aria-selected="true"] { color: var(--huggins-orange); }
+.tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -5px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--huggins-orange);
 }
+.text-tab {
+  padding: 0 12px;
+  font: inherit;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--page-fg);
+}
+
+/* The Filter tab's sections are text tabs. Without a border to cover, a section's badge needs no disc. */
+.filter-tabstrip { display: flex; gap: 4px; }
+.filter-tab .tab-problem { top: 2px; right: -6px; background: none; }
 .filter-section { margin-bottom: 20px; }
 .filter-section h3 { margin: 0 0 8px; font-size: 0.95rem; font-weight: 600; }
 .filter-hint { font-size: 0.85rem; opacity: 0.75; margin: 0 0 8px; }

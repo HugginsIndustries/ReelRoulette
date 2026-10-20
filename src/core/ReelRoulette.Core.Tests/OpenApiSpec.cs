@@ -70,6 +70,59 @@ internal static class OpenApiSpec
         return operations;
     }
 
+    /// <summary>
+    /// Returns the lines of one operation under <c>paths:</c>, such as <c>POST /api/play/{itemId}</c>, from its method
+    /// line to the next method or path. Empty when the spec has no such operation.
+    /// </summary>
+    public static string ReadOperationText(string operation)
+    {
+        var text = new List<string>();
+        string? currentPath = null;
+        var inPaths = false;
+        var inOperation = false;
+        foreach (var line in ReadLines())
+        {
+            if (line == "paths:")
+            {
+                inPaths = true;
+                continue;
+            }
+
+            if (inPaths && line.Length > 0 && !char.IsWhiteSpace(line[0]))
+            {
+                break;
+            }
+
+            if (!inPaths)
+            {
+                continue;
+            }
+
+            var pathMatch = PathLine.Match(line);
+            if (pathMatch.Success)
+            {
+                currentPath = pathMatch.Groups[1].Value;
+                inOperation = false;
+                continue;
+            }
+
+            var methodMatch = MethodLine.Match(line);
+            if (methodMatch.Success)
+            {
+                inOperation = currentPath != null &&
+                    string.Equals($"{methodMatch.Groups[1].Value.ToUpperInvariant()} {currentPath}", operation, StringComparison.Ordinal);
+                continue;
+            }
+
+            if (inOperation)
+            {
+                text.Add(line);
+            }
+        }
+
+        return string.Join('\n', text);
+    }
+
     /// <summary>Returns the operations under <c>paths:</c> that list <paramref name="statusCode"/> as a response.</summary>
     public static SortedSet<string> ReadOperationsWithResponse(string statusCode)
     {

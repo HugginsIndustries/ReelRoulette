@@ -176,6 +176,41 @@ public sealed class RefreshPipelineServiceTests
     }
 
     [Fact]
+    public async Task SourceRefresh_AddsM4vAndWebmFilesAsVideos()
+    {
+        using var scope = new DataFolderScope();
+        var sourceDir = Path.Combine(scope.RootPath, "source-a");
+        Directory.CreateDirectory(sourceDir);
+
+        var existingPath = Path.Combine(sourceDir, "existing.mp4");
+        await File.WriteAllTextAsync(existingPath, "existing");
+        await File.WriteAllTextAsync(Path.Combine(sourceDir, "phone.m4v"), "phone");
+        await File.WriteAllTextAsync(Path.Combine(sourceDir, "web.WEBM"), "web");
+
+        CatalogSeed.Write(
+            scope.RootPath,
+            sources: [new SeedSource("src-a", sourceDir)],
+            items:
+            [
+                new SeedItem("item-existing", existingPath)
+                {
+                    SourceId = "src-a",
+                    RelativePath = "existing.mp4",
+                    FileName = "existing.mp4"
+                }
+            ]);
+
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        Assert.True(service.TryStartManual().Accepted);
+        await WaitForCompletionAsync(service, TimeSpan.FromSeconds(30));
+
+        var added = LoadCatalog(scope.RootPath).Items
+            .Select(item => $"{item.FileName} mediaType={item.MediaType}")
+            .Order(StringComparer.Ordinal);
+        Assert.Equal(["existing.mp4 mediaType=0", "phone.m4v mediaType=0", "web.WEBM mediaType=0"], added);
+    }
+
+    [Fact]
     public async Task SourceRefresh_KeepsItemsOfARootThatListsNoMediaFiles()
     {
         using var scope = new DataFolderScope();

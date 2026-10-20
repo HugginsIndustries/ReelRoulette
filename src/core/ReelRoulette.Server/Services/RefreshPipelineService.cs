@@ -489,7 +489,7 @@ public sealed class RefreshPipelineService : BackgroundService
             var newPathWrite = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
             foreach (var path in newPaths)
             {
-                newPathMediaType[path] = MediaPlayableExtensions.IsVideoExtension(Path.GetExtension(path)) ? 0 : 1;
+                newPathMediaType[path] = SupportedMediaExtensions.IsVideoExtension(Path.GetExtension(path)) ? 0 : 1;
                 newPathFileName[path] = Path.GetFileName(path);
                 try
                 {
@@ -1690,7 +1690,7 @@ public sealed class RefreshPipelineService : BackgroundService
         foreach (var path in all)
         {
             var ext = Path.GetExtension(path);
-            if (MediaPlayableExtensions.IsPlayableExtension(ext))
+            if (SupportedMediaExtensions.IsSupportedExtension(ext))
             {
                 yield return path;
             }

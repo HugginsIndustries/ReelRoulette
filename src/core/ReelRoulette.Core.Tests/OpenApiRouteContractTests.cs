@@ -74,6 +74,23 @@ public sealed class OpenApiRouteContractTests : IDisposable
             $"Read by the filter parser but missing from FilterState: [{string.Join(", ", missingFromSpec)}]. In FilterState but not read: [{string.Join(", ", notRead)}].");
     }
 
+    // Every error code the play route answers is documented on it, so a new code can't go undocumented.
+    [Fact]
+    public void PlayRoute_DocumentsEveryPlayErrorCode()
+    {
+        var codes = typeof(LibraryPlaybackService)
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(field => field.IsLiteral && field.Name.StartsWith("PlayItemError", StringComparison.Ordinal))
+            .Select(field => (string)field.GetRawConstantValue()!)
+            .ToList();
+        Assert.Contains(LibraryPlaybackService.PlayItemErrorMediaUnreadable, codes);
+
+        var operation = OpenApiSpec.ReadOperationText("POST /api/play/{itemId}");
+        Assert.NotEmpty(operation);
+        var undocumented = codes.Where(code => !operation.Contains(code, StringComparison.Ordinal)).ToList();
+        Assert.True(undocumented.Count == 0, $"Play error codes missing from POST /api/play/{{itemId}}: [{string.Join(", ", undocumented)}].");
+    }
+
     [Fact]
     public void ControlStatus_ResponseMatchesSpec()
     {

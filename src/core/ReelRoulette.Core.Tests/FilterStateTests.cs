@@ -148,6 +148,42 @@ public sealed class FilterStateTests : IDisposable
         }
     }
 
+    // The library query and the random pick, as the routes run them, keep only playable containers and photos with
+    // the option on.
+    [Fact]
+    public void LibraryQueryAndRandomPick_ApplyBrowserPlayable()
+    {
+        var host = SeedBrowserPlayableItems();
+        var operations = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, _tempDir);
+        var playback = new LibraryPlaybackService(new ServerMediaTokenStore(), NullLogger<LibraryPlaybackService>.Instance, host);
+
+        Assert.Equal(["clip", "photo"], QueryIds(operations, """{"filterState":{"onlyBrowserPlayable":true}}"""));
+        Assert.Equal(["clip", "photo"], PickIds(playback, [], """{"filterState":{"onlyBrowserPlayable":true}}"""));
+        Assert.Equal(["clip", "film", "old", "photo"], QueryIds(operations, """{"filterState":{"onlyBrowserPlayable":false}}"""));
+        Assert.Equal(["clip", "film", "old", "photo"], PickIds(playback, [], """{"filterState":{}}"""));
+    }
+
+    // A preset stored before the option has no field for it, and picks with the option off.
+    [Fact]
+    public void StoredPresetWithoutBrowserPlayable_PicksWithTheOptionOff()
+    {
+        var host = SeedBrowserPlayableItems([new SeedPreset("Old", """{"favoritesMode":"off","blacklistedMode":"excluded","onlyNeverPlayed":false}""")]);
+        var playback = new LibraryPlaybackService(new ServerMediaTokenStore(), NullLogger<LibraryPlaybackService>.Instance, host);
+        var presets = new ServerStateService(catalog: host).GetPresetCatalogSnapshot();
+        var preset = Assert.Single(presets);
+        Assert.Equal(["clip", "film", "old", "photo"], PickIds(playback, presets, $$"""{"presetId":"{{preset.Id}}"}"""));
+    }
+
+    [Fact]
+    public void Comparison_TellsFiltersApartByBrowserPlayable()
+    {
+        Assert.False(FilterStateComparison.SameFilter(
+            new FilterStateModel { FavoritesMode = FlagFilterModeValue.Only },
+            new FilterStateModel { FavoritesMode = FlagFilterModeValue.Only, OnlyBrowserPlayable = true }));
+        Assert.False(FilterStateComparison.IsDefault(new FilterStateModel { OnlyBrowserPlayable = true }));
+        Assert.True(FilterStateComparison.IsDefault(new FilterStateModel { OnlyBrowserPlayable = false }));
+    }
+
     public void Dispose()
     {
         LibraryCatalogBackup.WaitForPending();
@@ -172,6 +208,29 @@ public sealed class FilterStateTests : IDisposable
                 SourceId = "s1",
                 IsFavorite = favorite,
                 IsBlacklisted = blacklisted
+            });
+        }
+
+        CatalogSeed.Write(_tempDir, sources: [new SeedSource("s1", _tempDir)], items: items, presets: presets);
+        return CatalogOpen.Host(_tempDir);
+    }
+
+    // A video in each of a playable and three unplayable containers, and a photo, with names that agree with their
+    // media types.
+    private LibraryCatalogHost SeedBrowserPlayableItems(IEnumerable<SeedPreset>? presets = null)
+    {
+        Directory.CreateDirectory(_tempDir);
+        var items = new List<SeedItem>();
+        foreach (var (id, fileName, mediaType) in new[] { ("clip", "clip.mp4", 0), ("film", "film.mkv", 0), ("old", "old.avi", 0), ("photo", "photo.jpg", 1) })
+        {
+            var path = Path.Combine(_tempDir, fileName);
+            File.WriteAllBytes(path, [0x01, 0x02]);
+            items.Add(new SeedItem(id, path)
+            {
+                FileName = fileName,
+                RelativePath = fileName,
+                SourceId = "s1",
+                MediaType = mediaType
             });
         }
 

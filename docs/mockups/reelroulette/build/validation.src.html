@@ -274,9 +274,9 @@ h1 { font-size: 1.4rem; margin: 0; }
 <template id="mini-template">
   <h2 class="mini-title">Preset: None</h2>
   <div class="filter-tabstrip" role="tablist" aria-label="Filter sections">
-    <button class="filter-tab is-active" type="button" role="tab" aria-selected="true" data-sub="general">General<span class="tab-problem material-symbol-icon">error</span></button>
-    <button class="filter-tab" type="button" role="tab" aria-selected="false" data-sub="tags">Tags</button>
-    <button class="filter-tab" type="button" role="tab" aria-selected="false" data-sub="presets">Presets</button>
+    <button class="tab text-tab filter-tab" type="button" role="tab" aria-selected="true" data-sub="general">General<span class="tab-problem material-symbol-icon">error</span></button>
+    <button class="tab text-tab filter-tab" type="button" role="tab" aria-selected="false" data-sub="tags">Tags</button>
+    <button class="tab text-tab filter-tab" type="button" role="tab" aria-selected="false" data-sub="presets">Presets</button>
   </div>
   <div class="mini-body scroll-y themed-scrollbar">
     <div data-subpanel="general">
@@ -451,7 +451,6 @@ document.querySelectorAll("[data-mini]").forEach((mini) => {
   const generalTab = mini.querySelector('[data-sub="general"]');
   function showSub(sub) {
     mini.querySelectorAll(".filter-tab").forEach((tab) => {
-      tab.classList.toggle("is-active", tab.dataset.sub === sub);
       tab.setAttribute("aria-selected", String(tab.dataset.sub === sub));
     });
     mini.querySelectorAll("[data-subpanel]").forEach((panel) => (panel.hidden = panel.dataset.subpanel !== sub));

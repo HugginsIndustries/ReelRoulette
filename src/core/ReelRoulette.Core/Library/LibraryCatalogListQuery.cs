@@ -160,6 +160,17 @@ internal static class LibraryCatalogListSql
             where.Append(CultureInfo.InvariantCulture, $" AND (items.media_type = {PhotoMediaType} OR items.integrated_loudness IS NOT NULL)");
         }
 
+        if (filter.OnlyBrowserPlayable)
+        {
+            where.Append(CultureInfo.InvariantCulture, $" AND (items.media_type = {PhotoMediaType}");
+            foreach (var extension in BrowserPlayableContainers.VideoExtensions)
+            {
+                where.Append(CultureInfo.InvariantCulture, $" OR items.file_name_fold LIKE '%{extension}'");
+            }
+
+            where.Append(')');
+        }
+
         AppendSelectedTags(where, filter, catalogTags, args);
         AppendExcludedTags(where, filter, args);
 

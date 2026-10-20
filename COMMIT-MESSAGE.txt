@@ -19,9 +19,13 @@ Instructions:
 
 Commit Message:
 
-Docs: Move playback sessions to v0.16.0, the structured log migration and Log Viewer to v0.17.0, and Accounts to v0.18.0
+M12k1: Add the server's browser-playable filter and 503 for unreadable media, and give the mockup's tabs one shared rule
 
-- Planned Releases: v0.16.0 is Playback sessions (P2a to P2h), v0.17.0 the structured log migration and Log Viewer (P27d to P27g), and v0.18.0 Accounts (the P28 series); v0.15.0 and v0.15.1 are unchanged.
-- P2a no longer depends on Per-User Source Permissions, which now extends its source check to playback sessions once accounts exist.
-- P2g keeps resume positions per server, shared by every device, until accounts exist, and Per-Account Library Data decides whether they become per account.
-- P27e no longer depends on WebUI Login Gate and drops its `LoginSession` flow, which WebUI Login Gate now logs through the structured log API. P27d likewise leaves login and session outcomes to PIN Login API and Sessions, which now logs them.
+- Server: FilterState's `onlyBrowserPlayable` keeps photos and .mp4, .m4v, and .webm videos in the library query, its counts, and random selection, and preset comparison compares it; mkv is left out, as it doesn't play reliably across browsers.
+- Server: `GET /api/media/{token}` and `POST /api/play/{itemId}` open the file to answer 503 for one that can't be read, with `play_media_unreadable` on play, and 404 only for a missing one, logging the unreadable answer without the path.
+- Server: `MediaPlayableExtensions` is renamed `SupportedMediaExtensions`, and the scan adds .m4v and .webm files.
+- Contract: `onlyBrowserPlayable` in `FilterState`, and the media and play routes' own 503 naming the unreadable file beside the library reasons, with `play_media_unreadable` on play, in `openapi.yaml`, with the regenerated WebUI types.
+- Tests: the option through the list, its count, the random candidates, and the browse and random services, a stored preset without it, the comparison, both routes' 404 and 503 with the file held open, the scan adding .m4v and .webm, and every play error code documented on the play route.
+- Mockup: the panel's icon tabs and the Filter tab's sub-tabs share one `.tab` rule, keyed to `aria-selected`, with the sub-tabs as text tabs at the panel heading's size and weight, and no tab row has a line under it.
+- Mockup: the Filter tab's Refresh is gone, and the Tags tab's Refresh is replaced by Discard changes beside Save, which puts back the saved tags without asking.
+- Docs: MILESTONES.md records the Mockup and Contract slices, the shared tab rule for the Filter and Tags tabs slice and Library Profiles' tabs, which makes Library Profiles depend on Browser-Playable Filter, mkv out of the container list, and the Filter and Tags tabs slice rewording or dropping the changelog's Filter dialog Refresh bullet, and drops the admin navigation from the tab look, in this milestone and in WebUI Admin Section. CONTEXT.md, docs/api.md, and docs/domain-inventory.md describe the filter and the 503s, and CHANGELOG.md the .m4v and .webm files joining the library.

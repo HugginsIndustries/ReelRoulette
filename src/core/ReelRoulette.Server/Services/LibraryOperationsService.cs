@@ -86,7 +86,7 @@ public sealed class LibraryOperationsService
         var files = new List<CatalogSourceImportFile>();
         foreach (var filePath in _enumerateFiles(rootPath))
         {
-            if (!MediaPlayableExtensions.IsPlayableExtension(Path.GetExtension(filePath)))
+            if (!SupportedMediaExtensions.IsSupportedExtension(Path.GetExtension(filePath)))
             {
                 continue;
             }
@@ -745,7 +745,7 @@ public sealed class LibraryOperationsService
         Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
 
     private static int ResolveMediaType(string filePath) =>
-        MediaPlayableExtensions.IsVideoExtension(Path.GetExtension(filePath)) ? 0 : 1;
+        SupportedMediaExtensions.IsVideoExtension(Path.GetExtension(filePath)) ? 0 : 1;
 
     private static string GetRelativePath(string rootPath, string fullPath) =>
         ReelRoulette.Core.Storage.LibraryRelativePath.GetRelativePath(rootPath, fullPath);

@@ -1,13 +1,14 @@
 namespace ReelRoulette.Server;
 
 /// <summary>
-/// Canonical video/photo extension sets for import, refresh, and playback eligibility.
+/// The video and photo extensions the server supports: the files import and refresh add to the library, and the play
+/// route accepts. Not what a browser can play, which is BrowserPlayableContainers in ReelRoulette.Core.
 /// </summary>
-public static class MediaPlayableExtensions
+public static class SupportedMediaExtensions
 {
     private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".mpg", ".mpeg"
+        ".mp4", ".m4v", ".webm", ".mkv", ".avi", ".mov", ".wmv", ".mpg", ".mpeg"
     };
 
     private static readonly HashSet<string> PhotoExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -16,13 +17,13 @@ public static class MediaPlayableExtensions
         ".tiff", ".tif", ".heic", ".heif", ".avif", ".ico", ".svg", ".raw", ".cr2", ".nef", ".orf", ".sr2"
     };
 
-    public static bool IsPlayableFilePath(string filePath)
+    public static bool IsSupportedFilePath(string filePath)
     {
         var ext = Path.GetExtension(filePath);
-        return IsPlayableExtension(ext);
+        return IsSupportedExtension(ext);
     }
 
-    public static bool IsPlayableExtension(string? extension)
+    public static bool IsSupportedExtension(string? extension)
     {
         if (string.IsNullOrEmpty(extension))
         {

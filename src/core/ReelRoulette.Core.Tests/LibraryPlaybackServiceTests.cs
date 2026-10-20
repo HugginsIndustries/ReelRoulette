@@ -566,6 +566,61 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         Assert.Equal(LibraryPlaybackService.PlayItemErrorMediaMissing, code);
     }
 
+    // A file the server can see but not open, as on a stalled drive or share, is not missing. Holding it open with no
+    // sharing makes the open fail while the file still exists.
+    [Fact]
+    public void TryPlayItem_ShouldReturn503_AndLogOneLineWithoutThePath_WhenTheFileCantBeRead()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var mediaPath = Path.Combine(_tempDir, "secret-held.mp4");
+        File.WriteAllBytes(mediaPath, [0x01]);
+
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("held-1", mediaPath)
+                {
+                    FileName = "secret-held.mp4",
+                    SourceId = "s1"
+                }
+            ]);
+
+        var logDirectory = Path.Combine(_tempDir, "logs");
+        var service = new LibraryPlaybackService(
+            new ServerMediaTokenStore(),
+            NullLogger<LibraryPlaybackService>.Instance,
+            CatalogOpen.Host(_tempDir),
+            new ServerLogService(logDirectory));
+
+        bool ok;
+        int statusCode;
+        string? error;
+        string? code;
+        var held = new FileStream(mediaPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        try
+        {
+            Assert.True(File.Exists(mediaPath));
+            ok = service.TryPlayItem("held-1", false, out _, out statusCode, out error, out code);
+        }
+        finally
+        {
+            held.Dispose();
+        }
+
+        Assert.False(ok);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, statusCode);
+        Assert.Equal("Media file can't be read", error);
+        Assert.Equal(LibraryPlaybackService.PlayItemErrorMediaUnreadable, code);
+        var line = Assert.Single(File.ReadAllLines(Path.Combine(logDirectory, "last.log")));
+        Assert.Matches(@"\[server\] \[warn\] Play media read failed item=held-1 error=\w+\.$", line);
+        Assert.DoesNotContain("secret", line, StringComparison.Ordinal);
+
+        // Once the file can be read again, it plays.
+        Assert.True(service.TryPlayItem("held-1", false, out _, out _, out _, out _));
+    }
+
     [Fact]
     public void TryPlayItem_ShouldReturn404_WhenForceMediaMissing()
     {

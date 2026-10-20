@@ -1303,6 +1303,11 @@ export interface components {
             /** @description Only videos with a known loudness. Photos always pass. Defaults to false. */
             onlyKnownLoudness?: boolean;
             /**
+             * @description Only videos in a container a browser can play: files ending in `.mp4`, `.m4v`, or `.webm`, in any case.
+             *     Photos always pass. Defaults to false.
+             */
+            onlyBrowserPlayable?: boolean;
+            /**
              * @description `PlayAll` (0), `WithAudioOnly` (1), or `WithoutAudioOnly` (2), as a number or a name in any case.
              *     Photos always pass. Defaults to `PlayAll`.
              */
@@ -3468,7 +3473,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            503: components["responses"]["LibraryUnavailable"];
+            /** @description The server is running without a library, with `code` `library_newer`, `library_damaged`, `library_missing`, or `library_unreadable` and an `error` that says why and what to do; or the item's file exists but can't be read, such as on a stalled drive or share (code play_media_unreadable). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     postShowInFileManager: {
@@ -3568,7 +3581,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unknown token, or the file is not found */
+            /** @description Unknown token, or the file is missing */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3577,7 +3590,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            503: components["responses"]["LibraryUnavailable"];
+            /** @description The server is running without a library, with `code` `library_newer`, `library_damaged`, `library_missing`, or `library_unreadable` and an `error` that says why and what to do; or the file exists but can't be read, such as on a stalled drive or share, with no `code`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     postFavorite: {

@@ -140,7 +140,7 @@ Last milestone completed: M12j
 
 ### M12k1 - Browser-Playable Filter
 
-- **Status**: ⏳ Planned
+- **Status**: 🚧 In Progress
 - **Goal**: Browse and random play can be limited to files a browser can play, a file the browser cannot play, or one the server can't read, says so instead of "not found", and the Filter and Tags tabs follow tag and source changes without a Refresh.
 - **Depends on**: WebUI Preact Migration, Favorite and Blacklist Filter Modes, whose FilterState schema it adds its field to, and WebUI Notifications, whose Skipped files popups announce the skips, and Per-Preset Preset Writes, whose per-preset writes save its field.
 - **Design**: `docs/mockups/reelroulette/`.
@@ -148,13 +148,15 @@ Last milestone completed: M12j
 #### Decisions
 
 - The server decides playability from one documented container list, so browse, random play, and counts agree.
-  - The list names the playable video containers, starting with mp4, m4v, webm, and mkv.
-  - Any other video container, including avi and wmv, is not browser-playable.
+  - The list names the playable video containers: mp4, m4v, and webm.
+  - Any other video container, including mkv, avi, and wmv, is not browser-playable.
+  - mkv is left out because a container list can't see a file's audio codec, and mkv files don't play reliably on the user's devices. Remux/Transcode and Segmented Streaming (HLS fMP4 Baseline) remuxes or transcodes them per file.
   - Photos are always playable.
 - A stored preset without the browser-playable field reads it as off.
-- The Filter tab's General, Tags, and Presets sub-tabs take the panel tabs' look: text, orange with the orange underline when active, and a thin line under the strip.
-  - They keep the red problem badge, the 44 px touch height, and their keyboard behavior.
-  - The mockup's admin navigation takes the same look.
+- Tabs share one rule, which the panel's icon tabs, the Filter tab's General, Tags, and Presets sub-tabs, and later tabs use: their layout, hover tint, orange active color, and the active tab's orange underline.
+  - Text tabs use a text-tab variant of the rule with the "Preset: …" heading's size and weight, in the normal text color until active, so icon tabs never take text styling.
+  - Tab rows have no separator line, only the active tab's orange underline, so the panel's header loses its line.
+  - The sub-tabs become text tabs and keep the red problem badge, the 44 px touch height, and their keyboard behavior.
 - The Filter tab's Refresh goes.
 - The Tags tab's Refresh is replaced by a Discard changes icon button, with the undo icon, beside Save, as the Filter tab has beside Apply.
 
@@ -162,18 +164,17 @@ Last milestone completed: M12j
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Mockup | ⏳ Planned | The Filter tab's sub-tabs and the admin navigation in the panel tabs' look, the Filter tab without Refresh, and the Tags tab's Discard changes in place of its Refresh, approved by the user. |
-| Contract | ⏳ Planned | A browser-playable field in the FilterState schema, applied by the server in the list query, its counts, and random selection, and a `503` with its own play error code from the media and play routes for a file the server can't read. |
+| Mockup | ✅ Complete | The shared tab rule, with the Filter tab's sub-tabs as text tabs, the Filter tab without Refresh, and the Tags tab's Discard changes in place of its Refresh, approved by the user. |
+| Contract | ✅ Complete | A browser-playable field in the FilterState schema, applied by the server in the list query, its counts, and random selection, and a `503` with its own play error code from the media and play routes for a file the server can't read. |
 | WebUI | ⏳ Planned | The "Only files this browser can play" option in the Filter tab, saved in presets and compared in preset matching. |
-| Filter and Tags tabs | ⏳ Planned | The Filter tab's sub-tabs in the panel tabs' look, its Refresh gone, the Tags tab's Discard changes in place of its Refresh, and both tabs reloading on tag and source events. |
+| Filter and Tags tabs | ⏳ Planned | The shared tab rule, with the Filter tab's sub-tabs as text tabs, its Refresh gone, the Tags tab's Discard changes in place of its Refresh, and both tabs reloading on tag and source events. |
 | Error message | ⏳ Planned | A format-not-supported message for a file the browser can't play, "not found" only for a missing file, a couldn't-load message for any other answer, such as the server's `503` for a file it can't read, and skipping missing and unplayable files during autoplay, Next, Previous, and random picks. |
 
 #### Mockup slice
 
 **Scope**
 
-- In `docs/mockups/reelroulette/`, the Filter tab's sub-tabs take the panel tabs' look, as the Decisions describe.
-- The admin page's navigation takes the same look.
+- In `docs/mockups/reelroulette/`, the shared tab rule and its text-tab variant, as the Decisions describe, used by the panel's tabs and the Filter tab's sub-tabs.
 - The Filter tab's Refresh goes.
 - The Tags tab's Refresh is replaced by the Discard changes icon button beside Save.
 - The user approves the round before the Filter and Tags tabs slice starts.
@@ -183,32 +184,64 @@ Last milestone completed: M12j
 - The panel tabs are 44 px icon buttons, orange when active with a 3 px orange underline, in a strip with a 1 px line under it (`.panel-tabs` and `.panel-tab` in `build/layout.src.html`).
 - The Filter tab's sub-tabs are bordered buttons in a wrapping strip, the active one with an orange border (`.filter-tabstrip` and `.filter-tab` in `build/common.css`).
 - On a short screen, such as a phone on its side, the sub-tabs are 38 px tall in the mockup and the app (`body.short-screen .filter-tab` in `build/layout.src.html` and `src/styles.css`).
-- The admin navigation is a row of pill-shaped jump links to the admin cards, with no active link (`.admin-nav` in `build/admin.src.html`).
 - The mockup's Refresh buttons are `#filter-refresh` and `#tags-refresh` (`build/layout.src.html`).
 
 **Acceptance**
 
-- The mockup shows the sub-tabs and the admin navigation in the panel tabs' look, the Filter tab without Refresh, and the Tags tab's Discard changes beside Save, as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+- The mockup shows the panel's tabs and the sub-tabs through the shared tab rule, the Filter tab without Refresh, and the Tags tab's Discard changes beside Save, as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+
+**Evidence**
+
+- `build/common.css` has the shared `.tab` rule, keyed to `aria-selected`, and its `.text-tab` variant at the panel heading's 1.15rem bold, 1rem on a short screen as the heading is.
+- The panel's tabs (`tab panel-tab`) and the Filter tab's sub-tabs (`tab text-tab filter-tab`) use them in place of their own rules, on the main page and the validation page, and the sub-tabs' `is-active` class is gone.
+- No tab row has a line under it: the panel's header lost its line in the review, and the sub-tabs never had one.
+- A sub-tab's problem badge sits at the top right of its name, without the disc it needed over a border.
+- The Filter tab's Refresh is gone, with its "Filter data refreshed." popup and its "Filter refresh failed" notice.
+- The Tags tab's Refresh is replaced by `#tags-discard` just before Save, disabled without unsaved changes, which puts back the saved tags without asking and then follows the playing item.
+- The admin navigation keeps its pill-shaped jump links, which are not tabs.
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- The user approved the mockup in their review on their devices, which settled the shared rule, text tabs at the heading's size and weight, and no line under any tab row.
 
 #### Contract slice
 
 **Scope**
 
-- A browser-playable field in the FilterState schema that Favorite and Blacklist Filter Modes adds, applied by the server in the list query, its counts, and random selection.
+- A browser-playable field, `onlyBrowserPlayable`, off by default, in the FilterState schema that Favorite and Blacklist Filter Modes adds, applied by the server in the list query, its counts, and random selection.
+- The container list, `BrowserPlayableContainers` in `ReelRoulette.Core/Filtering/`, holds mp4, m4v, and webm, and the condition lets every photo pass.
+- The server's preset comparison, `FilterStateComparison`, compares the field. Its cases in `preset-filter-equality.json` come with the WebUI slice, which teaches the WebUI's comparison the field.
 - OpenAPI and generated WebUI types.
 - The container list is documented in `docs/api.md`.
-- `GET /api/media/{token}` and `POST /api/play/{itemId}` answer `503` when the file can't be read, such as on a stalled drive or share, and `404` only when it is missing.
+- `MediaPlayableExtensions` is renamed `SupportedMediaExtensions`, with its `IsPlayable…` methods as `IsSupported…`, since it decides which files the scan adds and the play route accepts, not what a browser can play.
+- The scan's supported list adds .m4v and .webm, so such files join the library on the next refresh.
+- The mockup's stand-in list of playable containers drops mkv (`PLAYABLE` in `build/layout.src.html`), and its index note names .mkv among the tiles that show the format notice.
+- `GET /api/media/{token}` and `POST /api/play/{itemId}` answer `503` when the file can't be read, such as on a stalled drive or share, and `404` only when it is missing, decided by opening the file.
+- The media route serves a readable file as before.
 - The play route's `503` carries the code `play_media_unreadable`.
-- OpenAPI and the generated WebUI types document the new `503` reason on both routes and the new code.
+- Each `503` for an unreadable file writes one warning line to `last.log` with the error's type, and the item id on the play route, without the path.
+- OpenAPI and the generated WebUI types document the new `503` reason on both routes, each route with its own `503` naming both reasons in place of the shared `LibraryUnavailable` response, and the new code.
 
 **Traps**
 
 - Browsers cannot play every format the desktop's LibVLC played, so since Desktop Client Removal those files play in no client until playback sessions.
 - A copy of the developer's catalog has 17,423 videos by file extension, of which 16,611 are mp4, 533 mkv (3.1%), 225 avi, and 54 wmv (measured). The codecs inside the files were not measured.
 - avi and wmv files from that library fail in the WebUI (measured).
-- mkv plays in Chrome and Firefox with common codecs but not in Safari or on iOS (inferred), and counts as browser-playable.
+- mkv doesn't play reliably on the user's devices (measured):
+  - On the iPad it doesn't play at all, showing "Video file not found." after a long load.
+  - In desktop Firefox it plays with broken audio.
+  - Only Chrome on the Pixel plays it well.
+- A container list can't see a file's audio codec.
+- The list query, its counts, and random candidates build their filter in one place, `AppendFilter` in `LibraryCatalogListQuery.cs`.
+- The catalog has no extension column. `items.file_name_fold` holds the lowercased file name, and `items.media_type` tells photos from videos.
+- `ReelRoulette.Core` can't reference `ReelRoulette.Server`, where the scan's list lives (`MediaPlayableExtensions.cs`).
+- The scan's list has no .m4v or .webm, and has .mov, .mpg, and .mpeg, which the container list leaves out.
+- The filter parser reads a missing boolean as false, so a stored preset without the field needs no upgrade step (`LibraryListFilterParser.cs`).
+- `FilterStateComparison` names each field it compares, so a field left out is ignored.
 - `ServeMedia` in `ServerHostComposition.cs` and `TryPlayItem` in `LibraryPlaybackService.cs` check `File.Exists`, which returns false on any I/O error, so a file on a stalled drive or share answers `404`.
-- `File.Exists` and `FileInfo.Exists` can't tell a missing file from an unreadable one, so the server needs the exception from opening the file or reading its metadata (inferred).
+- `File.Exists` can't tell a missing file from an unreadable one, so the server needs the exception from opening the file (measured on Linux).
+- A file the server can see but not open answers `200` from the play route, and the media route then fails inside `Results.File` (measured on Linux up to the failure).
+- Opening a missing file throws `FileNotFoundException` or `DirectoryNotFoundException`, both `IOException`s, and an unreadable one throws another `IOException` or `UnauthorizedAccessException`, which is not an `IOException` (measured on Linux).
+- A test can make the open fail by holding the file open with `FileShare.None`, while `File.Exists` stays true (measured on Linux; inferred on Windows, where CI also runs).
+- Neither route writes to `last.log` today.
 - Both routes already answer `503` with `LibraryUnavailable` when the server has no library.
 - A stalled share can hold a check for seconds before it fails: a library play took 8.6 s during a stall against 0.16 s normally (measured), so the `503` comes only once the read fails.
 
@@ -219,8 +252,34 @@ Last milestone completed: M12j
 - OpenAPI and the generated WebUI types carry the field, in contract tests.
 - The media and play routes answer `503` for a file whose read fails with an I/O error and `404` for a missing one, and the play route's `503` carries `play_media_unreadable`, in server tests of both routes with a missing and an unreadable file.
 - OpenAPI and the generated WebUI types carry the new `503` reason and code, in contract tests.
+- Two filters that differ only by the field are different presets, and the default filter with the field on is not the default, in Core tests of the comparison.
+- The scan adds .m4v and .webm files as videos, in a refresh test with such files.
 - The container list is documented in `docs/api.md`, checked by reading it.
+- The mockup's stand-in list matches the container list, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- `FilterStateModel.OnlyBrowserPlayable`, which the filter parser reads from `onlyBrowserPlayable` as false when missing, adds one condition in `AppendFilter`, built from `BrowserPlayableContainers` (`.mp4`, `.m4v`, `.webm`): a photo, or a file name ending in one of them. `FilterStateComparison` compares the field.
+- `MediaPlayableExtensions` is now `SupportedMediaExtensions`, with `IsSupportedFilePath` and `IsSupportedExtension`. Its video list adds `.m4v` and `.webm`, which the media route serves as `video/mp4` and `video/webm` (measured).
+- `MediaFileProbe` opens the file for reading and closes it: a missing file or folder is missing, and any other I/O or access error is unreadable.
+- `GET /api/media/{token}` answers 404 "Media not found" for a missing file and 503 "Media can't be read" for an unreadable one, and serves a readable one through the same `Results.File` as before.
+- `POST /api/play/{itemId}` answers 404 `play_media_missing` for a missing file and 503 `play_media_unreadable`, "Media file can't be read", for an unreadable one, before its 415 check.
+- An unreadable file writes a warning to `last.log`, `Media read failed error={type}.` or `Play media read failed item={id} error={type}.`, without the path or token.
+- OpenAPI's `FilterState` has `onlyBrowserPlayable`. Both routes have their own 503 naming the library reasons and the unreadable file, and the other routes keep the shared `LibraryUnavailable`. The WebUI's types are regenerated.
+- New tests, in which an unreadable file is one held open with `FileShare.None`, which leaves `File.Exists` true:
+  - `LibraryListQueryTests.BrowserPlayable_ListCountAndRandomCandidates_KeepPlayableContainersAndPhotos`: with the option on, the list, its count, and the random candidates keep `.mp4`, `.MP4`, `.m4v`, `.webm`, and photos, and drop `.mkv`, `.avi`, `.wmv`, and `.mov`; with it false or missing, they keep everything.
+  - `FilterStateTests.LibraryQueryAndRandomPick_ApplyBrowserPlayable` runs the option through the real browse and random services.
+  - `FilterStateTests.StoredPresetWithoutBrowserPlayable_PicksWithTheOptionOff` picks an `.avi` through a stored preset without the field.
+  - `FilterStateTests.Comparison_TellsFiltersApartByBrowserPlayable` covers two filters that differ only by the field and the default filter with it on.
+  - `MediaResponseTests.TheMediaRoute_Answers404ForAMissingFile_503ForAnUnreadableOne_AndServesRangesOfAReadableOne` covers the 404, the 503 with one warning line holding neither the path nor the token, and a 206 for a range of the readable file.
+  - `LibraryPlaybackServiceTests.TryPlayItem_ShouldReturn503_AndLogOneLineWithoutThePath_WhenTheFileCantBeRead`; the existing `TryPlayItem_ShouldReturn404_WhenFileMissingOnDisk` covers the missing file.
+  - `RefreshPipelineServiceTests.SourceRefresh_AddsM4vAndWebmFilesAsVideos`.
+  - `OpenApiRouteContractTests.PlayRoute_DocumentsEveryPlayErrorCode` finds every play error code in the play route's spec, and the existing `FilterStateSchema_NamesEveryFieldTheParserReads` finds the field in the parser and the schema.
+- Five deliberate breaks each failed tests, each restored from a copy: the filter condition removed, the probe treating every error as missing, the field left out of the comparison, `.m4v` and `.webm` left out of the scan's list, and `play_media_unreadable` left out of the spec.
+- `docs/api.md` documents the container list, the field, its comparison, both routes' 503, and the new code. `CONTEXT.md` and `docs/domain-inventory.md` are updated.
+- The mockup's stand-in list drops mkv, and its index note names .mkv among the tiles that show the format notice. `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `dotnet build ReelRoulette.sln` has no warnings, `dotnet test ReelRoulette.sln` passes with 544 core and 19 server app tests, up from 536 and 19, and `npm run verify` passes with 1772 tests, and its contracts check finds the types current.
 
 #### WebUI slice
 
@@ -244,14 +303,19 @@ Last milestone completed: M12j
 
 **Scope**
 
-- The Filter tab's sub-tabs take the approved look in `src/styles.css`, keeping the red problem badge, the 44 px touch height, and their keyboard behavior.
+- `src/styles.css` gets the shared tab rule and its text-tab variant as the mockup has them, and the panel's tabs and the Filter tab's sub-tabs use them in place of their own rules.
+- Tab rows have no separator line, only the active tab's orange underline, so the panel's header loses its line.
+- The sub-tabs keep the red problem badge, the 44 px touch height, and their keyboard behavior.
 - The Filter tab's Refresh goes, with its "Filter data refreshed." popup.
+- `CHANGELOG.md`'s `[Unreleased]` bullet "Filter dialog Refresh keeps unsaved presets" is reworded or dropped, since the Filter tab's Refresh goes.
 - The Tags tab's Refresh is replaced by the Discard changes icon button beside Save, which works as the Filter tab's does.
 - The Filter tab reloads as opening it does on `tagCatalogChanged` and `sourceStateChanged`, keeping its unsaved changes.
 - The Tags tab reloads on `tagCatalogChanged` only while it has no unsaved changes.
 
 **Traps**
 
+- The app's panel tab row has a 1 px line under it (`.panel-tabs` in `src/styles.css`).
+- The sub-tabs mark the active one with an `is-active` class as well as `aria-selected` (`src/ui/FilterDialog.tsx`), and the screen snapshots in `filter.test.ts.snap` and `foundation.test.ts.snap` record the class.
 - Opening the Filter tab starts it over from the applied filter and the saved presets when it has no unsaved changes, then loads the sources, tags, and presets, keeping the working copy (`open` and `start` in `src/filter/filterDialog.ts`).
 - The Filter tab's Refresh does nothing while Apply's preset writes are being sent, since its load would replace the saved list the writes land in (`refresh` in `src/filter/filterDialog.ts`).
 - The Filter tab's Discard changes is disabled without unsaved changes and puts back the applied filter and the saved presets without asking (`#filter-discard-btn` in `src/ui/FilterDialog.tsx`).
@@ -277,7 +341,7 @@ Last milestone completed: M12j
 
 - Say that the format is not supported in this browser when that is the cause, and "not found" only when the file is missing.
 - The format message reads "This video's format (.{ext}) isn't supported in this browser.".
-- The WebUI asks the server about the file with a one-byte range request to the item's media URL: a successful answer (`200` or `206`) means this browser can't play its format, and a `404` means it is missing. Comparing the container against the container list instead would call an mkv that Safari can't play missing, since the list counts mkv as playable.
+- The WebUI asks the server about the file with a one-byte range request to the item's media URL: a successful answer (`200` or `206`) means this browser can't play its format, and a `404` means it is missing. Comparing the container against the container list instead would call a file in a listed container whose codec this browser can't play missing.
 - Any other answer, or none, such as a `503` when the server can't read the file, shows a couldn't-load message.
 - On the couldn't-load message the player stops instead of skipping, since the cause probably affects the next file too.
 - A library play answered with `503` and `play_media_unreadable` shows the couldn't-load message, mapped in `mapPlayItemErrorToStatus` in `src/library/libraryPlayModel.ts`, so the server's error text doesn't need to match it.
@@ -309,7 +373,7 @@ Last milestone completed: M12j
 
 #### Release checks
 
-- Manual: With the browser-playable filter on, browse and random play show no avi or wmv files; with it off, playing one says its format is not supported in this browser, and a deleted file says not found.
+- Manual: With the browser-playable filter on, browse and random play show no mkv, avi, or wmv files; with it off, playing one says its format is not supported in this browser, and a deleted file says not found.
 - Manual: With a source on a network share that is disconnected while a video from it plays, the player says it couldn't load the file, not that it is missing.
 
 #### Not included
@@ -1434,7 +1498,7 @@ Last milestone completed: M12j
 
 - **Status**: ⏳ Planned
 - **Goal**: Each device chooses a profile from a picker in the header, a named view of the library that shows only the sources picked for it.
-- **Depends on**: Per-Preset Preset Writes, whose preset ids each profile remembers its preset by, Item Ratings, whose rating event gains the item's source id, WebUI Keyboard Shortcuts, whose shortcut handling the picker's key uses and whose shortcut reference lists it, and WebUI Multi-Select and Bulk Actions, whose ids-only query, selection, and bulk events follow the active profile.
+- **Depends on**: Per-Preset Preset Writes, whose preset ids each profile remembers its preset by, Item Ratings, whose rating event gains the item's source id, WebUI Keyboard Shortcuts, whose shortcut handling the picker's key uses and whose shortcut reference lists it, Browser-Playable Filter, whose shared tab rule Add Profile and Edit Profile's tabs use, and WebUI Multi-Select and Bulk Actions, whose ids-only query, selection, and bulk events follow the active profile.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -1456,7 +1520,7 @@ Last milestone completed: M12j
 - Switching while the Filter or Tags tab holds unsaved changes asks "Discard changes?" first.
 - U opens the picker, and the arrow keys and Enter choose a profile.
 - The picker hides with the header, in fullscreen and on a phone on its side, where the user turns the phone upright to switch.
-- Add Profile and Edit Profile's tabs take the tab style that Browser-Playable Filter gives the Filter tab's sub-tabs: text, orange with the orange underline when active, and a thin line under the strip.
+- Add Profile and Edit Profile's tabs are text tabs of the shared tab rule that Browser-Playable Filter adds, as the Filter tab's sub-tabs are.
 
 #### Slices
 
@@ -1821,7 +1885,6 @@ Last milestone completed: M12j
 - The admin section ignores profiles: its header shows no profile button, and its requests name no profile, so it covers the whole library.
 - The view keeps the Operator page's responsive layout, restyled to match the rest of the WebUI.
 - Its layout: a bar with a back arrow ("Back to the player"), the title Admin, and at its right end the notifications bell; a row of jump links to its sections; and cards, each titled with its icon, in this order: Server (`dns`), Web access (`lan`), Control (`key`), Library refresh (`sync`), Library transfer (`swap_vert`), Backups (`storage`), Sources (`folder`), Duplicates (`content_paste`), Testing suite (`bug_report`), Connected clients (`group`), Log Viewer (`article`), and API events (`description`).
-- The row of jump links takes the tab style that Browser-Playable Filter gives the Filter tab's sub-tabs and the mockup's admin navigation.
 - Sources, Duplicates, the Log Viewer, and API events take the full width, and on a wide screen the others take half.
 - The cards for refresh, transfer, backups, sources, duplicates, and the Log Viewer arrive with the milestones that build them, in their places.
 - The admin view covers the player, so opening it pauses playback under the Always and Responsive Auto-Pause modes, and leaving it resumes playback only if Auto-Pause paused it, as WebUI Auto-Pause and Photo Scrub Bar describes.

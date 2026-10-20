@@ -47,6 +47,7 @@ public sealed class FilterStateModel
     public bool? GlobalMatchMode { get; set; }
     public bool OnlyKnownDuration { get; set; }
     public bool OnlyKnownLoudness { get; set; }
+    public bool OnlyBrowserPlayable { get; set; }
     public MediaTypeFilterValue MediaTypeFilter { get; set; } = MediaTypeFilterValue.All;
     public List<string> IncludedSourceIds { get; set; } = new();
 }

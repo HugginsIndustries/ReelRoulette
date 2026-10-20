@@ -292,37 +292,9 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
   align-items: center;
   gap: 4px;
   padding: 4px 6px 4px 8px;
-  border-bottom: 1px solid var(--surface-border);
   flex: 0 0 auto;
 }
 .panel-tablist { display: flex; align-items: center; gap: 4px; }
-.panel-tab {
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--icon);
-  cursor: pointer;
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.panel-tab:hover { background: rgba(127, 127, 127, 0.16); }
-.panel-tab:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
-.panel-tab[aria-selected="true"] { color: var(--huggins-orange); }
-.panel-tab[aria-selected="true"]::after {
-  content: "";
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: -5px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--huggins-orange);
-}
 .panel-tabs-spacer { flex: 1; }
 #panel-btn .unsaved-dot { top: 6px; right: 5px; box-shadow: 0 0 0 2px #000; }
 /* A tag category's header, expanded or collapsed: its name, a count of its tags in use, and the unsaved-changes dot. */
@@ -646,7 +618,7 @@ kbd {
 body.short-screen #app { padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); }
 body.short-screen .top-bar { display: none; }
 body.short-screen .panel-tabs { padding: 2px 6px; }
-body.short-screen .panel-tab, body.short-screen #panel-close { width: 40px; height: 40px; min-width: 40px; }
+body.short-screen .panel-tab, body.short-screen #panel-close { width: 40px; height: 40px; min-width: 40px; min-height: 40px; }
 body.short-screen .panel-tab[aria-selected="true"]::after { bottom: -3px; }
 body.short-screen .panel-page { padding: 6px 10px; gap: 6px; }
 body.short-screen .panel-page-head { min-height: 36px; }
@@ -654,7 +626,7 @@ body.short-screen .panel-page-head h2 { font-size: 1rem; }
 body.short-screen .lib-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 body.short-screen .lib-pair { display: contents; }
 body.short-screen .ctl, body.short-screen .btn { min-height: 38px; }
-body.short-screen .filter-tab { min-height: 38px; padding: 4px 12px; }
+body.short-screen .text-tab { min-height: 38px; font-size: 1rem; }
 body.short-screen .app-dialog { max-height: calc(100dvh - 12px); }
 body.short-screen .dialog-body { padding: 10px 12px; gap: 6px; }
 /* The player's controls stay off the home indicator and the status bar, which the stage itself keeps clear of in
@@ -904,11 +876,11 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
     <aside id="panel" class="panel" aria-label="Panel" hidden>
       <div class="panel-tabs">
         <div class="panel-tablist" role="tablist" aria-label="Panel tabs">
-          <button class="panel-tab" role="tab" id="tab-btn-library" data-tab="library" aria-controls="tab-library" aria-label="Library" title="Library"><span class="material-symbol-icon">browse</span></button>
-          <button class="panel-tab" role="tab" id="tab-btn-filter" data-tab="filter" aria-controls="tab-filter" aria-label="Filter" title="Filter"><span class="material-symbol-icon">filter_alt</span><span class="unsaved-dot" hidden></span></button>
-          <button class="panel-tab" role="tab" id="tab-btn-tags" data-tab="tags" aria-controls="tab-tags" aria-label="Tags" title="Tags"><span class="material-symbol-icon">tag</span><span class="unsaved-dot" hidden></span></button>
-          <button class="panel-tab" role="tab" id="tab-btn-stats" data-tab="stats" aria-controls="tab-stats" aria-label="Stats" title="Stats"><span class="material-symbol-icon">bar_chart</span></button>
-          <button class="panel-tab" role="tab" id="tab-btn-settings" data-tab="settings" aria-controls="tab-settings" aria-label="Settings" title="Settings"><span class="material-symbol-icon">settings</span></button>
+          <button class="tab panel-tab" role="tab" id="tab-btn-library" data-tab="library" aria-controls="tab-library" aria-label="Library" title="Library"><span class="material-symbol-icon">browse</span></button>
+          <button class="tab panel-tab" role="tab" id="tab-btn-filter" data-tab="filter" aria-controls="tab-filter" aria-label="Filter" title="Filter"><span class="material-symbol-icon">filter_alt</span><span class="unsaved-dot" hidden></span></button>
+          <button class="tab panel-tab" role="tab" id="tab-btn-tags" data-tab="tags" aria-controls="tab-tags" aria-label="Tags" title="Tags"><span class="material-symbol-icon">tag</span><span class="unsaved-dot" hidden></span></button>
+          <button class="tab panel-tab" role="tab" id="tab-btn-stats" data-tab="stats" aria-controls="tab-stats" aria-label="Stats" title="Stats"><span class="material-symbol-icon">bar_chart</span></button>
+          <button class="tab panel-tab" role="tab" id="tab-btn-settings" data-tab="settings" aria-controls="tab-settings" aria-label="Settings" title="Settings"><span class="material-symbol-icon">settings</span></button>
         </div>
         <span class="panel-tabs-spacer"></span>
         <button class="icon-btn" id="panel-close" aria-label="Close panel" title="Close"><span class="material-symbol-icon">close</span></button>
@@ -972,12 +944,11 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
       <section id="tab-filter" class="panel-page" role="tabpanel" aria-labelledby="tab-btn-filter" hidden>
         <div class="panel-page-head">
           <h2 id="filter-heading" class="grow">Preset: None</h2>
-          <button class="icon-btn" type="button" id="filter-refresh" aria-label="Refresh" title="Refresh"><span class="material-symbol-icon">refresh</span></button>
         </div>
         <div class="filter-tabstrip" role="tablist" aria-label="Filter sections">
-          <button class="filter-tab is-active" type="button" role="tab" aria-selected="true" data-sub="general">General<span class="tab-problem material-symbol-icon">error</span></button>
-          <button class="filter-tab" type="button" role="tab" aria-selected="false" data-sub="tags">Tags</button>
-          <button class="filter-tab" type="button" role="tab" aria-selected="false" data-sub="presets">Presets<span class="tab-problem material-symbol-icon">error</span></button>
+          <button class="tab text-tab filter-tab" type="button" role="tab" aria-selected="true" data-sub="general">General<span class="tab-problem material-symbol-icon">error</span></button>
+          <button class="tab text-tab filter-tab" type="button" role="tab" aria-selected="false" data-sub="tags">Tags</button>
+          <button class="tab text-tab filter-tab" type="button" role="tab" aria-selected="false" data-sub="presets">Presets<span class="tab-problem material-symbol-icon">error</span></button>
         </div>
         <div id="filter-body" class="filter-body scroll-y themed-scrollbar">
           <div data-subpanel="general">
@@ -1078,7 +1049,6 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <div class="panel-page-head">
           <h2 class="grow">Tag Editor</h2>
           <button class="icon-btn" type="button" id="open-autotag" aria-label="Auto Tag" title="Auto Tag"><span class="material-symbol-icon">auto_awesome</span></button>
-          <button class="icon-btn" type="button" id="tags-refresh" aria-label="Refresh" title="Refresh"><span class="material-symbol-icon">refresh</span></button>
         </div>
         <p id="tags-target" class="tags-target" aria-live="polite" hidden></p>
         <div id="tags-body" class="tags-body scroll-y themed-scrollbar"></div>
@@ -1090,6 +1060,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
           <div class="tags-footer-row">
             <span class="vfield"><input class="ctl" type="text" id="tags-new-name" placeholder="New tag name" aria-label="New tag name" autocomplete="off"><span class="vfield-icon material-symbol-icon">error</span></span>
             <button class="icon-btn" type="button" id="tags-add-tag" aria-label="Add tag" title="Add tag"><span class="material-symbol-icon">add</span></button>
+            <button class="icon-btn" type="button" id="tags-discard" aria-label="Discard changes" title="Discard changes" disabled><span class="material-symbol-icon">undo</span></button>
             <button class="icon-btn" type="button" id="tags-save" aria-label="Save" title="Save" disabled><span class="material-symbol-icon">save</span><span class="unsaved-dot" hidden></span></button>
           </div>
         </div>
@@ -1567,7 +1538,7 @@ const ITEMS = Array.from({ length: 72 }, (_, i) => {
 });
 const isPhoto = (item) => item.type === "photo";
 // The browser-playable profile: photos, and videos in these containers.
-const PLAYABLE = ["mp4", "m4v", "webm", "mkv"];
+const PLAYABLE = ["mp4", "m4v", "webm"];
 const extOf = (item) => item.name.slice(item.name.lastIndexOf(".") + 1);
 const isPlayable = (item) => isPhoto(item) || PLAYABLE.includes(extOf(item));
 const statRand = rng(23);
@@ -3484,7 +3455,6 @@ const anchorLabel = (anchor, ids, names) => `${(ids.includes(anchor.id) && names
 function showSub(sub) {
   document.querySelectorAll(".filter-tab").forEach((tab) => {
     const active = tab.dataset.sub === sub;
-    tab.classList.toggle("is-active", active);
     tab.setAttribute("aria-selected", String(active));
   });
   document.querySelectorAll("[data-subpanel]").forEach((panelEl) => {
@@ -3816,13 +3786,6 @@ $("filter-clear").addEventListener("click", () => {
   tabBase = "";
   renderPresets();
   renderApply();
-});
-// Refresh reloads sources and tags and keeps unsaved preset changes.
-$("filter-refresh").addEventListener("click", () => {
-  if (state.situation === "reconnecting") return void noticeDialog({ message: "Filter refresh failed: Couldn't reach the server." });
-  if (state.pairing || heldBack()) return;
-  renderFilterTags();
-  acknowledge("Filter data refreshed.", "filter");
 });
 // Load puts the chosen preset's filter in the tab, or the default filter for None, which Apply then applies, as picking a
 // preset did before. It leaves the preset list as it is.
@@ -4226,6 +4189,7 @@ function renderTags() {
   host.scrollTop = scrollTop;
   newTagField.update();
   $("tags-save").disabled = !pending;
+  $("tags-discard").disabled = !pending;
   unsaved.tags = pending;
   renderUnsaved();
   $("tags-save").style.color = pending ? "var(--huggins-orange)" : "";
@@ -4280,13 +4244,10 @@ $("tags-save").addEventListener("click", () => {
   // Saving for the selection acknowledges itself as the other bulk actions do.
   acknowledge(several ? `Updated tags on ${items.length === 1 ? "1 item" : `${items.length} items`}.` : "Tag editor changes applied", "tags");
 });
-// Refresh discards unsaved changes, asking first, and the tab then follows the playing item.
-$("tags-refresh").addEventListener("click", async () => {
-  if (tagsDirty || hasItemEdits()) {
-    if (!(await confirmDialog({ message: "Discard changes?", confirmLabel: "Discard", danger: true }))) return;
-    TAGS.splice(0, TAGS.length, ...JSON.parse(JSON.stringify(savedTags)));
-    tagsDirty = false;
-  }
+// Discard changes puts back the saved tags at once, as the Filter tab's does, and the tab then follows the playing item.
+$("tags-discard").addEventListener("click", () => {
+  TAGS.splice(0, TAGS.length, ...JSON.parse(JSON.stringify(savedTags)));
+  tagsDirty = false;
   followPlayingItem();
 });
 // New tag name: a name another tag has, ignoring case, is flagged, and Add tag, which sits beside it, is disabled

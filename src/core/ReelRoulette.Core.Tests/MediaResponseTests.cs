@@ -83,6 +83,71 @@ public sealed class MediaResponseTests : IDisposable
         }
     }
 
+    // The route opens the file to tell a missing file from one it can't read, as on a stalled drive or share. Holding
+    // the file open with no sharing makes the open fail while the file still exists. A readable file still serves
+    // ranges.
+    [Fact]
+    public async Task TheMediaRoute_Answers404ForAMissingFile_503ForAnUnreadableOne_AndServesRangesOfAReadableOne()
+    {
+        var mediaPath = Path.Combine(_appData, "secret-clip.mp4");
+        File.WriteAllBytes(mediaPath, [0x01, 0x02, 0x03, 0x04]);
+        var tokens = new ServerMediaTokenStore();
+        var token = tokens.CreateToken(mediaPath);
+        var missingToken = tokens.CreateToken(Path.Combine(_appData, "gone.mp4"));
+        var playback = new LibraryPlaybackService(tokens, NullLogger<LibraryPlaybackService>.Instance, CatalogOpen.Host(_appData));
+        var logDirectory = Path.Combine(_appData, "logs");
+        var logs = new ServerLogService(logDirectory);
+
+        var missing = await Serve(missingToken);
+        Assert.Equal(StatusCodes.Status404NotFound, missing.Status);
+        Assert.Contains("Media not found", System.Text.Encoding.UTF8.GetString(missing.Body), StringComparison.Ordinal);
+
+        (int Status, byte[] Body) unreadable;
+        var held = new FileStream(mediaPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        try
+        {
+            Assert.True(File.Exists(mediaPath));
+            unreadable = await Serve(token);
+        }
+        finally
+        {
+            held.Dispose();
+        }
+
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, unreadable.Status);
+        Assert.Contains("Media can't be read", System.Text.Encoding.UTF8.GetString(unreadable.Body), StringComparison.Ordinal);
+        var line = Assert.Single(File.ReadAllLines(Path.Combine(logDirectory, "last.log")));
+        Assert.Matches(@"\[server\] \[warn\] Media read failed error=\w+\.$", line);
+        Assert.DoesNotContain("secret", line, StringComparison.Ordinal);
+        Assert.DoesNotContain(token, line, StringComparison.Ordinal);
+
+        var whole = await Serve(token);
+        Assert.Equal(StatusCodes.Status200OK, whole.Status);
+        Assert.Equal([0x01, 0x02, 0x03, 0x04], whole.Body);
+        var range = await Serve(token, "bytes=1-2");
+        Assert.Equal(StatusCodes.Status206PartialContent, range.Status);
+        Assert.Equal([0x02, 0x03], range.Body);
+
+        async Task<(int Status, byte[] Body)> Serve(string requested, string? rangeHeader = null)
+        {
+            var context = new DefaultHttpContext
+            {
+                RequestServices = new ServiceCollection().AddLogging().AddSingleton(logs).BuildServiceProvider()
+            };
+            context.Request.Method = HttpMethods.Get;
+            if (rangeHeader != null)
+            {
+                context.Request.Headers.Range = rangeHeader;
+            }
+
+            using var body = new MemoryStream();
+            context.Response.Body = body;
+            var result = ServerHostComposition.ServeMedia(context, requested, playback, new OperatorTestingService(), CancellationToken.None);
+            await result.ExecuteAsync(context);
+            return (context.Response.StatusCode, body.ToArray());
+        }
+    }
+
     public void Dispose()
     {
         LibraryCatalogBackup.WaitForPending();

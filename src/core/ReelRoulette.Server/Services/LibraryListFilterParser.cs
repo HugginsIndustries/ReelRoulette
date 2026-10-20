@@ -29,6 +29,7 @@ internal static class LibraryListFilterParser
             OnlyNeverPlayed = Bool(element, "onlyNeverPlayed", false),
             OnlyKnownDuration = Bool(element, "onlyKnownDuration", false),
             OnlyKnownLoudness = Bool(element, "onlyKnownLoudness", false),
+            OnlyBrowserPlayable = Bool(element, "onlyBrowserPlayable", false),
             GlobalMatchMode = NullableBool(element, "globalMatchMode"),
             MinDuration = Duration(element, "minDuration"),
             MaxDuration = Duration(element, "maxDuration")

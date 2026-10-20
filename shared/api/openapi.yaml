@@ -1136,7 +1136,19 @@ paths:
                     error: Unsupported media type
                     code: play_unsupported_media
         "503":
-          $ref: "#/components/responses/LibraryUnavailable"
+          description: >
+            The server is running without a library, with `code` `library_newer`, `library_damaged`,
+            `library_missing`, or `library_unreadable` and an `error` that says why and what to do; or the item's
+            file exists but can't be read, such as on a stalled drive or share (code play_media_unreadable).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                mediaUnreadable:
+                  value:
+                    error: Media file can't be read
+                    code: play_media_unreadable
 
   /api/show-in-file-manager/{itemId}:
     post:
@@ -1250,13 +1262,24 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: Unknown token, or the file is not found
+          description: Unknown token, or the file is missing
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
-          $ref: "#/components/responses/LibraryUnavailable"
+          description: >
+            The server is running without a library, with `code` `library_newer`, `library_damaged`,
+            `library_missing`, or `library_unreadable` and an `error` that says why and what to do; or the file
+            exists but can't be read, such as on a stalled drive or share, with no `code`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                mediaUnreadable:
+                  value:
+                    error: Media can't be read
 
   /api/favorite:
     post:
@@ -2453,6 +2476,11 @@ components:
         onlyKnownLoudness:
           type: boolean
           description: Only videos with a known loudness. Photos always pass. Defaults to false.
+        onlyBrowserPlayable:
+          type: boolean
+          description: |
+            Only videos in a container a browser can play: files ending in `.mp4`, `.m4v`, or `.webm`, in any case.
+            Photos always pass. Defaults to false.
         audioFilter:
           oneOf:
             - type: integer

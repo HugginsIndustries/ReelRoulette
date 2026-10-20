@@ -1069,6 +1069,32 @@ public sealed class LibraryListQueryTests
         }
     }
 
+    // Videos keep only the browser-playable containers, by file name ending in any case, and photos always pass.
+    [Fact]
+    public void BrowserPlayable_ListCountAndRandomCandidates_KeepPlayableContainersAndPhotos()
+    {
+        using var dir = new TempDirectory();
+        var session = Open(dir);
+        session.InsertSource("on", "/media", "On", true);
+        string[] playable = ["clip.mp4", "loud.MP4", "phone.m4v", "web.webm"];
+        string[] unplayable = ["film.mkv", "old.avi", "win.wmv", "cam.mov"];
+        foreach (var name in playable.Concat(unplayable))
+        {
+            Add(session, name, "on", name, name);
+        }
+
+        Add(session, "photo.jpg", "on", "photo.jpg", "photo.jpg", mediaType: (int)MediaTypeValue.Photo);
+        Add(session, "scan.tiff", "on", "scan.tiff", "scan.tiff", mediaType: (int)MediaTypeValue.Photo);
+        var everything = playable.Concat(unplayable).Append("photo.jpg").Append("scan.tiff").Order(StringComparer.Ordinal).ToArray();
+
+        AssertListedAndEligible(
+            session,
+            """{"onlyBrowserPlayable":true}""",
+            playable.Append("photo.jpg").Append("scan.tiff").Order(StringComparer.Ordinal).ToArray());
+        AssertListedAndEligible(session, """{"onlyBrowserPlayable":false}""", everything);
+        AssertListedAndEligible(session, "{}", everything);
+    }
+
     private static readonly FlagFilterModeValue[] FlagModes = [FlagFilterModeValue.Off, FlagFilterModeValue.Only, FlagFilterModeValue.Excluded];
 
     private static readonly (string Id, bool Favorite, bool Blacklisted)[] FlagModeItems =
