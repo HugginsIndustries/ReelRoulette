@@ -44,7 +44,7 @@ python3 docs/mockups/reelroulette/build/build_pages.py
 
 To use an icon that isn't in `icons.json`, add its name to `ICONS` in `build/build_font.py`, run that script, then rebuild. The script cuts the WebUI's Material Symbols font and needs [fontTools](https://github.com/fonttools/fonttools).
 
-`build/check.mjs` loads each page in happy-dom and drives the main interactions to catch script errors. It opens the main page as `layout.html?instant`, which skips the mockup's waits, such as Auto Tag's 5-second scan. It does no layout, so it can't check how the pages look or pointer dragging. It uses the WebUI's dev dependencies, so run `npm install` in `src/clients/web/ReelRoulette.WebUI` first:
+`build/check.mjs` is a smoke check that runs in a few seconds. It loads each page in happy-dom at a desktop and a phone width, opens the main panels, tabs, and dialogs, plays an item on the main page, and fails on any script error. It opens the main page as `layout.html?instant`, which skips the mockup's waits, such as the library's loading. It checks no behavior and does no layout, so how the pages look and behave is judged in the user's review on their devices. It uses the WebUI's dev dependencies, so run `npm install` in `src/clients/web/ReelRoulette.WebUI` first:
 
 ```sh
 node docs/mockups/reelroulette/build/check.mjs

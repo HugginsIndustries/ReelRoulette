@@ -417,7 +417,7 @@ Last milestone completed: M12i9
 
 **Acceptance**
 
-- The mockup shows the sub-tabs and the admin navigation in the panel tabs' look, the Filter tab without Refresh, and the Tags tab's Discard changes beside Save, as the user approved them, and `node docs/mockups/reelroulette/build/check.mjs` passes, with checks that the Filter tab has no Refresh and that the Tags tab's Discard changes puts back its changes.
+- The mockup shows the sub-tabs and the admin navigation in the panel tabs' look, the Filter tab without Refresh, and the Tags tab's Discard changes beside Save, as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
 
 #### Contract slice
 
@@ -571,7 +571,7 @@ Last milestone completed: M12i9
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Mockup | ⏳ Planned | The rating in the Stats tab's Current file section, the Rated card, the rating popups, and a check that every icon the mockup uses is in its font subset, approved on a desktop browser, the iPad, and an Android phone. |
+| Mockup | ⏳ Planned | The rating in the Stats tab's Current file section, the Rated card, and the rating popups, approved on a desktop browser, the iPad, and an Android phone. |
 | Server | ⏳ Planned | The rating column in a new catalog schema step, the shipped 2→3 step's index SQL frozen, setting a rating in the catalog, `rating` on item reads, and the rated count in the stats read. |
 | Contract | ⏳ Planned | The rating route and its `itemRatingChanged` event, the rated count in the stats response, and `rating`, `hasAudio`, and the fields the server always sends named in `LibraryProjectionItem`, in OpenAPI and the generated WebUI types. |
 | WebUI | ⏳ Planned | The rating control in the Current file section, its popups and event handling, and the Rated card. |
@@ -584,7 +584,6 @@ Last milestone completed: M12i9
 - A Rated card in the Library cards, after Blacklisted, counting the rated items.
 - The Your actions and Other devices rating popups, a Mockup-tab button for a rating from another device beside the favorite one, and the Settings tab's Other devices description naming rating changes.
 - `star` and `star_half` in the mockup's icon subset, with `star` also filled.
-- A check in `check.mjs` that every icon a mockup page uses is in its font subset.
 - The ratings the mockup's items start with come from each item's id.
 - Before the app is built, the user approves the rating on a desktop browser, the iPad, and an Android phone, including the size of the stars and how halves are tapped and dragged.
 
@@ -603,8 +602,7 @@ Last milestone completed: M12i9
 
 **Acceptance**
 
-- The mockup shows the rating line, the Rated card, and the rating popups as the user approved them, and `node docs/mockups/reelroulette/build/check.mjs` passes, with checks of the control's value text, its keys, the states that hide it, and the popups and their keys.
-- `check.mjs` fails when a page uses an icon that isn't in its font subset, in a check run with one icon renamed to one the subset lacks, then restored.
+- The mockup shows the rating line, the Rated card, and the rating popups as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
 
 #### Server slice
 
@@ -911,7 +909,7 @@ Last milestone completed: M12i9
 
 **Acceptance**
 
-- The mockup shows Added in and Created in, their Filters line wording, and both date sorts as the user approved them, and `node docs/mockups/reelroulette/build/check.mjs` passes, with checks of each choice on the mockup's items, the custom range's flag, the Filters line wording, and both sorts' order.
+- The mockup shows Added in and Created in, their Filters line wording, and both date sorts as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
 
 #### Server slice
 
@@ -1099,10 +1097,9 @@ Last milestone completed: M12i9
 **Traps**
 
 - The mockup's randomization dropdown is `#lib-mode` in `.lib-pair` (`layout.src.html`), and the page script restores and saves it, so removing only its markup makes the script throw.
-- `check.mjs` reads `#lib-mode` and checks the Library tab's controls in the order `lib-preset,lib-mode,lib-sort,lib-dir,lib-search`.
 - On a phone on its side, the mockup's Library tab controls are a two-column grid, which the dropdown's removal leaves with three items.
 - `showTab` in `layout.src.html` names the five tab pages.
-- WebUI Keyboard Shortcuts' mockup binds 1 to 5 (`TAB_KEYS`), and `check.mjs` checks that 3 opens Tags and 4 opens Stats, and that the shortcut reference has 17 rows.
+- WebUI Keyboard Shortcuts' mockup binds 1 to 5 (`TAB_KEYS`), and its shortcut reference has 17 rows.
 - `renderFilterSummary` builds the mockup's Filters line (`#lib-filters`), which the controls' collapse hides.
 - The mockup's `pickRandom` picks uniformly from the filtered items, and its 72 items are `ITEMS` in `layout.src.html`.
 - WebUI Player Controls adds `casino` to the mockup's icon subset for its Random button.
@@ -1112,7 +1109,7 @@ Last milestone completed: M12i9
 
 **Acceptance**
 
-- The mockup shows the Random tab, the cycle card, the Random line, and the Library tab without the randomization dropdown as the user approved them, and `node docs/mockups/reelroulette/build/check.mjs` passes, with checks of each option's control, Remember plays for, Reset now, the cycle card opening and closing, the Random line's wording and its opening the Random tab, and the keys 1 to 6.
+- The mockup shows the Random tab, the cycle card, the Random line, and the Library tab without the randomization dropdown as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
 - The settled strengths, with the simulations they came from, are recorded in the Decisions, checked by reading them.
 
 #### Engine slice
@@ -1295,7 +1292,7 @@ Last milestone completed: M12i9
 
 **Acceptance**
 
-- The mockup shows Ctrl+scroll and a pinch over the grid stepping its row height from 100 to 300 px with the tile under the pointer held in place, as the user approved it, and `node docs/mockups/reelroulette/build/check.mjs` passes, with checks of the row height's steps and limits and of Ctrl+wheel never zooming the page.
+- The mockup shows Ctrl+scroll and a pinch over the grid stepping its row height from 100 to 300 px with the tile under the pointer held in place, as the user approved it in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
 
 #### Row reuse slice
 
@@ -1726,12 +1723,12 @@ Last milestone completed: M12i9
 - No tabbed dialog exists in the app or the mockup; the Filter tab's section strip (`role="tablist"`) is the nearest model.
 - Add tag and Add Preset are inline fields, not dialogs, so the creation question is a new dialog with two choices.
 - The mockup's dialogs (`openDialog`, `confirmDialog`, and `nameDialog` in `common.js`) offer Cancel and one action, and `nameDialog` takes extra fields through its `extra(form)` hook.
-- New icons go in `ICONS` in `build_font.py`, and `check.mjs` fails for an icon the font subset lacks, a check Item Ratings adds.
+- New icons go in `ICONS` in `build_font.py`; one missing from the subset shows as the `error` glyph.
 - `check.mjs` runs the pages in happy-dom with no layout, so the button's size and the picker's place at each width can only be judged on the devices.
 
 **Acceptance**
 
-- The mockup shows the profiles design as the user approved it, and `node docs/mockups/reelroulette/build/check.mjs` passes, with checks of the picker's order and what closes it, the dialog's tabs and fields, the creation question, Show in, "Discard changes?" on a switch, and U and the arrow keys.
+- The mockup shows the profiles design as the user approved it in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
 
 #### Server slice
 
@@ -4274,7 +4271,7 @@ Last milestone completed: M12i9
 
 **Acceptance**
 
-- The mockup shows editing one item and several, and where titles show, as the user approved them, and `node docs/mockups/reelroulette/build/check.mjs` passes, with checks of editing one item and several and of a cleared title going back to the file's name.
+- The mockup shows editing one item and several, and where titles show, as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
 
 #### Server slice
 

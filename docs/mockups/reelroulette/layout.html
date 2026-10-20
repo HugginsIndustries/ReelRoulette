@@ -3370,8 +3370,8 @@ const playback = {
 const history = [];
 let historyIndex = -1;
 let pickInFlight = false;
-// For build/check.mjs: picks it queues come first, and "?instant" in the address skips the mockup's waits.
-const mockHooks = { queue: [], instant: new URLSearchParams(location.search).has("instant") };
+// For build/check.mjs: "?instant" in the address skips the mockup's waits.
+const instant = new URLSearchParams(location.search).has("instant");
 
 // ---- Notifications, in place of the status line ----
 // Lasting states show on the player's indicator, one at a time, in common.js's precedence order; the list under the
@@ -3398,7 +3398,7 @@ const notes = initNotifications({
   },
   // The player's controls stay while the list is open, so their countdown starts again when it closes, however it closes.
   onClose: () => controlsActivity(),
-  instant: mockHooks.instant
+  instant
 });
 const acknowledge = (text, key, detail = "") => notes.notify({ kind: "actions", text, detail, key });
 // Loading shows only after half a second, so a quick load shows nothing. A random pick, the media, and the Mockup
@@ -3419,7 +3419,7 @@ function setLoading(reason, on) {
   loadingTimer = setTimeout(() => {
     loadingTimer = 0;
     if (loadingHolds.size) notes.setLasting("loading", LASTING.loading);
-  }, mockHooks.instant ? 0 : LOADING_GRACE);
+  }, instant ? 0 : LOADING_GRACE);
 }
 
 // "Advance after" in the Settings tab: today's photo duration, renamed, and the timer both autoplay modes use.
@@ -3656,7 +3656,7 @@ function start(item) {
   followPlayingItem();
   const load = ++mediaLoads;
   setLoading("media", true);
-  setTimeout(() => load === mediaLoads && setLoading("media", false), mockHooks.instant ? 0 : 300);
+  setTimeout(() => load === mediaLoads && setLoading("media", false), instant ? 0 : 300);
 }
 // A file chosen from the library drops the history after the playing item before it's added.
 function pushHistory(item) {
@@ -3693,8 +3693,7 @@ function pickRandom(tries = 0) {
     if (state.pairing) return void setLoading("pick", false);
     const pool = state.situation === "empty" ? [] : ITEMS.filter((item) => !item.removed && passesApplied(item));
     if (!pool.length) return void fail("No eligible media for current filters.");
-    const queued = mockHooks.queue.shift();
-    const item = queued !== undefined ? ITEMS[queued] : pool[Math.floor(Math.random() * pool.length)];
+    const item = pool[Math.floor(Math.random() * pool.length)];
     // The next pick keeps this one's hold, and the media's hold starts before the pick's ends, so the loading period
     // runs on unbroken.
     if (cannotPlay(item) && tries < 20) {
@@ -3706,7 +3705,7 @@ function pickRandom(tries = 0) {
     setLoading("pick", false);
   };
   // The WebUI gives up on a pick after 10 seconds; the mockup waits 4.
-  const delay = mockHooks.instant ? 0 : state.situation === "noanswer" ? 4000 : 350;
+  const delay = instant ? 0 : state.situation === "noanswer" ? 4000 : 350;
   if (delay) setTimeout(finish, delay);
   else finish();
 }
@@ -3779,7 +3778,6 @@ const [ambientFrom, ambientTo] = [0, 1].map(() => {
 });
 const context2d = (canvas) => (canvas.getContext ? canvas.getContext("2d") : null);
 let ambientSampledId = null;
-let ambientSamples = 0;
 let fadeStart = 0;
 let fadeFrame = 0;
 const ambientShows = () => state.ambient && !!playback.item && !playback.failed;
@@ -3837,7 +3835,6 @@ function sampleAmbient() {
   fadeStart = performance.now();
   if (!fadeFrame) fadeFrame = requestAnimationFrame(blendAmbient);
   ambientSampledId = item.id;
-  ambientSamples += 1;
 }
 let ambientTimer = 0;
 function ambientTick() {
@@ -6143,7 +6140,7 @@ $("autotag-scan").addEventListener("click", () => {
     if (state.situation === "reconnecting") autoTag.error = "Couldn't reach the server.";
     else if (!state.pairing) autoTag.rows = autoTagScan();
     renderAutoTag();
-  }, mockHooks.instant ? 0 : 5000);
+  }, instant ? 0 : 5000);
 });
 const setAllAutoTag = (checked) => () => {
   (autoTag.rows || []).forEach((row) => row.files.forEach((file) => file.change && (file.checked = checked)));
@@ -6403,8 +6400,7 @@ function startRefresh() {
     const [stage, percent] = REFRESH_STAGES[refreshStep];
     notes.setLasting("refresh", { icon: "autorenew", spin: true, title: `Library refresh: ${stage}`, progress: `(${percent}%)`, followsControls: true });
     renderMockLasting();
-    // "?instant" holds it at its first stage until it is unchecked, so the check can see each state.
-    if (!mockHooks.instant) refreshTimer = setTimeout(advance, 2500);
+    refreshTimer = setTimeout(advance, instant ? 0 : 2500);
   };
   advance();
 }
@@ -6572,9 +6568,9 @@ function reloadGrid() {
     notes.notify({ kind: "connection", icon: "sync_problem", text: "Library browse failed. Showing the tiles already loaded.", key: "browse" });
     return;
   }
-  placeholderUntil = Date.now() + (mockHooks.instant ? 0 : 450);
+  placeholderUntil = Date.now() + (instant ? 0 : 450);
   layoutGrid(true);
-  setTimeout(() => layoutGrid(true), mockHooks.instant ? 0 : 480);
+  setTimeout(() => layoutGrid(true), instant ? 0 : 480);
 }
 
 // ---- Multi-select and bulk actions ----
@@ -7401,27 +7397,6 @@ $("lib-collapse").addEventListener("click", () => {
   applyCollapse();
 });
 
-// For build/check.mjs only: random picks take queued item ids first, and the history can be read.
-window.mockup = {
-  items: ITEMS,
-  // The level an item's stand-in chord plays at before the volume and normalization, for the volume checks.
-  standInLevel,
-  tags: TAGS,
-  queue: mockHooks.queue,
-  choose: (id) => chooseItem(ITEMS[id]),
-  // The seek row's time format, for the check's hour-long times, which no item runs.
-  formatPosition: fmtPosition,
-  // The refresh's stage labels, in order.
-  refreshStages: REFRESH_STAGES.map(([stage]) => stage),
-  // The kept-source notice's wording, for the check's sources in any order.
-  keptSourcesMessage: (ids) => keptSourcesMessage(ids.map((id) => KEPT_SOURCES[id])),
-  history: () => ({ ids: history.map((item) => item.id), index: historyIndex }),
-  ambientSamples: () => ambientSamples,
-  situation: applySituation,
-  notifications: notes,
-  hooks: mockHooks
-};
-
 // ---- Start ----
 // The library and presets load after a moment, as they do from the server.
 initSettings();
@@ -7448,7 +7423,7 @@ setTimeout(() => {
   presetsLoading = false;
   renderLibPresets();
   layoutGrid(true);
-}, mockHooks.instant ? 0 : 400);
+}, instant ? 0 : 400);
 </script>
 </body>
 </html>

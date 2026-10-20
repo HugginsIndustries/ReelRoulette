@@ -424,8 +424,6 @@ const $ = (id) => document.getElementById(id);
 // and its own refresh.
 const notes = initNotifications({ button: $("notify-btn"), host: $("toasts") });
 const status = (text) => notes.notify({ kind: "actions", text });
-// For build/check.mjs only.
-window.mockup = { notifications: notes };
 const state = {
   remote: store.get("adminRemote", false),
   noLibrary: store.get("adminNoLibrary", false),
@@ -585,8 +583,6 @@ $("import-file").addEventListener("change", () => {
   $("import-file").value = "";
 });
 $("mock-bad-import").addEventListener("click", () => uploadLibrary("notes.db", false));
-// For build/check.mjs: "?instant" in the address skips the upload's wait.
-const instant = new URLSearchParams(location.search).has("instant");
 // The file uploads first, with a progress bar in this section. The server then reads its source folders, or rejects
 // a file that isn't a library and leaves the library as it is.
 function uploadLibrary(fileName, isLibrary) {
@@ -605,7 +601,7 @@ function uploadLibrary(fileName, isLibrary) {
       return;
     }
     percent += 20;
-    setTimeout(step, instant ? 0 : 250);
+    setTimeout(step, 250);
   };
   step();
 }
