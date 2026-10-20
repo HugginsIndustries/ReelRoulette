@@ -1145,10 +1145,12 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
 .settings-section { border: 1px solid var(--surface-border); border-radius: 8px; padding: 10px 12px; }
 .stats-section h3,
 .settings-section h3 { margin: 0 0 8px; font-size: 0.95rem; }
-/* The playing file's name, its path, and its stats as a table of labels and values, then the library's cards. */
+/* The playing file's name, its path with its button, and its stats as a table of labels and values, then the library's cards. */
 .stats-file-name { font-weight: 600; word-break: break-word; margin: 0 0 4px; }
 .stats-path { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
 .stats-path code { flex: 1 1 auto; min-width: 0; font-size: 0.82rem; color: var(--muted-fg); word-break: break-all; }
+.stats-path .btn { min-height: 36px; padding: 4px 10px; font-size: 0.9rem; flex: 0 0 auto; }
+.stats-path .btn .material-symbol-icon { font-size: 20px; }
 .stats-table { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin: 0; font-size: 0.92rem; }
 .stats-table dt { color: var(--muted-fg); }
 .stats-table dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }

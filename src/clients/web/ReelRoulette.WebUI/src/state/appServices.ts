@@ -151,7 +151,16 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     notifications,
     tagCatalog
   });
-  const statsTab = createStatsTab({ store, api, connection, tagCatalog, normalization, enhanced: audio.enhanced });
+  const statsTab = createStatsTab({
+    store,
+    api,
+    connection,
+    tagCatalog,
+    normalization,
+    enhanced: audio.enhanced,
+    dialogs,
+    notifications
+  });
   const settings = createSettings({ device });
   const ambient = createAmbient({
     enabled: settings.ambient,

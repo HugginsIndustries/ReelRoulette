@@ -617,6 +617,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/show-in-file-manager/{itemId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open the server machine's file manager at a library item's file
+         * @description Opens the system file manager on the server machine with the item's file selected, or, where the file
+         *     manager can't select it, at its folder. Accepted only from the server machine: a direct request from
+         *     loopback or from the server's own address. A request through a reverse proxy is refused, even when the
+         *     proxy runs on the server machine. The capability `api.showInFileManager` tells a caller whether the server
+         *     accepts this route from it. The route value is the item's persisted library `id`, never a path.
+         */
+        post: operations["postShowInFileManager"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/media/{token}": {
         parameters: {
             query?: never;
@@ -1090,6 +1114,7 @@ export interface components {
             assetsVersion?: string | null;
             minimumCompatibleApiVersion: string;
             supportedApiVersions: string[];
+            /** @description The server's capabilities. `api.showInFileManager` depends on the caller: it is listed only for a direct request from the server machine, while the server has a desktop session to open a file manager in, so `POST /api/show-in-file-manager/{itemId}` would be accepted from it. */
             capabilities: string[];
             /**
              * @description Whether the server has a library, as `ControlStatusResponse.libraryState` reports it. This route answers without a library, so a client learns the state here while library routes and the event stream answer 503.
@@ -1100,6 +1125,7 @@ export interface components {
             libraryMessage?: string | null;
         };
         CapabilitiesResponse: {
+            /** @description The same list as `VersionResponse.capabilities`, including its caller-dependent entry. */
             capabilities: string[];
         };
         RestartResponse: {
@@ -3435,6 +3461,73 @@ export interface operations {
             };
             /** @description File extension is not a supported playable type (code play_unsupported_media). */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            503: components["responses"]["LibraryUnavailable"];
+        };
+    };
+    postShowInFileManager: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Persisted library item `id` (path-safe). Not a filesystem path. */
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file manager was asked to show the file. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The request didn't come straight from the server machine (code file_manager_not_local), or it came from another device while remote connections are off. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown item id (code file_manager_item_not_found), or the item's file isn't on disk (code file_manager_file_missing). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The server has no desktop session to open a file manager in, or runs on a system it can't open one on (code file_manager_unavailable). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The file manager couldn't be started (code file_manager_failed). */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

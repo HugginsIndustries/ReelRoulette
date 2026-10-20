@@ -1,7 +1,19 @@
 // @vitest-environment happy-dom
 import { fireEvent, screen, waitFor } from "@testing-library/preact";
-import { beforeEach, describe, expect, it } from "vitest";
-import { COMPATIBLE_VERSION, FakeServer, json, mountPage, pageReady, resetPage, settle, status, type MountedPage } from "./pageHarness";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  COMPATIBLE_VERSION,
+  FakeServer,
+  json,
+  mountPage,
+  openNotices,
+  pageReady,
+  REQUIRED_CAPABILITIES,
+  resetPage,
+  settle,
+  status,
+  type MountedPage
+} from "./pageHarness";
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
@@ -181,7 +193,7 @@ describe("Stats tab", () => {
     await waitFor(() => expect(rows().Plays).toBe("1"));
     expect(sections().map((section) => section.querySelector("h3")?.textContent)).toEqual(["Current file", "Library"]);
     expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
-    expect(sections()[0]!.querySelector(".stats-path")?.textContent).toBe("C:\\media\\holiday clip.mp4");
+    expect(sections()[0]!.querySelector(".stats-path code")?.textContent).toBe("C:\\media\\holiday clip.mp4");
     expect(page.server.requests("POST", "/api/library/item").map((call) => call.body)).toEqual([{ id: "item-video" }]);
   });
 
@@ -425,7 +437,7 @@ describe("Stats tab", () => {
     await waitFor(() => expect(sections()[1]!.querySelector('[role="alert"]')?.textContent).toBe("Stats load failed: HTTP 500"));
     expect(statsBody().querySelectorAll('[role="alert"]')).toHaveLength(1);
     expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
-    expect(sections()[0]!.querySelector(".stats-path")?.textContent).toBe("C:\\media\\holiday clip.mp4");
+    expect(sections()[0]!.querySelector(".stats-path code")?.textContent).toBe("C:\\media\\holiday clip.mp4");
     expect(statsBody().querySelector("dl")).toBeNull();
     expect(server.logLines().some((line) => line.startsWith("status=Stats load failed: HTTP 500"))).toBe(true);
   });
@@ -452,7 +464,7 @@ describe("Stats tab", () => {
     await waitFor(() => expect(cards()).toHaveLength(11));
     expect(server.requests("POST", "/api/library/item").map((call) => call.body)).toEqual([{ id: "item-video" }]);
     expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
-    expect(sections()[0]!.querySelector(".stats-path")?.textContent).toBe("C:\\media\\holiday clip.mp4");
+    expect(sections()[0]!.querySelector(".stats-path code")?.textContent).toBe("C:\\media\\holiday clip.mp4");
     expect(statsBody().querySelector("dl")).toBeNull();
     expect(statsBody().querySelector('[role="alert"]')).toBeNull();
     expect(server.logLines().some((line) => line.startsWith("status=Stats load failed"))).toBe(false);
@@ -507,7 +519,202 @@ describe("Stats tab", () => {
     expect(cards()).toHaveLength(0);
     expect(statsBody().querySelector('[role="alert"]')).toBeNull();
     expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
-    expect(sections()[0]!.querySelector(".stats-path")?.textContent).toBe("C:\\media\\holiday clip.mp4");
+    expect(sections()[0]!.querySelector(".stats-path code")?.textContent).toBe("C:\\media\\holiday clip.mp4");
     expect(server.logLines().some((line) => line.startsWith("status=Stats load failed"))).toBe(false);
+  });
+});
+
+/** A video whose item id needs encoding in a route. */
+const ENCODED_VIDEO = { ...VIDEO, itemId: "item 7/a" };
+const SHOW_IN_FILE_MANAGER_ROUTE = "/api/show-in-file-manager/item%207%2Fa";
+
+/** The server's version for a browser on the server machine, while it has a desktop to open its file manager in. */
+function offerFileManager(server: FakeServer): void {
+  server.on("GET", "/api/version", () => json({ ...COMPATIBLE_VERSION, capabilities: [...REQUIRED_CAPABILITIES, "api.showInFileManager"] }));
+}
+
+/** Plays the video and opens the Stats tab on it, with or without the server offering Show in File Manager. */
+async function openOnFile(options: { fileManager: boolean; setup?: (server: FakeServer) => void }): Promise<StatsPage> {
+  const page = await mountStats({
+    picks: [ENCODED_VIDEO],
+    items: [itemRow(ENCODED_VIDEO)],
+    setup(server) {
+      if (options.fileManager) {
+        offerFileManager(server);
+      }
+      options.setup?.(server);
+    }
+  });
+  fireEvent.click(document.getElementById("now-playing-name")!);
+  await waitFor(() => expect(rows().Plays).toBe("1"));
+  return page;
+}
+
+function pathButton(name: string): HTMLButtonElement | null {
+  return [...statsBody().querySelectorAll<HTMLButtonElement>(".stats-path button")].find((button) => button.textContent?.includes(name)) ?? null;
+}
+
+/** The popups showing, each as its text and second line, leaving out any that are fading out. */
+function popupsShown(): string[] {
+  return [...document.querySelectorAll<HTMLElement>("#toasts .toast:not(.is-leaving)")].map((toast) =>
+    [...toast.querySelectorAll(".toast-text > div")].map((line) => line.textContent).join(" | ")
+  );
+}
+
+/** Whether any line the page relayed names the file or its path. */
+function relayedFile(server: FakeServer): boolean {
+  return server.logLines().some((line) => line.includes("holiday clip") || line.includes("C:\\media"));
+}
+
+/** The browser has no Clipboard API, as on a page served over plain HTTP to another device. */
+function removeClipboard(): void {
+  Object.defineProperty(window.navigator, "clipboard", { value: undefined, configurable: true });
+}
+
+function stubClipboard(writeText: (text: string) => Promise<void>): ReturnType<typeof vi.fn> {
+  const spy = vi.fn(writeText);
+  Object.defineProperty(window.navigator, "clipboard", { value: { writeText: spy }, configurable: true });
+  return spy;
+}
+
+interface ExecCopy {
+  commands: string[];
+  /** The field's value, selection, and place when the copy ran. */
+  fields: Array<{ value: string; selected: string; inStatsTab: boolean; focused: boolean }>;
+}
+
+/** Stands in for `document.execCommand`, which happy-dom lacks, answering `result`. */
+function stubExecCommand(result: boolean): ExecCopy {
+  const copy: ExecCopy = { commands: [], fields: [] };
+  (document as unknown as { execCommand: (command: string) => boolean }).execCommand = (command: string) => {
+    copy.commands.push(command);
+    const field = document.querySelector("textarea");
+    if (field) {
+      copy.fields.push({
+        value: field.value,
+        selected: field.value.slice(field.selectionStart ?? 0, field.selectionEnd ?? 0),
+        inStatsTab: !!field.closest("#stats-tab"),
+        focused: document.activeElement === field
+      });
+    }
+    return result;
+  };
+  return copy;
+}
+
+describe("Stats tab's Show in File Manager and Copy Path", () => {
+  beforeEach(() => {
+    resetPage();
+  });
+
+  afterEach(() => {
+    delete (window.navigator as unknown as Record<string, unknown>).clipboard;
+    delete (document as unknown as Record<string, unknown>).execCommand;
+    vi.unstubAllGlobals();
+  });
+
+  it("offers Show in File Manager only where the server offers it, and Copy Path otherwise", async () => {
+    await openOnFile({ fileManager: true });
+    const show = pathButton("Show in File Manager");
+    expect(show).not.toBeNull();
+    expect(show!.querySelector(".material-symbol-icon")?.textContent).toBe("folder_open");
+    expect(pathButton("Copy Path")).toBeNull();
+
+    resetPage();
+    await openOnFile({ fileManager: false });
+    const copy = pathButton("Copy Path");
+    expect(copy).not.toBeNull();
+    expect(copy!.querySelector(".material-symbol-icon")?.textContent).toBe("content_copy");
+    expect(pathButton("Show in File Manager")).toBeNull();
+  });
+
+  it("shows Copy Path beside the path of a playing item no longer in the catalog", async () => {
+    await mountStats({ items: [] });
+    fireEvent.click(document.getElementById("now-playing-name")!);
+    await waitFor(() => expect(cards()).toHaveLength(11));
+
+    expect(statsBody().querySelector("dl")).toBeNull();
+    expect(pathButton("Copy Path")).not.toBeNull();
+  });
+
+  it("asks the server to open its file manager at the item, and says so with the file's name", async () => {
+    const { server } = await openOnFile({ fileManager: true, setup: (fake) => fake.on("POST", SHOW_IN_FILE_MANAGER_ROUTE, () => status(204)) });
+
+    fireEvent.click(pathButton("Show in File Manager")!);
+    await waitFor(() => expect(popupsShown()).toEqual(["Opened in the file manager. | holiday clip.mp4"]));
+    expect(server.requests("POST", SHOW_IN_FILE_MANAGER_ROUTE)).toHaveLength(1);
+    expect(server.requests("POST", SHOW_IN_FILE_MANAGER_ROUTE)[0]!.body).toBeUndefined();
+    expect(openNotices()).toEqual([]);
+    expect(server.logLines().some((line) => line.startsWith("status=Opened in the file manager."))).toBe(true);
+    expect(relayedFile(server)).toBe(false);
+  });
+
+  it("says why the server refused to open its file manager, or its status without a reason", async () => {
+    const { server } = await openOnFile({
+      fileManager: true,
+      setup: (fake) =>
+        fake.on("POST", SHOW_IN_FILE_MANAGER_ROUTE, () =>
+          json({ error: "The server has no desktop to open a file manager in.", code: "file_manager_unavailable" }, 409)
+        )
+    });
+
+    fireEvent.click(pathButton("Show in File Manager")!);
+    await waitFor(() => expect(openNotices()).toEqual(["Show in File Manager failed: The server has no desktop to open a file manager in."]));
+    expect(server.logLines().some((line) => line.startsWith("status=Show in File Manager failed (409)."))).toBe(true);
+    fireEvent.click(document.querySelector("dialog.app-dialog .dialog-actions button")!);
+    await settle();
+
+    server.on("POST", SHOW_IN_FILE_MANAGER_ROUTE, () => new Response("Internal error", { status: 500 }));
+    fireEvent.click(pathButton("Show in File Manager")!);
+    await waitFor(() => expect(openNotices()).toEqual(["Show in File Manager failed (500)."]));
+    expect(server.logLines().some((line) => line.startsWith("status=Show in File Manager failed (500)."))).toBe(true);
+    expect(popupsShown()).toEqual([]);
+    expect(relayedFile(server)).toBe(false);
+  });
+
+  it("copies the path with the Clipboard API, and says so with the file's name", async () => {
+    const writeText = stubClipboard(() => Promise.resolve());
+    const execCopy = stubExecCommand(true);
+    const { server } = await openOnFile({ fileManager: false });
+
+    fireEvent.click(pathButton("Copy Path")!);
+    await waitFor(() => expect(popupsShown()).toEqual(["Path copied. | holiday clip.mp4"]));
+    expect(writeText.mock.calls).toEqual([["C:\\media\\holiday clip.mp4"]]);
+    expect(execCopy.commands).toEqual([]);
+    expect(server.logLines().some((line) => line.startsWith("status=Path copied."))).toBe(true);
+    expect(relayedFile(server)).toBe(false);
+  });
+
+  it("copies the path from a hidden field without the Clipboard API, as over plain HTTP from another device", async () => {
+    removeClipboard();
+    const execCopy = stubExecCommand(true);
+    const { server } = await openOnFile({ fileManager: false });
+    const button = pathButton("Copy Path")!;
+    button.focus();
+
+    fireEvent.click(button);
+    await waitFor(() => expect(popupsShown()).toEqual(["Path copied. | holiday clip.mp4"]));
+    expect(execCopy.commands).toEqual(["copy"]);
+    const path = "C:\\media\\holiday clip.mp4";
+    expect(execCopy.fields).toEqual([{ value: path, selected: path, inStatsTab: true, focused: true }]);
+    expect(document.querySelector("textarea")).toBeNull();
+    expect(document.activeElement).toBe(button);
+    expect(openNotices()).toEqual([]);
+    expect(relayedFile(server)).toBe(false);
+  });
+
+  it("falls back to the hidden field when the Clipboard API refuses, and says when that fails too", async () => {
+    const writeText = stubClipboard(() => Promise.reject(new Error("Write permission denied.")));
+    const execCopy = stubExecCommand(false);
+    const { server } = await openOnFile({ fileManager: false });
+
+    fireEvent.click(pathButton("Copy Path")!);
+    await waitFor(() => expect(openNotices()).toEqual(["Couldn't copy the path."]));
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(execCopy.commands).toEqual(["copy"]);
+    expect(document.querySelector("textarea")).toBeNull();
+    expect(popupsShown()).toEqual([]);
+    expect(server.logLines().some((line) => line.startsWith("status=Couldn't copy the path."))).toBe(true);
+    expect(relayedFile(server)).toBe(false);
   });
 });

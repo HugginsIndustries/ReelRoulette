@@ -11,6 +11,12 @@ namespace ReelRoulette.Server.Hosting;
 public static class ServerHostComposition
 {
     public const string WebClientCorsPolicyName = "ReelRouletteWebClient";
+    internal const string ShowInFileManagerCapability = "api.showInFileManager";
+    internal const string FileManagerErrorNotLocal = "file_manager_not_local";
+    internal const string FileManagerErrorUnavailable = "file_manager_unavailable";
+    internal const string FileManagerErrorItemNotFound = "file_manager_item_not_found";
+    internal const string FileManagerErrorFileMissing = "file_manager_file_missing";
+    internal const string FileManagerErrorFailed = "file_manager_failed";
     private static readonly FileExtensionContentTypeProvider ContentTypeProvider = new();
 
     public static void AddReelRouletteServer(this IServiceCollection services)
@@ -187,22 +193,7 @@ public static class ServerHostComposition
 
         app.MapGet("/api/version", GetVersion);
 
-        app.MapGet("/api/capabilities", (ServerStateService state, OperatorTestingService testingService) =>
-        {
-            var capabilities = state.GetVersion().Capabilities.ToList();
-            var testing = testingService.GetSnapshot();
-            if (testing.TestingModeEnabled && testing.ForceCapabilityMismatch)
-            {
-                capabilities = capabilities
-                    .Where(capability => !string.Equals(capability, "identity.sessionId", StringComparison.Ordinal))
-                    .ToList();
-            }
-
-            return Results.Ok(new
-            {
-                capabilities
-            });
-        });
+        app.MapGet("/api/capabilities", GetCapabilities);
 
         app.MapGet("/control/status", (ServerRuntimeOptions runtime, CoreSettingsService settings, ServerSessionStore sessions, ServerStateService state, ApiTelemetryService telemetry, ConnectedClientTracker clients, OperatorTestingService testingService, LibraryCatalogHost catalog) =>
         {
@@ -382,6 +373,8 @@ public static class ServerHostComposition
         });
 
         app.MapPost("/api/play/{itemId}", PlayItem);
+
+        app.MapPost("/api/show-in-file-manager/{itemId}", ShowInFileManager);
 
         app.MapGet("/api/media/{token}", (HttpContext context, string token, LibraryPlaybackService playback, OperatorTestingService testingService, IHostApplicationLifetime lifetime) =>
             ServeMedia(context, token, playback, testingService, lifetime.ApplicationStopping));
@@ -742,9 +735,10 @@ public static class ServerHostComposition
     /// The version and capabilities, and whether the server has a library. The library state comes from the catalog host,
     /// since without a library the state service has no catalog.
     /// </summary>
-    internal static IResult GetVersion(ServerStateService state, OperatorTestingService testingService, LibraryCatalogHost catalog)
+    internal static IResult GetVersion(HttpContext context, ServerStateService state, OperatorTestingService testingService, LibraryCatalogHost catalog)
     {
         var version = state.GetVersion();
+        AddCallerCapabilities(context, version.Capabilities);
         version.LibraryState = catalog.StateName;
         version.LibraryMessage = catalog.UnavailableMessage;
         var testing = testingService.GetSnapshot();
@@ -762,6 +756,91 @@ public static class ServerHostComposition
         }
 
         return Results.Ok(version);
+    }
+
+    /// <summary>The same capabilities as <see cref="GetVersion"/>, including the ones that depend on the caller.</summary>
+    internal static IResult GetCapabilities(HttpContext context, ServerStateService state, OperatorTestingService testingService)
+    {
+        var capabilities = state.GetVersion().Capabilities;
+        AddCallerCapabilities(context, capabilities);
+        var testing = testingService.GetSnapshot();
+        if (testing.TestingModeEnabled && testing.ForceCapabilityMismatch)
+        {
+            capabilities = capabilities
+                .Where(capability => !string.Equals(capability, "identity.sessionId", StringComparison.Ordinal))
+                .ToList();
+        }
+
+        return Results.Ok(new
+        {
+            capabilities
+        });
+    }
+
+    /// <summary>
+    /// Lists the file manager capability only for a caller the show-in-file-manager route would accept: a direct
+    /// request from the server machine, while the server has a desktop to open a file manager in.
+    /// </summary>
+    private static void AddCallerCapabilities(HttpContext context, List<string> capabilities)
+    {
+        if (LocalRequest.IsLocal(context) && context.RequestServices.GetService<IFileManagerLauncher>()?.IsAvailable == true)
+        {
+            capabilities.Add(ShowInFileManagerCapability);
+        }
+    }
+
+    /// <summary>
+    /// Opens the server machine's file manager at an item's file, for a browser on the server machine. The item is
+    /// looked up by its catalog id; the route never takes a path.
+    /// </summary>
+    internal static async Task<IResult> ShowInFileManager(HttpContext context, string itemId, LibraryCatalogHost catalog)
+    {
+        var logs = context.RequestServices.GetService<ServerLogService>();
+        var id = itemId?.Trim() ?? "";
+        void Log(string outcome, string level = "info") =>
+            logs?.Append(level, $"Show in file manager item={id} outcome={outcome}.");
+
+        if (!LocalRequest.IsLocal(context))
+        {
+            Log("not-local");
+            return Results.Json(
+                new { error = "Only a browser on the server machine can open its file manager.", code = FileManagerErrorNotLocal },
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        var launcher = context.RequestServices.GetService<IFileManagerLauncher>();
+        if (launcher is not { IsAvailable: true })
+        {
+            Log("unavailable");
+            return Results.Json(
+                new { error = "The server has no desktop to open a file manager in.", code = FileManagerErrorUnavailable },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
+        var item = id.Length == 0 ? null : catalog.Session.ReadPlaybackItem(id);
+        if (item == null || string.IsNullOrWhiteSpace(item.FullPath))
+        {
+            Log("not-found");
+            return Results.Json(new { error = "Item not found", code = FileManagerErrorItemNotFound }, statusCode: StatusCodes.Status404NotFound);
+        }
+
+        if (!File.Exists(item.FullPath))
+        {
+            Log("file-missing");
+            return Results.Json(new { error = "The file isn't on disk.", code = FileManagerErrorFileMissing }, statusCode: StatusCodes.Status404NotFound);
+        }
+
+        var result = await launcher.ShowAsync(item.FullPath, context.RequestAborted);
+        if (!result.Shown)
+        {
+            Log($"failed error={result.ErrorType}", "warn");
+            return Results.Json(
+                new { error = "The file manager couldn't be opened.", code = FileManagerErrorFailed },
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
+
+        Log(result.ShownWith!);
+        return Results.NoContent();
     }
 
     internal static IResult SetFavorite(FavoriteRequest request, ServerStateService state, LibraryOperationsService operations)

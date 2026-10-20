@@ -177,6 +177,11 @@ export interface AppStore {
   /** The server's version from the last version check it answered, or null before one has. */
   readonly serverVersion: Signal<ServerVersion | null>;
   /**
+   * The capabilities the last version check the server answered listed, or none before one has. Some depend on the
+   * caller, such as whether the server opens its file manager for this browser.
+   */
+  readonly serverCapabilities: Signal<readonly string[]>;
+  /**
    * The server can't be reached: the event stream isn't open, or the last version check didn't reach the server. False
    * while the last check found no library, since the server then refuses the stream.
    */
@@ -330,6 +335,7 @@ export function createAppStore(options: AppStoreOptions): AppStore {
     compatibilityMessage: signal<string | null>(null),
     pairingRequired: signal(false),
     serverVersion: signal<ServerVersion | null>(null),
+    serverCapabilities: signal<readonly string[]>([]),
     reconnecting: signal(false),
     libraryState,
     libraryMessage: signal<string | null>(null),

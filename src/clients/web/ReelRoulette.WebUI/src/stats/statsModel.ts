@@ -22,9 +22,12 @@ export interface StatsCard {
 
 /** What the Stats tab shows of the playing file. */
 export interface StatsFileView {
+  itemId: string;
   name: string;
   /** The file's full path. */
   path: string;
+  /** The server opens its file manager at the file for this browser, which offers that in place of Copy Path. */
+  canShowInFileManager: boolean;
   /** Its stats, or null until they load for it, and while the server holds back or asks for pairing. */
   rows: StatsRow[] | null;
   /** Its tags in the tag catalog's order, with the rows. */

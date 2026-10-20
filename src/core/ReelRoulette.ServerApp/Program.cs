@@ -59,6 +59,7 @@ static async Task RunAsync(string[] args)
         builder.Services.AddSingleton<RestartCoordinator>();
         builder.Services.AddSingleton<UpdateService>();
         builder.Services.AddSingleton<IServerUpdateChannelCoordinator>(sp => sp.GetRequiredService<UpdateService>());
+        builder.Services.AddSingleton<IFileManagerLauncher>(_ => DesktopFileManagerLauncher.Create());
         builder.Services.AddHostedService<UpdateHostedService>();
         builder.Services.AddHostedService<WebUiMdnsService>();
         builder.Services.AddCors(options =>

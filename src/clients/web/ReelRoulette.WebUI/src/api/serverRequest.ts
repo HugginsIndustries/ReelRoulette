@@ -73,7 +73,7 @@ export function createServerRequester(send: typeof fetch, onUnauthorized: (route
 }
 
 /** Routes that end in an item id, which `requestRoute` names as `{itemId}`. */
-const ITEM_ID_ROUTES: readonly string[] = ["/api/play/"];
+const ITEM_ID_ROUTES: readonly string[] = ["/api/play/", "/api/show-in-file-manager/"];
 
 /** The routes that name a preset by id, which `requestRoute` names as `{presetId}`. */
 const PRESET_ID_ROUTE = /^\/api\/presets\/[^/]+\/(update|rename|delete)$/;

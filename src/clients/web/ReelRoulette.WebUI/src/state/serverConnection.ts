@@ -18,7 +18,7 @@ import type { components } from "../types/openapi.generated";
 import type { RefreshKeptSource } from "../types/serverContracts";
 import type { AppApi } from "./appApi";
 import { PRESET_MENU_BLOCKED, PRESET_MENU_LOAD_FAILED, PRESET_MENU_NO_LIBRARY, type ApiPreset, type AppStore } from "./appStore";
-import { serverCompatibilityError, serverVersionOf } from "./serverCompatibility";
+import { serverCapabilitiesOf, serverCompatibilityError, serverVersionOf } from "./serverCompatibility";
 
 /** A version check that gets no answer in this time counts as not reaching the server. */
 export const VERSION_CHECK_TIMEOUT_MS = 10_000;
@@ -363,7 +363,10 @@ export function createServerConnection(options: ServerConnectionOptions): Server
       return;
     }
     // Before the compatibility check, so Diagnostics shows the version of a server that fails it.
-    store.serverVersion.value = serverVersionOf(version);
+    batch(() => {
+      store.serverVersion.value = serverVersionOf(version);
+      store.serverCapabilities.value = serverCapabilitiesOf(version);
+    });
     const compatibilityError = serverCompatibilityError(version);
     if (compatibilityError) {
       blockForCompatibility(compatibilityError);

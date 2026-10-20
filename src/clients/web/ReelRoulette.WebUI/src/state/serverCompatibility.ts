@@ -13,7 +13,7 @@ const REQUIRED_SERVER_CAPABILITIES = [
   "api.presets.byId"
 ];
 
-/** The parts of `GET /api/version` the compatibility check and Diagnostics read. */
+/** The parts of `GET /api/version` the compatibility check, Diagnostics, and the store's capabilities read. */
 export interface ServerVersionInfo {
   appVersion?: unknown;
   assetsVersion?: unknown;
@@ -38,6 +38,11 @@ export function serverVersionOf(version: ServerVersionInfo | null | undefined): 
   };
 }
 
+/** The capabilities the server listed, as text, or none when it sent no list. */
+export function serverCapabilitiesOf(version: ServerVersionInfo | null | undefined): string[] {
+  return Array.isArray(version?.capabilities) ? version.capabilities.map((x) => String(x)) : [];
+}
+
 function parseApiVersion(value: unknown): number {
   const parsed = Number.parseInt(String(value || "").trim(), 10);
   return Number.isFinite(parsed) ? parsed : Number.NaN;
@@ -56,8 +61,7 @@ export function serverCompatibilityError(version: ServerVersionInfo | null | und
     return `Server requires client API version ${String(version?.minimumCompatibleApiVersion)} or newer.`;
   }
 
-  const capabilities = Array.isArray(version?.capabilities) ? version.capabilities.map((x) => String(x)) : [];
-  const capabilitySet = new Set(capabilities);
+  const capabilitySet = new Set(serverCapabilitiesOf(version));
   const missing = REQUIRED_SERVER_CAPABILITIES.filter((key) => !capabilitySet.has(key));
   if (missing.length > 0) {
     return `Server missing required capabilities: ${missing.join(", ")}.`;

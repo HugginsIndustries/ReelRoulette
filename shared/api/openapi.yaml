@@ -1138,6 +1138,89 @@ paths:
         "503":
           $ref: "#/components/responses/LibraryUnavailable"
 
+  /api/show-in-file-manager/{itemId}:
+    post:
+      summary: Open the server machine's file manager at a library item's file
+      description: |
+        Opens the system file manager on the server machine with the item's file selected, or, where the file
+        manager can't select it, at its folder. Accepted only from the server machine: a direct request from
+        loopback or from the server's own address. A request through a reverse proxy is refused, even when the
+        proxy runs on the server machine. The capability `api.showInFileManager` tells a caller whether the server
+        accepts this route from it. The route value is the item's persisted library `id`, never a path.
+      operationId: postShowInFileManager
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Persisted library item `id` (path-safe). Not a filesystem path.
+      responses:
+        "204":
+          description: The file manager was asked to show the file.
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: >
+            The request didn't come straight from the server machine (code file_manager_not_local), or it came
+            from another device while remote connections are off.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notLocal:
+                  value:
+                    error: Only a browser on the server machine can open its file manager.
+                    code: file_manager_not_local
+        "404":
+          description: >
+            Unknown item id (code file_manager_item_not_found), or the item's file isn't on disk
+            (code file_manager_file_missing).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notFound:
+                  value:
+                    error: Item not found
+                    code: file_manager_item_not_found
+                fileMissing:
+                  value:
+                    error: The file isn't on disk.
+                    code: file_manager_file_missing
+        "409":
+          description: >
+            The server has no desktop session to open a file manager in, or runs on a system it can't open one on
+            (code file_manager_unavailable).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                unavailable:
+                  value:
+                    error: The server has no desktop to open a file manager in.
+                    code: file_manager_unavailable
+        "500":
+          description: The file manager couldn't be started (code file_manager_failed).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                failed:
+                  value:
+                    error: The file manager couldn't be opened.
+                    code: file_manager_failed
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
+
   /api/media/{token}:
     get:
       summary: Stream media by an issued playback token
@@ -1908,6 +1991,10 @@ components:
           type: array
           items:
             type: string
+          description: >
+            The server's capabilities. `api.showInFileManager` depends on the caller: it is listed only for a
+            direct request from the server machine, while the server has a desktop session to open a file manager
+            in, so `POST /api/show-in-file-manager/{itemId}` would be accepted from it.
         libraryState:
           type: string
           enum:
@@ -1934,6 +2021,7 @@ components:
           type: array
           items:
             type: string
+          description: The same list as `VersionResponse.capabilities`, including its caller-dependent entry.
 
     RestartResponse:
       type: object

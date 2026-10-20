@@ -195,7 +195,7 @@ public sealed class LibraryUnavailableServerTests : IDisposable
 
     private static VersionResponse ReadVersion(LibraryCatalogHost catalog)
     {
-        var result = ServerHostComposition.GetVersion(new ServerStateService(), new OperatorTestingService(), catalog);
+        var result = ServerHostComposition.GetVersion(new DefaultHttpContext(), new ServerStateService(), new OperatorTestingService(), catalog);
         return Assert.IsType<Ok<VersionResponse>>(result).Value!;
     }
 

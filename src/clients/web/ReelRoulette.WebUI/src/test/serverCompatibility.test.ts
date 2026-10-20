@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { serverCompatibilityError, serverVersionOf } from "../state/serverCompatibility";
+import { serverCapabilitiesOf, serverCompatibilityError, serverVersionOf } from "../state/serverCompatibility";
 
 const CAPABILITIES = [
   "auth.sessionCookie",
@@ -51,5 +51,14 @@ describe("serverVersionOf", () => {
     expect(serverVersionOf({ appVersion: " 0.14.2.0 ", assetsVersion: null, apiVersion: "1" })).toEqual({ version: "0.14.2.0", apiVersion: "1" });
     expect(serverVersionOf({ assetsVersion: "  ", apiVersion: 1 })).toEqual({ version: "", apiVersion: "" });
     expect(serverVersionOf(null)).toEqual({ version: "", apiVersion: "" });
+  });
+});
+
+describe("serverCapabilitiesOf", () => {
+  it("reads the listed capabilities, the optional ones too, and none from a server that sends no list", () => {
+    expect(serverCapabilitiesOf({ capabilities: [...CAPABILITIES, "api.showInFileManager"] })).toEqual([...CAPABILITIES, "api.showInFileManager"]);
+    expect(serverCapabilitiesOf({ capabilities: "api.showInFileManager" })).toEqual([]);
+    expect(serverCapabilitiesOf({ apiVersion: "2" })).toEqual([]);
+    expect(serverCapabilitiesOf(null)).toEqual([]);
   });
 });

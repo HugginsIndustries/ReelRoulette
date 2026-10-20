@@ -1,6 +1,8 @@
 import { batch, computed, signal, type ReadonlySignal } from "@preact/signals";
 import { errorText, HttpStatusError, UnauthorizedError } from "../api/serverRequest";
+import type { Dialogs } from "../dialogs/dialogs";
 import { parseLibraryItem, type LibraryProjectionItem } from "../library/libraryProjectionModel";
+import type { Notifications } from "../notifications/notifications";
 import type { LoudnessNormalization } from "../playback/loudnessNormalization";
 import { basenameFromPath } from "../playback/nowPlaying";
 import type { AppApi } from "../state/appApi";
@@ -9,6 +11,7 @@ import { noLibraryText } from "../state/lastingStates";
 import type { ServerConnection } from "../state/serverConnection";
 import type { TagCatalog } from "../tags/tagCatalog";
 import { createCoalescedRefresh } from "./coalescedRefresh";
+import { createFileLocation, SHOW_IN_FILE_MANAGER_CAPABILITY } from "./fileLocation";
 import { createLastPlayedBeforePlay } from "./lastPlayed";
 import { adjustmentText, fileRows, libraryCards, orderTags, type LibraryStats, type StatsLibraryView, type StatsView } from "./statsModel";
 
@@ -16,7 +19,9 @@ import { adjustmentText, fileRows, libraryCards, orderTags, type LibraryStats, t
  * The panel's Stats tab: the playing file's stats and the library's. It loads only while it shows: showing it loads
  * once, and while it shows, a new playing item and the server's events load again, a burst of them once. A failed load
  * keeps what the tab showed; with nothing loaded yet, the Library section says why. Nothing loads while the server
- * fails the compatibility check, runs without a library, or asks for pairing.
+ * fails the compatibility check, runs without a library, or asks for pairing. Beside the file's path, Show in File
+ * Manager opens the server machine's file manager at it where the server offers that, and Copy Path copies it
+ * everywhere else.
  */
 export interface StatsTab {
   readonly view: ReadonlySignal<StatsView>;
@@ -24,11 +29,15 @@ export interface StatsTab {
   open(): void;
   /** The tab hides: nothing loads until it shows again. */
   close(): void;
+  /** Opens the server machine's file manager at the file the tab shows. */
+  showInFileManager(): Promise<void>;
+  /** Copies the path of the file the tab shows, giving focus back to `button`, which copied it. */
+  copyPath(button: HTMLElement): Promise<void>;
 }
 
 export interface StatsTabOptions {
   store: AppStore;
-  api: Pick<AppApi, "getJson" | "postJson">;
+  api: Pick<AppApi, "getJson" | "postJson" | "url" | "request">;
   connection: Pick<ServerConnection, "on">;
   /** The tag catalog the Tags and Filter tabs share, which orders the file's tags. */
   tagCatalog: TagCatalog;
@@ -36,6 +45,10 @@ export interface StatsTabOptions {
   normalization: Pick<LoudnessNormalization, "adjustment">;
   /** Enhanced audio, without which nothing is applied. */
   enhanced: ReadonlySignal<boolean>;
+  /** The notice Show in File Manager's and Copy Path's failures show. */
+  dialogs: Pick<Dialogs, "notice">;
+  /** The popups that say a path was shown or copied. */
+  notifications: Pick<Notifications, "notify">;
 }
 
 interface LoadedItem {
@@ -44,7 +57,8 @@ interface LoadedItem {
 }
 
 export function createStatsTab(options: StatsTabOptions): StatsTab {
-  const { store, api, connection, tagCatalog, normalization, enhanced } = options;
+  const { store, api, connection, tagCatalog, normalization, enhanced, dialogs, notifications } = options;
+  const fileLocation = createFileLocation({ api, dialogs, notifications });
   const isOpen = signal(false);
   const stats = signal<LibraryStats | null>(null);
   const loadedItem = signal<LoadedItem | null>(null);
@@ -73,8 +87,10 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
       const loaded = loadedItem.value;
       const item = !unavailable && loaded?.itemId === playing.itemId ? loaded.item : null;
       file = {
+        itemId: playing.itemId,
         name: basenameFromPath(playing.displayName || playing.id),
         path: playing.id,
+        canShowInFileManager: !!playing.itemId && store.serverCapabilities.value.includes(SHOW_IN_FILE_MANAGER_CAPABILITY),
         rows: item
           ? fileRows(item, lastPlayed.shownFor(item.lastPlayedUtcMs), Date.now(), adjustmentText(normalization.adjustment.value, enhanced.value))
           : null,
@@ -175,6 +191,18 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
     },
     close() {
       isOpen.value = false;
+    },
+    async showInFileManager() {
+      const file = view.peek().file;
+      if (file?.canShowInFileManager) {
+        await fileLocation.showInFileManager(file.itemId, file.name);
+      }
+    },
+    async copyPath(button) {
+      const file = view.peek().file;
+      if (file) {
+        await fileLocation.copyPath(file.path, file.name, button);
+      }
     }
   };
 }

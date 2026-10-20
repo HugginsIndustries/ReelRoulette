@@ -136,86 +136,7 @@ Every active and planned entry uses this shape. `check-milestones.ps1` enforces 
 
 ## Active Milestones
 
-Last milestone completed: M12i10
-
-### M12j - Show in File Manager from the WebUI
-
-- **Status**: ⏳ Planned
-- **Goal**: A WebUI on the server machine opens the system file manager at the playing file, and elsewhere copies its path.
-- **Depends on**: Reverse Proxy and HTTPS Access, WebUI Preact Migration, and WebUI Stats Panel, and WebUI Notifications, whose Your actions popup acknowledges it.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Decisions
-
-- The server opens the file manager, since a browser can't do it itself, and the server can when the browser runs on the server machine.
-- The action is accepted only from the server machine, meaning a direct connection from loopback or from the server's own address, as the single localhost check that Reverse Proxy and HTTPS Access adds decides.
-- A request through a reverse proxy is not localhost, so the action is not offered there, even on the server machine.
-
-#### Slices
-
-| Slice | Status | Delivers |
-| --- | --- | --- |
-| Contract | ⏳ Planned | A route that takes an item id and opens the file manager, and a capability that tells the WebUI whether to offer it. |
-| Server | ⏳ Planned | The file manager launch on Windows and Linux, without a shell, and the refusals and headless report. |
-| WebUI | ⏳ Planned | Show in File Manager or Copy Path beside the file's path in the Stats tab. |
-
-#### Contract slice
-
-**Scope**
-
-- A route that takes an item id, never a path, accepted only from the server machine.
-- A capability the WebUI reads to decide whether to offer the action.
-
-**Acceptance**
-
-- The route, which takes an item id, and the capability are in the contract, in contract tests.
-- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
-
-#### Server slice
-
-**Scope**
-
-- On Windows, `explorer.exe /select,<path>`.
-- On Linux, the `org.freedesktop.FileManager1` `ShowItems` D-Bus call, which selects the file, falling back to `xdg-open` on its folder.
-- Start processes with `ProcessStartInfo.ArgumentList` and no shell.
-- A headless server with no desktop session reports the action as unavailable.
-
-**Traps**
-
-- The desktop's `OpenFileLocation`, in git history from before Desktop Client Removal, opened Explorer with the file selected on Windows and the folder with `xdg-open` on Linux.
-- The tray already launches programs (`AvaloniaTrayHostUi.cs`).
-
-**Acceptance**
-
-- A direct request from loopback or from the server's own address opens the file manager with the file selected, or its folder where selection is not available, in server tests for loopback and the server's own address with the launcher faked.
-- Requests from other addresses, proxied requests, and unknown ids are refused, and a headless server reports the action as unavailable, in server tests for another LAN address, proxied, unknown-id, and headless requests with the launcher faked.
-- The file manager is started without a shell, in server tests with the launcher faked.
-- `dotnet test ReelRoulette.sln` passes.
-
-#### WebUI slice
-
-**Scope**
-
-- A Show in File Manager action for the current file where the server offers it, and Copy Path everywhere else.
-- They sit beside the file's path in the Stats tab, Show in File Manager with the `folder_open` icon and Copy Path with `content_copy`.
-- A Your actions popup then says "Opened in the file manager." or "Path copied.", with the file name on its second line.
-- Copy Path from another device at the LAN address falls back to copying from a hidden text field with `document.execCommand('copy')`.
-
-**Traps**
-
-- `navigator.clipboard` exists only in a secure context, HTTPS or localhost (inferred).
-- The server serves plain HTTP on the LAN.
-
-**Acceptance**
-
-- The WebUI shows the action only when the server offers it, and Copy Path otherwise, in WebUI tests.
-- Copy Path copies the path over plain HTTP from another device, where the Clipboard API is missing, as well as over HTTPS, in a WebUI test of Copy Path without the Clipboard API.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and one quick Linux spot check.
-
-#### Release checks
-
-- Manual: On the server machine at `http://localhost`, Show in File Manager opens the file manager at the playing file on Linux and Windows; from another device, Copy Path copies it, at the LAN address and through an HTTPS proxy.
+Last milestone completed: M12j
 
 ### M12k1 - Browser-Playable Filter
 
@@ -445,7 +366,7 @@ Last milestone completed: M12i10
 - A filled `star` is flat only at optical size 20, the size filled icons use; at 48 its fill leaves a ring (measured). Empty and half stars use the outlined icons' size, and full stars the filled icons'.
 - `fileStats` in `layout.src.html` builds the Current file section, and `statRow` takes a DOM node as its value.
 - Drawing the starting ratings from `statRand` would shift every random value drawn after them (inferred).
-- The mockup's path line also holds Copy Path or Show in File Manager, which Show in File Manager from the WebUI builds.
+- The mockup's path line, like the app's `.stats-path`, also holds Copy Path or Show in File Manager, which Show in File Manager from the WebUI built.
 - `#mock-sync` is the Mockup tab's favorite from another device, which sends an Other devices popup with the key `sync:{id}`.
 - `check.mjs` runs the pages in happy-dom, with no layout and no pointer drags, so the stars' size and how halves are tapped and dragged can only be judged on the devices.
 - At 320 px wide the stats table's value column is about 210 px, too narrow for five 44 px stars and Clear, while the section's full width is about 290 px (inferred).

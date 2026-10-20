@@ -115,6 +115,7 @@ These need a person, real devices, or the Windows VM.
 - [ ] On a desktop browser and the Pixel's installed app, Random from the middle of the history plays a new item, after which Previous goes to the item that was last before it, and the fullscreen button shows the exit icon in fullscreen.
 - [ ] In Firefox on the desktop, K, Space, J and L, M, the left and right arrows, and [ and ] work, and H opens the shortcut reference, in normal view and in fullscreen.
 - [ ] On the iPad and an Android phone, double-tapping either side of a playing video seeks by the seek step with the seek indicator, a single tap still shows the controls, and the page doesn't zoom or flash a tap highlight.
+- [ ] On the server machine at `http://localhost`, Show in File Manager opens the file manager with the playing file selected on Linux and Windows, for a file whose path has spaces; from another device, Copy Path copies it, at the LAN address and through an HTTPS proxy.
 
 ## Release Flow
 

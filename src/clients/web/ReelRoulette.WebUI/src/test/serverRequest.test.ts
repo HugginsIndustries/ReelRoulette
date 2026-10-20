@@ -88,6 +88,9 @@ describe("requestRoute", () => {
     expect(requestRoute("http://server/api/play/item%2042", { method: "POST" })).toBe("POST /api/play/{itemId}");
     expect(requestRoute(new URL("http://server/api/version"))).toBe("GET /api/version");
     expect(requestRoute(new Request("http://server/api/play/item-1", { method: "POST" }))).toBe("POST /api/play/{itemId}");
+    expect(requestRoute("https://host/reelroulette/api/show-in-file-manager/item%2F42", { method: "POST" })).toBe(
+      "POST /api/show-in-file-manager/{itemId}"
+    );
   });
 
   it("names a preset route's id as {presetId}, as it names an item id, and not create's or reorder's last part", () => {

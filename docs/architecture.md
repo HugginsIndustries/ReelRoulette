@@ -46,6 +46,7 @@ flowchart LR
   - Windows path uses per-user startup registration and exposes immediate toggle control via tray and Operator UI.
   - Linux path uses XDG autostart (`*.desktop`) with `Exec=`/`Path=` aimed at the stable binary (AppImage: **`APPIMAGE`** on-disk path, not the `/tmp/.mount_*` process path); the host pins ASP.NET content root to `AppContext.BaseDirectory` so autostart works when the session manager uses a non-install cwd.
   - Other non-Windows hosts without Linux XDG use a no-op startup-launch service without affecting server-core behavior.
+- Provides the desktop file manager launcher behind `ReelRoulette.Server`'s `IFileManagerLauncher`: Explorer on Windows, and on Linux the FileManager1 `ShowItems` D-Bus call with `xdg-open` on the folder as the fallback, available only with a desktop session. A host without a launcher doesn't offer Show in File Manager.
 
 ### Server Transport Layer
 
@@ -73,7 +74,7 @@ flowchart LR
 - Clients issue command/query calls through APIs and project state from API plus SSE.
 - WebUI Auto Tag performs filename/path matching only on the server. Auto-tag scan and duplicate scan read catalog rows. A full-library scan reads every item, and any other scan reads enabled sources. Duplicate groups are ready fingerprints. Duplicate apply deletes the other files and catalog rows and leaves the kept item. The web client sends `scanFullLibrary` and applies selected suggestions via API without client-local tag-matching authority.
 - WebUI Library tab grid lays out its own justified rows (`libraryGridLayout.ts`) and scrolls them virtually, a row at a time. Browse is `POST /api/library/query`, in 200-item pages, and a reload of the loaded window is one request for up to 10,000 tiles; tile JPEGs load from `GET /api/thumbnail/{itemId}` using that page's thumbnail fields, with the page's thumbnail version in the URL so the browser caches each JPEG until it is written again. A finished refresh run reloads the loaded window once. The first page loads after connect and stays loaded across hide and show. Header counts stay the current query totals after a change that finishes while the tab is hidden. Tile activation is server-authoritative via `POST /api/play/{itemId}` (the side panel closes on success only as the full-screen overlay; no duplicate client `record-playback`). Favorite, blacklist, playback, and tag events patch or reload the loaded window whether the tab is shown or hidden, and the WebUI matches them to tiles and the playing item by item id. `resyncRequired` reloads that window and does not fetch the full catalog.
-- WebUI Stats tab only reads: library stats from `GET /api/library/stats`, the playing item from `POST /api/library/item`, and the time before this play from the `playbackRecorded` event's `previousLastPlayedUtc`. It loads only while it shows, coalescing a burst of events into one load.
+- WebUI Stats tab reads library stats from `GET /api/library/stats`, the playing item from `POST /api/library/item`, and the time before this play from the `playbackRecorded` event's `previousLastPlayedUtc`. It loads only while it shows, coalescing a burst of events into one load. Beside the file's path, Show in File Manager sends `POST /api/show-in-file-manager/{itemId}` where the server lists `api.showInFileManager`, and Copy Path copies the path on the device everywhere else.
 - The WebUI must not add local authoritative mutation fallbacks for server-owned domains.
 - `GET /api/library/catalog-checkpoint` writes a standalone copy of the live `library.db`. No client exports or imports a library, so `LibraryCatalogStore`'s replace methods have no caller; `Open` still recovers an interrupted replace on every start.
 
@@ -81,6 +82,7 @@ flowchart LR
 
 - OpenAPI (`shared/api/openapi.yaml`) is the source of truth for endpoint and schema contracts.
 - `/api/version` and `/api/capabilities` provide compatibility and capability metadata used for client gating.
+- Capabilities are worked out per request: `api.showInFileManager` is listed only for a direct request from the server machine while the server has a desktop session, so neither route's list can be cached or shared between callers.
 - Generated client contracts should stay in sync with OpenAPI and be verified in normal gates.
 
 ## Eventing and Projection

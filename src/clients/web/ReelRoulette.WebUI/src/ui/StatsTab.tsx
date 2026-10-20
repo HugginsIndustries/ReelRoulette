@@ -28,13 +28,28 @@ export function StatsTab() {
   );
 }
 
-/** The file's name and full path, then its stats once they load. */
+/**
+ * The file's name and full path, with Show in File Manager where the server offers it and Copy Path everywhere else,
+ * then its stats once they load.
+ */
 function FileStats({ file }: { file: StatsFileView }) {
+  const { statsTab } = useApp();
   return (
     <>
       <p class="stats-file-name">{file.name}</p>
       <div class="stats-path">
         <code>{file.path}</code>
+        {file.canShowInFileManager ? (
+          <button type="button" class="btn" onClick={() => void statsTab.showInFileManager()}>
+            <span class="material-symbol-icon" aria-hidden="true">folder_open</span>
+            Show in File Manager
+          </button>
+        ) : (
+          <button type="button" class="btn" onClick={(event) => void statsTab.copyPath(event.currentTarget)}>
+            <span class="material-symbol-icon" aria-hidden="true">content_copy</span>
+            Copy Path
+          </button>
+        )}
       </div>
       {file.rows ? (
         <dl class="stats-table">

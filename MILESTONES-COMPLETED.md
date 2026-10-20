@@ -6,6 +6,154 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12j - Show in File Manager from the WebUI
+
+- **Status**: ✅ Complete
+- **Goal**: A WebUI on the server machine opens the system file manager at the playing file, and elsewhere copies its path.
+- **Depends on**: Reverse Proxy and HTTPS Access, WebUI Preact Migration, and WebUI Stats Panel, and WebUI Notifications, whose Your actions popup acknowledges it.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- The server opens the file manager, since a browser can't do it itself, and the server can when the browser runs on the server machine.
+- The action is accepted only from the server machine, meaning a direct connection from loopback or from the server's own address, as the single localhost check that Reverse Proxy and HTTPS Access adds decides.
+- A request through a reverse proxy is not localhost, so the action is not offered there, even on the server machine.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Contract | ✅ Complete | A route that takes an item id and opens the file manager, and a capability that tells the WebUI whether to offer it. |
+| Server | ✅ Complete | The file manager launch on Windows and Linux, without a shell, and the refusals and headless report. |
+| WebUI | ✅ Complete | Show in File Manager or Copy Path beside the file's path in the Stats tab. |
+
+#### Contract slice
+
+**Scope**
+
+- `POST /api/show-in-file-manager/{itemId}`, which takes an item id, never a path, accepted only from the server machine.
+- The capability `api.showInFileManager`, which the WebUI reads to decide whether to offer the action, listed in `/api/version` and `/api/capabilities` only for a caller the route accepts, while the server has a desktop session.
+
+**Acceptance**
+
+- The route, which takes an item id, and the capability are in the contract, in contract tests.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- `shared/api/openapi.yaml` has `POST /api/show-in-file-manager/{itemId}` with 204, 401, 403, 404, 409, 500, and 503 responses and the codes `file_manager_not_local`, `file_manager_unavailable`, `file_manager_item_not_found`, `file_manager_file_missing`, and `file_manager_failed`, and describes `api.showInFileManager` in `VersionResponse` and `CapabilitiesResponse` as depending on the caller. The WebUI's types are regenerated.
+- The route is mapped in `ServerHostComposition.cs`. `GetVersion` takes the request, and `GET /api/capabilities` became the named handler `GetCapabilities`, both adding the capability through one helper.
+- `OpenApiRouteContractTests` finds the route both mapped and in the spec, and `LibraryUnavailableServerTests` finds its 503 matching the library route gate.
+- `ShowInFileManagerRouteTests.Capability_IsListedOnlyForACallerTheRouteWouldAccept` covers the capability in `/api/version` and `/api/capabilities` for loopback, the server's own address, another LAN address, a proxied request, an unavailable launcher, and no launcher.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### Server slice
+
+**Scope**
+
+- On Windows, `explorer.exe /select,"<path>"` from the Windows folder, its arguments given as one string, since `ProcessStartInfo.ArgumentList` can't produce that form.
+- On Linux, the `org.freedesktop.FileManager1` `ShowItems` D-Bus call over a session bus connection of its own, which selects the file, falling back to `xdg-open` on its folder.
+- Start every process with no shell, and `xdg-open` with `ProcessStartInfo.ArgumentList`.
+- A headless server with no desktop session, on Linux one with neither `DISPLAY` nor `WAYLAND_DISPLAY` set, reports the action as unavailable.
+
+**Traps**
+
+- The desktop's `OpenFileLocation`, in git history from before Desktop Client Removal, opened Explorer with the file selected on Windows and the folder with `xdg-open` on Linux.
+  - It gave Explorer the `Arguments` string `/select,"<path>"`.
+- `ProcessStartInfo.ArgumentList` quotes the whole token, as `"/select,C:\a b\c.mp4"`, while Explorer documents `/select,"C:\a b\c.mp4"` (inferred).
+- A Windows path can't contain `"`, so the quoted path can't break out of its argument.
+- Explorer often exits with code 1 even when it worked (inferred).
+- `new Uri(path).AbsoluteUri` names the wrong file for a name holding `%XX`, such as `a%41b.mp4` as `aAb.mp4`, and leaves `'`, `,`, `[`, and `]` unescaped, while escaping each path segment with `Uri.EscapeDataString` reads back exactly (measured).
+- The server already references `Tmds.DBus.Protocol` 0.94.1, so the D-Bus call needs no new package and no outside tool.
+- The tray's `SupportsTrayHostUi` counts `DBUS_SESSION_BUS_ADDRESS` alone as a desktop, which an SSH login also has (inferred).
+- On KDE, Dolphin owns `org.freedesktop.FileManager1` on the session bus, and its D-Bus service file starts it when it isn't running (measured).
+- `Path.GetDirectoryName` turns `/` into `\` on Windows, where CI also runs the Linux branch's tests (inferred).
+- The tray launches programs through the shell (`AvaloniaTrayHostUi.cs`), so it is no model for this.
+
+**Acceptance**
+
+- A direct request from loopback or from the server's own address opens the file manager with the file selected, or its folder where selection is not available, in server tests for loopback and the server's own address with the launcher faked.
+- Requests from other addresses, proxied requests, and unknown ids are refused, and a headless server reports the action as unavailable, in server tests for another LAN address, proxied, unknown-id, and headless requests with the launcher faked.
+- The file manager is started without a shell, in server tests with the launcher faked.
+- `dotnet test ReelRoulette.sln` passes.
+
+**Evidence**
+
+- `IFileManagerLauncher` in `ReelRoulette.Server/Hosting` is the hook the route reads from the request's services; without one registered, the action is unavailable.
+- The route refuses a caller that isn't localhost, then a missing or unavailable launcher, then an unknown or blank id, then a file that isn't on disk, before asking the launcher. Each request writes one `Show in file manager item=… outcome=…` line to `last.log`, without the path.
+- `DesktopFileManagerLauncher` in `ReelRoulette.ServerApp/Hosting` is registered in `Program.cs`. Its real D-Bus call opens and disposes a connection of its own, with a 5 second timeout.
+- `ShowInFileManagerRouteTests` (18 cases) covers these server requests:
+  - From loopback and from the server's own address, the route answers 204, calls the launcher once with the item's full path, and logs the outcome without the path.
+  - From another LAN address, and through a proxy via the real forwarded-headers middleware, it answers 403 without calling the launcher.
+  - An unknown id, a blank id, and a path in place of an id answer 404 `file_manager_item_not_found`, and a file not on disk 404 `file_manager_file_missing`.
+  - An unavailable or unregistered launcher answers 409, and a launcher failure 500, with a warning naming the error type.
+  - The capability is listed for each kind of caller as the Contract slice's evidence says.
+- `DesktopFileManagerLauncherTests` (12 cases) covers the launcher itself:
+  - On Windows, Explorer starts from the Windows folder with `Arguments` `/select,"C:\a b\c,d.mp4"`, an empty `ArgumentList`, and no shell.
+  - ShowItems gets `file:///media/nas/a%20b/c%23d%2541e%2Cf%27g%20%5Bh%5D.mp4` for `/media/nas/a b/c#d%41e,f'g [h].mp4`, and the UTF-8 escapes for a non-ASCII name.
+  - When the D-Bus call fails, and when there is no session bus, the folder opens with `xdg-open` as the only `ArgumentList` element, with no shell.
+  - When `xdg-open` fails too, the failure is reported.
+  - Availability is checked for Windows, `DISPLAY`, `WAYLAND_DISPLAY`, a session bus alone, blank values, and another system.
+- Six deliberate breaks each failed tests, each restored from a copy:
+  - removing the route's localhost check;
+  - listing the capability for every caller;
+  - starting `xdg-open` through the shell;
+  - building the URI with `new Uri(path).AbsoluteUri`, which failed on the `%41` name;
+  - removing the `xdg-open` fallback;
+  - removing the missing-file check.
+- No test makes a real D-Bus call or starts a file manager; the Linux spot check opens one.
+- `dotnet build ReelRoulette.sln` has no warnings, and `dotnet test ReelRoulette.sln` passes with 536 core and 19 server app tests, up from 518 and 7.
+
+#### WebUI slice
+
+**Scope**
+
+- A Show in File Manager action for the current file where the server offers it, and Copy Path everywhere else.
+- They sit beside the file's path in the Stats tab, Show in File Manager with the `folder_open` icon and Copy Path with `content_copy`.
+- A Your actions popup then says "Opened in the file manager." or "Path copied.", with the file name on its second line.
+- Copy Path from another device at the LAN address falls back to copying from a hidden text field with `document.execCommand('copy')`.
+
+**Traps**
+
+- `navigator.clipboard` exists only in a secure context, HTTPS or localhost (inferred).
+- The server serves plain HTTP on the LAN.
+- The mockup's action is a labeled `.btn` with its icon before the label, not an icon-only button.
+- The WebUI reads capabilities only to check compatibility, against a required list, and keeps none.
+- Four Stats tab tests read the whole text of `.stats-path` as the path, which the button's icon name and label join.
+- happy-dom has no `document.execCommand` (measured).
+
+**Acceptance**
+
+- The WebUI shows the action only when the server offers it, and Copy Path otherwise, in WebUI tests.
+- Copy Path copies the path over plain HTTP from another device, where the Clipboard API is missing, as well as over HTTPS, in a WebUI test of Copy Path without the Clipboard API.
+- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and one quick Linux spot check.
+
+**Evidence**
+
+- The store's `serverCapabilities` is set from each version check the server answers, through `serverCapabilitiesOf` in `serverCompatibility.ts`, and the capability stays out of the required list.
+- The Stats tab shows Show in File Manager (`folder_open`) or Copy Path (`content_copy`) as a labeled `.btn` after the path, with the mockup's two `.stats-path .btn` rules, also for a playing file no longer in the catalog. `src/stats/fileLocation.ts` holds both actions.
+- Show in File Manager posts with no body through the app's request helper, since `api.post` always sends `{}`, so a 401 still shows only the pairing prompt. The route's 401 line names `{itemId}`.
+- `stats.test.ts`'s "Stats tab's Show in File Manager and Copy Path" (7 tests) covers:
+  - which button shows with and without the capability, and Copy Path for a file no longer in the catalog;
+  - one POST to `/api/show-in-file-manager/item%207%2Fa`, and its popup;
+  - a 409's reason and a 500's status in the notice;
+  - Copy Path with the Clipboard API;
+  - Copy Path without it, from a selected hidden field inside the Stats tab, with focus back on the button;
+  - both failing, with "Couldn't copy the path.";
+  - and in each, no relayed line holding the path or the file name.
+- `serverRequest.test.ts` covers the route's 401 name, and `serverCompatibility.test.ts` covers `serverCapabilitiesOf`.
+- Four Stats tab tests read the path from `.stats-path code`.
+- Three deliberate breaks each failed tests, each restored from a copy: removing the hidden-field fallback, ignoring the capability, and relaying the file name.
+- The mockup already showed the action as shipped and needed no change. `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes with 1772 tests, up from 1764.
+- The user's Linux spot check at `http://localhost` on KDE Plasma passed: Show in File Manager opened Dolphin in front with the playing file selected, and the popup showed.
+- In the spot check, when the file's folder was already open in Dolphin, Dolphin selected the file in that window, which stayed behind the browser.
+
+#### Release checks
+
+- Manual: On the server machine at `http://localhost`, Show in File Manager opens the file manager with the playing file selected on Linux and Windows, for a file whose path has spaces; from another device, Copy Path copies it, at the LAN address and through an HTTPS proxy.
+
 ### M12i10 - WebUI Keyboard Shortcuts
 
 - **Status**: ✅ Complete
