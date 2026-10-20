@@ -1,5 +1,6 @@
 import { effect } from "@preact/signals";
 import { useLayoutEffect, useRef } from "preact/hooks";
+import { listenForShortcuts } from "../keyboard/shortcuts";
 import { useApp } from "./appContext";
 import { AutoTag } from "./AutoTag";
 import { DialogHost } from "./Dialog";
@@ -16,7 +17,7 @@ import { ScreenBoundary } from "./ScreenBoundary";
  * dragging the panel's handle doesn't render the player.
  */
 export function Stage() {
-  const { api, fullscreen, panel } = useApp();
+  const { api, fullscreen, panel, player, audio, settings } = useApp();
   const stage = useRef<HTMLDivElement>(null);
   const playerColumn = useRef<HTMLElement>(null);
 
@@ -46,14 +47,14 @@ export function Stage() {
     return () => panel.attachPlayer(null);
   }, []);
 
-  // Escape closes the panel when it is open, and otherwise leaves pseudo-fullscreen. While a dialog or Auto Tag is open,
-  // Escape is theirs: it closes the top one.
+  // Escape closes the panel when it is open, leaving focus on the page as the shortcuts do, and otherwise leaves
+  // pseudo-fullscreen. While a dialog or Auto Tag is open, Escape is theirs: it closes the top one.
   useLayoutEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (stage.current?.querySelector("dialog[open]")) return;
       if (panel.isOpen.peek()) {
-        void panel.close();
+        void panel.close({ byKey: true });
         return;
       }
       fullscreen.exitPseudo();
@@ -61,6 +62,9 @@ export function Stage() {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  // The keyboard shortcuts, from any key press the focused element leaves to the page.
+  useLayoutEffect(() => listenForShortcuts(document, { player, audio, panel, fullscreen, settings }), []);
 
   return (
     <div id="fullscreen-stage" class="fullscreen-stage" ref={stage}>

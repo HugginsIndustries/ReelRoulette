@@ -1174,6 +1174,22 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
 .setting-fields:disabled, .choice-row label:has(input:disabled) { opacity: 0.55; }
 .setting-fields:disabled .choice-row label:has(input:disabled) { opacity: 1; }
 #settings-popup-position { justify-self: start; min-width: 12rem; }
+/* The Keyboard shortcuts section opens like Ambient mode settings, from its heading. */
+.setting-more.shortcuts-more { margin: 0; }
+.shortcuts-more summary h3 { margin: 0; }
+/* The shortcut reference: each line's keys, then what they do. */
+.shortcut-list { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 0.9rem; }
+.shortcut-list dt { white-space: nowrap; }
+.shortcut-list dd { margin: 0; }
+kbd {
+  font-family: inherit;
+  font-size: 0.8rem;
+  padding: 1px 6px;
+  border: 1px solid var(--control-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--control-bg);
+}
 /* Diagnostics: the ids and the device name in full, wrapping anywhere, since they are for matching `last.log` lines. */
 .diag { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 0.9rem; }
 .diag dd { margin: 0; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8rem; word-break: break-all; }

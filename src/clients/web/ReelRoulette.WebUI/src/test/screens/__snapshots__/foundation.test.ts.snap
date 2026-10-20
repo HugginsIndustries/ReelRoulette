@@ -274,6 +274,25 @@ exports[`page structure > keeps the starting markup 1`] = `
                     "Loop stops autoplay"
                 <p class="setting-hint" id="settings-loop-stops-autoplay-hint">
                   "With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances."
+              <div class="setting">
+                <span class="setting-label" id="settings-seek-step-label">
+                  "Seek step"
+                <div aria-labelledby="settings-seek-step-label" class="choice-row" role="radiogroup">
+                  <label>
+                    <input aria-labelledby="settings-seek-step-1" name="settings-seek-step" type="radio" value="1">
+                    <span>
+                      <span id="settings-seek-step-1">
+                        "1 second"
+                  <label>
+                    <input aria-labelledby="settings-seek-step-5" name="settings-seek-step" type="radio" value="5">
+                    <span>
+                      <span id="settings-seek-step-5">
+                        "5 seconds"
+                  <label>
+                    <input aria-labelledby="settings-seek-step-10" name="settings-seek-step" type="radio" value="10">
+                    <span>
+                      <span id="settings-seek-step-10">
+                        "10 seconds"
             <section aria-labelledby="settings-audio-heading" class="settings-section">
               <h3 id="settings-audio-heading">
                 "Audio"
@@ -302,7 +321,7 @@ exports[`page structure > keeps the starting markup 1`] = `
                       <span id="settings-volume-step-10">
                         "10%"
                 <p class="setting-hint" id="settings-volume-step-hint">
-                  "For the scroll wheel and a two-finger drag over the player."
+                  "Also for the scroll wheel and a two-finger drag over the player."
               <div class="setting">
                 <div class="choice-row">
                   <label>
@@ -745,6 +764,119 @@ exports[`page structure > keeps the starting markup 1`] = `
                     <span>
                       <span id="settings-auto-pause-never">
                         "Never"
+            <section aria-labelledby="settings-shortcuts-heading" class="settings-section">
+              <details class="setting-more shortcuts-more" id="settings-shortcuts">
+                <summary>
+                  <span aria-hidden="true" class="material-symbol-icon setting-more-chevron">
+                    "chevron_right"
+                  <h3 id="settings-shortcuts-heading">
+                    "Keyboard shortcuts"
+                <dl class="shortcut-list">
+                  <dt>
+                    <kbd>
+                      "K"
+                    "/"
+                    <kbd>
+                      "Space"
+                  <dd>
+                    "Play or pause, or pause and resume a photo's timer"
+                  <dt>
+                    <kbd>
+                      "J"
+                    "/"
+                    <kbd>
+                      "L"
+                  <dd>
+                    "Seek back or forward by the seek step"
+                  <dt>
+                    <kbd>
+                      "←"
+                    "/"
+                    <kbd>
+                      "→"
+                  <dd>
+                    "Previous or next"
+                  <dt>
+                    <kbd>
+                      "R"
+                  <dd>
+                    "Random"
+                  <dt>
+                    <kbd>
+                      "F"
+                  <dd>
+                    "Favorite"
+                  <dt>
+                    <kbd>
+                      "B"
+                  <dd>
+                    "Blacklist"
+                  <dt>
+                    <kbd>
+                      "A"
+                  <dd>
+                    "Autoplay on or off"
+                  <dt>
+                    <kbd>
+                      "M"
+                  <dd>
+                    "Mute"
+                  <dt>
+                    <kbd>
+                      ","
+                    "/"
+                    <kbd>
+                      "."
+                  <dd>
+                    "One frame back or forward, while a video is paused"
+                  <dt>
+                    <kbd>
+                      "["
+                    "/"
+                    <kbd>
+                      "]"
+                  <dd>
+                    "Volume down or up by the volume step"
+                  <dt>
+                    <kbd>
+                      "1"
+                    "–"
+                    <kbd>
+                      "5"
+                  <dd>
+                    "Open Library, Filter, Tags, Stats, or Settings; the open tab's key closes the panel"
+                  <dt>
+                    <kbd>
+                      "T"
+                  <dd>
+                    "Tags"
+                  <dt>
+                    <kbd>
+                      "S"
+                  <dd>
+                    "Settings"
+                  <dt>
+                    <kbd>
+                      "P"
+                  <dd>
+                    "Show or hide the panel"
+                  <dt>
+                    <kbd>
+                      "Shift+F"
+                  <dd>
+                    "Fullscreen"
+                  <dt>
+                    <kbd>
+                      "H"
+                  <dd>
+                    "These shortcuts"
+                  <dt>
+                    <kbd>
+                      "Esc"
+                  <dd>
+                    "Close the top dialog, the notifications list, or the panel, or leave fullscreen"
+                <p class="setting-hint">
+                  "Shortcuts do nothing while you type in a text field."
             <section aria-labelledby="settings-diagnostics-heading" class="settings-section">
               <h3 id="settings-diagnostics-heading">
                 "Diagnostics"

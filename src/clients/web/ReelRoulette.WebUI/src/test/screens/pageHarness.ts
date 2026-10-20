@@ -206,6 +206,38 @@ function stubProperty(target: object, name: string, descriptor: PropertyDescript
   });
 }
 
+export interface FakeVideoFrames {
+  /** Shows a frame that starts `mediaTime` seconds into the video, running the callbacks waiting for the next frame. */
+  show(mediaTime: number): void;
+}
+
+/** Gives the page's videos the browser's frame timings (`requestVideoFrameCallback`), which happy-dom lacks. */
+export function stubVideoFrames(): FakeVideoFrames {
+  type FrameCallback = (now: number, metadata: { mediaTime: number; presentedFrames: number }) => void;
+  const waiting = new Map<number, FrameCallback>();
+  let nextHandle = 1;
+  let presentedFrames = 0;
+  stubProperty(HTMLVideoElement.prototype, "requestVideoFrameCallback", {
+    value(callback: FrameCallback) {
+      waiting.set(nextHandle, callback);
+      return nextHandle++;
+    }
+  });
+  stubProperty(HTMLVideoElement.prototype, "cancelVideoFrameCallback", {
+    value(handle: number) {
+      waiting.delete(handle);
+    }
+  });
+  return {
+    show(mediaTime) {
+      presentedFrames += 1;
+      const due = [...waiting.values()];
+      waiting.clear();
+      due.forEach((callback) => callback(performance.now(), { mediaTime, presentedFrames }));
+    }
+  };
+}
+
 export interface FakeFullscreen {
   /** The elements the page asked to show in fullscreen, oldest first. */
   readonly requests: Element[];

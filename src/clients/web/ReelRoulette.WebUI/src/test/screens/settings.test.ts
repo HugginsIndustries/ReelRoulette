@@ -191,11 +191,11 @@ describe("the Settings tab", () => {
     expect(tab("Settings").getAttribute("aria-selected")).toBe("true");
   });
 
-  it("shows Playback, Audio, Player controls, Appearance, Notifications, Panel, and Diagnostics, in that order, then says settings apply at once, with no Save", async () => {
+  it("shows Playback, Audio, Player controls, Appearance, Notifications, Panel, Keyboard shortcuts, and Diagnostics, in that order, then says settings apply at once, with no Save", async () => {
     await mount();
     await openSettings();
     const headings = within(settingsPage()).getAllByRole("heading", { level: 3 });
-    expect(headings.map((heading) => heading.textContent)).toEqual(["Playback", "Audio", "Player controls", "Appearance", "Notifications", "Panel", "Diagnostics"]);
+    expect(headings.map((heading) => heading.textContent)).toEqual(["Playback", "Audio", "Player controls", "Appearance", "Notifications", "Panel", "Keyboard shortcuts", "Diagnostics"]);
     expect(within(settingsPage()).getByText("Settings apply at once and are kept on this device.")).toBeTruthy();
     // Loudness normalization settings' and Ambient mode settings' Reset to defaults and Custom's Reset to Medium are the
     // tab's only buttons.
@@ -206,11 +206,13 @@ describe("the Settings tab", () => {
     ]);
   });
 
-  it("has no entry that turns Loop, Autoplay, or Mute on or off, which the player's buttons do, and no key badge in a label", async () => {
+  it("has no entry that turns Loop, Autoplay, or Mute on or off, which the player's buttons do, and no key badge outside the shortcut reference", async () => {
     await mount();
     await openSettings();
     expect(within(settingsPage()).queryByRole("checkbox", { name: /^(loop|autoplay|mute)$/i, hidden: true })).toBeNull();
-    expect(settingsPage().querySelectorAll("kbd")).toHaveLength(0);
+    const badges = Array.from(settingsPage().querySelectorAll("kbd"));
+    expect(badges.length).toBeGreaterThan(0);
+    expect(badges.filter((badge) => !badge.closest(".shortcut-list"))).toEqual([]);
   });
 });
 
@@ -256,7 +258,7 @@ describe("Volume step", () => {
     const names = within(group).getAllByRole("radio", { hidden: true }).map((choice) => document.getElementById(choice.getAttribute("aria-labelledby")!)!.textContent);
     expect(names).toEqual(["1%", "2%", "5%", "10%"]);
     expect(names.map((name) => radio(name!).checked)).toEqual([false, false, true, false]);
-    expect(document.getElementById(group.getAttribute("aria-describedby")!)!.textContent).toBe("For the scroll wheel and a two-finger drag over the player.");
+    expect(document.getElementById(group.getAttribute("aria-describedby")!)!.textContent).toBe("Also for the scroll wheel and a two-finger drag over the player.");
   });
 
   it("sets the step the scroll wheel takes, and is kept after a page refresh", async () => {
@@ -695,15 +697,16 @@ describe("Audio's defaults", () => {
 });
 
 describe("Autoplay mode and Loop stops autoplay", () => {
-  it("sit in Playback around Advance after: Autoplay mode first, Normal until chosen, each mode with its line and the group with its hint, and Loop stops autoplay last, on until turned off, with its hint", async () => {
+  it("sit in Playback around Advance after: Autoplay mode first, Normal until chosen, each mode with its line and the group with its hint, and Loop stops autoplay after it, on until turned off, with its hint, before Seek step", async () => {
     await mount();
     await openSettings();
     const playback = advanceAfter().closest("section")!;
     const settings = Array.from(playback.querySelectorAll(":scope > .setting"));
-    expect(settings).toHaveLength(3);
+    expect(settings).toHaveLength(4);
     expect(within(settings[0] as HTMLElement).getByRole("radiogroup", { name: "Autoplay mode", hidden: true })).toBeTruthy();
     expect(settings[1]!.contains(advanceAfter())).toBe(true);
     expect(settings[2]!.contains(checkbox("Loop stops autoplay"))).toBe(true);
+    expect(within(settings[3] as HTMLElement).getByRole("radiogroup", { name: "Seek step", hidden: true })).toBeTruthy();
 
     expect([radio("Normal").checked, radio("Timer").checked]).toEqual([true, false]);
     const description = (input: HTMLElement) => document.getElementById(input.getAttribute("aria-describedby")!)!.textContent;
@@ -751,6 +754,40 @@ describe("Autoplay mode and Loop stops autoplay", () => {
     await flush();
     await vi.advanceTimersByTimeAsync(10_000);
     expect(server.requests("POST", "/api/random")).toHaveLength(4);
+  });
+});
+
+describe("Seek step", () => {
+  it("offers 1, 5, and 10 seconds, 5 until chosen, and is kept after a page refresh", async () => {
+    const page = await mount();
+    await openSettings();
+    const group = within(settingsPage()).getByRole("radiogroup", { name: "Seek step", hidden: true });
+    const names = within(group).getAllByRole("radio", { hidden: true }).map((choice) => document.getElementById(choice.getAttribute("aria-labelledby")!)!.textContent);
+    expect(names).toEqual(["1 second", "5 seconds", "10 seconds"]);
+    expect(names.map((name) => radioOf("Seek step", name!).checked)).toEqual([false, true, false]);
+
+    await click(radioOf("Seek step", "1 second"));
+    expect(localStorage.getItem("rr_device.player.seekStep")).toBe("1");
+    page.unmount();
+
+    await mount();
+    await openSettings();
+    expect(radioOf("Seek step", "1 second").checked).toBe(true);
+  });
+});
+
+describe("Keyboard shortcuts", () => {
+  it("sits between Panel and Diagnostics, collapsed, opening from its heading with a chevron", async () => {
+    await mount();
+    await openSettings();
+    const section = document.getElementById("settings-shortcuts") as HTMLDetailsElement;
+    expect(section.closest("section")!.previousElementSibling?.querySelector("h3")?.textContent).toBe("Panel");
+    expect(section.closest("section")!.nextElementSibling?.querySelector("h3")?.textContent).toBe("Diagnostics");
+    expect(section.open).toBe(false);
+    const summary = section.querySelector("summary")!;
+    expect([summary.querySelector(".setting-more-chevron")?.textContent, summary.querySelector("h3")?.textContent]).toEqual(["chevron_right", "Keyboard shortcuts"]);
+    await click(summary);
+    expect(section.open).toBe(true);
   });
 });
 
@@ -1687,7 +1724,7 @@ describe("Notifications", () => {
     ]);
     expect(positionSelect().value).toBe("bottom-center");
     expect(checkbox("Show in fullscreen").checked).toBe(true);
-    expect(radio("5 seconds").checked).toBe(true);
+    expect(radioOf("Show for", "5 seconds").checked).toBe(true);
     expect(keptPopupSettings()).toBeNull();
   });
 
@@ -1716,7 +1753,7 @@ describe("Notifications", () => {
     await settle();
     expect(document.getElementById("toasts")!.dataset.pos).toBe("top-right");
     await click(checkbox("Show in fullscreen"));
-    await click(radio("10 seconds"));
+    await click(radioOf("Show for", "10 seconds"));
     expect(keptPopupSettings()).toMatchObject({ position: "top-right", fullscreen: false, seconds: 10 });
 
     // Show popups off: nothing pops up, and the list keeps it.

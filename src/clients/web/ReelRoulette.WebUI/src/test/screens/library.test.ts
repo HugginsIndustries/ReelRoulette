@@ -941,6 +941,19 @@ describe("playing a tile", () => {
     expect(server.requests("POST", "/api/record-playback")).toHaveLength(0);
   });
 
+  it("Space on a focused tile only plays the tile, and leaves Play/Pause's shortcut alone, so nothing is picked", async () => {
+    useOverlayWidth();
+    const { server } = await mountLibrary(libraryItems(3), (fake) => {
+      fake.on("POST", "/api/play/item-1", () => json(playResponse(1)));
+    });
+    await openLibrary();
+
+    fireEvent.keyDown(tile("item-1")!, { key: " " });
+    await flush();
+    expect(server.requests("POST", "/api/play/item-1")).toHaveLength(1);
+    expect(server.requests("POST", "/api/random")).toHaveLength(0);
+  });
+
   it("a tile the server cannot play leaves the overlay open and says why in the notice", async () => {
     useOverlayWidth();
     const replies: Response[] = [];

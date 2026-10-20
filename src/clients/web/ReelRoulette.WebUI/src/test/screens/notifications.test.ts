@@ -699,7 +699,7 @@ describe("the list", () => {
     expect(list().hidden).toBe(false);
   });
 
-  it("closes on its Close, the bell, and Escape, giving focus back to the bell", async () => {
+  it("closes on its Close and the bell, giving focus back to the bell, and on Escape, leaving focus on the page as a key that closes the panel does", async () => {
     await mountWithServices();
     expect(list().getAttribute("role")).toBe("dialog");
     expect(list().getAttribute("aria-labelledby")).toBe("notify-title");
@@ -722,7 +722,7 @@ describe("the list", () => {
     const allowed = await pressKey(listTitle(), "Escape");
     expect(allowed).toBe(false);
     expect(list().hidden).toBe(true);
-    expect(document.activeElement).toBe(bell());
+    expect(document.activeElement).toBe(document.body);
   });
 
   it("takes Escape before the stage, so the panel stays open, but not while an in-app dialog is open", async () => {

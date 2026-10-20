@@ -74,6 +74,31 @@ function fakeVideo() {
   return video;
 }
 
+/**
+ * Gives a stand-in `<video>` the browser's frame timings (`requestVideoFrameCallback`), with `showFrame` to show a frame
+ * that starts `mediaTime` seconds in, as the browser does while it plays or after a seek.
+ */
+function withFrameTimings<T extends object>(video: T) {
+  const waiting = new Map<number, (now: number, metadata: { mediaTime: number; presentedFrames: number }) => void>();
+  let nextHandle = 1;
+  let presentedFrames = 0;
+  return Object.assign(video, {
+    requestVideoFrameCallback(callback: (now: number, metadata: { mediaTime: number; presentedFrames: number }) => void) {
+      waiting.set(nextHandle, callback);
+      return nextHandle++;
+    },
+    cancelVideoFrameCallback(handle: number) {
+      waiting.delete(handle);
+    },
+    showFrame(mediaTime: number) {
+      presentedFrames += 1;
+      const due = [...waiting.values()];
+      waiting.clear();
+      due.forEach((callback) => callback(0, { mediaTime, presentedFrames }));
+    }
+  });
+}
+
 /** A stand-in for the `<img>`. It notes each source it is given, so a test sees whether a photo loaded again. */
 function fakePhoto() {
   let src = "";
@@ -132,7 +157,11 @@ function fakeFrames() {
  * A player whose device store starts with `saved`, as the page's `localStorage` would hold it. Its sound comes from an
  * audio stage whose gain stage never starts, so the video plays directly, unless `audio` stands in for it.
  */
-function setup(saved: Record<string, string> = {}, audioStandIn?: Pick<AudioStage, "play" | "pause" | "pausing" | "cancelPause">) {
+function setup(
+  saved: Record<string, string> = {},
+  audioStandIn?: Pick<AudioStage, "play" | "pause" | "pausing" | "cancelPause">,
+  options: { frameTimings?: boolean } = {}
+) {
   const requests: Array<{ path: string; body: any }> = [];
   const replies = new Map<string, () => Response>();
   const randomAnswers: unknown[] = [];
@@ -212,7 +241,7 @@ function setup(saved: Record<string, string> = {}, audioStandIn?: Pick<AudioStag
   });
   const player = createPlayer({ apiBaseUrl: "http://server/", store, audio: audioStandIn ?? audio, api, connection, dialogs, notifications, frames });
   const elements = {
-    video: fakeVideo(),
+    video: options.frameTimings ? withFrameTimings(fakeVideo()) : fakeVideo(),
     photo: fakePhoto(),
     emptyState: { style: { display: "" } },
     seekSlider: { value: "0", max: "100" },
@@ -870,6 +899,95 @@ describe("createPlayer", () => {
     expect(page.player.seekBar.value).toEqual({ disabled: false, label: "Seek" });
   });
 
+  it("seeks a video by J and L's seconds within its length, showing the new time at once, and does nothing before the video's length is known", () => {
+    const page = setup();
+    const { video, seekSlider } = page.elements;
+    page.play(VIDEO);
+    page.player.seekBy(5);
+    expect(video.currentTime).toBe(0);
+
+    page.elements.video.duration = 65;
+    page.player.videoMetadataLoaded();
+    page.player.videoPlaying();
+    video.currentTime = 10;
+    page.player.seekBy(5);
+    expect([video.currentTime, seekSlider.value, page.player.timeText.value]).toEqual([15, "15", "0:15 / 1:05"]);
+    page.player.seekBy(-20);
+    expect(video.currentTime).toBe(0);
+    video.currentTime = 62;
+    page.player.seekBy(5);
+    expect(video.currentTime).toBe(65);
+
+    page.playVideo(SECOND_VIDEO, Number.POSITIVE_INFINITY);
+    video.currentTime = 10;
+    page.player.seekBy(5);
+    expect(video.currentTime).toBe(10);
+  });
+
+  it("does nothing for J, L, or a frame step on a photo", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.player.toggleAutoplay();
+    page.play(PHOTO);
+    await vi.advanceTimersByTimeAsync(3_000);
+    // Holding the timer shows its time; a frame step needs a pause.
+    page.player.playOrPause();
+    expect(page.player.timeText.value).toBe("0:03 / 0:15");
+    page.player.seekBy(5);
+    page.player.stepFrame(1);
+    page.player.playOrPause();
+    expect(page.player.timeText.value).toBe("0:03 / 0:15");
+  });
+
+  it("steps a paused video a frame at 30 frames a second without the browser's frame timings, and not while it plays or past its last frame", () => {
+    const page = setup();
+    page.playVideo(VIDEO, 65);
+    const { video } = page.elements;
+    video.currentTime = 10;
+    page.player.stepFrame(1);
+    expect(video.currentTime).toBe(10);
+
+    page.player.playOrPause();
+    page.player.stepFrame(1);
+    expect(video.currentTime).toBeCloseTo(10 + 1 / 30, 10);
+    expect(page.elements.seekSlider.value).toBe(String(video.currentTime));
+    page.player.stepFrame(-1);
+    page.player.stepFrame(-1);
+    expect(video.currentTime).toBeCloseTo(10 - 1 / 30, 10);
+    video.currentTime = 0.01;
+    page.player.stepFrame(-1);
+    expect(video.currentTime).toBe(0);
+    video.currentTime = 64.99;
+    page.player.stepFrame(1);
+    expect(video.currentTime).toBe(64.99);
+  });
+
+  it("steps a paused video from the frame shown by the frame length timed while it played, with the browser's frame timings, and times a new item's frames anew", () => {
+    const page = setup({}, undefined, { frameTimings: true });
+    page.playVideo(VIDEO, 65);
+    const video = page.elements.video as ReturnType<typeof withFrameTimings<ReturnType<typeof fakeVideo>>>;
+    // 25 frames a second: the frame shown at the pause starts at 0.4 s.
+    for (let frame = 0; frame <= 10; frame++) video.showFrame(frame * 0.04);
+    page.player.playOrPause();
+    video.currentTime = 0.43;
+
+    page.player.stepFrame(1);
+    expect(video.currentTime).toBeCloseTo(0.46, 10);
+    // Pressed again before that frame shows, it goes on a frame.
+    page.player.stepFrame(1);
+    expect(video.currentTime).toBeCloseTo(0.5, 10);
+    video.showFrame(0.48);
+    page.player.stepFrame(-1);
+    page.player.stepFrame(-1);
+    expect(video.currentTime).toBeCloseTo(0.42, 10);
+
+    page.playVideo(SECOND_VIDEO, 30);
+    page.player.playOrPause();
+    video.currentTime = 5;
+    page.player.stepFrame(1);
+    expect(video.currentTime).toBeCloseTo(5 + 1 / 30, 10);
+  });
+
   it("disables the scrub bar and leaves it empty on a video whose length is Infinity, as the browser reports an unknown length", () => {
     const page = setup();
     page.play(VIDEO);
@@ -1278,6 +1396,30 @@ describe("autoplay modes and Loop stops autoplay", () => {
     // Normal mode repeats the whole video, and shows no stretch.
     page.store.setAutoplayMode("normal");
     expect([page.stretch().hidden, video.loop]).toEqual([true, true]);
+  });
+
+  it("in Timer mode, with Loop stops autoplay on, starts the stretch where J, L, or a frame step lands, as a seek by the bar does", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.store.setAdvanceAfter(10);
+    page.store.setAutoplayMode("timer");
+    page.player.toggleAutoplay();
+    page.player.toggleLoop();
+    page.playVideo(VIDEO, 120);
+    const { video } = page.elements;
+
+    video.currentTime = 50;
+    page.player.seekBy(10);
+    expect(video.currentTime).toBe(60);
+    expect(page.stretch()).toEqual({ hidden: false, from: "0.5", to: String(70 / 120) });
+    page.player.seekBy(-30);
+    expect(page.stretch()).toEqual({ hidden: false, from: "0.25", to: String(40 / 120) });
+
+    page.player.playOrPause();
+    video.currentTime = 90;
+    page.player.stepFrame(1);
+    expect(video.currentTime).toBeCloseTo(90 + 1 / 30, 10);
+    expect(Number(page.stretch().from)).toBeCloseTo((90 + 1 / 30) / 120, 10);
   });
 
   it("in Timer mode, starts the stretch a seek to the video's end lands on Advance after seconds before the end, or at 0 for a shorter video, and lets the browser repeat a stretch that is the whole video", async () => {

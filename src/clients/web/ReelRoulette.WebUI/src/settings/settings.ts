@@ -14,6 +14,18 @@ export const AUTO_PAUSE_KEY = "panel.autoPause";
 /** The per-device store's key for Show file names on tiles. */
 export const TILE_NAMES_KEY = "appearance.tileNames";
 
+/** The per-device store's key for the seek step. */
+export const SEEK_STEP_KEY = "player.seekStep";
+
+/** The seek step's choices, in seconds: the desktop's. */
+export const SEEK_STEPS = [1, 5, 10] as const;
+export type SeekStep = (typeof SEEK_STEPS)[number];
+export const DEFAULT_SEEK_STEP: SeekStep = 5;
+
+export function isSeekStep(value: unknown): value is SeekStep {
+  return SEEK_STEPS.includes(value as SeekStep);
+}
+
 /** A range's unit after its maximum, or nothing for a value without one, such as a ratio. */
 function unitText(unit: string): string {
   return unit ? ` ${unit}` : "";
@@ -62,7 +74,7 @@ export function boostLimitProblem(text: string): FieldProblem | null {
 
 /**
  * The Settings tab's settings that no other part of the page keeps: the Auto-Pause mode, the theme, ambient mode and its
- * settings, and whether tiles show their file names. Each applies as it changes and is kept on this device. The panel
+ * settings, whether tiles show their file names, and the seek step. Each applies as it changes and is kept on this device. The panel
  * keeps its side, the store Advance after and the autoplay settings, the player its buttons' state, the player's
  * controls Hide player controls and its settings, the audio stage Enhanced audio, loudness normalization its own
  * settings, and the notifications service the popup settings.
@@ -91,6 +103,15 @@ export interface Settings {
    */
   readonly popupSettingsRequest: ReadonlySignal<number>;
   revealPopupSettings(): void;
+  /** How far J and L seek, in seconds: 1, 5, or 10, and 5 by default. */
+  readonly seekStep: ReadonlySignal<SeekStep>;
+  setSeekStep(step: SeekStep): void;
+  /**
+   * Counts the requests to show the keyboard shortcuts, which H makes once the Settings tab shows: each one new, so
+   * asking again shows them again. The Settings tab expands Keyboard shortcuts and moves to it for each.
+   */
+  readonly shortcutsRequest: ReadonlySignal<number>;
+  revealShortcuts(): void;
 }
 
 export function createSettings(options: { device: DeviceStore }): Settings {
@@ -101,6 +122,8 @@ export function createSettings(options: { device: DeviceStore }): Settings {
   const ambientTuning = signal(readAmbientTuning(device));
   const tileNames = signal(device.read(TILE_NAMES_KEY, false, (value): value is boolean => typeof value === "boolean"));
   const popupSettingsRequest = signal(0);
+  const seekStep = signal(device.read(SEEK_STEP_KEY, DEFAULT_SEEK_STEP, isSeekStep));
+  const shortcutsRequest = signal(0);
   return {
     autoPauseMode,
     setAutoPauseMode(mode) {
@@ -134,6 +157,16 @@ export function createSettings(options: { device: DeviceStore }): Settings {
     popupSettingsRequest,
     revealPopupSettings() {
       popupSettingsRequest.value += 1;
+    },
+    seekStep,
+    setSeekStep(step) {
+      if (!isSeekStep(step)) return;
+      seekStep.value = step;
+      device.write(SEEK_STEP_KEY, step);
+    },
+    shortcutsRequest,
+    revealShortcuts() {
+      shortcutsRequest.value += 1;
     }
   };
 }

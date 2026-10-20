@@ -217,8 +217,10 @@ export function NotificationList() {
       if (event.key !== "Escape" || !notifications.listOpen.peek() || document.querySelector("dialog[open]")) return;
       event.preventDefault();
       event.stopPropagation();
+      // Escape leaves focus on the page, as a key that closes the panel does, so Space plays or pauses afterwards.
+      const focused = document.activeElement as HTMLElement | null;
       notifications.closeList();
-      bell()?.focus({ preventScroll: true });
+      if (focused && (list.current?.contains(focused) || bell()?.contains(focused))) focused.blur();
     };
     // A press outside leaves focus where it puts it.
     const onPointerDown = (event: PointerEvent) => {

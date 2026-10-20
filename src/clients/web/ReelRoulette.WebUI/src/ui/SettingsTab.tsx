@@ -1,6 +1,7 @@
 import { Fragment, type ComponentChildren } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { APP_VERSION } from "../config/appVersion";
+import { SHORTCUT_LINES } from "../keyboard/shortcuts";
 import { POPUP_POSITIONS, type NotificationKind, type PopupPosition } from "../notifications/notifications";
 import type { PanelSide } from "../panel/panelHost";
 import { AMBIENT_RANGES, AMBIENT_SETTINGS, formatAmbientSetting, type AmbientSetting } from "../playback/ambient";
@@ -9,7 +10,16 @@ import type { AutoPauseMode } from "../playback/autoPause";
 import { automaticLine, TARGET_LUFS, type NormalizationTarget } from "../playback/loudnessNormalization";
 import { CUSTOM_RANGES, type CompressionStrength, type CompressorValues } from "../playback/compression";
 import type { HideControlsMode } from "../playback/playerControls";
-import { advanceAfterProblem, boostLimitProblem, hideAfterProblem, manualTargetProblem, numberProblem, wholeNumberProblem } from "../settings/settings";
+import {
+  advanceAfterProblem,
+  boostLimitProblem,
+  hideAfterProblem,
+  manualTargetProblem,
+  numberProblem,
+  SEEK_STEPS,
+  wholeNumberProblem,
+  type SeekStep
+} from "../settings/settings";
 import type { ThemeChoice } from "../settings/theme";
 import type { AutoplayMode } from "../state/appStore";
 import type { FieldProblem } from "../validation/fieldValidation";
@@ -29,6 +39,8 @@ const AUTOPLAY_MODE_CHOICES: readonly Choice<AutoplayMode>[] = [
 ];
 
 const VOLUME_STEP_CHOICES: readonly Choice<`${VolumeStep}`>[] = VOLUME_STEPS.map((step) => ({ value: `${step}`, title: `${step}%` }));
+
+const SEEK_STEP_CHOICES: readonly Choice<`${SeekStep}`>[] = SEEK_STEPS.map((step) => ({ value: `${step}`, title: step === 1 ? "1 second" : `${step} seconds` }));
 
 /** Target loudness's choices, Automatic's line naming the library's baseline once it has loaded. */
 function targetChoices(baseline: number | null): Choice<NormalizationTarget>[] {
@@ -186,6 +198,7 @@ export function SettingsTab() {
         <Section id="panel" title="Panel">
           <PanelSettings />
         </Section>
+        <KeyboardShortcuts />
         <Section id="diagnostics" title="Diagnostics">
           <Diagnostics />
         </Section>
@@ -287,9 +300,12 @@ function Choices<T extends string>(props: {
   );
 }
 
-/** Autoplay mode, Advance after, and Loop stops autoplay, which the store keeps and the player follows at once. */
+/**
+ * Autoplay mode, Advance after, and Loop stops autoplay, which the store keeps and the player follows at once, and the
+ * seek step, which J and L seek by.
+ */
 function PlaybackSettings() {
-  const { store } = useApp();
+  const { store, settings } = useApp();
   return (
     <>
       <Choices
@@ -307,6 +323,13 @@ function PlaybackSettings() {
         hint="With Autoplay and Loop on, the item repeats and nothing advances. Turned off, autoplay goes on, and a video shorter than Advance after repeats until it advances."
         checked={store.loopStopsAutoplay.value}
         onChange={store.setLoopStopsAutoplay}
+      />
+      <Choices
+        id="settings-seek-step"
+        label="Seek step"
+        choices={SEEK_STEP_CHOICES}
+        value={`${settings.seekStep.value}`}
+        onChange={(step) => settings.setSeekStep(Number(step) as SeekStep)}
       />
     </>
   );
@@ -326,7 +349,7 @@ function AudioSettings() {
         choices={VOLUME_STEP_CHOICES}
         value={`${audio.volumeStep.value}`}
         onChange={(step) => audio.setVolumeStep(Number(step) as VolumeStep)}
-        hint="For the scroll wheel and a two-finger drag over the player."
+        hint="Also for the scroll wheel and a two-finger drag over the player."
       />
       <Checkbox
         id="settings-enhanced-audio"
@@ -825,6 +848,55 @@ function PanelSettings() {
       <Choices id="settings-side" label="Side" choices={SIDE_CHOICES} value={panel.side.value} onChange={panel.setSide} />
       <Choices id="settings-auto-pause" label="Auto-Pause" choices={AUTO_PAUSE_CHOICES} value={settings.autoPauseMode.value} onChange={settings.setAutoPauseMode} />
     </>
+  );
+}
+
+/**
+ * The keyboard shortcuts, a section that opens from its heading and starts closed. H opens it, moves to it, and puts
+ * focus on its heading, as the bell's Notification settings does for Popup settings.
+ */
+function KeyboardShortcuts() {
+  const { settings } = useApp();
+  const more = useRef<HTMLDetailsElement>(null);
+  const summary = useRef<HTMLElement>(null);
+  // A request made before this rendered was for an earlier page.
+  const request = settings.shortcutsRequest.value;
+  const handled = useRef(request);
+  useEffect(() => {
+    if (request === handled.current) {
+      return;
+    }
+    handled.current = request;
+    more.current!.open = true;
+    more.current!.closest("section")?.scrollIntoView?.({ block: "start" });
+    summary.current!.focus({ preventScroll: true });
+  }, [request]);
+
+  return (
+    <section class="settings-section" aria-labelledby="settings-shortcuts-heading">
+      <details class="setting-more shortcuts-more" id="settings-shortcuts" ref={more}>
+        <summary ref={summary}>
+          <span class="material-symbol-icon setting-more-chevron" aria-hidden="true">chevron_right</span>
+          <h3 id="settings-shortcuts-heading">Keyboard shortcuts</h3>
+        </summary>
+        <dl class="shortcut-list">
+          {SHORTCUT_LINES.map((line) => (
+            <Fragment key={line.text}>
+              <dt>
+                {line.keys.map((key, index) => (
+                  <Fragment key={key}>
+                    {index > 0 ? ` ${line.join} ` : null}
+                    <kbd>{key}</kbd>
+                  </Fragment>
+                ))}
+              </dt>
+              <dd>{line.text}</dd>
+            </Fragment>
+          ))}
+        </dl>
+        <p class="setting-hint">Shortcuts do nothing while you type in a text field.</p>
+      </details>
+    </section>
   );
 }
 

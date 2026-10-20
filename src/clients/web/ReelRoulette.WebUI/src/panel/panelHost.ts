@@ -121,20 +121,32 @@ export interface PanelHost {
    * the stage, or the column itself resizes, the panel opens or closes, or its handle changes its width.
    */
   attachPlayer(column: MeasuredElement | null): void;
-  /** The element that takes focus when the panel closes with focus inside it or on its handle: the panel button. */
+  /**
+   * The element that takes focus when the panel closes with focus inside it or on its handle, unless a key closes it:
+   * the panel button.
+   */
   attachButton(button: { focus(options?: FocusOptions): void } | null): void;
-  /** The panel button: opens the panel on its last tab, or closes it. */
-  toggle(): Promise<void>;
+  /** The panel button: opens the panel on its last tab, or closes it as `close` does. */
+  toggle(options?: PanelCloseOptions): Promise<void>;
   /** Opens the panel on `tab`, or shows `tab` in the open panel, once the tab it leaves agrees. */
   showTab(tab: PanelTab): Promise<void>;
   /** Closes the panel once its tab agrees. */
-  close(): Promise<void>;
+  close(options?: PanelCloseOptions): Promise<void>;
   /** Closes the panel as the overlay, which covers the player. Beside the player it stays open. */
   closeIfOverlay(): Promise<void>;
   /** Sets the width beside the player, within its limits, and remembers it when `remember`. */
   setWidth(width: number, remember: boolean): void;
   /** Moves the panel to `side` and remembers it. An open panel beside the player moves at once. */
   setSide(side: PanelSide): void;
+}
+
+/** How the panel closes. */
+export interface PanelCloseOptions {
+  /**
+   * A key closes it, Esc or a shortcut: focus inside the panel or on its handle goes to the page, not the panel button,
+   * so Space plays or pauses afterwards.
+   */
+  byKey?: boolean;
 }
 
 export interface PanelHostOptions {
@@ -277,7 +289,7 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
     enter();
   }
 
-  async function close(): Promise<void> {
+  async function close(options: PanelCloseOptions = {}): Promise<void> {
     if (!isOpen.peek() || leaving || !(await leaveShown())) {
       return;
     }
@@ -287,7 +299,12 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
     isOpen.value = false;
     device.write(OPEN_KEY, false);
     render();
-    if (hadFocus) {
+    if (!hadFocus) {
+      return;
+    }
+    if (options.byKey) {
+      (focused as HTMLElement).blur?.();
+    } else {
       button?.focus({ preventScroll: true });
     }
   }
@@ -362,8 +379,8 @@ export function createPanelHost(options: PanelHostOptions): PanelHost {
       button = attached;
     },
 
-    toggle() {
-      return isOpen.peek() ? close() : showTab(tab.peek());
+    toggle(options) {
+      return isOpen.peek() ? close(options) : showTab(tab.peek());
     },
 
     showTab,

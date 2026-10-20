@@ -167,7 +167,7 @@ export interface AudioStage {
   readonly muted: ReadonlySignal<boolean>;
   /** The volume the slider and the volume indicator show: the volume, or 0 while muted. */
   readonly shownVolume: ReadonlySignal<number>;
-  /** The volume step of the scroll wheel and a two-finger drag, in percent. */
+  /** The volume step of the scroll wheel, a two-finger drag, and the [ and ] keys, in percent. */
   readonly volumeStep: ReadonlySignal<VolumeStep>;
   /** The volume indicator shows, from a step until it fades out, `VOLUME_INDICATOR_MS` after the last one. */
   readonly indicatorShown: ReadonlySignal<boolean>;
@@ -188,8 +188,8 @@ export interface AudioStage {
   /** Moves the volume to `percent`, as the slider does, within the change under way or as a change of its own. */
   setVolume(percent: number): void;
   /**
-   * Moves the volume by whole volume steps, as the scroll wheel and a two-finger drag do, within the change under way
-   * or as a change of its own, and shows the volume indicator, a step down while muted too.
+   * Moves the volume by whole volume steps, as the scroll wheel, a two-finger drag, and [ and ] do, within the change
+   * under way or as a change of its own, and shows the volume indicator, a step down while muted too.
    */
   stepVolume(steps: number): void;
   toggleMute(): void;

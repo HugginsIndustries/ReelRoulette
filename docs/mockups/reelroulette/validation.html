@@ -1772,7 +1772,10 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     if (!listOpen || event.key !== "Escape" || document.querySelector("dialog[open]")) return;
     event.preventDefault();
     event.stopPropagation();
-    closeList();
+    // Escape leaves focus on the page, as a key that closes the panel does, so Space plays or pauses afterwards.
+    const focused = document.activeElement;
+    closeList(false);
+    if (list.contains(focused) || button.contains(focused)) focused.blur();
   }, true);
   window.addEventListener("resize", () => listOpen && placeList());
 

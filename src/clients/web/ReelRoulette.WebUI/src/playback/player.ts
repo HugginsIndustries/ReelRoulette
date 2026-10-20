@@ -10,6 +10,7 @@ import type { AppStore, PlayingItem } from "../state/appStore";
 import { playRefusalNotice } from "../state/lastingStates";
 import type { ServerConnection } from "../state/serverConnection";
 import type { AudioStage } from "./audioStage";
+import { createFrameClock, type FramedVideo } from "./frameStep";
 import { basenameFromPath, formatPlaybackPosition } from "./nowPlaying";
 import { createPhotoTimer } from "./photoTimer";
 import { createRandomPicker, randomPickRequest } from "./randomPick";
@@ -19,8 +20,8 @@ export interface ShownElement {
   readonly style: { display: string };
 }
 
-/** The parts of the `<video>` element the player drives. */
-export interface VideoElement extends ShownElement {
+/** The parts of the `<video>` element the player drives, and whose frames it follows for a frame step. */
+export interface VideoElement extends ShownElement, FramedVideo {
   src: string;
   loop: boolean;
   currentTime: number;
@@ -156,6 +157,16 @@ export interface Player {
    * after seconds before it.
    */
   seek(value: string): void;
+  /**
+   * J and L: seeks a video by `seconds`, back for a negative number, within its length, as a seek by the scrub bar
+   * does. Nothing happens on a photo, or before the video's length is known.
+   */
+  seekBy(seconds: number): void;
+  /**
+   * Comma and period: steps a paused video one frame back (-1) or forward (1), as a seek by the scrub bar does. Nothing
+   * happens while it plays, on a photo, before its length is known, or forward from its last frame.
+   */
+  stepFrame(direction: -1 | 1): void;
   /** Auto-Pause: pauses the video, or holds a photo's timer, keeping the time it has left. */
   autoPause(): void;
   /**
@@ -243,6 +254,7 @@ export function createPlayer(options: PlayerOptions): Player {
   const timeText = signal(NO_TIME);
   const mediaFailed = signal(false);
   const photoTimer = createPhotoTimer({ onEnd: photoTimerEnded });
+  const frameClock = createFrameClock();
   /**
    * A video's timer: set as each video starts, it runs while it advances the video and the video plays, from its first
    * `playing`, so loading doesn't count. Anything else holds it with its time.
@@ -313,6 +325,29 @@ export function createPlayer(options: PlayerOptions): Player {
 
   function photoShown(): boolean {
     return elements !== null && elements.photo.style.display !== "none";
+  }
+
+  /** The video shows and its length is known, so a key can move its position. */
+  function seekableVideo(): VideoElement | null {
+    if (!elements || !videoShown()) return null;
+    const { duration } = elements.video;
+    return Number.isFinite(duration) && duration > 0 ? elements.video : null;
+  }
+
+  /**
+   * Moves the video to `position`. While Timer mode repeats a stretch, the stretch, and its timer, start over where the
+   * seek lands, or, for a seek that lands at the video's end, Advance after seconds before it, or at 0 for a shorter
+   * video, and the video plays from there. Whether the browser repeats the video itself follows.
+   */
+  function seekVideoTo(position: number): void {
+    const { video } = elements!;
+    if (!stretching) {
+      video.currentTime = position;
+      return;
+    }
+    stretchStart = stretchStartAt(position);
+    video.currentTime = stretchStart;
+    syncVideo();
   }
 
   /** Autoplay goes on to the next item unless Loop holds it there, which it does while Loop stops autoplay is on. */
@@ -603,7 +638,8 @@ export function createPlayer(options: PlayerOptions): Player {
     videoTimer.clear();
     videoStarted = false;
     videoTimerDone = false;
-    // A new item's stretch starts at its start.
+    // A new item's stretch starts at its start, and its frames are timed anew.
+    frameClock.reset();
     stretchStart = 0;
     stretching = false;
     stretchRestarting = false;
@@ -831,9 +867,11 @@ export function createPlayer(options: PlayerOptions): Player {
 
     attach(attached) {
       elements = attached;
+      frameClock.follow(attached.video);
     },
 
     detach() {
+      frameClock.follow(null);
       photoTimer.clear();
       videoTimer.clear();
       stopMovingBar();
@@ -858,6 +896,7 @@ export function createPlayer(options: PlayerOptions): Player {
       previous.removeAttribute("src");
       previous.load();
       elements.video = next;
+      frameClock.follow(next);
       next.style.display = previous.style.display;
       // Only a video playing now, loaded or still loading, moves to the new element; a photo, or nothing yet, leaves it
       // empty.
@@ -949,17 +988,24 @@ export function createPlayer(options: PlayerOptions): Player {
         return;
       }
       if (!elements?.video.duration) return;
-      const { video } = elements;
-      if (!stretching) {
-        video.currentTime = Number(value);
-        return;
-      }
-      // While Timer mode repeats a stretch, the stretch, and its timer, start over where the seek lands, or, for a seek
-      // that lands at the video's end, Advance after seconds before it, or at 0 for a shorter video, and the video
-      // plays from there. Whether the browser repeats the video itself follows.
-      stretchStart = stretchStartAt(Number(value));
-      video.currentTime = stretchStart;
-      syncVideo();
+      seekVideoTo(Number(value));
+    },
+
+    seekBy(seconds) {
+      const video = seekableVideo();
+      if (!video) return;
+      seekVideoTo(Math.min(video.duration, Math.max(0, video.currentTime + seconds)));
+      showTime();
+    },
+
+    stepFrame(direction) {
+      const video = seekableVideo();
+      if (!video || !videoPaused()) return;
+      const target = frameClock.stepTarget(video.currentTime, direction);
+      // There is no frame after the last, and a seek to the end would end the video.
+      if (target >= video.duration) return;
+      seekVideoTo(Math.max(0, target));
+      showTime();
     },
 
     autoPause() {

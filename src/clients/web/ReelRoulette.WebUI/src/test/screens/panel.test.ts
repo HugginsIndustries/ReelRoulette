@@ -293,7 +293,7 @@ describe("tabs", () => {
     expect(document.activeElement).toBe(panelButton());
   });
 
-  it("Escape with focus on the handle gives focus back to the panel button", async () => {
+  it("Escape with focus on the handle leaves focus on the page, as every key that closes the panel does", async () => {
     await mount();
     await click(panelButton());
     handle().focus();
@@ -302,7 +302,7 @@ describe("tabs", () => {
     await settle();
 
     expect(isOpen()).toBe(false);
-    expect(document.activeElement).toBe(panelButton());
+    expect(document.activeElement).toBe(document.body);
   });
 
   it("close with Escape, and Escape then leaves pseudo-fullscreen", async () => {

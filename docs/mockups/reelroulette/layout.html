@@ -2893,7 +2893,10 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
     if (!listOpen || event.key !== "Escape" || document.querySelector("dialog[open]")) return;
     event.preventDefault();
     event.stopPropagation();
-    closeList();
+    // Escape leaves focus on the page, as a key that closes the panel does, so Space plays or pauses afterwards.
+    const focused = document.activeElement;
+    closeList(false);
+    if (list.contains(focused) || button.contains(focused)) focused.blur();
   }, true);
   window.addEventListener("resize", () => listOpen && placeList());
 
@@ -3941,7 +3944,9 @@ function openPanel(tab, from) {
   showTab(tab);
 }
 // Focus goes back to what opened the panel, or the panel button, only when it was in the panel or on its handle.
-function closePanel() {
+// A key that closes the panel, Esc or a shortcut, leaves focus on the page rather than on the panel button, so Space
+// plays or pauses afterwards.
+function closePanel({ byKey = false } = {}) {
   leaveSettingFields();
   const focused = document.activeElement;
   const hadFocus = $("panel").contains(focused) || $("handle").contains(focused);
@@ -3949,7 +3954,9 @@ function closePanel() {
   store.set("open", false);
   notePresetsView();
   applyLayout();
-  if (hadFocus) (opener || $("panel-btn")).focus({ preventScroll: true });
+  if (!hadFocus) return;
+  if (byKey) focused.blur();
+  else (opener || $("panel-btn")).focus({ preventScroll: true });
 }
 
 $("panel-btn").addEventListener("click", (event) => {
@@ -4533,7 +4540,7 @@ document.addEventListener("keydown", (event) => {
   } else if (!$("mock-sheet").hidden) {
     toggleSheet(false);
   } else if (state.open) {
-    closePanel();
+    closePanel({ byKey: true });
   } else if (stage.classList.contains("fullscreen-pseudo")) {
     setPseudo(false);
   }
@@ -7203,8 +7210,8 @@ const SHORTCUTS = [
   ["S", "Settings"],
   ["P", "Show or hide the panel"],
   ["Shift+F", "Fullscreen"],
-  ["?", "These shortcuts"],
-  ["Esc", "Close the top dialog, stop selecting, or close the panel"]
+  ["H", "These shortcuts"],
+  ["Esc", "Close the top dialog, the notifications list, or the panel, stop selecting, or leave fullscreen"]
 ];
 function showShortcuts() {
   openPanel("settings");
@@ -7217,6 +7224,12 @@ const TAB_KEYS = { 1: "library", 2: "filter", 3: "tags", 4: "stats", 5: "setting
 const isTextField = (el) =>
   el && (el.isContentEditable || el.tagName === "TEXTAREA" || el.tagName === "SELECT" ||
     (el.tagName === "INPUT" && !["checkbox", "radio", "button", "submit"].includes(el.type)));
+// A field nothing is typed into, as a slider is, keeps only its own keys: the shortcuts work there otherwise, so they
+// work at once after a mouse drag of the scrub bar or the volume.
+const takesEveryKey = (el) => isTextField(el) && el.type !== "range";
+// Only seeks, frame steps, and volume steps repeat while a key is held down; every other key acts once per press, and
+// its repeats stay the page's, so holding Space doesn't scroll.
+const REPEATING_KEYS = ["j", "l", ",", ".", "[", "]"];
 // The muted-volume rules, for the slider, the scroll wheel, a two-finger drag, and [ and ]. The slider shows the volume,
 // or 0 while muted. Raising it while muted unmutes and starts from 0, so the remembered volume isn't restored, and
 // lowering it while muted changes nothing. Lowering it to 0 while not muted mutes, and unmuting then restores the volume
@@ -7264,49 +7277,57 @@ function stepVolumeWithIndicator(steps) {
 }
 document.addEventListener("keydown", (event) => {
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
-  if (isTextField(event.target) || document.querySelector("dialog[open]") || state.autoTag) return;
+  if (takesEveryKey(event.target) || document.querySelector("dialog[open]") || state.autoTag) return;
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+  const held = event.repeat && !REPEATING_KEYS.includes(key);
   const item = playback.item;
   const video = !!item && !isPhoto(item) && !playback.failed;
-  const handled = () => event.preventDefault();
-  if (event.shiftKey && key === "f") return handled(), $("fullscreen-btn").click();
-  // ? opens Settings with the shortcuts shown, from anywhere outside a text field.
-  if (key === "?") return handled(), showShortcuts();
+  // A shortcut's key is the page's, held or not; true for a held key that doesn't repeat, which doesn't act again.
+  const handled = () => (event.preventDefault(), held);
+  if (event.shiftKey && key === "f") return handled() || $("fullscreen-btn").click();
   if (event.shiftKey) return;
+  // H opens Settings with the shortcuts shown, from anywhere outside a text field. Not ?, which Firefox takes for its
+  // quick find.
+  if (key === "h") return handled() || showShortcuts();
   // Space plays or pauses as K does, unless focus is on something Space already activates, such as a button or a tile.
-  if (key === " " && event.target !== document.body && event.target.closest("button, a, input, select, textarea, summary, [tabindex]")) return;
-  if (key === "k" || key === " ") return handled(), $("play-btn").click();
+  // A slider isn't among them, nor what takes focus without a tab stop, such as the bell's list's title.
+  if (key === " " && event.target !== document.body &&
+    event.target.closest('button, a, input:not([type=range]), select, textarea, summary, [tabindex]:not([tabindex="-1"])')) return;
+  if (key === "k" || key === " ") return handled() || $("play-btn").click();
   if ((key === "j" || key === "l") && video) {
-    handled();
+    if (handled()) return;
     catchUp();
     playback.time = Math.max(0, Math.min(item.duration, playback.time + (key === "l" ? 1 : -1) * state.seekStep));
     seekStartsStretch();
     return renderTime();
   }
-  // Arrow keys keep their own job on radio buttons and checkboxes.
+  // Arrow keys keep their own job on radio buttons, checkboxes, and sliders.
   if ((key === "ArrowLeft" || key === "ArrowRight") && event.target.tagName === "INPUT") return;
-  if (key === "ArrowLeft") return handled(), goPrevious();
-  if (key === "ArrowRight") return handled(), goNext();
-  if (key === "r") return handled(), pickRandom();
-  if (key === "f") return handled(), toggleFlag("favorite");
-  if (key === "b") return handled(), toggleFlag("blacklisted");
-  if (key === "a") return handled(), $("autoplay-btn").click();
-  if (key === "m") return handled(), toggleMute();
+  if (key === "ArrowLeft") return handled() || goPrevious();
+  if (key === "ArrowRight") return handled() || goNext();
+  if (key === "r") return handled() || pickRandom();
+  if (key === "f") return handled() || toggleFlag("favorite");
+  if (key === "b") return handled() || toggleFlag("blacklisted");
+  if (key === "a") return handled() || $("autoplay-btn").click();
+  if (key === "m") return handled() || toggleMute();
   // Frame stepping, as YouTube does: the mockup assumes 30 frames a second; the WebUI uses the browser's frame
   // timings (requestVideoFrameCallback) where it provides them.
   if ((key === "," || key === ".") && video && !playback.playing) {
-    handled();
+    if (handled()) return;
     catchUp();
-    playback.time = Math.max(0, Math.min(item.duration, playback.time + (key === "." ? 1 : -1) / 30));
+    const target = playback.time + (key === "." ? 1 : -1) / 30;
+    // There is no frame after the last, and a step to the end would end the video.
+    if (target >= item.duration) return;
+    playback.time = Math.max(0, target);
     playback.frameStep = key === "." ? "forward" : "back";
     seekStartsStretch();
     return renderPlayback();
   }
-  if ((key === "[" || key === "]") && volumeAdjustable()) return handled(), stepVolumeWithIndicator(key === "]" ? 1 : -1);
-  if (key === "p") return handled(), $("panel-btn").click();
+  if ((key === "[" || key === "]") && volumeAdjustable()) return handled() || stepVolumeWithIndicator(key === "]" ? 1 : -1);
+  if (key === "p") return handled() || (state.open ? closePanel({ byKey: true }) : $("panel-btn").click());
   if (TAB_KEYS[key]) {
-    handled();
-    if (state.open && state.tab === TAB_KEYS[key]) closePanel();
+    if (handled()) return;
+    if (state.open && state.tab === TAB_KEYS[key]) closePanel({ byKey: true });
     else openPanel(TAB_KEYS[key]);
   }
 });

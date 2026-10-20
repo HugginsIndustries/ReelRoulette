@@ -628,7 +628,7 @@ for (const width of [1280, 390]) {
     !$("notify-list").hidden && $("notify-btn").getAttribute("aria-expanded") === "true" && nowText().includes("The connection to the server was lost.") &&
     $("notify-list").textContent.includes("Favorite update failed: Couldn't reach the server.") && messages.entries()[0].kind === "error");
   press("Escape");
-  check(`layout@${width}: Escape closes the list and gives focus back to the bell`, $("notify-list").hidden && document.activeElement === $("notify-btn"));
+  check(`layout@${width}: Escape closes the list and leaves focus on the page`, $("notify-list").hidden && document.activeElement === document.body);
   situation("connected");
   check(`layout@${width}: when the connection comes back, the indicator goes and Reconnected. pops up (${newest()})`, said("Reconnected.") && $("player-indicator").hidden);
   situation("noanswer");
@@ -1841,8 +1841,10 @@ for (const width of [1280, 390]) {
   key(advance, "Enter");
   check(`layout@${width}: Advance after keeps 8 at once on Enter`, !advance.hasAttribute("aria-invalid") && keptAdvance() === "8");
   advance.blur();
-  check(`layout@${width}: the shortcut reference lists the bindings, ? among them`, $("shortcut-list").querySelectorAll("dt").length === 17 &&
-    [...$("shortcut-list").querySelectorAll("dt")].some((dt) => dt.textContent === "?"));
+  check(`layout@${width}: the shortcut reference lists the bindings, H among them`, $("shortcut-list").querySelectorAll("dt").length === 17 &&
+    [...$("shortcut-list").querySelectorAll("dt")].some((dt) => dt.textContent === "H"));
+  const escRow = [...$("shortcut-list").querySelectorAll("dt")].find((dt) => dt.textContent === "Esc")?.nextElementSibling.textContent;
+  check(`layout@${width}: Esc's line names what it closes, in order (${escRow})`, escRow === "Close the top dialog, the notifications list, or the panel, stop selecting, or leave fullscreen");
   const sectionNames = [...$("settings-body").querySelectorAll(".settings-section h3")].map((h) => h.textContent).join(", ");
   check(`layout@${width}: Settings is in sections: ${sectionNames}`, sectionNames === "Playback, Audio, Player controls, Appearance, Notifications, Panel, Keyboard shortcuts, Diagnostics");
   const sectionOf = (id) => $(id).closest(".settings-section").querySelector("h3").textContent;
@@ -2592,12 +2594,16 @@ for (const width of [1280, 390]) {
 
   // Keyboard shortcuts, ignored while typing.
   closePanel();
-  // ? is Shift+/ on most keyboards, so it arrives with Shift held.
+  // ? is no shortcut: Firefox takes it for its quick find. On most keyboards it is Shift+/, so it arrives with Shift held.
   press("?", document.body, { shiftKey: true });
-  check(`layout@${width}: ? opens Settings with the shortcuts expanded`, !$("panel").hidden && !$("tab-settings").hidden && $("set-shortcuts").open && document.activeElement === $("set-shortcuts").querySelector("summary"));
+  check(`layout@${width}: ? does nothing, since Firefox takes it`, $("panel").hidden);
   $("set-shortcuts").open = false;
   closePanel();
-  press("?", $("lib-search"), { shiftKey: true });
+  press("h");
+  check(`layout@${width}: H opens Settings with the shortcuts expanded`, !$("panel").hidden && !$("tab-settings").hidden && $("set-shortcuts").open && document.activeElement === $("set-shortcuts").querySelector("summary"));
+  $("set-shortcuts").open = false;
+  closePanel();
+  press("h", $("lib-search"));
   check(`layout@${width}: but not while typing`, $("panel").hidden);
   press("2");
   check(`layout@${width}: 2 opens the Filter tab`, !$("panel").hidden && !$("tab-filter").hidden);
@@ -2642,6 +2648,65 @@ for (const width of [1280, 390]) {
   $("play-btn").click();
   press(",");
   check(`layout@${width}: , does nothing while playing`, chip().includes("Playing"));
+  // A focused slider keeps its own keys, and every other key is a shortcut there, as after a mouse drag of the bar.
+  const nameBeforeSlider = $("np-name").textContent;
+  press("ArrowRight", $("seek"));
+  check(`layout@${width}: → on the focused scrub bar is the bar's, not Next`, $("np-name").textContent === nameBeforeSlider);
+  press("k", $("seek"));
+  check(`layout@${width}: but K there pauses (${chip()})`, chip().includes("Paused"));
+  press(" ", $("seek"));
+  check(`layout@${width}: and Space there plays (${chip()})`, chip().includes("Playing"));
+  // A held key repeats only seeks, frame steps, and volume steps.
+  const favoriteBeforeHeld = $("favorite-btn").classList.contains("active");
+  press("f", document.body, { repeat: true });
+  check(`layout@${width}: a held F acts once, not again on each repeat`, $("favorite-btn").classList.contains("active") === favoriteBeforeHeld);
+  press("k");
+  const seekBeforeHeld = Number($("seek").value);
+  press("l", document.body, { repeat: true });
+  check(`layout@${width}: and a held L keeps seeking (${seekBeforeHeld.toFixed(2)} to ${Number($("seek").value).toFixed(2)})`,
+    Math.abs(Number($("seek").value) - Math.min(items[3].duration, seekBeforeHeld + 5)) < 0.01);
+  press("k");
+  // A held key that acts once still keeps its repeats from the browser, so holding Space doesn't scroll.
+  const heldSpaceLeft = press(" ", document.body, { repeat: true });
+  check(`layout@${width}: a held Space acts once and keeps the browser from scrolling (${chip()})`, !heldSpaceLeft && chip().includes("Playing"));
+  // A key that closes the panel, Esc included, leaves focus on the page, so Space plays or pauses afterwards.
+  for (const closeKey of ["Escape", "s", "p"]) {
+    press("h");
+    press(closeKey, document.activeElement);
+    const focusAfterClose = document.activeElement;
+    const chipAfterClose = chip();
+    press(" ", document.activeElement);
+    check(`layout@${width}: ${closeKey} closing the panel leaves focus on the page, so Space then plays or pauses (${chipAfterClose} to ${chip()})`,
+      $("panel").hidden && focusAfterClose === document.body && chip() !== chipAfterClose);
+    press(" ");
+  }
+  // With the bell's list open, its title has focus, which Space doesn't activate, so Space plays or pauses.
+  $("notify-btn").click();
+  const listFocus = document.activeElement?.id;
+  const chipBeforeList = chip();
+  press(" ", document.activeElement);
+  check(`layout@${width}: Space with the bell's list open, focus on ${listFocus}, plays or pauses (${chipBeforeList} to ${chip()})`,
+    listFocus === "notify-title" && chip() !== chipBeforeList);
+  press("Escape", document.activeElement);
+  const focusAfterList = document.activeElement;
+  const chipAfterList = chip();
+  press(" ", document.activeElement);
+  check(`layout@${width}: Esc closing the bell's list leaves focus on the page, so Space then plays or pauses (${chipAfterList} to ${chip()})`,
+    $("notify-list").hidden && focusAfterList === document.body && chip() !== chipAfterList);
+  // There is no frame after the last, so . does nothing within it.
+  press("k");
+  const timeBeforeEnd = Number($("seek").value);
+  const seekTo = (time) => {
+    $("seek").value = String(time);
+    $("seek").dispatchEvent(new window.Event("input", { bubbles: true }));
+  };
+  const lastFrame = items[3].duration - 0.01;
+  seekTo(lastFrame);
+  press(".");
+  check(`layout@${width}: . does nothing within the last frame (${Number($("seek").value).toFixed(2)} of ${items[3].duration}, ${chip()})`,
+    Math.abs(Number($("seek").value) - lastFrame) < 0.001 && !chip().includes("stepped"));
+  seekTo(timeBeforeEnd);
+  press("k");
   openTab("library");
   const before = chip();
   press("k", $("lib-search"));
