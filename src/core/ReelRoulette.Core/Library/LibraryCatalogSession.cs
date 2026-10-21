@@ -91,14 +91,22 @@ public sealed class LibraryCatalogSession
         };
     }
 
-    /// <summary>The browse page query; <see cref="ReadListedItem(SqliteDataReader)"/> reads its columns.</summary>
+    /// <summary>
+    /// The columns the browse page and an item's read select, which <see cref="ReadListedItem(SqliteDataReader)"/>
+    /// reads by position.
+    /// </summary>
+    private const string ListedItemColumnsSql = """
+        items.id, items.source_id, items.full_path, items.full_path_fold, items.relative_path, items.relative_path_fold,
+        items.file_name, items.file_name_fold, items.duration_ticks, items.has_audio, items.integrated_loudness, items.peak_db,
+        items.is_favorite, items.is_blacklisted, items.play_count, items.last_played_utc, items.media_type, items.fingerprint,
+        items.fingerprint_algorithm, items.fingerprint_version, items.file_size_bytes, items.last_write_time_utc,
+        items.fingerprint_last_utc, items.fingerprint_status, items.loudness_error,
+        items.thumbnail_revision, items.thumbnail_width, items.thumbnail_height, items.rating
+        """;
+
+    /// <summary>The browse page query.</summary>
     internal static string ListPageSql(string where, string orderBy, string limit, string offset) => $"""
-        SELECT items.id, items.source_id, items.full_path, items.full_path_fold, items.relative_path, items.relative_path_fold,
-               items.file_name, items.file_name_fold, items.duration_ticks, items.has_audio, items.integrated_loudness, items.peak_db,
-               items.is_favorite, items.is_blacklisted, items.play_count, items.last_played_utc, items.media_type, items.fingerprint,
-               items.fingerprint_algorithm, items.fingerprint_version, items.file_size_bytes, items.last_write_time_utc,
-               items.fingerprint_last_utc, items.fingerprint_status, items.loudness_error,
-               items.thumbnail_revision, items.thumbnail_width, items.thumbnail_height
+        SELECT {ListedItemColumnsSql}
         {LibraryCatalogListSql.FromClause}
         {where}
         {orderBy}
@@ -217,13 +225,8 @@ public sealed class LibraryCatalogSession
 
             using var command = connection.CreateCommand();
             command.Transaction = transaction;
-            command.CommandText = """
-                SELECT items.id, items.source_id, items.full_path, items.full_path_fold, items.relative_path, items.relative_path_fold,
-                       items.file_name, items.file_name_fold, items.duration_ticks, items.has_audio, items.integrated_loudness, items.peak_db,
-                       items.is_favorite, items.is_blacklisted, items.play_count, items.last_played_utc, items.media_type, items.fingerprint,
-                       items.fingerprint_algorithm, items.fingerprint_version, items.file_size_bytes, items.last_write_time_utc,
-                       items.fingerprint_last_utc, items.fingerprint_status, items.loudness_error,
-                       items.thumbnail_revision, items.thumbnail_width, items.thumbnail_height
+            command.CommandText = $"""
+                SELECT {ListedItemColumnsSql}
                 FROM items
                 WHERE items.id = $id
                 LIMIT 1;
@@ -882,13 +885,13 @@ public sealed class LibraryCatalogSession
                     is_favorite, is_blacklisted, play_count, last_played_utc, media_type, fingerprint,
                     fingerprint_algorithm, fingerprint_version, file_size_bytes, last_write_time_utc,
                     fingerprint_last_utc, fingerprint_status, loudness_error,
-                    thumbnail_revision, thumbnail_width, thumbnail_height, file_name_sort_key)
+                    thumbnail_revision, thumbnail_width, thumbnail_height, file_name_sort_key, rating)
                 VALUES (
                     $id, $position, $source, $full, $fullFold, $relative, $relativeFold,
                     $file, $fileFold, $duration, $audio, $loudness, $peak,
                     $favorite, $blacklisted, $plays, $played, $media, $fingerprint,
                     $algorithm, $fpVersion, $size, $write, $fpLast, $fpStatus, $loudnessError,
-                    $thumbRevision, $thumbWidth, $thumbHeight, $fileKey);
+                    $thumbRevision, $thumbWidth, $thumbHeight, $fileKey, $rating);
                 """,
                 ("$id", item.Id),
                 ("$position", position),
@@ -919,7 +922,8 @@ public sealed class LibraryCatalogSession
                 ("$thumbRevision", (object?)item.ThumbnailRevision ?? DBNull.Value),
                 ("$thumbWidth", (object?)item.ThumbnailWidth ?? DBNull.Value),
                 ("$thumbHeight", (object?)item.ThumbnailHeight ?? DBNull.Value),
-                ("$fileKey", LibraryCatalogNameSortKey.Compute(item.FileName))) > 0;
+                ("$fileKey", LibraryCatalogNameSortKey.Compute(item.FileName)),
+                ("$rating", (object?)item.RatingHalfStars ?? DBNull.Value)) > 0;
             if (!inserted)
             {
                 return false;
@@ -1113,6 +1117,39 @@ public sealed class LibraryCatalogSession
         });
     }
 
+    /// <summary>
+    /// Sets the item's rating in half stars, or clears it with null, and says whether it changed. A rating is
+    /// independent of favorite and blacklist, so neither changes.
+    /// </summary>
+    public bool SetRating(string identifier, int? halfStars)
+    {
+        if (halfStars is int value && !ItemRating.IsStoredValue(value))
+        {
+            throw new ArgumentOutOfRangeException(nameof(halfStars), halfStars, "A rating is 1 to 10 half stars, or null for none.");
+        }
+
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            return false;
+        }
+
+        return Commit((connection, transaction) =>
+        {
+            var id = ResolveItemId(connection, transaction, identifier);
+            if (id == null)
+            {
+                return false;
+            }
+
+            return LibraryCatalogStore.Execute(
+                connection,
+                transaction,
+                "UPDATE items SET rating = $rating WHERE id = $id AND rating IS NOT $rating;",
+                ("$id", id),
+                ("$rating", (object?)halfStars ?? DBNull.Value)) > 0;
+        });
+    }
+
     public CatalogItemState? RecordPlayback(string identifier)
     {
         if (string.IsNullOrWhiteSpace(identifier))
@@ -1163,7 +1200,8 @@ public sealed class LibraryCatalogSession
                 IsBlacklisted = current.IsBlacklisted,
                 PlayCount = nextPlayCount,
                 LastPlayedUtc = nowUtc,
-                PreviousLastPlayedUtc = previousLastPlayedUtc
+                PreviousLastPlayedUtc = previousLastPlayedUtc,
+                RatingHalfStars = current.RatingHalfStars
             };
             return true;
         });
@@ -1970,7 +2008,7 @@ public sealed class LibraryCatalogSession
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            SELECT id, full_path, is_favorite, is_blacklisted, play_count, last_played_utc
+            SELECT id, full_path, is_favorite, is_blacklisted, play_count, last_played_utc, rating
             FROM items
             WHERE id = $id
             LIMIT 1;
@@ -1989,7 +2027,8 @@ public sealed class LibraryCatalogSession
             IsFavorite = reader.GetInt32(2) != 0,
             IsBlacklisted = reader.GetInt32(3) != 0,
             PlayCount = reader.GetInt32(4),
-            LastPlayedUtc = LibraryCatalogStore.ReadUtc(reader, 5)
+            LastPlayedUtc = LibraryCatalogStore.ReadUtc(reader, 5),
+            RatingHalfStars = reader.IsDBNull(6) ? null : reader.GetInt32(6)
         };
     }
 
@@ -2414,7 +2453,8 @@ public sealed class LibraryCatalogSession
             LoudnessError = reader.IsDBNull(24) ? null : reader.GetString(24),
             ThumbnailRevision = reader.IsDBNull(25) ? null : reader.GetString(25),
             ThumbnailWidth = reader.IsDBNull(26) ? null : reader.GetInt32(26),
-            ThumbnailHeight = reader.IsDBNull(27) ? null : reader.GetInt32(27)
+            ThumbnailHeight = reader.IsDBNull(27) ? null : reader.GetInt32(27),
+            RatingHalfStars = reader.IsDBNull(28) ? null : reader.GetInt32(28)
         };
     }
 
@@ -2498,6 +2538,11 @@ public sealed class LibraryCatalogSession
             node["peakDb"] = peak;
         }
 
+        if (item.RatingHalfStars is int halfStars)
+        {
+            node["rating"] = ItemRating.ToStars(halfStars);
+        }
+
         if (item.LoudnessError != null)
         {
             node["loudnessError"] = item.LoudnessError;
@@ -2556,6 +2601,7 @@ public sealed class LibraryCatalogSession
         long Total,
         long Favorites,
         long Blacklisted,
+        long Rated,
         long Played,
         long Plays,
         long WithAudio,
@@ -2574,6 +2620,7 @@ public sealed class LibraryCatalogSession
               COUNT(*),
               SUM(CASE WHEN is_favorite != 0 THEN 1 ELSE 0 END),
               SUM(CASE WHEN is_blacklisted != 0 THEN 1 ELSE 0 END),
+              COUNT(rating),
               SUM(CASE WHEN play_count > 0 THEN 1 ELSE 0 END),
               SUM(CASE WHEN play_count > 0 THEN play_count ELSE 0 END),
               SUM(CASE WHEN has_audio IS NOT NULL AND has_audio != 0 THEN 1 ELSE 0 END),
@@ -2598,7 +2645,8 @@ public sealed class LibraryCatalogSession
                 reader.GetInt64(7),
                 reader.GetInt64(8),
                 reader.GetInt64(9),
-                reader.GetInt64(10)));
+                reader.GetInt64(10),
+                reader.GetInt64(11)));
         }
 
         return groups;
@@ -2618,6 +2666,7 @@ public sealed class LibraryCatalogSession
             TotalMedia = totalVideos + totalPhotos,
             Favorites = ToCount(groups.Sum(group => group.Favorites)),
             Blacklisted = ToCount(groups.Sum(group => group.Blacklisted)),
+            Rated = ToCount(groups.Sum(group => group.Rated)),
             UniquePlayedMedia = uniquePlayedMedia,
             NeverPlayedMedia = Math.Max(0, totalVideos + totalPhotos - uniquePlayedMedia),
             TotalPlays = ToCount(groups.Sum(group => group.Plays)),
@@ -2745,6 +2794,7 @@ public sealed class CatalogGlobalStats
     public int TotalMedia { get; init; }
     public int Favorites { get; init; }
     public int Blacklisted { get; init; }
+    public int Rated { get; init; }
     public int UniquePlayedMedia { get; init; }
     public int NeverPlayedMedia { get; init; }
     public int TotalPlays { get; init; }
@@ -2777,6 +2827,9 @@ public sealed class CatalogItemState
     public int PlayCount { get; init; }
     public DateTime? LastPlayedUtc { get; init; }
     public DateTime? PreviousLastPlayedUtc { get; init; }
+
+    /// <summary>The rating in half stars, or null for none (see <see cref="ItemRating"/>).</summary>
+    public int? RatingHalfStars { get; init; }
 }
 
 public sealed class CatalogPlaybackItem

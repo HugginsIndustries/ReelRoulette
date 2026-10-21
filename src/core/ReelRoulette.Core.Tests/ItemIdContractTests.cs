@@ -385,6 +385,36 @@ public sealed class ItemIdContractTests : IDisposable
         }
     }
 
+    [Fact]
+    public void LibraryItems_CarryTheirRatingInStars_AndLeaveItOutWhenUnrated()
+    {
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("half", Path.Combine(_tempDir, "half.mp4")) { SourceId = "s1", RatingHalfStars = 7 },
+                new SeedItem("full", Path.Combine(_tempDir, "full.jpg")) { SourceId = "s1", MediaType = 1, RatingHalfStars = 10 },
+                new SeedItem("unrated", Path.Combine(_tempDir, "unrated.mp4")) { SourceId = "s1" }
+            ]);
+        var operations = CreateOperations(CatalogOpen.Host(_tempDir));
+
+        var listed = operations.QueryLibrary(new LibraryQueryRequest()).Body!["items"]!.AsArray()
+            .ToDictionary(item => item!["id"]!.GetValue<string>(), item => item!);
+        foreach (var (id, stars) in new[] { ("half", 3.5), ("full", 5.0) })
+        {
+            foreach (var item in new[] { listed[id], operations.ReadLibraryItem(id)! })
+            {
+                Assert.Equal(stars, item["rating"]!.GetValue<double>());
+            }
+        }
+
+        foreach (var unrated in new[] { listed["unrated"], operations.ReadLibraryItem("unrated")! })
+        {
+            Assert.False(unrated.AsObject().ContainsKey("rating"));
+        }
+    }
+
     public void Dispose()
     {
         LibraryCatalogBackup.WaitForPending();

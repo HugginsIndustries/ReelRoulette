@@ -19,13 +19,12 @@ Instructions:
 
 Commit Message:
 
-M12k2: Add Item Ratings' rating to the mockup's Stats tab, with its Rated card and popups, and tidy its path button and tags
+M12k2: Store each item's rating in a new catalog schema step, send it on item reads, and count rated items in library stats
 
-- The mockup's Stats tab shows the playing file's 5-star rating, with half stars, on its own line under the path. A click, a tap, or a drag along the stars sets it, as do the arrow keys, Home, End, and Delete, and a mouse over the stars previews it. A touch that starts on the stars never scrolls the tab.
-- The first star's left 8 px clears the rating, with no Clear button, and so does a drag off the stars' left end.
-- Stars are 36 px wide and as tall as their 30 px icons, and a half star is orange only on its filled half, drawn as the filled star cut off at its middle over the grey outline.
-- A rating change pops up as Your actions, or as Other devices from the Mockup tab's new rating from another device, and the Library's Rated card counts the rated files.
-- The Settings tab's Other devices description names rating changes, and the mockup's index lists the rating and its sizes.
-- Show in File Manager and Copy Path, beside the path, are an icon button with a tooltip and a 24 px icon, as the app's other icon buttons are, and the file's tags move below the table into a row of their own, without a Tags label.
-- The mockup's icon font adds the star, outlined and filled.
-- Item Ratings' Mockup slice is complete, approved on the user's devices, with the review's sizes, clear edge, half star, touches, path button, and tags row in its Decisions, and the remaining interaction details in the WebUI slice's Scope.
+- The catalog moves to schema version 7, whose upgrade step adds a nullable `rating` column to `items`, a whole number of half stars from 1 to 10 with no value for none. A new catalog has it too, and every older catalog from version 2 upgrades to it.
+- The shipped 2→3 step creates its own frozen copy of the sort indexes, so a later change to a new catalog's indexes can't change it.
+- The catalog session sets, changes, and clears a rating, refuses a value outside 1 to 10 half stars, and reports only a real change. The operations service sets it under its lock and returns the item before and after, through one before-and-after read that favorite and blacklist now share.
+- `POST /api/library/item` and `POST /api/library/query` send a rated item's `rating` in stars and leave it out for an unrated one. The browse page and an item's read share one column list.
+- The library stats read counts the rated items in its one pass, ready for the stats response.
+- Tests cover setting and refusing a rating, both reads, the stats count, and the operations' before and after, and the upgrade tests now also run from version 6. Each guarded behavior, broken on its own, failed its tests.
+- Item Ratings' Server slice is complete. CONTEXT.md, the domain inventory, and the dev setup guide say schema version 7, and CONTEXT.md says a rated library item carries its `rating`.

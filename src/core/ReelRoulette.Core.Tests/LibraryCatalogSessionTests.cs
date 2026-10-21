@@ -594,6 +594,92 @@ public sealed class LibraryCatalogSessionTests
     }
 
     [Fact]
+    public void SetRating_StoresChangesAndClearsIt_AndReportsOnlyARealChange()
+    {
+        using var dir = new TempDirectory();
+        var session = CatalogOpen.Open(dir.Path).Session!;
+        Assert.True(session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "item-a",
+            FullPath = "/clips/a.mp4",
+            FileName = "a.mp4",
+            IsFavorite = true
+        }));
+        Assert.True(session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "item-rated",
+            FullPath = "/clips/rated.mp4",
+            FileName = "rated.mp4",
+            RatingHalfStars = 4
+        }));
+        var revision = session.Revision;
+
+        Assert.Equal(4, session.ReadItemState("item-rated")!.RatingHalfStars);
+        Assert.True(session.SetRating("item-a", 7));
+        Assert.Equal(7, session.ReadItemState("item-a")!.RatingHalfStars);
+        Assert.Equal(revision + 1, session.Revision);
+        Assert.False(session.SetRating("ITEM-A", 7));
+        Assert.Equal(revision + 1, session.Revision);
+        Assert.True(session.SetRating("item-a", 10));
+        Assert.Equal(10, session.ReadListedItem("item-a")!.RatingHalfStars);
+        Assert.True(session.SetRating("item-a", null));
+        Assert.Null(session.ReadItemState("item-a")!.RatingHalfStars);
+        Assert.False(session.SetRating("item-a", null));
+        Assert.False(session.SetRating("missing", 3));
+        Assert.False(session.SetRating("/clips/a.mp4", 3));
+
+        // A rating is independent of favorite and blacklist.
+        Assert.True(session.SetRating("item-a", 1));
+        var rated = session.ReadItemState("item-a")!;
+        Assert.True(rated.IsFavorite);
+        Assert.False(rated.IsBlacklisted);
+        Assert.True(session.SetBlacklist("item-a", true));
+        Assert.Equal(1, session.ReadItemState("item-a")!.RatingHalfStars);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(11)]
+    [InlineData(-2)]
+    public void SetRating_RefusesAValueOutsideOneToTenHalfStars(int halfStars)
+    {
+        using var dir = new TempDirectory();
+        var session = CatalogOpen.Open(dir.Path).Session!;
+        Assert.True(session.InsertItem(new LibraryCatalogItem
+        {
+            Id = "item-a",
+            FullPath = "/clips/a.mp4",
+            FileName = "a.mp4",
+            RatingHalfStars = 6
+        }));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => session.SetRating("item-a", halfStars));
+        Assert.Equal(6, session.ReadItemState("item-a")!.RatingHalfStars);
+    }
+
+    [Fact]
+    public void ReadLibraryStats_CountsTheRatedItems()
+    {
+        using var dir = new TempDirectory();
+        CatalogSeed.Write(
+            dir.Path,
+            sources: [new SeedSource("s1", "/media")],
+            items:
+            [
+                new SeedItem("video", "/media/video.mp4") { SourceId = "s1", RatingHalfStars = 9 },
+                new SeedItem("photo", "/media/photo.jpg") { SourceId = "s1", MediaType = 1, RatingHalfStars = 1 },
+                new SeedItem("unrated", "/media/unrated.mp4") { SourceId = "s1" }
+            ]);
+        var session = CatalogOpen.Open(dir.Path).Session!;
+
+        Assert.Equal(2, session.ReadLibraryStats().Global.Rated);
+        Assert.True(session.SetRating("unrated", 5));
+        Assert.Equal(3, session.ReadLibraryStats().Global.Rated);
+        Assert.True(session.SetRating("video", null));
+        Assert.Equal(2, session.ReadLibraryStats().Global.Rated);
+    }
+
+    [Fact]
     public void ItemLookups_FindNoItemByItsFullPath()
     {
         using var dir = new TempDirectory();

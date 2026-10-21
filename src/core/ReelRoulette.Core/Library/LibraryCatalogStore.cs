@@ -153,6 +153,10 @@ public sealed class LibraryCatalogItem
     public string? ThumbnailRevision { get; init; }
     public int? ThumbnailWidth { get; init; }
     public int? ThumbnailHeight { get; init; }
+
+    /// <summary>The rating in half stars, from 1 to 10, or null for none (see <see cref="ItemRating"/>).</summary>
+    public int? RatingHalfStars { get; init; }
+
     public IReadOnlyList<string> Tags { get; internal set; } = [];
 }
 
@@ -167,7 +171,7 @@ public sealed class LibraryCatalogPreset
 
 public static class LibraryCatalogStore
 {
-    public const int SchemaVersion = 6;
+    public const int SchemaVersion = 7;
 
     /// <summary>
     /// The oldest schema version a release shipped. Open and import upgrade a catalog at it, or at any later
@@ -211,11 +215,30 @@ public static class LibraryCatalogStore
     internal const string NameSortKeyVersionKey = "name_sort_key_version";
 
     /// <summary>
-    /// One index per sort mode and direction, each followed by the name key tie-break, so no sort reads
-    /// the whole library. The item id tie-break is left out to keep the indexes small: SQLite sorts only
-    /// rows whose name ties exactly. The expressions must match the list query's ORDER BY.
+    /// The sort indexes a new catalog gets: one index per sort mode and direction, each followed by the name
+    /// key tie-break, so no sort reads the whole library. The item id tie-break is left out to keep the
+    /// indexes small: SQLite sorts only rows whose name ties exactly. The expressions must match the list
+    /// query's ORDER BY. A change here also needs an upgrade step that makes the same change, since the
+    /// shipped 2 to 3 step creates its own, <see cref="Schema3SortIndexesSql"/>.
     /// </summary>
     private const string SortIndexesSql = """
+        CREATE INDEX idx_items_name_sort ON items(file_name_sort_key);
+        CREATE INDEX idx_items_last_played_asc ON items(COALESCE(last_played_utc, 0), file_name_sort_key);
+        CREATE INDEX idx_items_last_played_desc ON items(COALESCE(last_played_utc, 0) DESC, file_name_sort_key);
+        CREATE INDEX idx_items_play_count_asc ON items(play_count, file_name_sort_key);
+        CREATE INDEX idx_items_play_count_desc ON items(play_count DESC, file_name_sort_key);
+        CREATE INDEX idx_items_duration_asc ON items(COALESCE(duration_ticks, 0), file_name_sort_key);
+        CREATE INDEX idx_items_duration_desc ON items(COALESCE(duration_ticks, 0) DESC, file_name_sort_key);
+        CREATE INDEX idx_items_date_added_asc ON items(COALESCE(last_write_time_utc, 0), file_name_sort_key);
+        CREATE INDEX idx_items_date_added_desc ON items(COALESCE(last_write_time_utc, 0) DESC, file_name_sort_key);
+        """;
+
+    /// <summary>
+    /// The sort indexes the 2 to 3 step creates, as v0.14.1 shipped them. They are history like the step
+    /// itself and never change, even when <see cref="SortIndexesSql"/> does: a later index could name a
+    /// column a schema 3 catalog doesn't have yet.
+    /// </summary>
+    private const string Schema3SortIndexesSql = """
         CREATE INDEX idx_items_name_sort ON items(file_name_sort_key);
         CREATE INDEX idx_items_last_played_asc ON items(COALESCE(last_played_utc, 0), file_name_sort_key);
         CREATE INDEX idx_items_last_played_desc ON items(COALESCE(last_played_utc, 0) DESC, file_name_sort_key);
@@ -250,6 +273,8 @@ public static class LibraryCatalogStore
 
     private static readonly string[] Schema4ItemColumns = [.. Schema3ItemColumns, "loudness_analysis_version"];
 
+    private static readonly string[] Schema7ItemColumns = [.. Schema4ItemColumns, "rating"];
+
     /// <summary>The <c>items</c> columns each usable schema version must have, from the oldest shipped one to the current one.</summary>
     private static readonly Dictionary<int, string[]> ItemColumnsBySchemaVersion = new()
     {
@@ -257,7 +282,8 @@ public static class LibraryCatalogStore
         [3] = Schema3ItemColumns,
         [4] = Schema4ItemColumns,
         [5] = Schema4ItemColumns,
-        [6] = Schema4ItemColumns
+        [6] = Schema4ItemColumns,
+        [7] = Schema7ItemColumns
     };
 
     /// <summary>
@@ -270,7 +296,8 @@ public static class LibraryCatalogStore
         [2] = UpgradeSchema2To3,
         [3] = UpgradeSchema3To4,
         [4] = UpgradeSchema4To5,
-        [5] = UpgradeSchema5To6
+        [5] = UpgradeSchema5To6,
+        [6] = UpgradeSchema6To7
     };
 
     /// <summary>
@@ -421,7 +448,7 @@ public static class LibraryCatalogStore
 
         Execute(connection, transaction, "DROP INDEX IF EXISTS idx_item_tags_item_id;");
         Execute(connection, transaction, "DROP INDEX IF EXISTS idx_items_file_name_fold;");
-        Execute(connection, transaction, SortIndexesSql);
+        Execute(connection, transaction, Schema3SortIndexesSql);
         Execute(
             connection,
             transaction,
@@ -493,6 +520,12 @@ public static class LibraryCatalogStore
             WHERE media_type = 0 AND has_audio = 1 AND integrated_loudness <= -70.0 AND peak_db IS NULL
               AND loudness_analysis_version >= 2;
             """);
+    }
+
+    /// <summary>Schema version 6 to 7: adds each item's rating, none until one is set (see <see cref="ItemRating"/>).</summary>
+    private static void UpgradeSchema6To7(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        Execute(connection, transaction, "ALTER TABLE items ADD COLUMN rating INTEGER NULL;");
     }
 
     private static string WithFlagModesWritten(string filterStateJson)
@@ -1017,7 +1050,8 @@ public static class LibraryCatalogStore
                 thumbnail_width INTEGER NULL,
                 thumbnail_height INTEGER NULL,
                 file_name_sort_key BLOB NULL,
-                loudness_analysis_version INTEGER NOT NULL DEFAULT 0
+                loudness_analysis_version INTEGER NOT NULL DEFAULT 0,
+                rating INTEGER NULL
             );
             CREATE TABLE categories (
                 id TEXT PRIMARY KEY,

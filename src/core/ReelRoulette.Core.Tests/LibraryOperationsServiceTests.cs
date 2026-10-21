@@ -180,6 +180,43 @@ public sealed class LibraryOperationsServiceTests
     }
 
     [Fact]
+    public void SetRating_ReturnsTheItemBeforeAndAfter_SoTheCallerCanTellAChange()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            CatalogSeed.Write(appDataRoot, items: [new SeedItem("item-1", "/media/movie.mp4") { RatingHalfStars = 3 }]);
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+
+            var changed = service.SetRating("item-1", 8, out var before);
+            Assert.Equal("item-1", changed!.Id);
+            Assert.Equal("/media/movie.mp4", changed.FullPath);
+            Assert.Equal(8, changed.RatingHalfStars);
+            Assert.Equal(3, before!.RatingHalfStars);
+
+            var same = service.SetRating("item-1", 8, out var sameBefore);
+            Assert.Equal(8, same!.RatingHalfStars);
+            Assert.Equal(8, sameBefore!.RatingHalfStars);
+
+            var cleared = service.SetRating("item-1", null, out var clearedBefore);
+            Assert.Null(cleared!.RatingHalfStars);
+            Assert.Equal(8, clearedBefore!.RatingHalfStars);
+
+            Assert.Null(service.SetRating("missing", 4, out var missingBefore));
+            Assert.Null(missingBefore);
+            Assert.Null(service.SetRating(" ", 4, out _));
+        }
+        finally
+        {
+            LibraryCatalogBackup.WaitForPending();
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void FavoriteBlacklistAndPlayback_PersistWithoutBuildingTheCatalogDocument()
     {
         var appDataRoot = CreateTempAppDataRoot();

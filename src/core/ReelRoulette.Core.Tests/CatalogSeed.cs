@@ -50,6 +50,9 @@ internal sealed record SeedItem(string Id, string FullPath)
     /// </summary>
     public int LoudnessAnalysisVersion { get; init; } = LibraryCatalogStore.LoudnessAnalysisVersion;
 
+    /// <summary>The rating in half stars, written from schema version 7.</summary>
+    public int? RatingHalfStars { get; init; }
+
     public IReadOnlyList<string> Tags { get; init; } = [];
 }
 
@@ -111,6 +114,7 @@ internal static class CatalogSeed
             4 => Schema4,
             5 => Schema5,
             6 => Schema6,
+            7 => Schema7,
             _ => throw new ArgumentOutOfRangeException(nameof(schemaVersion), schemaVersion, "The seed has no tables for this schema version.")
         };
 
@@ -178,9 +182,11 @@ internal static class CatalogSeed
             {
                 var fileName = item.FileName ?? Path.GetFileName(item.FullPath);
                 var laterColumns = (schemaVersion >= 3 ? ", file_name_sort_key" : string.Empty) +
-                                   (schemaVersion >= 4 ? ", loudness_analysis_version" : string.Empty);
+                                   (schemaVersion >= 4 ? ", loudness_analysis_version" : string.Empty) +
+                                   (schemaVersion >= 7 ? ", rating" : string.Empty);
                 var laterValues = (schemaVersion >= 3 ? ", $fileKey" : string.Empty) +
-                                  (schemaVersion >= 4 ? ", $loudnessVersion" : string.Empty);
+                                  (schemaVersion >= 4 ? ", $loudnessVersion" : string.Empty) +
+                                  (schemaVersion >= 7 ? ", $rating" : string.Empty);
                 Execute(
                     connection,
                     $"""
@@ -228,7 +234,8 @@ internal static class CatalogSeed
                     ("$thumbWidth", item.ThumbnailWidth),
                     ("$thumbHeight", item.ThumbnailHeight),
                     ("$fileKey", LibraryCatalogNameSortKey.Compute(fileName)),
-                    ("$loudnessVersion", item.LoudnessAnalysisVersion));
+                    ("$loudnessVersion", item.LoudnessAnalysisVersion),
+                    ("$rating", item.RatingHalfStars));
 
                 foreach (var (name, tagPosition) in item.Tags.Select((row, index) => (row, index)))
                 {
@@ -538,6 +545,8 @@ internal static class CatalogSeed
 
     private const string Schema4ItemColumns = Schema3ItemColumns + ",\n    loudness_analysis_version INTEGER NOT NULL DEFAULT 0";
 
+    private const string Schema7ItemColumns = Schema4ItemColumns + ",\n    rating INTEGER NULL";
+
     private const string Schema3 = "CREATE TABLE items (\n" + Schema3ItemColumns + "\n);\n" + SharedTables + Schema2Presets + SortIndexes;
 
     private const string Schema4 = "CREATE TABLE items (\n" + Schema4ItemColumns + "\n);\n" + SharedTables + Schema2Presets + SortIndexes;
@@ -546,6 +555,8 @@ internal static class CatalogSeed
 
     /// <summary>Schema version 6 changed stored values only, so its tables are version 5's.</summary>
     private const string Schema6 = Schema5;
+
+    private const string Schema7 = "CREATE TABLE items (\n" + Schema7ItemColumns + "\n);\n" + SharedTables + Schema5Presets + SortIndexes;
 
     private const string SortIndexes =
         """

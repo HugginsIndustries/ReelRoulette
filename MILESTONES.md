@@ -173,7 +173,7 @@ Last milestone completed: M12k1
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Mockup | ✅ Complete | The rating in the Stats tab's Current file section, the path's icon button, the tags row, the Rated card, and the rating popups, approved on a desktop browser, the iPad, and an Android phone. |
-| Server | ⏳ Planned | The rating column in a new catalog schema step, the shipped 2→3 step's index SQL frozen, setting a rating in the catalog, `rating` on item reads, and the rated count in the stats read. |
+| Server | ✅ Complete | The rating column in a new catalog schema step, the shipped 2→3 step's index SQL frozen, setting a rating in the catalog, `rating` on item reads, and the rated count in the stats read. |
 | Contract | ⏳ Planned | The rating route and its `itemRatingChanged` event, the rated count in the stats response, and `rating`, `hasAudio`, and the fields the server always sends named in `LibraryProjectionItem`, in OpenAPI and the generated WebUI types. |
 | WebUI | ⏳ Planned | The rating control in the Current file section, its popups and event handling, the path's icon button, the tags row, and the Rated card. |
 
@@ -257,6 +257,22 @@ Last milestone completed: M12k1
 - Item reads send `rating` in stars for a rated item and leave it out for an unrated one, in server tests of both reads.
 - Library stats count the rated items, in server tests of library stats.
 - `dotnet test ReelRoulette.sln` passes.
+
+**Evidence**
+
+- `LibraryCatalogStore.SchemaVersion` is 7, and `UpgradeSchema6To7` adds only `rating INTEGER NULL` to `items`. A new catalog has the column last, and version 7's required columns include it.
+- The 2→3 step runs `Schema3SortIndexesSql`, the nine sort indexes word for word as v0.14.1 shipped them (measured against the tag), and a new catalog runs `SortIndexesSql`, checked by reading. Their doc comments say the step's copy is history, and that a change to a new catalog's indexes needs a step of its own.
+- `ItemRating` holds the stored range, 1 to 10 half stars, and the conversion to stars. Core keeps the rating in half stars as `RatingHalfStars` on `LibraryCatalogItem` and `CatalogItemState`, and `ToItem` sends it as `rating` in stars.
+- `LibraryCatalogSession.SetRating` writes the rating only when it differs and says whether it changed, and throws for a value outside 1 to 10.
+- `LibraryOperationsService.SetRating` returns the item's state before and after under the operations lock, through `UpdateItem`, the one before-and-after read that favorite and blacklist now use too through `UpdateItemFlag`.
+- The browse page and an item's read share `ListedItemColumnsSql`, in place of two copies of the column list. `InsertItem`, the item state read, and playback's recorded state carry the rating too.
+- The stats pass counts `COUNT(rating)` into `CatalogGlobalStats.Rated`. The stats response maps its fields one by one, so it carries the count only once the Contract slice adds it.
+- `LibraryCatalogStore.Read`, which only tests use, still reads only schema 2's columns, so the upgrade tests can read a catalog before it upgrades.
+- `CatalogSeed` has version 7's tables, and `SeedItem.RatingHalfStars` writes a rating from version 7. The upgrade theories now run from every version from 2 to 6.
+- New tests: `SetRating_StoresChangesAndClearsIt_AndReportsOnlyARealChange`, `SetRating_RefusesAValueOutsideOneToTenHalfStars`, `ReadLibraryStats_CountsTheRatedItems`, `LibraryItems_CarryTheirRatingInStars_AndLeaveItOutWhenUnrated`, and `SetRating_ReturnsTheItemBeforeAndAfter_SoTheCallerCanTellAChange`.
+- Each guarded behavior broken on its own, restored from a copy under `artifacts/scratch/`, failed its tests (measured): `ToItem` without `rating`, the stats without the count, a same-value write reported as a change, the 6→7 step without its column, which failed both upgrade theories from every older version, and out-of-range half stars accepted.
+- `dotnet build ReelRoulette.sln` has no warnings, `dotnet test ReelRoulette.sln` passes 547 Core tests and 19 ServerApp tests, and `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passes.
+- CONTEXT.md, `docs/domain-inventory.md`, and `docs/dev-setup.md` say `user_version` 7 and describe the 6→7 step, CONTEXT.md says a rated library item carries its `rating`, and `docs/domain-inventory.md` lists rating among the catalog's and the operations service's row writes.
 
 #### Contract slice
 

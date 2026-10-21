@@ -283,6 +283,25 @@ public sealed class LibraryOperationsService
         }
     }
 
+    /// <summary>
+    /// Sets the item's rating in half stars, or clears it with null, and returns the item's state after the change,
+    /// with <paramref name="previous"/> its state before, so the caller can tell whether the rating changed. Both are
+    /// null for an item not in the library.
+    /// </summary>
+    public CatalogItemState? SetRating(string itemId, int? halfStars, out CatalogItemState? previous)
+    {
+        previous = null;
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return null;
+        }
+
+        lock (_lock)
+        {
+            return UpdateItem(itemId, () => _catalog.Session.SetRating(itemId, halfStars), out previous);
+        }
+    }
+
     public TagEditorModelResponse GetTagEditorModel(TagEditorModelRequest? request)
     {
         lock (_lock)
@@ -788,6 +807,17 @@ public sealed class LibraryOperationsService
 
     private LibraryStateResponse? UpdateItemFlag(string identifier, Action update, out LibraryStateResponse? previous)
     {
+        var after = UpdateItem(identifier, update, out var before);
+        previous = before == null ? null : ToStateResponse(before);
+        return after == null ? null : ToStateResponse(after);
+    }
+
+    /// <summary>
+    /// Reads the item's state before and after the update. Both are null for an item not in the library, or one gone
+    /// by the time the update finished.
+    /// </summary>
+    private CatalogItemState? UpdateItem(string identifier, Action update, out CatalogItemState? previous)
+    {
         previous = null;
         var before = _catalog.Session.ReadItemState(identifier);
         if (before == null)
@@ -802,8 +832,8 @@ public sealed class LibraryOperationsService
             return null;
         }
 
-        previous = ToStateResponse(before);
-        return ToStateResponse(after);
+        previous = before;
+        return after;
     }
 
     private static LibraryStateResponse ToStateResponse(CatalogItemState state)
