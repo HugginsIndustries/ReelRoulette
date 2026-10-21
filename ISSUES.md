@@ -86,6 +86,23 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
   - Rendering the tooltip outside the field's containers, in the page, the open dialog, or the fullscreen stage, didn't help (measured).
   - The mockup's `ValidatedField` in `docs/mockups/reelroulette/build/common.js` places its tooltip the same way.
 
+## Player
+
+### An item that starts while the panel covers the player plays behind it
+
+- **What goes wrong**: Auto-Pause covers one play attempt: it pauses the attempt playing when it acts, and resumes nothing once another has started. An item that starts by another path while the panel covers the player plays behind the panel (inferred):
+  - A history step that Auto-Pause caught while it waited for its fresh media URL, and that is then skipped as a missing file or one this browser can't play, plays the next file.
+  - A random pick answered just after the panel opened as the overlay plays its item.
+- **How to make it happen** (inferred):
+  - With Auto-Pause on Responsive, press Next or Previous within the history, on an entry whose file is missing or one this browser can't play, and open the panel as the overlay before the server answers. On a slow drive or share, the play route's answer can take seconds.
+  - Press Next at the end of the history, or Random, and open the panel as the overlay before the pick answers.
+- **How much it matters**: Low. It takes the panel opening during a wait for the server, which is short unless the drive or share is slow, but the item then plays with its sound behind the panel until the user pauses it or closes the panel (inferred).
+- **Since**: v0.15.0, not yet released, whose side panel pauses playback while it covers the player.
+- **Where**:
+  - `autoPause` and `autoResume` in `src/clients/web/ReelRoulette.WebUI/src/playback/player.ts` remember what they paused for one attempt, through `autoPausedAttempt`, `autoPausedVideo`, `autoHeldPhoto`, and `autoPausedWaiting`. `beginAttempt` and `loadMedia` start each new item playing unless Auto-Pause caught that attempt's own wait.
+  - `src/clients/web/ReelRoulette.WebUI/src/playback/autoPause.ts` decides when Auto-Pause applies and calls `autoPause` and `autoResume` only as that changes.
+  - The fix is for Auto-Pause to act as a state, so any item that starts while the panel covers the player starts paused, whatever path started it.
+
 ## Server
 
 ### The ffmpeg check can hang on its own output

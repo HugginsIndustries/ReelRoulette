@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PLAYBACK_REQUEST_TIMEOUT_MS } from "../api/serverRequest";
 import { HEADER_PRESET_STARRED_VALUE, createDefaultFilterState } from "../filter/filterStateModel";
 import {
-  RANDOM_PICK_TIMEOUT_MS,
   createRandomPicker,
   randomPickRequest,
   type RandomPickInputs,
@@ -52,7 +52,7 @@ describe("randomPick", () => {
   });
 
   it("waits ten seconds for the server", () => {
-    expect(RANDOM_PICK_TIMEOUT_MS).toBe(10_000);
+    expect(PLAYBACK_REQUEST_TIMEOUT_MS).toBe(10_000);
   });
 
   it("sends one pick at a time and sends nothing for presses while one is waiting", async () => {
@@ -82,13 +82,13 @@ describe("randomPick", () => {
       outcome = result;
     });
 
-    await vi.advanceTimersByTimeAsync(RANDOM_PICK_TIMEOUT_MS - 1);
+    await vi.advanceTimersByTimeAsync(PLAYBACK_REQUEST_TIMEOUT_MS - 1);
     expect(outcome).toBeUndefined();
     expect(sent[0].signal.aborted).toBe(false);
     await expect(picker.pick({ press: 2 })).resolves.toEqual({ kind: "busy" });
 
     await vi.advanceTimersByTimeAsync(1);
-    expect(outcome).toEqual({ kind: "timedOut", timeoutMs: RANDOM_PICK_TIMEOUT_MS });
+    expect(outcome).toEqual({ kind: "timedOut", timeoutMs: PLAYBACK_REQUEST_TIMEOUT_MS });
     expect(sent[0].signal.aborted).toBe(true);
     // A cancelled fetch rejects; that must not reach anyone.
     sent[0].reject(new DOMException("The operation was aborted.", "AbortError"));
@@ -105,8 +105,8 @@ describe("randomPick", () => {
     const picker = createRandomPicker(send);
 
     const stale = picker.pick({ press: 1 });
-    await vi.advanceTimersByTimeAsync(RANDOM_PICK_TIMEOUT_MS);
-    await expect(stale).resolves.toEqual({ kind: "timedOut", timeoutMs: RANDOM_PICK_TIMEOUT_MS });
+    await vi.advanceTimersByTimeAsync(PLAYBACK_REQUEST_TIMEOUT_MS);
+    await expect(stale).resolves.toEqual({ kind: "timedOut", timeoutMs: PLAYBACK_REQUEST_TIMEOUT_MS });
 
     const newer = picker.pick({ press: 2 });
     sent[0].resolve(jsonResponse(randomItem("late")));

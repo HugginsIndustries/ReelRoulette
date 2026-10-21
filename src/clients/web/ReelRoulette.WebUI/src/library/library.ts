@@ -161,7 +161,6 @@ export interface LibraryOptions {
 export function createLibrary(options: LibraryOptions): Library {
   const { store, api, connection, player, panel, device, dialogs, notifications } = options;
   const apiBaseUrl = String(options.config.apiBaseUrl || "").replace(/\/+$/, "");
-  const sseUrl = options.config.sseUrl;
   const createGrid: CreateLibraryGrid =
     options.createGrid ?? ((host, onCoverage) => createLibraryGridController(host, apiBaseUrl, { onCoverage }));
   const requestFrame = options.requestFrame ?? ((callback: () => void) => void requestAnimationFrame(() => callback()));
@@ -407,6 +406,11 @@ export function createLibrary(options: LibraryOptions): Library {
     session.setOverlayVisible(false);
   }
 
+  /** The media type of the loaded tile with `itemId`, which a refusal's message names. */
+  function tileMediaType(itemId: string): "video" | "photo" {
+    return session.snapshot().items.find((item) => item.id === itemId)?.mediaType === "photo" ? "photo" : "video";
+  }
+
   async function play(itemId: string): Promise<void> {
     const trimmedItemId = String(itemId || "").trim();
     if (!trimmedItemId) {
@@ -430,7 +434,7 @@ export function createLibrary(options: LibraryOptions): Library {
 
     try {
       const result = await requestPlayItem(
-        { apiBaseUrl, sseUrl },
+        { apiBaseUrl },
         trimmedItemId,
         { clientId: store.identity.clientId, sessionId: store.identity.sessionId },
         api.request
@@ -442,7 +446,7 @@ export function createLibrary(options: LibraryOptions): Library {
           code: result.code || "none"
         });
         // The server's error text can name a file, so the log keeps one line for every refusal.
-        void dialogs.notice(mapPlayItemErrorToStatus(result), "Playback failed");
+        void dialogs.notice(mapPlayItemErrorToStatus(result, tileMediaType(trimmedItemId)), "Playback failed");
         return;
       }
 
@@ -455,7 +459,8 @@ export function createLibrary(options: LibraryOptions): Library {
       store.pushHistory(data);
       void panel.closeIfOverlay();
       trace("info", "library-play-success");
-      player.playCurrent({ recordPlayback: false });
+      // The server recorded the play, and a file that can't play shows its message rather than being skipped.
+      player.playCurrent({ origin: "library" });
     } catch (error) {
       if (error instanceof UnauthorizedError) {
         // The request asked for pairing, whose prompt is the only signal, and sent its line.

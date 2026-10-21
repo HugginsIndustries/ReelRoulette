@@ -53,7 +53,7 @@ flowchart LR
 `src/core/ReelRoulette.Server` is a thin composition boundary.
 
 - Handles endpoint routing, auth middleware wiring, SSE/media transport, and DTO shaping.
-- Exposes `POST /api/play/{itemId}` for explicit item playback: same response shape as random selection, with server-side stats update and `playbackRecorded` SSE (orchestration mirrors `record-playback` semantics).
+- Exposes `POST /api/play/{itemId}` for explicit item playback: same response shape as random selection, with server-side stats update and `playbackRecorded` SSE (orchestration mirrors `record-playback` semantics), unless its body's `recordPlayback` is false, which only issues a fresh media URL.
 - Maps transport contracts to domain services.
 - Must not become the owner of business rules that belong in core services.
 

@@ -147,10 +147,8 @@ function setup() {
   const panel = { closeIfOverlay: vi.fn(() => Promise.resolve()), showTab: vi.fn(() => Promise.resolve()) };
   const playCalls: string[] = [];
   const player = {
-    playCurrent: vi.fn((options?: { recordPlayback?: boolean }) => {
-      playCalls.push(
-        `current=${store.current.peek()?.itemId} closeIfOverlay=${panel.closeIfOverlay.mock.calls.length} recordPlayback=${options?.recordPlayback}`
-      );
+    playCurrent: vi.fn((options?: { origin?: string }) => {
+      playCalls.push(`current=${store.current.peek()?.itemId} closeIfOverlay=${panel.closeIfOverlay.mock.calls.length} origin=${options?.origin}`);
     })
   };
   const grids: Array<ReturnType<typeof fakeGrid>> = [];
@@ -594,7 +592,7 @@ describe("search and sort", () => {
 });
 
 describe("play", () => {
-  it("joins history, closes the panel as the overlay, and then plays without recording the play again", async () => {
+  it("joins history, closes the panel as the overlay, and then plays as a library choice, which records no play again", async () => {
     const t = setup();
     t.replies.set("/api/play/item-1", () => json(PLAYED));
     t.showTab();
@@ -602,7 +600,7 @@ describe("play", () => {
     await t.library.play(" item-1 ");
 
     expect(t.requests("/api/play/item-1")[0]!.body).toEqual({ clientId: "client-1", sessionId: "session-1" });
-    expect(t.playCalls).toEqual(["current=item-1 closeIfOverlay=1 recordPlayback=false"]);
+    expect(t.playCalls).toEqual(["current=item-1 closeIfOverlay=1 origin=library"]);
     expect(t.store.history.peek()).toHaveLength(1);
     expect(t.relayed.filter((line) => line.startsWith("playback="))).toEqual([
       "playback=library-play-start attempt=0 hasCurrent=false",
@@ -676,6 +674,11 @@ describe("play", () => {
       [() => json({ error: "gone", code: "play_item_not_found" }, 404), "Media not found. The file may have moved or been deleted."],
       [() => json({ error: "disabled" }, 409), "This item is unavailable."],
       [() => json({}, 415), "This file type is not supported."],
+      [
+        () => json({ error: "Media can't be read", code: "play_media_unreadable" }, 503),
+        "This video couldn't load. The server may be waiting on a slow or disconnected drive or share."
+      ],
+      [() => json({ error: "The library is missing.", code: "library_missing" }, 503), "The library is missing."],
       [() => json({ error: "Server exploded" }, 500), "Server exploded"],
       [() => json({}, 500), "Playback failed."]
     ];
@@ -704,6 +707,19 @@ describe("play", () => {
     expect(t.panel.closeIfOverlay).not.toHaveBeenCalled();
     expect(t.library.isOpen()).toBe(true);
     expect(t.player.playCurrent).not.toHaveBeenCalled();
+  });
+
+  it("names a photo tile in the couldn't-load message of a play the server can't read", async () => {
+    const t = setup();
+    t.fakeLibrary.items = libraryItems(1, { mediaType: 1 });
+    t.emit("serverReady");
+    await vi.waitFor(() => expect(t.library.session.snapshot().items).toHaveLength(1));
+    t.replies.set("/api/play/item-1", () => json({ error: "Media can't be read", code: "play_media_unreadable" }, 503));
+
+    await t.library.play("item-1");
+
+    expect(t.notices).toEqual(["This photo couldn't load. The server may be waiting on a slow or disconnected drive or share."]);
+    expect(t.noticeLogs).toEqual(["Playback failed"]);
   });
 
   it.each(["Failed to fetch", "Load failed", "NetworkError when attempting to fetch resource."])(

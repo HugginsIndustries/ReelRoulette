@@ -1390,6 +1390,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <label><input type="checkbox" id="mock-ios-volume"> Volume is read-only, as on iOS: it works through the Web Audio gain stage, started on the first tap, and the slider hides while Enhanced audio is off</label>
         <label><input type="checkbox" id="mock-sound"> A stand-in sound plays with videos, through the Web Audio gain stage, so the volume can be heard</label>
         <label><input type="checkbox" id="mock-audio-fails"> The Web Audio gain stage fails to start (the next tap shows the notice)</label>
+        <label><input type="checkbox" id="mock-media-stalled"> The media's drive or share is stalled: the server can't read any file, so a play shows the couldn't-load notice and stops</label>
         <label><input type="checkbox" id="mock-short"> A phone on its side (a touch screen under 500 px tall)</label>
         <p class="mock-small mock-keep">The theme, panel side, and Auto-Pause are in the Settings tab.</p>
       </fieldset>
@@ -1490,6 +1491,7 @@ const state = {
   normalization: store.get("normalization", true),
   compression: store.get("compression", false),
   audioFails: store.get("audioFails", false),
+  mediaStalled: store.get("mediaStalled", false),
   hideAfter: store.get("hideAfter", 3),
   keepWhilePaused: store.get("keepWhilePaused", true),
   ambient: store.get("ambient", true),
@@ -1518,7 +1520,8 @@ const WORDS_A = ["Beach", "Harbor", "Mountain", "City", "Forest", "Desert", "Riv
 const WORDS_B = ["Sunset", "Walk", "Drive", "Timelapse", "Picnic", "Hike", "Party", "Fireworks", "Swim", "Ride", "Storm", "Morning", "Concert", "Trip"];
 const VIDEO_ASPECTS = [16 / 9, 16 / 9, 16 / 9, 16 / 9, 9 / 16, 9 / 16, 4 / 3, 21 / 9];
 const PHOTO_ASPECTS = [4 / 3, 3 / 4, 3 / 2, 2 / 3, 1];
-// Every third item is a photo; a few videos are in containers a browser can't play.
+// Every third item is a photo, one of them a HEIC this browser can't show; a few videos are in containers a browser
+// can't play.
 const ITEMS = Array.from({ length: 72 }, (_, i) => {
   const photo = i % 3 === 2;
   const a = WORDS_A[Math.floor(rand() * WORDS_A.length)];
@@ -1528,7 +1531,7 @@ const ITEMS = Array.from({ length: 72 }, (_, i) => {
   return {
     id: i,
     type: photo ? "photo" : "video",
-    name: `${a} ${b} ${year}${i % 5 === 0 ? " (2)" : ""}.${photo ? "jpg" : i % 11 === 4 ? "avi" : i % 13 === 7 ? "wmv" : i % 9 === 1 ? "mkv" : "mp4"}`,
+    name: `${a} ${b} ${year}${i % 5 === 0 ? " (2)" : ""}.${photo ? (i === 26 ? "heic" : "jpg") : i % 11 === 4 ? "avi" : i % 13 === 7 ? "wmv" : i % 9 === 1 ? "mkv" : "mp4"}`,
     year,
     aspect: aspects[Math.floor(rand() * aspects.length)],
     hue: Math.floor(rand() * 360),
@@ -1541,6 +1544,9 @@ const isPhoto = (item) => item.type === "photo";
 const PLAYABLE = ["mp4", "m4v", "webm"];
 const extOf = (item) => item.name.slice(item.name.lastIndexOf(".") + 1);
 const isPlayable = (item) => isPhoto(item) || PLAYABLE.includes(extOf(item));
+// What this browser can show: a video in a playable container, and a photo other than a HEIC, which only Safari shows.
+// The filter keeps every photo, as the server does.
+const browserCanShow = (item) => (isPhoto(item) ? extOf(item) !== "heic" : PLAYABLE.includes(extOf(item)));
 const statRand = rng(23);
 ITEMS.forEach((item) => {
   item.plays = statRand() < 0.2 ? 0 : 1 + Math.floor(statRand() * 40);
@@ -1758,7 +1764,12 @@ const autoplayGoesOn = () => playback.autoplay && !(playback.loop && state.loopS
 // until it ends, while the next item comes.
 const photoTimerRuns = () => !!playback.item && isPhoto(playback.item) && (playback.autoplay || playback.loop);
 const photoBarFills = () => !!playback.item && isPhoto(playback.item) && autoplayGoesOn() && playback.pausedBy !== "end";
-const cannotPlay = (item) => item.missing || item.removed || !isPlayable(item);
+const cannotPlay = (item) => item.missing || item.removed || !browserCanShow(item);
+// After ten skips in a row, the player stops on the next such file's message, so a filter that matches only files this
+// browser can't play doesn't pick without end. While the media's drive or share is stalled, nothing is skipped: the
+// server can't read the file, which the player stops on.
+const SKIP_LIMIT = 10;
+const skips = (item) => !state.mediaStalled && cannotPlay(item);
 const shortVideo = (item) => item.duration < state.advanceAfter;
 // A video's timer runs while autoplay will advance it: in Timer mode, and in either mode for a video shorter than the
 // timer that Loop repeats while autoplay goes on. Anything that stops it applying holds it, keeping its time, and so
@@ -1951,6 +1962,20 @@ function setPlaying(playing, by) {
   syncControlsToPlayback();
 }
 
+// Why an item's media fails, as the server's answer for the file tells the app: the server can't read it, it's missing,
+// or the server has it and this browser can't play its format.
+function mediaFailure(item) {
+  if (state.mediaStalled) return "unreadable";
+  if (item.missing) return "missing";
+  return browserCanShow(item) ? null : "format";
+}
+function failureMessage(item, failure) {
+  const kind = isPhoto(item) ? "photo" : "video";
+  if (failure === "unreadable") return `This ${kind} couldn't load. The server may be waiting on a slow or disconnected drive or share.`;
+  if (failure === "missing") return `${isPhoto(item) ? "Photo" : "Video"} file not found.`;
+  return `This ${kind}'s format (.${extOf(item)}) isn't supported in this browser.`;
+}
+
 function skipNotice(item) {
   notes.notify({ kind: "skips", text: item.missing ? "Skipped a missing file." : "Skipped a file this browser can't play.", detail: item.name, key: "skip" });
 }
@@ -1967,15 +1992,16 @@ function start(item) {
   playback.loopStart = 0;
   playback.stretching = repeatsStretch();
   hideSeekIndicator();
-  playback.failed = isPlayable(item) ? null : "format";
+  playback.failed = mediaFailure(item);
   if (playback.failed) {
-    // A file chosen from the library that this browser can't play: its notice, not a popup.
+    // A file whose media fails and isn't skipped: one chosen from the library, one past ten skips in a row, the oldest
+    // in the history, or one the server can't read. Its notice, not a popup, and the player stops.
     playback.playing = false;
     playback.autoPaused = false;
     playback.pausedBy = "error";
     renderPlayback();
     followPlayingItem();
-    noticeDialog({ message: `This video's format (.${extOf(item)}) isn't supported in this browser.` });
+    noticeDialog({ message: failureMessage(item, playback.failed) });
     return;
   }
   item.plays += 1;
@@ -2024,7 +2050,7 @@ function pickRandom(tries = 0) {
     const item = pool[Math.floor(Math.random() * pool.length)];
     // The next pick keeps this one's hold, and the media's hold starts before the pick's ends, so the loading period
     // runs on unbroken.
-    if (cannotPlay(item) && tries < 20) {
+    if (skips(item) && tries < SKIP_LIMIT) {
       skipNotice(item);
       return pickRandom(tries + 1);
     }
@@ -2039,12 +2065,13 @@ function pickRandom(tries = 0) {
 }
 
 // Next steps forward through history and picks at random at its end; Previous steps back and does nothing at the
-// start, as today. Both skip a file that is missing or that this browser can't play, saying so in a popup.
+// start, as today. Both skip a file that is missing or that this browser can't play, saying so in a popup, up to ten
+// in a row. Previous that reaches the oldest entry stops on its message, since there is nothing further back.
 function goNext(tries = 0) {
   if (historyIndex < history.length - 1) {
     historyIndex += 1;
     const item = history[historyIndex];
-    if (cannotPlay(item)) {
+    if (skips(item) && tries < SKIP_LIMIT) {
       skipNotice(item);
       return goNext(tries + 1);
     }
@@ -2053,15 +2080,15 @@ function goNext(tries = 0) {
   pickRandom(tries);
 }
 function goPrevious() {
+  if (historyIndex <= 0) return;
   let index = historyIndex - 1;
-  let skipped = null;
-  while (index >= 0 && cannotPlay(history[index])) {
-    skipped = history[index];
+  let tries = 0;
+  while (index > 0 && skips(history[index]) && tries < SKIP_LIMIT) {
+    skipNotice(history[index]);
     index -= 1;
+    tries += 1;
   }
-  if (index < 0) return;
   historyIndex = index;
-  if (skipped) skipNotice(skipped);
   start(history[index]);
 }
 // A tile chosen from the library: a missing file says so and nothing else changes, as a library play does today.
@@ -2070,6 +2097,8 @@ function chooseItem(item) {
   if (state.situation === "nolibrary") return void noticeDialog({ message: NO_LIBRARY_PLAY_NOTICE });
   if (state.pairing) return;
   if (item.missing) return void noticeDialog({ message: "Media not found. The file may have moved or been deleted." });
+  // The server can't read the file, so the play is refused and nothing else changes.
+  if (state.mediaStalled) return void noticeDialog({ message: failureMessage(item, "unreadable") });
   pushHistory(item);
   start(item);
 }
@@ -5750,7 +5779,7 @@ $("mock-audio-fails").addEventListener("change", () => {
   dropGainStage();
   renderVolume();
 });
-[["mock-pairing", "pairing"], ["mock-server-machine", "serverMachine"], ["mock-ios-volume", "iosVolume"], ["mock-sound", "sound"], ["mock-audio-fails", "audioFails"], ["mock-short", "mockShort"]].forEach(([id, key]) => {
+[["mock-pairing", "pairing"], ["mock-server-machine", "serverMachine"], ["mock-ios-volume", "iosVolume"], ["mock-sound", "sound"], ["mock-audio-fails", "audioFails"], ["mock-media-stalled", "mediaStalled"], ["mock-short", "mockShort"]].forEach(([id, key]) => {
   $(id).checked = state[key];
   $(id).addEventListener("change", () => {
     state[key] = $(id).checked;

@@ -41,6 +41,8 @@ export interface FetchCall {
   path: string;
   url: string;
   body: any;
+  /** The request's headers, such as a range request's `Range`. */
+  headers: Headers;
 }
 
 export type Reply = (call: FetchCall) => Response | Promise<Response>;
@@ -119,7 +121,7 @@ export class FakeServer {
         body = init.body;
       }
     }
-    const call: FetchCall = { method, path: url.pathname, url: url.toString(), body };
+    const call: FetchCall = { method, path: url.pathname, url: url.toString(), body, headers: new Headers(init?.headers) };
     this.calls.push(call);
     if (init?.signal?.aborted) {
       throw new DOMException("Aborted", "AbortError");
@@ -136,6 +138,21 @@ export class FakeServer {
     }
     return status(404);
   };
+
+  /**
+   * Answers `POST /api/play/{itemId}` for these items with the item itself, as the server answers a history step with
+   * the entry it plays.
+   */
+  playsItems(...items: unknown[]): this {
+    return this.fallback((call) => {
+      if (call.method !== "POST" || !call.path.startsWith("/api/play/")) {
+        return null;
+      }
+      const itemId = decodeURIComponent(call.path.slice("/api/play/".length));
+      const item = items.find((candidate) => (candidate as { itemId?: unknown } | null)?.itemId === itemId);
+      return item ? json(item) : null;
+    });
+  }
 
   requests(method: string, path: string): FetchCall[] {
     return this.calls.filter((call) => call.method === method && call.path === path);

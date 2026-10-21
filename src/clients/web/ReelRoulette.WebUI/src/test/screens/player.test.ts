@@ -85,7 +85,7 @@ function answerRandom(server: FakeServer, ...items: unknown[]): void {
 }
 
 function serverPicking(...items: unknown[]): FakeServer {
-  const server = new FakeServer();
+  const server = new FakeServer().playsItems(...items);
   answerRandom(server, ...items);
   server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
   server.on("GET", "/api/sources", () => json([]));
@@ -257,6 +257,30 @@ function playRecords(server: FakeServer): number {
   return server.requests("POST", "/api/record-playback").length;
 }
 
+/**
+ * The plays the server counted: those the page recorded, and the plays a history step asked for, which the play route
+ * counts itself. A request for a fresh media URL with `recordPlayback: false` counts none.
+ */
+function playsCounted(server: FakeServer): number {
+  const routed = server.calls.filter((call) => call.method === "POST" && call.path.startsWith("/api/play/") && call.body?.recordPlayback !== false);
+  return playRecords(server) + routed.length;
+}
+
+/** The popups showing, oldest first, as their text and second line. */
+function popups(): Array<{ text: string; detail: string | null }> {
+  return [...document.querySelectorAll<HTMLElement>("#toasts .toast:not(.is-leaving)")].map((toast) => ({
+    text: toast.querySelector(".toast-text > div")?.textContent ?? "",
+    detail: toast.querySelector(".toast-detail")?.textContent ?? null
+  }));
+}
+
+/** The one-byte range requests the page sent to ask the server about a file whose media failed. */
+function probes(server: FakeServer): string[] {
+  return server.calls
+    .filter((call) => call.method === "GET" && call.path.startsWith("/api/media/"))
+    .map((call) => `${call.path} ${call.headers.get("Range")}`);
+}
+
 function storageKeys(storage: Storage): string[] {
   const keys: string[] = [];
   for (let i = 0; i < storage.length; i++) {
@@ -300,6 +324,25 @@ afterEach(() => {
   unmountServices?.();
   unmountServices = null;
 });
+
+/**
+ * Fails a video that had played, and then the fresh media URL its recovery sets, running `between` after the first
+ * failure. A source that fails never plays, though happy-dom's play() fires playing at once, so the element's play is
+ * held until both have failed.
+ */
+async function failVideoAndItsFreshUrl(between?: () => void): Promise<void> {
+  const element = video();
+  element.play = async () => {};
+  try {
+    fireEvent.error(element);
+    await flush();
+    between?.();
+    fireEvent.error(element);
+    await flush();
+  } finally {
+    delete (element as unknown as { play?: unknown }).play;
+  }
+}
 
 describe("random pick", () => {
   it("shows the empty state until something plays, and a click on it plays a random video", async () => {
@@ -371,8 +414,9 @@ describe("random pick", () => {
     expect(video().src).toBe(VIDEO_URL);
   });
 
-  it("plays a photo in place of the video and reports when it loads or cannot be found", async () => {
-    const server = serverPicking(PHOTO_ITEM);
+  it("plays a photo in place of the video, reports when it loads, and skips it once the server says it is missing", async () => {
+    const server = serverPicking(PHOTO_ITEM, SECOND_VIDEO);
+    server.on("POST", "/api/play/item-photo", () => json({ error: "Media not found", code: "play_media_missing" }, 404));
     await mountAndPlay(server);
 
     expect(photo().src).toBe(PHOTO_URL);
@@ -383,58 +427,70 @@ describe("random pick", () => {
     fireEvent.load(photo());
     await flush();
     await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Playing", PHOTO_ITEM, 1)));
+    // The server answers the range request for the file 404, and its play route says the file is missing too, so the
+    // random pick is skipped.
     fireEvent.error(photo());
     await flush();
-    expect(openNotices()).toEqual(["Photo file not found."]);
+    expect(probes(server)).toEqual(["/api/media/item-photo bytes=0-0"]);
+    expect(server.requests("POST", "/api/play/item-photo").map((call) => call.body.recordPlayback)).toEqual([false]);
+    expect(openNotices()).toEqual([]);
+    expect(popups()).toEqual([{ text: "Skipped a missing file.", detail: "beach.jpg" }]);
+    expect(randomPicks(server)).toBe(2);
+    expect(video().src).toBe(SECOND_VIDEO_URL);
     await waitFor(() =>
       expect(server.logLines()).toEqual(
         expect.arrayContaining([
           "playback=start attempt=1 hasCurrent=true mediaType=photo",
           "playback=photo-onload attempt=1 hasCurrent=true",
           "playback=photo-onerror attempt=1 hasCurrent=true",
-          statusLogLine("Photo file not found.", PHOTO_ITEM, 1)
+          "playback=media-probe attempt=1 hasCurrent=true mediaType=photo statusCode=404 failure=missing",
+          "playback=media-recheck-failed attempt=1 hasCurrent=true statusCode=404 code=play_media_missing",
+          statusLogLine("Skipped a missing file.", PHOTO_ITEM, 1)
         ])
       )
     );
-    await closeNotices();
-    expect(openNotices()).toEqual([]);
+    // The popup's second line, the file name, isn't relayed.
+    expect(server.logLines().some((line) => line.includes("beach") || line.includes("token"))).toBe(false);
   });
 
-  it("reports a video that cannot be found in the notice", async () => {
-    const server = serverPicking(VIDEO_ITEM);
+  it("says a video the server can't read couldn't load, and stops, once a fresh media URL fails too", async () => {
+    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO);
+    server.on("GET", "/api/media/item-video", () => json({ error: "Media can't be read" }, 503));
     await mountAndPlay(server);
 
-    fireEvent.error(video());
-    await flush();
-    expect(openNotices()).toEqual(["Video file not found."]);
+    // The video had played, so it first gets a fresh media URL, which fails too, before it plays.
+    await failVideoAndItsFreshUrl(() => expect(openNotices()).toEqual([]));
+    expect(openNotices()).toEqual(["This video couldn't load. The server may be waiting on a slow or disconnected drive or share."]);
+    expect(probes(server)).toEqual(["/api/media/item-video bytes=0-0"]);
+    expect(randomPicks(server)).toBe(1);
+    expect(popups()).toEqual([]);
     await waitFor(() =>
       expect(server.logLines()).toEqual(
-        expect.arrayContaining(["playback=video-onerror attempt=1 hasCurrent=true", statusLogLine("Video file not found.", VIDEO_ITEM, 1)])
+        expect.arrayContaining([
+          "playback=video-onerror attempt=1 hasCurrent=true",
+          "playback=recover attempt=1 hasCurrent=true",
+          "playback=media-probe attempt=1 hasCurrent=true mediaType=video statusCode=503 failure=unreadable",
+          statusLogLine("This video couldn't load. The server may be waiting on a slow or disconnected drive or share.", VIDEO_ITEM, 1)
+        ])
       )
     );
   });
 
-  it("opens a missing photo's notice once under Autoplay, though its timer moves on and fails again, and relays each failure", async () => {
-    // The clock moves with the timers, so the relay, which drops a line repeated within a second, sees the photo's time pass.
+  it("holds a photo's timer under Autoplay once it stops on a photo that couldn't load, so nothing moves on past it", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-    const server = serverPicking(PHOTO_ITEM);
+    const server = serverPicking(PHOTO_ITEM, SECOND_VIDEO);
+    server.on("GET", "/api/media/item-photo", () => json({ error: "Media can't be read" }, 503));
     await mount(server);
     await click(button("Autoplay"));
     await click(emptyState());
 
     fireEvent.error(photo());
     await flush();
-    await vi.advanceTimersByTimeAsync(15_000);
-    expect(randomPicks(server)).toBe(2);
-    fireEvent.error(photo());
-    await flush();
-
-    expect(openNotices()).toEqual(["Photo file not found."]);
-    await vi.waitFor(() =>
-      expect(server.logLines()).toEqual(
-        expect.arrayContaining([statusLogLine("Photo file not found.", PHOTO_ITEM, 1), statusLogLine("Photo file not found.", PHOTO_ITEM, 2)])
-      )
-    );
+    expect(openNotices()).toEqual(["This photo couldn't load. The server may be waiting on a slow or disconnected drive or share."]);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(randomPicks(server)).toBe(1);
+    expect(photo().style.display).toBe("block");
+    expect(indicatorState()).toBeNull();
   });
 
   it("shows no eligible media, a refused pick, and a pick that cannot reach the server in the notice alone", async () => {
@@ -526,26 +582,135 @@ describe("transport", () => {
     await click(emptyState());
     await click(button("Previous"));
     expect(video().src).toBe(VIDEO_URL);
-    expect(playRecords(server)).toBe(1);
+    expect(playsCounted(server)).toBe(1);
 
     await click(button("Next"));
     expect(randomPicks(server)).toBe(2);
     expect(video().src).toBe(SECOND_VIDEO_URL);
 
+    // A history step asks the play route for a fresh media URL, which counts its one play.
     await click(button("Previous"));
     expect(video().src).toBe(VIDEO_URL);
     expect(randomPicks(server)).toBe(2);
-    expect(playRecords(server)).toBe(3);
+    expect(server.requests("POST", "/api/play/item-video")).toHaveLength(1);
+    expect(playRecords(server)).toBe(2);
+    expect(playsCounted(server)).toBe(3);
 
     await click(button("Next"));
     expect(video().src).toBe(SECOND_VIDEO_URL);
     expect(randomPicks(server)).toBe(2);
-    expect(playRecords(server)).toBe(4);
+    expect(server.requests("POST", "/api/play/item-video-2")).toHaveLength(1);
+    expect(playsCounted(server)).toBe(4);
 
     await click(button("Next"));
     expect(randomPicks(server)).toBe(3);
     expect(photo().src).toBe(PHOTO_URL);
     expect(document.getElementById("now-playing-name")!.textContent).toBe("beach.jpg");
+  });
+});
+
+describe("a file that can't play", () => {
+  const MKV_ITEM = { ...SECOND_VIDEO, id: "C:\\media\\Holiday.MKV", itemId: "item-mkv", displayName: "Holiday.MKV", mediaUrl: "/api/media/item-mkv?token=t" };
+
+  it("is skipped when Previous reaches it in the history, with a Skipped files popup naming it", async () => {
+    const server = serverPicking(VIDEO_ITEM, MKV_ITEM, SECOND_VIDEO);
+    server.on("GET", "/api/media/item-mkv", () => new Response("x", { status: 206 }));
+    await mountAndPlay(server);
+    await click(button("Next"));
+    await click(button("Next"));
+    expect(video().src).toBe(SECOND_VIDEO_URL);
+
+    await click(button("Previous"));
+    expect(video().src).toContain("item-mkv");
+    // happy-dom plays any source, so the video reads as having played and first gets a fresh media URL, which fails too.
+    await failVideoAndItsFreshUrl();
+
+    expect(probes(server)).toEqual(["/api/media/item-mkv bytes=0-0"]);
+    expect(popups()).toEqual([{ text: "Skipped a file this browser can't play.", detail: "Holiday.MKV" }]);
+    expect(openNotices()).toEqual([]);
+    expect(video().src).toBe(VIDEO_URL);
+    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Skipped a file this browser can't play.", MKV_ITEM, 4)));
+    expect(server.logLines().some((line) => line.includes("Holiday") || line.includes("token") || line.includes("item-"))).toBe(false);
+  });
+
+  it("shows a file chosen from the library its message, saying its format isn't supported", async () => {
+    setViewport({ width: 600, height: 800 });
+    stubLayoutSize();
+    const server = serverPicking(VIDEO_ITEM);
+    server.on("POST", "/api/library/query", () =>
+      json({
+        items: [{ id: "item-mkv", fullPath: MKV_ITEM.id, fileName: "Holiday.MKV", mediaType: 0, tags: [], hasThumbnail: false }],
+        totalCount: 1,
+        searchBaselineCount: 1
+      })
+    );
+    server.on("POST", "/api/play/item-mkv", () => json(MKV_ITEM));
+    server.on("GET", "/api/media/item-mkv", () => new Response("x", { status: 200 }));
+    mountPage({ server });
+    await pageReady(server);
+    await openPanel("Library");
+    const tile = await waitFor(() => {
+      const found = document.querySelector('.library-grid-tile[data-item-id="item-mkv"]');
+      expect(found).not.toBeNull();
+      return found!;
+    });
+    await click(tile);
+    // happy-dom plays any source, so the video reads as having played and first gets a fresh media URL, which fails too.
+    await failVideoAndItsFreshUrl();
+
+    expect(openNotices()).toEqual(["This video's format (.mkv) isn't supported in this browser."]);
+    expect(popups()).toEqual([]);
+    expect(randomPicks(server)).toBe(0);
+  });
+
+  it("keeps a video playing from where it was when its media token is lost, as on a server restart, with no message", async () => {
+    const server = serverPicking(VIDEO_ITEM);
+    const freshUrl = "/api/media/item-video?token=fresh";
+    server.on("POST", "/api/play/item-video", () => json({ ...VIDEO_ITEM, mediaUrl: freshUrl }));
+    await mountAndPlay(server);
+    stubElementProperty(video(), "duration", 65);
+    video().currentTime = 40;
+
+    fireEvent.error(video());
+    await flush();
+    expect(video().src).toBe(`${API_BASE_URL}${freshUrl}`);
+    video().currentTime = 0;
+    fireEvent.loadedMetadata(video());
+    await flush();
+
+    expect(video().currentTime).toBe(40);
+    expect(video().paused).toBe(false);
+    expect(server.requests("POST", "/api/play/item-video").map((call) => call.body.recordPlayback)).toEqual([false]);
+    expect(playsCounted(server)).toBe(1);
+    expect(openNotices()).toEqual([]);
+    expect(popups()).toEqual([]);
+    expect(probes(server)).toEqual([]);
+  });
+
+  it("keeps it playing through a second server restart in the same video, once it has played again", async () => {
+    const server = serverPicking(VIDEO_ITEM);
+    let fresh = 0;
+    server.on("POST", "/api/play/item-video", () => json({ ...VIDEO_ITEM, mediaUrl: `/api/media/item-video?token=fresh${++fresh}` }));
+    await mountAndPlay(server);
+    stubElementProperty(video(), "duration", 65);
+
+    for (const [position, token] of [[20, "fresh1"], [50, "fresh2"]] as const) {
+      video().currentTime = position;
+      fireEvent.error(video());
+      await flush();
+      expect(video().src).toBe(`${API_BASE_URL}/api/media/item-video?token=${token}`);
+      video().currentTime = 0;
+      fireEvent.loadedMetadata(video());
+      await flush();
+      expect(video().currentTime).toBe(position);
+      expect(video().paused).toBe(false);
+    }
+
+    expect(server.requests("POST", "/api/play/item-video").map((call) => call.body.recordPlayback)).toEqual([false, false]);
+    expect(playsCounted(server)).toBe(1);
+    expect(openNotices()).toEqual([]);
+    expect(popups()).toEqual([]);
+    expect(probes(server)).toEqual([]);
   });
 });
 
@@ -1864,10 +2029,12 @@ describe("ambient mode", () => {
   });
 
   it("hides its glow once the media fails, until the next item plays", async () => {
-    await mountAndPlay(serverPicking(VIDEO_ITEM, SECOND_VIDEO));
+    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO);
+    server.on("GET", "/api/media/item-video", () => json({ error: "Media can't be read" }, 503));
+    await mountAndPlay(server);
     expect(ambientLayer().hidden).toBe(false);
-    fireEvent.error(video());
-    await flush();
+    // The video had played, so it first gets a fresh media URL, which fails too, before it plays.
+    await failVideoAndItsFreshUrl(() => expect(ambientLayer().hidden).toBe(false));
     expect(ambientLayer().hidden).toBe(true);
     await closeNotices();
     await click(button("Next"));
@@ -2694,9 +2861,12 @@ describe("other screens", () => {
 
     await click(button("Next"));
     expect(video().src).toBe(SECOND_VIDEO_URL);
+    // Previous is a history step, whose play the play route counts.
     await click(button("Previous"));
     expect(video().src).toBe(VIDEO_URL);
-    expect(playRecords(server)).toBe(2);
+    expect(server.requests("POST", "/api/play/item-video")).toHaveLength(2);
+    expect(playRecords(server)).toBe(1);
+    expect(playsCounted(server)).toBe(3);
   });
 });
 

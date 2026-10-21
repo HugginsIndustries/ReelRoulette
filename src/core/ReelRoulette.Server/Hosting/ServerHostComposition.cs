@@ -659,6 +659,12 @@ public static class ServerHostComposition
             return Results.Json(new { error, code = errorCode }, statusCode: statusCode);
         }
 
+        // A fresh media URL for an item already playing counts no second play.
+        if (!body.RecordPlayback)
+        {
+            return Results.Ok(playResponse);
+        }
+
         var recorded = operations.RecordPlayback(playResponse!.ItemId);
         if (!recorded.Found)
         {

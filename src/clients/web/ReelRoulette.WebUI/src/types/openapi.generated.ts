@@ -608,7 +608,8 @@ export interface paths {
          *     (paths are not valid here). Blacklist state does not block this endpoint when the user explicitly
          *     selects an item. On success, playback stats and last-played are updated and a `playbackRecorded`
          *     SSE event is emitted (same as `POST /api/record-playback`); callers must not call `record-playback`
-         *     again for the same play start.
+         *     again for the same play start. With `recordPlayback: false` the answer is the same, but nothing is
+         *     recorded and no event is emitted.
          */
         post: operations["postPlayItem"];
         delete?: never;
@@ -1489,6 +1490,11 @@ export interface components {
         PlayItemRequest: {
             clientId?: string | null;
             sessionId?: string | null;
+            /**
+             * @description Defaults to true; the WebUI sends false only to get a fresh media URL for an item already playing.
+             * @default true
+             */
+            recordPlayback: boolean;
         };
         RandomResponse: {
             /** @description Full path of the file. */

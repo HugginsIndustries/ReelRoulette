@@ -43,6 +43,22 @@ describe("requestPlayItem", () => {
     expect(body.sessionId).toBe("session-1");
   });
 
+  it("asks for a fresh media URL without counting a play only when told to", async () => {
+    const answer = () =>
+      new Response(JSON.stringify({ mediaUrl: "/api/media/token-2" }), { status: 200, headers: { "Content-Type": "application/json" } });
+    const fetchMock = vi.fn().mockImplementation(async () => answer());
+    const identity = { clientId: "web-1", sessionId: "session-1" };
+
+    await requestPlayItem(CONFIG, "item-1", identity, fetchMock as unknown as typeof fetch);
+    await requestPlayItem(CONFIG, "item-1", identity, fetchMock as unknown as typeof fetch, { recordPlayback: false });
+
+    const bodies = fetchMock.mock.calls.map((call) => JSON.parse(String((call[1] as RequestInit).body)));
+    expect(bodies).toEqual([
+      { clientId: "web-1", sessionId: "session-1" },
+      { clientId: "web-1", sessionId: "session-1", recordPlayback: false }
+    ]);
+  });
+
   it("escapes item id in request path", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: "Item not found", code: "play_item_not_found" }), {

@@ -43,7 +43,7 @@ const PHOTO_ITEM = {
 
 /** A server that answers random picks with these items in order, then keeps answering with the last one. */
 function serverPicking(...items: unknown[]): FakeServer {
-  const server = new FakeServer();
+  const server = new FakeServer().playsItems(...items);
   let next = 0;
   server.on("POST", "/api/random", () => json(items[Math.min(next++, items.length - 1)]));
   server.on("POST", "/api/favorite", () => json({}));

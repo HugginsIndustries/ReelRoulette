@@ -75,12 +75,15 @@ export function createServerRequester(send: typeof fetch, onUnauthorized: (route
 /** Routes that end in an item id, which `requestRoute` names as `{itemId}`. */
 const ITEM_ID_ROUTES: readonly string[] = ["/api/play/", "/api/show-in-file-manager/"];
 
+/** The media route, whose token `requestRoute` names as `{token}`, so a log line never carries one. */
+const MEDIA_ROUTE = "/api/media/";
+
 /** The routes that name a preset by id, which `requestRoute` names as `{presetId}`. */
 const PRESET_ID_ROUTE = /^\/api\/presets\/[^/]+\/(update|rename|delete)$/;
 
 /**
  * The request's method and route, such as "POST /api/play/{itemId}": without the server, any path the server is
- * reached under before `/api/`, the query, or an item or preset id, so a log line can name it.
+ * reached under before `/api/`, the query, an item or preset id, or a media token, so a log line can name it.
  */
 export function requestRoute(input: RequestInfo | URL, init?: RequestInit): string {
   const request = typeof Request !== "undefined" && input instanceof Request ? input : null;
@@ -91,6 +94,9 @@ export function requestRoute(input: RequestInfo | URL, init?: RequestInit): stri
   const idRoute = ITEM_ID_ROUTES.find((prefix) => route.startsWith(prefix));
   if (idRoute) {
     return `${method} ${idRoute}{itemId}`;
+  }
+  if (route.startsWith(MEDIA_ROUTE)) {
+    return `${method} ${MEDIA_ROUTE}{token}`;
   }
   const presetRoute = PRESET_ID_ROUTE.exec(route);
   return `${method} ${presetRoute ? `/api/presets/{presetId}/${presetRoute[1]}` : route}`;
@@ -139,4 +145,41 @@ export async function refusalReason(response: Response): Promise<string | null> 
 /** An error's message, or the value itself as text. */
 export function errorText(error: unknown): string {
   return (error instanceof Error && error.message) || String(error);
+}
+
+/**
+ * How long a playback request may wait for the server before the WebUI cancels it: a random pick, the range request
+ * about a file whose media failed, and a play request for a fresh media URL.
+ */
+export const PLAYBACK_REQUEST_TIMEOUT_MS = 10_000;
+
+export type TimedOutcome<T> =
+  | { kind: "answered"; value: T }
+  | { kind: "failed"; error: unknown }
+  /** No answer within the limit, and the request was cancelled. */
+  | { kind: "timedOut" };
+
+/**
+ * Runs one request with a time limit: one that doesn't settle in time is cancelled through its signal, and its answer
+ * is never used, even when it arrives later.
+ */
+export async function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, timeoutMs: number): Promise<TimedOutcome<T>> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<TimedOutcome<T>>((resolve) => {
+    timer = setTimeout(() => resolve({ kind: "timedOut" }), timeoutMs);
+  });
+  const settled = run(controller.signal).then(
+    (value): TimedOutcome<T> => ({ kind: "answered", value }),
+    (error: unknown): TimedOutcome<T> => ({ kind: "failed", error })
+  );
+  try {
+    const outcome = await Promise.race([settled, timedOut]);
+    if (outcome.kind === "timedOut") {
+      controller.abort();
+    }
+    return outcome;
+  } finally {
+    clearTimeout(timer);
+  }
 }

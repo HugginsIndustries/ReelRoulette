@@ -7,7 +7,7 @@ import {
   type ApiFilterState,
   type FilterState
 } from "../filter/filterStateModel";
-import { errorText, readJson, UnauthorizedError } from "../api/serverRequest";
+import { errorText, PLAYBACK_REQUEST_TIMEOUT_MS, readJson, UnauthorizedError, withTimeout } from "../api/serverRequest";
 import type { components } from "../types/openapi.generated";
 
 type RandomResponse = components["schemas"]["RandomResponse"];
@@ -53,9 +53,6 @@ export function randomPickRequest(inputs: RandomPickInputs): RandomPickRequest {
   return body;
 }
 
-/** How long a random pick may wait for the server before the WebUI cancels it. */
-export const RANDOM_PICK_TIMEOUT_MS = 10_000;
-
 export type RandomPickOutcome =
   /** A pick is already waiting for the server, so nothing was sent. */
   | { kind: "busy" }
@@ -83,7 +80,7 @@ export interface RandomPicker {
  * items. A pick the server does not answer within the timeout is cancelled and resolves as timed out, and
  * its answer is never used, even when it arrives after a newer pick was sent.
  */
-export function createRandomPicker(send: RandomPickSend, timeoutMs: number = RANDOM_PICK_TIMEOUT_MS): RandomPicker {
+export function createRandomPicker(send: RandomPickSend, timeoutMs: number = PLAYBACK_REQUEST_TIMEOUT_MS): RandomPicker {
   let inFlight = false;
   return {
     async pick(body) {
@@ -92,19 +89,18 @@ export function createRandomPicker(send: RandomPickSend, timeoutMs: number = RAN
       }
 
       inFlight = true;
-      const controller = new AbortController();
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const timedOut = new Promise<RandomPickOutcome>((resolve) => {
-        timer = setTimeout(() => resolve({ kind: "timedOut", timeoutMs }), timeoutMs);
-      });
       try {
-        const outcome = await Promise.race([request(send, JSON.stringify(body), controller.signal), timedOut]);
-        if (outcome.kind === "timedOut") {
-          controller.abort();
+        const outcome = await withTimeout((signal) => request(send, JSON.stringify(body), signal), timeoutMs);
+        switch (outcome.kind) {
+          case "answered":
+            return outcome.value;
+          case "timedOut":
+            return { kind: "timedOut", timeoutMs };
+          case "failed":
+            // `request` answers every failure itself, so this only keeps the outcome whole.
+            return { kind: "error", message: errorText(outcome.error) };
         }
-        return outcome;
       } finally {
-        clearTimeout(timer);
         inFlight = false;
       }
     }

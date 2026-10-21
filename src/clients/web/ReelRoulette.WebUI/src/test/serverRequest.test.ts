@@ -103,6 +103,11 @@ describe("requestRoute", () => {
     expect(requestRoute("http://server/api/presets/reorder", { method: "POST" })).toBe("POST /api/presets/reorder");
   });
 
+  it("names a media route's token as {token}, so a log line never carries it", () => {
+    expect(requestRoute("http://server/api/media/3f9a2c71-tok", { method: "GET" })).toBe("GET /api/media/{token}");
+    expect(requestRoute("https://host/reelroulette/api/media/3f9a2c71-tok?x=1")).toBe("GET /api/media/{token}");
+  });
+
   it("logs a 401 with its route as the one line for it", () => {
     expect(unauthorizedLogText("POST /api/autotag/scan")).toBe("Unauthorized. Pair first. (POST /api/autotag/scan)");
   });

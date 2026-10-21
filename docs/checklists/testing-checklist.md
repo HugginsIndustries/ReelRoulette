@@ -116,6 +116,9 @@ These need a person, real devices, or the Windows VM.
 - [ ] In Firefox on the desktop, K, Space, J and L, M, the left and right arrows, and [ and ] work, and H opens the shortcut reference, in normal view and in fullscreen.
 - [ ] On the iPad and an Android phone, double-tapping either side of a playing video seeks by the seek step with the seek indicator, a single tap still shows the controls, and the page doesn't zoom or flash a tap highlight.
 - [ ] On the server machine at `http://localhost`, Show in File Manager opens the file manager with the playing file selected on Linux and Windows, for a file whose path has spaces; from another device, Copy Path copies it, at the LAN address and through an HTTPS proxy.
+- [ ] With the browser-playable filter on, browse and random play show no mkv, avi, or wmv files; with it off, choosing one in the library says its format isn't supported in this browser, and a deleted file says not found.
+- [ ] With a source on a network share that is disconnected while a video from it plays, the player says it couldn't load the file, not that it is missing.
+- [ ] Restarting the server while a video plays on the phone keeps it playing from where it was, with no message, and so does a second restart in the same video.
 
 ## Release Flow
 

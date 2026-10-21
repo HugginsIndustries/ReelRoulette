@@ -1,5 +1,6 @@
 import { batch, computed, signal, type ReadonlySignal } from "@preact/signals";
 import type { Dialogs } from "../dialogs/dialogs";
+import { errorType } from "../logging/relayLogLines";
 import type { DeviceStore } from "../state/deviceStore";
 import { compressionGainDb, COMPRESSOR_OFF, type CompressorSetting } from "./compression";
 import { dbToGain } from "./loudnessNormalization";
@@ -248,11 +249,6 @@ function isVolumeStep(value: unknown): value is VolumeStep {
 
 function isBoolean(value: unknown): value is boolean {
   return typeof value === "boolean";
-}
-
-/** The error's type only, as the log names a screen's failure. */
-function errorType(error: unknown): string {
-  return error instanceof Error ? error.name || "Error" : typeof error;
 }
 
 export function createAudioStage(options: AudioStageOptions): AudioStage {

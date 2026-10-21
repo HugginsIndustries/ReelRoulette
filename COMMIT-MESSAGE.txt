@@ -19,12 +19,12 @@ Instructions:
 
 Commit Message:
 
-M12k1: Give the WebUI's panel tabs and Filter sub-tabs one shared tab rule, replace the tabs' Refresh, and reload them on tag and source events
+M12k1: Tell a file the browser can't play from a missing or unreadable one, skip them in playback, and recover a video after a server restart
 
-- The panel's icon tabs and the Filter tab's General, Tags, and Presets sub-tabs share one `.tab` rule, with the sub-tabs as text tabs at the heading's size and weight, and the panel's tab row has no line under it, as the mockup has them.
-- The Filter tab's Refresh is gone, and the Tags tab's Refresh is replaced by Discard changes just before Save, which drops changes without asking.
-- While it shows, the Filter tab loads its sources, tags, and presets again on `tagCatalogChanged`, `sourceStateChanged`, and a resync, once for a burst and without starting over, and the Tags tab loads its tags again on `tagCatalogChanged` and a resync while it has no unsaved changes.
-- A load for a server event that fails keeps what the tab shows, shows no notice, and relays one `filter=` or `tags=event-load-failed` line with only the status or error type; the event stream now passes on `sourceStateChanged`.
-- The tests that used Refresh to reload move onto the events or Discard changes, and the changelog's Filter dialog Refresh bullet becomes one for tabs that stay current.
-- Choose Preset's row never wraps, both footers space their icons alike in the app and the mockup, a held icon button's icon sits where a plain one's does, and a failed tag load says "Tag load failed".
-- MILESTONES.md records the Filter and Tags tabs slice as complete, with the user's spot check.
+- After a media error, the WebUI asks the server about the file with a `Range: bytes=0-0` request, keeping Loading… up, 10 s at most: 200 or 206 shows the format-not-supported message, 404 not found once the play route says so too, since a token a server restart dropped answers 404 as well, and anything else or no answer the approved couldn't-load message, each with a photo form.
+- Autoplay, Next, Previous, and random picks skip a file this browser can't play or a missing one with a Skipped files popup, up to ten in a row; a library choice, couldn't-load, and Previous at the oldest entry stop on the message, holding the photo timer, which Auto-Pause doesn't resume.
+- History steps get a fresh media URL through `POST /api/play/{itemId}`, which counts the step's play, loading paused for Auto-Resume when Auto-Pause comes while they wait, and a video that had played recovers from a failure, such as a server restart, with a fresh URL from `recordPlayback: false`, waiting for the connection when needed, staying paused if it was paused while it waited, and again once it has played since.
+- `POST /api/play/{itemId}` takes an optional `recordPlayback`, documented in OpenAPI; a library play's 503 `play_media_unreadable` maps to the couldn't-load message, and a probe's 401 logs `/api/media/{token}`.
+- Random picks, the probe, and play requests for a fresh media URL share one 10 s limit and one `withTimeout`, and log lines one `errorType`.
+- The mockup shows the couldn't-load and photo format messages, a HEIC photo, a stalled drive or share, and the ten-skip limit.
+- M12k1 is complete and moves to MILESTONES-COMPLETED.md, its release checks join the testing checklist, Media Token Lifetime and Direct-Stream Sessions notes the WebUI's fresh tokens and takes on keeping the last frame through a source swap, and ISSUES.md records that an item starting while the panel covers the player can play behind it.

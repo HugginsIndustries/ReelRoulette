@@ -4,7 +4,7 @@ import { unauthorizedLogText } from "../api/serverRequest";
 import type { NotifyRequest } from "../notifications/notifications";
 import { createAudioStage, type AudioStage } from "../playback/audioStage";
 import { COMPRESSION_PRESETS } from "../playback/compression";
-import { createPlayer, type PlayerElements } from "../playback/player";
+import { createPlayer, type PlayerElements, type PlayOrigin } from "../playback/player";
 import { SEEK_INDICATOR_MS } from "../playback/seekIndicator";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type PlayingItem } from "../state/appStore";
@@ -163,19 +163,26 @@ function setup(
   audioStandIn?: Pick<AudioStage, "play" | "pause" | "pausing" | "cancelPause">,
   options: { frameTimings?: boolean } = {}
 ) {
-  const requests: Array<{ path: string; body: any }> = [];
-  const replies = new Map<string, () => Response>();
+  const requests: Array<{ path: string; method: string; body: any; headers: Headers }> = [];
+  /** Answers for a path, given the request's body. One that answers nothing leaves the request to the default answer. */
+  const replies = new Map<string, (request: { body: any }) => Response | undefined>();
   const randomAnswers: unknown[] = [];
   const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
     const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
-    requests.push({ path, body });
-    const reply = replies.get(path);
+    requests.push({ path, method: (init?.method || "GET").toUpperCase(), body, headers: new Headers(init?.headers) });
+    const reply = replies.get(path)?.({ body });
     if (reply) {
-      return reply();
+      return reply;
     }
     if (path === "/api/random") {
       return json(randomAnswers.length > 0 ? randomAnswers.shift() : { mediaUrl: null });
+    }
+    // A history step's play: the server answers with the entry it plays, its media URL unchanged.
+    if (path.startsWith("/api/play/")) {
+      const itemId = decodeURIComponent(path.slice("/api/play/".length));
+      const entry = store.history.peek().find((item) => item.itemId === itemId);
+      return entry ? json({ ...entry }) : json({ error: "Item not found", code: "play_item_not_found" }, 404);
     }
     return json({});
   }) as typeof fetch;
@@ -265,9 +272,10 @@ function setup(
     requests: (path: string) => requests.filter((request) => request.path === path),
     answerRandom: (...items: unknown[]) => randomAnswers.push(...items),
     emit: (event: keyof ServerConnectionEvents, payload: unknown) => listeners[event]?.forEach((listener) => listener(payload)),
-    play(item: PlayingItem) {
+    /** Plays `item` as the user starts a play from `origin`, forward unless it says otherwise. */
+    play(item: PlayingItem, origin?: PlayOrigin) {
       store.pushHistory({ ...item });
-      player.playCurrent();
+      player.playCurrent({ origin });
     },
     /** Plays `item` as a video `seconds` long whose metadata has loaded and that has started playing. */
     playVideo(item: PlayingItem, seconds: number) {
@@ -290,6 +298,13 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+/** Answers the next request to `path` only when the test calls the function returned. */
+function holdReply(page: ReturnType<typeof setup>, path: string): (response: Response) => void {
+  let answer: (response: Response) => void = () => {};
+  page.replies.set(path, () => new Promise<Response>((resolve) => (answer = resolve)) as unknown as Response);
+  return (response) => answer(response);
+}
+
 describe("createPlayer", () => {
   it("sets a video's source and shows it, then plays it with the saved mute, and records the play", async () => {
     const page = setup();
@@ -310,18 +325,19 @@ describe("createPlayer", () => {
     expect(page.relayed).toContain("playback=start attempt=1 hasCurrent=true mediaType=video");
   });
 
-  it("does not record a play the server already recorded", async () => {
+  it("does not record a library play, which the server already recorded", async () => {
     const page = setup();
     page.store.pushHistory({ ...VIDEO });
-    page.player.playCurrent({ recordPlayback: false });
+    page.player.playCurrent({ origin: "library" });
     await Promise.resolve();
     expect(page.requests("/api/record-playback")).toHaveLength(0);
   });
 
-  it("shows a photo, keeps Mute as it was, and ignores the video's events until a video plays again", () => {
+  it("shows a photo, keeps Mute as it was, and ignores the video's events until a video plays again", async () => {
     const page = setup();
+    answerMissing(page, PHOTO);
     page.play(VIDEO);
-    page.play(PHOTO);
+    page.play(PHOTO, "library");
 
     const { video, photo, seekSlider } = page.elements;
     expect([photo.src, photo.style.display, video.style.display]).toEqual(["http://server/api/media/item-photo?token=t", "block", "none"]);
@@ -337,7 +353,7 @@ describe("createPlayer", () => {
     expect(seekSlider.max).toBe("100");
 
     page.player.photoFailed();
-    expect(page.notices).toEqual(["Photo file not found."]);
+    await vi.waitFor(() => expect(page.notices).toEqual(["Photo file not found."]));
     expect(page.statuses).toEqual([]);
     // Playing is the normal state, which shows nothing and only relays.
     page.player.photoLoaded();
@@ -785,16 +801,18 @@ describe("createPlayer", () => {
     expect(page.frames.pending()).toBe(0);
   });
 
-  it("stops moving the bar once a video fails to load, and shows it can't be found in the notice", () => {
+  it("stops moving the bar once a video fails to load, and shows it can't be found in the notice", async () => {
     const page = setup();
-    page.play(VIDEO);
+    answerMissing(page, VIDEO);
+    page.play(VIDEO, "library");
     expect(page.frames.pending()).toBe(1);
 
     // A source that fails fires no pause, so the video still reads as playing.
     page.player.videoFailed();
     expect(page.elements.video.paused).toBe(false);
     expect(page.frames.pending()).toBe(0);
-    expect(page.notices).toEqual(["Video file not found."]);
+    await vi.waitFor(() => expect(page.notices).toEqual(["Video file not found."]));
+    expect(page.frames.pending()).toBe(0);
     expect(page.statuses).toEqual([]);
     expect(page.notified).toEqual([]);
   });
@@ -1726,7 +1744,7 @@ describe("Loading… on the player's indicator", () => {
     expect(watched.shown).toEqual([false]);
   });
 
-  it("ends when a photo loads or fails", async () => {
+  it("ends when a photo loads, or once the server has said why it failed", async () => {
     vi.useFakeTimers();
     const page = setup();
     page.play(PHOTO);
@@ -1735,21 +1753,66 @@ describe("Loading… on the player's indicator", () => {
     page.player.photoLoaded();
     expect(page.store.loading.shown.value).toBe(false);
 
-    page.play(PHOTO);
+    answerMissing(page, PHOTO);
+    const answerProbe = holdReply(page, "/api/media/item-photo");
+    page.play(PHOTO, "library");
     await vi.advanceTimersByTimeAsync(500);
     expect(page.store.loading.shown.value).toBe(true);
     page.player.photoFailed();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(page.store.loading.shown.value).toBe(true);
+    answerProbe(json({}, 404));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.notices).toEqual(["Photo file not found."]);
     expect(page.store.loading.shown.value).toBe(false);
   });
 
-  it("ends when a video fails, when the browser won't play it, when the user pauses it, on Auto-Pause, and when the player detaches", async () => {
+  it("ends once the server has said why a video failed, though the browser refuses its play at once", async () => {
     vi.useFakeTimers();
     const page = setup();
-    const ends: Array<() => void> = [
-      () => page.player.videoFailed(),
-      () => page.player.playOrPause(),
-      () => page.player.autoPause()
-    ];
+    answerMissing(page, VIDEO);
+    const answerProbe = holdReply(page, "/api/media/item-video");
+    // As a browser does, a source that fails fires its error and then refuses the play waiting on it.
+    let refusePlay: (reason: unknown) => void = () => {};
+    page.elements.video.play = () => new Promise<void>((_resolve, reject) => (refusePlay = reject));
+    page.play(VIDEO, "library");
+    await vi.advanceTimersByTimeAsync(500);
+    page.player.videoFailed();
+    refusePlay(new DOMException("No supported source", "NotSupportedError"));
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(page.store.loading.shown.value).toBe(true);
+    answerProbe(json({}, 404));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.notices).toEqual(["Video file not found."]);
+    expect(page.store.loading.shown.value).toBe(false);
+  });
+
+  it("keeps showing while the server is asked about a recovered video's fresh URL that failed, though its play is refused", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.replies.set("/api/play/item-video", () => json({ ...VIDEO, mediaUrl: "/api/media/item-video?token=fresh" }));
+    page.playVideo(VIDEO, 65);
+    let refusePlay: (reason: unknown) => void = () => {};
+    page.elements.video.play = () => new Promise<void>((_resolve, reject) => (refusePlay = reject));
+    page.player.videoFailed();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.elements.video.src).toContain("token=fresh");
+
+    const answerProbe = holdReply(page, "/api/media/item-video");
+    page.player.videoFailed();
+    refusePlay(new DOMException("No supported source", "NotSupportedError"));
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(page.store.loading.shown.value).toBe(true);
+    answerProbe(json({}, 503));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.notices).toEqual([COULD_NOT_LOAD_VIDEO]);
+    expect(page.store.loading.shown.value).toBe(false);
+  });
+
+  it("ends when the browser won't play a video, when the user pauses it, on Auto-Pause, and when the player detaches", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    const ends: Array<() => void> = [() => page.player.playOrPause(), () => page.player.autoPause()];
     for (const end of ends) {
       page.play(VIDEO);
       await vi.advanceTimersByTimeAsync(500);
@@ -1839,6 +1902,809 @@ describe("Loading… on the player's indicator", () => {
     page.store.setAdvanceAfter(4);
     await vi.advanceTimersByTimeAsync(500);
     expect(page.store.loading.shown.value).toBe(false);
+  });
+});
+
+const MKV: PlayingItem = {
+  ...VIDEO,
+  id: "/media/Holiday.MKV",
+  itemId: "item-mkv",
+  displayName: "Holiday.MKV",
+  mediaUrl: "/api/media/item-mkv?token=t"
+};
+
+const HEIC: PlayingItem = {
+  ...PHOTO,
+  id: "/media/IMG_1.HEIC",
+  itemId: "item-heic",
+  displayName: "IMG_1.HEIC",
+  mediaUrl: "/api/media/item-heic?token=t"
+};
+
+const COULD_NOT_LOAD_VIDEO = "This video couldn't load. The server may be waiting on a slow or disconnected drive or share.";
+const COULD_NOT_LOAD_PHOTO = "This photo couldn't load. The server may be waiting on a slow or disconnected drive or share.";
+
+/** The path of `item`'s media URL, which its range request goes to. */
+function mediaPath(item: PlayingItem): string {
+  return new URL(item.mediaUrl, "http://server").pathname;
+}
+
+/** Answers the range request for `item`'s file with `reply`. */
+function answerProbe(page: ReturnType<typeof setup>, item: PlayingItem, reply: () => Response | Promise<Response>): void {
+  page.replies.set(mediaPath(item), reply as () => Response);
+}
+
+/**
+ * Makes `item`'s file missing on the server: its range request answers 404, and so does the play route when the player
+ * asks it for a fresh media URL that counts no play. Any other play request, such as a history step's, answers as before.
+ */
+function answerMissing(page: ReturnType<typeof setup>, item: PlayingItem): void {
+  answerProbe(page, item, () => json({ error: "Media not found" }, 404));
+  page.replies.set(`/api/play/${item.itemId}`, ({ body }) =>
+    body?.recordPlayback === false ? json({ error: "Media not found", code: "play_media_missing" }, 404) : undefined
+  );
+}
+
+/** The play route's requests for a fresh media URL for `item`, which count no play. */
+function freshUrlRequestsFor(page: ReturnType<typeof setup>, item: PlayingItem) {
+  return page.requests(`/api/play/${item.itemId}`).filter((request) => request.body?.recordPlayback === false);
+}
+
+/** A media answer with a body, as the server streams one. */
+function media(status: number): Response {
+  return new Response("x", { status });
+}
+
+/** The range requests the player sent for `item`'s file. */
+function probesOf(page: ReturnType<typeof setup>, item: PlayingItem) {
+  return page.requests(mediaPath(item)).filter((request) => request.method === "GET");
+}
+
+/** Fails the media of the attempt playing now, as its element's error event does. */
+function failMedia(page: ReturnType<typeof setup>): void {
+  if (page.store.current.value?.mediaType === "photo") {
+    page.player.photoFailed();
+  } else {
+    page.player.videoFailed();
+  }
+}
+
+/** Makes `items` the history, each a copy, with the entry at `index` playing, without playing it. */
+function seedHistory(page: ReturnType<typeof setup>, items: PlayingItem[], index: number): void {
+  const entries = items.map((item) => ({ ...item }));
+  page.store.history.value = entries;
+  page.store.historyIndex.value = index;
+  page.store.current.value = entries[index]!;
+}
+
+/** The relayed lines that would name the item or its media: its path, file name, or media token. */
+function leakedLines(page: ReturnType<typeof setup>): string[] {
+  return page.relayed.filter((line) => /\/api\/media\/(?!\{token\})|token=|Holiday|IMG_1|clip\.mp4|beach|other\.mp4|item-/.test(line));
+}
+
+describe("a file that fails to load", () => {
+  it.each([
+    ["a video", "200", MKV, () => media(200), "This video's format (.mkv) isn't supported in this browser.", "statusCode=200 failure=format"],
+    ["a video", "206", MKV, () => media(206), "This video's format (.mkv) isn't supported in this browser.", "statusCode=206 failure=format"],
+    ["a video", "404", MKV, () => json({ error: "Media not found" }, 404), "Video file not found.", "statusCode=404 failure=missing"],
+    ["a video", "503", MKV, () => json({ error: "Media can't be read" }, 503), COULD_NOT_LOAD_VIDEO, "statusCode=503 failure=unreadable"],
+    ["a photo", "200", HEIC, () => media(200), "This photo's format (.heic) isn't supported in this browser.", "statusCode=200 failure=format"],
+    ["a photo", "206", HEIC, () => media(206), "This photo's format (.heic) isn't supported in this browser.", "statusCode=206 failure=format"],
+    ["a photo", "404", HEIC, () => json({ error: "Media not found" }, 404), "Photo file not found.", "statusCode=404 failure=missing"],
+    ["a photo", "503", HEIC, () => json({ error: "Media can't be read" }, 503), COULD_NOT_LOAD_PHOTO, "statusCode=503 failure=unreadable"]
+  ])("shows %s's message for the server's %s to the range request", async (_kind, answer, item, reply, message, logged) => {
+    const page = setup();
+    answerProbe(page, item, reply);
+    if (answer === "404") {
+      // The play route says the file is missing too, so the 404 isn't for a media token the server dropped.
+      answerMissing(page, item);
+    }
+    page.play(item, "library");
+    failMedia(page);
+
+    await vi.waitFor(() => expect(page.notices).toEqual([message]));
+    const probe = probesOf(page, item);
+    expect(probe).toHaveLength(1);
+    expect(probe[0]!.headers.get("Range")).toBe("bytes=0-0");
+    expect(freshUrlRequestsFor(page, item)).toHaveLength(answer === "404" ? 1 : 0);
+    expect(page.notified).toEqual([]);
+    expect(page.player.mediaFailed.value).toBe(true);
+    expect(page.relayed).toContain(`playback=media-probe attempt=1 hasCurrent=true mediaType=${item.mediaType} ${logged}`);
+    expect(leakedLines(page)).toEqual([]);
+  });
+
+  it.each([
+    ["a video", MKV, COULD_NOT_LOAD_VIDEO],
+    ["a photo", HEIC, COULD_NOT_LOAD_PHOTO]
+  ])("shows %s's couldn't-load message when the range request gets no answer in ten seconds, keeping Loading… up until then", async (_kind, item, message) => {
+    vi.useFakeTimers();
+    const page = setup();
+    answerProbe(page, item, () => new Promise<Response>(() => {}));
+    page.play(item, "library");
+    failMedia(page);
+
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(page.notices).toEqual([]);
+    expect(page.store.loading.shown.value).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(page.notices).toEqual([message]);
+    expect(page.store.loading.shown.value).toBe(false);
+    expect(page.relayed).toContain(`playback=media-probe attempt=1 hasCurrent=true mediaType=${item.mediaType} timeoutMs=10000 failure=unreadable`);
+  });
+
+  it("decides by the server's answer, not the file's container: an .mp4 the server has says its format, and an .mkv it hasn't says not found", async () => {
+    const page = setup();
+    answerProbe(page, VIDEO, () => media(206));
+    answerMissing(page, MKV);
+    page.play(VIDEO, "library");
+    page.player.videoFailed();
+    await vi.waitFor(() => expect(page.notices).toEqual(["This video's format (.mp4) isn't supported in this browser."]));
+
+    page.play(MKV, "library");
+    page.player.videoFailed();
+    await vi.waitFor(() => expect(page.notices.at(-1)).toBe("Video file not found."));
+  });
+
+  it.each([
+    ["a video", MKV],
+    ["a photo", HEIC]
+  ])("plays %s on from a fresh media URL that counts no play when its 404 was for a media token the server dropped", async (_kind, item) => {
+    const page = setup();
+    answerProbe(page, item, () => json({ error: "Media not found" }, 404));
+    page.replies.set(`/api/play/${item.itemId}`, () => json({ ...item, mediaUrl: `${mediaPath(item)}?token=fresh` }));
+    page.play(item);
+    failMedia(page);
+
+    const element = item.mediaType === "photo" ? page.elements.photo : page.elements.video;
+    await vi.waitFor(() => expect(element.src).toBe(`http://server${mediaPath(item)}?token=fresh`));
+    expect(page.requests(`/api/play/${item.itemId}`).map((request) => request.body)).toEqual([
+      { clientId: "client-1", sessionId: "session-1", recordPlayback: false }
+    ]);
+    expect(page.store.history.value[0]!.mediaUrl).toBe(`${mediaPath(item)}?token=fresh`);
+    expect(page.notices).toEqual([]);
+    expect(page.notified).toEqual([]);
+    expect(page.player.mediaFailed.value).toBe(false);
+    expect(page.requests("/api/record-playback")).toHaveLength(1);
+    expect(page.relayed).toContain("playback=media-recheck attempt=1 hasCurrent=true");
+    expect(leakedLines(page)).toEqual([]);
+  });
+
+  it("says a file is missing when its fresh media URL answers 404 too, asking the play route only once", async () => {
+    const page = setup();
+    answerProbe(page, MKV, () => json({ error: "Media not found" }, 404));
+    page.replies.set("/api/play/item-mkv", () => json({ ...MKV, mediaUrl: "/api/media/item-mkv?token=fresh" }));
+    page.play(MKV, "library");
+    page.player.videoFailed();
+    await vi.waitFor(() => expect(page.elements.video.src).toContain("token=fresh"));
+    page.player.videoFailed();
+
+    await vi.waitFor(() => expect(page.notices).toEqual(["Video file not found."]));
+    expect(freshUrlRequestsFor(page, MKV)).toHaveLength(1);
+    expect(probesOf(page, MKV)).toHaveLength(2);
+  });
+
+  it("stops on the couldn't-load message when the play route can't say whether a file the range request answered 404 is missing", async () => {
+    const page = setup();
+    answerProbe(page, MKV, () => json({ error: "Media not found" }, 404));
+    page.replies.set("/api/play/item-mkv", () => json({ error: "Media file can't be read", code: "play_media_unreadable" }, 503));
+    page.answerRandom(SECOND_VIDEO);
+    page.play(MKV);
+    page.player.videoFailed();
+
+    await vi.waitFor(() => expect(page.notices).toEqual([COULD_NOT_LOAD_VIDEO]));
+    expect(page.notified).toEqual([]);
+    expect(page.requests("/api/random")).toHaveLength(0);
+    expect(page.relayed).toContain("playback=media-recheck-failed attempt=1 hasCurrent=true statusCode=503 code=play_media_unreadable");
+  });
+
+  it("shows only the pairing prompt when the range request is answered 401, naming its route without the token", async () => {
+    const page = setup();
+    answerProbe(page, MKV, () => json({}, 401));
+    page.play(MKV, "library");
+    page.player.videoFailed();
+
+    await vi.waitFor(() => expect(page.store.pairingRequired.value).toBe(true));
+    await vi.waitFor(() => expect(page.store.loading.shown.value).toBe(false));
+    expect(page.notices).toEqual([]);
+    expect(page.notified).toEqual([]);
+    expect(page.relayed).toContain(
+      "status=Unauthorized. Pair first. (GET /api/media/{token}) hasCurrent=true attempt=1"
+    );
+    expect(leakedLines(page)).toEqual([]);
+  });
+
+  it("skips a random pick's file this browser can't play, saying so in a Skipped files popup, and picks again", async () => {
+    const page = setup();
+    page.answerRandom(MKV, SECOND_VIDEO);
+    answerProbe(page, MKV, () => media(206));
+    await page.player.pickRandom();
+    page.player.videoFailed();
+
+    await vi.waitFor(() => expect(page.store.current.value?.itemId).toBe("item-other"));
+    expect(page.notified).toEqual([{ kind: "skips", text: "Skipped a file this browser can't play.", detail: "Holiday.MKV", key: "skip" }]);
+    expect(page.notices).toEqual([]);
+    expect(page.requests("/api/random")).toHaveLength(2);
+    expect(page.store.history.value.map((item) => item.itemId)).toEqual(["item-mkv", "item-other"]);
+    expect(page.elements.video.src).toContain("item-other");
+    expect(leakedLines(page)).toEqual([]);
+  });
+
+  it("skips a missing file autoplay reaches, and goes on", async () => {
+    const page = setup();
+    page.player.toggleAutoplay();
+    page.answerRandom(MKV, SECOND_VIDEO);
+    answerMissing(page, MKV);
+    page.playVideo(VIDEO, 30);
+    page.player.videoEnded();
+    await vi.waitFor(() => expect(page.store.current.value?.itemId).toBe("item-mkv"));
+    page.player.videoFailed();
+
+    await vi.waitFor(() => expect(page.store.current.value?.itemId).toBe("item-other"));
+    expect(page.notified).toEqual([{ kind: "skips", text: "Skipped a missing file.", detail: "Holiday.MKV", key: "skip" }]);
+    expect(page.notices).toEqual([]);
+  });
+
+  it("skips a file Next reaches in the history, going on to the next entry", async () => {
+    const page = setup();
+    seedHistory(page, [VIDEO, MKV, SECOND_VIDEO], 0);
+    answerProbe(page, MKV, () => media(200));
+    page.player.next();
+    await vi.waitFor(() => expect(page.elements.video.src).toContain("item-mkv"));
+    page.player.videoFailed();
+
+    await vi.waitFor(() => expect(page.elements.video.src).toContain("item-other"));
+    expect(page.store.historyIndex.value).toBe(2);
+    expect(page.notified).toEqual([{ kind: "skips", text: "Skipped a file this browser can't play.", detail: "Holiday.MKV", key: "skip" }]);
+    expect(page.requests("/api/random")).toHaveLength(0);
+    expect(page.notices).toEqual([]);
+  });
+
+  it("skips a file Previous reaches, going on back to the older entry", async () => {
+    const page = setup();
+    seedHistory(page, [VIDEO, MKV, SECOND_VIDEO], 2);
+    answerMissing(page, MKV);
+    page.player.previous();
+    await vi.waitFor(() => expect(page.elements.video.src).toContain("item-mkv"));
+    page.player.videoFailed();
+
+    await vi.waitFor(() => expect(page.elements.video.src).toContain("item-video"));
+    expect(page.store.historyIndex.value).toBe(0);
+    expect(page.notified).toEqual([{ kind: "skips", text: "Skipped a missing file.", detail: "Holiday.MKV", key: "skip" }]);
+    expect(page.notices).toEqual([]);
+  });
+
+  it("stops on the message of a file Previous reaches at the oldest entry, with nowhere further back", async () => {
+    const page = setup();
+    seedHistory(page, [MKV, SECOND_VIDEO], 1);
+    answerMissing(page, MKV);
+    page.player.previous();
+    await vi.waitFor(() => expect(page.elements.video.src).toContain("item-mkv"));
+    page.player.videoFailed();
+
+    await vi.waitFor(() => expect(page.notices).toEqual(["Video file not found."]));
+    expect(page.notified).toEqual([]);
+    expect(page.store.historyIndex.value).toBe(0);
+    expect(page.store.loading.shown.value).toBe(false);
+  });
+
+  it("shows a file chosen from the library its message, rather than skipping it", async () => {
+    const page = setup();
+    page.answerRandom(SECOND_VIDEO);
+    answerProbe(page, MKV, () => media(206));
+    page.play(MKV, "library");
+    page.player.videoFailed();
+
+    await vi.waitFor(() => expect(page.notices).toEqual(["This video's format (.mkv) isn't supported in this browser."]));
+    expect(page.notified).toEqual([]);
+    expect(page.requests("/api/random")).toHaveLength(0);
+    expect(page.store.current.value?.itemId).toBe("item-mkv");
+  });
+
+  it("stops after ten skips in a row on the next such file's message, and starts the count over when the user presses Next", async () => {
+    const page = setup();
+    page.answerRandom(...Array.from({ length: 11 }, () => MKV));
+    answerMissing(page, MKV);
+    await page.player.pickRandom();
+    for (let attempt = 1; attempt <= 11; attempt++) {
+      await vi.waitFor(() => expect(page.store.playAttemptId.value).toBe(attempt));
+      page.player.videoFailed();
+    }
+
+    await vi.waitFor(() => expect(page.notices).toEqual(["Video file not found."]));
+    expect(page.notified).toHaveLength(10);
+    expect(page.requests("/api/random")).toHaveLength(11);
+    expect(page.store.current.value?.itemId).toBe("item-mkv");
+    expect(page.store.loading.shown.value).toBe(false);
+
+    // Next is the user's own play, so the count starts over and the file it reaches is skipped again.
+    page.answerRandom(MKV, VIDEO);
+    page.player.next();
+    await vi.waitFor(() => expect(page.store.playAttemptId.value).toBe(12));
+    page.player.videoFailed();
+    await vi.waitFor(() => expect(page.store.current.value?.itemId).toBe("item-video"));
+    expect(page.notified).toHaveLength(11);
+    expect(page.notices).toHaveLength(1);
+  });
+
+  it("starts the count of skips in a row over when a file loads", async () => {
+    const page = setup();
+    page.player.toggleAutoplay();
+    answerMissing(page, MKV);
+    page.answerRandom(...Array.from({ length: 9 }, () => MKV), VIDEO, ...Array.from({ length: 11 }, () => MKV));
+    await page.player.pickRandom();
+    for (let attempt = 1; attempt <= 9; attempt++) {
+      await vi.waitFor(() => expect(page.store.playAttemptId.value).toBe(attempt));
+      page.player.videoFailed();
+    }
+    await vi.waitFor(() => expect(page.store.playAttemptId.value).toBe(10));
+    expect(page.store.current.value?.itemId).toBe("item-video");
+    page.player.videoPlaying();
+    page.player.videoEnded();
+    for (let attempt = 11; attempt <= 21; attempt++) {
+      await vi.waitFor(() => expect(page.store.playAttemptId.value).toBe(attempt));
+      page.player.videoFailed();
+    }
+
+    await vi.waitFor(() => expect(page.notices).toEqual(["Video file not found."]));
+    expect(page.notified).toHaveLength(9 + 10);
+    expect(page.requests("/api/random")).toHaveLength(21);
+  });
+
+  it("stops on the couldn't-load message when autoplay reaches a file the server can't read, picking nothing more", async () => {
+    const page = setup();
+    page.player.toggleAutoplay();
+    page.answerRandom(MKV, SECOND_VIDEO);
+    answerProbe(page, MKV, () => json({ error: "Media can't be read" }, 503));
+    page.playVideo(VIDEO, 30);
+    page.player.videoEnded();
+    await vi.waitFor(() => expect(page.store.current.value?.itemId).toBe("item-mkv"));
+    page.player.videoFailed();
+
+    await vi.waitFor(() => expect(page.notices).toEqual([COULD_NOT_LOAD_VIDEO]));
+    expect(page.notified).toEqual([]);
+    expect(page.requests("/api/random")).toHaveLength(1);
+    expect(page.store.loading.shown.value).toBe(false);
+  });
+
+  it("stops on the couldn't-load message when Next reaches a file the server can't read", async () => {
+    const page = setup();
+    page.answerRandom(MKV, SECOND_VIDEO);
+    answerProbe(page, MKV, () => new Promise<Response>(() => {}));
+    vi.useFakeTimers();
+    page.play(VIDEO);
+    page.player.next();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.store.current.value?.itemId).toBe("item-mkv");
+    page.player.videoFailed();
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(page.notices).toEqual([COULD_NOT_LOAD_VIDEO]);
+    expect(page.notified).toEqual([]);
+    expect(page.requests("/api/random")).toHaveLength(1);
+  });
+
+  it("drops a range request's answer once another play has started", async () => {
+    const page = setup();
+    const answer = holdReply(page, mediaPath(MKV));
+    page.answerRandom(SECOND_VIDEO);
+    page.play(MKV);
+    page.player.videoFailed();
+    page.player.next();
+    await vi.waitFor(() => expect(page.store.current.value?.itemId).toBe("item-other"));
+
+    answer(json({}, 404));
+    await vi.waitFor(() => expect(page.relayed).toContain("playback=media-probe-stale attempt=2 hasCurrent=true expectedPlayAttemptId=1"));
+    expect(page.notified).toEqual([]);
+    expect(page.notices).toEqual([]);
+    expect(page.store.current.value?.itemId).toBe("item-other");
+    expect(page.requests("/api/random")).toHaveLength(1);
+  });
+
+  it("holds a photo's timer once it stops on a failure, so autoplay doesn't move on past it", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.player.toggleAutoplay();
+    page.answerRandom(SECOND_VIDEO);
+    answerProbe(page, HEIC, () => json({}, 503));
+    page.play(HEIC);
+    page.player.photoFailed();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.notices).toEqual([COULD_NOT_LOAD_PHOTO]);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(page.requests("/api/random")).toHaveLength(0);
+    expect(page.store.current.value?.itemId).toBe("item-heic");
+    expect(page.player.playButton.value.showsPause).toBe(false);
+  });
+
+  it("keeps a photo that stopped on its message held when Auto-Pause, which held it before it failed, lets go", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.player.toggleAutoplay();
+    page.answerRandom(SECOND_VIDEO);
+    answerProbe(page, HEIC, () => json({}, 503));
+    page.play(HEIC);
+    // The panel opens as the overlay while the photo loads, holding its running timer.
+    page.player.autoPause();
+    page.player.photoFailed();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.notices).toEqual([COULD_NOT_LOAD_PHOTO]);
+
+    page.player.autoResume();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(page.requests("/api/random")).toHaveLength(0);
+    expect(page.store.current.value?.itemId).toBe("item-heic");
+  });
+
+  it("keeps a photo held when Auto-Pause lets go after its skip found nothing else to play", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.player.toggleAutoplay();
+    page.answerRandom(HEIC);
+    answerProbe(page, HEIC, () => media(206));
+    await page.player.pickRandom();
+    page.player.autoPause();
+    page.player.photoFailed();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.notified).toHaveLength(1);
+    expect(page.notices).toEqual(["No eligible media for current filters."]);
+    expect(page.requests("/api/random")).toHaveLength(2);
+
+    page.player.autoResume();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(page.requests("/api/random")).toHaveLength(2);
+    expect(page.store.current.value?.itemId).toBe("item-heic");
+  });
+});
+
+describe("history steps", () => {
+  it("get a fresh media URL from the play route, which counts the step's one play, and play with it", async () => {
+    const page = setup();
+    seedHistory(page, [VIDEO, SECOND_VIDEO], 1);
+    page.replies.set("/api/play/item-video", () => json({ ...VIDEO, mediaUrl: "/api/media/item-video?token=fresh" }));
+    page.player.previous();
+    // Nothing loads until the server answers, and Loading… waits for it.
+    expect(page.elements.video.src).toBe("");
+
+    await vi.waitFor(() => expect(page.elements.video.src).toBe("http://server/api/media/item-video?token=fresh"));
+    expect(page.requests("/api/play/item-video").map((request) => request.body)).toEqual([{ clientId: "client-1", sessionId: "session-1" }]);
+    expect(page.store.history.value[0]!.mediaUrl).toBe("/api/media/item-video?token=fresh");
+    await Promise.resolve();
+    expect(page.requests("/api/record-playback")).toHaveLength(0);
+
+    page.player.next();
+    await vi.waitFor(() => expect(page.elements.video.src).toContain("item-other"));
+    expect(page.requests("/api/play/item-other")).toHaveLength(1);
+    expect(page.requests("/api/record-playback")).toHaveLength(0);
+  });
+
+  it("skip a file the play route says is missing, without asking about it again", async () => {
+    const page = setup();
+    seedHistory(page, [VIDEO, MKV, SECOND_VIDEO], 0);
+    page.replies.set("/api/play/item-mkv", () => json({ error: "Media not found", code: "play_media_missing" }, 404));
+    page.player.next();
+
+    await vi.waitFor(() => expect(page.elements.video.src).toContain("item-other"));
+    expect(page.notified).toEqual([{ kind: "skips", text: "Skipped a missing file.", detail: "Holiday.MKV", key: "skip" }]);
+    expect(probesOf(page, MKV)).toHaveLength(0);
+    expect(page.relayed).toContain("playback=step-play-failed attempt=1 hasCurrent=true statusCode=404 code=play_media_missing");
+  });
+
+  it.each([
+    ["503 play_media_unreadable", () => json({ error: "Media can't be read", code: "play_media_unreadable" }, 503), COULD_NOT_LOAD_VIDEO],
+    ["another 5xx", () => json({ error: "Server exploded" }, 500), COULD_NOT_LOAD_VIDEO],
+    ["409", () => json({ error: "Source disabled", code: "play_source_disabled" }, 409), "This item is unavailable."],
+    ["415", () => json({ error: "Unsupported", code: "play_unsupported_media" }, 415), "This file type is not supported."],
+    [
+      "no answer",
+      () => {
+        throw new TypeError("Failed to fetch");
+      },
+      COULD_NOT_LOAD_VIDEO
+    ]
+  ])("stop on the message for a play route's %s, without skipping or asking about the file", async (_answer, reply, message) => {
+    const page = setup();
+    seedHistory(page, [VIDEO, MKV, SECOND_VIDEO], 0);
+    page.replies.set("/api/play/item-mkv", reply);
+    page.player.next();
+
+    await vi.waitFor(() => expect(page.notices).toEqual([message]));
+    expect(page.notified).toEqual([]);
+    expect(page.store.current.value?.itemId).toBe("item-mkv");
+    expect(page.store.historyIndex.value).toBe(1);
+    expect(probesOf(page, MKV)).toHaveLength(0);
+    expect(page.store.loading.shown.value).toBe(false);
+    expect(page.player.mediaFailed.value).toBe(true);
+    expect(leakedLines(page)).toEqual([]);
+  });
+
+  it("stop on the couldn't-load message when the play route doesn't answer in ten seconds", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    seedHistory(page, [VIDEO, MKV], 0);
+    page.replies.set("/api/play/item-mkv", () => new Promise<Response>(() => {}) as unknown as Response);
+    page.player.next();
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(page.notices).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(page.notices).toEqual([COULD_NOT_LOAD_VIDEO]);
+    expect(page.relayed).toContain("playback=step-play-failed attempt=1 hasCurrent=true timeoutMs=10000");
+  });
+
+  it("show only the pairing prompt for a play route's 401", async () => {
+    const page = setup();
+    seedHistory(page, [VIDEO, MKV], 0);
+    page.replies.set("/api/play/item-mkv", () => json({}, 401));
+    page.player.next();
+
+    await vi.waitFor(() => expect(page.store.pairingRequired.value).toBe(true));
+    await vi.waitFor(() => expect(page.store.loading.shown.value).toBe(false));
+    expect(page.notices).toEqual([]);
+    expect(page.relayed).toContain("status=Unauthorized. Pair first. (POST /api/play/{itemId}) hasCurrent=true attempt=1");
+  });
+
+  it("drop a play route's answer once another play has started", async () => {
+    const page = setup();
+    seedHistory(page, [VIDEO, MKV, SECOND_VIDEO], 0);
+    const answer = holdReply(page, "/api/play/item-mkv");
+    page.player.next();
+    page.player.next();
+    await vi.waitFor(() => expect(page.elements.video.src).toContain("item-other"));
+
+    answer(json({ ...MKV, mediaUrl: "/api/media/item-mkv?token=late" }));
+    await vi.waitFor(() => expect(page.relayed).toContain("playback=step-play-stale attempt=2 hasCurrent=true expectedPlayAttemptId=1"));
+    expect(page.elements.video.src).toContain("item-other");
+  });
+
+  it("load a video paused when Auto-Pause came while they waited for the server, for Auto-Resume to play", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    seedHistory(page, [VIDEO, SECOND_VIDEO], 1);
+    const answer = holdReply(page, "/api/play/item-video");
+    page.player.previous();
+    page.player.autoPause();
+    // Loading… keeps waiting for the server.
+    await vi.advanceTimersByTimeAsync(500);
+    expect(page.store.loading.shown.value).toBe(true);
+
+    answer(json({ ...VIDEO, mediaUrl: "/api/media/item-video?token=fresh" }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.elements.video.src).toBe("http://server/api/media/item-video?token=fresh");
+    expect(page.elements.video.style.display).toBe("block");
+    expect(page.elements.video.plays).toEqual([]);
+    expect(page.player.playButton.value.showsPause).toBe(false);
+    expect(page.store.loading.shown.value).toBe(false);
+
+    page.player.autoResume();
+    expect(page.elements.video.plays).toEqual(["display=block muted=false src=http://server/api/media/item-video?token=fresh"]);
+  });
+
+  it("hold a photo's timer when Auto-Pause came while they waited for the server, for Auto-Resume to run it", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.player.toggleAutoplay();
+    seedHistory(page, [PHOTO, SECOND_VIDEO], 1);
+    const answer = holdReply(page, "/api/play/item-photo");
+    page.player.previous();
+    page.player.autoPause();
+    answer(json({ ...PHOTO }));
+    await vi.advanceTimersByTimeAsync(0);
+    page.player.photoLoaded();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(page.store.historyIndex.value).toBe(0);
+
+    page.player.autoResume();
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(page.store.historyIndex.value).toBe(1);
+  });
+
+  it("play as usual when Auto-Pause let go before the server answered", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    seedHistory(page, [VIDEO, SECOND_VIDEO], 1);
+    const answer = holdReply(page, "/api/play/item-video");
+    page.player.previous();
+    page.player.autoPause();
+    page.player.autoResume();
+
+    answer(json({ ...VIDEO }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.elements.video.plays).toHaveLength(1);
+  });
+});
+
+describe("recovering a video that had played", () => {
+  /** Plays VIDEO forward until it has played to `position`, answering the play route with a fresh URL. */
+  function playedTo(position: number, options: { paused?: boolean } = {}) {
+    const page = setup();
+    page.replies.set("/api/play/item-video", () => json({ ...VIDEO, mediaUrl: "/api/media/item-video?token=fresh" }));
+    page.playVideo(VIDEO, 65);
+    page.elements.video.currentTime = position;
+    if (options.paused) {
+      page.player.playOrPause();
+    }
+    return page;
+  }
+
+  /** The play route's requests for a fresh media URL, which count no play. */
+  function freshUrlRequests(page: ReturnType<typeof setup>) {
+    return page.requests("/api/play/item-video").filter((request) => request.body?.recordPlayback === false);
+  }
+
+  it("gets a fresh media URL that counts no play, and plays on from where it was, with no message", async () => {
+    const page = playedTo(30);
+    const plays = page.elements.video.plays.length;
+    page.player.videoFailed();
+
+    await vi.waitFor(() => expect(page.elements.video.src).toBe("http://server/api/media/item-video?token=fresh"));
+    expect(page.requests("/api/play/item-video").map((request) => request.body)).toEqual([
+      { clientId: "client-1", sessionId: "session-1", recordPlayback: false }
+    ]);
+    expect(page.elements.video.plays.slice(plays)).toEqual(["display=block muted=false src=http://server/api/media/item-video?token=fresh"]);
+    // The new source starts at its beginning; its metadata seeks it to where it was.
+    page.elements.video.currentTime = 0;
+    page.player.videoMetadataLoaded();
+    expect(page.elements.video.currentTime).toBe(30);
+    page.player.videoPlaying();
+
+    expect(page.notices).toEqual([]);
+    expect(page.notified).toEqual([]);
+    expect(probesOf(page, VIDEO)).toHaveLength(0);
+    expect(page.requests("/api/record-playback")).toHaveLength(1);
+    expect(page.store.history.value[0]!.mediaUrl).toBe("/api/media/item-video?token=fresh");
+    expect(page.store.loading.shown.value).toBe(false);
+    expect(page.relayed).toContain("playback=recover attempt=1 hasCurrent=true");
+    expect(leakedLines(page)).toEqual([]);
+  });
+
+  it("stays paused at its position when it was paused", async () => {
+    const page = playedTo(12, { paused: true });
+    const plays = page.elements.video.plays.length;
+    page.player.videoFailed();
+
+    await vi.waitFor(() => expect(page.elements.video.src).toContain("token=fresh"));
+    page.elements.video.currentTime = 0;
+    page.player.videoMetadataLoaded();
+    expect(page.elements.video.currentTime).toBe(12);
+    expect(page.elements.video.plays.length).toBe(plays);
+    expect(page.elements.video.paused).toBe(true);
+    expect(page.notices).toEqual([]);
+    expect(page.store.loading.shown.value).toBe(false);
+  });
+
+  it("stays paused when the user pauses it while it waits for the fresh URL", async () => {
+    const page = playedTo(30);
+    const answer = holdReply(page, "/api/play/item-video");
+    const plays = page.elements.video.plays.length;
+    page.player.videoFailed();
+    // A source that fails fires no pause, so the video still reads as playing, and Pause pauses it.
+    page.player.playOrPause();
+    answer(json({ ...VIDEO, mediaUrl: "/api/media/item-video?token=fresh" }));
+
+    await vi.waitFor(() => expect(page.elements.video.src).toContain("token=fresh"));
+    expect(page.elements.video.plays.length).toBe(plays);
+    expect(page.elements.video.paused).toBe(true);
+    expect(page.player.playButton.value.showsPause).toBe(false);
+    expect(page.store.loading.shown.value).toBe(false);
+  });
+
+  it("stays paused while Auto-Pause paused it during the wait, and plays on once Auto-Pause lets go", async () => {
+    const page = playedTo(30);
+    const answer = holdReply(page, "/api/play/item-video");
+    page.player.videoFailed();
+    page.player.autoPause();
+    answer(json({ ...VIDEO, mediaUrl: "/api/media/item-video?token=fresh" }));
+    await vi.waitFor(() => expect(page.elements.video.src).toContain("token=fresh"));
+    const plays = page.elements.video.plays.length;
+    expect(page.elements.video.paused).toBe(true);
+
+    page.player.autoResume();
+    await vi.waitFor(() =>
+      expect(page.elements.video.plays.slice(plays)).toEqual(["display=block muted=false src=http://server/api/media/item-video?token=fresh"])
+    );
+  });
+
+  it("waits for the connection while the server can't be reached, with no dialog, and then recovers", async () => {
+    vi.useFakeTimers();
+    const page = playedTo(30);
+    page.store.reconnecting.value = true;
+    page.player.videoFailed();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(freshUrlRequests(page)).toHaveLength(0);
+    expect(page.notices).toEqual([]);
+    expect(page.relayed).toContain("playback=recover-wait attempt=1 hasCurrent=true");
+
+    page.store.reconnecting.value = false;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(freshUrlRequests(page)).toHaveLength(1);
+    expect(page.elements.video.src).toContain("token=fresh");
+    expect(page.notices).toEqual([]);
+  });
+
+  it("waits for the connection when its request can't reach the server, and asks again once it is back", async () => {
+    vi.useFakeTimers();
+    const page = playedTo(30);
+    let reachable = false;
+    page.replies.set("/api/play/item-video", () => {
+      if (!reachable) {
+        throw new TypeError("Failed to fetch");
+      }
+      return json({ ...VIDEO, mediaUrl: "/api/media/item-video?token=fresh" });
+    });
+    page.player.videoFailed();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(freshUrlRequests(page)).toHaveLength(1);
+
+    // The connection finds the server down, and then back.
+    page.store.reconnecting.value = true;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(freshUrlRequests(page)).toHaveLength(1);
+    reachable = true;
+    page.store.reconnecting.value = false;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(freshUrlRequests(page)).toHaveLength(2);
+    expect(page.elements.video.src).toContain("token=fresh");
+    expect(page.notices).toEqual([]);
+  });
+
+  it("asks about the file when the fresh URL fails too", async () => {
+    const page = playedTo(30);
+    answerProbe(page, { ...VIDEO, mediaUrl: "/api/media/item-video?token=fresh" }, () => json({}, 503));
+    page.player.videoFailed();
+    await vi.waitFor(() => expect(page.elements.video.src).toContain("token=fresh"));
+    page.player.videoFailed();
+
+    await vi.waitFor(() => expect(page.notices).toEqual([COULD_NOT_LOAD_VIDEO]));
+    expect(freshUrlRequests(page)).toHaveLength(1);
+    expect(probesOf(page, VIDEO)).toHaveLength(1);
+  });
+
+  it("recovers again once the video has played since, as for a second server restart in one video", async () => {
+    const page = playedTo(30);
+    let fresh = 0;
+    page.replies.set("/api/play/item-video", () => json({ ...VIDEO, mediaUrl: `/api/media/item-video?token=fresh${++fresh}` }));
+    page.player.videoFailed();
+    await vi.waitFor(() => expect(page.elements.video.src).toContain("token=fresh1"));
+    page.elements.video.currentTime = 0;
+    page.player.videoMetadataLoaded();
+    page.player.videoPlaying();
+    page.elements.video.currentTime = 50;
+
+    // A second restart later in the same video: it plays on again from where it had reached.
+    page.player.videoFailed();
+    await vi.waitFor(() => expect(page.elements.video.src).toContain("token=fresh2"));
+    page.elements.video.currentTime = 0;
+    page.player.videoMetadataLoaded();
+    expect(page.elements.video.currentTime).toBe(50);
+    page.player.videoPlaying();
+
+    expect(freshUrlRequests(page)).toHaveLength(2);
+    expect(probesOf(page, VIDEO)).toHaveLength(0);
+    expect(page.notices).toEqual([]);
+    expect(page.requests("/api/record-playback")).toHaveLength(1);
+  });
+
+  it("goes on as a history step's request does when the server refuses it: a missing file skips, without asking about it", async () => {
+    const page = playedTo(30);
+    page.answerRandom(SECOND_VIDEO);
+    page.replies.set("/api/play/item-video", () => json({ error: "Media not found", code: "play_media_missing" }, 404));
+    page.player.videoFailed();
+
+    await vi.waitFor(() => expect(page.store.current.value?.itemId).toBe("item-other"));
+    expect(page.notified).toEqual([{ kind: "skips", text: "Skipped a missing file.", detail: "clip.mp4", key: "skip" }]);
+    expect(probesOf(page, VIDEO)).toHaveLength(0);
+    expect(page.relayed).toContain("playback=recover-failed attempt=1 hasCurrent=true statusCode=404 code=play_media_missing");
+  });
+
+  it("asks about a video that never played straight away, without a fresh URL", async () => {
+    const page = setup();
+    answerProbe(page, VIDEO, () => json({}, 503));
+    page.play(VIDEO);
+    page.player.videoFailed();
+
+    await vi.waitFor(() => expect(page.notices).toEqual([COULD_NOT_LOAD_VIDEO]));
+    expect(freshUrlRequests(page)).toHaveLength(0);
+    expect(probesOf(page, VIDEO)).toHaveLength(1);
   });
 });
 

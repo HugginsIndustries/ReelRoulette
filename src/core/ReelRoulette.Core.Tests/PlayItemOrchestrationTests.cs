@@ -1,5 +1,8 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
+using ReelRoulette.Core.Library;
 using ReelRoulette.Server.Contracts;
+using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
 using Xunit;
 
@@ -74,6 +77,40 @@ public sealed class PlayItemOrchestrationTests : IDisposable
         Assert.NotNull(payload.PlayCount);
     }
 
+    [Fact]
+    public void PlayItem_WithoutRecordPlayback_CountsOnePlayAndPublishesPlaybackRecorded()
+    {
+        var (host, playback, operations, state) = SeedPlayableItem();
+        var request = Request("""{"clientId":"client-a"}""");
+        Assert.True(request.RecordPlayback);
+
+        var result = ServerHostComposition.PlayItem("orch-item", request, playback, operations, state, new OperatorTestingService());
+
+        Assert.Equal(StatusCodes.Status200OK, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+        Assert.False(string.IsNullOrEmpty(Assert.IsType<RandomResponse>(Assert.IsAssignableFrom<IValueHttpResult>(result).Value).MediaUrl));
+        Assert.Equal(1, host.Session.ReadItemState("orch-item")!.PlayCount);
+        Assert.Single(state.GetReplayAfter(0).Events, envelope => envelope.EventType == "playbackRecorded");
+    }
+
+    // The WebUI sends it only to get a fresh media URL for an item already playing, which counts no second play.
+    [Fact]
+    public void PlayItem_WithRecordPlaybackFalse_AnswersTheSameWithoutCountingAPlayOrPublishing()
+    {
+        var (host, playback, operations, state) = SeedPlayableItem();
+        var request = Request("""{"clientId":"client-a","recordPlayback":false}""");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(request), "PlayItemRequest");
+
+        var result = ServerHostComposition.PlayItem("orch-item", request, playback, operations, state, new OperatorTestingService());
+
+        Assert.Equal(StatusCodes.Status200OK, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+        var response = Assert.IsType<RandomResponse>(Assert.IsAssignableFrom<IValueHttpResult>(result).Value);
+        Assert.Equal("orch-item", response.ItemId);
+        Assert.False(string.IsNullOrEmpty(response.MediaUrl));
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(response), "RandomResponse");
+        Assert.Equal(0, host.Session.ReadItemState("orch-item")!.PlayCount);
+        Assert.Empty(state.GetReplayAfter(0).Events);
+    }
+
     public void Dispose()
     {
         LibraryCatalogBackup.WaitForPending();
@@ -81,5 +118,26 @@ public sealed class PlayItemOrchestrationTests : IDisposable
         {
             Directory.Delete(_appData, recursive: true);
         }
+    }
+
+    private static PlayItemRequest Request(string json)
+    {
+        return System.Text.Json.JsonSerializer.Deserialize<PlayItemRequest>(json, OpenApiSpec.ServerJsonOptions)!;
+    }
+
+    private (LibraryCatalogHost Host, LibraryPlaybackService Playback, LibraryOperationsService Operations, ServerStateService State) SeedPlayableItem()
+    {
+        var mediaPath = Path.Combine(_appData, "clip.mp4");
+        File.WriteAllBytes(mediaPath, [0x01]);
+        CatalogSeed.Write(
+            _appData,
+            sources: [new SeedSource("s1", _appData)],
+            items: [new SeedItem("orch-item", mediaPath) { SourceId = "s1", FileName = "clip.mp4" }]);
+        var host = CatalogOpen.Host(_appData);
+        return (
+            host,
+            new LibraryPlaybackService(new ServerMediaTokenStore(), NullLogger<LibraryPlaybackService>.Instance, host),
+            new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, _appData),
+            new ServerStateService());
     }
 }

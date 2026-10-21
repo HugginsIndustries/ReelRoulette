@@ -1,9 +1,17 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
-import { errorText, UnauthorizedError } from "../api/serverRequest";
+import { requestPlayItem, type PlayItemFailure } from "../api/coreApi";
+import {
+  errorText,
+  PLAYBACK_REQUEST_TIMEOUT_MS,
+  ServerUnreachableError,
+  UnauthorizedError,
+  withTimeout
+} from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import { applyItemStateToCurrent } from "../library/currentItemState";
+import { mapPlayItemErrorToStatus } from "../library/libraryPlayModel";
 import type { ItemStateChangedPayload } from "../library/libraryProjectionSync";
-import { playbackTraceLine } from "../logging/relayLogLines";
+import { errorType, playbackTraceLine } from "../logging/relayLogLines";
 import type { Notifications } from "../notifications/notifications";
 import type { AppApi } from "../state/appApi";
 import type { AppStore, PlayingItem } from "../state/appStore";
@@ -11,6 +19,7 @@ import { playRefusalNotice } from "../state/lastingStates";
 import type { ServerConnection } from "../state/serverConnection";
 import type { AudioStage } from "./audioStage";
 import { createFrameClock, type FramedVideo } from "./frameStep";
+import { mediaFailureMessage, probeMedia, SKIP_LIMIT, skipText, type MediaFailure } from "./mediaFailure";
 import { basenameFromPath, formatPlaybackPosition } from "./nowPlaying";
 import { createPhotoTimer } from "./photoTimer";
 import { createRandomPicker, randomPickRequest } from "./randomPick";
@@ -85,10 +94,22 @@ export interface FrameScheduler {
   cancel(id: number): void;
 }
 
+/**
+ * Where a play came from: a library choice, forward (autoplay, Next, a random pick, Random, or the first Play), or back
+ * (Previous). Forward and back skip a file that can't play, and a library choice shows its message.
+ */
+export type PlayOrigin = "library" | "forward" | "back";
+
 export interface PlayOptions {
-  /** False when the server already recorded the play, as `POST /api/play/{itemId}` does. Defaults to true. */
-  recordPlayback?: boolean;
+  /**
+   * Where the play came from. A library play's server has already recorded it, as `POST /api/play/{itemId}` does; any
+   * other is recorded here. Defaults to forward.
+   */
+  origin?: PlayOrigin;
 }
+
+/** How long the player waits before trying again to recover a video while the connection doesn't know the server is down. */
+export const RECOVERY_RETRY_MS = 5_000;
 
 /**
  * Plays the current item and history, and runs the player's controls and autoplay. On a photo autoplay will advance,
@@ -98,6 +119,14 @@ export interface PlayOptions {
  * mode. With Loop on, Loop stops autoplay decides: on, the item repeats and nothing advances, and in Timer mode a video
  * repeats a stretch of Advance after seconds; off, autoplay goes on, and a video shorter than Advance after repeats
  * until it has run. A repeat only restarts the photo's timer or the video's position.
+ *
+ * A history step gets a fresh media URL from the server before it plays, so a token a server restart dropped never
+ * plays. When a video that had played fails, the player first gets it a fresh URL and plays it on from where it was,
+ * waiting for the connection when the server can't be reached. Otherwise, or when that fails too, it asks the server
+ * about the file, and a 404 for a URL not renewed since the media last played gets a fresh URL first, since the server
+ * no longer knowing the token answers the same. A file this browser can't play, or a missing one, reached by autoplay,
+ * Next, Previous, or a random pick is skipped with a Skipped files popup, up to ten in a row, and any other failure
+ * stops on its message.
  */
 export interface Player {
   readonly playButton: ReadonlySignal<PlayButtonView>;
@@ -139,8 +168,12 @@ export interface Player {
    * before it is emptied.
    */
   takeOverVideo(video: VideoElement): void;
+  /** Plays the current item, a play the user started, so the count of files skipped in a row starts over. */
   playCurrent(options?: PlayOptions): void;
-  /** Picks a new item, as Next does at the end of history and Random from anywhere in it, and adds it at the end. */
+  /**
+   * Picks a new item, as Next does at the end of history and Random from anywhere in it, and adds it at the end. A
+   * press starts the count of files skipped in a row over, as Next, Previous, and the first Play do.
+   */
   pickRandom(): Promise<void>;
   /**
    * The play button: picks when nothing is playing, otherwise plays or pauses the video, or holds and resumes a
@@ -204,10 +237,10 @@ export interface PlayerOptions {
   connection: ServerConnection;
   /**
    * The in-app dialogs, for a pick or play that fails, a favorite or blacklist the server doesn't take, and media that
-   * can't be found.
+   * can't play and isn't skipped.
    */
   dialogs: Pick<Dialogs, "notice">;
-  /** The one-off messages: a favorite or blacklist change made here, or on another device. */
+  /** The one-off messages: a favorite or blacklist change made here, or on another device, and a skipped file. */
   notifications: Pick<Notifications, "notify">;
   /** Defaults to the browser's animation frames, looked up on each request. */
   frames?: FrameScheduler;
@@ -276,8 +309,26 @@ export function createPlayer(options: PlayerOptions): Player {
   let armed: ArmedAttempt | null = null;
   let autoPausedVideo = false;
   let autoHeldPhoto = false;
+  /** Where the attempt playing now came from. */
+  let attemptOrigin: PlayOrigin = "forward";
+  /** Files skipped in a row, which starts over when a file loads and when the user starts a play. */
+  let skips = 0;
+  /**
+   * How the attempt playing now handles its media's failure: it hasn't failed, it gets a fresh media URL, it finds out
+   * why and goes on from there, or it stopped. Its timers hold until its video plays again.
+   */
+  let failurePhase: "none" | "recovering" | "failing" | "stopped" = "none";
+  /**
+   * The attempt playing now got its media a fresh media URL, and it hasn't played since, so a failure asks about the file
+   * without getting another, which can't loop on a fresh URL that fails too.
+   */
+  let recovered = false;
   /** The play attempt Auto-Pause paused; once another has started, there is nothing to resume. */
   let autoPausedAttempt = 0;
+  /** A history step waits for its fresh media URL, with nothing shown yet. */
+  let stepWaiting = false;
+  /** Auto-Pause came while a history step waited, so its media loads paused, for Auto-Resume to play. */
+  let autoPausedWaiting = false;
   /** A random pick waits for the server, holding Loading…. */
   let pickWaiting = false;
   /** The video of the attempt playing now has played, so its timer can run. */
@@ -446,7 +497,7 @@ export function createPlayer(options: PlayerOptions): Player {
       }
     }
     stretching = applies;
-    if (videoTimerApplies() && videoStarted && !videoPaused()) {
+    if (videoTimerApplies() && videoStarted && !videoPaused() && failurePhase === "none") {
       videoTimer.resume();
     } else {
       videoTimer.hold();
@@ -485,6 +536,7 @@ export function createPlayer(options: PlayerOptions): Player {
   function handBackToUser(): void {
     autoPausedVideo = false;
     autoHeldPhoto = false;
+    autoPausedWaiting = false;
   }
 
   function showToggles(): void {
@@ -571,7 +623,7 @@ export function createPlayer(options: PlayerOptions): Player {
       return;
     }
     showPlayState();
-    next();
+    advance();
   }
 
   /** Timer mode advances the video; in Normal mode, a short video Loop repeats finishes the repeat in progress first. */
@@ -579,7 +631,7 @@ export function createPlayer(options: PlayerOptions): Player {
     if (!videoShown()) return;
     if (store.autoplayMode.peek() === "timer") {
       trace("info", "timer-advance", { mediaType: "video" });
-      next();
+      advance();
       return;
     }
     videoTimerDone = true;
@@ -612,6 +664,18 @@ export function createPlayer(options: PlayerOptions): Player {
     store.loading.release("media");
   }
 
+  /**
+   * The browser refused the attempt's video play, as when it blocks autoplay, which leaves it waiting for the user. A
+   * source that fails refuses its play just after its error, whose handling holds Loading… until it knows why, so that
+   * refusal changes nothing. A refusal that arrives after another attempt has started is that earlier play's, cut short
+   * by the new source.
+   */
+  function playRefused(attemptId: number): void {
+    if (store.playAttemptId.peek() === attemptId && failurePhase === "none") {
+      mediaSettled();
+    }
+  }
+
   /** An attempt is stale once another item or attempt has started; its events are only traced. */
   function isStale(attempt: ArmedAttempt): boolean {
     const current = store.current.peek();
@@ -629,16 +693,19 @@ export function createPlayer(options: PlayerOptions): Player {
     seekSlider.value = videoLengthUnknown() ? "0" : String(video.currentTime);
   }
 
-  function playCurrent(playOptions: PlayOptions = {}): void {
-    const item = store.current.peek();
-    if (!item || !elements) return;
-    const { video, photo, emptyState, seekSlider } = elements;
+  /**
+   * Starts a play attempt for `item`: the last item stops at once, Loading… holds until the media plays, loads, or
+   * fails, and the play is recorded unless the server already recorded it. The media loads with `loadMedia`.
+   */
+  function beginAttempt(item: PlayingItem, origin: PlayOrigin, recordPlayback: boolean): number {
+    const { video, photo, emptyState, seekSlider } = elements!;
     store.playAttemptId.value += 1;
     const attemptId = store.playAttemptId.peek();
+    attemptOrigin = origin;
     // Every attempt waits for its media, a history step or a photo shown again too, until it plays, loads, or fails.
     store.loading.hold("media");
     trace("info", "start", { mediaType: item.mediaType });
-    if (playOptions.recordPlayback !== false) {
+    if (recordPlayback) {
       notifyPlaybackStarted(item);
     }
 
@@ -647,6 +714,10 @@ export function createPlayer(options: PlayerOptions): Player {
     videoTimer.clear();
     videoStarted = false;
     videoTimerDone = false;
+    failurePhase = "none";
+    recovered = false;
+    stepWaiting = false;
+    autoPausedWaiting = false;
     // A new item's stretch starts at its start, its frames are timed anew, and the seek indicator's total starts over.
     frameClock.reset();
     seekIndicator.clear();
@@ -666,7 +737,20 @@ export function createPlayer(options: PlayerOptions): Player {
     emptyState.style.display = "none";
     // The bar starts empty, so it never shows the last item's time.
     seekSlider.value = "0";
+    showToggles();
+    return attemptId;
+  }
+
+  /**
+   * Shows the attempt's photo, or loads and plays its video, from the item's media URL. When Auto-Pause came while a
+   * history step waited for this URL, the video loads paused and the photo's timer held, for Auto-Resume to play, and
+   * Loading… ends, as Auto-Pause ends a media load's wait.
+   */
+  function loadMedia(item: PlayingItem, attemptId: number): void {
+    const { video, photo } = elements!;
     const mediaUrl = absolutizeMediaUrl(apiBaseUrl, item.mediaUrl);
+    const autoPaused = autoPausedWaiting && autoPausedAttempt === attemptId;
+    autoPausedWaiting = false;
 
     if (item.mediaType === "photo") {
       armed = { mediaType: "photo", id: item.id, attemptId };
@@ -674,6 +758,10 @@ export function createPlayer(options: PlayerOptions): Player {
       photo.style.display = "block";
       if (photoTimerRuns()) {
         photoTimer.start(advanceAfterMs());
+        if (autoPaused) {
+          photoTimer.hold();
+          autoHeldPhoto = true;
+        }
       }
       showStretch();
     } else {
@@ -688,21 +776,361 @@ export function createPlayer(options: PlayerOptions): Player {
       videoTimer.hold();
       stretching = stretchApplies();
       syncVideo();
-      // A browser that won't play it, as when it blocks autoplay, leaves it waiting for the user. A rejection that
-      // arrives after another attempt has started is that earlier play's, cut short by the new source.
-      void audio.play(video).catch(() => {
-        if (store.playAttemptId.peek() === attemptId) {
-          mediaSettled();
-        }
-      });
+      if (autoPaused) {
+        autoPausedVideo = true;
+      } else {
+        void audio.play(video).catch(() => playRefused(attemptId));
+      }
     }
 
+    if (autoPaused) {
+      mediaSettled();
+    }
     showToggles();
   }
 
-  async function pickRandom(): Promise<void> {
+  /** Plays the current item from where `origin` says it came from. */
+  function play(origin: PlayOrigin): void {
+    const item = store.current.peek();
+    if (!item || !elements) return;
+    loadMedia(item, beginAttempt(item, origin, origin !== "library"));
+  }
+
+  /**
+   * Steps through the history, forward or back, and plays the entry with a fresh media URL from the server, which
+   * counts its one play. Returns false at either end of the history. While the server fails the compatibility check or
+   * runs without a library, it plays nothing, so the entry plays with the URL it has and nothing is recorded.
+   */
+  function stepHistory(step: -1 | 1): boolean {
+    if (!store.stepHistory(step)) return false;
+    if (!elements) return true;
+    const item = store.current.peek()!;
+    const attemptId = beginAttempt(item, step < 0 ? "back" : "forward", false);
+    if (store.heldBack.peek()) {
+      loadMedia(item, attemptId);
+    } else {
+      stepWaiting = true;
+      void playFresh(item, attemptId);
+    }
+    return true;
+  }
+
+  /** What the server answered a play request for the current item. */
+  type PlayAnswer =
+    | { kind: "played"; mediaUrl: string }
+    | { kind: "refused"; result: PlayItemFailure }
+    | { kind: "unauthorized" }
+    | { kind: "unreachable" }
+    | { kind: "timedOut" }
+    | { kind: "error"; error: string };
+
+  /**
+   * Asks the server for a fresh media URL through `POST /api/play/{itemId}`, which counts a play unless
+   * `recordPlayback` is false, with the same time limit as the probe.
+   */
+  async function requestPlay(item: PlayingItem, recordPlayback: boolean): Promise<PlayAnswer> {
+    const identity = { clientId: store.identity.clientId, sessionId: store.identity.sessionId };
+    const outcome = await withTimeout(
+      (signal) => requestPlayItem({ apiBaseUrl }, item.itemId, identity, api.request, { recordPlayback, signal }),
+      PLAYBACK_REQUEST_TIMEOUT_MS
+    );
+    if (outcome.kind === "timedOut") return { kind: "timedOut" };
+    if (outcome.kind === "failed") {
+      if (outcome.error instanceof UnauthorizedError) return { kind: "unauthorized" };
+      if (outcome.error instanceof ServerUnreachableError) return { kind: "unreachable" };
+      return { kind: "error", error: errorType(outcome.error) };
+    }
+    const result = outcome.value;
+    if (!result.ok) return { kind: "refused", result };
+    return result.response?.mediaUrl ? { kind: "played", mediaUrl: result.response.mediaUrl } : { kind: "error", error: "NoMediaUrl" };
+  }
+
+  /**
+   * A play request the server refused or didn't answer: a 404 means the file is missing, a 5xx or no answer that it
+   * couldn't load, and anything else stops on the library play's message for it. A 401 shows only the pairing prompt.
+   */
+  function playRequestFailed(attempt: ArmedAttempt, answer: Exclude<PlayAnswer, { kind: "played" }>, event: string): void {
+    switch (answer.kind) {
+      case "unauthorized":
+        stopSilently();
+        return;
+      case "refused": {
+        const { statusCode, code } = answer.result;
+        trace("warn", event, { statusCode, code: code || "none" });
+        if (statusCode === 404) {
+          failed(attempt, "missing");
+        } else if (statusCode >= 500) {
+          failed(attempt, "unreadable");
+        } else {
+          // The server's error text can name a file, so the log keeps one line for every refusal.
+          stopOn(mapPlayItemErrorToStatus(answer.result, attempt.mediaType), "Playback failed");
+        }
+        return;
+      }
+      case "timedOut":
+        trace("warn", event, { timeoutMs: PLAYBACK_REQUEST_TIMEOUT_MS });
+        failed(attempt, "unreadable");
+        return;
+      case "unreachable":
+        trace("warn", event, { error: "ServerUnreachableError" });
+        failed(attempt, "unreadable");
+        return;
+      case "error":
+        trace("warn", event, { error: answer.error });
+        failed(attempt, "unreadable");
+        return;
+    }
+  }
+
+  /** A history step's play: its fresh media URL replaces the entry's, and its media loads with it. */
+  async function playFresh(item: PlayingItem, attemptId: number): Promise<void> {
+    const attempt: ArmedAttempt = { mediaType: item.mediaType, id: item.id, attemptId };
+    const answer = await requestPlay(item, true);
+    if (!isStale(attempt)) {
+      stepWaiting = false;
+    }
+    if (!elements || isStale(attempt)) {
+      trace("info", "step-play-stale", { expectedPlayAttemptId: attemptId });
+      return;
+    }
+    if (answer.kind !== "played") {
+      playRequestFailed(attempt, answer, "step-play-failed");
+      return;
+    }
+    item.mediaUrl = answer.mediaUrl;
+    loadMedia(item, attemptId);
+  }
+
+  /**
+   * Resolves once the connection is back: Reconnecting… has shown and ended, or, while it doesn't show, after
+   * `RECOVERY_RETRY_MS`, since the connection may not yet know the server is down.
+   */
+  function connectionBack(): Promise<void> {
+    return new Promise((resolve) => {
+      let wasDown = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let unsubscribe = () => {};
+      const finish = () => {
+        clearTimeout(timer);
+        unsubscribe();
+        resolve();
+      };
+      // Called at once with whether it shows now, which can't finish the wait.
+      unsubscribe = store.reconnecting.subscribe((down) => {
+        if (down) {
+          wasDown = true;
+          clearTimeout(timer);
+        } else if (wasDown) {
+          finish();
+        }
+      });
+      if (!wasDown) {
+        timer = setTimeout(finish, RECOVERY_RETRY_MS);
+      }
+    });
+  }
+
+  /**
+   * A video that had played failed, as when a server restart drops its media token: it gets a fresh media URL that
+   * counts no second play, and plays on from where it was, playing or paused as it was. While the server can't be
+   * reached it waits for the connection, with no dialog. A refused request goes on as a history step's does.
+   */
+  async function recover(attempt: ArmedAttempt): Promise<void> {
+    const item = store.current.peek()!;
+    const position = elements!.video.currentTime;
+    failurePhase = "recovering";
+    recovered = true;
+    syncVideo();
+    store.loading.hold("media");
+    trace("info", "recover-start");
+    let answer: PlayAnswer;
+    for (;;) {
+      if (store.reconnecting.peek()) {
+        trace("info", "recover-wait");
+        await connectionBack();
+        if (!elements || isStale(attempt)) {
+          trace("info", "recover-stale", { expectedPlayAttemptId: attempt.attemptId });
+          return;
+        }
+      }
+      answer = await requestPlay(item, false);
+      if (!elements || isStale(attempt)) {
+        trace("info", "recover-stale", { expectedPlayAttemptId: attempt.attemptId });
+        return;
+      }
+      if (answer.kind !== "unreachable") break;
+      trace("info", "recover-wait");
+      await connectionBack();
+      if (!elements || isStale(attempt)) {
+        trace("info", "recover-stale", { expectedPlayAttemptId: attempt.attemptId });
+        return;
+      }
+    }
+    if (answer.kind !== "played") {
+      playRequestFailed(attempt, answer, "recover-failed");
+      return;
+    }
+    trace("info", "recover");
+    playFreshUrl(attempt, item, answer.mediaUrl, position);
+  }
+
+  /**
+   * Plays the attempt's media on from a fresh media URL: a photo shows again, and a video goes on from `position`,
+   * playing unless the user or Auto-Pause paused it while it waited.
+   */
+  function playFreshUrl(attempt: ArmedAttempt, item: PlayingItem, mediaUrl: string, position: number): void {
+    item.mediaUrl = mediaUrl;
+    failurePhase = "none";
+    mediaFailed.value = false;
+    if (attempt.mediaType === "photo") {
+      loadMedia(item, attempt.attemptId);
+      return;
+    }
+    const { video } = elements!;
+    // A source that fails fires no pause, so the video reads as paused only once the user or Auto-Pause paused it.
+    const playing = !videoPaused();
+    // A new source pauses the video, so playing it again plays it on.
+    audio.cancelPause();
+    video.pause();
+    videoSource = absolutizeMediaUrl(apiBaseUrl, item.mediaUrl);
+    video.src = videoSource;
+    // Its metadata seeks it to where it was.
+    resumeAt = position;
+    if (playing) {
+      void audio.play(video).catch(() => playRefused(attempt.attemptId));
+    } else {
+      mediaSettled();
+    }
+    showPlayState();
+    syncVideo();
+  }
+
+  /**
+   * Asks the server about the file whose media failed, keeping Loading… up, and goes on from its answer, unless another
+   * play has started by then. The server answers 404 for a media token it no longer knows, as after a restart, as well
+   * as for a missing file, so a 404 for a media URL that hasn't been renewed since the media last played asks the play
+   * route first.
+   */
+  async function probe(attempt: ArmedAttempt): Promise<void> {
+    const item = store.current.peek()!;
+    failurePhase = "failing";
+    store.loading.hold("media");
+    const result = await probeMedia(api.request, absolutizeMediaUrl(apiBaseUrl, item.mediaUrl));
+    if (!elements || isStale(attempt)) {
+      trace("info", "media-probe-stale", { expectedPlayAttemptId: attempt.attemptId });
+      return;
+    }
+    if (result.outcome === "unauthorized") {
+      trace("warn", "media-probe", { mediaType: attempt.mediaType, statusCode: 401 });
+      stopSilently();
+      return;
+    }
+    const { outcome, ...answer } = result;
+    trace("warn", "media-probe", { mediaType: attempt.mediaType, ...answer, failure: outcome });
+    if (outcome === "missing" && !recovered) {
+      await recheck(attempt, item);
+      return;
+    }
+    failed(attempt, outcome);
+  }
+
+  /**
+   * Asks the play route about a file whose range request answered 404, for a fresh media URL that counts no play: its
+   * 404 means the file is missing, and a fresh URL plays on, since only the media's token was stale. Any other answer
+   * goes on as a history step's does.
+   */
+  async function recheck(attempt: ArmedAttempt, item: PlayingItem): Promise<void> {
+    recovered = true;
+    const position = elements!.video.currentTime;
+    const answer = await requestPlay(item, false);
+    if (!elements || isStale(attempt)) {
+      trace("info", "media-recheck-stale", { expectedPlayAttemptId: attempt.attemptId });
+      return;
+    }
+    if (answer.kind !== "played") {
+      playRequestFailed(attempt, answer, "media-recheck-failed");
+      return;
+    }
+    trace("info", "media-recheck");
+    playFreshUrl(attempt, item, answer.mediaUrl, position);
+  }
+
+  /**
+   * The media of the attempt playing now failed: its timers hold, its bar stops, and ambient mode's glow hides. A video
+   * that had played recovers first, once; anything else asks the server about the file.
+   */
+  function mediaFailedNow(attempt: ArmedAttempt): void {
+    // A failure already handled, such as one from an element a new one took over from, changes nothing.
+    if (failurePhase !== "none") return;
+    stopMovingBar();
+    videoTimer.hold();
+    photoTimer.hold();
+    if (photoShown()) {
+      showPlayState();
+    }
+    if (attempt.mediaType === "video" && videoStarted && !recovered) {
+      void recover(attempt);
+      return;
+    }
+    mediaFailed.value = true;
+    void probe(attempt);
+  }
+
+  /**
+   * Goes on from a failure whose cause is known. A file this browser can't play, or a missing one, reached forward or
+   * back is skipped in the same direction with a Skipped files popup, up to ten in a row; Previous at the oldest entry
+   * has nowhere to go. Anything else stops on its message.
+   */
+  function failed(attempt: ArmedAttempt, failure: MediaFailure): void {
+    failurePhase = "failing";
+    const item = store.current.peek()!;
+    const name = item.displayName || item.id || "";
+    const atOldest = attemptOrigin === "back" && store.historyIndex.peek() <= 0;
+    if (failure === "unreadable" || attemptOrigin === "library" || skips >= SKIP_LIMIT || atOldest) {
+      stopOn(mediaFailureMessage(attempt.mediaType, failure, name));
+      return;
+    }
+    skips += 1;
+    notifications.notify({ kind: "skips", text: skipText(failure), detail: basenameFromPath(name), key: "skip" });
+    if (attemptOrigin === "back") {
+      stepHistory(-1);
+    } else {
+      advance();
+    }
+  }
+
+  /** Stops on a failure's notice: the photo's timer and the video's hold, so autoplay goes no further, and Loading… ends. */
+  function stopOn(message: string, logText?: string): void {
+    stopSilently();
+    void dialogs.notice(message, logText);
+  }
+
+  /**
+   * Stops on a failure without a notice, as for a 401, whose pairing prompt is the only signal. Auto-Pause has nothing to
+   * resume then, so a held photo's timer stays held.
+   */
+  function stopSilently(): void {
+    handBackToUser();
+    failurePhase = "stopped";
+    mediaFailed.value = true;
+    stopMovingBar();
+    photoTimer.hold();
+    videoTimer.hold();
+    mediaSettled();
+    if (photoShown()) {
+      showPlayState();
+    }
+  }
+
+  /** A play the user started, which starts the count of files skipped in a row over. */
+  function userStarted(): void {
+    skips = 0;
+  }
+
+  async function pick(): Promise<void> {
     const refusal = playRefusalNotice(store);
     if (refusal) {
+      settleFailedMedia();
       void dialogs.notice(refusal);
       return;
     }
@@ -727,6 +1155,9 @@ export function createPlayer(options: PlayerOptions): Player {
     }
     pickWaiting = false;
     try {
+      if (outcome.kind !== "picked") {
+        settleFailedMedia();
+      }
       switch (outcome.kind) {
         case "timedOut":
           trace("warn", "random-pick-timeout", { timeoutMs: outcome.timeoutMs });
@@ -749,24 +1180,29 @@ export function createPlayer(options: PlayerOptions): Player {
       // The media holds Loading… before the pick lets go of it, so a pick and its media load are one loading period.
       // A pick goes at the end of history, keeping every entry, wherever in it the press came from.
       store.appendHistory(outcome.item);
-      playCurrent();
+      play("forward");
     } finally {
       store.loading.release("pick");
     }
   }
 
-  function next(): void {
-    if (store.stepHistory(1)) {
-      playCurrent();
-      return;
+  /**
+   * A pick that skipped on from a file that couldn't play, and then played nothing, leaves that file stopped, with
+   * nothing loading and nothing for Auto-Pause to resume.
+   */
+  function settleFailedMedia(): void {
+    if (failurePhase === "failing") {
+      handBackToUser();
+      failurePhase = "stopped";
+      videoTimer.hold();
+      mediaSettled();
     }
-
-    void pickRandom();
   }
 
-  function previous(): void {
-    if (store.stepHistory(-1)) {
-      playCurrent();
+  /** Steps forward in history, or picks at its end, as autoplay, Next, and a skip forward do. */
+  function advance(): void {
+    if (!stepHistory(1)) {
+      void pick();
     }
   }
 
@@ -929,12 +1365,20 @@ export function createPlayer(options: PlayerOptions): Player {
       syncVideo();
     },
 
-    playCurrent,
-    pickRandom,
+    playCurrent(playOptions = {}) {
+      userStarted();
+      play(playOptions.origin ?? "forward");
+    },
+
+    pickRandom() {
+      userStarted();
+      return pick();
+    },
 
     playOrPause() {
       if (!store.current.peek()) {
-        void pickRandom();
+        userStarted();
+        void pick();
         return;
       }
       if (photoShown()) {
@@ -963,8 +1407,15 @@ export function createPlayer(options: PlayerOptions): Player {
       }
     },
 
-    next,
-    previous,
+    next() {
+      userStarted();
+      advance();
+    },
+
+    previous() {
+      userStarted();
+      stepHistory(-1);
+    },
 
     toggleLoop() {
       store.setLoop(!store.loop.peek());
@@ -1026,6 +1477,12 @@ export function createPlayer(options: PlayerOptions): Player {
     autoPause() {
       handBackToUser();
       autoPausedAttempt = store.playAttemptId.peek();
+      if (stepWaiting) {
+        // Nothing shows yet: the step's media loads paused once the server answers, and Loading… waits for that.
+        autoPausedWaiting = true;
+        trace("info", "auto-pause", { mediaType: store.current.peek()?.mediaType });
+        return;
+      }
       mediaSettled();
       if (photoShown()) {
         autoHeldPhoto = photoTimer.running;
@@ -1081,7 +1538,11 @@ export function createPlayer(options: PlayerOptions): Player {
       if (!repeat) {
         store.relayStatus("Playing");
       }
+      // A file loaded, so the files skipped before it no longer count as in a row.
+      skips = 0;
       videoStarted = true;
+      // Once it plays again after a recovery, a later failure, such as another server restart, recovers too.
+      recovered = false;
       syncVideo();
     },
 
@@ -1094,10 +1555,7 @@ export function createPlayer(options: PlayerOptions): Player {
       }
       trace("warn", "video-onerror");
       // A source that fails fires no pause, so the video still reads as playing; its bar has nothing more to show.
-      stopMovingBar();
-      mediaFailed.value = true;
-      mediaSettled();
-      void dialogs.notice("Video file not found.");
+      mediaFailedNow(attempt);
     },
 
     videoMetadataLoaded() {
@@ -1136,7 +1594,7 @@ export function createPlayer(options: PlayerOptions): Player {
         return;
       }
       if (!autoplayGoesOn()) return;
-      next();
+      advance();
     },
 
     photoLoaded() {
@@ -1149,6 +1607,7 @@ export function createPlayer(options: PlayerOptions): Player {
       trace("info", "photo-onload");
       mediaSettled();
       store.relayStatus("Playing");
+      skips = 0;
     },
 
     photoFailed() {
@@ -1159,10 +1618,7 @@ export function createPlayer(options: PlayerOptions): Player {
         return;
       }
       trace("warn", "photo-onerror");
-      mediaFailed.value = true;
-      mediaSettled();
-      // Under Autoplay the photo's timer runs on and the next item can fail too; the notice already open doesn't stack.
-      void dialogs.notice("Photo file not found.");
+      mediaFailedNow(attempt);
     }
   };
 }

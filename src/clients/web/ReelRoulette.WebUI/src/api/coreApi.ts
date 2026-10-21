@@ -39,7 +39,7 @@ function tryGetStorage(storage: unknown): StorageLike | null {
   return candidate as StorageLike;
 }
 
-function buildApiUrl(config: RuntimeConfig, path: string): string {
+function buildApiUrl(config: Pick<RuntimeConfig, "apiBaseUrl">, path: string): string {
   return new URL(path, `${config.apiBaseUrl}/`).toString();
 }
 
@@ -108,15 +108,26 @@ function tryReadJsonErrorBody(body: string): { error?: string; code?: string } {
   }
 }
 
+export interface PlayItemOptions {
+  /**
+   * False gets a fresh media URL for an item already playing, which counts no play and publishes no
+   * `playbackRecorded`. Defaults to true, sending the default body.
+   */
+  recordPlayback?: boolean;
+  /** Cancels the request. */
+  signal?: AbortSignal;
+}
+
 /**
  * Plays an item through `POST /api/play/{itemId}`. A request that couldn't reach the server throws a
  * `ServerUnreachableError`, and a success whose body isn't JSON an `UnexpectedResponseError`.
  */
 export async function requestPlayItem(
-  config: RuntimeConfig,
+  config: Pick<RuntimeConfig, "apiBaseUrl">,
   itemId: string,
   identity: { clientId: string; sessionId: string },
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  options: PlayItemOptions = {}
 ): Promise<PlayItemResult> {
   const trimmedItemId = itemId.trim();
   if (!trimmedItemId) {
@@ -137,8 +148,10 @@ export async function requestPlayItem(
     },
     body: JSON.stringify({
       clientId: identity.clientId,
-      sessionId: identity.sessionId
-    })
+      sessionId: identity.sessionId,
+      ...(options.recordPlayback === false ? { recordPlayback: false } : {})
+    }),
+    signal: options.signal
   });
 
   if (response.ok) {

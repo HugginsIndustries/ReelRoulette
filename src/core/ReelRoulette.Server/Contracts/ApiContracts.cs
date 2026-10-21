@@ -128,6 +128,12 @@ public sealed class PlayItemRequest
 {
     public string? ClientId { get; set; }
     public string? SessionId { get; set; }
+
+    /// <summary>
+    /// Whether the play counts, recording it and publishing <c>playbackRecorded</c>. False only gets a fresh media URL
+    /// for an item already playing.
+    /// </summary>
+    public bool RecordPlayback { get; set; } = true;
 }
 
 /// <summary>Names either every item, with <see cref="AllItems"/>, or the items in <see cref="ItemIds"/>, never both.</summary>

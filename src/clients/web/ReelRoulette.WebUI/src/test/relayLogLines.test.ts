@@ -49,6 +49,15 @@ describe("relayLogLines", () => {
     );
   });
 
+  it("keeps why a file's media failed and an error's type", () => {
+    const line = playbackTraceLine("media-probe", current, 5, { mediaType: "photo", statusCode: 404, failure: "missing", mediaUrl });
+    expectNoItemDetails(line);
+    expect(line).toBe("playback=media-probe attempt=5 hasCurrent=true mediaType=photo statusCode=404 failure=missing");
+    expect(playbackTraceLine("step-play-failed", current, 6, { error: "ServerUnreachableError" })).toBe(
+      "playback=step-play-failed attempt=6 hasCurrent=true error=ServerUnreachableError"
+    );
+  });
+
   it("names the screen and the error type, and never the error message", () => {
     const line = screenErrorLine("header", new TypeError(`Cannot read ${itemPath}`));
 

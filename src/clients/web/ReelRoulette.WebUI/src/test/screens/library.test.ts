@@ -954,6 +954,33 @@ describe("playing a tile", () => {
     expect(server.requests("POST", "/api/random")).toHaveLength(0);
   });
 
+  it("a tile whose file the server can't read says it couldn't load, for a video and a photo", async () => {
+    useOverlayWidth();
+    const { server } = await mountLibrary([libraryItem(1), libraryItem(2, { mediaType: 1 })], (fake) => {
+      fake.fallback((call) =>
+        call.method === "POST" && call.path.startsWith("/api/play/")
+          ? json({ error: "Media can't be read: C:\\media\\clip.mp4", code: "play_media_unreadable" }, 503)
+          : null
+      );
+    });
+    await openLibrary();
+
+    for (const [itemId, kind] of [
+      ["item-1", "video"],
+      ["item-2", "photo"]
+    ]) {
+      await click(tile(itemId)!);
+      expect(openNotices()).toEqual([`This ${kind} couldn't load. The server may be waiting on a slow or disconnected drive or share.`]);
+      expect(isOpen()).toBe(true);
+      await closeNotices();
+    }
+    await waitFor(() =>
+      expect(server.logLines()).toContain("playback=library-play-failed attempt=0 hasCurrent=false statusCode=503 code=play_media_unreadable")
+    );
+    // The server's text names the file, so the log keeps one line for the refusal.
+    expect(server.logLines().some((line) => line.includes("clip.mp4"))).toBe(false);
+  });
+
   it("a tile the server cannot play leaves the overlay open and says why in the notice", async () => {
     useOverlayWidth();
     const replies: Response[] = [];
