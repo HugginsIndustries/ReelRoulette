@@ -19,9 +19,9 @@ import { adjustmentText, fileRows, libraryCards, orderTags, type LibraryStats, t
  * The panel's Stats tab: the playing file's stats and the library's. It loads only while it shows: showing it loads
  * once, and while it shows, a new playing item and the server's events load again, a burst of them once. A failed load
  * keeps what the tab showed; with nothing loaded yet, the Library section says why. Nothing loads while the server
- * fails the compatibility check, runs without a library, or asks for pairing. Beside the file's path, Show in File
- * Manager opens the server machine's file manager at it where the server offers that, and Copy Path copies it
- * everywhere else.
+ * fails the compatibility check, runs without a library, or asks for pairing, nor once the connection stops, as when
+ * the page closes, not even a load that was waiting. Beside the file's path, Show in File Manager opens the server
+ * machine's file manager at it where the server offers that, and Copy Path copies it everywhere else.
  */
 export interface StatsTab {
   readonly view: ReadonlySignal<StatsView>;
@@ -67,6 +67,8 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
   const lastPlayed = createLastPlayedBeforePlay();
   /** Changes with what the playback events said about the time before this play. */
   const lastPlayedChanged = signal(0);
+  /** The connection has stopped, as when the page closes, so nothing loads. */
+  let stopped = false;
 
   /** The server's own message while it fails the compatibility check or runs without a library. */
   function blockedMessage(): string | null {
@@ -127,7 +129,7 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
   }
 
   async function load(): Promise<void> {
-    if (!isOpen.peek() || store.heldBack.peek() || store.pairingRequired.peek()) {
+    if (stopped || !isOpen.peek() || store.heldBack.peek() || store.pairingRequired.peek()) {
       return;
     }
     const itemId = store.current.peek()?.itemId || null;
@@ -177,6 +179,10 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
   connection.on("refreshCompleted", request);
   connection.on("resyncRequired", request);
   connection.on("serverReady", request);
+  // A load already waiting comes to nothing, since a load checks that the connection hasn't stopped.
+  connection.on("stopped", () => {
+    stopped = true;
+  });
   store.pairingRequired.subscribe((required) => {
     if (!required) {
       request();

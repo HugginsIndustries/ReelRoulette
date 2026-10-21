@@ -430,6 +430,18 @@ describe("Stats tab", () => {
     expect(statsLoads()).toBe(4);
   });
 
+  it("loads nothing once the page closes, not even the load it was waiting to make", async () => {
+    const { page, server } = await mountStats();
+    fireEvent.click(document.getElementById("now-playing-name")!);
+    await settle();
+    expect(document.getElementById("panel-tab-stats")!.getAttribute("aria-selected")).toBe("true");
+
+    page.unmount();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(server.requests("GET", "/api/library/stats")).toHaveLength(BASELINE_LOADS);
+    expect(server.requests("POST", "/api/library/item")).toHaveLength(0);
+  });
+
   it("says a failed first load once, in the Library section, and the current file keeps its name and path", async () => {
     const { server } = await mountStats({ setup: (fake) => fake.on("GET", "/api/library/stats", () => status(500)) });
     fireEvent.click(document.getElementById("now-playing-name")!);

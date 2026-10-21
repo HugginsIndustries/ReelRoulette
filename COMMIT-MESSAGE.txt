@@ -19,12 +19,9 @@ Instructions:
 
 Commit Message:
 
-Chore: Remove the Vite dev server setup and the CORS machinery only it used
+Bugfix: Stop the WebUI's Stats tab loading once its page closes, which made a Stats test flaky in CI
 
-- WebUI: Drop the `dev`, `predev`, and `preview` scripts, the Vite dev server's port, and the dev `public/runtime-config.json`; the server already serves its own runtime config. Vite stays the build tool. Requests and the event stream no longer ask for cross-origin credentials, since the WebUI and the API share one origin.
-- WebUI: Remove the unused `window.__REEL_ROULETTE_RUNTIME_CONFIG` override; the startup error page now says to reload the page or check that the ReelRoulette server is running.
-- Server: Remove ReelRoulette.Server's standalone dev host (`Program.cs` and its `appsettings.json`), `DynamicCorsOriginRegistry`, and the `EnableCors`, `CorsAllowedOrigins`, and `CorsAllowCredentials` settings. ServerApp already ran with CORS off. ReelRoulette.Server is now a plain class library on ASP.NET Core.
-- Server: The pairing and control-token checks no longer let OPTIONS requests through unauthenticated, and the pairing cookie's same-site setting takes only `Lax` or `Strict`, since no request is cross-origin any more; a `None` setting reads as `Lax`. The static files' `no-store` rule for a built `runtime-config.json` goes too, since the build no longer has one.
-- Packaging: Publish without `ErrorOnDuplicatePublishOutputFiles=false` in `release.yml` and the packaged server smoke, since ServerApp's `appsettings.json` no longer has a duplicate.
-- Solution: Remove the empty `ReelRoulette.WebUI.csproj` and the empty `clients` and `web` solution folders.
-- Docs: README, dev-setup, api, architecture, CONTEXT, domain inventory, the WebUI README, and the mockup's startup error screen follow; MILESTONES.md drops the CORS notes, and Auth Cutover now removes `/runtime-config.json` once `pairToken` is gone.
+- The WebUI's Stats tab now loads nothing once the server connection stops, as when the page closes, not even a load that was waiting out its 250 ms gather, as the library baseline already did. The app never closes its page while running, so nothing changes for users.
+- In tests, a page that closed with the Stats tab open sent that waiting load to the next test's fake server, so "says nothing is playing yet above the library's cards" sometimes counted two stats loads at mount and failed in about half the CI runs.
+- A new test closes the page while the Stats tab's load waits, and checks that no stats or item request goes out; it failed before the fix.
+- The domain inventory says the Stats tab's service stops with the connection.
