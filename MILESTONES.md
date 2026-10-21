@@ -174,7 +174,7 @@ Last milestone completed: M12k1
 | --- | --- | --- |
 | Mockup | ✅ Complete | The rating in the Stats tab's Current file section, the path's icon button, the tags row, the Rated card, and the rating popups, approved on a desktop browser, the iPad, and an Android phone. |
 | Server | ✅ Complete | The rating column in a new catalog schema step, the shipped 2→3 step's index SQL frozen, setting a rating in the catalog, `rating` on item reads, and the rated count in the stats read. |
-| Contract | ⏳ Planned | The rating route and its `itemRatingChanged` event, the rated count in the stats response, and `rating`, `hasAudio`, and the fields the server always sends named in `LibraryProjectionItem`, in OpenAPI and the generated WebUI types. |
+| Contract | ✅ Complete | The rating route and its `itemRatingChanged` event, the rated count in the stats response, and `rating`, `hasAudio`, and the fields the server always sends named in `LibraryProjectionItem`, in OpenAPI and the generated WebUI types. |
 | WebUI | ⏳ Planned | The rating control in the Current file section, its popups and event handling, the path's icon button, the tags row, and the Rated card. |
 
 #### Mockup slice
@@ -285,6 +285,7 @@ Last milestone completed: M12k1
 - The library stats response carries the rated count.
 - `LibraryProjectionItem` names `rating`, sent only for a rated item, and the fields the server always sends that it doesn't name yet: `fullPath`, `isFavorite`, `isBlacklisted`, `playCount`, `fingerprintAlgorithm`, `fingerprintVersion`, and `tags`.
 - `LibraryProjectionItem` also names `hasAudio`, sent once the loudness scan has looked at a video: false for a file without an audio track or one whose track the scan measured as digital silence, and true otherwise.
+- The favorite and blacklist routes name `LibraryStateResponse`, which the spec defined but no route used, as their 200 response.
 - OpenAPI, the generated WebUI types, and `docs/api.md`, which describes the event types.
 
 **Traps**
@@ -302,7 +303,21 @@ Last milestone completed: M12k1
 - The stats response with the rated count matches its schema, in `GetLibraryStats_ResponseMatchesSpec`.
 - `LibraryProjectionItem` names `rating`, `hasAudio`, and the fields the server always sends, in a contract test reading its names.
 - `npm run verify:contracts` passes, and `docs/api.md` describes the route, the event, and the fields, checked by reading it.
+- The favorite and blacklist routes' answers match `LibraryStateResponse`, in the test of the routes' request bodies.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- `POST /api/rating` (`SetRating` in `ServerHostComposition.cs`) reads `RatingRequest`, refuses an empty `itemId` and a rating `ItemRating.TryFromStars` doesn't take with 400, and answers 404 for an item the operations' `SetRating` doesn't find.
+- It publishes `itemRatingChanged`, an `ItemRatingChangedPayload` with `itemId`, `path`, `rating`, `previousRating`, and the trimmed `clientId`, only when the rating changed, and answers with `ItemRatingResponse`: the item's id, its rating, and that event's revision, or the server's current revision when nothing changed.
+- A missing `rating` clears the rating, as a missing `isFavorite` unfavorites, and the spec says so.
+- `LibraryGlobalStatsResponse` carries `rated`, mapped from the stats read.
+- `shared/api/openapi.yaml` has the route, `RatingRequest`, `ItemRatingResponse`, and `ItemRatingChangedPayload` in the event envelope's payloads, `rated` among the required global stats, and `LibraryProjectionItem`'s `fullPath`, `isFavorite`, `isBlacklisted`, `playCount`, `fingerprintAlgorithm`, `fingerprintVersion`, `tags`, `rating`, and `hasAudio`, named but not required, as its other fields are. `npm run generate:contracts` regenerated `src/types/openapi.generated.ts`.
+- The WebUI parses items into its own model, and the one generated type it uses that this slice changes, `LibraryStatsResponse` in `src/stats/statsModel.ts`, only gains `rated`, so no WebUI code changed.
+- New tests: `Rating_SetsChangesAndClearsIt_AndPublishesEachChangeWithThePreviousRatingAndTheClient`, `Rating_RefusesAnEmptyIdOrARatingOffTheHalfStarSteps_AndAnItemNotInTheLibrary`, and `LibraryProjectionItem_NamesEveryFieldTheServerAlwaysSends_AndTheRatingAndAudio`. `ItemRoutes_ReadTheItemIdField_AnswerAsTheSpecNames_AndClearStatsReadsItemIds`, renamed from the favorite, blacklist, and record-playback request body test, also reads the rating request, with and without `rating`, and checks the favorite and blacklist answers against `LibraryStateResponse`, and `GetLibraryStats_ResponseMatchesSpec` checks the rated count's value.
+- Each guarded behavior broken on its own, restored from a copy under `artifacts/scratch/`, failed its tests (measured): an event for an unchanged rating, 3.3 stars accepted, `rated` left out of the response, and `fullPath` left out of the spec.
+- `dotnet build ReelRoulette.sln` has no warnings, `dotnet test ReelRoulette.sln` passes 550 Core tests and 19 ServerApp tests, SystemChecks passes, and `npm run verify` passes, its contract freshness check and 1888 tests included.
+- `docs/api.md` describes the route, its answers, the event, the rating on item reads, `rated`, and the favorite and blacklist answers. CONTEXT.md and `docs/domain-inventory.md` describe the route, the event, and the rated count.
 
 #### WebUI slice
 
@@ -330,6 +345,8 @@ Last milestone completed: M12k1
 - `toggleFlag` in `src/playback/player.ts` changes nothing until the server answers, so nothing in the app yet shows a value before its request lands.
 - The `itemStateChanged` handler in `src/playback/player.ts` words its Other devices popup from the favorite and blacklist flags alone, with the key `sync:{itemId}`.
 - `src/events/sseClient.ts` listens only to the event types in the handlers `src/state/serverConnection.ts` passes it, and moves the resume revision on only for them.
+- The WebUI writes its own item event payload types, such as `ItemStateChangedPayload` in `src/library/libraryProjectionSync.ts`, rather than the generated ones.
+- `POST /api/rating` publishes nothing for the rating an item already has, and a request without `rating` clears it.
 - The Stats tab reloads through `createCoalescedRefresh` (`src/stats/coalescedRefresh.ts`), 250 ms after the first request of a burst.
 - WebUI Keyboard Shortcuts binds Left and Right to the previous and next item.
 - The panel's resize handle (`PanelHandle` in `src/ui/Panel.tsx`) takes the arrow keys, Home, and End and gives `aria-valuetext`, and the Settings tab's sliders are named by their label alone, with the value as shown as their value text.

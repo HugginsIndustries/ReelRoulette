@@ -19,12 +19,11 @@ Instructions:
 
 Commit Message:
 
-M12k2: Store each item's rating in a new catalog schema step, send it on item reads, and count rated items in library stats
+M12k2: Add the rating route and its itemRatingChanged event, the rated count in library stats, and the always-sent item fields the API spec didn't name
 
-- The catalog moves to schema version 7, whose upgrade step adds a nullable `rating` column to `items`, a whole number of half stars from 1 to 10 with no value for none. A new catalog has it too, and every older catalog from version 2 upgrades to it.
-- The shipped 2→3 step creates its own frozen copy of the sort indexes, so a later change to a new catalog's indexes can't change it.
-- The catalog session sets, changes, and clears a rating, refuses a value outside 1 to 10 half stars, and reports only a real change. The operations service sets it under its lock and returns the item before and after, through one before-and-after read that favorite and blacklist now share.
-- `POST /api/library/item` and `POST /api/library/query` send a rated item's `rating` in stars and leave it out for an unrated one. The browse page and an item's read share one column list.
-- The library stats read counts the rated items in its one pass, ready for the stats response.
-- Tests cover setting and refusing a rating, both reads, the stats count, and the operations' before and after, and the upgrade tests now also run from version 6. Each guarded behavior, broken on its own, failed its tests.
-- Item Ratings' Server slice is complete. CONTEXT.md, the domain inventory, and the dev setup guide say schema version 7, and CONTEXT.md says a rated library item carries its `rating`.
+- `POST /api/rating` sets an item's rating, in stars, a multiple of 0.5 from 0.5 to 5, or clears it with null, finding the item by catalog id. It answers 400 for an empty id or any other rating, 404 for an unknown id, and otherwise the item's id, its rating, and a revision.
+- It publishes `itemRatingChanged`, with the item's id and path, its rating and previous rating, and the request's trimmed `clientId`, only when the rating changed. The rating the item already has answers with the server's current revision.
+- The library stats response carries `rated`, the items with a rating.
+- OpenAPI names `rating`, `hasAudio`, and the fields the server always sends in `LibraryProjectionItem`, defines the route, its request and response, and the event, and names `LibraryStateResponse` as the favorite and blacklist routes' 200 response. The WebUI's generated types follow.
+- Tests cover setting, changing, and clearing a rating through the route, its event and response against their schemas, the 400 and 404 answers, the request body, the rated count, the item fields the spec names, and the favorite and blacklist responses against `LibraryStateResponse`. Each guarded behavior, broken on its own, failed its tests.
+- `docs/api.md`, CONTEXT.md, and the domain inventory describe the route, the event, and the rated count.

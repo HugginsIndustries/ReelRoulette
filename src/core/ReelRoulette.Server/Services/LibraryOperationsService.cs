@@ -216,6 +216,7 @@ public sealed class LibraryOperationsService
                     TotalMedia = stats.Global.TotalMedia,
                     Favorites = stats.Global.Favorites,
                     Blacklisted = stats.Global.Blacklisted,
+                    Rated = stats.Global.Rated,
                     UniquePlayedMedia = stats.Global.UniquePlayedMedia,
                     NeverPlayedMedia = stats.Global.NeverPlayedMedia,
                     TotalPlays = stats.Global.TotalPlays,

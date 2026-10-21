@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Net.Http.Headers;
+using ReelRoulette.Core.Library;
 using ReelRoulette.Server.Auth;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Services;
@@ -376,6 +377,8 @@ public static class ServerHostComposition
         app.MapPost("/api/favorite", SetFavorite);
 
         app.MapPost("/api/blacklist", SetBlacklist);
+
+        app.MapPost("/api/rating", SetRating);
 
         app.MapPost("/api/record-playback", RecordPlayback);
 
@@ -863,6 +866,47 @@ public static class ServerHostComposition
 
         var persisted = operations.SetBlacklist(request.ItemId, request.IsBlacklisted, out var previous);
         return PublishItemState(state, persisted, previous, request.ClientId);
+    }
+
+    /// <summary>
+    /// Sets an item's rating, in stars, or clears it with null, and publishes <c>itemRatingChanged</c> to every client,
+    /// naming the one that made it, only when the rating changed.
+    /// </summary>
+    internal static IResult SetRating(RatingRequest request, ServerStateService state, LibraryOperationsService operations)
+    {
+        if (string.IsNullOrWhiteSpace(request.ItemId))
+        {
+            return Results.BadRequest(new { error = "itemId is required" });
+        }
+
+        if (!ItemRating.TryFromStars(request.Rating, out var halfStars))
+        {
+            return Results.BadRequest(new { error = "rating must be a multiple of 0.5 from 0.5 to 5, or null" });
+        }
+
+        var after = operations.SetRating(request.ItemId, halfStars, out var before);
+        if (after == null || before == null)
+        {
+            return Results.NotFound(new { error = "item not found in library" });
+        }
+
+        var rating = Stars(after.RatingHalfStars);
+        var revision = state.GetCurrentRevision();
+        if (after.RatingHalfStars != before.RatingHalfStars)
+        {
+            revision = state.PublishExternal("itemRatingChanged", new ItemRatingChangedPayload
+            {
+                ItemId = after.Id,
+                Path = after.FullPath,
+                Rating = rating,
+                PreviousRating = Stars(before.RatingHalfStars),
+                ClientId = NormalizeOptionalIdentity(request.ClientId)
+            }).Revision;
+        }
+
+        return Results.Ok(new ItemRatingResponse { ItemId = after.Id, Rating = rating, Revision = revision });
+
+        static double? Stars(int? halfStars) => halfStars is int value ? ItemRating.ToStars(value) : null;
     }
 
     /// <summary>

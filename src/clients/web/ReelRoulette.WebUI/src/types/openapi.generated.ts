@@ -697,6 +697,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rating": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set or clear an item's rating
+         * @description Sets the item's rating, in stars, or clears it with null. It publishes `itemRatingChanged` only when the rating
+         *     changed. A rating is independent of favorite and blacklist, so neither changes.
+         */
+        post: operations["postRating"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/record-playback": {
         parameters: {
             query?: never;
@@ -1431,9 +1452,27 @@ export interface components {
         LibraryProjectionItem: {
             id?: string;
             sourceId?: string;
+            /** @description The file's full path on the server. */
+            fullPath?: string;
             fileName?: string;
             relativePath?: string;
             mediaType?: number | string;
+            isFavorite?: boolean;
+            isBlacklisted?: boolean;
+            /** Format: int32 */
+            playCount?: number;
+            fingerprintAlgorithm?: string;
+            /** Format: int32 */
+            fingerprintVersion?: number;
+            /** @description The item's tag names. */
+            tags?: string[];
+            /**
+             * Format: double
+             * @description The rating in stars, from 0.5 to 5 in half-star steps, present only for a rated item.
+             */
+            rating?: number;
+            /** @description Present once the loudness scan has looked at a video. False for a file without an audio track or one whose track the scan measured as digital silence, and true otherwise. */
+            hasAudio?: boolean;
             /** @description Duration as `hh:mm:ss`, in whole seconds, present when the catalog has it. */
             duration?: string;
             /**
@@ -1534,6 +1573,17 @@ export interface components {
             /** @description The client making the change, which `itemStateChanged` names. */
             clientId?: string | null;
         };
+        RatingRequest: {
+            /** @description Catalog item id. */
+            itemId: string;
+            /**
+             * Format: double
+             * @description The rating in stars, a multiple of 0.5 from 0.5 to 5, or null to clear it. A request without it clears the rating too.
+             */
+            rating: number | null;
+            /** @description The client making the change, which `itemRatingChanged` names. */
+            clientId?: string | null;
+        };
         RecordPlaybackRequest: {
             clientId?: string | null;
             sessionId?: string | null;
@@ -1577,7 +1627,7 @@ export interface components {
             eventType: string;
             /** Format: date-time */
             timestamp: string;
-            payload: components["schemas"]["ItemStateChangedPayload"] | components["schemas"]["PlaybackRecordedPayload"] | components["schemas"]["ResyncRequiredPayload"] | components["schemas"]["ItemTagsChangedPayload"] | components["schemas"]["TagCatalogChangedPayload"] | components["schemas"]["PresetCatalogChangedPayload"] | components["schemas"]["SourceStateChangedPayload"] | components["schemas"]["RefreshStatusChangedPayload"] | components["schemas"]["StreamOpenedPayload"];
+            payload: components["schemas"]["ItemStateChangedPayload"] | components["schemas"]["ItemRatingChangedPayload"] | components["schemas"]["PlaybackRecordedPayload"] | components["schemas"]["ResyncRequiredPayload"] | components["schemas"]["ItemTagsChangedPayload"] | components["schemas"]["TagCatalogChangedPayload"] | components["schemas"]["PresetCatalogChangedPayload"] | components["schemas"]["SourceStateChangedPayload"] | components["schemas"]["RefreshStatusChangedPayload"] | components["schemas"]["StreamOpenedPayload"];
         };
         ItemStateChangedPayload: {
             itemId: string;
@@ -1589,6 +1639,23 @@ export interface components {
             /** @description Blacklist before this change. */
             previousIsBlacklisted: boolean;
             /** @description The client that made the change, from its favorite or blacklist request, or null when the request named none. */
+            clientId?: string | null;
+        };
+        /** @description Published by `POST /api/rating` only when the rating changed. */
+        ItemRatingChangedPayload: {
+            itemId: string;
+            path: string;
+            /**
+             * Format: double
+             * @description The rating in stars, from 0.5 to 5 in half-star steps, or null for none.
+             */
+            rating: number | null;
+            /**
+             * Format: double
+             * @description The rating before this change, in stars, or null for none.
+             */
+            previousRating: number | null;
+            /** @description The client that made the change, from its rating request, or null when the request named none. */
             clientId?: string | null;
         };
         PlaybackRecordedPayload: {
@@ -1631,6 +1698,19 @@ export interface components {
             isFavorite: boolean;
             isBlacklisted: boolean;
             /** Format: int64 */
+            revision: number;
+        };
+        ItemRatingResponse: {
+            itemId: string;
+            /**
+             * Format: double
+             * @description The item's rating in stars, or null for none.
+             */
+            rating: number | null;
+            /**
+             * Format: int64
+             * @description The revision of the `itemRatingChanged` event the change published, or the server's current revision when the rating was already this one.
+             */
             revision: number;
         };
         CreatePresetRequest: {
@@ -1775,6 +1855,11 @@ export interface components {
             favorites: number;
             /** Format: int32 */
             blacklisted: number;
+            /**
+             * Format: int32
+             * @description Items with a rating.
+             */
+            rated: number;
             /** Format: int32 */
             uniquePlayedMedia: number;
             /** Format: int32 */
@@ -3620,12 +3705,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Favorite updated */
+            /** @description Favorite updated, with the item's favorite and blacklist and the revision of the `itemStateChanged` event it published */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LibraryStateResponse"];
+                };
             };
             /** @description Missing item id */
             400: {
@@ -3670,14 +3757,68 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Blacklist updated */
+            /** @description Blacklist updated, with the item's favorite and blacklist and the revision of the `itemStateChanged` event it published */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LibraryStateResponse"];
+                };
             };
             /** @description Missing item id */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized when auth is required and request is not paired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No catalog item has this id */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            503: components["responses"]["LibraryUnavailable"];
+        };
+    };
+    postRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RatingRequest"];
+            };
+        };
+        responses: {
+            /** @description Rating set, or already the item's rating */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemRatingResponse"];
+                };
+            };
+            /** @description Missing item id, or a rating that isn't a multiple of 0.5 from 0.5 to 5 */
             400: {
                 headers: {
                     [name: string]: unknown;

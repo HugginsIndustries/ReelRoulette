@@ -127,6 +127,65 @@ public sealed class ItemIdContractTests : IDisposable
     }
 
     [Fact]
+    public void Rating_SetsChangesAndClearsIt_AndPublishesEachChangeWithThePreviousRatingAndTheClient()
+    {
+        var path = Path.Combine(_tempDir, "clip.mp4");
+        CatalogSeed.Write(_tempDir, items: [new SeedItem("item-1", path) { IsFavorite = true }]);
+        var host = CatalogOpen.Host(_tempDir);
+        var operations = CreateOperations(host);
+        var state = new ServerStateService();
+
+        var set = RatingAnswer(ServerHostComposition.SetRating(new RatingRequest { ItemId = "item-1", Rating = 3.5, ClientId = " client-a " }, state, operations));
+        var changed = RatingAnswer(ServerHostComposition.SetRating(new RatingRequest { ItemId = "item-1", Rating = 5, ClientId = "client-b" }, state, operations));
+        // The rating the item already has publishes nothing, and answers with the current revision.
+        var same = RatingAnswer(ServerHostComposition.SetRating(new RatingRequest { ItemId = "item-1", Rating = 5 }, state, operations));
+        // A request that names only a blank client gets an event that names none.
+        var cleared = RatingAnswer(ServerHostComposition.SetRating(new RatingRequest { ItemId = "item-1", Rating = null, ClientId = " " }, state, operations));
+
+        var events = state.GetReplayAfter(0).Events;
+        Assert.Equal(["itemRatingChanged", "itemRatingChanged", "itemRatingChanged"], events.Select(envelope => envelope.EventType));
+        var changes = events.Select(envelope => Assert.IsType<ItemRatingChangedPayload>(envelope.Payload)).ToList();
+        Assert.All(changes, change => Assert.Equal(("item-1", path), (change.ItemId, change.Path)));
+        Assert.Equal([(3.5, null), (5.0, 3.5), (null, 5.0)], changes.Select(change => (change.Rating, change.PreviousRating)));
+        Assert.Equal(["client-a", "client-b", null], changes.Select(change => change.ClientId));
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(changes[0]), "ItemRatingChangedPayload");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(changes[2]), "ItemRatingChangedPayload");
+
+        Assert.Equal(("item-1", 3.5, events[0].Revision), (set.ItemId, set.Rating, set.Revision));
+        Assert.Equal((5.0, events[1].Revision), (changed.Rating, changed.Revision));
+        Assert.Equal((5.0, events[1].Revision), (same.Rating, same.Revision));
+        Assert.Equal(((double?)null, events[2].Revision), (cleared.Rating, cleared.Revision));
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(set), "ItemRatingResponse");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(cleared), "ItemRatingResponse");
+        var item = host.Session.ReadItemState("item-1")!;
+        Assert.Equal(((int?)null, true), (item.RatingHalfStars, item.IsFavorite));
+    }
+
+    [Fact]
+    public void Rating_RefusesAnEmptyIdOrARatingOffTheHalfStarSteps_AndAnItemNotInTheLibrary()
+    {
+        var path = Path.Combine(_tempDir, "clip.mp4");
+        CatalogSeed.Write(_tempDir, items: [new SeedItem("item-1", path) { RatingHalfStars = 6 }]);
+        var host = CatalogOpen.Host(_tempDir);
+        var operations = CreateOperations(host);
+        var state = new ServerStateService();
+        int Status(string itemId, double? rating) => Assert.IsAssignableFrom<IStatusCodeHttpResult>(
+            ServerHostComposition.SetRating(new RatingRequest { ItemId = itemId, Rating = rating }, state, operations)).StatusCode!.Value;
+
+        Assert.Equal(StatusCodes.Status400BadRequest, Status("", 3));
+        Assert.Equal(StatusCodes.Status400BadRequest, Status(" ", 3));
+        foreach (var rating in new[] { 0, 0.25, 3.3, 5.5, -1 })
+        {
+            Assert.Equal(StatusCodes.Status400BadRequest, Status("item-1", rating));
+        }
+
+        Assert.Equal(StatusCodes.Status404NotFound, Status("missing", 3));
+        Assert.Equal(StatusCodes.Status404NotFound, Status(path, 3));
+        Assert.Empty(state.GetReplayAfter(0).Events);
+        Assert.Equal(6, host.Session.ReadItemState("item-1")!.RatingHalfStars);
+    }
+
+    [Fact]
     public void FavoriteBlacklistRecordPlaybackAndPlay_FindNoItemByItsFullPath()
     {
         var path = Path.Combine(_tempDir, "clip.mp4");
@@ -154,7 +213,7 @@ public sealed class ItemIdContractTests : IDisposable
     }
 
     [Fact]
-    public void FavoriteBlacklistAndRecordPlayback_ReadTheItemIdField_AndClearStatsReadsItemIds()
+    public void ItemRoutes_ReadTheItemIdField_AnswerAsTheSpecNames_AndClearStatsReadsItemIds()
     {
         CatalogSeed.Write(
             _tempDir,
@@ -176,15 +235,33 @@ public sealed class ItemIdContractTests : IDisposable
         OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(record), "RecordPlaybackRequest");
         OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(clear), "ClearPlaybackStatsRequest");
 
-        Assert.IsType<LibraryStateResponse>(Value(ServerHostComposition.SetFavorite(favorite, state, operations)));
-        Assert.IsType<LibraryStateResponse>(Value(ServerHostComposition.SetBlacklist(blacklist, state, operations)));
+        var rating = Request<RatingRequest>("""{"itemId":"item-1","rating":3.5,"clientId":"client-a"}""");
+        var cleared = Request<RatingRequest>("""{"itemId":"item-2","rating":null}""");
+        OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(rating), "RatingRequest");
+        Assert.Equal((3.5, "client-a"), (rating.Rating, rating.ClientId));
+        Assert.Null(cleared.Rating);
+        // A request without the rating reads as null, so it clears the rating too.
+        Assert.Null(Request<RatingRequest>("""{"itemId":"item-2"}""").Rating);
+
+        // The favorite and blacklist routes answer with the schema the spec names as their 200 response.
+        foreach (var answer in new[]
+                 {
+                     ServerHostComposition.SetFavorite(favorite, state, operations),
+                     ServerHostComposition.SetBlacklist(blacklist, state, operations)
+                 })
+        {
+            OpenApiSpec.AssertMatchesSchema(OpenApiSpec.SerializeAsServer(Assert.IsType<LibraryStateResponse>(Value(answer))), "LibraryStateResponse");
+        }
+
         Assert.IsType<RecordPlaybackResponse>(Value(ServerHostComposition.RecordPlayback(record, state, operations)));
         Assert.Equal(1, operations.ClearPlaybackStats(clear).ClearedCount);
+        Assert.IsType<ItemRatingResponse>(Value(ServerHostComposition.SetRating(rating, state, operations)));
+        Assert.IsType<ItemRatingResponse>(Value(ServerHostComposition.SetRating(cleared, state, operations)));
 
         var first = host.Session.ReadItemState("item-1")!;
         var second = host.Session.ReadItemState("item-2")!;
-        Assert.Equal((true, false, 4), (first.IsFavorite, first.IsBlacklisted, first.PlayCount));
-        Assert.Equal((false, true, 0), (second.IsFavorite, second.IsBlacklisted, second.PlayCount));
+        Assert.Equal((true, false, 4, 7), (first.IsFavorite, first.IsBlacklisted, first.PlayCount, first.RatingHalfStars));
+        Assert.Equal((false, true, 0, (int?)null), (second.IsFavorite, second.IsBlacklisted, second.PlayCount, second.RatingHalfStars));
 
         // The old field names no longer bind, so a request that sends them names no item.
         var oldFavorite = Request<FavoriteRequest>("""{"path":"item-1","isFavorite":false}""");
@@ -415,6 +492,24 @@ public sealed class ItemIdContractTests : IDisposable
         }
     }
 
+    [Fact]
+    public void LibraryProjectionItem_NamesEveryFieldTheServerAlwaysSends_AndTheRatingAndAudio()
+    {
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items: [new SeedItem("plain", Path.Combine(_tempDir, "plain.mp4")) { SourceId = "s1" }]);
+        var operations = CreateOperations(CatalogOpen.Host(_tempDir));
+        var named = OpenApiSpec.ReadSchemaProperties("LibraryProjectionItem");
+
+        // A single read of an item without optional data sends only the fields the server always sends.
+        var sent = operations.ReadLibraryItem("plain")!.AsObject().Select(property => property.Key).ToList();
+        Assert.Contains("fullPath", sent);
+        Assert.All(sent, field => Assert.Contains(field, named));
+        Assert.Contains("rating", named);
+        Assert.Contains("hasAudio", named);
+    }
+
     public void Dispose()
     {
         LibraryCatalogBackup.WaitForPending();
@@ -427,6 +522,11 @@ public sealed class ItemIdContractTests : IDisposable
     private static object? Value(IResult result)
     {
         return Assert.IsAssignableFrom<IValueHttpResult>(result).Value;
+    }
+
+    private static ItemRatingResponse RatingAnswer(IResult result)
+    {
+        return Assert.IsType<ItemRatingResponse>(Value(result));
     }
 
     private static T Request<T>(string json)

@@ -44,6 +44,7 @@ public sealed class LibraryGlobalStatsResponse
     public int TotalMedia { get; set; }
     public int Favorites { get; set; }
     public int Blacklisted { get; set; }
+    public int Rated { get; set; }
     public int UniquePlayedMedia { get; set; }
     public int NeverPlayedMedia { get; set; }
     public int TotalPlays { get; set; }
@@ -115,6 +116,23 @@ public sealed class BlacklistRequest
     public string ItemId { get; set; } = string.Empty;
     public bool IsBlacklisted { get; set; }
     public string? ClientId { get; set; }
+}
+
+public sealed class RatingRequest
+{
+    public string ItemId { get; set; } = string.Empty;
+    /// <summary>The rating in stars, a multiple of 0.5 from 0.5 to 5, or null to clear it.</summary>
+    public double? Rating { get; set; }
+    public string? ClientId { get; set; }
+}
+
+public sealed class ItemRatingResponse
+{
+    public string ItemId { get; set; } = string.Empty;
+    /// <summary>The rating in stars, or null for none.</summary>
+    public double? Rating { get; set; }
+    /// <summary>The revision of the event the change published, or the current revision when nothing changed.</summary>
+    public long Revision { get; set; }
 }
 
 public sealed class RecordPlaybackRequest
@@ -474,6 +492,18 @@ public sealed class ItemStateChangedPayload
     public bool IsBlacklisted { get; set; }
     public bool PreviousIsFavorite { get; set; }
     public bool PreviousIsBlacklisted { get; set; }
+    /// <summary>The client that made the change, when its request named one.</summary>
+    public string? ClientId { get; set; }
+}
+
+public sealed class ItemRatingChangedPayload
+{
+    public string ItemId { get; set; } = string.Empty;
+    public string Path { get; set; } = string.Empty;
+    /// <summary>The rating in stars, or null for none.</summary>
+    public double? Rating { get; set; }
+    /// <summary>The rating before this change, in stars, or null for none.</summary>
+    public double? PreviousRating { get; set; }
     /// <summary>The client that made the change, when its request named one.</summary>
     public string? ClientId { get; set; }
 }

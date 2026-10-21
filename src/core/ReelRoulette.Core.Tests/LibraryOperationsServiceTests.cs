@@ -687,8 +687,10 @@ public sealed class LibraryOperationsServiceTests
                         SourceId = "src-a",
                         HasAudio = true,
                         Duration = TimeSpan.FromSeconds(120),
-                        PlayCount = 1
-                    }
+                        PlayCount = 1,
+                        RatingHalfStars = 9
+                    },
+                    new SeedItem("video-2", @"C:\media\a\v2.mp4") { SourceId = "src-a" }
                 ]);
 
             var host = LibraryCatalogHost.Open(appDataRoot);
@@ -697,6 +699,7 @@ public sealed class LibraryOperationsServiceTests
 
             OpenApiSpec.AssertMatchesSchema(json, "LibraryStatsResponse");
             OpenApiSpec.AssertMatchesSchema(json.GetProperty("global"), "LibraryGlobalStatsResponse");
+            Assert.Equal(1, json.GetProperty("global").GetProperty("rated").GetInt32());
             var sources = json.GetProperty("sources").EnumerateArray().ToList();
             Assert.Equal(2, sources.Count);
             foreach (var source in sources)

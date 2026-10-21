@@ -1294,7 +1294,11 @@ paths:
               $ref: "#/components/schemas/FavoriteRequest"
       responses:
         "200":
-          description: Favorite updated
+          description: Favorite updated, with the item's favorite and blacklist and the revision of the `itemStateChanged` event it published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryStateResponse"
         "400":
           description: Missing item id
           content:
@@ -1328,9 +1332,54 @@ paths:
               $ref: "#/components/schemas/BlacklistRequest"
       responses:
         "200":
-          description: Blacklist updated
+          description: Blacklist updated, with the item's favorite and blacklist and the revision of the `itemStateChanged` event it published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryStateResponse"
         "400":
           description: Missing item id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized when auth is required and request is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No catalog item has this id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/LibraryUnavailable"
+
+  /api/rating:
+    post:
+      summary: Set or clear an item's rating
+      description: |
+        Sets the item's rating, in stars, or clears it with null. It publishes `itemRatingChanged` only when the rating
+        changed. A rating is independent of favorite and blacklist, so neither changes.
+      operationId: postRating
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RatingRequest"
+      responses:
+        "200":
+          description: Rating set, or already the item's rating
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemRatingResponse"
+        "400":
+          description: Missing item id, or a rating that isn't a multiple of 0.5 from 0.5 to 5
           content:
             application/json:
               schema:
@@ -2701,6 +2750,9 @@ components:
           type: string
         sourceId:
           type: string
+        fullPath:
+          type: string
+          description: The file's full path on the server.
         fileName:
           type: string
         relativePath:
@@ -2709,6 +2761,30 @@ components:
           oneOf:
             - type: integer
             - type: string
+        isFavorite:
+          type: boolean
+        isBlacklisted:
+          type: boolean
+        playCount:
+          type: integer
+          format: int32
+        fingerprintAlgorithm:
+          type: string
+        fingerprintVersion:
+          type: integer
+          format: int32
+        tags:
+          type: array
+          description: The item's tag names.
+          items:
+            type: string
+        rating:
+          type: number
+          format: double
+          description: The rating in stars, from 0.5 to 5 in half-star steps, present only for a rated item.
+        hasAudio:
+          type: boolean
+          description: Present once the loudness scan has looked at a video. False for a file without an audio track or one whose track the scan measured as digital silence, and true otherwise.
         duration:
           type: string
           description: Duration as `hh:mm:ss`, in whole seconds, present when the catalog has it.
@@ -2863,6 +2939,25 @@ components:
           nullable: true
           description: The client making the change, which `itemStateChanged` names.
 
+    RatingRequest:
+      type: object
+      required:
+        - itemId
+        - rating
+      properties:
+        itemId:
+          type: string
+          description: Catalog item id.
+        rating:
+          type: number
+          format: double
+          nullable: true
+          description: The rating in stars, a multiple of 0.5 from 0.5 to 5, or null to clear it. A request without it clears the rating too.
+        clientId:
+          type: string
+          nullable: true
+          description: The client making the change, which `itemRatingChanged` names.
+
     RecordPlaybackRequest:
       type: object
       required:
@@ -2947,6 +3042,7 @@ components:
         payload:
           oneOf:
             - $ref: "#/components/schemas/ItemStateChangedPayload"
+            - $ref: "#/components/schemas/ItemRatingChangedPayload"
             - $ref: "#/components/schemas/PlaybackRecordedPayload"
             - $ref: "#/components/schemas/ResyncRequiredPayload"
             - $ref: "#/components/schemas/ItemTagsChangedPayload"
@@ -2984,6 +3080,34 @@ components:
           type: string
           nullable: true
           description: The client that made the change, from its favorite or blacklist request, or null when the request named none.
+
+    ItemRatingChangedPayload:
+      type: object
+      description: Published by `POST /api/rating` only when the rating changed.
+      required:
+        - itemId
+        - path
+        - rating
+        - previousRating
+      properties:
+        itemId:
+          type: string
+        path:
+          type: string
+        rating:
+          type: number
+          format: double
+          nullable: true
+          description: The rating in stars, from 0.5 to 5 in half-star steps, or null for none.
+        previousRating:
+          type: number
+          format: double
+          nullable: true
+          description: The rating before this change, in stars, or null for none.
+        clientId:
+          type: string
+          nullable: true
+          description: The client that made the change, from its rating request, or null when the request named none.
 
     PlaybackRecordedPayload:
       type: object
@@ -3062,6 +3186,25 @@ components:
         revision:
           type: integer
           format: int64
+
+    ItemRatingResponse:
+      type: object
+      required:
+        - itemId
+        - rating
+        - revision
+      properties:
+        itemId:
+          type: string
+        rating:
+          type: number
+          format: double
+          nullable: true
+          description: The item's rating in stars, or null for none.
+        revision:
+          type: integer
+          format: int64
+          description: The revision of the `itemRatingChanged` event the change published, or the server's current revision when the rating was already this one.
 
     CreatePresetRequest:
       type: object
@@ -3355,6 +3498,7 @@ components:
         - totalMedia
         - favorites
         - blacklisted
+        - rated
         - uniquePlayedMedia
         - neverPlayedMedia
         - totalPlays
@@ -3377,6 +3521,10 @@ components:
         blacklisted:
           type: integer
           format: int32
+        rated:
+          type: integer
+          format: int32
+          description: Items with a rating.
         uniquePlayedMedia:
           type: integer
           format: int32
