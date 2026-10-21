@@ -5,15 +5,12 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
   <div class="filter-dialog-header">
     <h2 id="filter-dialog-heading">
       "Preset: Rich"
-    <button aria-label="Refresh" class="icon-btn" id="filter-dialog-refresh-btn" title="Refresh" type="button">
-      <span class="material-symbol-icon">
-        "refresh"
   <div aria-label="Filter sections" class="filter-dialog-tabstrip" role="tablist">
-    <button aria-selected="true" class="filter-tab is-active" data-filter-tab="general" role="tab" type="button">
+    <button aria-selected="true" class="tab text-tab filter-tab" data-filter-tab="general" role="tab" type="button">
       "General"
-    <button aria-selected="false" class="filter-tab" data-filter-tab="tags" role="tab" type="button">
+    <button aria-selected="false" class="tab text-tab filter-tab" data-filter-tab="tags" role="tab" type="button">
       "Tags"
-    <button aria-selected="false" class="filter-tab" data-filter-tab="presets" role="tab" type="button">
+    <button aria-selected="false" class="tab text-tab filter-tab" data-filter-tab="presets" role="tab" type="button">
       "Presets"
   <div class="filter-dialog-body themed-scrollbar">
     <div class="filter-panel" id="filter-panel-general" style="display: block">
@@ -237,7 +234,7 @@ exports[`opening and closing > keeps its markup on each tab > general 1`] = `
       <div class="filter-section">
         <h3>
           "Choose Preset"
-        <div class="filter-row">
+        <div class="filter-row choose-preset-row">
           <select aria-label="Choose preset" class="ctl grow" id="filter-dialog-preset-select">
             <option selected="false" value="">
               "None"
@@ -311,15 +308,12 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
   <div class="filter-dialog-header">
     <h2 id="filter-dialog-heading">
       "Preset: Rich"
-    <button aria-label="Refresh" class="icon-btn" id="filter-dialog-refresh-btn" title="Refresh" type="button">
-      <span class="material-symbol-icon">
-        "refresh"
   <div aria-label="Filter sections" class="filter-dialog-tabstrip" role="tablist">
-    <button aria-selected="false" class="filter-tab" data-filter-tab="general" role="tab" type="button">
+    <button aria-selected="false" class="tab text-tab filter-tab" data-filter-tab="general" role="tab" type="button">
       "General"
-    <button aria-selected="false" class="filter-tab" data-filter-tab="tags" role="tab" type="button">
+    <button aria-selected="false" class="tab text-tab filter-tab" data-filter-tab="tags" role="tab" type="button">
       "Tags"
-    <button aria-selected="true" class="filter-tab is-active" data-filter-tab="presets" role="tab" type="button">
+    <button aria-selected="true" class="tab text-tab filter-tab" data-filter-tab="presets" role="tab" type="button">
       "Presets"
   <div class="filter-dialog-body themed-scrollbar">
     <div class="filter-panel" id="filter-panel-general" style="display: none">
@@ -543,7 +537,7 @@ exports[`opening and closing > keeps its markup on each tab > presets 1`] = `
       <div class="filter-section">
         <h3>
           "Choose Preset"
-        <div class="filter-row">
+        <div class="filter-row choose-preset-row">
           <select aria-label="Choose preset" class="ctl grow" id="filter-dialog-preset-select">
             <option selected="false" value="">
               "None"
@@ -617,15 +611,12 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
   <div class="filter-dialog-header">
     <h2 id="filter-dialog-heading">
       "Preset: Rich"
-    <button aria-label="Refresh" class="icon-btn" id="filter-dialog-refresh-btn" title="Refresh" type="button">
-      <span class="material-symbol-icon">
-        "refresh"
   <div aria-label="Filter sections" class="filter-dialog-tabstrip" role="tablist">
-    <button aria-selected="false" class="filter-tab" data-filter-tab="general" role="tab" type="button">
+    <button aria-selected="false" class="tab text-tab filter-tab" data-filter-tab="general" role="tab" type="button">
       "General"
-    <button aria-selected="true" class="filter-tab is-active" data-filter-tab="tags" role="tab" type="button">
+    <button aria-selected="true" class="tab text-tab filter-tab" data-filter-tab="tags" role="tab" type="button">
       "Tags"
-    <button aria-selected="false" class="filter-tab" data-filter-tab="presets" role="tab" type="button">
+    <button aria-selected="false" class="tab text-tab filter-tab" data-filter-tab="presets" role="tab" type="button">
       "Presets"
   <div class="filter-dialog-body themed-scrollbar">
     <div class="filter-panel" id="filter-panel-general" style="display: none">
@@ -849,7 +840,7 @@ exports[`opening and closing > keeps its markup on each tab > tags 1`] = `
       <div class="filter-section">
         <h3>
           "Choose Preset"
-        <div class="filter-row">
+        <div class="filter-row choose-preset-row">
           <select aria-label="Choose preset" class="ctl grow" id="filter-dialog-preset-select">
             <option selected="false" value="">
               "None"

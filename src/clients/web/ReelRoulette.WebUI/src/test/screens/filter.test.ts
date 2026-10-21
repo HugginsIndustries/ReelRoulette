@@ -2,6 +2,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { statusLogLine } from "../../logging/relayLogLines";
+import { REFRESH_GATHER_MS } from "../../stats/coalescedRefresh";
 import { createFakePresets, type FakePresets } from "../fakePresetServer";
 import {
   closeNotices,
@@ -569,6 +570,66 @@ describe("opening and closing", () => {
     expect(applyDot().parentElement).toBe(applyButton());
   });
 
+  it("has no Refresh: its heading row holds only the heading", async () => {
+    await mountFilter();
+    await openDialog();
+    expect(within(dialog()).queryByRole("button", { name: "Refresh" })).toBeNull();
+    expect(byId("filter-dialog-refresh-btn")).toBeNull();
+    expect(Array.from(dialog().querySelector(".filter-dialog-header")!.children).map((child) => child.id)).toEqual(["filter-dialog-heading"]);
+  });
+
+  it("its sections are text tabs in the shared tab look, marked active by aria-selected in orange, with no border", async () => {
+    await mountFilter();
+    await openDialog();
+    useStylesheet();
+    const tabs = within(dialog()).getAllByRole("tab");
+    expect(tabs.map((tab) => tab.className)).toEqual(["tab text-tab filter-tab", "tab text-tab filter-tab", "tab text-tab filter-tab"]);
+    expect(tabs.map((tab) => tab.getAttribute("aria-selected"))).toEqual(["true", "false", "false"]);
+
+    const [general, tags] = tabs.map((tab) => currentStyle(tab));
+    // The heading's size and weight, the 44 px touch height, and no border; the page's text color until active, then orange.
+    expect([general!.fontSize, general!.fontWeight, general!.minHeight, general!.paddingLeft, general!.borderTopWidth]).toEqual(["18.4px", "700", "44px", "12px", "0px"]);
+    expect(tags!.color).toBe("#e0e0e0");
+    expect(general!.color).toBe("#ef7f22");
+    expect(getComputedStyle(dialog().querySelector(".filter-dialog-tabstrip")!).gap).toBe("4px");
+  });
+
+  it("keeps Choose Preset's row on one line, the dropdown taking the room Load and Update leave, and spaces its footer as the Tags tab's", async () => {
+    await mountFilter();
+    await openDialog();
+    useStylesheet();
+    const select = dialog().querySelector("#filter-dialog-preset-select") as HTMLSelectElement;
+    expect(getComputedStyle(select.parentElement!).flexWrap).toBe("nowrap");
+    const chosen = getComputedStyle(select);
+    expect([chosen.flexGrow, chosen.flexShrink, chosen.flexBasis, chosen.minWidth]).toEqual(["1", "1", "0px", "0"]);
+    // The Tags tab's footer row has the same gap, so Discard changes and Apply sit where its Discard changes and Save do.
+    expect(getComputedStyle(dialog().querySelector(".filter-dialog-footer")!).gap).toBe("8px");
+    // Apply's label is a flex box, so its icon sits where the Tags tab's Save icon does, with no line of text lifting it.
+    expect(getComputedStyle(dialog().querySelector("#filter-apply-btn > .btn-label")!).display).toBe("inline-flex");
+  });
+
+  it("its section tabs are reached with the keyboard and Enter shows each, keeping focus on it", async () => {
+    await mountFilter();
+    await openDialog();
+    const tabs = within(dialog()).getAllByRole("tab") as HTMLButtonElement[];
+    expect(tabs.map((tab) => [tab.tagName, tab.tabIndex])).toEqual([
+      ["BUTTON", 0],
+      ["BUTTON", 0],
+      ["BUTTON", 0]
+    ]);
+
+    for (const [index, name, panel] of [
+      [2, "Presets", "presets"],
+      [1, "Tags", "tags"],
+      [0, "General", "general"]
+    ] as const) {
+      await pressWithKeyboard(tabs[index]!);
+      expect(selectedTab()).toBe(name);
+      expect(byId(`filter-panel-${panel}`).style.display).not.toBe("none");
+      expect(document.activeElement).toBe(tabs[index]);
+    }
+  });
+
   it("enables Apply and Discard changes, with Apply orange and its dot, only while there are changes, after a change put back and after Clear all too", async () => {
     await mountFilter([RICH_PRESET]);
     await pickPreset("preset-rich");
@@ -727,19 +788,22 @@ describe("opening and closing", () => {
     expect(applyDot().hidden).toBe(true);
   });
 
-  it("shows but loads nothing while the server runs without a library, nor on Refresh, with no notice", async () => {
+  it("shows but loads nothing while the server runs without a library, nor on a server event, with no notice", async () => {
     const server = new FakeServer();
     server.on("GET", "/api/sources", () => json(SOURCES));
     server.on("POST", "/api/tag-editor/model", () => json(TAG_MODEL));
     server.on("GET", "/api/version", () =>
       json({ ...COMPATIBLE_VERSION, libraryState: "missing", libraryMessage: "The library file is missing." })
     );
-    mountPage({ server });
+    const page = mountPage({ server });
     await waitFor(() => expect(selectedPresetLabel()).toBe("Running without a library"));
 
     await chooseFilterTab();
     expect(isOpen()).toBe(true);
-    await click(dialogButton("Refresh"));
+    page.stream().emit("tagCatalogChanged", 40, { categories: [], tags: [] });
+    page.stream().emit("sourceStateChanged", 41, { sourceId: "source-1", isEnabled: false });
+    await new Promise((resolve) => setTimeout(resolve, REFRESH_GATHER_MS + 50));
+    await settle();
     expect(server.requests("GET", "/api/sources")).toHaveLength(0);
     expect(server.requests("POST", "/api/tag-editor/model")).toHaveLength(0);
     expect(server.requests("GET", "/api/presets")).toHaveLength(0);
@@ -747,10 +811,10 @@ describe("opening and closing", () => {
     expect(openNotices()).toEqual([]);
   });
 
-  it("says why when its sources or tags cannot load, and loads them when it shows again or on Refresh", async () => {
+  it("says why when its sources or tags cannot load as it shows, and loads them when it shows again, while a server event's load that fails says nothing", async () => {
     let tagModelStatus = 200;
     let sourcesStatus = 500;
-    const { server } = await mountFilter([], (server) => {
+    const { page, server } = await mountFilter([], (server) => {
       server.on("GET", "/api/sources", () => (sourcesStatus === 200 ? json(SOURCES) : status(sourcesStatus)));
       server.on("POST", "/api/tag-editor/model", () => (tagModelStatus === 200 ? json(TAG_MODEL) : status(tagModelStatus)));
     });
@@ -767,14 +831,17 @@ describe("opening and closing", () => {
     await expectNotice(server, "Filter load failed: HTTP 503");
     expect(dialog().querySelector("input")).toBeNull();
 
-    await click(dialogButton("Refresh"));
-    await expectNotice(server, "Filter refresh failed: HTTP 503");
-    expect(dialog().querySelector("input")).toBeNull();
-
     tagModelStatus = 200;
-    await click(dialogButton("Refresh"));
-    await waitFor(() => expect(relayed(server, "Filter data refreshed.")).toBe(true));
+    await click(panelTab("Library"));
+    await chooseFilterTab();
+    await waitFor(() => expect(dialog().querySelector("input")).not.toBeNull());
     expect(selectedTab()).toBe("General");
+    expect(box("Movies (C:\\media\\movies)").checked).toBe(true);
+
+    tagModelStatus = 503;
+    page.stream().emit("tagCatalogChanged", 40, { categories: [], tags: [] });
+    await waitFor(() => expect(server.logLines()).toContain("filter=event-load-failed status=503"));
+    expect(openNotices()).toEqual([]);
     expect(box("Movies (C:\\media\\movies)").checked).toBe(true);
   });
 
@@ -798,10 +865,11 @@ describe("opening and closing", () => {
 
     await chooseFilterTab();
     await waitFor(() => expect(pairingPrompt().style.display).toBe("flex"));
-    await click(dialogButton("Refresh"));
+    await click(panelTab("Library"));
+    await chooseFilterTab();
     expect(server.requests(method, path)).toHaveLength(2);
     expect(openNotices()).toEqual([]);
-    expect(server.logLines().some((line) => /^status=Filter (load|refresh) failed/.test(line))).toBe(false);
+    expect(server.logLines().some((line) => /^status=Filter load failed|^filter=event-load-failed/.test(line))).toBe(false);
     expect(dialog().querySelector("input")).toBeNull();
     await waitFor(() => expect(server.logLines()).toContain(unauthorizedLogLine(`${method} ${path}`)));
   });
@@ -1113,7 +1181,7 @@ describe("General tab", () => {
     expect(tooltipShown(min)).toBe(true);
   });
 
-  it("marks a flagged section's tab with the badge on its top-right corner, out of its flow, and nothing after its name", async () => {
+  it("marks a flagged section's tab with the badge at the top right of its name, without a disc, out of its flow, and nothing after its name", async () => {
     await mountFilter();
     await openDialog();
     useStylesheet();
@@ -1125,7 +1193,8 @@ describe("General tab", () => {
     const badge = tab.querySelector<HTMLElement>(".section-problem")!;
     const style = currentStyle(badge);
     expect(currentStyle(tab).position).toBe("relative");
-    expect([style.position, style.top, style.right, style.fontSize]).toEqual(["absolute", "-6px", "-6px", "18px"]);
+    expect([style.position, style.top, style.right, style.fontSize]).toEqual(["absolute", "2px", "-6px", "18px"]);
+    expect(style.backgroundImage).toBe("none");
     expect(style.fontFamily).toContain("Material Symbols Outlined");
     expect(badge.getAttribute("aria-hidden")).toBe("true");
     expect(selectedTab()).toBe("Tags");
@@ -2233,7 +2302,7 @@ describe("presets save answered with 401", () => {
   });
 });
 
-describe("preset dropdown, refresh, and clear all", () => {
+describe("preset dropdown, server events, and clear all", () => {
 
   // The tab shows the applied filter again after a preset is picked in the Library tab, which it leaves for that.
   it("shows a preset picked in the Library tab when it shows again, without the changes it was left with", async () => {
@@ -2255,11 +2324,11 @@ describe("preset dropdown, refresh, and clear all", () => {
     expect(chosenInDialog()).toBe("Favorites");
   });
 
-  it("Refresh loads sources, tags, and presets again and keeps the working filter", async () => {
+  it("a source enabled or disabled loads sources, tags, and presets again and keeps the working filter, and a load that fails says nothing", async () => {
     let sources = SOURCES;
     let tagModel = TAG_MODEL;
     let sourcesStatus = 200;
-    const { server, presets } = await mountFilter([FAVORITES_PRESET], (server) => {
+    const { page, server, presets } = await mountFilter([FAVORITES_PRESET], (server) => {
       server.on("GET", "/api/sources", () => (sourcesStatus === 200 ? json(sources) : status(sourcesStatus)));
       server.on("POST", "/api/tag-editor/model", () => json(tagModel));
     });
@@ -2269,10 +2338,9 @@ describe("preset dropdown, refresh, and clear all", () => {
     sources = [...SOURCES, { id: "source-4", displayName: "Phone", rootPath: "E:\\phone", isEnabled: true }];
     tagModel = { ...TAG_MODEL, tags: [...TAG_MODEL.tags, { name: "Snow", categoryId: "cat-places" }] };
     presets.list = [...presets.list, RECENT_PRESET];
-    await click(dialogButton("Refresh"));
+    page.stream().emit("sourceStateChanged", 40, { sourceId: "source-4", isEnabled: true });
 
-    await waitFor(() => expect(relayed(server, "Filter data refreshed.")).toBe(true));
-    expect(box("Phone (E:\\phone)").checked).toBe(true);
+    await waitFor(() => expect(box("Phone (E:\\phone)").checked).toBe(true));
     expect(box("Only never played").checked).toBe(true);
     expect(applyShowsChanges()).toBe(true);
     await showTab("Tags");
@@ -2282,22 +2350,23 @@ describe("preset dropdown, refresh, and clear all", () => {
     expect(heading()).toBe("Preset: Recent");
 
     sourcesStatus = 500;
-    await click(dialogButton("Refresh"));
-    await expectNotice(server, "Filter refresh failed: HTTP 500");
+    page.stream().emit("sourceStateChanged", 41, { sourceId: "source-4", isEnabled: false });
+    await waitFor(() => expect(server.logLines()).toContain("filter=event-load-failed status=500"));
+    expect(openNotices()).toEqual([]);
     expect(isOpen()).toBe(true);
+    expect(presetRows()).toEqual(["Favorites", "Recent"]);
   });
 
-  it("Refresh keeps unsaved preset changes and Apply's changes, with a preset another device added at the end, and Apply then saves them", async () => {
-    const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
+  it("a tag catalog change's load keeps unsaved preset changes and Apply's changes, with a preset another device added at the end, and Apply then saves them", async () => {
+    const { page, server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
     await showTab("Presets");
     await pressKey(presetHandle("Favorites"), "ArrowDown");
     expect(presetRows()).toEqual(["Beach days", "Favorites"]);
 
     presets.list = [...presets.list, RECENT_PRESET];
-    await click(dialogButton("Refresh"));
-    await waitFor(() => expect(relayed(server, "Filter data refreshed.")).toBe(true));
-    expect(presetRows()).toEqual(["Beach days", "Favorites", "Recent"]);
+    page.stream().emit("tagCatalogChanged", 40, { categories: [], tags: [] });
+    await waitFor(() => expect(presetRows()).toEqual(["Beach days", "Favorites", "Recent"]));
     expect(applyShowsChanges()).toBe(true);
 
     await applyAndWait(server);
@@ -2580,17 +2649,16 @@ describe("unsaved state", () => {
     }
   }
 
-  it("Refresh takes the server's list for a preset list put back as it was, and Apply saves none", async () => {
-    const { server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
+  it("a resync's load takes the server's list for a preset list put back as it was, and Apply saves none", async () => {
+    const { page, server, presets } = await mountFilter([FAVORITES_PRESET, BEACH_PRESET]);
     await openDialog();
     await showTab("Presets");
     await pressKey(presetHandle("Favorites"), "ArrowDown");
     await pressKey(presetHandle("Favorites"), "ArrowUp");
 
     presets.list = [...presets.list, RECENT_PRESET];
-    await click(dialogButton("Refresh"));
-    await waitFor(() => expect(relayed(server, "Filter data refreshed.")).toBe(true));
-    expect(presetRows()).toEqual(["Favorites", "Beach days", "Recent"]);
+    page.stream().emit("resyncRequired", 40, { reason: "gap" });
+    await waitFor(() => expect(presetRows()).toEqual(["Favorites", "Beach days", "Recent"]));
     expect(applyShowsChanges()).toBe(false);
     expect(dotted()).toBe(false);
 

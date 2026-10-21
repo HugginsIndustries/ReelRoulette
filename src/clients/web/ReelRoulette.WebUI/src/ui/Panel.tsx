@@ -98,7 +98,7 @@ function PanelTabs() {
           const { label, icon } = TABS[name];
           const held = dots[name];
           return (
-            <button key={name} type="button" id={`panel-tab-${name}`} class="panel-tab" role="tab" aria-selected={name === shown ? "true" : "false"} aria-controls={`panel-page-${name}`} aria-label={held ? `${label}, unsaved changes` : label} title={held ? `${label} (unsaved changes)` : label} onClick={() => void panel.showTab(name)}>
+            <button key={name} type="button" id={`panel-tab-${name}`} class="tab panel-tab" role="tab" aria-selected={name === shown ? "true" : "false"} aria-controls={`panel-page-${name}`} aria-label={held ? `${label}, unsaved changes` : label} title={held ? `${label} (unsaved changes)` : label} onClick={() => void panel.showTab(name)}>
               <span class="material-symbol-icon">{icon}</span>
               {held === null ? null : <span class="unsaved-dot" hidden={!held}></span>}
             </button>

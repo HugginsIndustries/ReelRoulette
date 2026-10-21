@@ -3,6 +3,8 @@
  * URLs (which carry a media token); the attempt id ties the lines of one playback attempt together.
  */
 
+import { HttpStatusError } from "../api/serverRequest";
+
 /** The item playing now, as far as relayed log lines need it. */
 export interface RelayLogCurrentItem {
   id?: string;
@@ -48,4 +50,16 @@ export function playbackTraceLine(
   }
 
   return parts.join(" ");
+}
+
+/**
+ * Builds the line relayed to the server log when the Filter or Tags tab fails to load again for a server event. It
+ * names the failure's HTTP status, or the error's type, never its message, which can hold a name.
+ */
+export function eventLoadFailedLine(tab: "filter" | "tags", error: unknown): string {
+  if (error instanceof HttpStatusError) {
+    return `${tab}=event-load-failed status=${error.status}`;
+  }
+  const type = error instanceof Error ? error.name || "Error" : typeof error;
+  return `${tab}=event-load-failed error=${type}`;
 }

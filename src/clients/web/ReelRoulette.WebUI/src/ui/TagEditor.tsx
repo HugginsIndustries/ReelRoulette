@@ -42,7 +42,6 @@ export function TagEditor() {
         <div class="tag-editor-header">
           <h2>Tag Editor</h2>
           <button id="tag-editor-autotag-btn" class="icon-btn" type="button" title="Auto Tag" aria-label="Auto Tag" onClick={() => tagEditor.openAutoTag()}><Icon name="auto_awesome" /></button>
-          <button id="tag-editor-refresh-btn" class="icon-btn" type="button" title="Refresh" aria-label="Refresh" onClick={() => void tagEditor.refresh()}><Icon name="refresh" /></button>
         </div>
         <p id="tag-editor-target" class="tags-target" aria-live="polite" title={view?.heldName ?? undefined} hidden={!view?.heldName}>
           {view?.heldName ? <>Editing tags for <b>{view.heldName}</b></> : null}
@@ -84,6 +83,7 @@ export function TagEditor() {
               )}
             </ValidatedField>
             <button id="tag-editor-add-tag-btn" class="icon-btn" type="button" title="Add tag" aria-label="Add tag" disabled={!view || view.addTagDisabled} onClick={() => (addedTag.current = tagEditor.addTag())}><Icon name="add" /></button>
+            <button id="tag-editor-discard-btn" class="icon-btn" type="button" title="Discard changes" aria-label="Discard changes" disabled={!view?.savePending} onClick={() => tagEditor.discardChanges()}><Icon name="undo" /></button>
             <button id="tag-editor-apply-btn" class={saveClass} type="button" title="Save" aria-label="Save" disabled={view ? !view.savePending : undefined} onClick={() => tagEditor.save()}><Icon name="save" /><span class="unsaved-dot" hidden={!view?.savePending}></span></button>
           </div>
         </div>

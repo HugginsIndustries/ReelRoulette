@@ -119,9 +119,6 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
     <button aria-label="Auto Tag" class="icon-btn" id="tag-editor-autotag-btn" title="Auto Tag" type="button">
       <span class="material-symbol-icon">
         "auto_awesome"
-    <button aria-label="Refresh" class="icon-btn" id="tag-editor-refresh-btn" title="Refresh" type="button">
-      <span class="material-symbol-icon">
-        "refresh"
   <p aria-live="polite" class="tags-target" hidden="" id="tag-editor-target">
   <div class="tag-editor-body themed-scrollbar" id="tag-editor-body">
     <section class="tag-category">
@@ -276,6 +273,9 @@ exports[`opening and closing > keeps its markup, and Auto Tag's and the Edit Tag
       <button aria-label="Add tag" class="icon-btn" disabled="" id="tag-editor-add-tag-btn" title="Add tag" type="button">
         <span class="material-symbol-icon">
           "add"
+      <button aria-label="Discard changes" class="icon-btn" id="tag-editor-discard-btn" title="Discard changes" type="button">
+        <span class="material-symbol-icon">
+          "undo"
       <button aria-label="Save" class="icon-btn has-pending" id="tag-editor-apply-btn" title="Save" type="button">
         <span class="material-symbol-icon">
           "save"

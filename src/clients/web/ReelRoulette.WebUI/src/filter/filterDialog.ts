@@ -2,6 +2,7 @@ import { batch, signal, type ReadonlySignal } from "@preact/signals";
 import { errorText, readJson, refusalReason, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { Library } from "../library/library";
+import { eventLoadFailedLine } from "../logging/relayLogLines";
 import type { Notifications } from "../notifications/notifications";
 import type { PanelHost } from "../panel/panelHost";
 import { moveEntry } from "../reorder/reorder";
@@ -9,6 +10,7 @@ import type { AppApi } from "../state/appApi";
 import type { ApiPreset, AppStore } from "../state/appStore";
 import type { DeviceStore } from "../state/deviceStore";
 import type { ServerConnection } from "../state/serverConnection";
+import { createCoalescedRefresh } from "../stats/coalescedRefresh";
 import type { TagCatalog } from "../tags/tagCatalog";
 import type { components } from "../types/openapi.generated";
 import {
@@ -167,22 +169,20 @@ export interface FilterDialog {
   /**
    * The tab shows, on the section it was left on, General the first time. Without unsaved changes it starts over from
    * the applied filter and the saved presets. It then loads the sources, tags, and presets, keeping the working copy,
-   * as Refresh does. Nothing loads while the server fails the compatibility check or runs without a library; a tab that
-   * shows then loads once the server is ready. Showing on the Presets section starts Choose Preset over.
+   * and takes the loaded presets by the merge, which keeps the tab's preset changes and takes the server's version of
+   * every other preset. Nothing loads while the server fails the compatibility check or runs without a library; a tab
+   * that shows then loads once the server is ready. Showing on the Presets section starts Choose Preset over.
+   *
+   * While it shows, a tag catalog change, a source enabled or disabled, or a resync loads them again the same way,
+   * once for a burst of them, without starting over, so the working copy, a typed new preset name, Choose Preset's
+   * choice, and an open Edit Preset stay. Not while Apply's preset writes are being sent. Such a load that fails keeps
+   * what the tab shows, says nothing, and sends one line to the log. A hidden tab loads when it next shows.
    */
   open(): Promise<void>;
   /** The tab hides without applying anything, keeping its changes. */
   close(): void;
   /** Shows a section. The Presets section coming into view starts Choose Preset over on the heading's preset. */
   showTab(tab: FilterDialogTab): void;
-  /**
-   * Loads the sources, tags, and presets again, keeping the working filter, and takes the loaded preset list by the
-   * merge, which keeps the tab's preset changes and takes the server's version of every other preset, as the tab does
-   * whenever the presets reload for a preset event or a resync, shown or not. Before they have loaded once, it loads
-   * them as showing the tab does. It does nothing while the server fails the compatibility check or runs without a
-   * library, or while Apply's preset writes are being sent.
-   */
-  refresh(): Promise<void>;
   /**
    * Saves each preset the tab changed, one write at a time, applies the working filter, closes the panel as the
    * overlay, and starts the library over. While a field it uses is not valid, it moves to that field instead, and while
@@ -258,7 +258,7 @@ export interface FilterDialogOptions {
   device: DeviceStore;
   /** The in-app dialogs, for the confirmations and the notices of what failed. */
   dialogs: Pick<Dialogs, "confirm" | "notice">;
-  /** The one-off messages: Apply, Refresh, and Update preset say what they did. */
+  /** The one-off messages: Apply and Update preset say what they did. */
   notifications: Pick<Notifications, "notify">;
   /** The tag catalog the tabs share, which takes each catalog the dialog loads. */
   tagCatalog?: Pick<TagCatalog, "take">;
@@ -275,7 +275,8 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
   let unsavedPresets = 0;
   /**
    * Apply's preset writes are being sent. A second Apply would send them again from the saved list as it was, and a
-   * Refresh would replace the saved list the writes are landing in, so both do nothing until the writes finish.
+   * load for a server event would replace the saved list the writes are landing in, so both do nothing until the writes
+   * finish.
    */
   let savingPresets = false;
 
@@ -507,7 +508,8 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
    * Sends the tab's preset changes, one write at a time in order, and says whether every one landed. Each that lands is
    * saved, so only what didn't land stays unsaved. At the first write the server refuses, it says why, with the
    * server's reason, and takes the server's list by the merge. A write that couldn't reach the server keeps the tab's
-   * list as the writes left it, and a 401 shows only the pairing prompt. While it runs, Apply and Refresh do nothing.
+   * list as the writes left it, and a 401 shows only the pairing prompt. While it runs, Apply and the loads for server
+   * events do nothing.
    */
   async function savePresets(): Promise<boolean> {
     const current = view.peek()!;
@@ -545,9 +547,10 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
 
   /**
    * Loads the sources, tags, and presets. The first time, it starts the working copy from the applied filter, on
-   * General; after that it keeps the working copy and only takes what loaded, as Refresh does. Says whether it loaded;
-   * a failure shows in the in-app notice with `failure` before the reason, except a 401, whose pairing prompt is the
-   * thing to act on. Nothing loads while the server fails the compatibility check or runs without a library.
+   * General; after that it keeps the working copy and only takes what loaded, as a load for a server event does. Says
+   * whether it loaded; a failure shows in the in-app notice with `failure` before the reason, except a 401, whose
+   * pairing prompt is the thing to act on. Nothing loads while the server fails the compatibility check or runs
+   * without a library.
    */
   async function start(failure: string): Promise<boolean> {
     if (store.heldBack.peek()) {
@@ -620,12 +623,57 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
   }
 
   // A tab that showed while the server had no library loaded nothing, so while it shows it loads once the server is
-  // ready, keeping its changes, as Refresh does.
+  // ready, keeping its changes.
   connection.on("serverReady", () => {
     if (isOpen.peek()) {
       void start("Filter load failed");
     }
   });
+
+  /** Whether a load for a server event can go: the tab shows, has loaded once, and nothing holds the load back. */
+  function eventLoadCanGo(): boolean {
+    return isOpen.peek() && view.peek() !== null && !store.heldBack.peek() && !savingPresets;
+  }
+
+  /**
+   * Loads the sources, tags, and presets again for a server event, as opening the tab does once it has loaded, without
+   * starting over. A failure keeps what the tab shows and says nothing, sending one line to the log naming the error's
+   * status or kind, never a name; a 401 has sent its own line and asked for pairing.
+   */
+  async function loadForEvents(): Promise<void> {
+    if (!eventLoadCanGo()) {
+      return;
+    }
+    let remote: Awaited<ReturnType<typeof loadRemote>>;
+    try {
+      remote = await loadRemote();
+    } catch (error) {
+      if (!(error instanceof UnauthorizedError)) {
+        void api.relayLog("warn", eventLoadFailedLine("filter", error));
+      }
+      return;
+    }
+    // Apply's writes may have started while it loaded, and they land in the saved list it would replace.
+    const current = view.peek();
+    if (current && !savingPresets) {
+      takeRemote(current, remote);
+    }
+  }
+
+  /** Loads the tab again once for a burst of server events. */
+  const eventLoads = createCoalescedRefresh(loadForEvents);
+
+  function requestEventLoad(): void {
+    if (eventLoadCanGo()) {
+      void eventLoads.request();
+    }
+  }
+
+  // A tag catalog change, a source enabled or disabled, or a resync changes what the tab lists. While it shows it loads
+  // again; a hidden tab loads when it next shows.
+  connection.on("tagCatalogChanged", requestEventLoad);
+  connection.on("sourceStateChanged", requestEventLoad);
+  connection.on("resyncRequired", requestEventLoad);
 
   // Presets reloaded for a preset event or a resync are taken by the merge, whether the tab shows or not, so its preset
   // changes stay. While Apply's writes are being sent, the reload would replace the saved list they land in, and Apply
@@ -680,28 +728,6 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       tab.value = next;
       if (comesIntoView) {
         startChoiceOver();
-      }
-    },
-
-    async refresh() {
-      if (store.heldBack.peek() || savingPresets) {
-        return;
-      }
-      if (!view.peek()) {
-        if (await start("Filter refresh failed")) {
-          notifications.notify({ kind: "actions", text: "Filter data refreshed.", key: "filter" });
-        }
-        return;
-      }
-      try {
-        const remote = await loadRemote();
-        const current = view.peek();
-        if (current) {
-          takeRemote(current, remote);
-        }
-        notifications.notify({ kind: "actions", text: "Filter data refreshed.", key: "filter" });
-      } catch (error) {
-        showLoadFailure("Filter refresh failed", error);
       }
     },
 

@@ -2,6 +2,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it } from "vitest";
 import { statusLogLine } from "../../logging/relayLogLines";
+import { REFRESH_GATHER_MS } from "../../stats/coalescedRefresh";
 import {
   closeNotices,
   FakeServer,
@@ -298,8 +299,18 @@ function closeButton(): HTMLButtonElement {
   return byId<HTMLButtonElement>("panel-close-btn");
 }
 
-function headerButton(name: "Refresh" | "Auto Tag"): HTMLButtonElement {
+function headerButton(name: "Auto Tag"): HTMLButtonElement {
   return within(editor().querySelector(".tag-editor-header") as HTMLElement).getByRole("button", { name }) as HTMLButtonElement;
+}
+
+function discardButton(): HTMLButtonElement {
+  return byId<HTMLButtonElement>("tag-editor-discard-btn");
+}
+
+/** Waits long enough for a load that a server event asked for to have gone, had it gone. */
+async function waitForEventLoad(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, REFRESH_GATHER_MS + 50));
+  await settle();
 }
 
 function saveButton(): HTMLButtonElement {
@@ -501,7 +512,7 @@ function confirmMessage(): string {
   return document.getElementById(dialog.getAttribute("aria-labelledby")!)?.textContent ?? "";
 }
 
-async function answer(label: "Cancel" | "Discard" | "Delete"): Promise<void> {
+async function answer(label: "Cancel" | "Delete"): Promise<void> {
   await press(dialogButton(confirmation(), label));
 }
 
@@ -712,7 +723,7 @@ describe("opening and closing", () => {
     expect(chipState("Beach").has).toBe("all");
   });
 
-  it("keeps its changes without asking when the panel closes or another tab shows, until Refresh drops them after asking", async () => {
+  it("keeps its changes without asking when the panel closes or another tab shows, until Discard changes drops them at once", async () => {
     const { tags } = await mountTags();
     await openEditor();
     await click(chipButton("Calm", "Add tag"));
@@ -732,18 +743,7 @@ describe("opening and closing", () => {
     await click(panelTab("Tags"));
     expect(chipState("Calm").pending).toBe("add");
 
-    await press(headerButton("Refresh"));
-    expect(confirmMessage()).toBe("Discard changes?");
-    expect(document.activeElement).toBe(dialogButton(confirmation(), "Cancel"));
-    expect(dialogButton(confirmation(), "Discard").classList.contains("btn-danger")).toBe(true);
-    expect(dialogButton(confirmation(), "Cancel").classList.contains("btn-danger")).toBe(false);
-    await answer("Cancel");
-    expect(appDialogs()).toEqual([]);
-    expect(chipState("Calm").pending).toBe("add");
-    expect(document.activeElement).toBe(headerButton("Refresh"));
-
-    await press(headerButton("Refresh"));
-    await answer("Discard");
+    await press(discardButton());
     expect(appDialogs()).toEqual([]);
     expect(isOpen()).toBe(true);
     expect(tags.saves()).toEqual([]);
@@ -751,6 +751,25 @@ describe("opening and closing", () => {
     expect(categoryTitles()).toContain("Places");
     expect(savePending()).toBe(false);
     expect(tags.modelRequests()).toHaveLength(4);
+  });
+
+  it("has Discard changes just before Save, an icon button with the undo icon, and no Refresh", async () => {
+    await mountTags();
+    await openEditor();
+    expect(within(editor()).queryByRole("button", { name: "Refresh" })).toBeNull();
+    expect(byId("tag-editor-refresh-btn")).toBeNull();
+    const discard = discardButton();
+    expect(discard.nextElementSibling).toBe(saveButton());
+    expect([discard.className, discard.title, discard.getAttribute("aria-label"), discard.querySelector(".material-symbol-icon")?.textContent]).toEqual([
+      "icon-btn",
+      "Discard changes",
+      "Discard changes",
+      "undo"
+    ]);
+    expect(discard.querySelector(".unsaved-dot")).toBeNull();
+    // The Filter tab's footer has the same gap, so Discard changes and Save sit where its Discard changes and Apply do.
+    useStylesheet();
+    expect(getComputedStyle(discard.parentElement!).gap).toBe("8px");
   });
 
   it("Save shows the unsaved-changes dot, as the panel's tabs do, only while there are changes", async () => {
@@ -779,11 +798,13 @@ describe("opening and closing", () => {
     expect(body().textContent).toBe("");
 
     tags.modelStatus = 200;
-    await click(headerButton("Refresh"));
-    expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
+    await click(panelTab("Library"));
+    await click(panelTab("Tags"));
+    await waitFor(() => expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]));
+    await click(chipButton("Calm", "Add tag"));
     tags.modelStatus = 503;
-    await click(headerButton("Refresh"));
-    await expectNotice(server, "Tag refresh failed: HTTP 503");
+    await press(discardButton());
+    await expectNotice(server, "Tag load failed: HTTP 503");
     expect(isOpen()).toBe(true);
   });
 
@@ -799,10 +820,11 @@ describe("opening and closing", () => {
     expect(pairingPrompt().style.display).toBe("none");
     await openEditor();
     await waitFor(() => expect(pairingPrompt().style.display).toBe("flex"));
-    await click(headerButton("Refresh"));
+    await click(panelTab("Library"));
+    await click(panelTab("Tags"));
     expect(tags.modelRequests()).toHaveLength(2);
     expect(openNotices()).toEqual([]);
-    expect([...relayedLines("Tag editor unavailable"), ...relayedLines("Tag refresh failed")]).toEqual([]);
+    expect([...relayedLines("Tag editor unavailable"), ...relayedLines("Tag load failed")]).toEqual([]);
     expect(body().textContent).toBe("");
     await waitFor(() =>
       expect(server.logLines()).toContain(unauthorizedLogLine("POST /api/tag-editor/model", { id: VIDEO_ITEM.id }, 1))
@@ -937,15 +959,15 @@ describe("following the playing item", () => {
     expect(chipState("Calm")).toEqual({ has: "all", pending: null });
   });
 
-  it("follows the playing item once Refresh discards its adds or removes", async () => {
+  it("follows the playing item once Discard changes drops its adds or removes", async () => {
     const { server, tags } = await mountTags({ setup: withOtherItem });
     await openEditor();
     await click(chipButton("Bob", "Remove tag"));
     await playNext(server, OTHER_ITEM);
     expect(targetLine().hidden).toBe(false);
 
-    await press(headerButton("Refresh"));
-    await answer("Discard");
+    await press(discardButton());
+    expect(appDialogs()).toEqual([]);
     expect(targetLine().hidden).toBe(true);
     expect(tags.modelRequests().at(-1)).toEqual({ itemIds: ["item-other"] });
     expect(chipState("Bob")).toEqual({ has: "none", pending: null });
@@ -1809,31 +1831,31 @@ describe("Edit Tags", () => {
     expect(tags.saves()).toEqual([{ path: "/api/tag-editor/delete-tag", body: { name: "Bob" } }]);
   });
 
-  it("Refresh loads the tags again, asking first when there are changes to drop", async () => {
+  it("Discard changes is disabled without changes, and puts back the changes at once, with no dialog, loading the tags again", async () => {
     const { tags } = await mountTags();
     await openEditor();
-    await click(headerButton("Refresh"));
-    expect(appDialogs()).toEqual([]);
-    expect(tags.modelRequests()).toHaveLength(2);
+    expect(discardButton().disabled).toBe(true);
+    expect(tags.modelRequests()).toHaveLength(1);
 
     await click(chipButton("Calm", "Add tag"));
-    await press(headerButton("Refresh"));
-    expect(confirmMessage()).toBe("Discard changes?");
-    expect(document.activeElement).toBe(dialogButton(confirmation(), "Cancel"));
-    expect(dialogButton(confirmation(), "Discard").classList.contains("btn-danger")).toBe(true);
-    await answer("Cancel");
-    expect(appDialogs()).toEqual([]);
-    expect(tags.modelRequests()).toHaveLength(2);
-    expect(chipState("Calm").pending).toBe("add");
+    await click(chipButton("Bob", "Remove tag"));
+    await editCategory("Places");
+    await typeInto(nameField("Edit Category"), "Scenery");
+    await press(dialogButton(nameDialog("Edit Category"), "Save"));
+    expect(discardButton().disabled).toBe(false);
+    expect(savePending()).toBe(true);
 
     tags.model.tags.push({ name: "Snow", categoryId: "cat-places" });
-    await press(headerButton("Refresh"));
-    await answer("Discard");
+    await press(discardButton());
     expect(appDialogs()).toEqual([]);
-    expect(tags.modelRequests()).toHaveLength(3);
+    expect(tags.modelRequests()).toHaveLength(2);
+    expect(categoryTitles()).toContain("Places");
     expect(chipNames("Places")).toEqual(["alps", "Beach", "Snow"]);
     expect(chipState("Calm").pending).toBe(null);
+    expect(chipState("Bob").pending).toBe(null);
     expect(savePending()).toBe(false);
+    expect(discardButton().disabled).toBe(true);
+    expect(tags.saves()).toEqual([]);
   });
 });
 
@@ -2369,7 +2391,7 @@ describe("Auto Tag", () => {
     ]);
   });
 
-  it("Cancel clears the scan and closes; the X closes and keeps it; the Tags tab's Refresh and Save leave it", async () => {
+  it("Cancel clears the scan and closes; the X closes and keeps it; the Tags tab's Discard changes and Save leave it", async () => {
     const { tags } = await mountTags();
     await openEditor();
     await openAutoTag();
@@ -2378,7 +2400,8 @@ describe("Auto Tag", () => {
 
     await press(autoTagButton("Close"));
     expect(findAutoTag()).toBeNull();
-    await click(headerButton("Refresh"));
+    await click(chipButton("Calm", "Add tag"));
+    await press(discardButton());
     expect(appDialogs()).toEqual([]);
     expect(tags.modelRequests()).toHaveLength(2);
     await openAutoTag();
@@ -2523,5 +2546,58 @@ describe("controls kept in place", () => {
     await click(box);
     expect(rowCheck("beach")).toBe(box);
     expect(document.activeElement).toBe(box);
+  });
+});
+
+describe("server events", () => {
+  it("a tag catalog change loads the tags again while it shows without changes, and keeps its changes, loading nothing, while it has some", async () => {
+    const { page, tags } = await mountTags();
+    await openEditor();
+    expect(tags.modelRequests()).toHaveLength(1);
+
+    tags.model.tags.push({ name: "Snow", categoryId: "cat-places" });
+    page.stream().emit("tagCatalogChanged", 40, { categories: tags.model.categories, tags: tags.model.tags });
+    await waitFor(() => expect(chipNames("Places")).toEqual(["alps", "Beach", "Snow"]));
+    expect(tags.modelRequests()).toHaveLength(2);
+
+    await click(chipButton("Calm", "Add tag"));
+    tags.model.tags.push({ name: "Rain", categoryId: "cat-places" });
+    page.stream().emit("tagCatalogChanged", 41, { categories: tags.model.categories, tags: tags.model.tags });
+    await waitForEventLoad();
+    expect(tags.modelRequests()).toHaveLength(2);
+    expect(chipNames("Places")).toEqual(["alps", "Beach", "Snow"]);
+    expect(chipState("Calm").pending).toBe("add");
+    expect(savePending()).toBe(true);
+    expect(openNotices()).toEqual([]);
+  });
+
+  it("a resync loads the tags again while it shows, and a hidden tab loads nothing until it shows again", async () => {
+    const { page, tags } = await mountTags();
+    await openEditor();
+    tags.model.tags.push({ name: "Snow", categoryId: "cat-places" });
+    page.stream().emit("resyncRequired", 40, { reason: "gap" });
+    await waitFor(() => expect(chipNames("Places")).toEqual(["alps", "Beach", "Snow"]));
+    expect(tags.modelRequests()).toHaveLength(2);
+
+    await click(panelTab("Library"));
+    page.stream().emit("tagCatalogChanged", 41, { categories: tags.model.categories, tags: tags.model.tags });
+    page.stream().emit("resyncRequired", 42, { reason: "gap" });
+    await waitForEventLoad();
+    expect(tags.modelRequests()).toHaveLength(2);
+    await click(panelTab("Tags"));
+    expect(tags.modelRequests()).toHaveLength(3);
+  });
+
+  it("a load for an event that fails keeps the tags shown, says nothing, and logs one line with only its status", async () => {
+    const { page, server, tags } = await mountTags();
+    await openEditor();
+    tags.modelStatus = 503;
+    page.stream().emit("tagCatalogChanged", 40, { categories: tags.model.categories, tags: tags.model.tags });
+    await waitFor(() => expect(server.logLines()).toContain("tags=event-load-failed status=503"));
+    await settle();
+    expect(server.logLines().filter((line) => line.includes("event-load-failed"))).toEqual(["tags=event-load-failed status=503"]);
+    expect(openNotices()).toEqual([]);
+    expect(relayedLines("Tag")).toEqual([]);
+    expect(categoryTitles()).toEqual(["Places", "Mood", "People", "Uncategorized"]);
   });
 });

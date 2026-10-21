@@ -2,6 +2,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it } from "vitest";
 import { statusLogLine } from "../../logging/relayLogLines";
+import { REFRESH_GATHER_MS } from "../../stats/coalescedRefresh";
 import {
   closeNotices,
   COMPATIBLE_VERSION,
@@ -76,6 +77,18 @@ async function mount(server = panelServer()): Promise<MountedPage> {
 
 async function click(element: Element): Promise<void> {
   fireEvent.click(element);
+  await settle();
+}
+
+/**
+ * Sends a tag catalog change and a source enabled or disabled, which the Filter and Tags tabs load again for, and waits
+ * long enough for a load to have gone, had it gone. A resync, which the library reloads for too, is left to the tabs'
+ * own tests.
+ */
+async function emitTabEvents(page: MountedPage): Promise<void> {
+  page.stream().emit("tagCatalogChanged", 40, { categories: [], tags: [] });
+  page.stream().emit("sourceStateChanged", 41, { sourceId: "source-1", isEnabled: false });
+  await new Promise((resolve) => setTimeout(resolve, REFRESH_GATHER_MS + 50));
   await settle();
 }
 
@@ -595,7 +608,7 @@ describe("Filter tab's Apply and Discard changes", () => {
     expect(applyShowsChanges()).toBe(false);
   });
 
-  it("Refresh loads the tab when it failed to load when it showed", async () => {
+  it("loads the tab when it shows again after it failed to load when it showed", async () => {
     const server = panelServer();
     let sources = 503;
     server.on("GET", "/api/sources", () => (sources === 200 ? json([]) : new Response("{}", { status: sources })));
@@ -607,10 +620,12 @@ describe("Filter tab's Apply and Discard changes", () => {
     await closeNotices();
 
     sources = 200;
-    await click(within(panel()).getByRole("button", { name: "Refresh" }));
+    await click(tab("Library"));
+    await click(tab("Filter"));
 
-    await waitFor(() => expect(relayed(server, "Filter data refreshed.")).toBe(true));
+    await waitFor(() => expect(neverPlayed()).not.toBeNull());
     expect(neverPlayed().checked).toBe(false);
+    expect(openNotices()).toEqual([]);
   });
 });
 
@@ -708,7 +723,7 @@ describe("unsaved changes", () => {
     expect(marked(panelButton()).dot).toBe(false);
   });
 
-  it("mark the Tags tab and the panel button with a dot until Save, or until Refresh discards the changes", async () => {
+  it("mark the Tags tab and the panel button with a dot until Save, or until Discard changes drops the changes", async () => {
     await mount();
     await click(screen.getByText("Tap to play, or open the panel to choose a preset or filter."));
     await waitFor(() => expect(videoSrc()).toContain("/api/media/item-1"));
@@ -726,8 +741,8 @@ describe("unsaved changes", () => {
 
     await click(alice());
     expect(marked(tab("Tags")).dot).toBe(true);
-    await click(document.getElementById("tag-editor-refresh-btn")!);
-    await click(within(topDialog()!).getByRole("button", { name: "Discard" }));
+    await click(document.getElementById("tag-editor-discard-btn")!);
+    expect(topDialog()).toBeNull();
     expect(marked(tab("Tags")).dot).toBe(false);
     expect(marked(panelButton()).dot).toBe(false);
   });
@@ -818,7 +833,7 @@ describe("compatibility failure", () => {
     expect(server.requests("POST", "/api/random")).toHaveLength(0);
   });
 
-  it("loads nothing into a Filter tab remembered open, nor on its Refresh", async () => {
+  it("loads nothing into a Filter tab remembered open", async () => {
     localStorage.setItem("rr_device.panel.open", "true");
     localStorage.setItem("rr_device.panel.tab", '"filter"');
     const server = panelServer();
@@ -826,7 +841,8 @@ describe("compatibility failure", () => {
     await mount(server);
     expect(shownPages()).toEqual(["Filter"]);
 
-    await click(within(panel()).getByRole("button", { name: "Refresh" }));
+    await click(tab("Library"));
+    await click(tab("Filter"));
     expect(server.requests("GET", "/api/sources")).toHaveLength(0);
     expect(server.requests("POST", "/api/tag-editor/model")).toHaveLength(0);
   });
@@ -845,7 +861,7 @@ describe("compatibility failure", () => {
     );
   });
 
-  it("loads nothing into a Tags tab remembered open, nor on its Refresh", async () => {
+  it("loads nothing into a Tags tab remembered open", async () => {
     localStorage.setItem("rr_device.panel.open", "true");
     localStorage.setItem("rr_device.panel.tab", '"tags"');
     const server = panelServer();
@@ -853,7 +869,8 @@ describe("compatibility failure", () => {
     await mount(server);
     expect(shownPages()).toEqual(["Tags"]);
 
-    await click(within(document.getElementById("panel-page-tags")!).getByRole("button", { name: "Refresh" }));
+    await click(tab("Library"));
+    await click(tab("Tags"));
     expect(server.requests("POST", "/api/tag-editor/model")).toHaveLength(0);
   });
 });
@@ -861,15 +878,15 @@ describe("compatibility failure", () => {
 describe("running without a library", () => {
   const NO_LIBRARY = { ...COMPATIBLE_VERSION, libraryState: "damaged", libraryMessage: "The library file is damaged." };
 
-  it("loads nothing into a Filter tab remembered open, nor on its Refresh or Apply", async () => {
+  it("loads nothing into a Filter tab remembered open, nor on a server event or Apply", async () => {
     localStorage.setItem("rr_device.panel.open", "true");
     localStorage.setItem("rr_device.panel.tab", '"filter"');
     const server = panelServer();
     server.on("GET", "/api/version", () => json(NO_LIBRARY));
-    await mount(server);
+    const page = await mount(server);
     expect(shownPages()).toEqual(["Filter"]);
 
-    await click(within(panel()).getByRole("button", { name: "Refresh" }));
+    await emitTabEvents(page);
     await click(applyButton());
     expect(server.requests("GET", "/api/sources")).toHaveLength(0);
     expect(server.requests("POST", "/api/tag-editor/model")).toHaveLength(0);
@@ -878,15 +895,15 @@ describe("running without a library", () => {
     expect(topDialog()).toBeNull();
   });
 
-  it("loads nothing into a Tags tab remembered open, nor on its Refresh", async () => {
+  it("loads nothing into a Tags tab remembered open, nor on a server event", async () => {
     localStorage.setItem("rr_device.panel.open", "true");
     localStorage.setItem("rr_device.panel.tab", '"tags"');
     const server = panelServer();
     server.on("GET", "/api/version", () => json(NO_LIBRARY));
-    await mount(server);
+    const page = await mount(server);
     expect(shownPages()).toEqual(["Tags"]);
 
-    await click(within(document.getElementById("panel-page-tags")!).getByRole("button", { name: "Refresh" }));
+    await emitTabEvents(page);
     expect(server.requests("POST", "/api/tag-editor/model")).toHaveLength(0);
     expect(topDialog()).toBeNull();
   });

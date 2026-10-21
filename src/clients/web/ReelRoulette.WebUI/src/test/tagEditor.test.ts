@@ -5,6 +5,7 @@ import type { NotifyRequest } from "../notifications/notifications";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type ApiPreset, type PlayingItem } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
+import { REFRESH_GATHER_MS } from "../stats/coalescedRefresh";
 import { createTagEditor } from "../tags/tagEditor";
 import type { TagEditorModel } from "../tags/tagEditorModel";
 import { EMPTY_FIELD } from "../validation/fieldValidation";
@@ -61,7 +62,9 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     failures: new Map<string, number>(),
     /** Paths whose replies wait, each until the test calls the function it puts in the list. */
     held: new Map<string, Array<() => void>>(),
-    posts: [] as Array<{ path: string; body: any }>
+    posts: [] as Array<{ path: string; body: any }>,
+    /** The lines the editor sent to the log, as level and message. */
+    relayed: [] as string[]
   };
   /** A success, as JSON or as the page `replyType` names. */
   const reply200 = (body: unknown) =>
@@ -75,6 +78,7 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     const path = new URL(String(input)).pathname;
     const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
     if (path === "/api/logs/client") {
+      server.relayed.push(`${body.level} ${body.message}`);
       return json({});
     }
     server.posts.push({ path, body });
@@ -207,12 +211,27 @@ async function settle(): Promise<void> {
   }
 }
 
+/**
+ * Sends the editor server events, as the connection does, each with `payload`, and lets the load they ask for gather
+ * and arrive.
+ */
+async function serverEvents(context: ReturnType<typeof setup>, events: string[], payload: unknown = {}): Promise<void> {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    for (const event of events) {
+      context.listeners[event]?.(payload);
+    }
+    await vi.advanceTimersByTimeAsync(REFRESH_GATHER_MS);
+  } finally {
+    vi.useRealTimers();
+  }
+  await settle();
+}
+
 /** The confirmation asked, as the dialogs service gets it. */
 function asked(message: string, confirmLabel: string): ConfirmRequest {
   return { message, confirmLabel, danger: true };
 }
-
-const DISCARD = asked("Discard changes?", "Discard");
 
 /** A confirmation the test answers later. */
 function held(): { promise: Promise<boolean>; answer: (confirmed: boolean) => void } {
@@ -294,19 +313,19 @@ describe("opening and closing", () => {
     expect(context.view().noModel).toBe(true);
   });
 
-  it("says a failed Refresh failed, and names the content type of tags that aren't JSON", async () => {
+  it("says Discard changes' load failed, and names the content type of tags that aren't JSON", async () => {
     const context = setup();
     await openOn(context);
     context.server.modelStatus = 503;
-    await context.editor.refresh();
+    context.editor.discardChanges();
     await settle();
     context.server.modelStatus = 200;
     context.server.replyType = "text/html";
-    await context.editor.refresh();
+    context.editor.discardChanges();
     await settle();
     expect(context.notices).toEqual([
-      "Tag refresh failed: HTTP 503",
-      "Tag refresh failed: The server sent an unexpected response (text/html)."
+      "Tag load failed: HTTP 503",
+      "Tag load failed: The server sent an unexpected response (text/html)."
     ]);
     expect(context.notified).toEqual([]);
   });
@@ -315,11 +334,12 @@ describe("opening and closing", () => {
     const context = setup();
     context.server.modelStatus = 401;
     await openOn(context);
-    await context.editor.refresh();
-    await settle();
+    context.editor.discardChanges();
+    await serverEvents(context, ["tagCatalogChanged"]);
     expect(context.store.pairingRequired.value).toBe(true);
     expect(context.notices).toEqual([]);
     expect(context.notified).toEqual([]);
+    expect(context.server.relayed).toEqual([]);
     expect(context.view().categories).toBeNull();
   });
 
@@ -329,8 +349,8 @@ describe("opening and closing", () => {
     context.store.compatibilityBlocked.value = true;
     await openOn(context);
     expect(editor.isOpen.value).toBe(true);
-    await editor.refresh();
-    await settle();
+    editor.discardChanges();
+    await serverEvents(context, ["tagCatalogChanged", "resyncRequired"]);
 
     editor.addCategory();
     editor.typeNewCategoryName("Food");
@@ -373,7 +393,7 @@ describe("opening and closing", () => {
     expect(context.view().edit).toMatchObject({ name: "Shore", categoryId: "places" });
   });
 
-  it("orders categories by the newest tags' sort order on each open and Refresh, unless a category moved", async () => {
+  it("orders categories by the newest tags' sort order on each open and Discard changes, unless a category moved", async () => {
     const context = setup();
     await openOn(context);
     context.editor.close();
@@ -385,7 +405,7 @@ describe("opening and closing", () => {
     expect(context.titles()).toEqual(["People", "Places"]);
 
     context.server.model.categories[1]!.sortOrder = 2;
-    context.editor.refresh();
+    context.editor.discardChanges();
     await settle();
     expect(context.titles()).toEqual(["Places", "People"]);
 
@@ -395,39 +415,30 @@ describe("opening and closing", () => {
     expect(context.titles()).toEqual(["People", "Places"]);
   });
 
-  it("Refresh asks before dropping changes, and keeps them when the user does", async () => {
+  it("Discard changes drops the changes at once, without asking, and loads the tags again", async () => {
     const context = setup();
     const { editor, confirm } = context;
     await openOn(context);
     editor.toggleTag("Bob", "add");
-
-    confirm.mockResolvedValue(false);
-    await editor.refresh();
-    expect(confirm.mock.calls).toEqual([[DISCARD]]);
-    expect(context.view().selections.size).toBe(1);
+    editor.moveCategory("people", 0);
+    editor.addCategory();
+    editor.typeNewCategoryName("Food");
+    editor.saveNewCategory();
+    expect(context.view().savePending).toBe(true);
     expect(context.server.posts).toHaveLength(1);
 
-    confirm.mockResolvedValue(true);
-    await editor.refresh();
-    await settle();
-    expect(confirm).toHaveBeenCalledTimes(2);
+    editor.discardChanges();
+    expect(context.server.posts.at(-1)?.path).toBe("/api/tag-editor/model");
     expect(context.server.posts).toHaveLength(2);
     expect(context.view().selections.size).toBe(0);
     expect(context.view().savePending).toBe(false);
-  });
-
-  it("refreshes at once without asking when nothing changed", async () => {
-    const context = setup();
-    const { editor, confirm } = context;
-    await openOn(context);
-    void editor.refresh();
-    expect(context.server.posts.at(-1)?.path).toBe("/api/tag-editor/model");
-    expect(context.server.posts).toHaveLength(2);
     await settle();
     expect(confirm).not.toHaveBeenCalled();
+    expect(context.titles()).toEqual(["Places", "People"]);
+    expect(context.view().savePending).toBe(false);
   });
 
-  it("closing or refreshing the editor closes its dialogs", async () => {
+  it("closing the editor or Discard changes closes its dialogs", async () => {
     const context = setup();
     const { editor } = context;
     await openOn(context);
@@ -438,7 +449,7 @@ describe("opening and closing", () => {
       expect(context.view()).toMatchObject({ editing: true, categoryEdit: { categoryId: "people" }, newCategory: { name: "" } });
     };
     openDialogs();
-    await editor.refresh();
+    editor.discardChanges();
     expect(context.view()).toMatchObject({ editing: false, categoryEdit: null, newCategory: null });
     await settle();
 
@@ -508,7 +519,7 @@ describe("following the playing item", () => {
     await settle();
     expect(context.view().heldName).toBe("clip.mp4");
 
-    await editor.refresh();
+    editor.discardChanges();
     await settle();
     expect(context.view().itemIds).toEqual(["item-2"]);
     expect(context.view().heldName).toBeNull();
@@ -650,7 +661,7 @@ describe("Edit Tags", () => {
     editor.editCategory("people");
     await editor.deleteEditedCategory();
     expect(context.view().newTagCategoryId).toBe("places");
-    await editor.refresh();
+    editor.discardChanges();
     await settle();
     expect(context.view().newTagCategoryId).toBe("places");
   });
@@ -933,7 +944,7 @@ describe("saving", () => {
     expect(places()).toEqual(["Shore"]);
   });
 
-  it("sends no tag load while a save is on its way, when the tab shows again or Refresh runs, and loads once it lands", async () => {
+  it("sends no tag load while a save is on its way, when the tab shows again, Discard changes runs, or a server event comes, and loads once it lands", async () => {
     const context = setup();
     const { editor } = context;
     await openOn(context);
@@ -944,9 +955,10 @@ describe("saving", () => {
     editor.save();
     editor.close();
     editor.open();
-    await editor.refresh();
+    editor.discardChanges();
     expect(context.view().categories?.find((category) => category.id === "places")?.chips.map((chip) => chip.name)).toEqual(["Shore"]);
-    await settle();
+    expect(context.modelRequests()).toHaveLength(loads);
+    await serverEvents(context, ["tagCatalogChanged", "resyncRequired"]);
     expect(context.modelRequests()).toHaveLength(loads + 1);
   });
 
@@ -1104,14 +1116,14 @@ describe("Auto Tag", () => {
     context.store.libraryState.value = "unreadable";
     await openOn(context);
     expect(editor.isOpen.value).toBe(true);
-    await editor.refresh();
-    await settle();
+    editor.discardChanges();
+    await serverEvents(context, ["tagCatalogChanged", "resyncRequired"]);
     expect(server.posts).toEqual([]);
     expect(context.view().categories).toBeNull();
 
     // The server restarted without its library after the tab loaded and Auto Tag scanned.
     context.store.libraryState.value = "ready";
-    await editor.refresh();
+    editor.discardChanges();
     await settle();
     await editor.scan();
     editor.checkRow(0, true);
@@ -1373,5 +1385,80 @@ describe("Auto Tag", () => {
     // A selection change while no row shows keeps the summary.
     context.editor.selectAll();
     expect(context.view().autoTag.status).toBe("Scan complete: 1 matching tags, 1 matches, 0/0 selected changes.");
+  });
+});
+
+describe("server events", () => {
+  it.each(["tagCatalogChanged", "resyncRequired"])("%s loads the tags again while it shows without changes", async (event) => {
+    const context = setup();
+    await openOn(context);
+    context.server.model.tags.push({ name: "Alice", categoryId: "people" });
+    const loads = context.modelRequests().length;
+
+    await serverEvents(context, [event]);
+
+    expect(context.modelRequests()).toHaveLength(loads + 1);
+    expect(context.modelRequests().at(-1)).toEqual(["item-1"]);
+    expect(context.view().categories?.find((category) => category.id === "people")?.chips.map((chip) => chip.name)).toEqual(["Alice", "Bob"]);
+    expect(context.notices).toEqual([]);
+  });
+
+  it.each(["tagCatalogChanged", "resyncRequired"])("%s keeps the changes and loads nothing while it has some", async (event) => {
+    const context = setup();
+    const { editor } = context;
+    await openOn(context);
+    editor.toggleTag("Bob", "add");
+    editor.moveCategory("people", 0);
+    context.server.model.tags.push({ name: "Alice", categoryId: "people" });
+    const loads = context.modelRequests().length;
+
+    await serverEvents(context, [event]);
+
+    expect(context.modelRequests()).toHaveLength(loads);
+    expect(context.view().selections.get("bob")).toEqual({ action: "add", name: "Bob" });
+    expect(context.titles()).toEqual(["People", "Places"]);
+    expect(context.view().savePending).toBe(true);
+    expect(context.view().categories?.find((category) => category.id === "people")?.chips.map((chip) => chip.name)).toEqual(["Bob"]);
+  });
+
+  it("loads nothing while hidden, and loads as it shows again", async () => {
+    const context = setup();
+    await openOn(context);
+    context.editor.close();
+    const loads = context.modelRequests().length;
+
+    await serverEvents(context, ["tagCatalogChanged", "resyncRequired"]);
+    expect(context.modelRequests()).toHaveLength(loads);
+
+    await openOn(context);
+    expect(context.modelRequests()).toHaveLength(loads + 1);
+  });
+
+  it("loads once for a burst of events", async () => {
+    const context = setup();
+    await openOn(context);
+    const loads = context.modelRequests().length;
+
+    await serverEvents(context, ["tagCatalogChanged", "resyncRequired", "tagCatalogChanged", "tagCatalogChanged"]);
+
+    expect(context.modelRequests()).toHaveLength(loads + 1);
+  });
+
+  it("a load that fails keeps what the tab shows, says nothing, and logs one line with only the status or the error's kind", async () => {
+    const context = setup();
+    await openOn(context);
+    context.server.modelStatus = 503;
+
+    await serverEvents(context, ["tagCatalogChanged"]);
+    expect(context.server.relayed).toEqual(["warn tags=event-load-failed status=503"]);
+
+    context.server.modelStatus = 200;
+    context.server.replyType = "text/html";
+    await serverEvents(context, ["resyncRequired"]);
+    expect(context.server.relayed).toEqual(["warn tags=event-load-failed status=503", "warn tags=event-load-failed error=UnexpectedResponseError"]);
+
+    expect(context.notices).toEqual([]);
+    expect(context.notified).toEqual([]);
+    expect(context.titles()).toEqual(["Places", "People"]);
   });
 });

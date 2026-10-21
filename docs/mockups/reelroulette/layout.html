@@ -359,8 +359,12 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 .filter-row > label { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 /* An icon button in a row, such as Add Preset or Choose Preset's Update, carries a held action's red dot on its corner. */
 .filter-row > .icon-btn { position: relative; }
+/* Choose Preset's row never wraps: the dropdown takes the room Load and Update leave, shrinking as the panel narrows. */
+.filter-row.choose-preset-row { flex-wrap: nowrap; }
+.choose-preset-row > select { flex: 1 1 0; min-width: 0; }
 .duration-field { width: 14rem; max-width: 100%; }
-.filter-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+/* The footer's gap is the Tags tab footer's, so Discard changes and Apply sit where its Discard changes and Save do. */
+.filter-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 /* Its icon buttons, as the Tags tab's. Apply turns orange and shows the unsaved-changes dot while there are changes to
    apply. While a field holds it, its dot turns red in place of the badge other held actions show, over the 250 ms the
    red marks fade in, or at once with reduced motion. */
@@ -1641,7 +1645,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
           <div data-subpanel="presets" hidden>
             <div class="filter-section">
               <h3>Choose Preset</h3>
-              <div class="filter-row">
+              <div class="filter-row choose-preset-row">
                 <select class="ctl grow" id="filter-preset-select" aria-label="Choose preset"></select>
                 <button class="icon-btn" type="button" id="filter-load-preset" aria-label="Load preset" title="Load preset"><span class="material-symbol-icon">sync</span></button>
                 <button class="icon-btn" type="button" id="filter-update-preset" aria-label="Update preset" title="Update preset"><span class="btn-label material-symbol-icon">save</span><span class="held-dot"></span></button>

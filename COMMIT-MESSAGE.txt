@@ -19,10 +19,12 @@ Instructions:
 
 Commit Message:
 
-M12k1: Add Only files this browser can play to the WebUI's Filter tab, saved in presets and compared in preset matching
+M12k1: Give the WebUI's panel tabs and Filter sub-tabs one shared tab rule, replace the tabs' Refresh, and reload them on tag and source events
 
-- The Filter tab's Basic Filters end with Only files this browser can play, off by default, and the Library tab's Filters line names it while it applies.
-- The WebUI writes and reads `onlyBrowserPlayable` in library queries, random picks, presets, and the filter each device remembers, and its preset matching compares it, as two new cases in `preset-filter-equality.json` lock for the WebUI and Core.
-- The mockup's preset follow takes the option like any other field, in place of keeping the tab's checkbox when another device changes the applied preset.
-- The changelog's .m4v and .webm bullet joins the new filter's bullet.
-- MILESTONES.md records the WebUI slice.
+- The panel's icon tabs and the Filter tab's General, Tags, and Presets sub-tabs share one `.tab` rule, with the sub-tabs as text tabs at the heading's size and weight, and the panel's tab row has no line under it, as the mockup has them.
+- The Filter tab's Refresh is gone, and the Tags tab's Refresh is replaced by Discard changes just before Save, which drops changes without asking.
+- While it shows, the Filter tab loads its sources, tags, and presets again on `tagCatalogChanged`, `sourceStateChanged`, and a resync, once for a burst and without starting over, and the Tags tab loads its tags again on `tagCatalogChanged` and a resync while it has no unsaved changes.
+- A load for a server event that fails keeps what the tab shows, shows no notice, and relays one `filter=` or `tags=event-load-failed` line with only the status or error type; the event stream now passes on `sourceStateChanged`.
+- The tests that used Refresh to reload move onto the events or Discard changes, and the changelog's Filter dialog Refresh bullet becomes one for tabs that stay current.
+- Choose Preset's row never wraps, both footers space their icons alike in the app and the mockup, a held icon button's icon sits where a plain one's does, and a failed tag load says "Tag load failed".
+- MILESTONES.md records the Filter and Tags tabs slice as complete, with the user's spot check.

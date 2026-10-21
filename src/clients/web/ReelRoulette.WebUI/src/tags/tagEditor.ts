@@ -5,6 +5,7 @@ import type { FilterDialog } from "../filter/filterDialog";
 import { cloneFilterState } from "../filter/filterStateModel";
 import type { Library } from "../library/library";
 import { createAutoTagScanRequest, libraryQueryTagSaveEffect } from "../library/libraryQuerySession";
+import { eventLoadFailedLine } from "../logging/relayLogLines";
 import type { Notifications } from "../notifications/notifications";
 import {
   createTagSaveSession,
@@ -20,6 +21,7 @@ import type { AppApi } from "../state/appApi";
 import type { AppStore, StorageLike } from "../state/appStore";
 import type { DeviceStore } from "../state/deviceStore";
 import type { ServerConnection } from "../state/serverConnection";
+import { createCoalescedRefresh } from "../stats/coalescedRefresh";
 import { actionBlock, isFlagged, type FieldProblem } from "../validation/fieldValidation";
 import {
   AUTO_TAG_SCANNING,
@@ -176,15 +178,20 @@ export interface TagEditor {
    * The tab shows: loads the tags of the item it edits, which it doesn't while the server fails the compatibility
    * check or runs without a library, nor while a save is on its way, which loads them once it lands. A tab that shows
    * while the server has no library loads once it is ready. Its changes are as it was left with them.
+   *
+   * While it shows without changes, a tag catalog change or a resync loads the tags again, once for a burst of them;
+   * with changes it keeps them and loads nothing. Such a load that fails keeps what the tab shows, says nothing, and
+   * sends one line to the log. A hidden tab loads when it next shows.
    */
   open(): void;
   /** The tab hides: closes the editor's dialogs, keeping the changes. */
   close(): void;
   /**
-   * Asks first when there are changes, then drops them, closes the editor's dialogs, follows the playing item, and
-   * loads the tags again, or once a save on its way lands.
+   * Discard changes: drops the changes at once, without asking, closes the editor's dialogs, puts the categories back in
+   * the order of the tags about to load, follows the playing item, and loads the tags again, or once a save on its way
+   * lands. Disabled while there are no changes.
    */
-  refresh(): Promise<void>;
+  discardChanges(): void;
   /**
    * Shows the changes as saved and sends them in the background, leaving the panel open. Once the save lands, the
    * editor follows the playing item and loads the tags again. Not while the server fails the compatibility check or
@@ -387,10 +394,6 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     return { editing: false, categoryEdit: null, newCategory: null };
   }
 
-  function confirmDiscard(): Promise<boolean> {
-    return dialogs.confirm({ message: "Discard changes?", confirmLabel: "Discard", danger: true });
-  }
-
   /** The categories expanded with these changed, which this device then remembers. */
   function withExpanded(ids: readonly string[], open: boolean): Set<string> {
     const expanded = new Set(state.expanded);
@@ -498,7 +501,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     savesInFlight -= 1;
     follow();
     if (isOpen.peek()) {
-      reload("Tag refresh failed");
+      reload("Tag load failed");
     }
   }
 
@@ -576,7 +579,7 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     }
     // A deleted tag's add or remove may have been the last one holding the item.
     if (!followAndLoad() && isOpen.peek()) {
-      reload("Tag refresh failed");
+      reload("Tag load failed");
     }
   }
 
@@ -697,9 +700,46 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     }
   });
 
-  // A rename or delete of a tag no file has comes only as a catalog change, without the old name, so a kept scan that
-  // names a tag no longer in the catalog is cleared, and its Apply can't create the tag again.
+  /**
+   * Whether a load for a server event can go: the tab shows without changes, no save is on its way, which loads once it
+   * lands, and the server isn't held back.
+   */
+  function eventLoadCanGo(): boolean {
+    return isOpen.peek() && !hasChanges(state) && savesInFlight === 0 && !store.heldBack.peek();
+  }
+
+  /**
+   * Loads the tags again for a server event. A failure keeps what the tab shows and says nothing, sending one line to
+   * the log naming the error's status or kind, never a name; a 401 has sent its own line and asked for pairing.
+   */
+  async function loadForEvents(): Promise<void> {
+    if (!eventLoadCanGo()) {
+      return;
+    }
+    try {
+      await loadModel();
+    } catch (error) {
+      if (!(error instanceof UnauthorizedError)) {
+        void api.relayLog("warn", eventLoadFailedLine("tags", error));
+      }
+    }
+  }
+
+  /** Loads the tags again once for a burst of server events. */
+  const eventLoads = createCoalescedRefresh(loadForEvents);
+
+  function requestEventLoad(): void {
+    if (eventLoadCanGo()) {
+      void eventLoads.request();
+    }
+  }
+
+  // A catalog change, this page's own save's or another device's, can leave the tab's tags out of date. While it shows
+  // without changes it loads again; with changes it keeps them, and a hidden tab loads when it next shows. A rename or
+  // delete of a tag no file has comes only as a catalog change, without the old name, so a kept scan that names a tag
+  // no longer in the catalog is cleared, and its Apply can't create the tag again.
   connection.on("tagCatalogChanged", (payload) => {
+    requestEventLoad();
     const tags: unknown = payload?.tags ?? payload?.Tags;
     if (!Array.isArray(tags) || !state.autoTag.hasRun || state.autoTag.scanning) {
       return;
@@ -708,6 +748,9 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       clearScan();
     }
   });
+
+  // Events missed can leave the tab's tags out of date, so it loads again as for a catalog change.
+  connection.on("resyncRequired", requestEventLoad);
 
   // The editor follows the playing item, and the line naming a held item follows it too.
   store.current.subscribe(() => {
@@ -775,17 +818,14 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       isOpen.value = false;
     },
 
-    async refresh() {
-      if (hasChanges(state) && !(await confirmDiscard())) {
-        return;
-      }
+    discardChanges() {
       update({
         ...cleared(),
         ...dialogsClosed(),
         order: []
       });
       follow();
-      reload("Tag refresh failed");
+      reload("Tag load failed");
     },
 
     save() {

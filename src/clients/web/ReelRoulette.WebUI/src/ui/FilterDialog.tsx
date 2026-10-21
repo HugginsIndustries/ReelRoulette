@@ -117,13 +117,12 @@ export function FilterDialog() {
       <div id="filter-dialog" class="filter-dialog">
         <div class="filter-dialog-header">
           <h2 id="filter-dialog-heading">{view ? view.heading : "Preset: None"}</h2>
-          <button id="filter-dialog-refresh-btn" class="icon-btn" type="button" title="Refresh" aria-label="Refresh" onClick={() => void filterDialog.refresh()}><span class="material-symbol-icon">refresh</span></button>
         </div>
         <div class="filter-dialog-tabstrip" role="tablist" aria-label="Filter sections">
           {TABS.map(({ tab, label }) => {
             const problem = sectionFlagged(view, tab);
             return (
-              <button key={tab} type="button" class={tab === active ? "filter-tab is-active" : "filter-tab"} role="tab" data-filter-tab={tab} aria-selected={tab === active ? "true" : "false"} title={problem ? SECTION_PROBLEM_TITLE : undefined} onClick={() => filterDialog.showTab(tab)}>
+              <button key={tab} type="button" class="tab text-tab filter-tab" role="tab" data-filter-tab={tab} aria-selected={tab === active ? "true" : "false"} title={problem ? SECTION_PROBLEM_TITLE : undefined} onClick={() => filterDialog.showTab(tab)}>
                 {label}
                 <SectionProblemMark shown={problem} />
               </button>
@@ -432,7 +431,7 @@ function PresetsPanel({ view }: { view: FilterDialogView }) {
     <>
       <div class="filter-section">
         <h3>Choose Preset</h3>
-        <div class="filter-row">
+        <div class="filter-row choose-preset-row">
           <select id="filter-dialog-preset-select" class="ctl grow" aria-label="Choose preset" value={chosen} onChange={(event) => filterDialog.choosePreset(event.currentTarget.value)}>
             <option value="">None</option>
             {view.presets.map((preset) => (

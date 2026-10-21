@@ -167,7 +167,7 @@ Last milestone completed: M12j
 | Mockup | ✅ Complete | The shared tab rule, with the Filter tab's sub-tabs as text tabs, the Filter tab without Refresh, and the Tags tab's Discard changes in place of its Refresh, approved by the user. |
 | Contract | ✅ Complete | A browser-playable field in the FilterState schema, applied by the server in the list query, its counts, and random selection, and a `503` with its own play error code from the media and play routes for a file the server can't read. |
 | WebUI | ✅ Complete | The "Only files this browser can play" option in the Filter tab, saved in presets and compared in preset matching. |
-| Filter and Tags tabs | ⏳ Planned | The shared tab rule, with the Filter tab's sub-tabs as text tabs, its Refresh gone, the Tags tab's Discard changes in place of its Refresh, and both tabs reloading on tag and source events. |
+| Filter and Tags tabs | ✅ Complete | The shared tab rule, with the Filter tab's sub-tabs as text tabs, its Refresh gone, the Tags tab's Discard changes in place of its Refresh, and both tabs reloading on tag and source events. |
 | Error message | ⏳ Planned | A format-not-supported message for a file the browser can't play, "not found" only for a missing file, a couldn't-load message for any other answer, such as the server's `503` for a file it can't read, and skipping missing and unplayable files during autoplay, Next, Previous, and random picks. |
 
 #### Mockup slice
@@ -349,6 +349,37 @@ Last milestone completed: M12j
 - The Tags tab reloads on `tagCatalogChanged` while it has no unsaved changes, and keeps its changes without reloading while it has some, in WebUI tests of the Tags tab on the event.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and a spot check of the sub-tabs on the user's phone.
+
+**Evidence**
+
+- `src/styles.css` has the mockup's shared `.tab` rule and its `.text-tab` variant. The panel's tabs (`tab panel-tab`) and the Filter tab's sub-tabs (`tab text-tab filter-tab`, without `is-active`) use them in place of their own rules, and the panel's tab row has no line under it.
+- A sub-tab's problem badge sits at the top right of its name without its disc. On a short screen, text tabs are 38 px and 1rem, and the panel tabs 40 px.
+- The Filter tab's Refresh is gone, with its "Filter data refreshed." popup and "Filter refresh failed" notice.
+- The Tags tab's Refresh is replaced by `#tag-editor-discard-btn` (`undo`) just before Save, disabled without changes. Its `discardChanges` drops the changes without asking, closes the tab's dialogs, resets the category order, follows the playing item, and loads the tags.
+- The event stream passes on `sourceStateChanged`.
+- While it shows, the Filter tab loads its sources, tags, and presets again on `tagCatalogChanged`, `sourceStateChanged`, and `resyncRequired`, once for a burst through `createCoalescedRefresh`, without starting over, and not while Apply's preset writes are being sent. A typed new preset name, Choose Preset's choice, and an open Edit Preset stay.
+- While it shows without changes, the Tags tab loads its tags again on `tagCatalogChanged` and `resyncRequired`, once for a burst, and not while a save is on its way. With changes it keeps them and loads nothing.
+- Both tabs' loads on `resyncRequired` go beyond the Scope, which names only `tagCatalogChanged` and `sourceStateChanged`. A resync means events were missed, which may include the ones the tabs load for.
+- A load for a server event that fails keeps what the tab shows, shows no notice, and relays `filter=event-load-failed` or `tags=event-load-failed` with `status={code}` or `error={type}`, built by `eventLoadFailedLine` in `src/logging/relayLogLines.ts`. Opening a tab still shows its notice on failure.
+- The tests that used Refresh to reload moved onto the events, or onto Discard changes for the Tags tab. One Tags test of Refresh without changes went, since Discard changes is disabled then and the events cover that load.
+- New tests:
+  - `filterDialog.test.ts`'s and `tagEditor.test.ts`'s "server events": each event with and without unsaved changes, a hidden tab, a burst, and a failed load.
+  - The Filter screen's "has no Refresh", the sub-tabs' text tab look, and their keyboard behavior.
+  - The Tags screen's Discard changes, and its event loads and failed load.
+  - `serverConnection.test.ts`'s `sourceStateChanged`, and `relayLogLines.test.ts`'s `eventLoadFailedLine`.
+- The phone test's 44 px tablet check reads the tabs' minimum size, since the shared rule sets one, and its short-screen icon button check reads Discard changes.
+- The snapshots change only for the tab classes, the Refresh buttons going, and Discard changes.
+- Four deliberate breaks each failed tests, each restored from a copy: the Filter tab's event listeners removed (17), the Tags tab loading with changes (3), Discard asking first (7), and an event load showing a notice (6). The event load starting over failed 3 more.
+- `CONTEXT.md` and `docs/domain-inventory.md` describe the tabs without Refresh and their event loads, and `docs/api.md` and `docs/architecture.md` their event loads. The changelog's Filter dialog Refresh bullet is replaced by one for tabs that stay current.
+- The mockup already showed this slice's look and buttons and needed no change until the spot check's fixes below. `node docs/mockups/reelroulette/build/check.mjs` passes.
+- Discard changes' own load, and the load after a save lands, say "Tag load failed: …" when they fail, in place of "Tag refresh failed: …".
+- The user's spot check on the phone found three layout issues, the first two fixed in the app and the mockup, the third in the app only:
+  - At the minimum panel width, Choose Preset's Update wrapped to a second line. Its row (`choose-preset-row`) now never wraps, and the dropdown takes the room Load and Update leave, shrinking as the panel narrows.
+  - The Filter tab's footer had a 10 px gap and the Tags tab's footer row 8 px, so Discard changes moved between the tabs. Both now have 8 px.
+  - Apply's icon sat about 5 px higher than Save's, since a held button wraps its icon in a `.btn-label` span whose line of text lifted it. In an icon button the label is now a flex box (`.icon-btn > .btn-label`), which also lowers Add Preset's and Update preset's icons to where the plain icon buttons' sit. The mockup puts its icon in the label itself and needed no change.
+- A Filter screen test checks the Choose Preset row's computed `flex-wrap`, the dropdown's flex and minimum width, the footer's gap, and Apply's label as a flex box, and a Tags screen test checks its footer row's gap. Removing the row's rule, and the label's, each failed it.
+- `npm run verify` passes with 1801 tests, up from 1778.
+- The user's spot check on the phone and the desktop browser passed after the fixes: the sub-tabs, the tab row without a line, Discard changes in the Tags tab, Choose Preset on one line at the minimum panel width, and Discard changes and Apply sitting where the Tags tab's Discard changes and Save do, with Update level with Load.
 
 #### Error message slice
 

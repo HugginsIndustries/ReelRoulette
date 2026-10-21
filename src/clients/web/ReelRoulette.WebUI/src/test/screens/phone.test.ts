@@ -191,6 +191,7 @@ describe("a phone on its side", () => {
 
     await click(panelButton());
     expect(currentStyle(tab("Library")).height).toBe("40px");
+    expect([currentStyle(tab("Library")).minWidth, currentStyle(tab("Library")).minHeight]).toEqual(["40px", "40px"]);
     expect(currentStyle(document.getElementById("library-search-input")!).minHeight).toBe("38px");
     await click(tab("Filter"));
     expect(currentStyle(document.querySelector(".filter-tab")!).minHeight).toBe("38px");
@@ -232,8 +233,8 @@ describe("a phone on its side", () => {
     await click(tab("Tags"));
     expect(currentStyle(panel().querySelector(".tag-editor-header h2")!).fontSize).toBe("16px");
     // The tabs' icon buttons keep their size.
-    expect(currentStyle(document.getElementById("tag-editor-refresh-btn")!).height).toBe("44px");
-    expect(currentStyle(document.getElementById("tag-editor-refresh-btn")!).minHeight).not.toBe("38px");
+    expect(currentStyle(document.getElementById("tag-editor-discard-btn")!).height).toBe("44px");
+    expect(currentStyle(document.getElementById("tag-editor-discard-btn")!).minHeight).not.toBe("38px");
     expect(currentStyle(panel().querySelector(".tag-editor-header")!).minHeight).toBe("36px");
     expect(currentStyle(document.getElementById("tag-editor-new-tag")!).minHeight).toBe("38px");
     fireEvent.click(document.getElementById("tag-editor-autotag-btn")!);
@@ -265,7 +266,8 @@ describe("a phone on its side", () => {
     await mount(server);
 
     await click(panelButton());
-    expect(currentStyle(tab("Library")).height).toBe("44px");
+    // The shared tab rule gives tabs their 44 px as a minimum size.
+    expect([currentStyle(tab("Library")).minWidth, currentStyle(tab("Library")).minHeight]).toEqual(["44px", "44px"]);
     await click(tab("Filter"));
     expect(currentStyle(document.querySelector(".filter-tab")!).minHeight).toBe("44px");
 

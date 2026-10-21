@@ -8,6 +8,7 @@ import type { NotifyRequest } from "../notifications/notifications";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type ApiPreset } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
+import { REFRESH_GATHER_MS } from "../stats/coalescedRefresh";
 import { createFakePresets, type FakePresets } from "./fakePresetServer";
 import { EMPTY_FIELD } from "../validation/fieldValidation";
 
@@ -31,6 +32,8 @@ function setup(presets: ApiPreset[] = [FAVORITES], shared?: FakePresets) {
       fakePresets.list = list.slice();
     },
     fakePresets,
+    /** The sources the server lists. */
+    sources: [{ id: "source-1", displayName: "Movies" }, { id: "source-2", displayName: "Photos" }] as Array<{ id: string; displayName: string }>,
     sourcesStatus: 200,
     /** The tag model's status, and its content type, for a proxy's page in place of JSON. */
     modelStatus: 200,
@@ -57,7 +60,7 @@ function setup(presets: ApiPreset[] = [FAVORITES], shared?: FakePresets) {
     server.requests.push({ method, path, body });
     if (path === "/api/sources") {
       await server.held;
-      return json([{ id: "source-1", displayName: "Movies" }, { id: "source-2", displayName: "Photos" }], server.sourcesStatus);
+      return json(server.sources, server.sourcesStatus);
     }
     if (path === "/api/tag-editor/model") {
       const model = { categories: [{ id: "places", name: "Places", sortOrder: 0 }], tags: [{ name: "Beach", categoryId: "places" }] };
@@ -93,7 +96,7 @@ function setup(presets: ApiPreset[] = [FAVORITES], shared?: FakePresets) {
     fetch: fetchImpl
   });
   const steps: string[] = [];
-  const connectionListeners: Record<string, () => void> = {};
+  const connectionListeners: Record<string, (payload?: unknown) => void> = {};
   const connection = {
     async loadPresets() {
       steps.push("loadPresets");
@@ -101,9 +104,35 @@ function setup(presets: ApiPreset[] = [FAVORITES], shared?: FakePresets) {
       store.syncHeaderPresets();
       return true;
     },
-    on(event: string, listener: () => void) {
+    on(event: string, listener: (payload?: unknown) => void) {
       connectionListeners[event] = listener;
     }
+  };
+  /**
+   * Sends the dialog server events, as the connection does, each with an empty payload, and lets the load they ask for
+   * gather and arrive.
+   */
+  async function serverEvents(...events: string[]): Promise<void> {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      for (const event of events) {
+        connectionListeners[event]?.({});
+      }
+      await vi.advanceTimersByTimeAsync(REFRESH_GATHER_MS);
+    } finally {
+      vi.useRealTimers();
+    }
+    for (let i = 0; i < 5; i++) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+  }
+  /** The lines the dialog sent to the log, as level and message. */
+  const relayed = () =>
+    server.requests.filter((request) => request.path === "/api/logs/client").map((request) => `${request.body.level} ${request.body.message}`);
+  /** How many times the dialog loaded each of its sources, tags, and presets. */
+  const loads = () => {
+    const count = (path: string) => server.requests.filter((request) => request.path === path).length;
+    return { sources: count("/api/sources"), tags: count("/api/tag-editor/model"), presets: count("/api/presets") };
   };
   /**
    * Reloads the presets for a preset event or a resync, as the connection does, with the server's list as it is now: the
@@ -171,6 +200,9 @@ function setup(presets: ApiPreset[] = [FAVORITES], shared?: FakePresets) {
     deviceWrites,
     serverReady,
     presetEvent,
+    serverEvents,
+    relayed,
+    loads,
     moves
   };
 }
@@ -212,14 +244,14 @@ describe("opening", () => {
     expect(view().unsaved).toBe(false);
   });
 
-  it("shows but loads nothing while the server is incompatible, and says why when its data cannot load", async () => {
-    const { dialog, store, server, messages, notices } = setup();
+  it("shows but loads nothing while the server is incompatible, nor on a server event, and says why when its data cannot load", async () => {
+    const { dialog, store, server, messages, notices, serverEvents } = setup();
     store.compatibilityBlocked.value = true;
     await dialog.open();
     expect(server.requests).toHaveLength(0);
     expect(dialog.isOpen.value).toBe(true);
     expect(dialog.view.value).toBeNull();
-    await dialog.refresh();
+    await serverEvents("tagCatalogChanged", "sourceStateChanged", "resyncRequired");
     expect(server.requests).toHaveLength(0);
     expect(dialog.view.value).toBeNull();
     dialog.close();
@@ -234,14 +266,14 @@ describe("opening", () => {
     expect(dialog.tab.value).toBeNull();
   });
 
-  it("loads, refreshes, and applies nothing while the server runs without a library, with no notice", async () => {
-    const { dialog, view, store, server, messages, notices, steps, library, panel } = setup();
+  it("loads and applies nothing while the server runs without a library, on a server event either, with no notice", async () => {
+    const { dialog, view, store, server, messages, notices, steps, library, panel, serverEvents } = setup();
     store.libraryState.value = "damaged";
     await dialog.open();
     expect(server.requests).toHaveLength(0);
     expect(dialog.isOpen.value).toBe(true);
     expect(dialog.view.value).toBeNull();
-    await dialog.refresh();
+    await serverEvents("tagCatalogChanged", "sourceStateChanged", "resyncRequired");
     expect(server.requests).toHaveLength(0);
     expect(dialog.view.value).toBeNull();
     dialog.close();
@@ -254,7 +286,7 @@ describe("opening", () => {
     dialog.changeGeneral({ onlyNeverPlayed: true });
     expect(view().unsaved).toBe(true);
     store.libraryState.value = "newer";
-    await dialog.refresh();
+    await serverEvents("tagCatalogChanged", "sourceStateChanged", "resyncRequired");
     await dialog.apply();
     expect(server.requests).toHaveLength(loaded);
     expect(steps).toEqual([]);
@@ -293,31 +325,29 @@ describe("opening", () => {
     expect(notices).toEqual([]);
   });
 
-  it("Refresh before anything has loaded loads as showing the tab does, and says so, as Refresh after it does", async () => {
-    const { dialog, view, server, messages, notified, notices } = setup();
+  it("loads nothing on a server event before anything has loaded, and loads as it shows again", async () => {
+    const { dialog, view, server, messages, notices, serverEvents, loads } = setup();
     server.sourcesStatus = 500;
     await dialog.open();
-    expect(dialog.view.value).toBeNull();
-
-    await dialog.refresh();
-    expect(notices.at(-1)).toBe("Filter refresh failed: HTTP 500");
-    expect(messages).toEqual([]);
+    expect(notices).toEqual(["Filter load failed: HTTP 500"]);
     expect(dialog.view.value).toBeNull();
 
     server.sourcesStatus = 200;
-    await dialog.refresh();
-    expect(messages.at(-1)).toBe("Filter data refreshed.");
+    const before = loads();
+    await serverEvents("tagCatalogChanged", "sourceStateChanged", "resyncRequired");
+    expect(loads()).toEqual(before);
+    expect(dialog.view.value).toBeNull();
+
+    await dialog.open();
     expect(dialog.tab.value).toBe("general");
     expect(view().sources.map((source) => source.id)).toEqual(["source-1", "source-2"]);
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites"]);
-
-    await dialog.refresh();
-    const refreshed = { kind: "actions", text: "Filter data refreshed.", key: "filter" };
-    expect(notified).toEqual([refreshed, refreshed]);
+    expect(notices).toEqual(["Filter load failed: HTTP 500"]);
+    expect(messages).toEqual([]);
   });
 
-  it("reads a failed tag model as HTTP and its status, on loading and on Refresh", async () => {
-    const { dialog, server, messages, notices } = setup();
+  it("reads a failed tag model as HTTP and its status, in a notice on loading and in a log line on a server event", async () => {
+    const { dialog, server, messages, notices, serverEvents, relayed } = setup();
     server.modelStatus = 503;
     await dialog.open();
     expect(notices).toEqual(["Filter load failed: HTTP 503"]);
@@ -325,8 +355,9 @@ describe("opening", () => {
     server.modelStatus = 200;
     await dialog.open();
     server.modelStatus = 503;
-    await dialog.refresh();
-    expect(notices).toEqual(["Filter load failed: HTTP 503", "Filter refresh failed: HTTP 503"]);
+    await serverEvents("tagCatalogChanged");
+    expect(notices).toEqual(["Filter load failed: HTTP 503"]);
+    expect(relayed()).toEqual(["warn filter=event-load-failed status=503"]);
     expect(messages).toEqual([]);
   });
 
@@ -341,21 +372,25 @@ describe("opening", () => {
   it.each([
     ["tag model", "modelStatus"],
     ["sources", "sourcesStatus"]
-  ] as const)("shows only the pairing prompt when the %s answers 401, on loading and on Refresh", async (_name, field) => {
-    const { dialog, store, server, messages, notices } = setup();
+  ] as const)("shows only the pairing prompt when the %s answers 401, on loading and on a server event", async (_name, field) => {
+    const { dialog, view, store, server, messages, notices, serverEvents, relayed } = setup();
     server[field] = 401;
     await dialog.open();
     expect(store.pairingRequired.value).toBe(true);
     expect(notices).toEqual([]);
     expect(dialog.view.value).toBeNull();
 
-    await dialog.refresh();
     server[field] = 200;
-    await dialog.refresh();
+    await dialog.open();
+    expect(view().sources).toHaveLength(2);
+    store.pairingRequired.value = false;
     server[field] = 401;
-    await dialog.refresh();
+    await serverEvents("tagCatalogChanged");
+    expect(store.pairingRequired.value).toBe(true);
+    expect(view().sources).toHaveLength(2);
     expect(notices).toEqual([]);
-    expect(messages).toEqual(["Filter data refreshed."]);
+    expect(messages).toEqual([]);
+    expect(relayed()).toEqual([]);
   });
 
   it("keeps its changes and its section while it hides, and shows them again as it loads again", async () => {
@@ -1145,19 +1180,19 @@ describe("per-preset writes", () => {
     expect(server.presets.map((preset) => preset.name)).toEqual(["Mine", "Favorites", "Recent", "Long", "Other"]);
   });
 
-  it("does nothing on a second Apply or a Refresh while Apply's writes are being sent", async () => {
-    const { dialog, view, server, notices } = await opened();
+  it("does nothing on a second Apply or a server event while Apply's writes are being sent", async () => {
+    const { dialog, view, server, notices, serverEvents } = await opened();
     dialog.editPreset(LONG.id);
     await dialog.deleteEditedPreset();
     add(dialog, "Mine", { onlyKnownDuration: true });
     const sourceLoads = () => server.requests.filter((request) => request.path === "/api/sources").length;
     const loadsBefore = sourceLoads();
 
-    // A double press, and a Refresh, while the first Apply's delete is on its way.
+    // A double press, and server events, while the first Apply's delete is on its way.
     const first = dialog.apply();
     const second = dialog.apply();
-    const refreshed = dialog.refresh();
-    await Promise.all([first, second, refreshed]);
+    const evented = serverEvents("tagCatalogChanged", "sourceStateChanged", "resyncRequired");
+    await Promise.all([first, second, evented]);
 
     expect(server.fakePresets.summaries()).toEqual(["delete preset-long", "create Mine"]);
     expect(notices).toEqual([]);
@@ -1166,8 +1201,8 @@ describe("per-preset writes", () => {
     expect(view().presetsChanged).toBe(false);
   });
 
-  it("Refresh keeps the tab's preset changes and takes the server's version of every other preset", async () => {
-    const { dialog, view, server } = await opened();
+  it("a server event's load keeps the tab's preset changes and takes the server's version of every other preset", async () => {
+    const { dialog, view, server, serverEvents } = await opened();
     rename(dialog, RECENT.id, "Fresh");
     // Another device changes Favorites' and Recent's filters and deletes Long.
     server.presets = [
@@ -1175,7 +1210,7 @@ describe("per-preset writes", () => {
       { ...RECENT, filterState: { mediaTypeFilter: 1 } }
     ];
 
-    await dialog.refresh();
+    await serverEvents("tagCatalogChanged");
 
     expect(view().presets.map((preset) => [preset.name, preset.filterState.onlyKnownLoudness, preset.filterState.mediaTypeFilter])).toEqual([
       ["Favorites", true, 0],
@@ -1260,13 +1295,13 @@ describe("applying", () => {
     expect(library.commitQuery).not.toHaveBeenCalled();
   });
 
-  it("Refresh keeps the tab's order, with a preset another device added at the end, and Apply then sends one reorder", async () => {
-    const { dialog, view, server, store } = setup([FAVORITES, RECENT]);
+  it("a server event's load keeps the tab's order, with a preset another device added at the end, and Apply then sends one reorder", async () => {
+    const { dialog, view, server, store, serverEvents } = setup([FAVORITES, RECENT]);
     await dialog.open();
     dialog.movePreset(0, 1);
     server.presets = [FAVORITES, RECENT, LONG];
 
-    await dialog.refresh();
+    await serverEvents("sourceStateChanged");
     expect(view().presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites", "Long"]);
     expect(view().presetsChanged).toBe(true);
     expect(view().unsaved).toBe(true);
@@ -1277,11 +1312,11 @@ describe("applying", () => {
     expect(server.presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites", "Long"]);
   });
 
-  it("Refresh takes the server's preset list while there are no preset changes", async () => {
-    const { dialog, view, server } = setup([FAVORITES]);
+  it("a server event's load takes the server's preset list while there are no preset changes", async () => {
+    const { dialog, view, server, serverEvents } = setup([FAVORITES]);
     await dialog.open();
     server.presets = [FAVORITES, RECENT];
-    await dialog.refresh();
+    await serverEvents("tagCatalogChanged");
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent"]);
     expect(view().presetsChanged).toBe(false);
   });
@@ -1432,7 +1467,7 @@ describe("unsaved state", () => {
   });
 
   it("sources checked back as they were keep the preset's source list, through other General changes too", async () => {
-    const { dialog, view, store } = setup([EVERY_SOURCE]);
+    const { dialog, view, store, serverEvents } = setup([EVERY_SOURCE]);
     store.pickHeaderPreset("preset-every");
     await dialog.open();
     expect(view().heading).toBe("Preset: Every source");
@@ -1444,11 +1479,11 @@ describe("unsaved state", () => {
     expect(view().working.includedSourceIds).toEqual(["source-1", "source-2"]);
     expect(view()).toMatchObject({ heading: "Preset: Every source", unsaved: false });
 
-    // So do closing and opening the tab, and Refresh, between unchecking and checking.
+    // So do closing and opening the tab, and a server event's load, between unchecking and checking.
     dialog.checkSource(0, false);
     dialog.close();
     await dialog.open();
-    await dialog.refresh();
+    await serverEvents("sourceStateChanged");
     dialog.checkSource(0, true);
     expect(view().working.includedSourceIds).toEqual(["source-1", "source-2"]);
     expect(view()).toMatchObject({ heading: "Preset: Every source", unsaved: false });
@@ -1495,14 +1530,14 @@ describe("unsaved state", () => {
     expect(view()).toMatchObject(unchanged);
   });
 
-  it("Refresh takes the server's list for a list put back as it was, and Apply saves none, and after Apply saves a list it is the saved one", async () => {
-    const { dialog, view, server } = setup([FAVORITES, RECENT]);
+  it("a server event's load takes the server's list for a list put back as it was, and Apply saves none, and after Apply saves a list it is the saved one", async () => {
+    const { dialog, view, server, serverEvents } = setup([FAVORITES, RECENT]);
     await dialog.open();
     dialog.movePreset(0, 1);
     dialog.movePreset(1, 0);
     server.presets = [FAVORITES, RECENT, LONG];
 
-    await dialog.refresh();
+    await serverEvents("tagCatalogChanged");
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent", "Long"]);
     expect(view()).toMatchObject({ presetsChanged: false, unsaved: false });
     await dialog.apply();
@@ -1852,5 +1887,115 @@ describe("preset events", () => {
     expect(store.appliedFilter.peek().mediaTypeFilter).toBe(1);
     expect(view().working.mediaTypeFilter).toBe(0);
     expect(view().general.minText).toBe("00:05");
+  });
+});
+
+describe("server events", () => {
+  const THREE_SOURCES = [
+    { id: "source-1", displayName: "Movies" },
+    { id: "source-2", displayName: "Photos" },
+    { id: "source-3", displayName: "Archive" }
+  ];
+
+  it.each(["tagCatalogChanged", "sourceStateChanged", "resyncRequired"])(
+    "%s loads the sources, tags, and presets again while it shows without unsaved changes, without starting over",
+    async (event) => {
+      const { dialog, view, server, notices, messages, serverEvents, loads } = setup([FAVORITES, RECENT]);
+      await dialog.open();
+      dialog.typeNewPresetName("Draft");
+      dialog.showTab("presets");
+      dialog.choosePreset(RECENT.id);
+      dialog.editPreset(FAVORITES.id);
+      dialog.typePresetName("Fav");
+      expect(view().unsaved).toBe(false);
+      server.sources = THREE_SOURCES;
+      server.presets = [FAVORITES, RECENT, LONG];
+      const before = loads();
+
+      await serverEvents(event);
+
+      expect(loads()).toEqual({ sources: before.sources + 1, tags: before.tags + 1, presets: before.presets + 1 });
+      expect(view().sources.map((source) => source.id)).toEqual(["source-1", "source-2", "source-3"]);
+      expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Recent", "Long"]);
+      expect(view()).toMatchObject({ unsaved: false, newPresetName: "Draft", chosenPreset: RECENT.id, presetEdit: { id: FAVORITES.id, name: "Fav" } });
+      expect(dialog.tab.value).toBe("presets");
+      expect(notices).toEqual([]);
+      expect(messages).toEqual([]);
+    }
+  );
+
+  it.each(["tagCatalogChanged", "sourceStateChanged"])(
+    "%s loads them again while it has unsaved changes, keeping the working copy, a typed preset name, and an open Edit Preset",
+    async (event) => {
+      const { dialog, view, server, serverEvents, loads } = setup([FAVORITES, RECENT]);
+      await dialog.open();
+      dialog.changeGeneral({ onlyNeverPlayed: true });
+      dialog.movePreset(0, 1);
+      dialog.typeNewPresetName("Draft");
+      dialog.editPreset(FAVORITES.id);
+      dialog.typePresetName("Fav");
+      expect(view().unsaved).toBe(true);
+      server.sources = THREE_SOURCES;
+      server.presets = [FAVORITES, RECENT, LONG];
+      const before = loads();
+
+      await serverEvents(event);
+
+      expect(loads()).toEqual({ sources: before.sources + 1, tags: before.tags + 1, presets: before.presets + 1 });
+      expect(view().sources.map((source) => source.id)).toEqual(["source-1", "source-2", "source-3"]);
+      expect(view().general.sourceChecked).toHaveLength(3);
+      expect(view().working.onlyNeverPlayed).toBe(true);
+      expect(view().general.onlyNeverPlayed).toBe(true);
+      expect(view().presets.map((preset) => preset.name)).toEqual(["Recent", "Favorites", "Long"]);
+      expect(view()).toMatchObject({ unsaved: true, newPresetName: "Draft", presetEdit: { id: FAVORITES.id, name: "Fav" } });
+    }
+  );
+
+  it("loads nothing while hidden, and loads as it shows again", async () => {
+    const { dialog, view, server, serverEvents, loads } = setup();
+    await dialog.open();
+    dialog.close();
+    server.sources = THREE_SOURCES;
+    const before = loads();
+
+    await serverEvents("tagCatalogChanged", "sourceStateChanged", "resyncRequired");
+    expect(loads()).toEqual(before);
+    expect(view().sources).toHaveLength(2);
+
+    await dialog.open();
+    expect(loads()).toEqual({ sources: before.sources + 1, tags: before.tags + 1, presets: before.presets + 1 });
+    expect(view().sources).toHaveLength(3);
+  });
+
+  it("loads once for a burst of events", async () => {
+    const { dialog, serverEvents, loads } = setup();
+    await dialog.open();
+    const before = loads();
+
+    await serverEvents("tagCatalogChanged", "sourceStateChanged", "tagCatalogChanged", "resyncRequired", "sourceStateChanged");
+
+    expect(loads()).toEqual({ sources: before.sources + 1, tags: before.tags + 1, presets: before.presets + 1 });
+  });
+
+  it("a load that fails keeps what the tab shows, says nothing, and logs one line with only the status or the error's kind", async () => {
+    const { dialog, view, server, notices, messages, serverEvents, relayed } = setup();
+    await dialog.open();
+    dialog.changeGeneral({ onlyNeverPlayed: true });
+    server.sources = THREE_SOURCES;
+    server.sourcesStatus = 503;
+
+    await serverEvents("sourceStateChanged");
+    expect(relayed()).toEqual(["warn filter=event-load-failed status=503"]);
+
+    server.sourcesStatus = 200;
+    server.modelType = "text/html";
+    await serverEvents("tagCatalogChanged");
+    expect(relayed()).toEqual(["warn filter=event-load-failed status=503", "warn filter=event-load-failed error=UnexpectedResponseError"]);
+
+    expect(notices).toEqual([]);
+    expect(messages).toEqual([]);
+    expect(view().sources).toHaveLength(2);
+    expect(view()).toMatchObject({ unsaved: true });
+    expect(view().working.onlyNeverPlayed).toBe(true);
   });
 });

@@ -429,6 +429,9 @@ html.theme-light .app-dialog {
 .icon-btn:active:not(:disabled) { opacity: var(--icon-pressed-opacity); }
 .icon-btn:disabled { opacity: var(--icon-disabled-opacity); cursor: default; }
 .icon-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+/* A held icon button, such as Apply or Update preset, wraps its icon in a label. As a flex box the label holds no line of
+   text, whose spacing would lift the icon, so the icon sits where a plain icon button's does, such as Save's. */
+.icon-btn > .btn-label { display: inline-flex; }
 
 /* Text buttons, selects, and text fields in the panel's tabs and Auto Tag. */
 .btn, .ctl {
@@ -1296,25 +1299,12 @@ html.theme-light .tag-category-header { background: #e4e6ec; border-color: #c8ce
 .tag-chip .icon-btn { color: #fff; text-shadow: 0 0 8px rgba(0, 0, 0, 0.62); }
 .tag-chip .icon-btn.is-selected { color: var(--huggins-orange); }
 
-/* The Filter tab's sections. */
-.filter-dialog-tabstrip { display: flex; flex-wrap: wrap; gap: 8px; flex: 0 0 auto; }
-.filter-tab {
-  min-height: 44px;
-  padding: 8px 16px;
-  border: 1px solid var(--control-border);
-  border-radius: 8px;
-  background: var(--control-bg);
-  color: var(--control-fg);
-  cursor: pointer;
-  font-size: 1rem;
-  font-family: inherit;
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-.filter-tab.is-active {
-  border-color: var(--huggins-orange);
-  box-shadow: 0 0 0 1px var(--huggins-orange-soft-inset) inset;
+/* The Filter tab's sections are text tabs. Without a border to cover, a section's badge needs no disc. */
+.filter-dialog-tabstrip { display: flex; gap: 4px; flex: 0 0 auto; }
+.filter-tab .section-problem {
+  top: 2px;
+  right: -6px;
+  background: none;
 }
 .filter-dialog-body {
   flex: 1;
@@ -1341,11 +1331,15 @@ html.theme-light .tag-category-header { background: #e4e6ec; border-color: #c8ce
 .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .filter-row > label { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .grow { flex: 1 1 auto; min-width: 0; }
+/* Choose Preset's row never wraps: the dropdown takes the room Load and Update leave, shrinking as the panel narrows. */
+.filter-row.choose-preset-row { flex-wrap: nowrap; }
+.choose-preset-row > select { flex: 1 1 0; min-width: 0; }
 .duration-field { width: 14rem; max-width: 100%; }
 .new-preset-field { flex: 1 1 180px; }
 .filter-local-mode { min-height: 36px; font-size: 0.85rem; }
-/* Its icon buttons, as the Tags tab's: Apply turns orange and shows the unsaved-changes dot while there are changes. */
-.filter-dialog-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; flex: 0 0 auto; }
+/* Its icon buttons, as the Tags tab's: Apply turns orange and shows the unsaved-changes dot while there are changes.
+   Its gap is the Tags tab footer's, so Discard changes and Apply sit where its Discard changes and Save do. */
+.filter-dialog-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; flex: 0 0 auto; }
 .filter-preset-list { border: 1px solid var(--panel-border); border-radius: 8px; padding: 4px 8px 4px 4px; }
 .filter-preset-row { display: flex; align-items: center; gap: 2px; padding: 2px 0; border-bottom: 1px solid var(--surface-border); background: var(--surface); }
 .filter-preset-row:last-child { border-bottom: 0; }
@@ -1795,22 +1789,12 @@ html.theme-light .panel {
 .fullscreen-stage[data-panel-mode="overlay"] .panel-handle {
   display: none;
 }
-.panel-tabs {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 6px 4px 8px;
-  border-bottom: 1px solid var(--surface-border);
-  flex: 0 0 auto;
-}
-.panel-tablist {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.panel-tab {
-  width: 44px;
-  height: 44px;
+/* Tabs share one look: the panel's icon tabs, the Filter tab's text tabs, and later ones. A tab row has no separator
+   line, only the active tab's orange underline. Text tabs use the heading's size and weight, in the normal text color
+   until active, so icon tabs never take text styling. */
+.tab {
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
   border: 0;
   border-radius: 8px;
@@ -1821,6 +1805,45 @@ html.theme-light .panel {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+.tab:hover {
+  background: rgba(127, 127, 127, 0.16);
+}
+.tab:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.tab[aria-selected="true"] {
+  color: var(--huggins-orange);
+}
+.tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -5px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--huggins-orange);
+}
+.text-tab {
+  padding: 0 12px;
+  font: inherit;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--page-fg);
+}
+.panel-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 8px;
+  flex: 0 0 auto;
+}
+.panel-tablist {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 /* A dot marks the Filter and Tags tabs, the player's panel button, the Filter tab's Apply, and the Tags tab's Save while
    they hold unsaved changes. */
@@ -1837,26 +1860,9 @@ html.theme-light .panel {
 }
 .unsaved-dot[hidden] { display: none; }
 #panel-btn .unsaved-dot { top: 6px; right: 5px; box-shadow: 0 0 0 2px #000; }
-.panel-tab:hover {
-  background: rgba(127, 127, 127, 0.16);
-}
-.panel-tab:focus-visible,
 .panel-close:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
-}
-.panel-tab[aria-selected="true"] {
-  color: var(--huggins-orange);
-}
-.panel-tab[aria-selected="true"]::after {
-  content: "";
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: -5px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--huggins-orange);
 }
 .panel-tabs-spacer {
   flex: 1;
@@ -1953,8 +1959,10 @@ body.short-screen .panel-tab,
 body.short-screen .panel-close {
   width: 40px;
   height: 40px;
+  min-width: 40px;
+  min-height: 40px;
 }
-/* The selected tab's underline stays on the row's border. */
+/* The selected tab's underline keeps its place under the lower tab row. */
 body.short-screen .panel-tab[aria-selected="true"]::after {
   bottom: -3px;
 }
@@ -1982,7 +1990,6 @@ body.short-screen .settings-tab-header h2 {
 body.short-screen .library-overlay button:not(.icon-glyph-base):not(.library-filter-summary),
 body.short-screen .library-overlay-search,
 body.short-screen .library-controls select,
-body.short-screen .filter-tab,
 body.short-screen .app-dialog button,
 body.short-screen .app-dialog input[type="text"],
 body.short-screen .app-dialog select,
@@ -1990,8 +1997,9 @@ body.short-screen .btn,
 body.short-screen .ctl {
   min-height: 38px;
 }
-body.short-screen .filter-tab {
-  padding: 4px 12px;
+body.short-screen .text-tab {
+  min-height: 38px;
+  font-size: 1rem;
 }
 /* The Library tab's four controls take two rows. */
 body.short-screen .library-controls {

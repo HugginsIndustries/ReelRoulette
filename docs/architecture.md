@@ -100,7 +100,7 @@ Reconnect and recovery:
 
 - Clients reconnect with revision continuity hints (`Last-Event-ID` and fallback query semantics where applicable). The WebUI resumes with the last event ID, and takes the revision of a `resyncRequired` it receives. A stream opened without a last event ID starts with `streamOpened`, which gives the client the server's current revision to resume from.
 - Server replays retained events when available.
-- On replay gaps, and for a last event ID ahead of the current revision (as after a server restart), server emits `resyncRequired`. WebUI reloads the loaded library list and the presets.
+- On replay gaps, and for a last event ID ahead of the current revision (as after a server restart), server emits `resyncRequired`. WebUI reloads the loaded library list and the presets, and the Filter tab while it shows, and the Tags tab while it shows without unsaved changes, load again.
 
 ## Auth and Access Model
 

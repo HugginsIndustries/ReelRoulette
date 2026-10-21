@@ -158,13 +158,14 @@ describe("createServerConnection", () => {
     expect(store.presetMenu.value.entries.map((entry) => entry.label)).toEqual(["None", "Favorites"]);
   });
 
-  it("passes item, playback, tag, and tag catalog events on, and a finished refresh once per run", async () => {
+  it("passes item, playback, tag, tag catalog, and source state events on, and a finished refresh once per run", async () => {
     const { connection, sources } = setup();
     const received: Array<[string, unknown]> = [];
     connection.on("itemStateChanged", (payload) => received.push(["itemStateChanged", payload]));
     connection.on("playbackRecorded", (payload) => received.push(["playbackRecorded", payload]));
     connection.on("itemTagsChanged", (payload) => received.push(["itemTagsChanged", payload]));
     connection.on("tagCatalogChanged", (payload) => received.push(["tagCatalogChanged", payload]));
+    connection.on("sourceStateChanged", (payload) => received.push(["sourceStateChanged", payload]));
     connection.on("refreshCompleted", () => received.push(["refreshCompleted", null]));
     connection.start();
     await settle();
@@ -174,15 +175,17 @@ describe("createServerConnection", () => {
     stream.emit("playbackRecorded", 2, { itemId: "b" });
     stream.emit("itemTagsChanged", 3, { resolvedItemIds: ["c"] });
     stream.emit("tagCatalogChanged", 4, { reason: "deleteTag", categories: [], tags: [] });
+    stream.emit("sourceStateChanged", 5, { sourceId: "source-1", isEnabled: false });
     const finished = { snapshot: { isRunning: false, runId: "run-1", completedUtc: "2026-10-07T00:00:00Z", stages: [] } };
-    stream.emit("refreshStatusChanged", 5, finished);
     stream.emit("refreshStatusChanged", 6, finished);
+    stream.emit("refreshStatusChanged", 7, finished);
 
     expect(received).toEqual([
       ["itemStateChanged", { itemId: "a" }],
       ["playbackRecorded", { itemId: "b" }],
       ["itemTagsChanged", { resolvedItemIds: ["c"] }],
       ["tagCatalogChanged", { reason: "deleteTag", categories: [], tags: [] }],
+      ["sourceStateChanged", { sourceId: "source-1", isEnabled: false }],
       ["refreshCompleted", null]
     ]);
   });

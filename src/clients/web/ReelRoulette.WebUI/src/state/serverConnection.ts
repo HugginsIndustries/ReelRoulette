@@ -45,6 +45,8 @@ export interface ServerConnectionEvents {
   itemTagsChanged: (payload: any) => void;
   /** The tag catalog changed, with its categories and tags as they now are. */
   tagCatalogChanged: (payload: any) => void;
+  /** A source was enabled or disabled, which changes the sources the Filter tab lists. */
+  sourceStateChanged: (payload: any) => void;
   /** A refresh run finished. Sent once per run. */
   refreshCompleted: () => void;
   /**
@@ -114,6 +116,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     playbackRecorded: [],
     itemTagsChanged: [],
     tagCatalogChanged: [],
+    sourceStateChanged: [],
     refreshCompleted: [],
     refreshKeptSources: [],
     resyncRequired: [],
@@ -463,6 +466,9 @@ export function createServerConnection(options: ServerConnectionOptions): Server
         },
         tagCatalogChanged(payload) {
           emit("tagCatalogChanged", payload);
+        },
+        sourceStateChanged(payload) {
+          emit("sourceStateChanged", payload);
         },
         presetCatalogChanged(payload) {
           recordPresetEvent(payload);
