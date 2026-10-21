@@ -345,6 +345,29 @@ describe("startup and connection", () => {
     expect(relayedLines(page.server, "Blacklisted on another device")).toEqual([]);
     expect(page.server.logLines().some((line) => line.includes("holiday"))).toBe(false);
   });
+
+  it("pops up another device's rating changes, not this device's own, under a key apart from the favorite's, leaving the file name out of the log", async () => {
+    const page = mountPage();
+    await pageReady(page.server);
+    const path = "C:\\media\\holiday clip.mp4";
+
+    // This device's own change already said so.
+    page.stream().emit("itemRatingChanged", 3, { itemId: "item-video", path, rating: 2, previousRating: null, clientId: page.clientId() });
+    page.stream().emit("itemStateChanged", 4, { itemId: "item-video", path, isFavorite: true, isBlacklisted: false, clientId: "another-client" });
+    page.stream().emit("itemRatingChanged", 5, { itemId: "item-video", path, rating: 3.5, previousRating: 2, clientId: "another-client" });
+    await waitFor(() => expect(toastTexts()).toEqual(["Added to favorites on another device", "Rated 3.5 stars on another device"]));
+    expect(document.querySelectorAll("#toasts .toast-text")[1]!.textContent).toContain("holiday clip.mp4");
+
+    // A second rating replaces the first, and one without a client id counts as another device's.
+    page.stream().emit("itemRatingChanged", 6, { itemId: "item-video", path, rating: null, previousRating: 3.5 });
+    await waitFor(() => expect(toastTexts()).toEqual(["Added to favorites on another device", "Rating cleared on another device"]));
+
+    expect(page.server.logLines()).toEqual(
+      expect.arrayContaining([statusLogLine("Rated 3.5 stars on another device", null, 0), statusLogLine("Rating cleared on another device", null, 0)])
+    );
+    expect(page.server.logLines().some((line) => line.includes("Rated 2 stars"))).toBe(false);
+    expect(page.server.logLines().some((line) => line.includes("holiday"))).toBe(false);
+  });
 });
 
 describe("message relay", () => {

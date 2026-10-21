@@ -64,6 +64,16 @@ describe("libraryProjectionModel", () => {
     expect(page.items.map((item) => item.durationSeconds)).toEqual([150.48, null, null]);
   });
 
+  it("reads a rating in stars, a half-star step from 0.5 to 5, and none for an unrated item or any other value", () => {
+    const ratings = [0.5, 3.5, 5, undefined, null, 0, 5.5, 3.3, "4"];
+    const page = parseLibraryQueryPage({
+      items: ratings.map((rating, index) => ({ id: `i${index}`, sourceId: "s1", fileName: "clip.mp4", rating })),
+      totalCount: ratings.length,
+      searchBaselineCount: ratings.length
+    });
+    expect(page.items.map((item) => item.rating)).toEqual([0.5, 3.5, 5, null, null, null, null, null, null]);
+  });
+
   it("parseUtcMs parses ISO strings", () => {
     const ms = parseUtcMs("2024-01-15T12:00:00Z");
     expect(ms).not.toBeNull();

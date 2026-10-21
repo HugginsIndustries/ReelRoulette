@@ -30,7 +30,9 @@ export interface StatsFileView {
   canShowInFileManager: boolean;
   /** Its stats, or null until they load for it, and while the server holds back or asks for pairing. */
   rows: StatsRow[] | null;
-  /** Its tags in the tag catalog's order, with the rows. */
+  /** Its rating in stars, or null for none, which shows with the rows. */
+  rating: number | null;
+  /** Its tags in the tag catalog's order, in a row of their own below the rows. */
   tags: string[];
 }
 
@@ -107,7 +109,8 @@ export function adjustmentText(adjustment: NormalizationAdjustment, enhanced: bo
 
 /**
  * The current file's rows: plays, the time before this play, favorite, and blacklisted, then for a video its duration
- * and audio, with the adjustment normalization applies to it. The tags follow them, in the tab.
+ * and audio, with the adjustment normalization applies to it. The rating comes before them and the tags after, in the
+ * tab.
  */
 export function fileRows(item: LibraryProjectionItem, lastPlayedUtcMs: number | null, nowMs: number, adjustment: string): StatsRow[] {
   const rows: StatsRow[] = [
@@ -138,6 +141,7 @@ export function libraryCards(stats: LibraryStats): StatsCard[] {
     { label: "Total media", value: count(global.totalMedia) },
     { label: "Favorites", value: count(global.favorites) },
     { label: "Blacklisted", value: count(global.blacklisted) },
+    { label: "Rated", value: count(global.rated) },
     { label: "Total plays", value: count(global.totalPlays) },
     { label: "Unique played", value: count(global.uniquePlayedMedia) },
     { label: "Never played", value: count(global.neverPlayedMedia) },

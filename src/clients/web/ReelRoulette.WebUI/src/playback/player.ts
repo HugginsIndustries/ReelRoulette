@@ -1,8 +1,8 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
 import { requestPlayItem, type PlayItemFailure } from "../api/coreApi";
 import {
-  errorText,
   PLAYBACK_REQUEST_TIMEOUT_MS,
+  postWithNotice,
   ServerUnreachableError,
   UnauthorizedError,
   withTimeout
@@ -1231,26 +1231,15 @@ export function createPlayer(options: PlayerOptions): Player {
     const nextValue = !item[flag];
     // The item the request acts on, named as the now-playing line names it, though another may play by the answer.
     const fileName = basenameFromPath(item.displayName || item.id || "");
-    const failed = `${isFavorite ? "Favorite" : "Blacklist"} update failed`;
-    let response: Response;
-    try {
+    const taken = await postWithNotice(
+      api,
+      dialogs,
+      isFavorite ? "/api/favorite" : "/api/blacklist",
       // The client id comes back on the change's event, so this device can tell its own change from another's.
-      response = await api.post(isFavorite ? "/api/favorite" : "/api/blacklist", {
-        itemId: item.itemId,
-        [flag]: nextValue,
-        clientId: store.identity.clientId
-      });
-    } catch (error) {
-      // A 401 shows only the pairing prompt, which the request has asked for.
-      if (!(error instanceof UnauthorizedError)) {
-        void dialogs.notice(`${failed}: ${errorText(error)}`);
-      }
-      return;
-    }
-    if (!response.ok) {
-      void dialogs.notice(`${failed} (${response.status}).`);
-      return;
-    }
+      { itemId: item.itemId, [flag]: nextValue, clientId: store.identity.clientId },
+      `${isFavorite ? "Favorite" : "Blacklist"} update failed`
+    );
+    if (!taken) return;
     // Applied to the item playing when the server answers.
     const current = store.current.peek()!;
     current[flag] = nextValue;

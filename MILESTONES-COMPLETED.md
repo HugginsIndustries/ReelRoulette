@@ -6,6 +6,316 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12k2 - Item Ratings
+
+- **Status**: ✅ Complete
+- **Goal**: Library items have a 5-star rating with half stars, set from the Stats tab's Current file section and shared by every device.
+- **Depends on**: WebUI Stats Panel, whose Current file section holds the rating and whose catalog upgrade chain takes its schema step, and WebUI Notifications, whose Your actions and Other devices popups announce a rating change.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- A rating is ½ to 5 stars in half-star steps, or none. The catalog stores it as a whole number of half stars from 1 to 10, with no value for none and never 0, so "0 stars" and "not rated" can't both exist. The API gives it in stars, a multiple of 0.5 from 0.5 to 5.
+- Ratings are shared by every device, as favorites and the blacklist are, until accounts exist; then each account has its own, as its favorites and blacklist are.
+- A rating is independent of favorite and blacklist: blacklisting an item keeps its rating, and rating an item changes neither flag.
+- A rating change publishes its own event, `itemRatingChanged`, with the item's id and path, its rating and previous rating, and the `clientId` of the request that made it. Reusing `itemStateChanged` would show a rating change as a favorite change on other devices.
+- The rating has its own line in the Current file section, under the path: the label Rating and five stars, with no Clear button.
+  - The first star's left 8 px, its clear edge, clears the rating, in place of Plex's zone left of its stars, so the control starts at the first star and a click or tap left of the stars does nothing.
+  - Each star is 36 px wide and 30 px tall, its icon's size, so the stars sit close; the control is shorter than the 44 px other controls take.
+  - A full star is the filled star in orange, and a half star lays the filled star, cut off at its middle, over an empty star's grey outline, so only its filled half is orange.
+  - The clear edge is part of the first star, not a tab stop of its own; from the keyboard the keys clear the rating.
+  - A mouse over a star previews the value under it, the star's left half meaning half a star less than its right half, and a mouse over the clear edge previews no stars.
+  - The preview replaces the shown rating while the pointer is over the stars, and the set rating shows again when the pointer leaves them.
+  - A click on a star sets the value under it, and a click on the clear edge clears the rating.
+  - On a touch screen a tap on a star's half sets that value and a tap on the clear edge clears the rating.
+  - A touch drag along the stars changes the value as it moves and sets it on release, and a drag that ends on the clear edge or past the stars' left end clears the rating.
+  - A touch that starts on the stars stays the control's however the finger moves, so it never scrolls the tab and is never cancelled, and lifting it sets the value under it. The control is small enough not to get in the way of scrolling.
+  - From the keyboard it is one tab stop: the left and down arrows step down half a star, the right and up arrows step up half a star, Home is Not rated, End is 5 stars, and Delete or Backspace clears it.
+  - A click or a tap on the stars sets the rating without moving focus to them, so the left and right arrows still play the previous or next item afterwards; Tab still reaches them.
+  - To screen readers it is a slider named Rating, from 0 to 5, whose value text is "3.5 stars", "1 star", or "Not rated".
+- The popups are "Rated {rating}" and "Rating cleared" as Your actions, with the file name as the second line, and the same text followed by "on another device" as Other devices, where {rating} reads as the value text does, such as "3.5 stars".
+- Show in File Manager and Copy Path, beside the path, become one icon button with a tooltip, as the app's other icon buttons are: `folder_open` with the tooltip Show in File Manager on the server machine, and `content_copy` with Copy Path elsewhere, the tooltip also naming it to screen readers. Its icon is 24 px in the 44 px button.
+- The Current file section shows the file's tags as pills in a row of their own below the table, with no Tags label, across the section's full width with a small margin above, right-aligned and wrapping, and nothing there for a file without tags.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ✅ Complete | The rating in the Stats tab's Current file section, the path's icon button, the tags row, the Rated card, and the rating popups, approved on a desktop browser, the iPad, and an Android phone. |
+| Server | ✅ Complete | The rating column in a new catalog schema step, the shipped 2→3 step's index SQL frozen, setting a rating in the catalog, `rating` on item reads, and the rated count in the stats read. |
+| Contract | ✅ Complete | The rating route and its `itemRatingChanged` event, the rated count in the stats response, and `rating`, `hasAudio`, and the fields the server always sends named in `LibraryProjectionItem`, in OpenAPI and the generated WebUI types. |
+| WebUI | ✅ Complete | The rating control in the Current file section, its popups and event handling, the path's icon button, the tags row, and the Rated card. |
+
+#### Mockup slice
+
+**Scope**
+
+- The rating line in the Stats tab's Current file section, as the Decisions describe, under the path line. It shows only while the stats rows show, so not with nothing playing, for a file the server no longer has, while the server fails the compatibility check, runs without a library, or asks for pairing, or while the item loads.
+- A Rated card in the Library cards, after Blacklisted, counting the rated items.
+- The Your actions and Other devices rating popups, a Mockup-tab button for a rating from another device beside the favorite one, and the Settings tab's Other devices description naming rating changes.
+- Show in File Manager or Copy Path as an icon button beside the path, and the file's tags in a row of their own below the table, as the Decisions describe.
+- `star` in the mockup's icon subset, outlined and filled.
+- The clear edge, the first star's left 8 px, which clears on a click, a tap, or a drag that ends on it or past the stars' left end, and previews no stars under a mouse.
+- The hover preview, which replaces the shown rating while the mouse is over the stars and goes back to the set rating when it leaves.
+- The ratings the mockup's items start with come from each item's id.
+- Before the app is built, the user approves the rating on a desktop browser, the iPad, and an Android phone, including the size of the stars and of the clear edge, how halves are tapped and dragged, and how the clear edge is tapped and dragged onto.
+
+**Traps**
+
+- The mockup's fonts are a subset that `build_font.py` cuts from the WebUI's font, with outlined icons in `ICONS` and filled ones in `FILLED`, written into `icons.json`; neither list has a star.
+- `setIcon` in `common.js` shows an icon missing from the subset as codepoint 0xE000, the `error` glyph, and `check.mjs` doesn't check for it (measured).
+- `star_half` ignores the font's fill axis: its left half is solid and its right half outlined at every fill (measured).
+- A filled `star` is flat only at optical size 20, the size filled icons use; at 48 its fill leaves a ring (measured). Empty stars use the outlined icons' size, and full stars and a half star's filled half the filled icons'. The outlined star at 48 and the filled one at 20 have the same outline to within 8 font units of 960 (measured), so the fill lines up over the outline.
+- `fileStats` in `layout.src.html` builds the Current file section, and `statRow` takes a DOM node as its value.
+- Drawing the starting ratings from `statRand` would shift every random value drawn after them (inferred).
+- The mockup's path line, like the app's `.stats-path`, also holds Copy Path or Show in File Manager, which Show in File Manager from the WebUI built.
+- `#mock-sync` is the Mockup tab's favorite from another device, which sends an Other devices popup with the key `sync:{id}`.
+- `check.mjs` runs the pages in happy-dom, with no layout and no pointer drags, so the size of the stars and the clear edge, and how halves and the clear edge are tapped and dragged, can only be judged on the devices.
+
+**Acceptance**
+
+- The mockup shows the rating line, with its clear edge and hover preview, the path's icon button, the tags row, the Rated card, and the rating popups as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+
+**Evidence**
+
+- `build_font.py` adds `star` to the mockup's icon subset, outlined and filled, and every icon already in it kept its codepoint (measured). `star_half`, tried in the first round, left the font again once half stars became the filled star cut off at its middle over the grey outline.
+- `layout.src.html` has the Mockup slice's Scope:
+  - The rating line, one element kept across the Stats tab's redraws, so focus stays on it.
+  - The Rated card, the rating popups, the Mockup tab's "A rating from another device", and the Settings tab's Other devices description naming rating changes.
+  - The path's icon button, and the tags row.
+  - Starting ratings from the items' ids, about a quarter unrated.
+- The index page describes the rating, the path's icon button, and the tags row, and its numbers table has the rating's sizes and the 500 ms key pause.
+- The review ran four rounds, which the Decisions record:
+  - The stars went from 44 px cells, 44 px tall, to 36 px wide and 30 px tall.
+  - The 44 px clear zone left of the stars became the first star's left 8 px.
+  - A half star became orange only on its filled half.
+  - A touch on the stars became the control's however it moves.
+  - The path's text button became an icon button, with a 24 px icon in its 44 px tap area.
+  - The tags moved to a row of their own below the table.
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passes all 66 steps.
+- The smoke check opens the Stats tab before anything plays, so each round also drove the rating once in a throwaway happy-dom script, not kept: taps on halves and the clear edge, drags, the mouse preview, keys and their pause, a redraw keeping focus, another device's change, and the failure notice behaved as the Decisions say.
+- The user approved the mockup in their review on a desktop browser, the iPad, and an Android phone, with the agent's calls the WebUI slice's Scope now records.
+
+#### Server slice
+
+**Scope**
+
+- The catalog moves to the next schema version, with its own upgrade step from the version before that adds only a nullable `rating` column to `items`. A new catalog has the column last too.
+- The shipped 2→3 step's sort indexes move into their own constant, so a later change to the indexes a new catalog gets can't change a shipped step.
+- Setting a rating writes it under the library operations lock, reading the value before and after, as a favorite does, and reports whether it changed.
+- Item reads, `POST /api/library/item` and `POST /api/library/query`, send `rating` in stars when the item is rated, from `ToItem`.
+- The library stats read counts the rated items in its one pass.
+
+**Traps**
+
+- No schema version after 3 has shipped: v0.14.0 shipped 2 and v0.14.1 shipped 3 (measured). A catalog already at the version before, such as a development server's, would fail `HasRequiredCatalogSchema` and be moved aside as damaged if that version gained the column, so the column takes its own step.
+- `UpgradeSchema2To3` runs `SortIndexesSql`, the constant `WriteEmptyDatabase` runs for a new catalog, so adding an index to it would change the shipped step and break upgrading a schema-2 catalog, which doesn't have a newer index's column yet.
+- `LibraryCatalogMigrationTests` compares an upgraded catalog with a new one through `CatalogSeedTests.DescribeSchema`, column by column in order and index by index, so the new column is last in the new catalog's table too.
+- `OlderSchemaVersions()` covers every version from 2 to the one before current, so `CatalogSeed` needs tables for the version before and for the new version.
+- `ListPageSql` and the item readers read columns by position.
+- Adding the column costs no space, and rating all 49,000 items of a synthetic catalog added about 0.3 MB (measured).
+- `ToItem` leaves `peakDb` out when there is none.
+- `ReadStatsGroups` is one `GROUP BY source_id, media_type` pass behind `GET /api/library/stats`.
+- Backups of the previous schema version stay in `backups/`, untrimmed, after an upgrade.
+
+**Acceptance**
+
+- A catalog at each older version opens upgraded and imports upgraded with the rating column, and matches a new catalog's schema, in the catalog upgrade tests.
+- The 2→3 step runs its own index SQL, not the constant a new catalog runs, checked by reading it, and a schema-2 catalog still upgrades, in the catalog upgrade tests.
+- Setting, changing, and clearing a rating stores it, and setting the same value again reports no change, in server tests of setting a rating.
+- Item reads send `rating` in stars for a rated item and leave it out for an unrated one, in server tests of both reads.
+- Library stats count the rated items, in server tests of library stats.
+- `dotnet test ReelRoulette.sln` passes.
+
+**Evidence**
+
+- `LibraryCatalogStore.SchemaVersion` is 7, and `UpgradeSchema6To7` adds only `rating INTEGER NULL` to `items`. A new catalog has the column last, and version 7's required columns include it.
+- The 2→3 step runs `Schema3SortIndexesSql`, the nine sort indexes word for word as v0.14.1 shipped them (measured against the tag), and a new catalog runs `SortIndexesSql`, checked by reading. Their doc comments say the step's copy is history, and that a change to a new catalog's indexes needs a step of its own.
+- `ItemRating` holds the stored range, 1 to 10 half stars, and the conversion to stars. Core keeps the rating in half stars as `RatingHalfStars` on `LibraryCatalogItem` and `CatalogItemState`, and `ToItem` sends it as `rating` in stars.
+- `LibraryCatalogSession.SetRating` writes the rating only when it differs and says whether it changed, and throws for a value outside 1 to 10.
+- `LibraryOperationsService.SetRating` returns the item's state before and after under the operations lock, through `UpdateItem`, the one before-and-after read that favorite and blacklist now use too through `UpdateItemFlag`.
+- The browse page and an item's read share `ListedItemColumnsSql`, in place of two copies of the column list. `InsertItem`, the item state read, and playback's recorded state carry the rating too.
+- The stats pass counts `COUNT(rating)` into `CatalogGlobalStats.Rated`. The stats response maps its fields one by one, so it carries the count only once the Contract slice adds it.
+- `LibraryCatalogStore.Read`, which only tests use, still reads only schema 2's columns, so the upgrade tests can read a catalog before it upgrades.
+- `CatalogSeed` has version 7's tables, and `SeedItem.RatingHalfStars` writes a rating from version 7. The upgrade theories now run from every version from 2 to 6.
+- New tests: `SetRating_StoresChangesAndClearsIt_AndReportsOnlyARealChange`, `SetRating_RefusesAValueOutsideOneToTenHalfStars`, `ReadLibraryStats_CountsTheRatedItems`, `LibraryItems_CarryTheirRatingInStars_AndLeaveItOutWhenUnrated`, and `SetRating_ReturnsTheItemBeforeAndAfter_SoTheCallerCanTellAChange`.
+- Each guarded behavior broken on its own, restored from a copy under `artifacts/scratch/`, failed its tests (measured): `ToItem` without `rating`, the stats without the count, a same-value write reported as a change, the 6→7 step without its column, which failed both upgrade theories from every older version, and out-of-range half stars accepted.
+- `dotnet build ReelRoulette.sln` has no warnings, `dotnet test ReelRoulette.sln` passes 547 Core tests and 19 ServerApp tests, and `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passes.
+- CONTEXT.md, `docs/domain-inventory.md`, and `docs/dev-setup.md` say `user_version` 7 and describe the 6→7 step, CONTEXT.md says a rated library item carries its `rating`, and `docs/domain-inventory.md` lists rating among the catalog's and the operations service's row writes.
+
+#### Contract slice
+
+**Scope**
+
+- `POST /api/rating` takes `itemId`, the item's catalog id as `POST /api/favorite` takes it, `rating`, in stars, or null to clear, and `clientId`.
+  - It answers 400 for an empty item id or a rating that isn't a multiple of 0.5 from 0.5 to 5, and 404 for an item that isn't in the library.
+  - It answers with the item's id, its rating, and the revision of the event it published, as the favorite route does.
+- It publishes `itemRatingChanged` only when the rating changed, with `itemId`, `path`, `rating`, `previousRating`, and the request's `clientId`, no rating being null.
+- The library stats response carries the rated count.
+- `LibraryProjectionItem` names `rating`, sent only for a rated item, and the fields the server always sends that it doesn't name yet: `fullPath`, `isFavorite`, `isBlacklisted`, `playCount`, `fingerprintAlgorithm`, `fingerprintVersion`, and `tags`.
+- `LibraryProjectionItem` also names `hasAudio`, sent once the loudness scan has looked at a video: false for a file without an audio track or one whose track the scan measured as digital silence, and true otherwise.
+- The favorite and blacklist routes name `LibraryStateResponse`, which the spec defined but no route used, as their 200 response.
+- OpenAPI, the generated WebUI types, and `docs/api.md`, which describes the event types.
+
+**Traps**
+
+- `PublishItemState` in `ServerHostComposition.cs` publishes `itemStateChanged` for every favorite or blacklist request that finds its item, even when nothing changed, so other devices pop up a change that didn't happen.
+- `clientId` comes from the request body, trimmed by `NormalizeOptionalIdentity`, an empty one counting as none.
+- `Spec_ListsEveryMappedApiAndControlRoute` fails for a route the server maps that the spec doesn't list, and for one the spec lists that the server doesn't serve.
+- `OpenApiSpec.AssertMatchesSchema` needs a payload's fields and its schema's to be the same set, so the event's schema and payload type change together, and so do the stats response's (`GetLibraryStats_ResponseMatchesSpec`).
+- `LibraryProjectionItem` allows extra properties, so the fields it doesn't name are missing from the generated WebUI types, and `ItemIdContractTests.LibraryItems_CarryLoudnessAndPeak_AsTheSchemaNamesThem` reads the names it has.
+- `npm run verify:contracts` only checks that the generated types match the OpenAPI file.
+
+**Acceptance**
+
+- The route sets, changes, and clears a rating, answers 400 and 404 as described, and publishes `itemRatingChanged` with the previous rating and the trimmed `clientId`, matching its schema, only when the rating changed, in server tests of the rating route.
+- The stats response with the rated count matches its schema, in `GetLibraryStats_ResponseMatchesSpec`.
+- `LibraryProjectionItem` names `rating`, `hasAudio`, and the fields the server always sends, in a contract test reading its names.
+- `npm run verify:contracts` passes, and `docs/api.md` describes the route, the event, and the fields, checked by reading it.
+- The favorite and blacklist routes' answers match `LibraryStateResponse`, in the test of the routes' request bodies.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- `POST /api/rating` (`SetRating` in `ServerHostComposition.cs`) reads `RatingRequest`, refuses an empty `itemId` and a rating `ItemRating.TryFromStars` doesn't take with 400, and answers 404 for an item the operations' `SetRating` doesn't find.
+- It publishes `itemRatingChanged`, an `ItemRatingChangedPayload` with `itemId`, `path`, `rating`, `previousRating`, and the trimmed `clientId`, only when the rating changed, and answers with `ItemRatingResponse`: the item's id, its rating, and that event's revision, or the server's current revision when nothing changed.
+- A missing `rating` clears the rating, as a missing `isFavorite` unfavorites, and the spec says so.
+- `LibraryGlobalStatsResponse` carries `rated`, mapped from the stats read.
+- `shared/api/openapi.yaml` has the route, `RatingRequest`, `ItemRatingResponse`, and `ItemRatingChangedPayload` in the event envelope's payloads, `rated` among the required global stats, and `LibraryProjectionItem`'s `fullPath`, `isFavorite`, `isBlacklisted`, `playCount`, `fingerprintAlgorithm`, `fingerprintVersion`, `tags`, `rating`, and `hasAudio`, named but not required, as its other fields are. `npm run generate:contracts` regenerated `src/types/openapi.generated.ts`.
+- The WebUI parses items into its own model, and the one generated type it uses that this slice changes, `LibraryStatsResponse` in `src/stats/statsModel.ts`, only gains `rated`, so no WebUI code changed.
+- New tests: `Rating_SetsChangesAndClearsIt_AndPublishesEachChangeWithThePreviousRatingAndTheClient`, `Rating_RefusesAnEmptyIdOrARatingOffTheHalfStarSteps_AndAnItemNotInTheLibrary`, and `LibraryProjectionItem_NamesEveryFieldTheServerAlwaysSends_AndTheRatingAndAudio`. `ItemRoutes_ReadTheItemIdField_AnswerAsTheSpecNames_AndClearStatsReadsItemIds`, renamed from the favorite, blacklist, and record-playback request body test, also reads the rating request, with and without `rating`, and checks the favorite and blacklist answers against `LibraryStateResponse`, and `GetLibraryStats_ResponseMatchesSpec` checks the rated count's value.
+- Each guarded behavior broken on its own, restored from a copy under `artifacts/scratch/`, failed its tests (measured): an event for an unchanged rating, 3.3 stars accepted, `rated` left out of the response, and `fullPath` left out of the spec.
+- `dotnet build ReelRoulette.sln` has no warnings, `dotnet test ReelRoulette.sln` passes 550 Core tests and 19 ServerApp tests, SystemChecks passes, and `npm run verify` passes, its contract freshness check and 1888 tests included.
+- `docs/api.md` describes the route, its answers, the event, the rating on item reads, `rated`, and the favorite and blacklist answers. CONTEXT.md and `docs/domain-inventory.md` describe the route, the event, and the rated count.
+
+#### WebUI slice
+
+**Scope**
+
+- The rating control in the Current file section, as the Decisions describe, on its own line under the path, shown only while the section shows its stats rows.
+- The control's stars, 36 px wide and 30 px tall, its clear edge, the first star's left 8 px, and its half stars, the filled star cut off at its middle over the grey outline, as the mockup review settled.
+- A hover preview changes only the stars shown; the slider's value and value text stay the set rating.
+- A new value shows at once. A click, tap, or drag sends it when it is set; changes from the keys, the arrows, Home, End, Delete, and Backspace, are sent once the keys pause for 500 ms, when focus leaves the control, or when the item changes, so stepping from 1 to 4 stars, or End then Left, sends one request.
+- A mouse press and drag sets the rating where it is released, as a touch drag does, and a drag past the stars' right end sets 5 stars.
+- Setting the rating an item already has, by a click or tap on its value or by keys that end where they started, sends nothing and pops up nothing.
+- While the control has focus, its keys stay its own, so the left and right arrows change its rating instead of going to the previous or next item.
+- A rating goes to the item it was set on, even when another item plays before it is sent.
+- A request that fails puts the rating back and shows "Rating update failed: {error}" in the in-app notice, or "Rating update failed ({status})." when the server refuses it, as a favorite's failure does.
+- `itemRatingChanged` is registered with the event stream. It updates the control, unless a change made here is still waiting to be sent, and reloads the Stats tab as the favorite event does.
+- The rating popups as the Decisions word them: Your actions with the key `rating`, so a second rating replaces the first, and Other devices for an event whose `clientId` isn't this device's, or that has none, under the key `sync-rating:{itemId}`, so it doesn't replace another device's favorite popup for the same file, with the file name left out of `last.log`.
+- The Rated card after Blacklisted, and the Settings tab's Other devices description naming rating changes.
+- Show in File Manager or Copy Path as an icon button with its tooltip and a 24 px icon, as the Decisions describe, in `FileStats` (`src/ui/StatsTab.tsx`), with the `.stats-path .btn` styles in `src/styles.css` gone.
+- The tags row below the table in `FileStats`, as the Decisions describe, in place of the table's Tags row and its None.
+
+**Traps**
+
+- The Stats tab has no control today. `fileRows()` in `src/stats/statsModel.ts` builds plain-text rows, so the rating needs its own markup in `FileStats` (`src/ui/StatsTab.tsx`).
+- In `src/stats/statsTab.ts` the view's `file` is null with nothing playing, and its `rows` are null for a file the server no longer has, while the server is held back or asks for pairing, and until the playing item's read arrives.
+- `toggleFlag` in `src/playback/player.ts` changes nothing until the server answers, so nothing in the app yet shows a value before its request lands.
+- The `itemStateChanged` handler in `src/playback/player.ts` words its Other devices popup from the favorite and blacklist flags alone, with the key `sync:{itemId}`.
+- `src/events/sseClient.ts` listens only to the event types in the handlers `src/state/serverConnection.ts` passes it, and moves the resume revision on only for them.
+- The WebUI writes its own item event payload types, such as `ItemStateChangedPayload` in `src/library/libraryProjectionSync.ts`, rather than the generated ones.
+- `POST /api/rating` publishes nothing for the rating an item already has, and a request without `rating` clears it.
+- The Stats tab reloads through `createCoalescedRefresh` (`src/stats/coalescedRefresh.ts`), 250 ms after the first request of a burst.
+- WebUI Keyboard Shortcuts binds Left and Right to the previous and next item.
+- The panel's resize handle (`PanelHandle` in `src/ui/Panel.tsx`) takes the arrow keys, Home, and End and gives `aria-valuetext`, and the Settings tab's sliders are named by their label alone, with the value as shown as their value text.
+- The WebUI loads the full Material Symbols font, so `star` needs no font change, and `.material-symbol-icon.is-filled` uses optical size 20, at which the filled star lines up over the outlined one at 48 (measured).
+- Interactive elements are 44 px on every pointer; on a phone on its side (`short-screen`) text buttons shrink to 38 px and icon buttons keep their size.
+- A touch on an element whose `touch-action` allows panning, such as `pan-y`, is the browser's once it moves along that axis, which ends it with `pointercancel` (inferred), so the control needs `touch-action: none` to keep its touches.
+- `pathButton` in `src/test/screens/stats.test.ts` finds the path's button by its text, which an icon button doesn't have.
+- `FileStats` puts the tags in the table, as a Tags row after the rows `fileRows()` builds, reading None for a file without tags.
+- A tap on a touch screen also fires pointer enter and leave events, so a preview that doesn't check `pointerType` would flash on every tap (inferred). The field validation icon (`src/ui/FieldValidation.tsx`) and the popups (`src/ui/Notifications.tsx`) react to hover only for a mouse, by `pointerType`.
+
+**Acceptance**
+
+- A click or tap on a star's left or right half sets half a star less or the whole star, a drag sets the value on release, a click or tap on the clear edge and a drag that ends on it or past the stars' left end clear the rating, a click or tap left of the stars does nothing, and the keys step, clear, and set as described, with the slider's value and value text following, in Stats screen tests of the rating control.
+- A mouse over a star or the clear edge shows its preview in place of the set rating, without changing the slider's value, and the set rating shows again when the mouse leaves, in Stats screen tests of the rating control.
+- The control is absent with nothing playing, for a file the server no longer has, while the server is held back or asks for pairing, and while the item loads, in Stats screen tests of each state.
+- Arrow-key steps send one request once they pause or focus leaves, and a rating set before another item plays goes to the item it was set on, in Stats screen tests.
+- While the control has focus, the left and right arrows change its rating and don't go to the previous or next item, in keyboard tests of the rating control.
+- A click or a tap on the stars leaves focus where it was, so the left and right arrows still play the previous or next item, in keyboard tests of the rating control.
+- A failed request puts the rating back and shows its notice, in Stats screen tests.
+- A rating change pops up as Your actions on this device and as Other devices for another device's event or one without a client id, and a second rating replaces the first popup, in WebUI tests of the rating popups.
+- Another device's rating updates the control, in Stats screen tests.
+- The Rated card shows the stats' rated count, in Stats screen tests.
+- Show in File Manager and Copy Path are an icon button with the matching icon and tooltip, named by it, and act as before, in Stats screen tests.
+- The tags show in a row of their own below the table, with no Tags label, and nothing shows there for a file without tags, in Stats screen tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes, and a spot check on the user's phone.
+
+**Evidence**
+
+- `src/rating/rating.ts` holds the rating's rules: its value text, the value under a pointer with the 8 px clear edge, what each key sets, how each star fills, and the API's half-star steps, which `parseLibraryItem` reads `rating` by, so library items carry it.
+- `src/rating/itemRatings.ts`, created in `appServices.ts`, sets and shows ratings:
+  - A pointer's change is sent at once, and a key's once the keys pause for 500 ms, focus leaves the stars, or `store.current` changes, each to the item it was set on.
+  - A change that ends where it started is dropped, and so is one still waiting when the connection stops.
+  - The stars show a change waiting or on its way, then the rating the server last answered or `itemRatingChanged` last brought, which a resync forgets, then the item's read.
+  - Its answer pops up under the key `rating`, a failure puts the rating back with the notice, and another device's event pops up under `sync-rating:{itemId}`.
+  - Its request and failure notices come from `postWithNotice` in `src/api/serverRequest.ts`, which `toggleFlag` in `src/playback/player.ts` now shares in place of its own copy.
+- `serverConnection.ts` registers `itemRatingChanged` and passes it on, and the Stats tab loads again on it.
+- `src/ui/RatingStars.tsx` is the control:
+  - A slider whose value and value text stay the rating set.
+  - Pointer capture for presses, with a preview only for a mouse that isn't pressed.
+  - A cancelled `mousedown`, so a click or tap takes no focus.
+  - Handled keys, so the shortcuts leave them, which `shortcuts.ts` already did for a handled key, so it is unchanged.
+- `StatsTab.tsx` puts the Rating line under the path, only with the rows, makes the path's button an icon button named by its tooltip, and moves the tags to a row of their own. `statsModel.ts` adds the Rated card. The `.stats-path .btn` styles are gone, `styles.css` has the mockup's rating styles with the app's orange focus ring, and the Settings tab's Other devices description names rating changes.
+- Found while testing: a key change still waiting when a test's page closed was sent to the next test's server, as the Stats tab's loads once were, so a change still waiting when the connection stops is dropped, with a test of its own.
+- happy-dom defines `onlostpointercapture` and the other pointer handlers Preact attaches, and passes `pointerType`, `clientX`, and `pointerId` through (measured), but it moves no focus on `mousedown`. So the tests send a press's events in a browser's order and focus the stars when the `mousedown` isn't cancelled, as a browser does.
+- New tests:
+  - In `rating.test.ts`: the rules.
+  - In `libraryProjectionModel.test.ts`: the rating's parse.
+  - In `stats.test.ts`, under Stats tab's rating:
+    - clicks and taps on halves and on the clear edge, and nothing left of the stars
+    - drags, including past either end, and a press the browser cancels
+    - the mouse preview
+    - each key
+    - one request per pause or blur
+    - the item it was set on
+    - nothing for the same rating, and nothing once the page closes
+    - a failure, with both notices
+    - another device's rating, and a waiting change through it
+    - focus through a reload
+    - `touch-action: none`
+  - Also in `stats.test.ts`: the tags row, the stars' absence while the server turns out to run without a library during play, and the icon button's name and tooltip.
+  - In `keyboard.test.ts`: the focused stars keeping their arrows, and the arrows still playing the previous or next item after a mouse click or a tap.
+  - In `foundation.test.ts`: the Other devices rating popups.
+- The tests of the stars' absence in each state, the cards, and the Settings text were extended, the foundation markup snapshot changed only in that description, and the five test files and the grid controller that build whole items gained `rating: null`.
+- Each guarded behavior broken on its own, restored from a copy under `artifacts/scratch/`, failed its tests (measured):
+  - the event not registered
+  - keys sent on every press
+  - a change sent to the playing item, or not sent when another item plays
+  - a failure that doesn't put the rating back
+  - the preview moving the slider's value
+  - no clear edge
+  - no Rated card
+  - the same rating sent
+  - a press taking focus
+  - a waiting change sent after the page closes
+  - another device's rating waiting for the reload, or replacing a waiting change
+  - the stars' keys reaching the shortcuts
+  - the stars without `touch-action: none`
+- `npm run verify` passes, its 1919 tests included.
+- The mockup's stars cancel `mousedown` too, so a click or tap leaves focus where it was, and have the app's orange focus ring, which the approved mockup left to the browser. Its index says how the stars take the keys and keep focus. `build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passes all 66 steps.
+- CONTEXT.md, `docs/architecture.md`, `docs/api.md`, and `docs/domain-inventory.md` describe the rating, its popups, the icon button, the tags row, and the Rated card.
+- The user's spot check passed on the phone: tapping a star's left and right halves set half a star and the whole star, dragging along the stars set the rating without scrolling the tab, and tapping the first star's left edge cleared it, each with its popup. In the desktop browser, the right arrow played the next file after a click on a star.
+
+#### Release checks
+
+- Manual: On the iPad and an Android phone, setting half-star ratings by tapping each half and by dragging, and clearing one by tapping the first star's left edge, works, and a second device shows each change with its Other devices popup.
+- Manual: In a desktop browser, hovering the stars previews the rating in place of the set one, which shows again when the pointer leaves, and a click sets it.
+
+#### Not included
+
+- A rating on the player, which is WebUI Player Rating.
+- Rating keys, which is WebUI Player Rating.
+- Filtering and sorting by rating, which is Rating Filter and Sort.
+- Weighting random picks by rating, which is Random Pick Options.
+- Ratings on library tiles, which is WebUI Ratings on Tiles.
+- Rating several items at once, which is WebUI Multi-Select and Bulk Actions.
+- Ratings in duplicate review, which is Admin Refresh, Backup, and Duplicate Review.
+- Reading ratings from media files and writing them back, which is File Metadata Sync.
+- Ratings kept per account, which is Per-Account Library Data.
+
 ### M12k1 - Browser-Playable Filter
 
 - **Status**: ✅ Complete

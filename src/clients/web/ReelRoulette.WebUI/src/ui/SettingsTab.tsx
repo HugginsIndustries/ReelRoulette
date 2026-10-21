@@ -130,7 +130,7 @@ const AMBIENT_LABELS: Readonly<Record<AmbientSetting, string>> = {
 
 const POPUP_KIND_CHOICES: readonly Choice<NotificationKind>[] = [
   { value: "actions", title: "Your actions", description: "Such as Added to favorites, Filters applied, and Path copied." },
-  { value: "devices", title: "Other devices", description: "Favorites, blacklist, and preset changes made on another device." },
+  { value: "devices", title: "Other devices", description: "Favorites, blacklist, rating, and preset changes made on another device." },
   { value: "refresh", title: "Library refresh", description: "When a refresh finishes or fails." },
   { value: "skips", title: "Skipped files", description: "When playback skips a missing file or one this browser can't play." },
   { value: "connection", title: "Connection", description: "When the connection to the server comes back, or the library can't load more." }

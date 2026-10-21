@@ -41,6 +41,8 @@ export interface ServerConnectionEvents {
    */
   serverReady: () => void;
   itemStateChanged: (payload: any) => void;
+  /** An item's rating changed, on this device or another. */
+  itemRatingChanged: (payload: any) => void;
   playbackRecorded: (payload: any) => void;
   itemTagsChanged: (payload: any) => void;
   /** The tag catalog changed, with its categories and tags as they now are. */
@@ -113,6 +115,7 @@ export function createServerConnection(options: ServerConnectionOptions): Server
   const listeners: { [K in keyof ServerConnectionEvents]: ServerConnectionEvents[K][] } = {
     serverReady: [],
     itemStateChanged: [],
+    itemRatingChanged: [],
     playbackRecorded: [],
     itemTagsChanged: [],
     tagCatalogChanged: [],
@@ -457,6 +460,9 @@ export function createServerConnection(options: ServerConnectionOptions): Server
       handlers: {
         itemStateChanged(payload) {
           emit("itemStateChanged", payload);
+        },
+        itemRatingChanged(payload) {
+          emit("itemRatingChanged", payload);
         },
         playbackRecorded(payload) {
           emit("playbackRecorded", payload);

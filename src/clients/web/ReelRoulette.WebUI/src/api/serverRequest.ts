@@ -148,6 +148,34 @@ export function errorText(error: unknown): string {
 }
 
 /**
+ * Posts a change with `api` and says whether the server took it. A request that fails shows "{failed}: {why}" in
+ * `dialogs`' notice, and one the server refuses "{failed} ({status})."; a 401 shows only the pairing prompt, which the
+ * request has asked for.
+ */
+export async function postWithNotice(
+  api: { post(path: string, payload: unknown): Promise<Response> },
+  dialogs: { notice(message: string): Promise<void> },
+  path: string,
+  payload: unknown,
+  failed: string
+): Promise<boolean> {
+  let response: Response;
+  try {
+    response = await api.post(path, payload);
+  } catch (error) {
+    if (!(error instanceof UnauthorizedError)) {
+      void dialogs.notice(`${failed}: ${errorText(error)}`);
+    }
+    return false;
+  }
+  if (!response.ok) {
+    void dialogs.notice(`${failed} (${response.status}).`);
+    return false;
+  }
+  return true;
+}
+
+/**
  * How long a playback request may wait for the server before the WebUI cancels it: a random pick, the range request
  * about a file whose media failed, and a play request for a fresh media URL.
  */

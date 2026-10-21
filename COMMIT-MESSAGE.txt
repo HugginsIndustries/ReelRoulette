@@ -19,11 +19,12 @@ Instructions:
 
 Commit Message:
 
-M12k2: Add the rating route and its itemRatingChanged event, the rated count in library stats, and the always-sent item fields the API spec didn't name
+M12k2: Add the Stats tab's 5-star rating with half stars, its popups, and the Rated card, and make the path's button an icon
 
-- `POST /api/rating` sets an item's rating, in stars, a multiple of 0.5 from 0.5 to 5, or clears it with null, finding the item by catalog id. It answers 400 for an empty id or any other rating, 404 for an unknown id, and otherwise the item's id, its rating, and a revision.
-- It publishes `itemRatingChanged`, with the item's id and path, its rating and previous rating, and the request's trimmed `clientId`, only when the rating changed. The rating the item already has answers with the server's current revision.
-- The library stats response carries `rated`, the items with a rating.
-- OpenAPI names `rating`, `hasAudio`, and the fields the server always sends in `LibraryProjectionItem`, defines the route, its request and response, and the event, and names `LibraryStateResponse` as the favorite and blacklist routes' 200 response. The WebUI's generated types follow.
-- Tests cover setting, changing, and clearing a rating through the route, its event and response against their schemas, the 400 and 404 answers, the request body, the rated count, the item fields the spec names, and the favorite and blacklist responses against `LibraryStateResponse`. Each guarded behavior, broken on its own, failed its tests.
-- `docs/api.md`, CONTEXT.md, and the domain inventory describe the route, the event, and the rated count.
+- The Stats tab's Current file section has a Rating line under the path. It has five stars with half stars, set by a click, a tap, or a drag and cleared on the first star's left edge, with a mouse previewing the value under it, and screen readers hear it as one slider. A click or a tap takes no focus, so the arrow keys still play the previous or next item afterwards; once Tab reaches the stars, the arrows, Home, End, Delete, and Backspace set the rating.
+- A new rating shows at once. A click, tap, or drag sends it to `POST /api/rating` at once, and the keys' once they pause for 500 ms, focus leaves the stars, or another item plays, each to the item it was set on. Setting the rating a file already has sends nothing, a failure puts it back with a notice, through one helper the favorite and blacklist toggle now shares, and a change still waiting when the page closes is dropped.
+- Each change pops up as Your actions. The event stream now listens for `itemRatingChanged`: another device's change pops up as Other devices, and the Settings tab's Other devices description names rating changes. The event also updates the stars at once and loads the tab again.
+- The Rated card follows Blacklisted, Show in File Manager and Copy Path are an icon button named by its tooltip, and the file's tags sit in a row of their own below the table.
+- The mockup's stars also take no focus on a click or tap, and have the app's orange focus ring.
+- Tests cover the rating's rules and parse, every way of setting and clearing it, the preview, the keys and their pause, the item a change goes to, failures, other devices' changes and popups, focus, the stars' absence in each state, the Rated card, the icon button, and the tags row. Each guarded behavior, broken on its own, failed its tests.
+- CONTEXT.md, the architecture, API, and domain inventory docs, and the changelog describe the rating. The user's spot check passed on the phone and the desktop, so Item Ratings is complete: it moves to the completed milestones, and its release checks go into the testing checklist.

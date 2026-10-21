@@ -5,6 +5,7 @@ import { parseLibraryItem, type LibraryProjectionItem } from "../library/library
 import type { Notifications } from "../notifications/notifications";
 import type { LoudnessNormalization } from "../playback/loudnessNormalization";
 import { basenameFromPath } from "../playback/nowPlaying";
+import type { ItemRatings } from "../rating/itemRatings";
 import type { AppApi } from "../state/appApi";
 import type { AppStore } from "../state/appStore";
 import { noLibraryText } from "../state/lastingStates";
@@ -21,7 +22,8 @@ import { adjustmentText, fileRows, libraryCards, orderTags, type LibraryStats, t
  * keeps what the tab showed; with nothing loaded yet, the Library section says why. Nothing loads while the server
  * fails the compatibility check, runs without a library, or asks for pairing, nor once the connection stops, as when
  * the page closes, not even a load that was waiting. Beside the file's path, Show in File Manager opens the server
- * machine's file manager at it where the server offers that, and Copy Path copies it everywhere else.
+ * machine's file manager at it where the server offers that, and Copy Path copies it everywhere else. Under it, the
+ * file's rating shows and is set once its stats load.
  */
 export interface StatsTab {
   readonly view: ReadonlySignal<StatsView>;
@@ -33,6 +35,10 @@ export interface StatsTab {
   showInFileManager(): Promise<void>;
   /** Copies the path of the file the tab shows, giving focus back to `button`, which copied it. */
   copyPath(button: HTMLElement): Promise<void>;
+  /** Sets the rating of the file the tab shows, or clears it with null, a key's once the keys pause. */
+  setRating(rating: number | null, options: { byKey: boolean }): void;
+  /** Sends a key's rating still waiting, as when focus leaves the stars. */
+  sendRating(): void;
 }
 
 export interface StatsTabOptions {
@@ -49,6 +55,8 @@ export interface StatsTabOptions {
   dialogs: Pick<Dialogs, "notice">;
   /** The popups that say a path was shown or copied. */
   notifications: Pick<Notifications, "notify">;
+  /** The ratings this device sets and shows. */
+  ratings: Pick<ItemRatings, "shown" | "set" | "send">;
 }
 
 interface LoadedItem {
@@ -57,7 +65,7 @@ interface LoadedItem {
 }
 
 export function createStatsTab(options: StatsTabOptions): StatsTab {
-  const { store, api, connection, tagCatalog, normalization, enhanced, dialogs, notifications } = options;
+  const { store, api, connection, tagCatalog, normalization, enhanced, dialogs, notifications, ratings } = options;
   const fileLocation = createFileLocation({ api, dialogs, notifications });
   const isOpen = signal(false);
   const stats = signal<LibraryStats | null>(null);
@@ -96,6 +104,7 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
         rows: item
           ? fileRows(item, lastPlayed.shownFor(item.lastPlayedUtcMs), Date.now(), adjustmentText(normalization.adjustment.value, enhanced.value))
           : null,
+        rating: item ? ratings.shown(playing.itemId, item.rating) : null,
         tags: item ? orderTags(item.tags, tagCatalog.catalog.value) : []
       };
     }
@@ -174,6 +183,7 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
     request();
   });
   connection.on("itemStateChanged", request);
+  connection.on("itemRatingChanged", request);
   connection.on("itemTagsChanged", request);
   connection.on("tagCatalogChanged", request);
   connection.on("refreshCompleted", request);
@@ -209,6 +219,15 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
       if (file) {
         await fileLocation.copyPath(file.path, file.name, button);
       }
+    },
+    setRating(rating, { byKey }) {
+      const file = view.peek().file;
+      if (file?.rows) {
+        ratings.set({ itemId: file.itemId, fileName: file.name, shown: file.rating }, rating, { byKey });
+      }
+    },
+    sendRating() {
+      ratings.send();
     }
   };
 }

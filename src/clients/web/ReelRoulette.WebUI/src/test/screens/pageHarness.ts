@@ -584,6 +584,27 @@ export function stubRowLayout(selector: string, height: (row: HTMLElement) => nu
   });
 }
 
+/** Where the rating's stars start in the window when `stubStarLayout` lays them out, and how wide each is. */
+export const STARS_LEFT = 100;
+export const STAR_WIDTH = 36;
+
+/**
+ * Lays out the rating's stars in a row, as happy-dom does not: from `STARS_LEFT` in the window, each `STAR_WIDTH`
+ * pixels wide and 30 tall. Other elements keep happy-dom's empty box.
+ */
+export function stubStarLayout(): void {
+  const original = Element.prototype.getBoundingClientRect;
+  stubProperty(HTMLElement.prototype, "getBoundingClientRect", {
+    value(this: HTMLElement) {
+      if (!this.matches(".rating-star")) {
+        return original.call(this);
+      }
+      const index = Array.from(this.parentElement!.children).indexOf(this);
+      return new DOMRect(STARS_LEFT + STAR_WIDTH * index, 0, STAR_WIDTH, 30);
+    }
+  });
+}
+
 /**
  * Makes `element` a list that scrolls, as happy-dom lays none out: `height` pixels tall from `top` in the window,
  * holding `content` pixels. Its `overflow-y` is set on it, since happy-dom's computed style doesn't take it from the

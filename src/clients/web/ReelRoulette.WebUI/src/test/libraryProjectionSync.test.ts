@@ -23,6 +23,7 @@ function item(overrides: Partial<LibraryProjectionItem> = {}): LibraryProjection
     hasAudio: null,
     integratedLoudness: null,
     peakDb: null,
+    rating: null,
     tags: [],
     hasThumbnail: false,
     thumbnailVersion: null,

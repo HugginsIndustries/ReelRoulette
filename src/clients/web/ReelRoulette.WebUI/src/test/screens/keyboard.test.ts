@@ -1,7 +1,20 @@
 // @vitest-environment happy-dom
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it } from "vitest";
-import { FakeServer, json, mountPage, resetPage, settle, status, stubFullscreenApi, stubVideoFrames, type MountedPage } from "./pageHarness";
+import {
+  FakeServer,
+  json,
+  mountPage,
+  resetPage,
+  settle,
+  STAR_WIDTH,
+  STARS_LEFT,
+  status,
+  stubFullscreenApi,
+  stubStarLayout,
+  stubVideoFrames,
+  type MountedPage
+} from "./pageHarness";
 
 const VIDEO_ITEM = {
   id: "C:\\media\\holiday clip.mp4",
@@ -524,6 +537,79 @@ describe("keyboard shortcuts", () => {
     await press(".");
     expect(stretchFrom()).toBeCloseTo((90 + 1 / 30) / 120, 10);
   });
+});
+
+describe("the Stats tab's rating", () => {
+  /** A server that plays two videos, reads each one rated 2 stars for the Stats tab, and takes ratings. */
+  function ratingServer(): FakeServer {
+    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO);
+    server.on("POST", "/api/library/item", (call) => json({ id: call.body?.id, sourceId: "s1", fileName: "clip.mp4", mediaType: 0, rating: 2, tags: [] }));
+    server.on("POST", "/api/rating", (call) => json({ itemId: call.body?.itemId, rating: call.body?.rating ?? null, revision: 9 }));
+    return server;
+  }
+
+  /** Plays both videos, the second one now, and opens the Stats tab on it, whose stars it returns once they show. */
+  async function openOnSecond(server: FakeServer): Promise<HTMLElement> {
+    stubStarLayout();
+    await mount(server);
+    await press("k");
+    await press("ArrowRight");
+    expect(video().src).toContain("item-video-2");
+    await press("4");
+    await waitFor(() => expect(document.querySelector("#stats-body .rating")).not.toBeNull());
+    return document.querySelector<HTMLElement>("#stats-body .rating")!;
+  }
+
+  it("leaves the focused stars their arrow keys, which step the rating and don't play the previous or next item", async () => {
+    const server = ratingServer();
+    const stars = await openOnSecond(server);
+    stars.focus();
+
+    expect(await press("ArrowLeft", {}, stars)).toBe(false);
+    expect(stars.getAttribute("aria-valuetext")).toBe("1.5 stars");
+    expect(await press("ArrowRight", {}, stars)).toBe(false);
+    await press("ArrowRight", {}, stars);
+    expect(stars.getAttribute("aria-valuetext")).toBe("2.5 stars");
+
+    expect(video().src).toContain("item-video-2");
+    expect(server.requests("POST", "/api/play/item-video")).toHaveLength(0);
+    expect(randomPicks(server)).toBe(2);
+  });
+
+  it.each(["mouse", "touch"])(
+    "still play the previous or next item after a %s sets the rating, which leaves focus where it was",
+    async (pointerType) => {
+      const server = ratingServer();
+      const stars = await openOnSecond(server);
+      const focused = document.activeElement;
+      expect(focused).not.toBe(stars);
+
+      // A click or tap on the third star's right half, in the order a browser sends its events: a mouse's `mousedown`
+      // comes with its press and a tap's after it lifts, and a browser moves focus there unless it is cancelled.
+      const x = STARS_LEFT + STAR_WIDTH * 2 + 27;
+      const pointer = { pointerId: 1, pointerType, button: 0, clientX: x };
+      const mouseDown = () => {
+        if (fireEvent.mouseDown(stars, { button: 0, clientX: x })) stars.focus();
+      };
+      fireEvent.pointerDown(stars, pointer);
+      if (pointerType === "mouse") mouseDown();
+      fireEvent.pointerUp(stars, pointer);
+      if (pointerType === "touch") mouseDown();
+      fireEvent.mouseUp(stars, { button: 0, clientX: x });
+      fireEvent.click(stars, { button: 0, clientX: x });
+      await settle();
+
+      expect(stars.getAttribute("aria-valuetext")).toBe("3 stars");
+      await waitFor(() => expect(server.requests("POST", "/api/rating").map((call) => call.body?.rating)).toEqual([3]));
+      expect(document.activeElement).toBe(focused);
+
+      await press("ArrowLeft", {}, document.activeElement ?? document.body);
+      expect(video().src).toContain("item-video?");
+      await press("ArrowRight", {}, document.activeElement ?? document.body);
+      expect(video().src).toContain("item-video-2");
+      expect(server.requests("POST", "/api/rating")).toHaveLength(1);
+    }
+  );
 });
 
 describe("Escape", () => {

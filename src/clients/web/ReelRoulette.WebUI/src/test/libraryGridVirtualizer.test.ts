@@ -26,6 +26,7 @@ function makeItem(index: number): LibraryProjectionItem {
     hasAudio: true,
     integratedLoudness: null,
     peakDb: null,
+    rating: null,
     tags: [],
     hasThumbnail: index % 2 === 0,
     thumbnailVersion: null,

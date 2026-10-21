@@ -1148,16 +1148,33 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
 .settings-section { border: 1px solid var(--surface-border); border-radius: 8px; padding: 10px 12px; }
 .stats-section h3,
 .settings-section h3 { margin: 0 0 8px; font-size: 0.95rem; }
-/* The playing file's name, its path with its button, and its stats as a table of labels and values, then the library's cards. */
+/* The playing file's name, its path with its icon button, its rating, its stats as a table of labels and values, and
+   its tags, then the library's cards. */
 .stats-file-name { font-weight: 600; word-break: break-word; margin: 0 0 4px; }
 .stats-path { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
 .stats-path code { flex: 1 1 auto; min-width: 0; font-size: 0.82rem; color: var(--muted-fg); word-break: break-all; }
-.stats-path .btn { min-height: 36px; padding: 4px 10px; font-size: 0.9rem; flex: 0 0 auto; }
-.stats-path .btn .material-symbol-icon { font-size: 20px; }
+.stats-path .icon-btn .material-symbol-icon { font-size: 24px; }
+/* The rating's line: its label at the left, and the stars at the right, lined up with the table's values, wrapping
+   under the label on a screen too narrow for both. The stars start at the first star, whose left edge clears the
+   rating, and each is only as tall as its icon. A touch that starts on them stays theirs however the finger moves, so
+   it never scrolls the tab. */
+.stats-rating { display: flex; flex-wrap: wrap; align-items: center; margin: 0 0 6px; font-size: 0.92rem; }
+.stats-rating-label { color: var(--muted-fg); }
+.rating { display: flex; margin-left: auto; border-radius: 6px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+.rating:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.rating-star { position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 30px; color: var(--muted-fg); }
+.rating-star .material-symbol-icon { font-size: 30px; }
+/* A full star is the filled star in orange. A half star lays it, cut off at its middle, over the grey outline, so only
+   the filled half is orange. */
+.rating-fill { position: absolute; top: 0; left: 50%; transform: translateX(-50%); color: var(--huggins-orange); visibility: hidden; }
+.rating-star.is-full .rating-fill, .rating-star.is-half .rating-fill { visibility: visible; }
+.rating-star.is-half .rating-fill { clip-path: inset(0 50% 0 0); }
+.rating-star.is-full .rating-outline { visibility: hidden; }
 .stats-table { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin: 0; font-size: 0.92rem; }
 .stats-table dt { color: var(--muted-fg); }
 .stats-table dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
-.stats-tags { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+/* The file's tags, in a row of their own below the table, with no label. */
+.stats-tags { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; margin-top: 8px; }
 .stats-tag { padding: 2px 8px; border-radius: 999px; background: var(--violet); color: #fff; font-size: 0.8rem; font-weight: 600; }
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
 .stat-card { border: 1px solid var(--surface-border); border-radius: 8px; padding: 8px 10px; }

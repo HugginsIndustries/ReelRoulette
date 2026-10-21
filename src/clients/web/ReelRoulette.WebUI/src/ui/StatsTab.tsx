@@ -1,6 +1,7 @@
 import { Fragment } from "preact";
 import type { StatsFileView, StatsLibraryView } from "../stats/statsModel";
 import { useApp } from "./appContext";
+import { RatingStars } from "./RatingStars";
 
 /**
  * The panel's Stats tab, as the mockup lays it out: the playing file first, since the header's file name opens the tab,
@@ -30,7 +31,8 @@ export function StatsTab() {
 
 /**
  * The file's name and full path, with Show in File Manager where the server offers it and Copy Path everywhere else,
- * then its stats once they load.
+ * as an icon button named by its tooltip, then once they load its rating, its stats, and its tags in a row of their
+ * own, which a file without tags doesn't show.
  */
 function FileStats({ file }: { file: StatsFileView }) {
   const { statsTab } = useApp();
@@ -40,38 +42,42 @@ function FileStats({ file }: { file: StatsFileView }) {
       <div class="stats-path">
         <code>{file.path}</code>
         {file.canShowInFileManager ? (
-          <button type="button" class="btn" onClick={() => void statsTab.showInFileManager()}>
+          <button type="button" class="icon-btn" aria-label="Show in File Manager" title="Show in File Manager" onClick={() => void statsTab.showInFileManager()}>
             <span class="material-symbol-icon" aria-hidden="true">folder_open</span>
-            Show in File Manager
           </button>
         ) : (
-          <button type="button" class="btn" onClick={(event) => void statsTab.copyPath(event.currentTarget)}>
+          <button type="button" class="icon-btn" aria-label="Copy Path" title="Copy Path" onClick={(event) => void statsTab.copyPath(event.currentTarget)}>
             <span class="material-symbol-icon" aria-hidden="true">content_copy</span>
-            Copy Path
           </button>
         )}
       </div>
       {file.rows ? (
-        <dl class="stats-table">
-          {file.rows.map((row) => (
-            <Fragment key={row.label}>
-              <dt>{row.label}</dt>
-              <dd>{row.value}</dd>
-            </Fragment>
-          ))}
-          <dt>Tags</dt>
-          <dd>
-            {file.tags.length > 0 ? (
-              <div class="stats-tags">
-                {file.tags.map((tag) => (
-                  <span key={tag} class="stats-tag">{tag}</span>
-                ))}
-              </div>
-            ) : (
-              "None"
-            )}
-          </dd>
-        </dl>
+        <>
+          <div class="stats-rating">
+            <span id="stats-rating-label" class="stats-rating-label">Rating</span>
+            <RatingStars
+              rating={file.rating}
+              labelledBy="stats-rating-label"
+              onSet={(rating, byKey) => statsTab.setRating(rating, { byKey })}
+              onBlur={() => statsTab.sendRating()}
+            />
+          </div>
+          <dl class="stats-table">
+            {file.rows.map((row) => (
+              <Fragment key={row.label}>
+                <dt>{row.label}</dt>
+                <dd>{row.value}</dd>
+              </Fragment>
+            ))}
+          </dl>
+          {file.tags.length > 0 ? (
+            <div class="stats-tags">
+              {file.tags.map((tag) => (
+                <span key={tag} class="stats-tag">{tag}</span>
+              ))}
+            </div>
+          ) : null}
+        </>
       ) : null}
     </>
   );

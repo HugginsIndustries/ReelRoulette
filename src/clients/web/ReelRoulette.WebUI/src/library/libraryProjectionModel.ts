@@ -1,3 +1,4 @@
+import { parseRating } from "../rating/rating";
 import { parseLibraryProjectionSummary, type LibraryProjectionSummary } from "./libraryOverlayModel";
 
 export type LibraryMediaType = "video" | "photo";
@@ -40,6 +41,8 @@ export interface LibraryProjectionItem {
   integratedLoudness: number | null;
   /** The true peak in dBTP the loudness scan measured, or null when it hasn't measured one. */
   peakDb: number | null;
+  /** The rating in stars, from 0.5 to 5 in half-star steps, or null for an unrated item. */
+  rating: number | null;
   tags: string[];
   hasThumbnail: boolean;
   /** Changes whenever the thumbnail is written again; part of the thumbnail URL so it can be cached. */
@@ -181,6 +184,7 @@ function parseQueryItem(row: Record<string, unknown>): LibraryProjectionItem {
         ? row.integratedLoudness
         : null,
     peakDb: typeof row.peakDb === "number" && Number.isFinite(row.peakDb) ? row.peakDb : null,
+    rating: parseRating(row.rating),
     tags: parseStringArray(row.tags),
     hasThumbnail: row.hasThumbnail === true,
     thumbnailVersion: typeof row.thumbnailVersion === "string" && row.thumbnailVersion !== "" ? row.thumbnailVersion : null,

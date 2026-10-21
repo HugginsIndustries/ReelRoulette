@@ -13,6 +13,7 @@ import { createCompression, type Compression } from "../playback/compression";
 import { createLoudnessNormalization, type LoudnessNormalization } from "../playback/loudnessNormalization";
 import { createPlayer, type Player } from "../playback/player";
 import { createPlayerControls, type PlayerControls } from "../playback/playerControls";
+import { createItemRatings } from "../rating/itemRatings";
 import { createStageFullscreen, type StageFullscreen } from "../playback/stageFullscreen";
 import { createSettings, type Settings } from "../settings/settings";
 import { createLibraryBaseline } from "../stats/libraryBaseline";
@@ -151,6 +152,8 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     notifications,
     tagCatalog
   });
+  // The ratings this device sets and shows, which the Stats tab's stars set.
+  const ratings = createItemRatings({ store, api, connection, dialogs, notifications });
   const statsTab = createStatsTab({
     store,
     api,
@@ -159,7 +162,8 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     normalization,
     enhanced: audio.enhanced,
     dialogs,
-    notifications
+    notifications,
+    ratings
   });
   const settings = createSettings({ device });
   const ambient = createAmbient({

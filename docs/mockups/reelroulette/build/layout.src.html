@@ -545,6 +545,7 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
 .stats-rating { display: flex; flex-wrap: wrap; align-items: center; margin: 0 0 6px; font-size: 0.92rem; }
 .stats-rating-label { color: var(--muted-fg); }
 .rating { display: flex; margin-left: auto; border-radius: 6px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+.rating:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .rating-star { position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 30px; color: var(--muted-fg); }
 .rating-star .material-symbol-icon { font-size: 30px; }
 /* A full star is the filled star in orange. A half star lays it, cut off at its middle, over the grey outline, so only
@@ -5379,6 +5380,9 @@ const ratingControl = (() => {
     return true;
   }
 
+  // A browser moves focus on mousedown, which a tap sends too, so the stars set a rating without taking focus, and
+  // after a click or a tap the arrow keys still play the previous or next item. Tab still reaches them.
+  el.addEventListener("mousedown", (event) => event.preventDefault());
   el.addEventListener("pointerdown", (event) => {
     if (!item || (event.pointerType === "mouse" && event.button !== 0)) return;
     pressId = event.pointerId;

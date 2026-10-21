@@ -121,6 +121,8 @@ These need a person, real devices, or the Windows VM.
 - [ ] With the browser-playable filter on, browse and random play show no mkv, avi, or wmv files; with it off, choosing one in the library says its format isn't supported in this browser, and a deleted file says not found.
 - [ ] With a source on a network share that is disconnected while a video from it plays, the player says it couldn't load the file, not that it is missing.
 - [ ] Restarting the server while a video plays on the phone keeps it playing from where it was, with no message, and so does a second restart in the same video.
+- [ ] On the iPad and an Android phone, setting half-star ratings by tapping each half and by dragging, and clearing one by tapping the first star's left edge, works, and a second device shows each change with its Other devices popup.
+- [ ] In a desktop browser, hovering the stars previews the rating in place of the set one, which shows again when the pointer leaves, and a click sets it.
 
 ## Release Flow
 
