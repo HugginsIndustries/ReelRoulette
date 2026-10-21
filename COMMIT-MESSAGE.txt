@@ -19,12 +19,7 @@ Instructions:
 
 Commit Message:
 
-M12k1: Tell a file the browser can't play from a missing or unreadable one, skip them in playback, and recover a video after a server restart
+Docs: Put code cleanliness first and record every user-noticeable change in the changelog
 
-- After a media error, the WebUI asks the server about the file with a `Range: bytes=0-0` request, keeping Loading… up, 10 s at most: 200 or 206 shows the format-not-supported message, 404 not found once the play route says so too, since a token a server restart dropped answers 404 as well, and anything else or no answer the approved couldn't-load message, each with a photo form.
-- Autoplay, Next, Previous, and random picks skip a file this browser can't play or a missing one with a Skipped files popup, up to ten in a row; a library choice, couldn't-load, and Previous at the oldest entry stop on the message, holding the photo timer, which Auto-Pause doesn't resume.
-- History steps get a fresh media URL through `POST /api/play/{itemId}`, which counts the step's play, loading paused for Auto-Resume when Auto-Pause comes while they wait, and a video that had played recovers from a failure, such as a server restart, with a fresh URL from `recordPlayback: false`, waiting for the connection when needed, staying paused if it was paused while it waited, and again once it has played since.
-- `POST /api/play/{itemId}` takes an optional `recordPlayback`, documented in OpenAPI; a library play's 503 `play_media_unreadable` maps to the couldn't-load message, and a probe's 401 logs `/api/media/{token}`.
-- Random picks, the probe, and play requests for a fresh media URL share one 10 s limit and one `withTimeout`, and log lines one `errorType`.
-- The mockup shows the couldn't-load and photo format messages, a HEIC photo, a stalled drive or share, and the ten-skip limit.
-- M12k1 is complete and moves to MILESTONES-COMPLETED.md, its release checks join the testing checklist, Media Token Lifetime and Direct-Stream Sessions notes the WebUI's fresh tokens and takes on keeping the last frame through a source swap, and ISSUES.md records that an item starting while the panel covers the player can play behind it.
+- AGENTS.md's Workflow Priorities says the project has no release deadlines, so correctness and cleanliness come first by default: duplicated and dead code noticed in or around a change is cleaned up in the same change unless the user says otherwise.
+- AGENTS.md's Changelog rule records every change a user would notice since the last release in `[Unreleased]`, however small, leaving what to condense or drop to the pre-release pass and the user.
