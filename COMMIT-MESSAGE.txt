@@ -19,7 +19,11 @@ Instructions:
 
 Commit Message:
 
-Docs: Put code cleanliness first and record every user-noticeable change in the changelog
+Bugfix: Start an item paused when it starts while Auto-Pause holds playback
 
-- AGENTS.md's Workflow Priorities says the project has no release deadlines, so correctness and cleanliness come first by default: duplicated and dead code noticed in or around a change is cleaned up in the same change unless the user says otherwise.
-- AGENTS.md's Changelog rule records every change a user would notice since the last release in `[Unreleased]`, however small, leaving what to condense or drop to the pre-release pass and the user.
+- The WebUI's Auto-Pause now holds playback from its pause until it resumes, where it covered only the one play attempt it paused. A random pick that answers after the panel came to cover the player, or a file skipped to, starts paused, or with its photo's timer held, and plays as the panel closes, where it played behind the panel.
+- An item the user starts while the hold is on, by Next, Previous, Random, a Library tile, or Play on an empty player, plays and ends the hold, as their own play or pause does, from the player's controls or from a media key or the system's media controls.
+- An item that starts paused ends Loading… and relays a `playback=auto-pause` line to last.log, which replaces the line relayed when Auto-Pause came during a history step's wait.
+- Tests cover a pick's video and photo answering after Auto-Pause, a history step skipped as missing or as one this browser can't play, a user's start during the hold, a press during it that starts nothing, a play from outside the player's controls, and the overlay opening while a pick waits; each failed before the fix, or when its guard was removed.
+- The mockup's Auto-Pause keeps the same hold, so its random pick no longer plays behind the overlay.
+- CONTEXT.md and the domain inventory describe the hold, and the issue is gone from ISSUES.md.

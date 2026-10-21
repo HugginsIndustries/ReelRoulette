@@ -3388,6 +3388,10 @@ const playback = {
   item: null,
   playing: false,
   autoPaused: false,
+  // Auto-Pause holds playback from its pause until it lets go, or the user plays, pauses, or starts an item, so an item
+  // that starts meanwhile, as a random pick that answers after the panel opened, starts paused. Nothing plays while it
+  // holds, so autoplay never reaches Next then.
+  autoHold: false,
   pausedBy: null,
   time: 0,
   timer: 0,
@@ -3656,6 +3660,7 @@ function setPlaying(playing, by) {
   playback.frameStep = null;
   playback.playing = playing;
   playback.autoPaused = !playing && by === "auto";
+  if (by === "user") playback.autoHold = false;
   playback.pausedBy = playing ? null : by;
   renderPlayback();
   syncControlsToPlayback();
@@ -3705,6 +3710,12 @@ function start(item) {
   }
   item.plays += 1;
   item.lastPlayedAt = Date.now();
+  // While Auto-Pause holds playback, the item starts paused, for Auto-Pause to play as it lets go, and nothing waits for
+  // its media.
+  if (playback.autoHold) {
+    setPlaying(false, "auto");
+    return void followPlayingItem();
+  }
   setPlaying(true, "user");
   followPlayingItem();
   const load = ++mediaLoads;
@@ -3729,6 +3740,8 @@ const NO_LIBRARY_PLAY_NOTICE = "Cannot play: the server is running without a lib
 
 // One random pick at a time, as today: a press while one waits does nothing.
 function pickRandom(tries = 0) {
+  // The user's own start ends Auto-Pause's hold, as Next, Previous, and a tile do; a pick that skips on doesn't.
+  if (!tries) playback.autoHold = false;
   if (state.situation === "incompatible") return void noticeDialog({ message: "Cannot play: server compatibility check failed." });
   if (state.situation === "nolibrary") return void noticeDialog({ message: NO_LIBRARY_PLAY_NOTICE });
   if (pickInFlight) return;
@@ -3767,6 +3780,7 @@ function pickRandom(tries = 0) {
 // start, as today. Both skip a file that is missing or that this browser can't play, saying so in a popup, up to ten
 // in a row. Previous that reaches the oldest entry stops on its message, since there is nothing further back.
 function goNext(tries = 0) {
+  playback.autoHold = false;
   if (historyIndex < history.length - 1) {
     historyIndex += 1;
     const item = history[historyIndex];
@@ -3779,6 +3793,7 @@ function goNext(tries = 0) {
   pickRandom(tries);
 }
 function goPrevious() {
+  playback.autoHold = false;
   if (historyIndex <= 0) return;
   let index = historyIndex - 1;
   let tries = 0;
@@ -3792,6 +3807,7 @@ function goPrevious() {
 }
 // A tile chosen from the library: a missing file says so and nothing else changes, as a library play does today.
 function chooseItem(item) {
+  playback.autoHold = false;
   if (state.situation === "incompatible") return void noticeDialog({ message: "Cannot play: server compatibility check failed." });
   if (state.situation === "nolibrary") return void noticeDialog({ message: NO_LIBRARY_PLAY_NOTICE });
   if (state.pairing) return;
@@ -3812,8 +3828,13 @@ function autoPauseWants() {
 // Auto-Pause acts only when what it wants changes, so the user's own play or pause while the panel is open stands.
 function syncAutoPause() {
   const want = autoPauseWants();
-  if (want && !pauseWanted && playback.playing) setPlaying(false, "auto");
-  else if (!want && pauseWanted && playback.autoPaused) setPlaying(true, "auto");
+  if (want && !pauseWanted) {
+    playback.autoHold = true;
+    if (playback.playing) setPlaying(false, "auto");
+  } else if (!want && pauseWanted) {
+    playback.autoHold = false;
+    if (playback.autoPaused) setPlaying(true, "auto");
+  }
   pauseWanted = want;
 }
 

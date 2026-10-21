@@ -208,12 +208,16 @@ export interface Player {
    * happens while it plays, on a photo, before its length is known, or forward from its last frame.
    */
   stepFrame(direction: -1 | 1): void;
-  /** Auto-Pause: pauses the video, or holds a photo's timer, keeping the time it has left. */
+  /**
+   * Auto-Pause: pauses the video, or holds a photo's timer, keeping the time it has left, and holds playback until
+   * `autoResume`, so an item that starts meanwhile, as a random pick or a history step answers or a file is skipped,
+   * starts paused. The user's own play or pause, or an item they start, hands playback back to them.
+   */
   autoPause(): void;
   /**
-   * Resumes what `autoPause` paused: plays the video, or runs the photo's timer on with the time it had left, without
-   * loading the photo again or recording its play again. Playback the user had paused, or played or paused since,
-   * stays as it is, and nothing resumes once another item, or the same one again, has started.
+   * Resumes what Auto-Pause holds: plays the video, or runs the photo's timer on with the time it had left, without
+   * loading the photo again or recording its play again. Playback the user had paused, or played, paused, or started
+   * since, stays as it is.
    */
   autoResume(): void;
 
@@ -307,6 +311,12 @@ export function createPlayer(options: PlayerOptions): Player {
   /** The animation frame that moves the bar next, while something plays. */
   let frameId: number | null = null;
   let armed: ArmedAttempt | null = null;
+  /**
+   * Auto-Pause holds playback, from its pause until its resume or the user's own play, pause, or start, so an item that
+   * starts meanwhile starts paused: its video loads without playing, or its photo's timer holds, for Auto-Resume to play.
+   */
+  let autoPauseHolds = false;
+  /** What Auto-Pause holds of what shows now, for Auto-Resume to play: the video it paused, or the photo's timer. */
   let autoPausedVideo = false;
   let autoHeldPhoto = false;
   /** Where the attempt playing now came from. */
@@ -323,12 +333,8 @@ export function createPlayer(options: PlayerOptions): Player {
    * without getting another, which can't loop on a fresh URL that fails too.
    */
   let recovered = false;
-  /** The play attempt Auto-Pause paused; once another has started, there is nothing to resume. */
-  let autoPausedAttempt = 0;
   /** A history step waits for its fresh media URL, with nothing shown yet. */
   let stepWaiting = false;
-  /** Auto-Pause came while a history step waited, so its media loads paused, for Auto-Resume to play. */
-  let autoPausedWaiting = false;
   /** A random pick waits for the server, holding Loading…. */
   let pickWaiting = false;
   /** The video of the attempt playing now has played, so its timer can run. */
@@ -532,11 +538,16 @@ export function createPlayer(options: PlayerOptions): Player {
     }
   }
 
-  /** The user played or paused, which Auto-Pause then leaves as it is. */
-  function handBackToUser(): void {
+  /** Auto-Pause has nothing of what shows to resume. */
+  function dropAutoPaused(): void {
     autoPausedVideo = false;
     autoHeldPhoto = false;
-    autoPausedWaiting = false;
+  }
+
+  /** The user played or paused, which Auto-Pause then leaves as it is. */
+  function handBackToUser(): void {
+    autoPauseHolds = false;
+    dropAutoPaused();
   }
 
   function showToggles(): void {
@@ -717,7 +728,8 @@ export function createPlayer(options: PlayerOptions): Player {
     failurePhase = "none";
     recovered = false;
     stepWaiting = false;
-    autoPausedWaiting = false;
+    // What Auto-Pause held of the last item has nothing left to resume.
+    dropAutoPaused();
     // A new item's stretch starts at its start, its frames are timed anew, and the seek indicator's total starts over.
     frameClock.reset();
     seekIndicator.clear();
@@ -742,15 +754,13 @@ export function createPlayer(options: PlayerOptions): Player {
   }
 
   /**
-   * Shows the attempt's photo, or loads and plays its video, from the item's media URL. When Auto-Pause came while a
-   * history step waited for this URL, the video loads paused and the photo's timer held, for Auto-Resume to play, and
-   * Loading… ends, as Auto-Pause ends a media load's wait.
+   * Shows the attempt's photo, or loads and plays its video, from the item's media URL. While Auto-Pause holds playback,
+   * the video loads paused and the photo's timer holds, for Auto-Resume to play, and Loading… ends, as Auto-Pause ends a
+   * media load's wait.
    */
   function loadMedia(item: PlayingItem, attemptId: number): void {
     const { video, photo } = elements!;
     const mediaUrl = absolutizeMediaUrl(apiBaseUrl, item.mediaUrl);
-    const autoPaused = autoPausedWaiting && autoPausedAttempt === attemptId;
-    autoPausedWaiting = false;
 
     if (item.mediaType === "photo") {
       armed = { mediaType: "photo", id: item.id, attemptId };
@@ -758,7 +768,7 @@ export function createPlayer(options: PlayerOptions): Player {
       photo.style.display = "block";
       if (photoTimerRuns()) {
         photoTimer.start(advanceAfterMs());
-        if (autoPaused) {
+        if (autoPauseHolds) {
           photoTimer.hold();
           autoHeldPhoto = true;
         }
@@ -776,15 +786,18 @@ export function createPlayer(options: PlayerOptions): Player {
       videoTimer.hold();
       stretching = stretchApplies();
       syncVideo();
-      if (autoPaused) {
+      if (autoPauseHolds) {
         autoPausedVideo = true;
       } else {
         void audio.play(video).catch(() => playRefused(attemptId));
       }
     }
 
-    if (autoPaused) {
+    if (autoPauseHolds) {
       mediaSettled();
+      if (autoPausedVideo || autoHeldPhoto) {
+        trace("info", "auto-pause", { mediaType: item.mediaType });
+      }
     }
     showToggles();
   }
@@ -1110,7 +1123,7 @@ export function createPlayer(options: PlayerOptions): Player {
    * resume then, so a held photo's timer stays held.
    */
   function stopSilently(): void {
-    handBackToUser();
+    dropAutoPaused();
     failurePhase = "stopped";
     mediaFailed.value = true;
     stopMovingBar();
@@ -1122,9 +1135,14 @@ export function createPlayer(options: PlayerOptions): Player {
     }
   }
 
-  /** A play the user started, which starts the count of files skipped in a row over. */
+  /**
+   * A play the user started, which starts the count of files skipped in a row over and ends Auto-Pause's hold, so the
+   * item it starts plays. What Auto-Pause paused still resumes until an item starts, since a press can start nothing,
+   * as Previous at the oldest entry or a pick that finds nothing doesn't.
+   */
   function userStarted(): void {
     skips = 0;
+    autoPauseHolds = false;
   }
 
   async function pick(): Promise<void> {
@@ -1192,7 +1210,7 @@ export function createPlayer(options: PlayerOptions): Player {
    */
   function settleFailedMedia(): void {
     if (failurePhase === "failing") {
-      handBackToUser();
+      dropAutoPaused();
       failurePhase = "stopped";
       videoTimer.hold();
       mediaSettled();
@@ -1475,14 +1493,9 @@ export function createPlayer(options: PlayerOptions): Player {
     },
 
     autoPause() {
-      handBackToUser();
-      autoPausedAttempt = store.playAttemptId.peek();
-      if (stepWaiting) {
-        // Nothing shows yet: the step's media loads paused once the server answers, and Loading… waits for that.
-        autoPausedWaiting = true;
-        trace("info", "auto-pause", { mediaType: store.current.peek()?.mediaType });
-        return;
-      }
+      autoPauseHolds = true;
+      // Nothing shows yet: the step's media loads paused once the server answers, and Loading… waits for that.
+      if (stepWaiting) return;
       mediaSettled();
       if (photoShown()) {
         autoHeldPhoto = photoTimer.running;
@@ -1502,8 +1515,6 @@ export function createPlayer(options: PlayerOptions): Player {
       const resumeVideo = autoPausedVideo;
       const resumePhoto = autoHeldPhoto;
       handBackToUser();
-      // An item played since, or the same one played again, already plays as it should.
-      if (!store.current.peek() || store.playAttemptId.peek() !== autoPausedAttempt) return;
       if (resumePhoto && photoShown() && photoTimer.active) {
         trace("info", "auto-resume", { mediaType: "photo" });
         photoTimer.resume();
@@ -1517,6 +1528,11 @@ export function createPlayer(options: PlayerOptions): Player {
     },
 
     videoPlayStateChanged() {
+      // Nothing in the player plays a video while Auto-Pause holds playback, so this play is the user's, from outside
+      // its controls, as a media key or the system's media controls play it.
+      if (autoPauseHolds && !videoPaused()) {
+        handBackToUser();
+      }
       showPlayState();
       syncVideo();
     },

@@ -707,6 +707,109 @@ describe("createPlayer", () => {
     expect(page.requests("/api/record-playback").map((request) => request.body.itemId)).toEqual(["item-video", "item-other"]);
   });
 
+  it("starts a video a random pick answers with while Auto-Pause holds playback paused, ending Loading…, for Auto-Resume to play", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.play(VIDEO);
+    const { video } = page.elements;
+    const answer = holdReply(page, "/api/random");
+    page.player.next();
+    page.player.autoPause();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(page.store.loading.shown.value).toBe(true);
+
+    answer(json({ ...SECOND_VIDEO }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(video.src).toBe("http://server/api/media/item-other?token=t");
+    expect(video.paused).toBe(true);
+    expect(video.plays).toHaveLength(1);
+    expect(page.player.playButton.value.showsPause).toBe(false);
+    expect(page.store.loading.shown.value).toBe(false);
+    expect(page.relayed).toContain("playback=auto-pause attempt=2 hasCurrent=true mediaType=video");
+
+    page.player.autoResume();
+    expect(video.plays).toEqual([
+      "display=block muted=false src=http://server/api/media/item-video?token=t",
+      "display=block muted=false src=http://server/api/media/item-other?token=t"
+    ]);
+  });
+
+  it("holds the timer of a photo a random pick answers with while Auto-Pause holds playback, for Auto-Resume to run it", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.player.toggleAutoplay();
+    page.play(VIDEO);
+    const answer = holdReply(page, "/api/random");
+    page.player.next();
+    page.player.autoPause();
+
+    answer(json({ ...PHOTO }));
+    await vi.advanceTimersByTimeAsync(0);
+    page.player.photoLoaded();
+    expect(page.store.current.value?.itemId).toBe("item-photo");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(page.requests("/api/random")).toHaveLength(1);
+
+    page.player.autoResume();
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(page.requests("/api/random")).toHaveLength(2);
+  });
+
+  it("plays an item the user starts while Auto-Pause holds playback, once its history step's answer comes, and Auto-Resume then changes nothing", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    seedHistory(page, [VIDEO, SECOND_VIDEO], 1);
+    page.player.autoPause();
+    const answer = holdReply(page, "/api/play/item-video");
+    page.player.previous();
+
+    answer(json({ ...VIDEO }));
+    await vi.advanceTimersByTimeAsync(0);
+    const { video } = page.elements;
+    expect(video.plays).toHaveLength(1);
+    page.player.autoResume();
+    expect(video.plays).toHaveLength(1);
+    expect(video.paused).toBe(false);
+  });
+
+  it.each<[string, (page: ReturnType<typeof setup>) => void | Promise<void>]>([
+    ["Previous at the oldest entry", (page) => page.player.previous()],
+    ["Random, which finds nothing", (page) => page.player.pickRandom()]
+  ])("resumes what Auto-Pause paused when a press during its hold starts nothing: %s", async (_name, press) => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.play(VIDEO);
+    const { video } = page.elements;
+    page.player.autoPause();
+
+    await press(page);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.store.playAttemptId.value).toBe(1);
+    page.player.autoResume();
+    expect(video.paused).toBe(false);
+    expect(video.plays).toHaveLength(2);
+  });
+
+  it("ends Auto-Pause's hold when the browser plays the video itself, as a media key does, so the next item plays", async () => {
+    vi.useFakeTimers();
+    const page = setup();
+    page.player.toggleAutoplay();
+    page.playVideo(VIDEO, 30);
+    const { video } = page.elements;
+    page.player.autoPause();
+
+    // Not through the player's controls, as a media key, a headset's button, or the system's media controls play it.
+    video.play();
+    page.player.videoPlayStateChanged();
+    page.answerRandom({ ...SECOND_VIDEO });
+    video.ended = true;
+    page.player.videoEnded();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(video.src).toBe("http://server/api/media/item-other?token=t");
+    expect(video.paused).toBe(false);
+  });
+
   it("disables the scrub bar before anything plays, with the time at 0:00 / 0:00", () => {
     const page = setup();
     expect(page.player.seekBar.value).toEqual({ disabled: true, label: "Seek" });
@@ -2510,6 +2613,41 @@ describe("history steps", () => {
     answer(json({ ...VIDEO }));
     await vi.advanceTimersByTimeAsync(0);
     expect(page.elements.video.plays).toHaveLength(1);
+  });
+
+  it.each([
+    [
+      "the play route says is missing",
+      async (_page: ReturnType<typeof setup>, answer: (response: Response) => void) =>
+        answer(json({ error: "Media not found", code: "play_media_missing" }, 404))
+    ],
+    [
+      "this browser can't play",
+      async (page: ReturnType<typeof setup>, answer: (response: Response) => void) => {
+        answerProbe(page, MKV, () => media(200));
+        answer(json({ ...MKV }));
+        await vi.waitFor(() => expect(page.elements.video.src).toContain("item-mkv"));
+        page.player.videoFailed();
+      }
+    ]
+  ])("load the next entry paused when the one Auto-Pause came to while they waited is a file %s, which is skipped", async (_name, fail) => {
+    vi.useFakeTimers();
+    const page = setup();
+    seedHistory(page, [VIDEO, MKV, SECOND_VIDEO], 0);
+    const answer = holdReply(page, "/api/play/item-mkv");
+    page.player.next();
+    page.player.autoPause();
+    await fail(page, answer);
+
+    const { video } = page.elements;
+    await vi.waitFor(() => expect(video.src).toContain("item-other"));
+    expect(page.notified).toHaveLength(1);
+    expect(video.plays).toEqual([]);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(page.store.loading.shown.value).toBe(false);
+
+    page.player.autoResume();
+    expect(video.plays).toEqual(["display=block muted=false src=http://server/api/media/item-other?token=t"]);
   });
 });
 

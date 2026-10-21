@@ -31,6 +31,10 @@ const PHOTO: PlayingItem = {
   mediaUrl: "/api/media/item-photo?token=t"
 };
 
+function json(body: unknown): Response {
+  return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json" } });
+}
+
 /** Desktop and phone widths, and a phone on its side, where the panel is the overlay at any width. */
 const DESKTOP = { width: 1024, height: 768, coarse: false };
 const PHONE = { width: 390, height: 844, coarse: true };
@@ -83,9 +87,12 @@ function fakeVideo() {
 /** Auto-Pause in `mode`, wired to the panel host at `size` and to the player, which plays `item`. */
 function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
   const requests: string[] = [];
+  /** Answers for a path that the test gives, in place of the default answer. */
+  const replies = new Map<string, () => Promise<Response>>();
   const fetchImpl = (async (input: RequestInfo | URL) => {
-    requests.push(new URL(String(input)).pathname);
-    return new Response(JSON.stringify({ mediaUrl: null }), { headers: { "Content-Type": "application/json" } });
+    const path = new URL(String(input)).pathname;
+    requests.push(path);
+    return replies.get(path)?.() ?? json({ mediaUrl: null });
   }) as typeof fetch;
   const device = createDeviceStore(null);
   const store = createAppStore({
@@ -152,6 +159,12 @@ function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
     viewport,
     autoTagOpen,
     requests: (path: string) => requests.filter((request) => request === path),
+    /** Answers the next request to `path` only when the test calls the function returned. */
+    holdReply(path: string): (response: Response) => void {
+      let answer: (response: Response) => void = () => {};
+      replies.set(path, () => new Promise<Response>((resolve) => (answer = resolve)));
+      return (response) => answer(response);
+    },
     /** Whether the video plays, or the photo's timer runs. */
     playing: () => (item.mediaType === "photo" ? player.playButton.value.showsPause : !video.paused)
   };
@@ -287,6 +300,20 @@ describe("Auto-Pause with the panel and the player", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(page.requests("/api/random")).toHaveLength(1);
     expect(page.requests("/api/record-playback")).toHaveLength(1);
+  });
+
+  it("starts paused an item a random pick answers with after the overlay opened, and plays it as the overlay closes", async () => {
+    const page = setup("responsive", PHONE);
+    const answer = page.holdReply("/api/random");
+    page.player.next();
+    await page.panel.showTab("library");
+
+    answer(json({ ...VIDEO, id: "/media/other.mp4", itemId: "item-other", mediaUrl: "/api/media/item-other?token=t" }));
+    await vi.waitFor(() => expect(page.video.src).toBe("http://server/api/media/item-other?token=t"));
+    expect(page.playing()).toBe(false);
+
+    await page.panel.close();
+    expect(page.playing()).toBe(true);
   });
 
   it("ends Loading… for a video still loading as the overlay pauses it", async () => {
