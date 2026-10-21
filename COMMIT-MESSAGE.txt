@@ -19,9 +19,13 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Stop the WebUI's Stats tab loading once its page closes, which made a Stats test flaky in CI
+M12k2: Add Item Ratings' rating to the mockup's Stats tab, with its Rated card and popups, and tidy its path button and tags
 
-- The WebUI's Stats tab now loads nothing once the server connection stops, as when the page closes, not even a load that was waiting out its 250 ms gather, as the library baseline already did. The app never closes its page while running, so nothing changes for users.
-- In tests, a page that closed with the Stats tab open sent that waiting load to the next test's fake server, so "says nothing is playing yet above the library's cards" sometimes counted two stats loads at mount and failed in about half the CI runs.
-- A new test closes the page while the Stats tab's load waits, and checks that no stats or item request goes out; it failed before the fix.
-- The domain inventory says the Stats tab's service stops with the connection.
+- The mockup's Stats tab shows the playing file's 5-star rating, with half stars, on its own line under the path. A click, a tap, or a drag along the stars sets it, as do the arrow keys, Home, End, and Delete, and a mouse over the stars previews it. A touch that starts on the stars never scrolls the tab.
+- The first star's left 8 px clears the rating, with no Clear button, and so does a drag off the stars' left end.
+- Stars are 36 px wide and as tall as their 30 px icons, and a half star is orange only on its filled half, drawn as the filled star cut off at its middle over the grey outline.
+- A rating change pops up as Your actions, or as Other devices from the Mockup tab's new rating from another device, and the Library's Rated card counts the rated files.
+- The Settings tab's Other devices description names rating changes, and the mockup's index lists the rating and its sizes.
+- Show in File Manager and Copy Path, beside the path, are an icon button with a tooltip and a 24 px icon, as the app's other icon buttons are, and the file's tags move below the table into a row of their own, without a Tags label.
+- The mockup's icon font adds the star, outlined and filled.
+- Item Ratings' Mockup slice is complete, approved on the user's devices, with the review's sizes, clear edge, half star, touches, path button, and tags row in its Decisions, and the remaining interaction details in the WebUI slice's Scope.

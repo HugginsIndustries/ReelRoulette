@@ -537,12 +537,27 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
 .stats-file-name { font-weight: 600; word-break: break-word; margin: 0 0 4px; }
 .stats-path { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
 .stats-path code { flex: 1 1 auto; min-width: 0; font-size: 0.82rem; color: var(--muted-fg); word-break: break-all; }
-.stats-path .btn { min-height: 36px; padding: 4px 10px; font-size: 0.9rem; flex: 0 0 auto; }
-.stats-path .btn .material-symbol-icon { font-size: 20px; }
+.stats-path .icon-btn .material-symbol-icon { font-size: 24px; }
+/* The rating's line: its label at the left, and the control at the right, lined up with the table's values, wrapping
+   under the label on a screen too narrow for both. The control starts at the first star, whose left edge clears the
+   rating. Each star is only as tall as its icon. A touch that starts on the control stays its own however the finger
+   moves, so it never scrolls the tab. */
+.stats-rating { display: flex; flex-wrap: wrap; align-items: center; margin: 0 0 6px; font-size: 0.92rem; }
+.stats-rating-label { color: var(--muted-fg); }
+.rating { display: flex; margin-left: auto; border-radius: 6px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+.rating-star { position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 30px; color: var(--muted-fg); }
+.rating-star .material-symbol-icon { font-size: 30px; }
+/* A full star is the filled star in orange. A half star lays it, cut off at its middle, over the grey outline, so only
+   the filled half is orange. */
+.rating-fill { position: absolute; top: 0; left: 50%; transform: translateX(-50%); color: var(--huggins-orange); visibility: hidden; }
+.rating-star.is-full .rating-fill, .rating-star.is-half .rating-fill { visibility: visible; }
+.rating-star.is-half .rating-fill { clip-path: inset(0 50% 0 0); }
+.rating-star.is-full .rating-outline { visibility: hidden; }
 .stats-table { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin: 0; font-size: 0.92rem; }
 .stats-table dt { color: var(--muted-fg); }
 .stats-table dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
-.stats-tags { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+/* The file's tags, in a row of their own below the table, with no label. */
+.stats-tags { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; margin-top: 8px; }
 .stats-tag { padding: 2px 8px; border-radius: 999px; background: var(--violet); color: #fff; font-size: 0.8rem; font-weight: 600; }
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
 .stat-card { border: 1px solid var(--surface-border); border-radius: 8px; padding: 8px 10px; }
@@ -1247,7 +1262,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
                   <span class="setting-label" id="set-popup-kinds-label">Show popups for</span>
                   <div class="choice-stack" role="group" aria-labelledby="set-popup-kinds-label">
                     <label><input type="checkbox" name="set-popup-kind" value="actions"><span>Your actions<small>Such as Added to favorites, Filters applied, and Path copied.</small></span></label>
-                    <label><input type="checkbox" name="set-popup-kind" value="devices"><span>Other devices<small>Favorites, blacklist, and preset changes made on another device.</small></span></label>
+                    <label><input type="checkbox" name="set-popup-kind" value="devices"><span>Other devices<small>Favorites, blacklist, rating, and preset changes made on another device.</small></span></label>
                     <label><input type="checkbox" name="set-popup-kind" value="refresh"><span>Library refresh<small>When a refresh finishes or fails.</small></span></label>
                     <label><input type="checkbox" name="set-popup-kind" value="skips"><span>Skipped files<small>When playback skips a missing file or one this browser can't play.</small></span></label>
                     <label><input type="checkbox" name="set-popup-kind" value="connection"><span>Connection<small>When the connection to the server comes back, or the library can't load more.</small></span></label>
@@ -1421,6 +1436,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <legend>Events</legend>
         <div class="mock-sheet-actions">
           <button type="button" id="mock-sync">A favorite from another device</button>
+          <button type="button" id="mock-sync-rating">A rating from another device</button>
           <button type="button" id="mock-preset-added">A preset added on another device</button>
           <button type="button" id="mock-preset-renamed">A preset renamed on another device</button>
           <button type="button" id="mock-preset-updated">A preset updated on another device</button>
@@ -1568,6 +1584,10 @@ ITEMS.forEach((item) => {
     else if (item.id % 25 === 19) Object.assign(item, { hasAudio: false, loudness: null, peak: null });
     else if (item.id % 11 === 6) item.peak = null;
   }
+  // The rating in stars, or null for none, as the API gives it: about a quarter unrated. It comes from the item's id
+  // rather than statRand, whose values the stats above share.
+  const halves = (item.id * 7) % 13;
+  item.rating = halves >= 1 && halves <= 10 ? halves / 2 : null;
   item.missing = item.id === 13;
   item.removed = false;
   item.path = `${isPhoto(item) ? "/media/phone" : "/media/videos"}/${item.year}/${item.name}`;
@@ -4675,6 +4695,16 @@ $("mock-sync").addEventListener("click", () => {
   renderPlayback();
   layoutGrid(true);
 });
+// Another device clears a rated item's rating and rates an unrated one 3.5 stars. Its popup has a key of its own, so
+// it doesn't replace another device's favorite change to the same file.
+$("mock-sync-rating").addEventListener("click", () => {
+  const item = playback.item || visibleItems().items[0];
+  if (!item) return;
+  item.rating = item.rating ? null : 3.5;
+  const text = item.rating ? `Rated ${ratingText(item.rating)}` : "Rating cleared";
+  notes.notify({ kind: "devices", text: `${text} on another device`, detail: item.name, key: `sync-rating:${item.id}` });
+  renderStats();
+});
 
 // Preset changes from another device. The page reloads the presets and tells the changes apart by comparing the list
 // with the one before, since the event carries only the preset's id and the device's clientId. The preset dropdown takes
@@ -5253,6 +5283,156 @@ function statsHint(text, error) {
   hint.textContent = text;
   return hint;
 }
+// A rating is ½ to 5 stars in half-star steps, or none, kept on each item in stars or as null.
+const ratingText = (rating) => (!rating ? "Not rated" : rating === 1 ? "1 star" : `${rating} stars`);
+const RATING_KEY_PAUSE_MS = 500;
+const RATING_CLEAR_EDGE_PX = 8;
+// The Current file section's rating: the label and one control, a slider from 0 to 5 to screen readers. It is one
+// element kept across the tab's redraws, which move it into the new rows, so a redraw keeps focus on it.
+const ratingControl = (() => {
+  const line = document.createElement("div");
+  line.className = "stats-rating";
+  const label = document.createElement("span");
+  label.className = "stats-rating-label";
+  label.id = "stats-rating-label";
+  label.textContent = "Rating";
+  const el = document.createElement("div");
+  el.className = "rating";
+  el.id = "stats-rating";
+  el.tabIndex = 0;
+  el.setAttribute("role", "slider");
+  el.setAttribute("aria-labelledby", label.id);
+  el.setAttribute("aria-valuemin", "0");
+  el.setAttribute("aria-valuemax", "5");
+  const stars = Array.from({ length: 5 }, () => {
+    const star = document.createElement("span");
+    star.className = "rating-star";
+    star.append(iconSpan("star", "rating-outline"), iconSpan("star", "is-filled rating-fill"));
+    return star;
+  });
+  el.append(...stars);
+  line.append(label, el);
+
+  let item = null;
+  // A mouse's preview, or the value under a press, shown in place of the set rating.
+  let shown = null;
+  let pressId = null;
+  // A change not sent yet: the item it was made on and its rating before. Keys wait for a pause before sending.
+  let pending = null;
+  let pauseTimer = 0;
+
+  function draw() {
+    const rating = item?.rating || 0;
+    const value = shown ?? rating;
+    stars.forEach((star, i) => {
+      const full = value >= i + 1;
+      star.classList.toggle("is-full", full);
+      star.classList.toggle("is-half", !full && value >= i + 0.5);
+    });
+    // The slider's value stays the set rating through a preview or a press.
+    el.setAttribute("aria-valuenow", String(rating));
+    el.setAttribute("aria-valuetext", ratingText(rating));
+  }
+  // The value under the pointer: the first star's left edge clears the rating, a star's left half is half a star less
+  // than its right half, and past the stars' ends, which only a press that started on them reaches, is none or 5.
+  function valueAt(clientX) {
+    const first = stars[0].getBoundingClientRect();
+    const width = first.width || 36;
+    const x = clientX - first.left;
+    if (x < RATING_CLEAR_EDGE_PX) return 0;
+    const index = Math.floor(x / width);
+    return index >= 5 ? 5 : index + (x - index * width < width / 2 ? 0.5 : 1);
+  }
+  // What the app does once its request lands: a rating it already had changes nothing, and one the server can't be
+  // reached for goes back, with the notice. The Rated card counts it after any redraw under way.
+  function commit(target, before) {
+    if ((target.rating ?? null) === before) return;
+    if (state.situation === "reconnecting") {
+      target.rating = before;
+      void noticeDialog({ message: "Rating update failed: Couldn't reach the server." });
+    } else {
+      acknowledge(target.rating ? `Rated ${ratingText(target.rating)}` : "Rating cleared", "rating", target.name);
+    }
+    queueMicrotask(renderStats);
+  }
+  function flush() {
+    clearTimeout(pauseTimer);
+    if (!pending) return;
+    const { target, before } = pending;
+    pending = null;
+    commit(target, before);
+  }
+  // A new value shows at once. A click, tap, or drag sends it as it is set; keys send it once they pause.
+  function set(value, byKey) {
+    if (!item) return;
+    if (!pending) pending = { target: item, before: item.rating ?? null };
+    item.rating = value || null;
+    draw();
+    clearTimeout(pauseTimer);
+    if (byKey) pauseTimer = setTimeout(flush, RATING_KEY_PAUSE_MS);
+    else flush();
+  }
+  function endPress(event) {
+    if (pressId !== event.pointerId) return false;
+    pressId = null;
+    shown = null;
+    return true;
+  }
+
+  el.addEventListener("pointerdown", (event) => {
+    if (!item || (event.pointerType === "mouse" && event.button !== 0)) return;
+    pressId = event.pointerId;
+    el.setPointerCapture?.(event.pointerId);
+    shown = valueAt(event.clientX);
+    draw();
+  });
+  // A mouse over the control previews the value under it, and a press, by any pointer, shows the value it would set.
+  el.addEventListener("pointermove", (event) => {
+    if (pressId === event.pointerId || (pressId == null && event.pointerType === "mouse")) {
+      shown = valueAt(event.clientX);
+      draw();
+    }
+  });
+  // A release sets the value under it. A mouse still over the control previews it again on its next move.
+  el.addEventListener("pointerup", (event) => {
+    if (endPress(event)) set(valueAt(event.clientX), false);
+  });
+  // A press the browser or a redraw cuts short sets nothing.
+  const cancelPress = (event) => endPress(event) && draw();
+  el.addEventListener("pointercancel", cancelPress);
+  el.addEventListener("lostpointercapture", cancelPress);
+  el.addEventListener("pointerleave", (event) => {
+    if (event.pointerType !== "mouse" || pressId != null) return;
+    shown = null;
+    draw();
+  });
+  // The keys stay the control's, so the left and right arrows don't play the previous or next item.
+  el.addEventListener("keydown", (event) => {
+    if (!item || event.altKey || event.ctrlKey || event.metaKey) return;
+    const rating = item.rating || 0;
+    const steps = { ArrowLeft: rating - 0.5, ArrowDown: rating - 0.5, ArrowRight: rating + 0.5, ArrowUp: rating + 0.5, Home: 0, End: 5, Delete: 0, Backspace: 0 };
+    if (!(event.key in steps)) return;
+    event.preventDefault();
+    set(Math.min(5, Math.max(0, steps[event.key])), true);
+  });
+  // Leaving the control sends a key change at once; a redraw gives focus straight back, so it sends nothing.
+  el.addEventListener("blur", () => queueMicrotask(() => document.activeElement !== el && flush()));
+
+  return {
+    el,
+    // The line for the playing item. Another item sends a change still waiting, to the item it was made on.
+    line(next) {
+      if (next !== item) {
+        flush();
+        pressId = null;
+        shown = null;
+      }
+      item = next;
+      draw();
+      return line;
+    }
+  };
+})();
 function fileStats(item) {
   const name = document.createElement("p");
   name.className = "stats-file-name";
@@ -5261,9 +5441,15 @@ function fileStats(item) {
   path.className = "stats-path";
   const code = document.createElement("code");
   code.textContent = item.path;
-  // The server opens its file manager only for a browser on the server machine; elsewhere the path is copied.
-  const action = dialogButton(state.serverMachine ? "Show in File Manager" : "Copy Path");
-  action.prepend(iconSpan(state.serverMachine ? "folder_open" : "content_copy"));
+  // The server opens its file manager only for a browser on the server machine; elsewhere the path is copied. An icon
+  // button, named by its tooltip.
+  const label = state.serverMachine ? "Show in File Manager" : "Copy Path";
+  const action = document.createElement("button");
+  action.type = "button";
+  action.className = "icon-btn";
+  action.setAttribute("aria-label", label);
+  action.title = label;
+  action.append(iconSpan(state.serverMachine ? "folder_open" : "content_copy"));
   action.addEventListener("click", () => {
     if (state.serverMachine) {
       acknowledge("Opened in the file manager.", "path", item.name);
@@ -5276,6 +5462,7 @@ function fileStats(item) {
   // The name and path come with the playing item; the rest needs the load, whose message shows once, in Library. A
   // playing file the server no longer has, whose read answers 404, shows only them while the library's cards load.
   if (statsMessage() || state.statsLoad === "removed") return [name, path];
+  const rating = ratingControl.line(item);
   const table = document.createElement("dl");
   table.className = "stats-table";
   statRow(table, "Plays", String(item.plays));
@@ -5301,13 +5488,14 @@ function fileStats(item) {
     tag.textContent = chip.name;
     tags.append(tag);
   });
-  statRow(table, "Tags", tags.childElementCount ? tags : "None");
-  return [name, path, table];
+  // A file without tags shows nothing in their place.
+  return tags.childElementCount ? [name, path, rating, table, tags] : [name, path, rating, table];
 }
 function renderStats() {
   const host = $("stats-body");
   if (!host) return;
   const item = playback.item;
+  const ratingFocused = document.activeElement === ratingControl.el;
   host.textContent = "";
 
   const file = document.createElement("section");
@@ -5327,6 +5515,7 @@ function renderStats() {
     ["Total media", live.length],
     ["Favorites", live.filter((x) => x.favorite).length],
     ["Blacklisted", live.filter((x) => x.blacklisted).length],
+    ["Rated", live.filter((x) => x.rating).length],
     ["Total plays", live.reduce((n, x) => n + x.plays, 0)],
     ["Unique played", live.filter((x) => x.plays).length],
     ["Never played", live.filter((x) => !x.plays).length],
@@ -5353,6 +5542,7 @@ function renderStats() {
   library.append(grid);
   // The current file first, since the file name opens this tab.
   host.append(file, library);
+  if (ratingFocused && ratingControl.el.isConnected) ratingControl.el.focus({ preventScroll: true });
 }
 
 // ---- Settings tab ----
