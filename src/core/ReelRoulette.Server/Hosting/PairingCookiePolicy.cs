@@ -7,31 +7,21 @@ public static class PairingCookiePolicy
     /// </summary>
     public static CookieOptions BuildCookieOptions(ServerRuntimeOptions options, bool isHttps)
     {
-        var secure = ResolveSecure(options.PairingCookieSecureMode, isHttps);
-        var sameSite = ResolveSameSite(options.PairingCookieSameSite);
-        // Browsers reject SameSite=None without Secure, so such a cookie is sent as Lax instead.
-        if (sameSite == SameSiteMode.None && !secure)
-        {
-            sameSite = SameSiteMode.Lax;
-        }
-
         return new CookieOptions
         {
             HttpOnly = true,
-            SameSite = sameSite,
-            Secure = secure,
+            SameSite = ResolveSameSite(options.PairingCookieSameSite),
+            Secure = ResolveSecure(options.PairingCookieSecureMode, isHttps),
             Path = "/",
             MaxAge = TimeSpan.FromHours(options.PairingSessionDurationHours)
         };
     }
 
+    /// <summary>
+    /// Lax or Strict. The WebUI and the API share one origin, so the cookie never needs to go with a cross-site request.
+    /// </summary>
     public static SameSiteMode ResolveSameSite(string? value)
     {
-        if (value != null && value.Equals("None", StringComparison.OrdinalIgnoreCase))
-        {
-            return SameSiteMode.None;
-        }
-
         if (value != null && value.Equals("Strict", StringComparison.OrdinalIgnoreCase))
         {
             return SameSiteMode.Strict;

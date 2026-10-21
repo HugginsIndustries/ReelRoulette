@@ -78,15 +78,15 @@ dotnet build ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj -f 
 dotnet run --framework net10.0 --project ./src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj
 ```
 
-Run the WebUI dev server:
+Run the server with the WebUI built from source:
 
 ```bash
-cd ./src/clients/web/ReelRoulette.WebUI
-npm install
-npm run dev
+pwsh ./tools/scripts/run-server.ps1
 ```
 
-`npm run dev` and `npm run build` automatically sync shared assets into WebUI `public/`, including:
+It builds the WebUI (`npm run build` in `src/clients/web/ReelRoulette.WebUI`) and runs the server on your real settings, serving that build. Run it again to see WebUI changes.
+
+`npm run build` automatically syncs shared assets into WebUI `public/`, including:
 
 - tab icon: `assets/logo/favicon.ico` -> `public/favicon.ico`
 - logo and PWA / home-screen icons, copied from `assets/logo/` at their sizes into `public/icons/`: `logo-icon.svg`, `logo-lockup.svg`, and `logo-lockup-dark.svg` for the tab icon and the header; `pwa-192.png` and `pwa-512.png` (manifest purpose `any`); `pwa-maskable-192.png` and `pwa-maskable-512.png` (purpose `maskable`); and `apple-touch-icon.png` (**180×180**). `npm run verify` checks that each PNG's pixel size matches `manifest.webmanifest`

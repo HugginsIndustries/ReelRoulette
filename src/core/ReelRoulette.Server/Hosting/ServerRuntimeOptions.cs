@@ -12,13 +12,6 @@ public sealed class ServerRuntimeOptions
     public string PairingCookieSameSite { get; set; } = "Lax";
     public string PairingCookieSecureMode { get; set; } = "Request";
     public bool AllowLegacyTokenAuth { get; set; } = true;
-    public bool EnableCors { get; set; } = true;
-    public bool CorsAllowCredentials { get; set; } = true;
-    public string[] CorsAllowedOrigins { get; set; } =
-    [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173"
-    ];
     public bool AutoRefreshEnabled { get; set; } = true;
     public int AutoRefreshIntervalMinutes { get; set; } = 15;
     public bool ForceRescanLoudness { get; set; }
@@ -65,11 +58,6 @@ public sealed class ServerRuntimeOptions
         options.PairingSessionDurationHours = Math.Clamp(options.PairingSessionDurationHours, 1, 24 * 365);
         options.PairingCookieSameSite = NormalizeSameSite(options.PairingCookieSameSite);
         options.PairingCookieSecureMode = NormalizeSecureMode(options.PairingCookieSecureMode);
-        options.CorsAllowedOrigins = (options.CorsAllowedOrigins ?? [])
-            .Where(origin => !string.IsNullOrWhiteSpace(origin))
-            .Select(origin => origin.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
         if (options.BindOnLan && options.ListenUrl.Contains("localhost", StringComparison.OrdinalIgnoreCase))
         {
             options.ListenUrl = options.ListenUrl.Replace("localhost", "0.0.0.0", StringComparison.OrdinalIgnoreCase);
@@ -94,22 +82,7 @@ public sealed class ServerRuntimeOptions
 
     private static string NormalizeSameSite(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return "Lax";
-        }
-
-        if (value.Equals("None", StringComparison.OrdinalIgnoreCase))
-        {
-            return "None";
-        }
-
-        if (value.Equals("Strict", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Strict";
-        }
-
-        return "Lax";
+        return PairingCookiePolicy.ResolveSameSite(value).ToString();
     }
 
     private static string NormalizeSecureMode(string? value)

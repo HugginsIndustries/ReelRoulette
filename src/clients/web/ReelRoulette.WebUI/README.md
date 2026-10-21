@@ -12,26 +12,25 @@ Config shape (required):
 
 ```json
 {
-  "apiBaseUrl": "http://localhost:51301",
-  "sseUrl": "http://localhost:51301/api/events",
+  "apiBaseUrl": "http://localhost:45123",
+  "sseUrl": "http://localhost:45123/api/events",
   "pairToken": "reelroulette-dev-token"
 }
 ```
 
-Runtime config loading order:
-
-1. `window.__REEL_ROULETTE_RUNTIME_CONFIG` (if set by host before app boot)
-2. `/runtime-config.json` (served static file, `no-store` fetch)
+The app loads it from `/runtime-config.json`, which the server builds for each request (`no-store` fetch).
 
 `pairToken` is optional, but if provided the app can bootstrap pairing automatically.
 
 ## Auth + SSE Notes
 
+The app and the API share one origin, so the browser sends the pairing cookie with every request and the event stream.
+
 - Pairing flow:
-  - Probe `/api/version` with credentials.
+  - Probe `/api/version`.
   - If unauthorized, call `/api/pair` with token and retry version probe.
 - SSE flow:
-  - Connect directly to `/api/events` with `withCredentials`.
+  - Connect directly to `/api/events`.
   - Track last revision and pass reconnect fallback `lastEventId` query.
   - Handle `resyncRequired` by requerying authoritative APIs.
 
@@ -41,16 +40,16 @@ From this directory:
 
 ```bash
 npm install
-npm run dev
+npm run build
 ```
+
+The server serves the build from `dist/`; `pwsh ./tools/scripts/run-server.ps1` from the repository root builds the WebUI and runs the server with it.
 
 Additional commands:
 
 ```bash
 npm run typecheck
 npm run test
-npm run build
-npm run preview
 npm run verify
 ```
 
@@ -60,4 +59,4 @@ npm run verify
 2. type-check: app code with browser types only (`tsconfig.app.json`), and `src/test` with Node types as well (`tsconfig.test.json`)
 3. unit tests (Vitest): typed modules under node, and screen tests in `src/test/screens/`, which mount the page in `happy-dom` against a fake server and event stream (`pageHarness.ts`)
 4. production build
-5. build-output verification (`dist` artifacts + runtime-config presence)
+5. build-output verification (`dist` artifacts)

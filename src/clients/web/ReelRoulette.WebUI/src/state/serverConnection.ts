@@ -537,7 +537,6 @@ export function createServerConnection(options: ServerConnectionOptions): Server
     try {
       response = await sendRequest(send, api.url("/api/pair"), {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: trimmed })
       });

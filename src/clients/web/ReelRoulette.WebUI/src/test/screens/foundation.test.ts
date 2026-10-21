@@ -736,6 +736,7 @@ describe("startup error", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("ReelRoulette");
     expect(screen.getByText("Runtime Configuration Error")).toBeTruthy();
     expect(screen.getByText("Runtime config '<b>apiBaseUrl</b>' is required.")).toBeTruthy();
+    expect(screen.getByText("Reload the page, or check that the ReelRoulette server is running.")).toBeTruthy();
     expect(root.querySelector("b")).toBeNull();
   });
 });

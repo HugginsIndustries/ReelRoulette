@@ -10,7 +10,6 @@ namespace ReelRoulette.Server.Hosting;
 
 public static class ServerHostComposition
 {
-    public const string WebClientCorsPolicyName = "ReelRouletteWebClient";
     internal const string ShowInFileManagerCapability = "api.showInFileManager";
     internal const string FileManagerErrorNotLocal = "file_manager_not_local";
     internal const string FileManagerErrorUnavailable = "file_manager_unavailable";
@@ -82,7 +81,7 @@ public static class ServerHostComposition
         });
         app.UseForwardedHeaders(ProxyForwarding.CreateOptions());
 
-        // Next, ahead of telemetry and CORS, so nothing else answers a device that remote connections refuse.
+        // Next, ahead of telemetry, so nothing else answers a device that remote connections refuse.
         app.Use(async (context, next) =>
         {
             var settings = context.RequestServices.GetRequiredService<CoreSettingsService>();
@@ -140,11 +139,6 @@ public static class ServerHostComposition
 
             await next();
         });
-
-        if (options.EnableCors)
-        {
-            app.UseCors(WebClientCorsPolicyName);
-        }
 
         // Installed whether or not API pairing is required: the control plane always needs it.
         app.Use((context, next) =>

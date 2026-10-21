@@ -142,7 +142,6 @@ export async function requestPlayItem(
   const encodedItemId = encodeURIComponent(trimmedItemId);
   const response = await sendRequest(fetchImpl, buildApiUrl(config, `/api/play/${encodedItemId}`), {
     method: "POST",
-    credentials: "include",
     headers: {
       "Content-Type": "application/json"
     },

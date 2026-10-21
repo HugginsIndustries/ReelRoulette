@@ -18,7 +18,7 @@ describe("createAppApi", () => {
     expect(api.url("api/presets")).toBe("http://localhost:51301/api/presets");
   });
 
-  it("posts JSON with credentials", async () => {
+  it("posts JSON", async () => {
     const { calls, fetchImpl } = recordingFetch(() => new Response("{}"));
     const api = createAppApi("http://localhost:51301", { onUnauthorized: () => {}, fetch: fetchImpl });
     await api.post("/api/favorite", { itemId: "item-1", isFavorite: true });
@@ -26,7 +26,6 @@ describe("createAppApi", () => {
     expect(calls[0]!.url).toBe("http://localhost:51301/api/favorite");
     expect(calls[0]!.init).toMatchObject({
       method: "POST",
-      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ itemId: "item-1", isFavorite: true })
     });
@@ -39,7 +38,7 @@ describe("createAppApi", () => {
     const api = createAppApi("http://localhost:51301", { onUnauthorized, fetch: fetchImpl });
 
     await expect(api.getJson("/api/presets")).resolves.toEqual({ ok: true });
-    expect(calls[0]!.init?.credentials).toBe("include");
+    expect(calls[0]!.url).toBe("http://localhost:51301/api/presets");
 
     status = 401;
     await expect(api.getJson("/api/presets")).rejects.toThrow("Unauthorized");
@@ -61,7 +60,7 @@ describe("createAppApi", () => {
 
     await expect(api.postJson("/api/tag-editor/model", { itemIds: ["item-1"] })).resolves.toEqual({ tags: [] });
     expect(calls[0]!.url).toBe("http://localhost:51301/api/tag-editor/model");
-    expect(calls[0]!.init).toMatchObject({ method: "POST", credentials: "include", body: JSON.stringify({ itemIds: ["item-1"] }) });
+    expect(calls[0]!.init).toMatchObject({ method: "POST", body: JSON.stringify({ itemIds: ["item-1"] }) });
 
     reply = () => new Response("{}", { status: 401 });
     await expect(api.postJson("/api/tag-editor/model", {})).rejects.toBeInstanceOf(UnauthorizedError);

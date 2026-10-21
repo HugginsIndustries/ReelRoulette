@@ -60,7 +60,7 @@ export function nextEventRevision(lastRevision: number | null, eventType: string
 export function createSseClient(options: SseClientOptions): SseClient {
   const createEventSource =
     options.createEventSource ??
-    ((url: string): EventSourceLike => new EventSource(url, { withCredentials: true }));
+    ((url: string): EventSourceLike => new EventSource(url));
   const reconnectDelayMs = options.reconnectDelayMs ?? SSE_RECONNECT_DELAY_MS;
 
   let source: EventSourceLike | null = null;

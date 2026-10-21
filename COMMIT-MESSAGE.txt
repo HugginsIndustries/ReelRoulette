@@ -19,8 +19,12 @@ Instructions:
 
 Commit Message:
 
-Docs: Clear Item Ratings' rating from a zone left of the first star, and let a hover preview replace the shown rating
+Chore: Remove the Vite dev server setup and the CORS machinery only it used
 
-- MILESTONES.md: Item Ratings drops the Clear button. A small zone just left of the first star clears the rating, as Plex's does: a click or tap on it, or a touch drag that ends on it, clears, a mouse over it previews no stars, and the keys still clear. It stays easy to tap on the iPad and phone, and the mockup review settles its size.
-- MILESTONES.md: A mouse hover's preview replaces the shown rating while the pointer is over the stars or the clear zone, and the set rating shows again when it leaves; the slider's value stays the set rating.
-- MILESTONES.md: Item Ratings' Mockup and WebUI slices, their traps, including the narrow value column's, their acceptance, and its release checks follow both changes.
+- WebUI: Drop the `dev`, `predev`, and `preview` scripts, the Vite dev server's port, and the dev `public/runtime-config.json`; the server already serves its own runtime config. Vite stays the build tool. Requests and the event stream no longer ask for cross-origin credentials, since the WebUI and the API share one origin.
+- WebUI: Remove the unused `window.__REEL_ROULETTE_RUNTIME_CONFIG` override; the startup error page now says to reload the page or check that the ReelRoulette server is running.
+- Server: Remove ReelRoulette.Server's standalone dev host (`Program.cs` and its `appsettings.json`), `DynamicCorsOriginRegistry`, and the `EnableCors`, `CorsAllowedOrigins`, and `CorsAllowCredentials` settings. ServerApp already ran with CORS off. ReelRoulette.Server is now a plain class library on ASP.NET Core.
+- Server: The pairing and control-token checks no longer let OPTIONS requests through unauthenticated, and the pairing cookie's same-site setting takes only `Lax` or `Strict`, since no request is cross-origin any more; a `None` setting reads as `Lax`. The static files' `no-store` rule for a built `runtime-config.json` goes too, since the build no longer has one.
+- Packaging: Publish without `ErrorOnDuplicatePublishOutputFiles=false` in `release.yml` and the packaged server smoke, since ServerApp's `appsettings.json` no longer has a duplicate.
+- Solution: Remove the empty `ReelRoulette.WebUI.csproj` and the empty `clients` and `web` solution folders.
+- Docs: README, dev-setup, api, architecture, CONTEXT, domain inventory, the WebUI README, and the mockup's startup error screen follow; MILESTONES.md drops the CORS notes, and Auth Cutover now removes `/runtime-config.json` once `pairToken` is gone.

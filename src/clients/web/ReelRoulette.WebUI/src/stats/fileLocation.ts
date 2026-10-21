@@ -35,8 +35,7 @@ export function createFileLocation(options: FileLocationOptions): FileLocation {
     let response: Response;
     try {
       response = await api.request(api.url(`/api/show-in-file-manager/${encodeURIComponent(itemId)}`), {
-        method: "POST",
-        credentials: "include"
+        method: "POST"
       });
     } catch (error) {
       // A 401 shows only the pairing prompt, which the request has asked for.

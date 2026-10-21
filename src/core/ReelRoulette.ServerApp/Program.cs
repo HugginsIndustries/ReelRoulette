@@ -48,33 +48,18 @@ static async Task RunAsync(string[] args)
         var startupWebRuntime = startupSettings.GetWebRuntimeSettings();
         ServerAppRuntimeHelpers.ApplyWebRuntimeSettingsToRuntimeOptions(runtimeOptions, startupWebRuntime);
         var webUiEnabledAtStartup = startupWebRuntime.Enabled;
-        var corsOrigins = new DynamicCorsOriginRegistry(runtimeOptions);
         var serverAppOptions = ServerAppOptions.FromConfiguration(builder.Configuration);
         ServerAppRuntimeHelpers.ResetServerLastLog();
 
         builder.WebHost.UseUrls(runtimeOptions.ListenUrl);
         builder.Services.AddSingleton(runtimeOptions);
         builder.Services.AddSingleton(serverAppOptions);
-        builder.Services.AddSingleton(corsOrigins);
         builder.Services.AddSingleton<RestartCoordinator>();
         builder.Services.AddSingleton<UpdateService>();
         builder.Services.AddSingleton<IServerUpdateChannelCoordinator>(sp => sp.GetRequiredService<UpdateService>());
         builder.Services.AddSingleton<IFileManagerLauncher>(_ => DesktopFileManagerLauncher.Create());
         builder.Services.AddHostedService<UpdateHostedService>();
         builder.Services.AddHostedService<WebUiMdnsService>();
-        builder.Services.AddCors(options =>
-        {
-            options.AddPolicy(ServerHostComposition.WebClientCorsPolicyName, cors =>
-            {
-                cors.SetIsOriginAllowed(corsOrigins.IsAllowed);
-                cors.WithMethods("GET", "POST", "OPTIONS")
-                    .WithHeaders("Content-Type", "Authorization", "Last-Event-ID");
-                if (runtimeOptions.CorsAllowCredentials)
-                {
-                    cors.AllowCredentials();
-                }
-            });
-        });
         builder.Services.AddReelRouletteServer();
         builder.Services.Configure<FormOptions>(options =>
         {
@@ -83,11 +68,6 @@ static async Task RunAsync(string[] args)
 
         var app = builder.Build();
         app.MapReelRouletteEndpoints(runtimeOptions);
-
-        corsOrigins.Start(
-            app.Services.GetRequiredService<CoreSettingsService>(),
-            app.Logger);
-        app.Lifetime.ApplicationStopping.Register(corsOrigins.Stop);
 
         var startupLaunchService = CreateStartupLaunchService(app);
 
@@ -1281,7 +1261,6 @@ static void MapWebUiStaticServing(WebApplication app, ServerAppOptions options, 
         OnPrepareResponse = ctx =>
         {
             if (ctx.File.Name.Equals("index.html", StringComparison.OrdinalIgnoreCase) ||
-                ctx.File.Name.Equals("runtime-config.json", StringComparison.OrdinalIgnoreCase) ||
                 ctx.File.Name.Equals("sw.js", StringComparison.OrdinalIgnoreCase))
             {
                 ctx.Context.Response.Headers["Cache-Control"] = "no-store";

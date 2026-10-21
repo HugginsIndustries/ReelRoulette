@@ -67,7 +67,7 @@ export async function probeMedia(
   timeoutMs: number = PLAYBACK_REQUEST_TIMEOUT_MS
 ): Promise<MediaProbeResult> {
   const answer = await withTimeout(
-    (signal) => send(mediaUrl, { method: "GET", credentials: "include", headers: { Range: "bytes=0-0" }, signal }),
+    (signal) => send(mediaUrl, { method: "GET", headers: { Range: "bytes=0-0" }, signal }),
     timeoutMs
   );
   if (answer.kind === "timedOut") {

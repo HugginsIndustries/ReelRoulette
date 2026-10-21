@@ -1,13 +1,10 @@
 import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-// Node runs this TypeScript module as is by stripping its types, so the build is checked by the app's own rules.
-import { parseRuntimeConfig } from "../src/config/runtimeConfig.ts";
 import { readAppVersion } from "./app-version.mjs";
 
 const cwd = process.cwd();
 const distDir = path.join(cwd, "dist");
 const indexPath = path.join(distDir, "index.html");
-const runtimeConfigPath = path.join(distDir, "runtime-config.json");
 const manifestPath = path.join(distDir, "manifest.webmanifest");
 const serviceWorkerPath = path.join(distDir, "sw.js");
 const faviconPath = path.join(distDir, "favicon.ico");
@@ -80,22 +77,6 @@ async function verifyManifestIcons() {
   }
 }
 
-async function verifyRuntimeConfig() {
-  const runtimeConfigRaw = await readFile(runtimeConfigPath, "utf8");
-  let runtimeConfig;
-  try {
-    runtimeConfig = JSON.parse(runtimeConfigRaw);
-  } catch {
-    throw new Error("dist/runtime-config.json is not valid JSON.");
-  }
-
-  try {
-    parseRuntimeConfig(runtimeConfig);
-  } catch (error) {
-    throw new Error(`dist/runtime-config.json is rejected by the app: ${error.message}`);
-  }
-}
-
 /**
  * The built scripts hold the app's version from `.version`, which Diagnostics in the Settings tab shows, as a string in
  * any of the quotes the minifier writes (it uses backticks).
@@ -116,7 +97,6 @@ async function verifyAppVersion() {
 async function run() {
   await assertExists(distDir, "dist directory");
   await assertExists(indexPath, "index.html");
-  await assertExists(runtimeConfigPath, "runtime config file");
   await assertExists(manifestPath, "web app manifest file");
   await assertExists(serviceWorkerPath, "service worker file");
   await assertExists(faviconPath, "favicon");
@@ -128,7 +108,6 @@ async function run() {
 
   await assertPngSize(appleTouchIconPath, 180, 180, "Apple touch icon");
   await verifyManifestIcons();
-  await verifyRuntimeConfig();
   await verifyAppVersion();
 
   const indexHtml = await readFile(indexPath, "utf8");

@@ -8,12 +8,6 @@ type RuntimeConfigInput = {
   pairToken?: unknown;
 };
 
-declare global {
-  interface Window {
-    __REEL_ROULETTE_RUNTIME_CONFIG?: RuntimeConfigInput;
-  }
-}
-
 function normalizeAbsoluteHttpUrl(value: string, key: keyof RuntimeConfig): string {
   let parsed: URL;
   try {
@@ -63,10 +57,6 @@ export function parseRuntimeConfig(raw: RuntimeConfigInput | null | undefined): 
 }
 
 export async function loadRuntimeConfig(fetchImpl: typeof fetch = fetch): Promise<RuntimeConfig> {
-  if (typeof window !== "undefined" && window.__REEL_ROULETTE_RUNTIME_CONFIG) {
-    return parseRuntimeConfig(window.__REEL_ROULETTE_RUNTIME_CONFIG);
-  }
-
   const response = await fetchImpl(RUNTIME_CONFIG_PATH, {
     cache: "no-store",
     headers: {

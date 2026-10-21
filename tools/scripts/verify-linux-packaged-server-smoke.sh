@@ -60,7 +60,6 @@ build_velopack_server_appimage() {
     -f net10.0 \
     -p:PublishSingleFile=false -p:PublishTrimmed=false \
     -p:Version="$bare" -p:AssemblyVersion="$assembly" -p:FileVersion="$assembly" \
-    -p:ErrorOnDuplicatePublishOutputFiles=false \
     -o "$publish_dir"
 
   pwsh "$REPO_ROOT/tools/scripts/stage-webui-assets.ps1" -RepoRoot "$REPO_ROOT" -PublishDir "$publish_dir"

@@ -11,8 +11,10 @@ namespace ReelRoulette.Core.Tests;
 
 public sealed class ServerAuthRegressionTests
 {
-    [Fact]
-    public async Task Middleware_ShouldAllowOptionsPreflight_WhenAuthRequired()
+    [Theory]
+    [InlineData("/api/version")]
+    [InlineData("/control/status")]
+    public async Task Middleware_ShouldRejectUnauthedOptionsRequest_FromAnotherDevice(string path)
     {
         var options = new ServerRuntimeOptions
         {
@@ -20,6 +22,12 @@ public sealed class ServerAuthRegressionTests
             PairingToken = "token",
             TrustLocalhost = false
         };
+        var settings = CreateSettingsService(options);
+        settings.UpdateControlRuntimeSettings(new ControlRuntimeSettingsSnapshot
+        {
+            AdminAuthMode = "TokenRequired",
+            AdminSharedToken = "control-token"
+        });
         var sessions = new ServerSessionStore();
         var nextCalled = false;
         var middleware = new ServerPairingAuthMiddleware(
@@ -30,15 +38,17 @@ public sealed class ServerAuthRegressionTests
             },
             options,
             sessions,
-            CreateSettingsService(options));
+            settings);
 
         var context = new DefaultHttpContext();
         context.Request.Method = HttpMethods.Options;
-        context.Request.Path = "/api/version";
+        context.Request.Path = path;
         context.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("192.168.1.90");
+        context.Connection.LocalIpAddress = System.Net.IPAddress.Parse("192.168.1.10");
 
         await middleware.InvokeAsync(context);
-        Assert.True(nextCalled);
+        Assert.False(nextCalled);
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
     }
 
     [Fact]

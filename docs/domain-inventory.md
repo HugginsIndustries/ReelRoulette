@@ -301,7 +301,7 @@ Boundary:
   - `src/clients/web/ReelRoulette.WebUI/scripts/verify-openapi-contracts-fresh.mjs`
   - `src/clients/web/ReelRoulette.WebUI/scripts/sync-shared-icon.mjs` (copies `favicon.ico` to `public/`, the logo SVGs and PWA PNGs from `assets/logo/` to `public/icons/` as they are, and the font)
   - `src/clients/web/ReelRoulette.WebUI/scripts/app-version.mjs` (reads the app's version from the repository's `.version` file, without its leading `v`, for the build, the tests, and the build output check)
-  - `src/clients/web/ReelRoulette.WebUI/scripts/verify-build-output.mjs` (checks the build output's icons and their manifest sizes, checks `dist/runtime-config.json` with the app's `parseRuntimeConfig`, checks that the built scripts hold the app's version from `.version`, and checks that the built page keeps its theme boot script)
+  - `src/clients/web/ReelRoulette.WebUI/scripts/verify-build-output.mjs` (checks the build output's icons and their manifest sizes, checks that the built scripts hold the app's version from `.version`, and checks that the built page keeps its theme boot script)
   - `src/clients/web/ReelRoulette.WebUI/public/sw.js` + `src/main.ts` service worker registration (Chromium PWA installability; document navigations only)
   - package scripts (`generate:contracts`, `verify:contracts`, `verify`).
 

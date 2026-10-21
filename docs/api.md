@@ -66,7 +66,7 @@ Reverse proxies:
 Session/cookie behavior:
 
 - Server issues generated session-id cookies (not raw pairing token values).
-- Cookie policy is runtime-configurable (same-site, secure mode, session duration). In the default `Request` secure mode, a cookie is `Secure` when the client used HTTPS, including through a proxy. A cookie that would be `SameSite=None` without `Secure` is sent as `Lax`, since browsers reject it.
+- Cookie policy is runtime-configurable (same-site `Lax` or `Strict`, secure mode, session duration). In the default `Request` secure mode, a cookie is `Secure` when the client used HTTPS, including through a proxy.
 - Auth middleware validates session cookie first; optional legacy fallback paths can be enabled.
 
 Control-plane auth (`/control/*`):
@@ -78,27 +78,20 @@ Control-plane auth (`/control/*`):
 - Changing the token through `POST /control/settings` ends every control session. A non-localhost caller gets a fresh admin cookie in the same response, so the rest of its save goes through.
 - A control session also authorizes `/api` requests.
 
-## CORS and Cookie Runtime Policy
+## Cookie Runtime Policy
 
-Runtime controls include:
-
-- `EnableCors`
-- `CorsAllowedOrigins[]`
-- `CorsAllowCredentials`
-- Pairing cookie policy options
+Runtime controls include the pairing cookie policy options.
 
 Recommended profiles:
 
-- Localhost dev: allow local web origins; relaxed cookie policy appropriate for local HTTP.
-- LAN/prod-style: HTTPS + explicit origins + credentials + secure cookie settings.
-- Configured origins can use `http` or `https`; an origin with its scheme's default port matches one without it. The server's own localhost and LAN origins use the scheme it listens on. The WebUI served through a proxy is same-origin and needs no CORS entry.
+- Localhost dev: relaxed cookie policy appropriate for local HTTP.
+- LAN/prod-style: HTTPS + secure cookie settings.
+
+The WebUI and the API share one origin, directly or through a proxy, so the server has no CORS policy.
 
 ## Web Runtime Configuration (WebUI)
 
-Web client bootstraps runtime config from:
-
-1. `window.__REEL_ROULETTE_RUNTIME_CONFIG`
-2. `/runtime-config.json`
+Web client bootstraps runtime config from `/runtime-config.json`.
 
 Required keys:
 
@@ -107,7 +100,7 @@ Required keys:
 
 Optional keys:
 
-- `pairToken` (dev/local bootstrap only)
+- `pairToken` (sent only to a caller that pairing already accepts)
 
 Served by the server, `/runtime-config.json` loads for every caller. `apiBaseUrl` and `sseUrl` use the scheme and host the caller used, which through a proxy on the server machine are the proxy's. `pairToken` is included only for a caller that `/api` pairing already accepts, so a device that is not paired gets the pairing prompt.
 
@@ -202,7 +195,7 @@ Reconnect/resync behavior:
 
 - `GET /api/web-runtime/settings`
 - `POST /api/web-runtime/settings`
-- Web runtime snapshot fields include `enabled`, `port`, `bindOnLan` (shown as **Allow remote connections**), `mdnsEnabled` (defaults to `true`; when `false`, remote connections and CORS still apply but the server does not advertise `{lanHostname}.local` on the network), `lanHostname`, `authMode`, and `sharedToken`.
+- Web runtime snapshot fields include `enabled`, `port`, `bindOnLan` (shown as **Allow remote connections**), `mdnsEnabled` (defaults to `true`; when `false`, remote connections still apply but the server does not advertise `{lanHostname}.local` on the network), `lanHostname`, `authMode`, and `sharedToken`.
 
 ### Backup settings
 
@@ -287,7 +280,7 @@ Update this file when:
 - endpoint surfaces change,
 - request/response semantics change,
 - compatibility/capability policy changes,
-- runtime auth/CORS/config expectations change.
+- runtime auth/config expectations change.
 
 Keep this document concise and current-state only.
 Do not add milestone references or implementation chronology.

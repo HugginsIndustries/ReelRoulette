@@ -10,33 +10,6 @@ namespace ReelRoulette.Server.Hosting;
 /// </summary>
 public static class PrivateLanNetworkAddresses
 {
-    public static IEnumerable<IPAddress> GetPrivateLanIpv4Addresses()
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var nic in GetEligibleNetworkInterfaces())
-        {
-            foreach (var unicast in nic.GetIPProperties().UnicastAddresses)
-            {
-                var ip = unicast.Address;
-                if (ip.AddressFamily != AddressFamily.InterNetwork)
-                {
-                    continue;
-                }
-
-                if (!IsPrivateLanIpv4(ip))
-                {
-                    continue;
-                }
-
-                var key = ip.ToString();
-                if (seen.Add(key))
-                {
-                    yield return ip;
-                }
-            }
-        }
-    }
-
     public static IEnumerable<IPAddress> GetMdnsAdvertisementAddresses()
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

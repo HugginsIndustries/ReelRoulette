@@ -16,7 +16,7 @@ This guide covers local setup, run paths, verification gates, packaging, and rel
 - Core domain: `src/core/ReelRoulette.Core/ReelRoulette.Core.csproj`
 - Server transport: `src/core/ReelRoulette.Server/ReelRoulette.Server.csproj`
 - Default runtime host: `src/core/ReelRoulette.ServerApp/ReelRoulette.ServerApp.csproj`
-- WebUI client: `src/clients/web/ReelRoulette.WebUI/ReelRoulette.WebUI.csproj`
+- WebUI client: `src/clients/web/ReelRoulette.WebUI/package.json`
 - Core tests: `src/core/ReelRoulette.Core.Tests/ReelRoulette.Core.Tests.csproj`
 - Server host tests: `src/core/ReelRoulette.ServerApp.Tests/ReelRoulette.ServerApp.Tests.csproj`
 - System-check harness: `src/core/ReelRoulette.Core.SystemChecks/ReelRoulette.Core.SystemChecks.csproj`
@@ -75,13 +75,12 @@ From `src/clients/web/ReelRoulette.WebUI`:
 
 - `npm install` (first run)
 - `npm run verify`
-- `npm run dev`/`npm run build` auto-sync shared assets into WebUI `public/`:
+- `npm run build` auto-syncs shared assets into WebUI `public/`:
   - `assets/logo/favicon.ico` -> `public/favicon.ico`
-  - Logo and PWA icons: `scripts/sync-shared-icon.mjs` copies `logo-icon.svg`, `logo-lockup.svg`, `logo-lockup-dark.svg`, `png/pwa-192.png`, `png/pwa-512.png`, `png/pwa-maskable-192.png`, `png/pwa-maskable-512.png`, and `png/apple-touch-icon.png` from `assets/logo/` into `public/icons/` as they are. `scripts/verify-build-output.mjs` checks that each manifest icon's pixel size matches its `sizes`, checks `dist/runtime-config.json` with the app's own `parseRuntimeConfig`, and checks that the built scripts hold the app's version
+  - Logo and PWA icons: `scripts/sync-shared-icon.mjs` copies `logo-icon.svg`, `logo-lockup.svg`, `logo-lockup-dark.svg`, `png/pwa-192.png`, `png/pwa-512.png`, `png/pwa-maskable-192.png`, `png/pwa-maskable-512.png`, and `png/apple-touch-icon.png` from `assets/logo/` into `public/icons/` as they are. `scripts/verify-build-output.mjs` checks that each manifest icon's pixel size matches its `sizes`, and checks that the built scripts hold the app's version
   - PWA service worker: `public/sw.js` (copied to `dist/` root) is registered from `src/main.ts` in secure contexts. Its fetch handler intercepts document navigations only, which satisfies Chromium installability for standalone install on Android Chrome. API calls, the event stream, and media are not intercepted. `ServerApp` sets `Cache-Control: no-store` for `sw.js` when serving WebUI static files.
   - `assets/fonts/MaterialSymbolsOutlined.var.ttf` -> `public/assets/fonts/MaterialSymbolsOutlined.var.ttf`
 - App version: the build and the tests read the repository's `.version` through `scripts/app-version.mjs`, without its leading `v`, for the Settings tab's Diagnostics; a missing or empty `.version` fails the build
-- Sound under `npm run dev`: the Vite dev server plays media from the server's other origin, which can play silent through Enhanced audio's Web Audio gain stage. Try audio with the WebUI the server serves, such as through `run-server.ps1`, or turn Enhanced audio off in the Settings tab while developing.
 
 Optional helper scripts:
 
@@ -93,13 +92,13 @@ Optional helper scripts:
 
 For the pre-release pass, use `docs/checklists/testing-checklist.md` and `pwsh ./tools/scripts/reset-checklist.ps1`.
 
-## Auth, CORS, and Runtime Settings Notes
+## Auth and Runtime Settings Notes
 
 - Pairing/auth is server enforced via `/api/pair` and runtime policy. It covers `/api` routes only: the WebUI's files and `/runtime-config.json` load for every caller, and the runtime config includes the pairing token only for a caller that pairing already accepts.
 - **Allow remote connections** (`webRuntime.bindOnLan`) off: the server refuses every request from another device with `403`, directly or through a proxy, on every path, and listens only on localhost from its next start. On: it listens on the LAN from its next start, and other devices pair as usual.
 - Localhost means a direct connection from the server machine. A request through a reverse proxy is not localhost, even when the proxy runs on the server machine, and neither is one with no remote address.
 - Control routes trust localhost and need the control token from any other address; see the control-plane auth rules in `docs/api.md`. The token is `controlRuntime.adminSharedToken` in `core-settings.json` under the data folder below, generated on first start when none is set.
-- Browser-client CORS and cookie behavior is controlled by `CoreServer` settings. Configured CORS origins can be `http` or `https`; the server's own localhost and LAN origins use the scheme it listens on.
+- Browser-client cookie behavior is controlled by `CoreServer` settings. The WebUI and the API share one origin, directly or through a proxy, so the server has no CORS policy.
 - Some settings changes require restart to fully apply (for example listen/auth/WebUI availability changes); use `/control/restart` or restart the process.
 - `FormOptions.MultipartBodyLengthLimit` is set to **512 MB** in `src/core/ReelRoulette.ServerApp/Program.cs` for any future multipart endpoints; **no shipped API route currently uses multipart uploads**, so this is host-level configuration only for now.
 

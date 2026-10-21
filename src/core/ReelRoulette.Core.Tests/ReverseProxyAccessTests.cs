@@ -243,24 +243,6 @@ public sealed class ReverseProxyAccessTests : IDisposable
         Assert.False(RemoteConnectionsGate.Refuses(context, Settings(allowRemote: true)));
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task WithRemoteConnectionsOff_APreflightFromAnotherDeviceIsRefused(bool throughProxy)
-    {
-        var context = throughProxy
-            ? ProxiedRequest("/api/library/query", IPAddress.Loopback)
-            : DirectRequest("/api/library/query", LanClient);
-        context.Request.Method = HttpMethods.Options;
-        context.Request.Headers.Origin = $"https://{ProxyHost}";
-        context.Request.Headers.AccessControlRequestMethod = HttpMethods.Post;
-
-        var reachedEndpoint = await InvokePipelineAsync(context, Settings(allowRemote: false));
-
-        Assert.False(reachedEndpoint);
-        Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
-    }
-
     [Fact]
     public async Task WithRemoteConnectionsOn_ADeviceStillNeedsTheControlTokenForControlRoutes()
     {
@@ -377,32 +359,6 @@ public sealed class ReverseProxyAccessTests : IDisposable
     }
 
     [Fact]
-    public void Cors_AcceptsAConfiguredHttpsOrigin()
-    {
-        using var registry = new DynamicCorsOriginRegistry(new ServerRuntimeOptions
-        {
-            CorsAllowedOrigins = [$"https://{ProxyHost}"]
-        });
-
-        Assert.True(registry.IsAllowed($"https://{ProxyHost}"));
-        Assert.True(registry.IsAllowed($"https://{ProxyHost}:443"));
-        Assert.False(registry.IsAllowed($"http://{ProxyHost}"));
-        Assert.False(registry.IsAllowed($"ftp://{ProxyHost}"));
-    }
-
-    [Theory]
-    [InlineData("http://localhost:45123", "http://localhost:45123", "https://localhost:45123")]
-    [InlineData("https://localhost:45123", "https://localhost:45123", "http://localhost:45123")]
-    public void Cors_BuildsTheServersOwnOriginsWithTheSchemeItListensOn(string listenUrl, string allowed, string refused)
-    {
-        using var registry = new DynamicCorsOriginRegistry(new ServerRuntimeOptions { ListenUrl = listenUrl, CorsAllowedOrigins = [] });
-        registry.Start(Settings(allowRemote: false), NullLogger.Instance);
-
-        Assert.True(registry.IsAllowed(allowed));
-        Assert.False(registry.IsAllowed(refused));
-    }
-
-    [Fact]
     public void ForwardedHeadersFromAnotherMachine_WarnOncePerAddressInLastLog()
     {
         var forwarding = new ProxyForwarding(new ServerLogService(_tempDir));
@@ -469,7 +425,7 @@ public sealed class ReverseProxyAccessTests : IDisposable
         return context;
     }
 
-    // Every step before an endpoint, in the server's order, with a CORS policy that accepts the origin.
+    // Every step before an endpoint, in the server's order.
     private async Task<bool> InvokePipelineAsync(DefaultHttpContext context, CoreSettingsService settings)
     {
         var services = new ServiceCollection()
@@ -479,9 +435,6 @@ public sealed class ReverseProxyAccessTests : IDisposable
             .AddSingleton(new ServerSessionStore())
             .AddSingleton<ApiTelemetryService>()
             .AddSingleton<OperatorTestingService>()
-            .AddCors(cors => cors.AddPolicy(
-                ServerHostComposition.WebClientCorsPolicyName,
-                policy => policy.SetIsOriginAllowed(_ => true).AllowAnyMethod().AllowAnyHeader().AllowCredentials()))
             .BuildServiceProvider();
         var app = new ApplicationBuilder(services);
         ServerHostComposition.UseRequestPipeline(app, new ServerRuntimeOptions());

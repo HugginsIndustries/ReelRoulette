@@ -47,7 +47,6 @@ export function createAppApi(apiBaseUrl: string, options: AppApiOptions): AppApi
     return request(url(path), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",
       body: JSON.stringify(payload || {}),
       ...requestOptions
     });
@@ -67,7 +66,7 @@ export function createAppApi(apiBaseUrl: string, options: AppApiOptions): AppApi
       return post(path, payload);
     },
     async getJson(path, requestOptions = {}) {
-      return readSuccess(await request(url(path), { credentials: "include", ...requestOptions }));
+      return readSuccess(await request(url(path), requestOptions));
     },
     async postJson(path, payload, requestOptions = {}) {
       return readSuccess(await post(path, payload, requestOptions));
@@ -76,7 +75,6 @@ export function createAppApi(apiBaseUrl: string, options: AppApiOptions): AppApi
       try {
         await send(url("/api/logs/client"), {
           method: "POST",
-          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             source: "webui",

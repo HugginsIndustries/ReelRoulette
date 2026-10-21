@@ -62,6 +62,8 @@ An agent verifies these from the repo, its docs, or the release workflow's runs 
 
 - [ ] On Linux and Windows, the release publishes only the server, and the Windows package carries FFmpeg's license text, checked in a dev-channel release run of `release.yml`.
 
+- [ ] The Linux and Windows publish steps of a dev-channel release run of `release.yml` succeed without `ErrorOnDuplicatePublishOutputFiles=false`.
+
 - [ ] The v0.15.0 release notes say the desktop app is no longer released and that ReelRoulette in the browser replaces it.
 
 - [ ] The v0.15.0 release notes tell users to reload any open ReelRoulette page after updating the server, since an open page keeps the old API version until it's reloaded.

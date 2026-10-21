@@ -1392,7 +1392,7 @@ Last milestone completed: M12k1
 
 **Traps**
 
-- CORS allows only `Content-Type`, `Authorization`, and `Last-Event-ID` (`Program.cs` in `ReelRoulette.Server` and `ReelRoulette.ServerApp`), and EventSource can't send headers, so a header naming the profile would need a CORS change and still wouldn't reach the event stream.
+- EventSource can't send headers, so a header naming the profile wouldn't reach the event stream.
 - `Spec_ListsEveryMappedApiAndControlRoute` fails for a route the server maps that the spec doesn't list, and for one the spec lists that the server doesn't serve.
 - `OpenApiSpec.AssertMatchesSchema` needs a payload's fields and its schema's to be the same set, so each event's schema and payload type change together.
 - `npm run verify:contracts` only checks that the generated types match the OpenAPI file.
@@ -1862,13 +1862,13 @@ Last milestone completed: M12k1
 
 **Traps**
 
-- Turned off, the `enabled` field stops the server serving the WebUI's files and `/runtime-config.json` from its next start, leaves the WebUI's origins out of CORS, and stops mDNS advertising.
+- Turned off, the `enabled` field stops the server serving the WebUI's files and `/runtime-config.json` from its next start, and stops mDNS advertising.
 - Turned off from the admin section, `enabled` would remove the admin section itself, and the recovery page has no way to turn it back on.
 - The Operator page reads and writes the field, as its `webEnabled` checkbox, until the Operator retirement slice retires it.
 
 **Acceptance**
 
-- With `enabled` stored as off in `core-settings.json`, the server still serves the WebUI and `/runtime-config.json`, allows the WebUI's CORS origins, and, with remote connections and mDNS on, advertises over mDNS after a restart, in server tests that a stored `enabled` of off is ignored.
+- With `enabled` stored as off in `core-settings.json`, the server still serves the WebUI and `/runtime-config.json`, and, with remote connections and mDNS on, advertises over mDNS after a restart, in server tests that a stored `enabled` of off is ignored.
 - The admin section shows no Enable Web UI switch, and `enabled` is gone from OpenAPI and the web runtime settings, in admin section UI tests and contract tests.
 - `dotnet test ReelRoulette.sln` passes.
 
@@ -3257,7 +3257,7 @@ Last milestone completed: M12k1
 #### Scope
 
 - Require a session on every API and control route and on the event stream for non-localhost requests.
-- The WebUI's files and `/runtime-config.json` stay open without a session, as Reverse Proxy and HTTPS Access left them, so WebUI Login Gate can load before login.
+- The WebUI's files stay open without a session, as Reverse Proxy and HTTPS Access left them, so WebUI Login Gate can load before login.
 - The admin section and the recovery page use admin account sessions and no longer accept the control token added in v0.14.0.
 - Remove the control token, its setting, and its prompt, including the `adminAuthMode` field on `/control/settings` and in `core-settings.json`.
 - No session or token is accepted as a query parameter.
@@ -3268,7 +3268,7 @@ Last milestone completed: M12k1
 - Remove pairing and control-token flows from clients, docs, and contracts. The pairing and control-token problems listed in Traps go with them.
 - The `reelroulette-dev-token` default leaves `appsettings.json` and the `-PairingToken` parameter of `run-server.ps1`.
 - Session secrets that replace the pairing token must not be passed to a restarted server as an environment variable.
-- Remove `pairToken` from the WebUI's `public/runtime-config.json` and `src/config/runtimeConfig.ts`, and its example from the WebUI `README.md`.
+- Remove `/runtime-config.json`, which without `pairToken` returns only the page's own address: the WebUI calls the API and the event stream on its own origin. The server's endpoint and `WebRuntimeConfig`, the WebUI's `src/config/runtimeConfig.ts`, the startup error screen that reports a config that didn't load, and their tests, docs, mockup screen, the WebUI `README.md`'s example, and `verify-web-deploy.ps1`'s check of the route go with it.
 - The login flow that replaces the WebUI's pairing request returns a typed result on every failure.
 
 #### Traps
@@ -3276,15 +3276,15 @@ Last milestone completed: M12k1
 - v0.14.0 kept the `adminAuthMode` field read-only (always `TokenRequired`, posted values ignored) so the contract changes only once.
 - `/api` routes still accept the API pairing token as a `token` query, and `GET /api/pair?token=` pairs with it, which puts the token in URLs and in the default request log.
 - v0.14.0 stopped accepting the control token in a query and made `/control/pair` POST-only, but left `/api` for this cutover.
-- `/api/web-runtime/settings` is on the API plane, so any LAN caller with the API pairing token, which `/runtime-config.json` hands to every browser, can turn WebUI auth off, change the port or remote connections, and read the shared token.
+- `/api/web-runtime/settings` is on the API plane, so any LAN caller with the API pairing token, which `/runtime-config.json` gives to every device pairing already accepts, can turn WebUI auth off, change the port or remote connections, and read the shared token.
 - `/api/web-runtime/settings` stayed on the API plane because the desktop called it from other machines, and Desktop Client Removal removed the desktop.
 - `OperatorTestingService` mutations are protected only by middleware policy.
+- `/runtime-config.json` builds `apiBaseUrl` and `sseUrl` from the scheme and host the caller used, which are always the page's own origin, directly or through a proxy, and adds `pairToken` only for a caller that pairing already accepts.
 - Auth and secret fields in settings DTOs encourage credential leakage; `GET /control/settings` returns the admin token.
 - Pairing and control-token problems that go with those flows:
   - Two pairing secrets drift apart: `/api/pair` checks `ServerRuntimeOptions.PairingToken`, while the Operator page, and later the admin section, saves `WebRuntimeSettings.SharedToken`, and `src/core/ReelRoulette.ServerApp/Program.cs` starts with `SharedToken ?? PairingToken` and passes that to a restarted server. Editing the shared token has no effect until a restart, then silently changes the pairing token.
   - `WebRuntimeSettings.AuthMode` is saved by `CoreSettingsService.UpdateWebRuntimeSettings`, but `ServerPairingAuthMiddleware` reads only `RequireAuth`, which the server sets from `AuthMode` only at startup, so setting it to `Off` changes nothing until a restart.
   - `RestartCoordinator.TryLaunchReplacementProcess` in `Program.cs` passes the token to the child as the `CoreServer__PairingToken` environment variable, which other local users can read from `/proc/<pid>/environ` on Linux.
-  - The WebUI ships `"pairToken": "reelroulette-dev-token"` in `public/runtime-config.json`, which any browser can fetch, and `src/config/runtimeConfig.ts` parses `pairToken` as a config field.
   - The same `reelroulette-dev-token` default is in `src/core/ReelRoulette.ServerApp/appsettings.json` and the `-PairingToken` parameter of `tools/scripts/run-server.ps1`.
   - The WebUI's pairing request lets a network error reject instead of reporting it in an in-app notice, as the other failed pairing outcomes do.
 
@@ -3296,6 +3296,7 @@ Last milestone completed: M12k1
 - LAN and remote requests to web runtime settings without an admin session are refused, in the authorization tests.
 - No settings response contains a secret, in server tests.
 - Active docs no longer describe pairing or control tokens, checked by reading them.
+- The WebUI loads and reaches the API and the event stream on its own origin, and the server no longer serves `/runtime-config.json`, in WebUI tests and a server test for the route.
 
 #### Not included
 
@@ -3614,7 +3615,6 @@ Last milestone completed: M12k1
 - Needless work:
   - Telemetry reads: `ApiTelemetryService` keeps a ring buffer that reads newest first.
   - Session list under lock: `ServerSessionStore.GetActiveSessions` copies the records under the lock and sorts outside it.
-  - Dead write-back: `DynamicCorsOriginRegistry` keeps the rebuilt list only in the registry.
 
 #### Traps
 
@@ -3627,7 +3627,6 @@ Last milestone completed: M12k1
 - Needless work:
   - Telemetry reads: `ApiTelemetryService.GetIncoming` and `GetOutgoing` call `Reverse()` over the whole queue on every control status poll.
   - Session list under lock: `ServerSessionStore.GetActiveSessions` filters, sorts, and projects inside the session lock.
-  - Dead write-back: `DynamicCorsOriginRegistry.RebuildAllowedOrigins` writes the rebuilt list back into the shared `ServerRuntimeOptions.CorsAllowedOrigins`, which nothing reads after the registry's constructor.
 
 #### Acceptance
 

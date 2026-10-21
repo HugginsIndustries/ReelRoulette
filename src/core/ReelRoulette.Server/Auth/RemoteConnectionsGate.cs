@@ -5,7 +5,7 @@ namespace ReelRoulette.Server.Auth;
 
 /// <summary>
 /// With remote connections off, only this machine is served: every request from another device is refused,
-/// directly or through a proxy, whatever its path or method. It runs before CORS, so a preflight is refused too.
+/// directly or through a proxy, whatever its path or method.
 /// </summary>
 public static class RemoteConnectionsGate
 {

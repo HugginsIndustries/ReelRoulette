@@ -139,8 +139,7 @@ const HAVE_CURRENT_DATA = 2;
  * cleared, so the black background never shows through. Sampling holds while the video is paused or the tab is hidden,
  * and a photo is copied once, and again when ambient mode turns back on. A video's copy waits until it has a picture,
  * and a photo's until it has loaded. The glow shows while ambient mode is on and an item plays, and hides once its
- * media fails. The effect only draws pictures onto canvases and never reads their pixels back, so a cross-origin
- * video, which taints the canvas, still shows.
+ * media fails. The effect only draws pictures onto canvases and never reads their pixels back.
  */
 export function createAmbient(options: AmbientOptions): Ambient {
   const { enabled, tuning, current, attemptId, failed } = options;

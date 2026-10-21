@@ -36,7 +36,6 @@ public sealed class ServerPairingAuthMiddleware
         // is not paired reaches the pairing prompt, and the browser gets the manifest, which it fetches without cookies.
         if (!context.Request.Path.StartsWithSegments("/api") ||
             context.Request.Path.StartsWithSegments("/api/pair") ||
-            HttpMethods.IsOptions(context.Request.Method) ||
             IsApiRequestAuthorized(context, _options, _sessions))
         {
             await _next(context);
@@ -75,12 +74,6 @@ public sealed class ServerPairingAuthMiddleware
     private async Task AuthorizeControlPlaneAsync(HttpContext context)
     {
         if (context.Request.Path.StartsWithSegments("/control/pair"))
-        {
-            await _next(context);
-            return;
-        }
-
-        if (HttpMethods.IsOptions(context.Request.Method))
         {
             await _next(context);
             return;

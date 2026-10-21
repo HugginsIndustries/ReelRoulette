@@ -9,7 +9,7 @@ public sealed class ServerCookiePolicyTests
     [Theory]
     [InlineData("Lax", SameSiteMode.Lax)]
     [InlineData("Strict", SameSiteMode.Strict)]
-    [InlineData("None", SameSiteMode.None)]
+    [InlineData("None", SameSiteMode.Lax)]
     [InlineData("anything", SameSiteMode.Lax)]
     public void ResolveSameSite_ShouldMapExpectedValues(string value, SameSiteMode expected)
     {
@@ -24,25 +24,6 @@ public sealed class ServerCookiePolicyTests
     public void ResolveSecure_ShouldRespectMode(string mode, bool isHttps, bool expected)
     {
         Assert.Equal(expected, PairingCookiePolicy.ResolveSecure(mode, isHttps));
-    }
-
-    [Theory]
-    [InlineData("Request", false, SameSiteMode.Lax, false)]
-    [InlineData("Never", true, SameSiteMode.Lax, false)]
-    [InlineData("Request", true, SameSiteMode.None, true)]
-    [InlineData("Always", false, SameSiteMode.None, true)]
-    public void BuildCookieOptions_NeverSendsSameSiteNoneWithoutSecure(string secureMode, bool isHttps, SameSiteMode expectedSameSite, bool expectedSecure)
-    {
-        var options = new ServerRuntimeOptions
-        {
-            PairingCookieSameSite = "None",
-            PairingCookieSecureMode = secureMode
-        };
-
-        var cookieOptions = PairingCookiePolicy.BuildCookieOptions(options, isHttps);
-
-        Assert.Equal(expectedSameSite, cookieOptions.SameSite);
-        Assert.Equal(expectedSecure, cookieOptions.Secure);
     }
 
     [Fact]

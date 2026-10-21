@@ -283,7 +283,6 @@ export function createPlayer(options: PlayerOptions): Player {
   const randomPicker = createRandomPicker((body, signal) =>
     api.request(api.url("/api/random"), {
       method: "POST",
-      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body,
       signal

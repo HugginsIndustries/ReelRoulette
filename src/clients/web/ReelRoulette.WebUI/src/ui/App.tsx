@@ -47,9 +47,7 @@ export function StartupError({ message }: { message: string }) {
       <section class="card error">
         <h2>Runtime Configuration Error</h2>
         <p>{message}</p>
-        <p>
-          {"Provide `window.__REEL_ROULETTE_RUNTIME_CONFIG` before boot, or host a valid `/runtime-config.json`."}
-        </p>
+        <p>Reload the page, or check that the ReelRoulette server is running.</p>
       </section>
     </main>
   );
