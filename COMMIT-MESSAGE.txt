@@ -19,11 +19,8 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Start an item paused when it starts while Auto-Pause holds playback
+Docs: Clear Item Ratings' rating from a zone left of the first star, and let a hover preview replace the shown rating
 
-- The WebUI's Auto-Pause now holds playback from its pause until it resumes, where it covered only the one play attempt it paused. A random pick that answers after the panel came to cover the player, or a file skipped to, starts paused, or with its photo's timer held, and plays as the panel closes, where it played behind the panel.
-- An item the user starts while the hold is on, by Next, Previous, Random, a Library tile, or Play on an empty player, plays and ends the hold, as their own play or pause does, from the player's controls or from a media key or the system's media controls.
-- An item that starts paused ends Loading… and relays a `playback=auto-pause` line to last.log, which replaces the line relayed when Auto-Pause came during a history step's wait.
-- Tests cover a pick's video and photo answering after Auto-Pause, a history step skipped as missing or as one this browser can't play, a user's start during the hold, a press during it that starts nothing, a play from outside the player's controls, and the overlay opening while a pick waits; each failed before the fix, or when its guard was removed.
-- The mockup's Auto-Pause keeps the same hold, so its random pick no longer plays behind the overlay.
-- CONTEXT.md and the domain inventory describe the hold, and the issue is gone from ISSUES.md.
+- MILESTONES.md: Item Ratings drops the Clear button. A small zone just left of the first star clears the rating, as Plex's does: a click or tap on it, or a touch drag that ends on it, clears, a mouse over it previews no stars, and the keys still clear. It stays easy to tap on the iPad and phone, and the mockup review settles its size.
+- MILESTONES.md: A mouse hover's preview replaces the shown rating while the pointer is over the stars or the clear zone, and the set rating shows again when it leaves; the slider's value stays the set rating.
+- MILESTONES.md: Item Ratings' Mockup and WebUI slices, their traps, including the narrow value column's, their acceptance, and its release checks follow both changes.

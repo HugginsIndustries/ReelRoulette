@@ -151,9 +151,14 @@ Last milestone completed: M12k1
 - Ratings are shared by every device, as favorites and the blacklist are, until accounts exist; then each account has its own, as its favorites and blacklist are.
 - A rating is independent of favorite and blacklist: blacklisting an item keeps its rating, and rating an item changes neither flag.
 - A rating change publishes its own event, `itemRatingChanged`, with the item's id and path, its rating and previous rating, and the `clientId` of the request that made it. Reusing `itemStateChanged` would show a rating change as a favorite change on other devices.
-- The rating has its own line in the Current file section, under the path: the label Rating, five stars, and a Clear button while the item is rated.
-  - A mouse over a star previews the value under it, the star's left half meaning half a star less than its right half, and a click sets it.
-  - On a touch screen a tap on a star's half sets that value, and a drag along the stars changes the value as it moves and sets it on release.
+- The rating has its own line in the Current file section, under the path: the label Rating and five stars, with no Clear button.
+  - A small zone just left of the first star clears the rating, as Plex's does. It stays easy to tap on the iPad and phone, and the mockup review settles its size.
+  - The clear zone is part of the control, not a tab stop of its own; from the keyboard the keys clear the rating.
+  - A mouse over a star previews the value under it, the star's left half meaning half a star less than its right half, and a mouse over the clear zone previews no stars.
+  - The preview replaces the shown rating while the pointer is over the stars or the clear zone, and the set rating shows again when the pointer leaves them.
+  - A click on a star sets the value under it, and a click on the clear zone clears the rating.
+  - On a touch screen a tap on a star's half sets that value and a tap on the clear zone clears the rating.
+  - A touch drag along the stars changes the value as it moves and sets it on release, and a drag that ends on the clear zone clears the rating.
   - From the keyboard it is one tab stop: the left and down arrows step down half a star, the right and up arrows step up half a star, Home is Not rated, End is 5 stars, and Delete or Backspace clears it.
   - To screen readers it is a slider named Rating, from 0 to 5, whose value text is "3.5 stars", "1 star", or "Not rated".
 - The popups are "Rated {rating}" and "Rating cleared" as Your actions, with the file name as the second line, and the same text followed by "on another device" as Other devices, where {rating} reads as the value text does, such as "3.5 stars".
@@ -175,8 +180,10 @@ Last milestone completed: M12k1
 - A Rated card in the Library cards, after Blacklisted, counting the rated items.
 - The Your actions and Other devices rating popups, a Mockup-tab button for a rating from another device beside the favorite one, and the Settings tab's Other devices description naming rating changes.
 - `star` and `star_half` in the mockup's icon subset, with `star` also filled.
+- The clear zone left of the first star, which clears on a click, a tap, or a drag that ends on it, and previews no stars under a mouse.
+- The hover preview, which replaces the shown rating while the mouse is over the stars or the clear zone and goes back to the set rating when it leaves.
 - The ratings the mockup's items start with come from each item's id.
-- Before the app is built, the user approves the rating on a desktop browser, the iPad, and an Android phone, including the size of the stars and how halves are tapped and dragged.
+- Before the app is built, the user approves the rating on a desktop browser, the iPad, and an Android phone, including the size of the stars and of the clear zone, how halves are tapped and dragged, and how the clear zone is tapped and dragged onto.
 
 **Traps**
 
@@ -188,12 +195,12 @@ Last milestone completed: M12k1
 - Drawing the starting ratings from `statRand` would shift every random value drawn after them (inferred).
 - The mockup's path line, like the app's `.stats-path`, also holds Copy Path or Show in File Manager, which Show in File Manager from the WebUI built.
 - `#mock-sync` is the Mockup tab's favorite from another device, which sends an Other devices popup with the key `sync:{id}`.
-- `check.mjs` runs the pages in happy-dom, with no layout and no pointer drags, so the stars' size and how halves are tapped and dragged can only be judged on the devices.
-- At 320 px wide the stats table's value column is about 210 px, too narrow for five 44 px stars and Clear, while the section's full width is about 290 px (inferred).
+- `check.mjs` runs the pages in happy-dom, with no layout and no pointer drags, so the size of the stars and the clear zone, and how halves and the clear zone are tapped and dragged, can only be judged on the devices.
+- At 320 px wide the stats table's value column is about 210 px, too narrow for five 44 px stars even before the clear zone, while the section's full width is about 290 px (inferred).
 
 **Acceptance**
 
-- The mockup shows the rating line, the Rated card, and the rating popups as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+- The mockup shows the rating line, with its clear zone and hover preview, the Rated card, and the rating popups as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
 
 #### Server slice
 
@@ -261,6 +268,8 @@ Last milestone completed: M12k1
 **Scope**
 
 - The rating control in the Current file section, as the Decisions describe, on its own line under the path, shown only while the section shows its stats rows.
+- The control's clear zone left of the first star, at the size the mockup review settled.
+- A hover preview changes only the stars shown; the slider's value and value text stay the set rating.
 - A new value shows at once. A click, tap, or drag sends it when it is set; arrow-key steps are sent once the keys pause, when focus leaves the control, or when the item changes, so stepping from 1 to 4 stars sends one request.
 - While the control has focus, its keys stay its own, so the left and right arrows change its rating instead of going to the previous or next item.
 - A rating goes to the item it was set on, even when another item plays before it is sent.
@@ -281,10 +290,12 @@ Last milestone completed: M12k1
 - The panel's resize handle (`PanelHandle` in `src/ui/Panel.tsx`) takes the arrow keys, Home, and End and gives `aria-valuetext`, and the Settings tab's sliders are named by their label alone, with the value as shown as their value text.
 - The WebUI loads the full Material Symbols font, so `star` and `star_half` need no font change, and `.material-symbol-icon.is-filled` uses optical size 20.
 - Interactive elements are 44 px on every pointer; on a phone on its side (`short-screen`) text buttons shrink to 38 px and icon buttons keep their size.
+- A tap on a touch screen also fires pointer enter and leave events, so a preview that doesn't check `pointerType` would flash on every tap (inferred). The field validation icon (`src/ui/FieldValidation.tsx`) and the popups (`src/ui/Notifications.tsx`) react to hover only for a mouse, by `pointerType`.
 
 **Acceptance**
 
-- A click or tap on a star's left or right half sets half a star less or the whole star, a drag sets the value on release, the keys step, clear, and set as described, and Clear clears, with the slider's value and value text following, in Stats screen tests of the rating control.
+- A click or tap on a star's left or right half sets half a star less or the whole star, a drag sets the value on release, a click or tap on the clear zone and a drag that ends on it clear the rating, and the keys step, clear, and set as described, with the slider's value and value text following, in Stats screen tests of the rating control.
+- A mouse over a star or the clear zone shows its preview in place of the set rating, without changing the slider's value, and the set rating shows again when the mouse leaves, in Stats screen tests of the rating control.
 - The control is absent with nothing playing, for a file the server no longer has, while the server is held back or asks for pairing, and while the item loads, in Stats screen tests of each state.
 - Arrow-key steps send one request once they pause or focus leaves, and a rating set before another item plays goes to the item it was set on, in Stats screen tests.
 - While the control has focus, the left and right arrows change its rating and don't go to the previous or next item, in keyboard tests of the rating control.
@@ -297,8 +308,8 @@ Last milestone completed: M12k1
 
 #### Release checks
 
-- Manual: On the iPad and an Android phone, setting half-star ratings by tapping each half and by dragging, and clearing one, works, and a second device shows each change with its Other devices popup.
-- Manual: In a desktop browser, hovering the stars previews the rating and a click sets it.
+- Manual: On the iPad and an Android phone, setting half-star ratings by tapping each half and by dragging, and clearing one by tapping the clear zone, works, and a second device shows each change with its Other devices popup.
+- Manual: In a desktop browser, hovering the stars previews the rating in place of the set one, which shows again when the pointer leaves, and a click sets it.
 
 #### Not included
 
