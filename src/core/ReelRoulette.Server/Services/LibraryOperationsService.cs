@@ -746,7 +746,8 @@ public sealed class LibraryOperationsService
             return true;
         }
 
-        foreach (var name in Enum.GetNames<LibraryListSort>())
+        var names = Enum.GetNames<LibraryListSort>();
+        foreach (var name in names)
         {
             if (string.Equals(name, sortMode.Trim(), StringComparison.OrdinalIgnoreCase))
             {
@@ -757,7 +758,7 @@ public sealed class LibraryOperationsService
         }
 
         sort = LibraryListSort.Name;
-        error = "sortMode must be Name, LastPlayed, PlayCount, Duration, or DateAdded";
+        error = $"sortMode must be {string.Join(", ", names[..^1])}, or {names[^1]}";
         return false;
     }
 

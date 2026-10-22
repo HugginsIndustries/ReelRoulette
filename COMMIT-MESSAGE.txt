@@ -20,10 +20,12 @@ Instructions:
 
 Commit Message:
 
-M12k4: Add Only unrated, Min Rating, and the Rating sort to the mockup
+M12k4: Add the server's rating filter and Rating sort, with the sort's indexes in catalog schema 8
 
-- The Filter tab's Basic Filters end with Only unrated and Min Rating, set with the rating's five stars, where no stars is no minimum, which screen readers hear as "No minimum". The stars change only the tab's filter until Apply.
-- Only unrated with a minimum is flagged with the field validation pattern on the Only unrated line, "Nothing unrated has a minimum rating. Clear one of them.", and holds Apply, Add Preset, and Update, as Favorites only with Blacklisted only does.
-- The Filters line names "Only unrated" and "Min 3.5 stars", and the Library tab's sort ends with Rating, Highest → Lowest or Lowest → Highest, with unrated files as 0 stars. The grid follows a rating change while either applies.
-- The star control takes its text for no rating and what it does when focus leaves from its caller, and its styles move to the shared stylesheet. The validation page gets the pair's group, and the index page describes the filter and the sort.
-- MILESTONES.md: Rating Filter and Sort's Decisions take the new filter design, with Only unrated (`onlyUnrated`) in place of Include unrated, unrated files sorting as 0 stars, and a `minRating` that isn't a valid rating reading as no minimum. A Mockup slice records the approved mockup, and the Contract slice's Traps record the measured sort indexes.
+- Server: FilterState's `onlyUnrated` keeps only unrated items and `minRating`, in stars, keeps items rated at or above it, in the library query, its counts, and random selection. A `minRating` that isn't a rating reads as no minimum, and both together match nothing, as sent.
+- Server: preset comparison tells filters apart by both fields, so a preset whose only filter is a rating one isn't the default filter.
+- Server: the library query sorts by `Rating`, with an unrated item as 0 stars, and the refusal of an unknown sort mode lists the modes from the enum.
+- Catalog: schema version 8 adds the rating sort's two indexes, for a new catalog and in the upgrade step from version 7.
+- Contract: `onlyUnrated`, `minRating`, and the Rating sort mode in `openapi.yaml`, with the regenerated WebUI types, and `shared/fixtures/filter-min-rating.json` locking how `minRating` is read.
+- Tests: the fixture, the filters through the list, its count, the random candidates, and the query and pick services, a stored preset without the fields, the comparison, the Rating sort's order and its index in both directions, OpenAPI's sort modes against the server's, the unknown sort mode's refusal, and the upgrade from version 7.
+- Docs: MILESTONES.md records the Contract slice, with the comparison change moved into it from the WebUI slice. CONTEXT.md, docs/api.md, docs/domain-inventory.md, and docs/dev-setup.md describe the fields, the sort, and schema version 8.

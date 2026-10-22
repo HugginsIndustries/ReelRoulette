@@ -1,0 +1,14 @@
+[
+  { "name": "missing reads as no minimum", "filter": {}, "minRating": null },
+  { "name": "null reads as no minimum", "filter": { "minRating": null }, "minRating": null },
+  { "name": "half a star", "filter": { "minRating": 0.5 }, "minRating": 0.5 },
+  { "name": "whole stars", "filter": { "minRating": 3 }, "minRating": 3 },
+  { "name": "a half step", "filter": { "minRating": 3.5 }, "minRating": 3.5 },
+  { "name": "five stars", "filter": { "minRating": 5 }, "minRating": 5 },
+  { "name": "a value between half steps reads as no minimum", "filter": { "minRating": 3.2 }, "minRating": null },
+  { "name": "zero reads as no minimum", "filter": { "minRating": 0 }, "minRating": null },
+  { "name": "a negative value reads as no minimum", "filter": { "minRating": -1 }, "minRating": null },
+  { "name": "above five stars reads as no minimum", "filter": { "minRating": 5.5 }, "minRating": null },
+  { "name": "a string reads as no minimum", "filter": { "minRating": "3.5" }, "minRating": null },
+  { "name": "a boolean reads as no minimum", "filter": { "minRating": true }, "minRating": null }
+]

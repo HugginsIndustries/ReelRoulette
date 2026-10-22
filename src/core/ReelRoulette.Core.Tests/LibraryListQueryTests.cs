@@ -687,13 +687,17 @@ public sealed class LibraryListQueryTests
             mode == TagMatchModeValue.Or;
     }
 
-    /// <summary>The plan details of the browse count, browse page, and random candidates queries for a filter.</summary>
-    private static List<string> QueryPlans(LibraryCatalogSession session, FilterStateModel filter)
+    /// <summary>The plan details of the browse count, browse page, and random candidates queries for a filter and sort.</summary>
+    private static List<string> QueryPlans(
+        LibraryCatalogSession session,
+        FilterStateModel filter,
+        LibraryListSort sort = LibraryListSort.Name,
+        bool descending = false)
     {
         using var connection = LibraryCatalogStore.OpenWrite(session.DatabasePath);
         LibraryCatalogListSql.RegisterCollation(connection);
         var catalogTags = session.ReadTagEditor(null).Tags;
-        var request = new LibraryListRequest { Filter = filter, Limit = 200 };
+        var request = new LibraryListRequest { Filter = filter, Sort = sort, SortDescending = descending, Limit = 200 };
         var lines = new List<string>();
 
         var countArgs = new LibraryCatalogListSql.SqlArgs();
@@ -773,7 +777,9 @@ public sealed class LibraryListQueryTests
             Assert.False(operations.QueryLibrary(new LibraryQueryRequest { Limit = 0 }).Accepted);
             Assert.False(operations.QueryLibrary(new LibraryQueryRequest { Limit = 10_001 }).Accepted);
             Assert.True(operations.QueryLibrary(new LibraryQueryRequest { Limit = 10_000 }).Accepted);
-            Assert.False(operations.QueryLibrary(new LibraryQueryRequest { SortMode = "Size" }).Accepted);
+            var unknownSort = operations.QueryLibrary(new LibraryQueryRequest { SortMode = "Size" });
+            Assert.False(unknownSort.Accepted);
+            Assert.Equal("sortMode must be Name, LastPlayed, PlayCount, Duration, DateAdded, or Rating", unknownSort.Error);
             Assert.False(operations.QueryLibrary(new LibraryQueryRequest
             {
                 FilterState = JsonSerializer.SerializeToElement(new[] { 1 })
@@ -1093,6 +1099,51 @@ public sealed class LibraryListQueryTests
             playable.Append("photo.jpg").Append("scan.tiff").Order(StringComparer.Ordinal).ToArray());
         AssertListedAndEligible(session, """{"onlyBrowserPlayable":false}""", everything);
         AssertListedAndEligible(session, "{}", everything);
+    }
+
+    // A minimum keeps items rated at or above it and never an unrated one, Only unrated keeps the unrated ones, and the
+    // two together keep nothing.
+    [Fact]
+    public void Rating_ListCountAndRandomCandidates_KeepWhatEachRatingFilterSays()
+    {
+        using var dir = new TempDirectory();
+        var session = Open(dir);
+        session.InsertSource("on", "/media", "On", true);
+        foreach (var (id, halfStars) in new (string Id, int? HalfStars)[] { ("unrated", null), ("half", 1), ("three", 6), ("three-half", 7), ("five", 10) })
+        {
+            Add(session, id, "on", id + ".mp4", id + ".mp4");
+            if (halfStars is int value)
+            {
+                Assert.True(session.SetRating(id, value));
+            }
+        }
+
+        AssertListedAndEligible(session, """{"minRating":3}""", ["five", "three", "three-half"]);
+        AssertListedAndEligible(session, """{"minRating":0.5}""", ["five", "half", "three", "three-half"]);
+        AssertListedAndEligible(session, """{"minRating":5}""", ["five"]);
+        AssertListedAndEligible(session, """{"onlyUnrated":true}""", ["unrated"]);
+        AssertListedAndEligible(session, """{"onlyUnrated":true,"minRating":0.5}""", []);
+        AssertListedAndEligible(session, "{}", ["five", "half", "three", "three-half", "unrated"]);
+    }
+
+    // Each direction of the rating sort reads its own index, so the page query never sorts the whole library.
+    [Fact]
+    public void RatingSort_PageQueryReadsItsIndexInBothDirections()
+    {
+        using var dir = new TempDirectory();
+        var session = Open(dir);
+        session.InsertSource("on", "/media", "On", true);
+        foreach (var id in new[] { "a", "b", "c" })
+        {
+            Add(session, id, "on", id + ".mp4", id + ".mp4");
+        }
+
+        Assert.True(session.SetRating("b", 6));
+        foreach (var (descending, index) in new[] { (false, "idx_items_rating_asc"), (true, "idx_items_rating_desc") })
+        {
+            var plans = QueryPlans(session, new FilterStateModel(), LibraryListSort.Rating, descending);
+            Assert.Contains(plans, line => line.StartsWith("page: ", StringComparison.Ordinal) && line.Contains($"USING INDEX {index}", StringComparison.Ordinal));
+        }
     }
 
     private static readonly FlagFilterModeValue[] FlagModes = [FlagFilterModeValue.Off, FlagFilterModeValue.Only, FlagFilterModeValue.Excluded];

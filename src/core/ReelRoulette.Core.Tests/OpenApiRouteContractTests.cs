@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using ReelRoulette.Core.Filtering;
+using ReelRoulette.Core.Library;
 using ReelRoulette.Server.Contracts;
 using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
@@ -72,6 +73,13 @@ public sealed class OpenApiRouteContractTests : IDisposable
         Assert.True(
             missingFromSpec.Count == 0 && notRead.Count == 0,
             $"Read by the filter parser but missing from FilterState: [{string.Join(", ", missingFromSpec)}]. In FilterState but not read: [{string.Join(", ", notRead)}].");
+    }
+
+    // The library query's sort modes in the spec are the server's, so a new mode can't go unlisted.
+    [Fact]
+    public void LibraryQuerySortModes_MatchTheServersSortModes()
+    {
+        Assert.Equal(Enum.GetNames<LibraryListSort>(), OpenApiSpec.ReadSchemaPropertyEnum("LibraryQueryRequest", "sortMode"));
     }
 
     // Every error code the play route answers is documented on it, so a new code can't go undocumented.

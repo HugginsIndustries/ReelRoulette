@@ -75,6 +75,7 @@ public sealed class LibraryCatalogNameSortKeyTests
     [InlineData(LibraryListSort.PlayCount)]
     [InlineData(LibraryListSort.Duration)]
     [InlineData(LibraryListSort.DateAdded)]
+    [InlineData(LibraryListSort.Rating)]
     public void Query_EverySortInBothDirections_MatchesThePreviousOrder(LibraryListSort sort)
     {
         using var dir = new TempDirectory();
@@ -203,8 +204,8 @@ public sealed class LibraryCatalogNameSortKeyTests
     private static string Hex(string value) => string.Join(" ", value.Select(c => ((int)c).ToString("X4")));
 
     /// <summary>
-    /// One item per fixture name, with play counts, last-played times, durations, and write times that
-    /// tie often and are null or zero for some, so every sort reaches its name and id tie-breaks.
+    /// One item per fixture name, with play counts, last-played times, durations, write times, and ratings
+    /// that tie often and are null or zero for some, so every sort reaches its name and id tie-breaks.
     /// </summary>
     private static LibraryCatalogSession SeedFixture(string directory)
     {
@@ -218,6 +219,7 @@ public sealed class LibraryCatalogNameSortKeyTests
             LastPlayedUtc = i % 4 == 0 ? null : start.AddDays(i % 3),
             Duration = (i % 5) switch { 0 => null, 1 => TimeSpan.Zero, _ => TimeSpan.FromSeconds(i % 3) },
             LastWriteTimeUtc = i % 6 == 0 ? null : start.AddDays(i % 2),
+            RatingHalfStars = i % 7 == 0 ? null : i % 3 + 1,
             MediaType = i % 5 == 0 ? 1 : 0
         });
         CatalogSeed.Write(directory, sources: [new SeedSource("on", "/media", "On")], items: items);
@@ -235,6 +237,7 @@ public sealed class LibraryCatalogNameSortKeyTests
             LibraryListSort.PlayCount => $"items.play_count {direction}",
             LibraryListSort.Duration => $"COALESCE(items.duration_ticks, 0) {direction}",
             LibraryListSort.DateAdded => $"COALESCE(items.last_write_time_utc, 0) {direction}",
+            LibraryListSort.Rating => $"COALESCE(items.rating, 0) {direction}",
             _ => $"{fileName} {direction}"
         };
         var orderBy = sort == LibraryListSort.Name

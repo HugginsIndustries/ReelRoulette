@@ -1329,6 +1329,15 @@ export interface components {
              *     Photos always pass. Defaults to false.
              */
             onlyBrowserPlayable?: boolean;
+            /** @description Only items with no rating. Defaults to false. */
+            onlyUnrated?: boolean;
+            /**
+             * Format: double
+             * @description Only items rated at or above this many stars, from 0.5 to 5 in half-star steps, so unrated items are
+             *     left out, and with `onlyUnrated` nothing matches. Another value, such as a string or a number between
+             *     half stars, counts as missing, which is no minimum.
+             */
+            minRating?: number | null;
             /**
              * @description `PlayAll` (0), `WithAudioOnly` (1), or `WithoutAudioOnly` (2), as a number or a name in any case.
              *     Photos always pass. Defaults to `PlayAll`.
@@ -1413,7 +1422,7 @@ export interface components {
              * @default Name
              * @enum {string|null}
              */
-            sortMode: "Name" | "LastPlayed" | "PlayCount" | "Duration" | "DateAdded" | null;
+            sortMode: "Name" | "LastPlayed" | "PlayCount" | "Duration" | "DateAdded" | "Rating" | null;
             /**
              * @description Direction of the primary sort key only. Filename and item id tie-breaks stay ascending.
              * @default false

@@ -171,7 +171,7 @@ public sealed class LibraryCatalogPreset
 
 public static class LibraryCatalogStore
 {
-    public const int SchemaVersion = 7;
+    public const int SchemaVersion = 8;
 
     /// <summary>
     /// The oldest schema version a release shipped. Open and import upgrade a catalog at it, or at any later
@@ -215,11 +215,11 @@ public static class LibraryCatalogStore
     internal const string NameSortKeyVersionKey = "name_sort_key_version";
 
     /// <summary>
-    /// The sort indexes a new catalog gets: one index per sort mode and direction, each followed by the name
-    /// key tie-break, so no sort reads the whole library. The item id tie-break is left out to keep the
-    /// indexes small: SQLite sorts only rows whose name ties exactly. The expressions must match the list
-    /// query's ORDER BY. A change here also needs an upgrade step that makes the same change, since the
-    /// shipped 2 to 3 step creates its own, <see cref="Schema3SortIndexesSql"/>.
+    /// The sort indexes a new catalog gets, with <see cref="RatingSortIndexesSql"/>: one index per sort mode and
+    /// direction, each followed by the name key tie-break, so no sort reads the whole library. The item id
+    /// tie-break is left out to keep the indexes small: SQLite sorts only rows whose name ties exactly. The
+    /// expressions must match the list query's ORDER BY. A change here also needs an upgrade step that makes the
+    /// same change, since the shipped 2 to 3 step creates its own, <see cref="Schema3SortIndexesSql"/>.
     /// </summary>
     private const string SortIndexesSql = """
         CREATE INDEX idx_items_name_sort ON items(file_name_sort_key);
@@ -248,6 +248,15 @@ public static class LibraryCatalogStore
         CREATE INDEX idx_items_duration_desc ON items(COALESCE(duration_ticks, 0) DESC, file_name_sort_key);
         CREATE INDEX idx_items_date_added_asc ON items(COALESCE(last_write_time_utc, 0), file_name_sort_key);
         CREATE INDEX idx_items_date_added_desc ON items(COALESCE(last_write_time_utc, 0) DESC, file_name_sort_key);
+        """;
+
+    /// <summary>
+    /// The rating sort's indexes, one per direction, as <see cref="SortIndexesSql"/> describes. A new catalog
+    /// gets them, and the 7 to 8 step adds them, so a later change to them needs a step and SQL of its own.
+    /// </summary>
+    private const string RatingSortIndexesSql = """
+        CREATE INDEX idx_items_rating_asc ON items(COALESCE(rating, 0), file_name_sort_key);
+        CREATE INDEX idx_items_rating_desc ON items(COALESCE(rating, 0) DESC, file_name_sort_key);
         """;
 
     private static readonly string[] CatalogTables =
@@ -283,7 +292,8 @@ public static class LibraryCatalogStore
         [4] = Schema4ItemColumns,
         [5] = Schema4ItemColumns,
         [6] = Schema4ItemColumns,
-        [7] = Schema7ItemColumns
+        [7] = Schema7ItemColumns,
+        [8] = Schema7ItemColumns
     };
 
     /// <summary>
@@ -297,7 +307,8 @@ public static class LibraryCatalogStore
         [3] = UpgradeSchema3To4,
         [4] = UpgradeSchema4To5,
         [5] = UpgradeSchema5To6,
-        [6] = UpgradeSchema6To7
+        [6] = UpgradeSchema6To7,
+        [7] = UpgradeSchema7To8
     };
 
     /// <summary>
@@ -526,6 +537,12 @@ public static class LibraryCatalogStore
     private static void UpgradeSchema6To7(SqliteConnection connection, SqliteTransaction transaction)
     {
         Execute(connection, transaction, "ALTER TABLE items ADD COLUMN rating INTEGER NULL;");
+    }
+
+    /// <summary>Schema version 7 to 8: adds the rating sort's indexes (see <see cref="RatingSortIndexesSql"/>).</summary>
+    private static void UpgradeSchema7To8(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        Execute(connection, transaction, RatingSortIndexesSql);
     }
 
     private static string WithFlagModesWritten(string filterStateJson)
@@ -1090,6 +1107,7 @@ public static class LibraryCatalogStore
             CREATE INDEX idx_item_tags_name_fold ON item_tags(name_fold);
             """);
         Execute(connection, SortIndexesSql);
+        Execute(connection, RatingSortIndexesSql);
 
         Execute(
             connection,

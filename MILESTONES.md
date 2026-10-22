@@ -166,7 +166,7 @@ Last milestone completed: M12k3
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Mockup | ✅ Complete | Only unrated and Min Rating in the Filter tab's Basic Filters, flagged together with the field validation pattern, their Filters line wording, and Rating in the sort list with its direction labels, approved in the user's review on their devices. |
-| Contract | ⏳ Planned | The minimum rating and Only unrated in the FilterState schema, applied by the server in the list query, its counts, and random selection, and a rating sort with its indexes. |
+| Contract | ✅ Complete | The minimum rating and Only unrated in the FilterState schema, applied by the server in the list query, its counts, and random selection, and a rating sort with its indexes. |
 | WebUI | ⏳ Planned | Only unrated and Min Rating in the Filter tab, flagged together, and in the Filters line, saved in presets and compared in preset matching, the rating sort, and rating changes patching or reloading the loaded window. |
 
 #### Mockup slice
@@ -216,9 +216,10 @@ Last milestone completed: M12k3
 
 - `minRating`, in stars or null for no minimum, and `onlyUnrated` fields in the FilterState schema, applied by the server in the list query, its counts, and random selection.
 - `FilterStateModel` keeps the minimum in half stars, as the catalog keeps a rating, read with `ItemRating.TryFromStars`.
-- A shared fixture under `shared/fixtures/` locks how the server's filter parser and the WebUI read `minRating`: a valid number reads as itself, and a string, a value between half steps, one out of range, and null read as no minimum. Core and WebUI tests read it.
+- A shared fixture under `shared/fixtures/` locks how the server's filter parser and the WebUI read `minRating`: a valid number reads as itself, and a string, a value between half steps, one out of range, and null read as no minimum. Core tests read it.
 - A Rating sort mode, sorting unrated items as 0 stars, as the other modes sort a missing value.
 - The sort's two indexes, one per direction, come with the catalog's move to the next schema version, with its upgrade step from the version before, and go in their own constant.
+- Core's preset comparison, `FilterStateComparison`, compares both fields, so a preset whose only filter is a rating one isn't the default filter, as the browser-playable filter's comparison change came with its contract.
 - OpenAPI, `docs/api.md`, and generated WebUI types.
 
 **Traps**
@@ -244,6 +245,19 @@ Last milestone completed: M12k3
 - OpenAPI and the generated WebUI types carry the fields and the sort mode, in contract tests.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
+**Evidence**
+
+- `FilterStateModel` has `OnlyUnrated` and `MinRatingHalfStars`. `LibraryListFilterParser` reads `onlyUnrated` like the other booleans, and `minRating` with `ItemRating.TryFromStars` when it is a JSON number, and anything else as no minimum. `AppendFilter` adds `items.rating IS NULL` and `items.rating >= {min}`, and `FilterStateComparison` compares both fields.
+- `LibraryListSort.Rating` sorts by `COALESCE(items.rating, 0)` in both directions. The refusal of an unknown `sortMode` builds its list from the enum, so it names Rating and any later mode.
+- The catalog is at schema version 8: `RatingSortIndexesSql` holds `idx_items_rating_asc` and `idx_items_rating_desc`, which a new catalog runs after `SortIndexesSql` and `UpgradeSchema7To8` runs. The test seed has version 8's tables.
+- `shared/fixtures/filter-min-rating.json` has 12 cases, which `FilterStateTests.Parser_ReadsMinRating_AsTheSharedFixtureSays` reads.
+- New tests: `LibraryQueryAndRandomPick_ApplyRatingFilters`, `StoredPresetWithoutRatingFields_PicksWithNoMinimumAndOnlyUnratedOff`, and `Comparison_TellsFiltersApartByRating` in `FilterStateTests`; `Rating_ListCountAndRandomCandidates_KeepWhatEachRatingFilterSays` and `RatingSort_PageQueryReadsItsIndexInBothDirections` in `LibraryListQueryTests`; `LibraryQuerySortModes_MatchTheServersSortModes` in `OpenApiRouteContractTests`, which checks OpenAPI's sort modes against `LibraryListSort`; and Rating in `Query_EverySortInBothDirections_MatchesThePreviousOrder`, whose seed now has ratings. `QueryLibrary_RejectsInvalidPagingSortAndFilter_AndEnrichesOnlyThePage` checks the refusal's wording. The upgrade tests cover version 7 through `OlderSchemaVersions`.
+- Each new test fails with its code broken, restored from a copy afterward (measured): without the parser's `minRating` read, 3 fail; without either WHERE clause, 2; with Rating sorting by name, 2; with the 7 to 8 step emptied, 13 upgrade tests; without the comparison's fields, 1; with Only unrated read as on by default, the stored preset test; with Rating left out of OpenAPI's sort modes, the sort mode test; and with the refusal listing the modes without its final "or", the refusal test.
+- The two indexes took about 55 ms to build on a synthetic 49,000-item catalog (measured), and SQLite reads each one for its direction even on a test catalog without statistics (measured).
+- `dotnet test ReelRoulette.sln` passes (Core 571, ServerApp 19), `npm run generate:contracts` regenerated the types, `npm run verify` passes (1,962 tests), and the Core system checks pass.
+- `shared/api/openapi.yaml` has `onlyUnrated`, `minRating`, and the Rating sort mode. `docs/api.md`, CONTEXT.md, `docs/domain-inventory.md`, and `docs/dev-setup.md` describe the fields, the sort, and schema version 8.
+- No changelog entry: nothing a user can see changes until the WebUI slice.
+
 #### WebUI slice
 
 **Scope**
@@ -263,7 +277,8 @@ Last milestone completed: M12k3
 **Traps**
 
 - `serializeFilterStateForApi`, `filterStateFromApiObject`, and `filterStatesEqualForPresetMatch` in `src/filter/filterStateModel.ts` write, read, and compare FilterState, and a field the serializer writes joins preset matching.
-- Core's filter comparison, behind the preset routes' refusal of a filter another preset holds, reads `shared/fixtures/preset-filter-equality.json` too, so the rating cases need it to compare the fields.
+- Core's filter comparison, behind the preset routes' refusal of a filter another preset holds, reads `shared/fixtures/preset-filter-equality.json` too, and compares the rating fields already, so the rating cases go in the fixture with the WebUI's comparison.
+- `docs/api.md`'s paragraph on the random playback filter payload says "Core also compares" `onlyUnrated` and `minRating`, which becomes "Both compare" once the WebUI's comparison does.
 - `filterFieldProblems`, `FILTER_ACTION_FIELDS`, `FILTER_FIELD_SECTION`, and `filterHeldReason` in `src/filter/filterDialogModel.ts` hold the Favorites and Blacklisted pair's problem and held reasons, and `FlagFilterRows` in `src/ui/FilterDialog.tsx` marks its partner and places its icon with `useFieldValidation`.
 - The Basic Filters checkboxes come from `BASIC_FILTERS`, which the Filters line also reads by label.
 - `RatingStars` (`src/ui/RatingStars.tsx`) gives its value text from `ratingText`, which says "Not rated" for none, and takes its blur handling from its caller.

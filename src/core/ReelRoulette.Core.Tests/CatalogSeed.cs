@@ -115,6 +115,7 @@ internal static class CatalogSeed
             5 => Schema5,
             6 => Schema6,
             7 => Schema7,
+            8 => Schema8,
             _ => throw new ArgumentOutOfRangeException(nameof(schemaVersion), schemaVersion, "The seed has no tables for this schema version.")
         };
 
@@ -558,6 +559,9 @@ internal static class CatalogSeed
 
     private const string Schema7 = "CREATE TABLE items (\n" + Schema7ItemColumns + "\n);\n" + SharedTables + Schema5Presets + SortIndexes;
 
+    /// <summary>Schema version 8 added the rating sort's indexes, so its tables are version 7's.</summary>
+    private const string Schema8 = Schema7 + RatingSortIndexes;
+
     private const string SortIndexes =
         """
         CREATE INDEX idx_items_name_sort ON items(file_name_sort_key);
@@ -569,5 +573,11 @@ internal static class CatalogSeed
         CREATE INDEX idx_items_duration_desc ON items(COALESCE(duration_ticks, 0) DESC, file_name_sort_key);
         CREATE INDEX idx_items_date_added_asc ON items(COALESCE(last_write_time_utc, 0), file_name_sort_key);
         CREATE INDEX idx_items_date_added_desc ON items(COALESCE(last_write_time_utc, 0) DESC, file_name_sort_key);
+        """;
+
+    private const string RatingSortIndexes =
+        """
+        CREATE INDEX idx_items_rating_asc ON items(COALESCE(rating, 0), file_name_sort_key);
+        CREATE INDEX idx_items_rating_desc ON items(COALESCE(rating, 0) DESC, file_name_sort_key);
         """;
 }

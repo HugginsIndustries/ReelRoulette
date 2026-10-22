@@ -38,6 +38,8 @@ public static class FilterStateComparison
             filter.OnlyKnownDuration,
             filter.OnlyKnownLoudness,
             filter.OnlyBrowserPlayable,
+            filter.OnlyUnrated,
+            filter.MinRatingHalfStars,
             filter.AudioFilter,
             filter.MediaTypeFilter,
             GlobalMatchMode = filter.GlobalMatchMode ?? true,

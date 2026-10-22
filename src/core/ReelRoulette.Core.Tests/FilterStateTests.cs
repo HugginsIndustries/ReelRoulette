@@ -184,6 +184,72 @@ public sealed class FilterStateTests : IDisposable
         Assert.True(FilterStateComparison.IsDefault(new FilterStateModel { OnlyBrowserPlayable = false }));
     }
 
+    [Fact]
+    public void Parser_ReadsMinRating_AsTheSharedFixtureSays()
+    {
+        using var fixture = JsonDocument.Parse(File.ReadAllText(OpenApiSpec.RepoPath("shared", "fixtures", "filter-min-rating.json")));
+        var cases = fixture.RootElement.EnumerateArray().ToList();
+        Assert.NotEmpty(cases);
+        foreach (var testCase in cases)
+        {
+            var name = testCase.GetProperty("name").GetString();
+            Assert.True(LibraryListFilterParser.TryParse(testCase.GetProperty("filter"), out var parsed, out var error), $"{name}: {error}");
+            var expected = testCase.GetProperty("minRating");
+            double? stars = expected.ValueKind == JsonValueKind.Null ? null : expected.GetDouble();
+            Assert.True(stars == ItemRating.ToStars(parsed!.MinRatingHalfStars), $"{name}: read {parsed.MinRatingHalfStars} half stars.");
+        }
+    }
+
+    // The library query and the random pick, as the routes run them: a minimum keeps items rated at or above it, Only
+    // unrated keeps the unrated ones, and the two together keep nothing.
+    [Fact]
+    public void LibraryQueryAndRandomPick_ApplyRatingFilters()
+    {
+        var host = SeedRatedItems();
+        var operations = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, _tempDir);
+        var playback = new LibraryPlaybackService(new ServerMediaTokenStore(), NullLogger<LibraryPlaybackService>.Instance, host);
+        (string Filter, string[] Ids)[] cases =
+        [
+            ("""{"minRating":3}""", ["high"]),
+            ("""{"minRating":0.5}""", ["high", "low"]),
+            ("""{"onlyUnrated":true}""", ["unrated"]),
+            ("""{"onlyUnrated":false,"minRating":null}""", ["high", "low", "unrated"])
+        ];
+
+        foreach (var (filter, ids) in cases)
+        {
+            Assert.Equal(ids, QueryIds(operations, $$"""{"filterState":{{filter}}}"""));
+            Assert.Equal(ids, PickIds(playback, [], $$"""{"filterState":{{filter}}}"""));
+        }
+
+        const string both = """{"filterState":{"onlyUnrated":true,"minRating":0.5}}""";
+        Assert.Empty(QueryIds(operations, both));
+        Assert.True(playback.TrySelectRandom(Body<RandomRequest>(both), [], out var response, out var statusCode, out var error), $"{statusCode} {error}");
+        Assert.Null(response);
+    }
+
+    // A preset stored before the rating filter has no fields for it, and picks with no minimum and Only unrated off.
+    [Fact]
+    public void StoredPresetWithoutRatingFields_PicksWithNoMinimumAndOnlyUnratedOff()
+    {
+        var host = SeedRatedItems([new SeedPreset("Old", """{"favoritesMode":"off","blacklistedMode":"excluded","onlyBrowserPlayable":false}""")]);
+        var playback = new LibraryPlaybackService(new ServerMediaTokenStore(), NullLogger<LibraryPlaybackService>.Instance, host);
+        var presets = new ServerStateService(catalog: host).GetPresetCatalogSnapshot();
+        var preset = Assert.Single(presets);
+        Assert.Equal(["high", "low", "unrated"], PickIds(playback, presets, $$"""{"presetId":"{{preset.Id}}"}"""));
+    }
+
+    [Fact]
+    public void Comparison_TellsFiltersApartByRating()
+    {
+        var favorites = new FilterStateModel { FavoritesMode = FlagFilterModeValue.Only };
+        Assert.False(FilterStateComparison.SameFilter(favorites, new FilterStateModel { FavoritesMode = FlagFilterModeValue.Only, OnlyUnrated = true }));
+        Assert.False(FilterStateComparison.SameFilter(favorites, new FilterStateModel { FavoritesMode = FlagFilterModeValue.Only, MinRatingHalfStars = 6 }));
+        Assert.False(FilterStateComparison.SameFilter(new FilterStateModel { MinRatingHalfStars = 6 }, new FilterStateModel { MinRatingHalfStars = 7 }));
+        Assert.False(FilterStateComparison.IsDefault(new FilterStateModel { OnlyUnrated = true }));
+        Assert.False(FilterStateComparison.IsDefault(new FilterStateModel { MinRatingHalfStars = 1 }));
+    }
+
     public void Dispose()
     {
         LibraryCatalogBackup.WaitForPending();
@@ -231,6 +297,28 @@ public sealed class FilterStateTests : IDisposable
                 RelativePath = fileName,
                 SourceId = "s1",
                 MediaType = mediaType
+            });
+        }
+
+        CatalogSeed.Write(_tempDir, sources: [new SeedSource("s1", _tempDir)], items: items, presets: presets);
+        return CatalogOpen.Host(_tempDir);
+    }
+
+    // An unrated item, one rated 1 star, and one rated 4 stars.
+    private LibraryCatalogHost SeedRatedItems(IEnumerable<SeedPreset>? presets = null)
+    {
+        Directory.CreateDirectory(_tempDir);
+        var items = new List<SeedItem>();
+        foreach (var (id, halfStars) in new (string Id, int? HalfStars)[] { ("unrated", null), ("low", 2), ("high", 8) })
+        {
+            var path = Path.Combine(_tempDir, id + ".mp4");
+            File.WriteAllBytes(path, [0x01, 0x02]);
+            items.Add(new SeedItem(id, path)
+            {
+                FileName = id + ".mp4",
+                RelativePath = id + ".mp4",
+                SourceId = "s1",
+                RatingHalfStars = halfStars
             });
         }
 

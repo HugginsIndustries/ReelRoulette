@@ -11,7 +11,8 @@ public enum LibraryListSort
     LastPlayed,
     PlayCount,
     Duration,
-    DateAdded
+    DateAdded,
+    Rating
 }
 
 public sealed class LibraryListRequest
@@ -78,6 +79,7 @@ internal static class LibraryCatalogListSql
             LibraryListSort.PlayCount => $"items.play_count {direction}",
             LibraryListSort.Duration => $"COALESCE(items.duration_ticks, 0) {direction}",
             LibraryListSort.DateAdded => $"COALESCE(items.last_write_time_utc, 0) {direction}",
+            LibraryListSort.Rating => $"COALESCE(items.rating, 0) {direction}",
             _ => $"{fileName} {direction}"
         };
 
@@ -169,6 +171,18 @@ internal static class LibraryCatalogListSql
             }
 
             where.Append(')');
+        }
+
+        if (filter.OnlyUnrated)
+        {
+            where.Append(" AND items.rating IS NULL");
+        }
+
+        // A minimum leaves unrated items out, since their rating is null.
+        if (filter.MinRatingHalfStars is int minRating)
+        {
+            var min = args.Add(minRating);
+            where.Append(CultureInfo.InvariantCulture, $" AND items.rating >= {min}");
         }
 
         AppendSelectedTags(where, filter, catalogTags, args);

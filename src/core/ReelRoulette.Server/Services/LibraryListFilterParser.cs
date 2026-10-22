@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using ReelRoulette.Core.Filtering;
+using ReelRoulette.Core.Library;
 
 namespace ReelRoulette.Server.Services;
 
@@ -30,6 +31,8 @@ internal static class LibraryListFilterParser
             OnlyKnownDuration = Bool(element, "onlyKnownDuration", false),
             OnlyKnownLoudness = Bool(element, "onlyKnownLoudness", false),
             OnlyBrowserPlayable = Bool(element, "onlyBrowserPlayable", false),
+            OnlyUnrated = Bool(element, "onlyUnrated", false),
+            MinRatingHalfStars = MinRating(element, "minRating"),
             GlobalMatchMode = NullableBool(element, "globalMatchMode"),
             MinDuration = Duration(element, "minDuration"),
             MaxDuration = Duration(element, "maxDuration")
@@ -87,6 +90,20 @@ internal static class LibraryListFilterParser
     {
         return element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String
             ? FlagFilterModes.Parse(property.GetString())
+            : null;
+    }
+
+    /// <summary>
+    /// A rating in stars, as <see cref="ItemRating"/> reads one, in half stars. Anything else, such as a string or a
+    /// number between half stars, counts as missing, which is no minimum. Locked to shared/fixtures/filter-min-rating.json.
+    /// </summary>
+    private static int? MinRating(JsonElement element, string name)
+    {
+        return element.TryGetProperty(name, out var property) &&
+            property.ValueKind == JsonValueKind.Number &&
+            property.TryGetDouble(out var stars) &&
+            ItemRating.TryFromStars(stars, out var halfStars)
+            ? halfStars
             : null;
     }
 

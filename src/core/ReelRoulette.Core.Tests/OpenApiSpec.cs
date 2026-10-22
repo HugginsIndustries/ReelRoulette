@@ -177,30 +177,11 @@ internal static class OpenApiSpec
     /// <summary>Returns the property names listed under <c>components.schemas.{name}.properties</c>.</summary>
     public static SortedSet<string> ReadSchemaProperties(string schemaName)
     {
-        var lines = ReadLines();
-        var schemasIndex = Array.IndexOf(lines, "  schemas:");
-        Assert.True(schemasIndex >= 0, "openapi.yaml has no components.schemas section.");
-
-        var start = Array.IndexOf(lines, $"    {schemaName}:", schemasIndex);
-        Assert.True(start >= 0, $"openapi.yaml has no schema named {schemaName}.");
-
         var properties = new SortedSet<string>(StringComparer.Ordinal);
         var inProperties = false;
-        for (var i = start + 1; i < lines.Length; i++)
+        foreach (var line in ReadSchemaLines(schemaName))
         {
-            var line = lines[i];
-            if (line.Length == 0)
-            {
-                continue;
-            }
-
-            var indent = line.Length - line.TrimStart().Length;
-            if (indent <= 4)
-            {
-                break;
-            }
-
-            if (indent == 6)
+            if (Indent(line) == 6)
             {
                 inProperties = line == "      properties:";
                 continue;
@@ -218,6 +199,49 @@ internal static class OpenApiSpec
 
         return properties;
     }
+
+    /// <summary>Returns the values listed under <c>components.schemas.{name}.properties.{property}.enum</c>, in order.</summary>
+    public static List<string> ReadSchemaPropertyEnum(string schemaName, string propertyName)
+    {
+        var values = new List<string>();
+        var inProperty = false;
+        var inEnum = false;
+        foreach (var line in ReadSchemaLines(schemaName))
+        {
+            var indent = Indent(line);
+            if (indent <= 8)
+            {
+                inProperty = line == $"        {propertyName}:";
+                inEnum = false;
+            }
+            else if (indent == 10)
+            {
+                inEnum = inProperty && line == "          enum:";
+            }
+            else if (inEnum && line.TrimStart().StartsWith("- ", StringComparison.Ordinal))
+            {
+                values.Add(line.TrimStart()[2..]);
+            }
+        }
+
+        Assert.True(values.Count > 0, $"openapi.yaml lists no enum values for {schemaName}.{propertyName}.");
+        return values;
+    }
+
+    /// <summary>The non-blank lines of <c>components.schemas.{name}</c> below its name.</summary>
+    private static IEnumerable<string> ReadSchemaLines(string schemaName)
+    {
+        var lines = ReadLines();
+        var schemasIndex = Array.IndexOf(lines, "  schemas:");
+        Assert.True(schemasIndex >= 0, "openapi.yaml has no components.schemas section.");
+
+        var start = Array.IndexOf(lines, $"    {schemaName}:", schemasIndex);
+        Assert.True(start >= 0, $"openapi.yaml has no schema named {schemaName}.");
+
+        return lines.Skip(start + 1).Where(line => line.Length > 0).TakeWhile(line => Indent(line) > 4);
+    }
+
+    private static int Indent(string line) => line.Length - line.TrimStart().Length;
 
     public static JsonElement SerializeAsServer<T>(T value)
     {
