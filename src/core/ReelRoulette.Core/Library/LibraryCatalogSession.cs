@@ -1317,7 +1317,7 @@ public sealed class LibraryCatalogSession
         command.CommandText = """
             SELECT items.id, items.full_path, items.file_name, items.media_type, items.duration_ticks,
                    items.is_favorite, items.is_blacklisted, sources.is_enabled,
-                   items.integrated_loudness, items.peak_db
+                   items.integrated_loudness, items.peak_db, items.rating
             FROM items
             LEFT JOIN sources ON sources.id = items.source_id
             WHERE items.id = $id
@@ -1341,7 +1341,8 @@ public sealed class LibraryCatalogSession
             IsBlacklisted = reader.GetInt32(6) != 0,
             IsSourceEnabled = reader.IsDBNull(7) || reader.GetInt32(7) != 0,
             IntegratedLoudness = reader.IsDBNull(8) ? null : reader.GetDouble(8),
-            PeakDb = reader.IsDBNull(9) ? null : reader.GetDouble(9)
+            PeakDb = reader.IsDBNull(9) ? null : reader.GetDouble(9),
+            RatingHalfStars = reader.IsDBNull(10) ? null : reader.GetInt32(10)
         };
     }
 
@@ -2841,6 +2842,7 @@ public sealed class CatalogPlaybackItem
     public bool IsSourceEnabled { get; init; }
     public double? IntegratedLoudness { get; init; }
     public double? PeakDb { get; init; }
+    public int? RatingHalfStars { get; init; }
 }
 
 public enum CatalogAutoTagScanScope

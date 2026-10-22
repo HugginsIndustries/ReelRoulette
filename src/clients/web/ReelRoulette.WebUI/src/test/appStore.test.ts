@@ -233,7 +233,8 @@ describe("createAppStore", () => {
       mediaType: "video",
       mediaUrl: `/api/media/${itemId}`,
       isFavorite: false,
-      isBlacklisted: false
+      isBlacklisted: false,
+      rating: null
     });
     store.itemStates.remember("c", { isFavorite: true, isBlacklisted: false });
 
@@ -262,7 +263,8 @@ describe("createAppStore", () => {
       mediaType: "video",
       mediaUrl: `/api/media/${itemId}`,
       isFavorite: false,
-      isBlacklisted: false
+      isBlacklisted: false,
+      rating: null
     });
     store.itemStates.remember("d", { isFavorite: false, isBlacklisted: true });
 

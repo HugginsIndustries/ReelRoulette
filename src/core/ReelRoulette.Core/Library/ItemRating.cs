@@ -14,6 +14,8 @@ public static class ItemRating
 
     public static double ToStars(int halfStars) => halfStars / 2.0;
 
+    public static double? ToStars(int? halfStars) => halfStars is int value ? ToStars(value) : null;
+
     /// <summary>
     /// Reads a rating in stars, a multiple of 0.5 from 0.5 to 5, as half stars, or null for none. False for any other
     /// number.

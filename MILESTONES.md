@@ -173,7 +173,7 @@ Last milestone completed: M12k2
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Mockup | ✅ Complete | The player's star button with its badge, the rating popover, the Stats tab's empty stars in the text color, the rating keys in the mockup's keys and shortcut reference, and the bell in orange while it has unread notifications, approved on a desktop browser, the iPad, and an Android phone. |
-| Contract | ⏳ Planned | The item's rating in the random and play responses, in OpenAPI and the generated WebUI types. |
+| Contract | ✅ Complete | The item's rating in the random and play responses, in OpenAPI and the generated WebUI types. |
 | WebUI | ⏳ Planned | The star button, its badge, and the rating popover on the player, the Stats tab's empty stars in the text color, the rating keys with their lines in the shortcut reference, and the bell in orange while it has unread notifications. |
 
 #### Mockup slice
@@ -260,6 +260,17 @@ Last milestone completed: M12k2
 - `/api/random` and `/api/play` give a rated item's rating in stars and null for an unrated one, in server tests of both routes.
 - OpenAPI and the generated WebUI types carry `rating` in `RandomResponse`, in contract tests.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- `ReadPlaybackRow` reads `items.rating` into `CatalogPlaybackItem.RatingHalfStars`, `RandomResponse` has `Rating`, and `MapRandomResult` gives it in stars through `ItemRating.ToStars`.
+- The random pick and the direct play built their response with the same twelve lines, which are now one helper, `PlaybackResponse` in `LibraryPlaybackService.cs`. The mapping and the rating route turn half stars or none into stars or null through `ItemRating.ToStars(int?)`, in place of the route's own copy of that conversion.
+- OpenAPI names `rating` in `RandomResponse`, nullable and in `required`, and `docs/api.md` and CONTEXT.md name it. `npm run generate:contracts` regenerated the WebUI types, and five playing items in `appStore.test.ts`, `autoPause.test.ts`, `library.test.ts`, and `player.test.ts` gained `rating: null`, the ones the type check asked for (measured beforehand on a scratch copy). Nothing in the WebUI reads it yet.
+- `TrySelectRandomAndTryPlayItem_CarryTheItemsRatingInStars` in `LibraryPlaybackServiceTests.cs`, beside the tests of the loudness both routes carry, shows 7 and 10 half stars as 3.5 and 5 stars and no rating as null. The test of both routes' fields against the spec shows `rating` sent for an unrated item too.
+- Each guarded behavior broken on its own, restored from a copy under `artifacts/scratch/`, failed its tests (measured):
+  - the read without the rating, and the mapping dropping it, failed the rated cases
+  - the spec without `rating` failed the fields test
+- `dotnet build ReelRoulette.sln` passes with no warnings, `dotnet test ReelRoulette.sln` passes, 561 Core tests and 19 ServerApp tests, SystemChecks pass, and `npm run verify` passes, its 1927 tests included.
 
 #### WebUI slice
 

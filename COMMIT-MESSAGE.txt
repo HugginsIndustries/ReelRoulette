@@ -20,12 +20,10 @@ Instructions:
 
 Commit Message:
 
-M12k3: Add the player's rating star, its badge, and its popover to the mockup, with the rating keys and the bell's unread color
+M12k3: Send the item's rating with each random pick and direct play
 
-- The milestone splits into Mockup, Contract, and WebUI slices with the player rating's design decisions. The Contract slice is new: the random and play responses carry no rating, so the server will send it as it sends the favorite flag.
-- The mockup's player has a star left of Favorite, moving the panel button one place left. It is orange with the rating in a badge, shaped like the bell's, while the playing item is rated. Pressing it opens the Stats tab's stars at the player's center, white where empty, with no background. Each star's glyph has a text shadow matching the corner buttons' drop shadow, and the popover and the filled half stars are placed without a transform, since Safari on iPad drew a drop shadow filter there as a rectangle.
-- A click, tap, or drag that sets a rating closes the popover, and so do Enter, Escape, Tab, a press elsewhere, another item playing, a volume change, and the panel opening. The keys change the rating without closing it, the controls stay shown while it is open, and a touch on its stars neither swipes nor sends a click to the video.
-- The Stats tab's stars, the popover, and the rating keys share one change waiting to be sent, with the same popups.
-- Shift+1 to Shift+5 rate the playing item, Shift+0 clears its rating, and - and = step it by half a star. The shortcut list shows them.
-- The Stats tab's empty stars are the panel's text color in place of grey, and the bell is orange while it has unread messages, on the main page and the admin page. Both badges sit 2 px further in, since Chrome on Android clipped their ring where it reached the button's edge.
-- The player indicator clears the wider corner group: at most the player's width less 440 px while the panel is on the right. The index page describes the rating, its keys, and the bell, the smoke check passes, and the user approved the mockup on a desktop browser, the iPad, and an Android phone.
+- The random and play responses carry the item's rating in stars, or null for an unrated item, so the WebUI's player can show it without a read of its own. The catalog's playback read now reads the rating.
+- The random pick and the direct play build their response in one helper in place of two copies of the same mapping, and these responses and the rating route turn half stars into stars, or null, through one Core helper.
+- OpenAPI names the rating in RandomResponse, the generated WebUI types carry it, and the API doc and CONTEXT.md name it. Nothing in the WebUI reads it yet.
+- A playback service test shows ratings as 3.5 and 5 stars and none as null on both routes. Dropping the rating from the read or the mapping failed it, and dropping it from the spec failed the test of both routes' fields.
+- The milestone records the Contract slice as complete.

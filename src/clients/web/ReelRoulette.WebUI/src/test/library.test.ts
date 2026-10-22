@@ -20,7 +20,8 @@ const PLAYED: PlayingItem = {
   durationSeconds: 60,
   mediaUrl: "/api/media/item-1?token=t",
   isFavorite: false,
-  isBlacklisted: false
+  isBlacklisted: false,
+  rating: null
 };
 
 function json(body: unknown, status = 200): Response {

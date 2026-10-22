@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using ReelRoulette.Core.Filtering;
+using ReelRoulette.Core.Library;
 using ReelRoulette.Core.Randomization;
 using ReelRoulette.Server.Contracts;
 
@@ -145,18 +146,7 @@ public sealed class LibraryPlaybackService
             return false;
         }
 
-        var token = _tokenStore.CreateToken(selected.FullPath);
-        response = ApiContractMapper.MapRandomResult(
-            id: selected.FullPath,
-            itemId: selected.Id,
-            displayName: string.IsNullOrWhiteSpace(selected.FileName) ? Path.GetFileName(selected.FullPath) : selected.FileName,
-            mediaType: MediaTypeName(selected.MediaType),
-            durationSeconds: DurationSeconds(selected.DurationTicks),
-            integratedLoudness: selected.IntegratedLoudness,
-            peakDb: selected.PeakDb,
-            mediaUrl: $"/api/media/{token}",
-            isFavorite: selected.IsFavorite,
-            isBlacklisted: selected.IsBlacklisted);
+        response = PlaybackResponse(selected);
         LogPick(randomizationMode, eligible.Count, stopwatch);
         return true;
     }
@@ -241,18 +231,7 @@ public sealed class LibraryPlaybackService
             return false;
         }
 
-        var token = _tokenStore.CreateToken(match.FullPath);
-        response = ApiContractMapper.MapRandomResult(
-            id: match.FullPath,
-            itemId: match.Id,
-            displayName: string.IsNullOrWhiteSpace(match.FileName) ? Path.GetFileName(match.FullPath) : match.FileName,
-            mediaType: MediaTypeName(match.MediaType),
-            durationSeconds: DurationSeconds(match.DurationTicks),
-            integratedLoudness: match.IntegratedLoudness,
-            peakDb: match.PeakDb,
-            mediaUrl: $"/api/media/{token}",
-            isFavorite: match.IsFavorite,
-            isBlacklisted: match.IsBlacklisted);
+        response = PlaybackResponse(match);
         return true;
     }
 
@@ -337,6 +316,24 @@ public sealed class LibraryPlaybackService
 
         filter ??= new FilterStateModel();
         return true;
+    }
+
+    /// <summary>A random pick's or a direct play's answer: the item, with a media token for its file.</summary>
+    private RandomResponse PlaybackResponse(CatalogPlaybackItem item)
+    {
+        var token = _tokenStore.CreateToken(item.FullPath);
+        return ApiContractMapper.MapRandomResult(
+            id: item.FullPath,
+            itemId: item.Id,
+            displayName: string.IsNullOrWhiteSpace(item.FileName) ? Path.GetFileName(item.FullPath) : item.FileName,
+            mediaType: MediaTypeName(item.MediaType),
+            durationSeconds: DurationSeconds(item.DurationTicks),
+            integratedLoudness: item.IntegratedLoudness,
+            peakDb: item.PeakDb,
+            mediaUrl: $"/api/media/{token}",
+            isFavorite: item.IsFavorite,
+            isBlacklisted: item.IsBlacklisted,
+            ratingHalfStars: item.RatingHalfStars);
     }
 
     private static string MediaTypeName(int mediaType)

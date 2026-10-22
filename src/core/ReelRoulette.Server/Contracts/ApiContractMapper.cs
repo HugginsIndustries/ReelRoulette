@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using ReelRoulette.Core.Library;
 using ReelRoulette.Core.Storage;
 
 namespace ReelRoulette.Server.Contracts;
@@ -36,7 +37,8 @@ public static class ApiContractMapper
         double? peakDb,
         string mediaUrl,
         bool isFavorite,
-        bool isBlacklisted)
+        bool isBlacklisted,
+        int? ratingHalfStars)
     {
         return new RandomResponse
         {
@@ -49,7 +51,8 @@ public static class ApiContractMapper
             PeakDb = peakDb,
             MediaUrl = mediaUrl,
             IsFavorite = isFavorite,
-            IsBlacklisted = isBlacklisted
+            IsBlacklisted = isBlacklisted,
+            Rating = ItemRating.ToStars(ratingHalfStars)
         };
     }
 

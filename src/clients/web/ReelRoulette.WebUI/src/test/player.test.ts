@@ -21,7 +21,8 @@ const VIDEO: PlayingItem = {
   durationSeconds: 65,
   mediaUrl: "/api/media/item-video?token=t",
   isFavorite: false,
-  isBlacklisted: false
+  isBlacklisted: false,
+  rating: null
 };
 
 const SECOND_VIDEO: PlayingItem = { ...VIDEO, id: "/media/other.mp4", itemId: "item-other", displayName: "other.mp4", mediaUrl: "/api/media/item-other?token=t" };

@@ -18,7 +18,8 @@ const VIDEO: PlayingItem = {
   durationSeconds: 65,
   mediaUrl: "/api/media/item-video?token=t",
   isFavorite: false,
-  isBlacklisted: false
+  isBlacklisted: false,
+  rating: null
 };
 
 const PHOTO: PlayingItem = {

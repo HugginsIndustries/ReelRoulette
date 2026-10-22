@@ -729,7 +729,7 @@ public static class ServerHostComposition
             return Results.NotFound(new { error = ItemNotInLibrary });
         }
 
-        var rating = Stars(after.RatingHalfStars);
+        var rating = ItemRating.ToStars(after.RatingHalfStars);
         var revision = state.GetCurrentRevision();
         if (after.RatingHalfStars != before.RatingHalfStars)
         {
@@ -738,14 +738,12 @@ public static class ServerHostComposition
                 ItemId = after.Id,
                 Path = after.FullPath,
                 Rating = rating,
-                PreviousRating = Stars(before.RatingHalfStars),
+                PreviousRating = ItemRating.ToStars(before.RatingHalfStars),
                 ClientId = NormalizeOptionalIdentity(request.ClientId)
             }).Revision;
         }
 
         return Results.Ok(new ItemRatingResponse { ItemId = after.Id, Rating = rating, Revision = revision });
-
-        static double? Stars(int? halfStars) => halfStars is int value ? ItemRating.ToStars(value) : null;
     }
 
     /// <summary>

@@ -2947,6 +2947,7 @@ components:
         - mediaUrl
         - isFavorite
         - isBlacklisted
+        - rating
       properties:
         id:
           type: string
@@ -2981,6 +2982,11 @@ components:
           type: boolean
         isBlacklisted:
           type: boolean
+        rating:
+          type: number
+          format: double
+          nullable: true
+          description: The rating in stars, from 0.5 to 5 in half-star steps, or null for none.
 
     FavoriteRequest:
       type: object

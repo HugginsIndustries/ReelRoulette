@@ -1558,6 +1558,11 @@ export interface components {
             mediaUrl: string;
             isFavorite: boolean;
             isBlacklisted: boolean;
+            /**
+             * Format: double
+             * @description The rating in stars, from 0.5 to 5 in half-star steps, or null for none.
+             */
+            rating: number | null;
         };
         FavoriteRequest: {
             /** @description Catalog item id. */

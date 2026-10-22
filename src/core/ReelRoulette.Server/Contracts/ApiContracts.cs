@@ -102,6 +102,8 @@ public sealed class RandomResponse
     public string MediaUrl { get; set; } = string.Empty;
     public bool IsFavorite { get; set; }
     public bool IsBlacklisted { get; set; }
+    /// <summary>The rating in stars, from 0.5 to 5 in half-star steps, or null for none.</summary>
+    public double? Rating { get; set; }
 }
 
 public sealed class FavoriteRequest

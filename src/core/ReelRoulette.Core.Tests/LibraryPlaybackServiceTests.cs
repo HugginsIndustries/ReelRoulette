@@ -495,6 +495,34 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         Assert.Null(unmeasured.PeakDb);
     }
 
+    [Theory]
+    [InlineData(7, 3.5)]
+    [InlineData(10, 5.0)]
+    [InlineData(null, null)]
+    public void TrySelectRandomAndTryPlayItem_CarryTheItemsRatingInStars(int? ratingHalfStars, double? expectedStars)
+    {
+        Directory.CreateDirectory(_tempDir);
+        var mediaPath = Path.Combine(_tempDir, "rated.mp4");
+        File.WriteAllBytes(mediaPath, [0x01, 0x02]);
+
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items: [new SeedItem("r1", mediaPath) { FileName = "rated.mp4", RatingHalfStars = ratingHalfStars, SourceId = "s1" }]);
+
+        var service = CreateService();
+        Assert.True(service.TrySelectRandom(
+            new RandomRequest { PresetId = string.Empty, FilterState = ParseJson("{}") },
+            [],
+            out var picked,
+            out _,
+            out _));
+        Assert.True(service.TryPlayItem("r1", false, out var played, out _, out _, out _));
+
+        Assert.Equal(expectedStars, picked!.Rating);
+        Assert.Equal(expectedStars, played!.Rating);
+    }
+
     [Fact]
     public void TryPlayItem_ShouldSucceed_WhenItemIsBlacklisted()
     {
