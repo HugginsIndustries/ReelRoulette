@@ -163,6 +163,29 @@ h1 { font-size: 1.4rem; margin: 0; }
   </section>
 
   <section class="group">
+    <h2>Only unrated and Min Rating (Filter tab, General)</h2>
+    <p class="group-note">Checked as a pair. A minimum rating leaves unrated files out, so Only unrated with a minimum matches nothing and is flagged as it is chosen; either one alone is allowed. One icon sits just after the Only unrated label. The checkbox and the stars are both marked invalid and described by its tooltip, and focusing either one shows it. Apply, Add Preset, and Update preset can't proceed until either changes, and pressing one moves to the Only unrated checkbox. The stars here are fixed at 3.</p>
+    <div class="specimens">
+      <figure class="specimen" data-rating-pair data-minimum="3">
+        <div class="filter-stack">
+          <span class="vfield vfield-after"><label><input type="checkbox"> Only unrated</label><span class="vfield-icon material-symbol-icon">error</span></span>
+          <div class="mode-row min-rating-row"><span id="vr-min-rating-1">Min Rating</span><div class="rating" role="slider" tabindex="0" aria-labelledby="vr-min-rating-1" aria-valuemin="0" aria-valuemax="5" aria-valuenow="3" aria-valuetext="3 stars"></div></div>
+        </div>
+        <figcaption><b>Min Rating 3 stars, Only unrated off</b>Valid, as either one alone is.</figcaption>
+        <p class="attrs mock-note"></p>
+      </figure>
+      <figure class="specimen" data-rating-pair data-minimum="3" data-pinned>
+        <div class="filter-stack">
+          <span class="vfield vfield-after"><label><input type="checkbox" checked> Only unrated</label><span class="vfield-icon material-symbol-icon">error</span></span>
+          <div class="mode-row min-rating-row"><span id="vr-min-rating-2">Min Rating</span><div class="rating" role="slider" tabindex="0" aria-labelledby="vr-min-rating-2" aria-valuemin="0" aria-valuemax="5" aria-valuenow="3" aria-valuetext="3 stars"></div></div>
+        </div>
+        <figcaption><b>Only unrated with Min Rating 3 stars</b>Flagged; tooltip held open here so it shows.</figcaption>
+        <p class="attrs mock-note"></p>
+      </figure>
+    </div>
+  </section>
+
+  <section class="group">
     <h2>New preset name (Filter tab, Presets)</h2>
     <p class="group-note">Required, but an empty name is never flagged: Add Preset is disabled until the field has a name. A name a saved preset already has, ignoring case, is flagged as it is typed, and Add Preset, which sits beside the field, is disabled too, without an icon. A problem in a General field, such as a duration that is not valid, holds Add Preset instead, as it holds Apply. Saved presets here: Favorites, Short clips, Long videos.</p>
     <div class="specimens">
@@ -387,6 +410,27 @@ document.querySelectorAll(".specimen[data-pair]").forEach((specimen) => {
   });
 });
 
+// Only unrated and Min Rating, checked as a pair, with the stars fixed at the specimen's minimum.
+document.querySelectorAll(".specimen[data-rating-pair]").forEach((specimen) => {
+  const minimum = Number(specimen.dataset.minimum);
+  const stars = specimen.querySelector(".rating");
+  for (let i = 0; i < 5; i++) {
+    const star = document.createElement("span");
+    star.className = i < minimum ? "rating-star is-full" : "rating-star";
+    star.append(iconSpan("star", "rating-outline"), iconSpan("star", "is-filled rating-fill"));
+    stars.append(star);
+  }
+  const box = specimen.querySelector('input[type="checkbox"]');
+  const field = ratingPairField(box, () => minimum, stars, { pinned: specimen.hasAttribute("data-pinned") });
+  const out = specimen.querySelector(".attrs");
+  const show = () => (out.textContent = `Only unrated checkbox\n${attrsOf(box)}\n\nMin Rating stars\n${attrsOf(stars)}`);
+  field.onChange(show);
+  show();
+  [box, stars].forEach((control) => control.addEventListener("focus", () => {
+    field.pinned = false;
+  }));
+});
+
 // A setting's field, with the value in use below it, so its saves show.
 document.querySelectorAll(".specimen[data-setting]").forEach((specimen) => {
   let inUse = 10;
@@ -403,7 +447,7 @@ document.querySelectorAll(".specimen[data-setting]").forEach((specimen) => {
   show();
 });
 
-document.querySelectorAll(".specimen:not([data-pair]):not([data-setting])").forEach((specimen) => {
+document.querySelectorAll(".specimen:not([data-pair]):not([data-rating-pair]):not([data-setting])").forEach((specimen) => {
   const input = specimen.querySelector("input[data-check]");
   const kind = input.dataset.check;
   const field = new ValidatedField(input, CHECKS[kind], { pinned: input.hasAttribute("data-pinned") });

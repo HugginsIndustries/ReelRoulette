@@ -341,11 +341,14 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 .filter-stack label { display: flex; align-items: center; gap: 8px; min-height: 40px; }
 /* Stacked text fields sit 10px apart, as the WebUI's filter rows do. */
 .duration-stack { gap: 10px; }
-/* The Favorites and Blacklisted filters: a checkbox and an only-or-excluded dropdown. */
+/* A filter's row: Favorites' or Blacklisted's checkbox and only-or-excluded dropdown, or Min Rating's label and stars. */
 .mode-row { display: flex; align-items: center; gap: 10px; min-height: 40px; }
 .mode-row > label { display: flex; align-items: center; gap: 8px; min-width: 7.5rem; }
 .mode-select { min-height: 36px; padding: 0 8px; }
 .mode-select:disabled { opacity: 0.5; }
+/* Min Rating: its label, then the stars beside it, wrapping under the label on a screen too narrow for both. */
+.min-rating-row { flex-wrap: wrap; }
+.min-rating-row .rating { margin-left: 0; }
 .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .filter-row > label { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 /* An icon button in a row, such as Add Preset or Choose Preset's Update, carries a held action's red dot on its corner. */
@@ -522,6 +525,22 @@ html.hide-mock .mock-small:not(.mock-keep) { display: none !important; }
   text-transform: uppercase;
   color: var(--mock);
 }
+
+/* The rating's five stars, which the Stats tab, the player's popover, and the Filter tab's Min Rating share. The control
+   starts at the first star, whose left edge clears the rating, and sits at the right of its line unless the line places
+   it. Each star is only as tall as its icon. A touch that starts on the control stays its own however the finger
+   moves, so it never scrolls the tab. */
+.rating { display: flex; margin-left: auto; border-radius: 6px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+.rating:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.rating-star { position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 30px; color: var(--page-fg); }
+.rating-star .material-symbol-icon { font-size: 30px; }
+/* A full star is the filled star in orange. A half star lays it, cut off at its middle, over the empty star's outline,
+   so only the filled half is orange. The filled star spans its star and centers its glyph there, as the outline is
+   centered, without a transform. */
+.rating-fill { position: absolute; inset: 0; color: var(--huggins-orange); visibility: hidden; }
+.rating-star.is-full .rating-fill, .rating-star.is-half .rating-fill { visibility: visible; }
+.rating-star.is-half .rating-fill { clip-path: inset(0 50% 0 0); }
+.rating-star.is-full .rating-outline { visibility: hidden; }
 
 /* Notifications: the bell, its list of recent messages, and the popups. */
 .notify-btn { position: relative; }

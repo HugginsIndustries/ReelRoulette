@@ -548,23 +548,10 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
 .stats-path { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
 .stats-path code { flex: 1 1 auto; min-width: 0; font-size: 0.82rem; color: var(--muted-fg); word-break: break-all; }
 .stats-path .icon-btn .material-symbol-icon { font-size: 24px; }
-/* The rating's line: its label at the left, and the control at the right, lined up with the table's values, wrapping
-   under the label on a screen too narrow for both. The control starts at the first star, whose left edge clears the
-   rating. Each star is only as tall as its icon. A touch that starts on the control stays its own however the finger
-   moves, so it never scrolls the tab. */
+/* The rating's line: its label at the left, and the stars at the right, lined up with the table's values, wrapping
+   under the label on a screen too narrow for both. */
 .stats-rating { display: flex; flex-wrap: wrap; align-items: center; margin: 0 0 6px; font-size: 0.92rem; }
 .stats-rating-label { color: var(--muted-fg); }
-.rating { display: flex; margin-left: auto; border-radius: 6px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
-.rating:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
-.rating-star { position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 30px; color: var(--page-fg); }
-.rating-star .material-symbol-icon { font-size: 30px; }
-/* A full star is the filled star in orange. A half star lays it, cut off at its middle, over the empty star's outline,
-   so only the filled half is orange. The filled star spans its star and centers its glyph there, as the outline is
-   centered, without a transform. */
-.rating-fill { position: absolute; inset: 0; color: var(--huggins-orange); visibility: hidden; }
-.rating-star.is-full .rating-fill, .rating-star.is-half .rating-fill { visibility: visible; }
-.rating-star.is-half .rating-fill { clip-path: inset(0 50% 0 0); }
-.rating-star.is-full .rating-outline { visibility: hidden; }
 .stats-table { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin: 0; font-size: 0.92rem; }
 .stats-table dt { color: var(--muted-fg); }
 .stats-table dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
@@ -947,6 +934,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
               <option value="PlayCount">Play count</option>
               <option value="Duration">Duration</option>
               <option value="DateAdded">Date added</option>
+              <option value="Rating">Rating</option>
             </select>
             <button class="btn" id="lib-dir" type="button" aria-label="Toggle sort direction">A–Z</button>
           </div>
@@ -992,6 +980,8 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
                 <label><input type="checkbox"> Only videos with known duration</label>
                 <label><input type="checkbox"> Only videos with known loudness</label>
                 <label><input type="checkbox" id="filter-playable"> Only files this browser can play</label>
+                <span class="vfield vfield-after"><label><input type="checkbox" id="filter-unrated"> Only unrated</label><span class="vfield-icon material-symbol-icon">error</span></span>
+                <div class="mode-row min-rating-row" id="filter-min-rating-row"><span id="filter-min-rating-label">Min Rating</span><input type="hidden" id="filter-min-rating" value=""></div>
               </div>
             </div>
             <div class="filter-section">
@@ -3170,7 +3160,8 @@ const DIRECTION_LABELS = {
   LastPlayed: ["Oldest → Newest", "Newest → Oldest"],
   DateAdded: ["Oldest → Newest", "Newest → Oldest"],
   PlayCount: ["Least Plays → Most Plays", "Most Plays → Least Plays"],
-  Duration: ["Shortest → Longest", "Longest → Shortest"]
+  Duration: ["Shortest → Longest", "Longest → Shortest"],
+  Rating: ["Lowest → Highest", "Highest → Lowest"]
 };
 let libLoading = true;
 let presetsLoading = true;
@@ -3198,7 +3189,7 @@ function visibleItems() {
   if (lib.search) items = items.filter((item) => item.name.toLowerCase().includes(lib.search.toLowerCase()));
   const baseline = items.length;
   items = items.filter((item) => passesApplied(item));
-  const key = lib.sort === "Duration" ? (item) => item.duration : lib.sort === "Name" ? (item) => item.name : (item) => (item.id * 37) % 101;
+  const key = lib.sort === "Duration" ? (item) => item.duration : lib.sort === "Name" ? (item) => item.name : lib.sort === "Rating" ? (item) => item.rating || 0 : (item) => (item.id * 37) % 101;
   items.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
   if (lib.descending) items.reverse();
   return { items, baseline };
@@ -3473,7 +3464,7 @@ function checkPresetName(value, own) {
 }
 // A filter as the app compares it, read from the tab's fields: a duration as its field's text reads it, one that is not
 // valid reading as "invalid", and only the categories matched with ANY (OR), since one without an entry matches ALL.
-const DEFAULT_FILTER = { fav: null, bl: "excluded", basic: [false, false, false, false], media: "all", audio: "all", sources: null, min: null, max: null, include: [], exclude: [], global: "AND", local: {} };
+const DEFAULT_FILTER = { fav: null, bl: "excluded", basic: [false, false, false, false], unrated: false, minRating: null, media: "all", audio: "all", sources: null, min: null, max: null, include: [], exclude: [], global: "AND", local: {} };
 const sameFilter = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 // Each preset's filter, none of them the default one, which no preset may hold.
 const PRESET_FILTERS = {
@@ -3601,6 +3592,21 @@ function resetUncheckedModes() {
   if (!$("filter-fav").checked) $("filter-fav-mode").value = "only";
   if (!$("filter-bl").checked) $("filter-bl-mode").value = "excluded";
 }
+// Min Rating: the rating's stars, holding the tab's minimum in a hidden field, so the tab's snapshot and the filter this
+// device remembers carry it as they carry the other fields. No stars is no minimum. The stars change only the tab's
+// filter until Apply, and never send a rating.
+const minRatingInput = $("filter-min-rating");
+const minRating = () => Number(minRatingInput.value) || null;
+const minRatingStars = ratingStars({ "aria-labelledby": "filter-min-rating-label" }, (_, value) => {
+  minRatingInput.value = value ? String(value) : "";
+  unratedField.update();
+}, { noneText: "No minimum" });
+minRatingStars.el.id = "filter-min-rating-stars";
+$("filter-min-rating-row").append(minRatingStars.el);
+minRatingStars.show({ get rating() { return minRating(); } });
+const unratedField = ratingPairField($("filter-unrated"), minRating, minRatingStars.el);
+// The stars show the minimum the pair was last checked with, however it changed.
+unratedField.onChange(minRatingStars.draw);
 
 // The tab's filter, as the comparisons read it. A mode dropdown holds no choice while its checkbox is off.
 function generalSection(heading) {
@@ -3618,6 +3624,8 @@ function filterValue() {
     fav: $("filter-fav").checked ? $("filter-fav-mode").value : null,
     bl: $("filter-bl").checked ? $("filter-bl-mode").value : null,
     basic: [...generalSection("Basic Filters").querySelectorAll(".filter-stack > label input")].map((box) => box.checked),
+    unrated: $("filter-unrated").checked,
+    minRating: minRating(),
     media: ["all", "videos", "photos"][chosen("media")],
     audio: ["all", "with", "without"][chosen("audio")],
     sources: on.length < boxes.length ? on.map(sourceRoot).sort() : null,
@@ -3638,6 +3646,8 @@ function applyFilterValue(value) {
   $("filter-bl").checked = !!value.bl;
   $("filter-bl-mode").value = value.bl || "excluded";
   generalSection("Basic Filters").querySelectorAll(".filter-stack > label input").forEach((box, i) => (box.checked = !!value.basic[i]));
+  $("filter-unrated").checked = !!value.unrated;
+  minRatingInput.value = value.minRating ? String(value.minRating) : "";
   const choose = (name, index) => general.querySelectorAll(`input[name="${name}"]`).forEach((radio, i) => (radio.checked = i === index));
   choose("media", ["all", "videos", "photos"].indexOf(value.media));
   choose("audio", ["all", "with", "without"].indexOf(value.audio));
@@ -3650,6 +3660,7 @@ function applyFilterValue(value) {
   $("filter-global").value = value.global;
   filterLocalModes = new Map(Object.entries(value.local));
   syncModeSelects();
+  unratedField.update();
   renderFilterTags();
 }
 
@@ -3695,7 +3706,7 @@ function renderApply() {
   const named = !anchor.id ? DEFAULT_FILTER : presets.includes(anchor.id) ? presetFilters.get(anchor.id) : null;
   $("filter-heading").textContent = `Preset: ${anchorLabel({ id: anchor.id, starred: !named || !sameFilter(filterValue(), named) }, presets, presetNames)}`;
   const generalTab = document.querySelector('.filter-tab[data-sub="general"]');
-  const generalProblem = flagModesField.flagged || minField.flagged || maxField.flagged;
+  const generalProblem = flagModesField.flagged || unratedField.flagged || minField.flagged || maxField.flagged;
   generalTab.classList.toggle("has-problem", generalProblem);
   fadeShown(generalTab.querySelector(".tab-problem"), generalProblem);
   generalTab.title = generalProblem ? "A field here is not valid" : "";
@@ -3708,6 +3719,7 @@ function renderApply() {
 // Add Preset sits beside the name, so an empty or taken name disables it, and only the General fields hold it.
 function generalReason(field, ending) {
   if (field === flagModesField) return `Change Favorites or Blacklisted ${ending}.`;
+  if (field === unratedField) return `Clear Only unrated or Min Rating ${ending}.`;
   return `Correct the ${field === minField ? "minimum" : "maximum"} duration ${ending}.`;
 }
 // Apply saves each changed preset by id, each rename after the rename that frees its name and each filter update after
@@ -3755,7 +3767,7 @@ function loopReason() {
 }
 // A loop blocks Apply, which turns its dot red, as a held Apply does, and pressing it shows the reason in a notice, since
 // a phone or tablet shows no tooltip.
-applyHold = holdAction($("filter-apply"), () => [flagModesField, minField, maxField], {
+applyHold = holdAction($("filter-apply"), () => [flagModesField, unratedField, minField, maxField], {
   idle: () => !filterChanges(),
   blocked: loopReason,
   onBlocked: (reason) => void noticeDialog({ message: reason }),
@@ -3772,19 +3784,19 @@ function presetReason() {
   const holder = presets.find((id) => sameFilter(presetFilters.get(id), value));
   return holder ? `Preset "${presetNames.get(holder)}" already has this filter.` : null;
 }
-addPresetHold = holdAction($("filter-add-preset"), () => [nameField, flagModesField, minField, maxField], {
+addPresetHold = holdAction($("filter-add-preset"), () => [nameField, flagModesField, unratedField, minField, maxField], {
   beside: () => [nameField],
   unavailable: presetReason,
   reason: (field) => generalReason(field, "first"),
   beforeReveal: () => showSub("general")
 });
 // Update has nothing to write into while Choose Preset is on None, which it says before the filter's reasons.
-updatePresetHold = holdAction($("filter-update-preset"), () => [flagModesField, minField, maxField], {
+updatePresetHold = holdAction($("filter-update-preset"), () => [flagModesField, unratedField, minField, maxField], {
   unavailable: () => (chosenPreset ? presetReason() : "Choose a preset to update."),
   reason: (field) => generalReason(field, "first"),
   beforeReveal: () => showSub("general")
 });
-[flagModesField, minField, maxField, nameField].forEach((field) => field.onChange(renderApply));
+[flagModesField, unratedField, minField, maxField, nameField].forEach((field) => field.onChange(renderApply));
 
 filterBody.addEventListener("change", (event) => {
   if (event.target.closest('[data-subpanel="presets"]') && event.target.id !== "filter-preset-select") return;
@@ -3818,7 +3830,7 @@ function restoreSnapshot() {
   startOver();
   renderPresets();
   renderFilterTags();
-  [flagModesField, minField, maxField, nameField].forEach((field) => field.reset());
+  [flagModesField, unratedField, minField, maxField, nameField].forEach((field) => field.reset());
 }
 // The applied filter is remembered on this device, as the per-device store keeps it.
 function saveFilterState() {
@@ -3841,7 +3853,7 @@ function restoreFilterState() {
   $("filter-global").value = store.get("filterGlobal", "AND");
   filterLocalModes = new Map(store.get("filterLocal", []));
   syncModeSelects();
-  [flagModesField, minField, maxField].forEach((field) => field.update());
+  [flagModesField, unratedField, minField, maxField].forEach((field) => field.update());
 }
 
 $("filter-apply").addEventListener("click", () => {
@@ -4727,6 +4739,7 @@ $("mock-sync-rating").addEventListener("click", () => {
   const text = item.rating ? `Rated ${ratingText(item.rating)}` : "Rating cleared";
   notes.notify({ kind: "devices", text: `${text} on another device`, detail: item.name, key: `sync-rating:${item.id}` });
   renderPlayback();
+  if (ratingShapesGrid()) layoutGrid(true);
 });
 
 // Preset changes from another device. The page reloads the presets and tells the changes apart by comparing the list
@@ -4953,6 +4966,8 @@ const applied = {
   knownDuration: false,
   knownLoudness: false,
   playable: false,
+  unrated: false,
+  minRating: null,
   media: "all",
   audio: "all",
   sources: null,
@@ -4976,6 +4991,10 @@ function readApplied() {
   basic.forEach((label) => {
     if (label.querySelector("input").checked) parts.push(label.textContent.trim());
   });
+  const unrated = $("filter-unrated").checked;
+  const minimum = minRating();
+  if (unrated) parts.push("Only unrated");
+  if (minimum) parts.push(`Min ${ratingText(minimum)}`);
   const chosen = (name) => {
     const radios = [...general.querySelectorAll(`input[name="${name}"]`)];
     const index = radios.findIndex((radio) => radio.checked);
@@ -5003,6 +5022,8 @@ function readApplied() {
     knownDuration: basic[1].querySelector("input").checked,
     knownLoudness: basic[2].querySelector("input").checked,
     playable: $("filter-playable").checked,
+    unrated,
+    minRating: minimum,
     media: ["all", "videos", "photos"][media],
     audio: ["all", "with", "without"][audio],
     sources: on.length < boxes.length ? on.map((box) => /\(([^)]+)\)/.exec(box.parentElement.textContent)[1]) : null,
@@ -5023,6 +5044,8 @@ function passesApplied(item) {
   if (a.neverPlayed && item.plays) return false;
   if ((a.knownDuration || a.knownLoudness) && isPhoto(item)) return false;
   if (a.playable && !isPlayable(item)) return false;
+  if (a.unrated && item.rating) return false;
+  if (a.minRating && (item.rating || 0) < a.minRating) return false;
   if (a.media === "videos" && isPhoto(item)) return false;
   if (a.media === "photos" && !isPhoto(item)) return false;
   if (a.audio !== "all" && (isPhoto(item) || item.hasAudio !== (a.audio === "with"))) return false;
@@ -5033,6 +5056,8 @@ function passesApplied(item) {
   if (a.exclude.some((key) => item.tags.has(key))) return false;
   return true;
 }
+// Whether a rating change can change what the grid shows or its order, so it lays out again, as the app reloads it.
+const ratingShapesGrid = () => applied.unrated || !!applied.minRating || lib.sort === "Rating";
 // A one-line summary of the applied filter above the grid; it opens the Filter tab.
 function renderFilterSummary() {
   const line = $("lib-filters");
@@ -5329,6 +5354,7 @@ const ratings = (() => {
     queueMicrotask(() => {
       renderStats();
       renderRating();
+      if (ratingShapesGrid()) layoutGrid(true);
     });
   }
   function flush() {
@@ -5351,8 +5377,9 @@ const ratings = (() => {
   return { set, flush };
 })();
 // The five stars, a slider from 0 to 5 to screen readers, for one item at a time. `onSet` gets the item, the value, and
-// whether a key set it.
-function ratingStars(labelAttributes, onSet) {
+// whether a key set it. Screen readers hear `noneText` while there are no stars, "Not rated" unless the caller says
+// otherwise, and `onLeave` runs when focus leaves them.
+function ratingStars(labelAttributes, onSet, { noneText = ratingText(null), onLeave } = {}) {
   const el = document.createElement("div");
   el.className = "rating";
   el.tabIndex = 0;
@@ -5383,7 +5410,7 @@ function ratingStars(labelAttributes, onSet) {
     });
     // The slider's value stays the set rating through a preview or a press.
     el.setAttribute("aria-valuenow", String(rating));
-    el.setAttribute("aria-valuetext", ratingText(rating));
+    el.setAttribute("aria-valuetext", rating ? ratingText(rating) : noneText);
   }
   // The value under the pointer: the first star's left edge clears the rating, a star's left half is half a star less
   // than its right half, and past the stars' ends, which only a press that started on them reaches, is none or 5.
@@ -5441,8 +5468,8 @@ function ratingStars(labelAttributes, onSet) {
     event.preventDefault();
     onSet(item, Math.min(5, Math.max(0, steps[event.key])), true);
   });
-  // Leaving the stars sends a key change at once; a redraw that gives focus straight back sends nothing.
-  el.addEventListener("blur", () => queueMicrotask(() => document.activeElement !== el && ratings.flush()));
+  // A redraw that gives focus straight back hasn't left them.
+  el.addEventListener("blur", () => queueMicrotask(() => document.activeElement !== el && onLeave?.()));
 
   return {
     el,
@@ -5467,7 +5494,10 @@ const ratingControl = (() => {
   label.className = "stats-rating-label";
   label.id = "stats-rating-label";
   label.textContent = "Rating";
-  const control = ratingStars({ "aria-labelledby": label.id }, (item, value, byKey) => ratings.set(item, value, byKey));
+  // Leaving the stars sends a key change at once.
+  const control = ratingStars({ "aria-labelledby": label.id }, (item, value, byKey) => ratings.set(item, value, byKey), {
+    onLeave: () => ratings.flush()
+  });
   control.el.id = "stats-rating";
   line.append(label, control.el);
   return {
@@ -5490,7 +5520,7 @@ const ratingPopover = (() => {
   const control = ratingStars({ "aria-label": "Rating" }, (item, value, byKey) => {
     ratings.set(item, value, byKey);
     if (!byKey) close();
-  });
+  }, { onLeave: () => ratings.flush() });
   popover.append(control.el);
   let open = false;
 

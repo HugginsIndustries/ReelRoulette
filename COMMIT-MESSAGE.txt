@@ -20,6 +20,10 @@ Instructions:
 
 Commit Message:
 
-Docs: Block nonsense combinations and actions in the WebUI, with no matching server refusal
+M12k4: Add Only unrated, Min Rating, and the Rating sort to the mockup
 
-- AGENTS.md's Workflow Priorities say to block a combination or action that makes no sense in the WebUI instead of supporting it: settings that can't work together use the validation pattern, as Favorites only with Blacklisted only does, and an action that makes no sense is a disabled control with a tooltip reason. The WebUI is the only client, so the server needs no matching refusal.
+- The Filter tab's Basic Filters end with Only unrated and Min Rating, set with the rating's five stars, where no stars is no minimum, which screen readers hear as "No minimum". The stars change only the tab's filter until Apply.
+- Only unrated with a minimum is flagged with the field validation pattern on the Only unrated line, "Nothing unrated has a minimum rating. Clear one of them.", and holds Apply, Add Preset, and Update, as Favorites only with Blacklisted only does.
+- The Filters line names "Only unrated" and "Min 3.5 stars", and the Library tab's sort ends with Rating, Highest → Lowest or Lowest → Highest, with unrated files as 0 stars. The grid follows a rating change while either applies.
+- The star control takes its text for no rating and what it does when focus leaves from its caller, and its styles move to the shared stylesheet. The validation page gets the pair's group, and the index page describes the filter and the sort.
+- MILESTONES.md: Rating Filter and Sort's Decisions take the new filter design, with Only unrated (`onlyUnrated`) in place of Include unrated, unrated files sorting as 0 stars, and a `minRating` that isn't a valid rating reading as no minimum. A Mockup slice records the approved mockup, and the Contract slice's Traps record the measured sort indexes.

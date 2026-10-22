@@ -285,6 +285,20 @@ function flagPairField(favBox, favMode, blBox, blMode, options) {
 }
 
 /**
+ * The Filter tab's Only unrated and Min Rating, checked as a pair: Only unrated with a minimum rating matches nothing,
+ * since a minimum leaves unrated files out. The icon sits after the Only unrated label, which a held action moves to,
+ * and the stars, when given, are marked with it. `minimum()` gives the stars' value, 0 or null for none; the checkbox
+ * updates the field, and call `update()` after the stars change.
+ */
+const RATING_PAIR_PROBLEM = "Nothing unrated has a minimum rating. Clear one of them.";
+function ratingPairField(unratedBox, minimum, stars, options) {
+  const check = () => (unratedBox.checked && minimum() > 0 ? { message: RATING_PAIR_PROBLEM } : null);
+  const field = new ValidatedField(unratedBox, check, { ...options, partners: stars ? [stars] : [] });
+  unratedBox.addEventListener("change", () => field.update());
+  return field;
+}
+
+/**
  * A setting that applies without Save and must always hold a value, on a field using the validation pattern. A valid
  * value typed is saved only on Enter or when the field loses focus, so a value passed through on the way, such as the
  * "1" of "120", is never saved. While the field has focus, a value that is not valid stays flagged; once it loses focus,

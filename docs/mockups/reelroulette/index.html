@@ -350,11 +350,14 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 .filter-stack label { display: flex; align-items: center; gap: 8px; min-height: 40px; }
 /* Stacked text fields sit 10px apart, as the WebUI's filter rows do. */
 .duration-stack { gap: 10px; }
-/* The Favorites and Blacklisted filters: a checkbox and an only-or-excluded dropdown. */
+/* A filter's row: Favorites' or Blacklisted's checkbox and only-or-excluded dropdown, or Min Rating's label and stars. */
 .mode-row { display: flex; align-items: center; gap: 10px; min-height: 40px; }
 .mode-row > label { display: flex; align-items: center; gap: 8px; min-width: 7.5rem; }
 .mode-select { min-height: 36px; padding: 0 8px; }
 .mode-select:disabled { opacity: 0.5; }
+/* Min Rating: its label, then the stars beside it, wrapping under the label on a screen too narrow for both. */
+.min-rating-row { flex-wrap: wrap; }
+.min-rating-row .rating { margin-left: 0; }
 .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .filter-row > label { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 /* An icon button in a row, such as Add Preset or Choose Preset's Update, carries a held action's red dot on its corner. */
@@ -532,6 +535,22 @@ html.hide-mock .mock-small:not(.mock-keep) { display: none !important; }
   color: var(--mock);
 }
 
+/* The rating's five stars, which the Stats tab, the player's popover, and the Filter tab's Min Rating share. The control
+   starts at the first star, whose left edge clears the rating, and sits at the right of its line unless the line places
+   it. Each star is only as tall as its icon. A touch that starts on the control stays its own however the finger
+   moves, so it never scrolls the tab. */
+.rating { display: flex; margin-left: auto; border-radius: 6px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+.rating:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.rating-star { position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 30px; color: var(--page-fg); }
+.rating-star .material-symbol-icon { font-size: 30px; }
+/* A full star is the filled star in orange. A half star lays it, cut off at its middle, over the empty star's outline,
+   so only the filled half is orange. The filled star spans its star and centers its glyph there, as the outline is
+   centered, without a transform. */
+.rating-fill { position: absolute; inset: 0; color: var(--huggins-orange); visibility: hidden; }
+.rating-star.is-full .rating-fill, .rating-star.is-half .rating-fill { visibility: visible; }
+.rating-star.is-half .rating-fill { clip-path: inset(0 50% 0 0); }
+.rating-star.is-full .rating-outline { visibility: hidden; }
+
 /* Notifications: the bell, its list of recent messages, and the popups. */
 .notify-btn { position: relative; }
 /* The bell is orange while its list is open, and while it has unread messages, as its badge is. */
@@ -682,8 +701,8 @@ th { font-weight: 600; }
       <li>Volume: the scroll wheel over the player and a two-finger drag on a touch screen change it by the volume step, and so do [ and ]; each shows the volume indicator, centered over the player, as M does, reading Muted while muted, which the slider and the Mute button don't. Mute moves the slider to 0 and unmuting brings the volume back. While muted, raising the volume unmutes and starts from 0, and lowering it does nothing. Lowering it to 0 mutes, and unmuting then brings back the volume from before that drag, notch, or key press. With Enhanced audio, on by default in Settings, every device plays through a Web Audio gain stage, started on the first tap, so iOS gets a volume slider too. The Mockup tab's stand-in sound plays with videos so the volume can be heard, and the Mockup tab can make the gain stage fail to show its notice. With Loudness normalization on, the stand-in sound follows each video's loudness against the baseline.</li>
       <li>Autoplay has two modes in Settings: Normal, where photos advance after Advance after and videos play to the end, and Timer, where every item advances after it, a paused video holding the timer. With Loop on, the item repeats and nothing advances while Loop stops autoplay is on, its default; in Timer mode a video then repeats a stretch of Advance after seconds, from its start or from where a seek lands, shown faintly on the scrub bar. Turned off, autoplay goes on with Loop on, and a video shorter than Advance after repeats until it advances: at once in Timer mode, and once the repeat in progress finishes in Normal mode. A repeat never loads the item again.</li>
       <li>On a photo that autoplay will advance, Play or Space pauses and resumes its timer, and dragging the scrub bar moves it. Otherwise both are disabled on a photo.</li>
-      <li>Library: controls that collapse, the filter summary line, the playing tile's icon, the favorite and blacklist icons, placeholder tiles while a page loads, and file names on tiles as a setting. Selection works as in Google Photos: start it with the check at a tile's top left when hovering it, or a long press on a touch screen; then a click adds or removes a tile, Shift+click adds a range, and deselecting the last tile ends it. Edit tags opens the Tags tab on the selected items.</li>
-      <li>Filter, Tags, and their dialogs as approved so far, with Favorites and Blacklisted each set to only or excluded, plus the browser-playable option. Pick an .mkv, .avi, or .wmv tile, or the .heic photo, to see the format notice; autoplay, Next, Previous, and random picks skip them with a popup, up to ten in a row. The Mockup tab's stalled drive or share shows the couldn't-load notice, and the player stops.</li>
+      <li>Library: controls that collapse, the filter summary line, the playing tile's icon, the favorite and blacklist icons, the Rating sort, where an unrated file counts as 0 stars, placeholder tiles while a page loads, and file names on tiles as a setting. Selection works as in Google Photos: start it with the check at a tile's top left when hovering it, or a long press on a touch screen; then a click adds or removes a tile, Shift+click adds a range, and deselecting the last tile ends it. Edit tags opens the Tags tab on the selected items.</li>
+      <li>Filter, Tags, and their dialogs as approved so far, with Favorites and Blacklisted each set to only or excluded, plus the browser-playable option, Only unrated, and Min Rating, set with the rating's stars; Only unrated with a minimum is flagged, as Favorites only with Blacklisted only is. Pick an .mkv, .avi, or .wmv tile, or the .heic photo, to see the format notice; autoplay, Next, Previous, and random picks skip them with a popup, up to ten in a row. The Mockup tab's stalled drive or share shows the couldn't-load notice, and the player stops.</li>
       <li>Tag categories start collapsed and remember which are open, separately in the Tags tab and the Filter tab. A category's header, expanded or collapsed, shows how many of its tags are in use and, with unsaved changes, the orange dot; adding a tag to a category, or moving one into it, opens it.</li>
       <li>Auto Tag opens from the Tags tab over the whole page. Its scan runs for about 5 seconds, then lists the tags file names match, and its own Apply applies the checked changes.</li>
       <li>Stats: the current file, with Show in File Manager or Copy Path as an icon button beside its path and its tags below its stats, and the library. Click the file name in the header to open it. A video's Adjustment shows what loudness normalization applies, with “(limited by peak)” when the video's peak holds a boost back, or Off while it or Enhanced audio is off. True peak is the loudness scan's, Not measured, or N/A, and Last played is the time before this play. The Mockup tab's Stats load shows a failed load.</li>
@@ -716,7 +735,7 @@ th { font-weight: 600; }
   <a class="card" href="validation.html">
     <h2><span class="material-symbol-icon">error</span>Field validation pattern</h2>
     <ul>
-      <li>Each state of the durations (parsed strictly), the new preset name, and the Edit Tag and Edit Category names, with what a screen reader gets.</li>
+      <li>Each state of the durations (parsed strictly), the Favorites and Blacklisted pair, the Only unrated and Min Rating pair, the new preset name, and the Edit Tag and Edit Category names, with what a screen reader gets.</li>
       <li>Apply when the field that is not valid is out of view.</li>
     </ul>
   </a>
@@ -1018,6 +1037,20 @@ function flagPairField(favBox, favMode, blBox, blMode, options) {
   const check = () => (favBox.checked && favMode.value === "only" && blBox.checked && blMode.value === "only" ? { message: FLAG_PAIR_PROBLEM } : null);
   const field = new ValidatedField(blMode, check, { ...options, partners: [favMode] });
   [favMode, blMode].forEach((select) => select.addEventListener("change", () => field.update()));
+  return field;
+}
+
+/**
+ * The Filter tab's Only unrated and Min Rating, checked as a pair: Only unrated with a minimum rating matches nothing,
+ * since a minimum leaves unrated files out. The icon sits after the Only unrated label, which a held action moves to,
+ * and the stars, when given, are marked with it. `minimum()` gives the stars' value, 0 or null for none; the checkbox
+ * updates the field, and call `update()` after the stars change.
+ */
+const RATING_PAIR_PROBLEM = "Nothing unrated has a minimum rating. Clear one of them.";
+function ratingPairField(unratedBox, minimum, stars, options) {
+  const check = () => (unratedBox.checked && minimum() > 0 ? { message: RATING_PAIR_PROBLEM } : null);
+  const field = new ValidatedField(unratedBox, check, { ...options, partners: stars ? [stars] : [] });
+  unratedBox.addEventListener("change", () => field.update());
   return field;
 }
 

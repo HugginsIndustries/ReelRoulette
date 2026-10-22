@@ -350,11 +350,14 @@ input.ctl::placeholder { color: var(--muted-fg); opacity: 0.9; }
 .filter-stack label { display: flex; align-items: center; gap: 8px; min-height: 40px; }
 /* Stacked text fields sit 10px apart, as the WebUI's filter rows do. */
 .duration-stack { gap: 10px; }
-/* The Favorites and Blacklisted filters: a checkbox and an only-or-excluded dropdown. */
+/* A filter's row: Favorites' or Blacklisted's checkbox and only-or-excluded dropdown, or Min Rating's label and stars. */
 .mode-row { display: flex; align-items: center; gap: 10px; min-height: 40px; }
 .mode-row > label { display: flex; align-items: center; gap: 8px; min-width: 7.5rem; }
 .mode-select { min-height: 36px; padding: 0 8px; }
 .mode-select:disabled { opacity: 0.5; }
+/* Min Rating: its label, then the stars beside it, wrapping under the label on a screen too narrow for both. */
+.min-rating-row { flex-wrap: wrap; }
+.min-rating-row .rating { margin-left: 0; }
 .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .filter-row > label { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 /* An icon button in a row, such as Add Preset or Choose Preset's Update, carries a held action's red dot on its corner. */
@@ -531,6 +534,22 @@ html.hide-mock .mock-small:not(.mock-keep) { display: none !important; }
   text-transform: uppercase;
   color: var(--mock);
 }
+
+/* The rating's five stars, which the Stats tab, the player's popover, and the Filter tab's Min Rating share. The control
+   starts at the first star, whose left edge clears the rating, and sits at the right of its line unless the line places
+   it. Each star is only as tall as its icon. A touch that starts on the control stays its own however the finger
+   moves, so it never scrolls the tab. */
+.rating { display: flex; margin-left: auto; border-radius: 6px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+.rating:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.rating-star { position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 30px; color: var(--page-fg); }
+.rating-star .material-symbol-icon { font-size: 30px; }
+/* A full star is the filled star in orange. A half star lays it, cut off at its middle, over the empty star's outline,
+   so only the filled half is orange. The filled star spans its star and centers its glyph there, as the outline is
+   centered, without a transform. */
+.rating-fill { position: absolute; inset: 0; color: var(--huggins-orange); visibility: hidden; }
+.rating-star.is-full .rating-fill, .rating-star.is-half .rating-fill { visibility: visible; }
+.rating-star.is-half .rating-fill { clip-path: inset(0 50% 0 0); }
+.rating-star.is-full .rating-outline { visibility: hidden; }
 
 /* Notifications: the bell, its list of recent messages, and the popups. */
 .notify-btn { position: relative; }
@@ -786,6 +805,29 @@ h1 { font-size: 1.4rem; margin: 0; }
           <div class="mode-row"><label><input type="checkbox" data-bl checked> Blacklisted</label><span class="vfield vfield-after"><select class="ctl mode-select" aria-label="Blacklisted filter" data-bl-mode><option value="only" selected>only</option><option value="excluded">excluded</option></select><span class="vfield-icon material-symbol-icon">error</span></span></div>
         </div>
         <figcaption><b>Favorites only, Blacklisted only</b>Flagged; tooltip held open here so it shows.</figcaption>
+        <p class="attrs mock-note"></p>
+      </figure>
+    </div>
+  </section>
+
+  <section class="group">
+    <h2>Only unrated and Min Rating (Filter tab, General)</h2>
+    <p class="group-note">Checked as a pair. A minimum rating leaves unrated files out, so Only unrated with a minimum matches nothing and is flagged as it is chosen; either one alone is allowed. One icon sits just after the Only unrated label. The checkbox and the stars are both marked invalid and described by its tooltip, and focusing either one shows it. Apply, Add Preset, and Update preset can't proceed until either changes, and pressing one moves to the Only unrated checkbox. The stars here are fixed at 3.</p>
+    <div class="specimens">
+      <figure class="specimen" data-rating-pair data-minimum="3">
+        <div class="filter-stack">
+          <span class="vfield vfield-after"><label><input type="checkbox"> Only unrated</label><span class="vfield-icon material-symbol-icon">error</span></span>
+          <div class="mode-row min-rating-row"><span id="vr-min-rating-1">Min Rating</span><div class="rating" role="slider" tabindex="0" aria-labelledby="vr-min-rating-1" aria-valuemin="0" aria-valuemax="5" aria-valuenow="3" aria-valuetext="3 stars"></div></div>
+        </div>
+        <figcaption><b>Min Rating 3 stars, Only unrated off</b>Valid, as either one alone is.</figcaption>
+        <p class="attrs mock-note"></p>
+      </figure>
+      <figure class="specimen" data-rating-pair data-minimum="3" data-pinned>
+        <div class="filter-stack">
+          <span class="vfield vfield-after"><label><input type="checkbox" checked> Only unrated</label><span class="vfield-icon material-symbol-icon">error</span></span>
+          <div class="mode-row min-rating-row"><span id="vr-min-rating-2">Min Rating</span><div class="rating" role="slider" tabindex="0" aria-labelledby="vr-min-rating-2" aria-valuemin="0" aria-valuemax="5" aria-valuenow="3" aria-valuetext="3 stars"></div></div>
+        </div>
+        <figcaption><b>Only unrated with Min Rating 3 stars</b>Flagged; tooltip held open here so it shows.</figcaption>
         <p class="attrs mock-note"></p>
       </figure>
     </div>
@@ -1237,6 +1279,20 @@ function flagPairField(favBox, favMode, blBox, blMode, options) {
   const check = () => (favBox.checked && favMode.value === "only" && blBox.checked && blMode.value === "only" ? { message: FLAG_PAIR_PROBLEM } : null);
   const field = new ValidatedField(blMode, check, { ...options, partners: [favMode] });
   [favMode, blMode].forEach((select) => select.addEventListener("change", () => field.update()));
+  return field;
+}
+
+/**
+ * The Filter tab's Only unrated and Min Rating, checked as a pair: Only unrated with a minimum rating matches nothing,
+ * since a minimum leaves unrated files out. The icon sits after the Only unrated label, which a held action moves to,
+ * and the stars, when given, are marked with it. `minimum()` gives the stars' value, 0 or null for none; the checkbox
+ * updates the field, and call `update()` after the stars change.
+ */
+const RATING_PAIR_PROBLEM = "Nothing unrated has a minimum rating. Clear one of them.";
+function ratingPairField(unratedBox, minimum, stars, options) {
+  const check = () => (unratedBox.checked && minimum() > 0 ? { message: RATING_PAIR_PROBLEM } : null);
+  const field = new ValidatedField(unratedBox, check, { ...options, partners: stars ? [stars] : [] });
+  unratedBox.addEventListener("change", () => field.update());
   return field;
 }
 
@@ -2090,6 +2146,27 @@ document.querySelectorAll(".specimen[data-pair]").forEach((specimen) => {
   });
 });
 
+// Only unrated and Min Rating, checked as a pair, with the stars fixed at the specimen's minimum.
+document.querySelectorAll(".specimen[data-rating-pair]").forEach((specimen) => {
+  const minimum = Number(specimen.dataset.minimum);
+  const stars = specimen.querySelector(".rating");
+  for (let i = 0; i < 5; i++) {
+    const star = document.createElement("span");
+    star.className = i < minimum ? "rating-star is-full" : "rating-star";
+    star.append(iconSpan("star", "rating-outline"), iconSpan("star", "is-filled rating-fill"));
+    stars.append(star);
+  }
+  const box = specimen.querySelector('input[type="checkbox"]');
+  const field = ratingPairField(box, () => minimum, stars, { pinned: specimen.hasAttribute("data-pinned") });
+  const out = specimen.querySelector(".attrs");
+  const show = () => (out.textContent = `Only unrated checkbox\n${attrsOf(box)}\n\nMin Rating stars\n${attrsOf(stars)}`);
+  field.onChange(show);
+  show();
+  [box, stars].forEach((control) => control.addEventListener("focus", () => {
+    field.pinned = false;
+  }));
+});
+
 // A setting's field, with the value in use below it, so its saves show.
 document.querySelectorAll(".specimen[data-setting]").forEach((specimen) => {
   let inUse = 10;
@@ -2106,7 +2183,7 @@ document.querySelectorAll(".specimen[data-setting]").forEach((specimen) => {
   show();
 });
 
-document.querySelectorAll(".specimen:not([data-pair]):not([data-setting])").forEach((specimen) => {
+document.querySelectorAll(".specimen:not([data-pair]):not([data-rating-pair]):not([data-setting])").forEach((specimen) => {
   const input = specimen.querySelector("input[data-check]");
   const kind = input.dataset.check;
   const field = new ValidatedField(input, CHECKS[kind], { pinned: input.hasAttribute("data-pinned") });
