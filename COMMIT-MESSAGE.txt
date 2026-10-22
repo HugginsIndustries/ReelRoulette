@@ -20,13 +20,6 @@ Instructions:
 
 Commit Message:
 
-M12k3: Add the player's rating star and popover, the rating keys, and the bell's unread color
+Docs: Block nonsense combinations and actions in the WebUI, with no matching server refusal
 
-- A star beside the favorite heart shows the playing item's rating, orange with the rating in a badge, and opens the Stats tab's stars at the player's center, which set a rating by click, tap, drag, or keys. They close on a pointer's rating, Enter, Escape, Tab, a press elsewhere, a volume change, another item playing, or the panel opening, giving focus on them back to the star, and keep the player's controls shown while open.
-- Shift+1 to Shift+5 rate the playing item, Shift+0 clears its rating, matched by the key's position, and - and = step it by half a star, all sharing the Stats tab's one waiting change and its popups. The shortcut reference lists them.
-- A rating the server confirms for the playing item also becomes its read, so the star keeps it through a resync, and a history step takes the rating its play answer gives, so the star shows a change made while another item played.
-- The Stats tab's empty stars use the panel's text color, the bell is orange while it has unread notifications, and both badges sit 2 px further in so Chrome on Android no longer clips them.
-- The mockup's popover no longer reopens when a pointer press on the star follows a keyboard open, and gives focus on its stars back to the star however it closes, matching the app.
-- The bell's list and the popover close on a press outside or Escape through one shared hook, and one helper names the playing file in place of four copies.
-- Test helpers for the stars and popups are shared in the page harness, each page a test mounts is unmounted after it, and the foundation snapshot carries the star, the popover, and the new shortcut lines.
-- CONTEXT.md, the API and architecture docs, the domain inventory, and the changelog describe the player's rating. The milestone is complete, with the user's spot check, and moves to the completed list, its release check joining the testing checklist. ISSUES.md records that a favorite or blacklist changed on another device while this one was disconnected shows its old state on a later play.
+- AGENTS.md's Workflow Priorities say to block a combination or action that makes no sense in the WebUI instead of supporting it: settings that can't work together use the validation pattern, as Favorites only with Blacklisted only does, and an action that makes no sense is a disabled control with a tooltip reason. The WebUI is the only client, so the server needs no matching refusal.

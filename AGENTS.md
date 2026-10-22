@@ -10,6 +10,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 - Stay within the requested milestone or task unless the user expands scope. Instead of doing future work, record an improvement in `MILESTONES.md`, as a backlog item or as an addition to the milestone that will do it, and a bug in `ISSUES.md` when the user asks to record it. Scope boundaries go in the entry's Not included section.
 - The project has no release deadlines, so code correctness and cleanliness come first by default. Consolidate duplicated code and remove dead code you notice in or around a change, in the same change, unless the user says otherwise.
 - Solutions are best-effort. Handle what can realistically happen in normal use; don't add code, tests, or findings for improbable edge cases such as storage corruption, a failing disk, or files damaged by something outside the app. In summaries and reviews, leave such cases out rather than listing them as "noticed but not fixed".
+- Block a combination or action that makes no sense in the WebUI instead of supporting it. Settings that can't work together use the validation pattern, as Favorites only with Blacklisted only does: the field shows its error with a message, and Apply or Save stays blocked. An action that makes no sense at that moment is a disabled control with a tooltip reason. The WebUI is the only client, so the server needs no matching refusal.
 - Before sign-off, verify each acceptance criterion explicitly and call out any that are unmet.
 
 ## Architecture Guardrails
