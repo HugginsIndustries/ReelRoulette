@@ -2,11 +2,50 @@
 import { signal } from "@preact/signals";
 import { describe, expect, it, vi } from "vitest";
 import { focusTakesKey, runShortcut, SHORTCUT_LINES, shortcutFor, type KeyPress, type ShortcutAction, type ShortcutServices } from "../keyboard/shortcuts";
-import type { PanelTab } from "../panel/panelHost";
+import { PANEL_TABS, type PanelTab } from "../panel/panelHost";
 
-/** A key press on the page's body, with nothing held, unless `changes` says otherwise. */
+/** The symbols' keys on a US keyboard, with Shift and without, as `KeyboardEvent.code` names them. */
+const US_SYMBOL_CODES: Readonly<Record<string, string>> = {
+  " ": "Space",
+  "-": "Minus",
+  _: "Minus",
+  "=": "Equal",
+  "+": "Equal",
+  "[": "BracketLeft",
+  "{": "BracketLeft",
+  "]": "BracketRight",
+  "}": "BracketRight",
+  "\\": "Backslash",
+  "|": "Backslash",
+  ";": "Semicolon",
+  ":": "Semicolon",
+  "'": "Quote",
+  '"': "Quote",
+  ",": "Comma",
+  "<": "Comma",
+  ".": "Period",
+  ">": "Period",
+  "/": "Slash",
+  "?": "Slash",
+  "`": "Backquote",
+  "~": "Backquote"
+};
+
+/**
+ * The key that gives `key` on a US keyboard, with Shift or without, as `KeyboardEvent.code` names it: KeyF for "f" and
+ * "F", Digit1 for "1" and "!", and a named key's own name, such as ArrowLeft.
+ */
+function usCode(key: string): string {
+  if (/^[a-z]$/i.test(key)) return `Key${key.toUpperCase()}`;
+  if (/^[0-9]$/.test(key)) return `Digit${key}`;
+  const shiftedDigit = ")!@#$%^&*(".indexOf(key);
+  if (shiftedDigit >= 0) return `Digit${shiftedDigit}`;
+  return US_SYMBOL_CODES[key] ?? key;
+}
+
+/** A key press on the page's body, from a US keyboard's key for `key`, with nothing held, unless `changes` says otherwise. */
 function press(key: string, changes: Partial<KeyPress> = {}): KeyPress {
-  return { key, shiftKey: false, ctrlKey: false, altKey: false, metaKey: false, repeat: false, defaultPrevented: false, target: document.body, ...changes };
+  return { key, code: usCode(key), shiftKey: false, ctrlKey: false, altKey: false, metaKey: false, repeat: false, defaultPrevented: false, target: document.body, ...changes };
 }
 
 function input(type: string): HTMLInputElement {
@@ -31,6 +70,14 @@ const BOUND: readonly [KeyPress, ShortcutAction][] = [
   [press("r"), "random"],
   [press("f"), "favorite"],
   [press("b"), "blacklist"],
+  [press("!", { shiftKey: true }), "rate1"],
+  [press("@", { shiftKey: true }), "rate2"],
+  [press("#", { shiftKey: true }), "rate3"],
+  [press("$", { shiftKey: true }), "rate4"],
+  [press("%", { shiftKey: true }), "rate5"],
+  [press(")", { shiftKey: true }), "clearRating"],
+  [press("-"), "ratingDown"],
+  [press("="), "ratingUp"],
   [press("a"), "autoplay"],
   [press("m"), "mute"],
   [press(","), "frameBack"],
@@ -58,7 +105,9 @@ describe("shortcutFor", () => {
     const listed = SHORTCUT_LINES.flatMap((line) => line.bindings.map((binding) => binding.action)).sort();
     const bound = [...BOUND.map(([, action]) => action)].sort();
     expect(listed).toEqual(bound);
-    // Every printable key and the named keys a keyboard sends, with Shift and without: only the table's keys act.
+    // Every printable key and the named keys a keyboard sends, with Shift and without, from the US keyboard's key that
+    // gives it: only the table's keys act. Shift and a digit come both as a US keyboard sends them, "!" from Digit1, and
+    // as a layout whose shifted digit row types digits does, "1" from Digit1.
     const named = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown", "Enter", "Tab", "Backspace", "Delete", "F11", "Escape"];
     const keys = [...Array.from({ length: 95 }, (_, i) => String.fromCharCode(32 + i)), ...named];
     const acting = keys.flatMap((key) =>
@@ -68,11 +117,15 @@ describe("shortcutFor", () => {
       })
     );
     expect(acting.sort()).toEqual(
-      [" ", ",", ".", "1", "2", "3", "4", "5", "ArrowLeft", "ArrowRight", "Shift+F", "Shift+f", "[", "]", "a", "b", "f", "h", "j", "k", "l", "m", "p", "r", "s", "t", "A", "B", "F", "H", "J", "K", "L", "M", "P", "R", "S", "T"].sort()
+      [
+        " ", ",", ".", "-", "=", "1", "2", "3", "4", "5", "ArrowLeft", "ArrowRight", "Shift+F", "Shift+f", "[", "]",
+        "Shift+0", "Shift+1", "Shift+2", "Shift+3", "Shift+4", "Shift+5", "Shift+)", "Shift+!", "Shift+@", "Shift+#", "Shift+$", "Shift+%",
+        "a", "b", "f", "h", "j", "k", "l", "m", "p", "r", "s", "t", "A", "B", "F", "H", "J", "K", "L", "M", "P", "R", "S", "T"
+      ].sort()
     );
   });
 
-  it("reads a letter typed with Caps Lock as the letter, and Shift with any key but F as no shortcut, ? included, which Firefox takes", () => {
+  it("reads a letter typed with Caps Lock as the letter, and Shift with any key but F and the digits 0 to 5 as no shortcut, ? included, which Firefox takes", () => {
     expect(shortcutFor(press("K"))).toBe("playOrPause");
     expect(shortcutFor(press("f"))).toBe("favorite");
     expect(shortcutFor(press("H"))).toBe("shortcuts");
@@ -91,13 +144,38 @@ describe("shortcutFor", () => {
     ]);
   });
 
+  it("rates by the position of the digit held with Shift, whatever character it gives, and opens no panel tab", () => {
+    // A US keyboard gives the digit's symbol, a French one the digit, and a German one its own symbols.
+    const given: readonly [string, readonly string[]][] = [
+      ["Digit1", ["!", "1"]],
+      ["Digit2", ["@", "2", '"']],
+      ["Digit3", ["#", "3", "§"]],
+      ["Digit4", ["$", "4"]],
+      ["Digit5", ["%", "5"]],
+      ["Digit0", [")", "0", "="]]
+    ];
+    const actions = given.map(([code, keys]) => keys.map((key) => shortcutFor(press(key, { code, shiftKey: true }))));
+    expect(actions).toEqual([
+      ["rate1", "rate1"],
+      ["rate2", "rate2", "rate2"],
+      ["rate3", "rate3", "rate3"],
+      ["rate4", "rate4"],
+      ["rate5", "rate5"],
+      ["clearRating", "clearRating", "clearRating"]
+    ]);
+    expect(actions.flat().some((action) => (PANEL_TABS as readonly (string | null)[]).includes(action))).toBe(false);
+    // Without Shift, the digits still open the tabs, and Shift with the digits past 5 does nothing.
+    expect(["1", "5"].map((key) => shortcutFor(press(key)))).toEqual(["library", "settings"]);
+    expect([press("^", { shiftKey: true }), press("6", { code: "Digit6", shiftKey: true }), press("(", { shiftKey: true })].map(shortcutFor)).toEqual([null, null, null]);
+  });
+
   it("leaves a key the focused element already handled to it", () => {
     expect(shortcutFor(press(" ", { defaultPrevented: true }))).toBeNull();
   });
 
-  it("repeats a held key only to seek, step a frame, or step the volume", () => {
+  it("repeats a held key only to seek, step the rating, step a frame, or step the volume", () => {
     const held = BOUND.filter(([keyPress]) => shortcutFor({ ...keyPress, repeat: true }) !== null).map(([, action]) => action);
-    expect(held).toEqual(["seekBack", "seekForward", "frameBack", "frameForward", "volumeDown", "volumeUp"]);
+    expect(held).toEqual(["seekBack", "seekForward", "ratingDown", "ratingUp", "frameBack", "frameForward", "volumeDown", "volumeUp"]);
   });
 
   it("is no shortcut in a text field, a text area, a dropdown, or editable text", () => {
@@ -191,14 +269,19 @@ function services(options: { open?: boolean; tab?: PanelTab; volumeShown?: boole
       toggle: note("toggle")
     },
     fullscreen: { toggle: note("fullscreen") },
-    settings: { seekStep: signal(10), revealShortcuts: note("revealShortcuts") }
+    settings: { seekStep: signal(10), revealShortcuts: note("revealShortcuts") },
+    rating: { set: note("setRating"), step: note("stepRating") }
   } as unknown as ShortcutServices;
   return { services: shown, calls };
 }
 
 describe("runShortcut", () => {
-  it("does what the player's controls, the panel, and fullscreen do, seeking by the seek step", async () => {
-    const actions: ShortcutAction[] = ["playOrPause", "seekBack", "seekForward", "previous", "next", "random", "favorite", "blacklist", "autoplay", "mute", "frameBack", "frameForward", "volumeDown", "volumeUp", "panel", "fullscreen"];
+  it("does what the player's controls, its rating stars, the panel, and fullscreen do, seeking by the seek step", async () => {
+    const actions: ShortcutAction[] = [
+      "playOrPause", "seekBack", "seekForward", "previous", "next", "random", "favorite", "blacklist",
+      "rate1", "rate2", "rate3", "rate4", "rate5", "clearRating", "ratingDown", "ratingUp",
+      "autoplay", "mute", "frameBack", "frameForward", "volumeDown", "volumeUp", "panel", "fullscreen"
+    ];
     const { services: shown, calls } = services();
     actions.forEach((action) => runShortcut(action, shown));
     expect(calls).toEqual([
@@ -210,6 +293,14 @@ describe("runShortcut", () => {
       "pickRandom",
       "toggleFavorite",
       "toggleBlacklist",
+      'setRating(1, {"byKey":true})',
+      'setRating(2, {"byKey":true})',
+      'setRating(3, {"byKey":true})',
+      'setRating(4, {"byKey":true})',
+      'setRating(5, {"byKey":true})',
+      'setRating(null, {"byKey":true})',
+      "stepRating(-1)",
+      "stepRating(1)",
       "toggleAutoplay",
       'toggleMute({"byKey":true})',
       "stepFrame(-1)",

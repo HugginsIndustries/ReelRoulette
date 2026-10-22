@@ -1,16 +1,29 @@
 import { useRef, useState } from "preact/hooks";
 import { RATING_MAX, ratingAt, ratingForKey, ratingText, starFill } from "../rating/rating";
 
-interface RatingStarsProps {
+interface RatingStarsBaseProps {
   /** The rating set, or null for none, which the slider's value gives through a preview too. */
   rating: number | null;
-  /** The element that names the control. */
-  labelledBy: string;
   /** A press's release or a key sets a rating, or clears it with null. */
   onSet(rating: number | null, byKey: boolean): void;
   /** Focus left the control. */
   onBlur(): void;
 }
+
+/** The control is named by an element on screen, or by its own name where none shows. */
+type RatingStarsProps = RatingStarsBaseProps &
+  (
+    | {
+        /** The element that names the control. */
+        labelledBy: string;
+        label?: never;
+      }
+    | {
+        /** The control's name. */
+        label: string;
+        labelledBy?: never;
+      }
+  );
 
 /**
  * Five stars that show a rating with half stars and set it, a slider from 0 to 5 to screen readers, with one tab stop.
@@ -19,7 +32,7 @@ interface RatingStarsProps {
  * tap the arrow keys still play the previous or next item. While the stars have focus, their keys are their own: the
  * arrows step by half a star, Home, Delete, and Backspace clear the rating, and End is 5 stars.
  */
-export function RatingStars({ rating, labelledBy, onSet, onBlur }: RatingStarsProps) {
+export function RatingStars({ rating, labelledBy, label, onSet, onBlur }: RatingStarsProps) {
   /** A press's value, or a mouse's preview, shown in place of the rating set; undefined while there is none. */
   const [preview, setPreview] = useState<number | null | undefined>(undefined);
   const pressId = useRef<number | null>(null);
@@ -47,6 +60,7 @@ export function RatingStars({ rating, labelledBy, onSet, onBlur }: RatingStarsPr
       role="slider"
       tabIndex={0}
       aria-labelledby={labelledBy}
+      aria-label={label}
       aria-valuemin={0}
       aria-valuemax={RATING_MAX}
       aria-valuenow={rating ?? 0}

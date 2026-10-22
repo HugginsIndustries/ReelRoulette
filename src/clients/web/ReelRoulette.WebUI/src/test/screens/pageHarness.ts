@@ -206,8 +206,11 @@ export class FakeEventSource {
 }
 
 let createdSources: FakeEventSource[] = [];
-/** Unmounts the page the last test mounted, so its connection stops before the next test. */
-let mounted: (() => void) | null = null;
+/**
+ * Unmounts the pages the last test mounted, so their connections stop and their listeners on `document`, such as the
+ * shortcuts', don't take the next test's keys.
+ */
+let mounted: Array<() => void> = [];
 /** Undoes what tests stubbed on shared prototypes and the document, newest first. */
 let restores: Array<() => void> = [];
 
@@ -605,6 +608,102 @@ export function stubStarLayout(): void {
   });
 }
 
+/** The rating `stars` show, in stars, a half-filled star counting as half. */
+export function starsShown(stars: HTMLElement): number {
+  return [...stars.querySelectorAll(".rating-star")].reduce(
+    (shown, star) => shown + (star.classList.contains("is-full") ? 1 : star.classList.contains("is-half") ? 0.5 : 0),
+    0
+  );
+}
+
+/** The stars' slider value and value text, which stay the rating set through a preview. */
+export function sliderValue(stars: HTMLElement): [string | null, string | null] {
+  return [stars.getAttribute("aria-valuenow"), stars.getAttribute("aria-valuetext")];
+}
+
+/**
+ * Where on the stars `stubStarLayout` lays out `stars` is set: a star's right half for a whole star, and its left half
+ * for a half.
+ */
+export function xFor(stars: number): number {
+  return STARS_LEFT + STAR_WIDTH * (Math.ceil(stars) - 1) + (Number.isInteger(stars) ? 27 : 13);
+}
+/** On the first star's left edge, which clears the rating. */
+export const CLEAR_EDGE_X = STARS_LEFT + 4;
+export const PAST_RIGHT_X = STARS_LEFT + STAR_WIDTH * 5 + 20;
+export const PAST_LEFT_X = STARS_LEFT - 30;
+
+export type StarPointer = "mouse" | "touch";
+
+/** Sends `mousedown` on the stars, which moves focus to them unless it is cancelled, as a browser does. */
+function mouseDownOnStars(stars: HTMLElement, x: number): void {
+  if (fireEvent.mouseDown(stars, { button: 0, clientX: x })) {
+    stars.focus();
+  }
+}
+
+/** Presses on the stars at `x` and holds. A mouse's `mousedown` comes with its press. */
+export async function pressStars(stars: HTMLElement, x: number, pointer: StarPointer): Promise<void> {
+  fireEvent.pointerDown(stars, { pointerId: 1, pointerType: pointer, button: 0, clientX: x });
+  if (pointer === "mouse") mouseDownOnStars(stars, x);
+  await settle();
+}
+
+/** Moves the pointer over the stars to `x`, pressed or not. */
+export async function movePointer(stars: HTMLElement, x: number, pointer: StarPointer): Promise<void> {
+  fireEvent.pointerMove(stars, { pointerId: 1, pointerType: pointer, clientX: x });
+  await settle();
+}
+
+/** Lets go at `x`, as a drag ends, which a touch screen sends no mouse events for. */
+export async function releasePointer(stars: HTMLElement, x: number, pointer: StarPointer): Promise<void> {
+  fireEvent.pointerUp(stars, { pointerId: 1, pointerType: pointer, button: 0, clientX: x });
+  if (pointer === "mouse") fireEvent.mouseUp(stars, { button: 0, clientX: x });
+  await settle();
+}
+
+/**
+ * A click or a tap on the stars at `x`, in the order a browser sends its events: a tap's pointer leaves as it lifts,
+ * and its `mousedown` comes after that, each `mousedown` moving focus to the stars unless it is cancelled.
+ */
+export async function tapStars(stars: HTMLElement, x: number, pointer: StarPointer = "mouse"): Promise<void> {
+  const init = { pointerId: 1, pointerType: pointer, button: 0, clientX: x };
+  fireEvent.pointerDown(stars, init);
+  if (pointer === "mouse") mouseDownOnStars(stars, x);
+  fireEvent.pointerUp(stars, init);
+  if (pointer === "touch") {
+    fireEvent.pointerLeave(stars, init);
+    mouseDownOnStars(stars, x);
+  }
+  fireEvent.mouseUp(stars, { button: 0, clientX: x });
+  fireEvent.click(stars, { button: 0, clientX: x });
+  await settle();
+}
+
+/** Presses `key` on the stars. */
+export async function pressRatingKey(stars: HTMLElement, key: string): Promise<void> {
+  fireEvent.keyDown(stars, { key });
+  fireEvent.keyUp(stars, { key });
+  await settle();
+}
+
+/** The popups showing, each as its text and second line, leaving out any that are fading out. */
+export function popupsShown(): string[] {
+  return [...document.querySelectorAll<HTMLElement>("#toasts .toast:not(.is-leaving)")].map((toast) =>
+    [...toast.querySelectorAll(".toast-text > div")].map((line) => line.textContent).join(" | ")
+  );
+}
+
+/** The rating requests' bodies, in order. */
+export function ratingRequests(server: FakeServer): unknown[] {
+  return server.requests("POST", "/api/rating").map((call) => call.body);
+}
+
+/** The server's answer to a rating request, as it answers one it takes. */
+export function ratingAnswer(call: FetchCall): Response {
+  return json({ itemId: call.body?.itemId, rating: call.body?.rating ?? null, revision: 9 });
+}
+
 /**
  * Makes `element` a list that scrolls, as happy-dom lays none out: `height` pixels tall from `top` in the window,
  * holding `content` pixels. Its `overflow-y` is set on it, since happy-dom's computed style doesn't take it from the
@@ -815,8 +914,10 @@ export interface MountOptions {
  * their own page's client id, and storage is cleared so each page gets a new one.
  */
 export function resetPage(userAgent = DESKTOP_USER_AGENT): void {
-  mounted?.();
-  mounted = null;
+  for (const dispose of mounted) {
+    dispose();
+  }
+  mounted = [];
   for (const restore of restores.reverse()) {
     restore();
   }
@@ -859,7 +960,7 @@ export function mountPage(options: MountOptions = {}): MountedPage {
   document.body.appendChild(root);
   const config: RuntimeConfig = { apiBaseUrl: API_BASE_URL, sseUrl: SSE_URL, ...options.config };
   const dispose = renderApp(root, config);
-  mounted = dispose;
+  mounted.push(dispose);
 
   const clientId = () => localStorage.getItem("rr_clientId") ?? "";
   const sessionId = () => sessionStorage.getItem("rr_sessionId") ?? "";

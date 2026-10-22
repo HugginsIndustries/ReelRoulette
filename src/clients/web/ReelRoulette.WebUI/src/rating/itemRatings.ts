@@ -33,6 +33,11 @@ export interface ItemRatings {
   set(item: RatedItem, rating: number | null, options: { byKey: boolean }): void;
   /** Sends a key's change still waiting, as when focus leaves the control. */
   send(): void;
+  /**
+   * Takes the playing item's rating as a new read gives it, such as a history step's play answer, so a change made
+   * while the item wasn't playing shows, though this device no longer keeps it, as after a resync.
+   */
+  takeRead(itemId: string, rating: number | null): void;
 }
 
 export interface ItemRatingsOptions {
@@ -80,6 +85,23 @@ export function createItemRatings(options: ItemRatingsOptions): ItemRatings {
     changes.value += 1;
   }
 
+  /**
+   * Keeps the rating the server answered or an event brought. On the playing item it also becomes the item's read, as
+   * its favorite does, so the player keeps showing it through a resync, which no read of the player's own follows.
+   */
+  function keepConfirmed(itemId: string, rating: number | null): void {
+    confirmed.set(itemId, rating);
+    keepRead(itemId, rating);
+  }
+
+  /** Makes `rating` the playing item's read, when `itemId` plays. */
+  function keepRead(itemId: string, rating: number | null): void {
+    const playing = store.current.peek();
+    if (playing?.itemId === itemId) {
+      playing.rating = rating;
+    }
+  }
+
   function send(): void {
     clearTimeout(pauseTimer);
     const change = waiting;
@@ -103,7 +125,7 @@ export function createItemRatings(options: ItemRatingsOptions): ItemRatings {
       api.post("/api/rating", { itemId: change.itemId, rating: change.rating, clientId: store.identity.clientId })
     );
     if (taken) {
-      confirmed.set(change.itemId, change.rating);
+      keepConfirmed(change.itemId, change.rating);
     }
     if (sending.get(change.itemId)?.request === request) {
       sending.delete(change.itemId);
@@ -118,7 +140,7 @@ export function createItemRatings(options: ItemRatingsOptions): ItemRatings {
     const itemId = payload?.itemId;
     if (!payload || !itemId) return;
     const rating = parseRating(payload.rating);
-    confirmed.set(itemId, rating);
+    keepConfirmed(itemId, rating);
     changed();
     // This device's own change already said so, as Your actions. An event without a client id counts as another
     // device's. Its own key keeps it from replacing another device's favorite popup for the same file.
@@ -171,6 +193,10 @@ export function createItemRatings(options: ItemRatingsOptions): ItemRatings {
         send();
       }
     },
-    send
+    send,
+    takeRead(itemId, rating) {
+      keepRead(itemId, rating);
+      changed();
+    }
   };
 }

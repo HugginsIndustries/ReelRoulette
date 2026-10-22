@@ -2,11 +2,14 @@ import { useLayoutEffect, useRef } from "preact/hooks";
 import { timeAgo, type NotificationEntry, type Popup } from "../notifications/notifications";
 import { activeLastingStates, lastingStateText } from "../state/lastingStates";
 import { useApp } from "./appContext";
+import { useLightDismiss } from "./LightDismiss";
 
 /** How far a swipe on a touch screen has to go, to either side, to close a popup. */
 const SWIPE_CLOSE_PX = 64;
 /** Over how far a swipe fades a popup, down to a fifth of its opacity. */
 const SWIPE_FADE_PX = 220;
+
+const BELL_CLASS = "overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn notify-btn";
 
 function bell(): HTMLElement | null {
   return document.getElementById("notify-btn");
@@ -18,8 +21,9 @@ function listTitle(): HTMLElement | null {
 
 /**
  * The player's bell, at its top left with its other controls, so it shows and hides with them. Its badge counts the
- * one-off messages that didn't pop up since the list was last open. A press opens the list under it, or closes the
- * list and keeps focus on the bell; the controls stop the press from reaching the player, so it starts no random pick.
+ * one-off messages that didn't pop up since the list was last open, and the bell is orange while there are any, as it
+ * is while its list is open. A press opens the list under it, or closes the list and keeps focus on the bell; the
+ * controls stop the press from reaching the player, so it starts no random pick.
  */
 export function NotifyButton() {
   const { notifications } = useApp();
@@ -38,7 +42,7 @@ export function NotifyButton() {
   }
 
   return (
-    <button id="notify-btn" type="button" class="overlay-btn icon-glyph-base icon-glyph-button overlay-corner-btn notify-btn" aria-label={label} title={label} aria-expanded={open ? "true" : "false"} aria-controls="notify-list" onClick={onClick}>
+    <button id="notify-btn" type="button" class={unread > 0 ? `${BELL_CLASS} has-unread` : BELL_CLASS} aria-label={label} title={label} aria-expanded={open ? "true" : "false"} aria-controls="notify-list" onClick={onClick}>
       <span class="material-symbol-icon">notifications</span>
       <span class="notify-badge" hidden={unread === 0}>{unread > 9 ? "9+" : String(unread)}</span>
     </button>
@@ -212,34 +216,24 @@ export function NotificationList() {
     }
   }, [open]);
 
-  useLayoutEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !notifications.listOpen.peek() || document.querySelector("dialog[open]")) return;
-      event.preventDefault();
-      event.stopPropagation();
-      // Escape leaves focus on the page, as a key that closes the panel does, so Space plays or pauses afterwards.
+  useLightDismiss({
+    open: notifications.listOpen,
+    keepsOpen: (target) => !!target && (!!list.current?.contains(target) || !!bell()?.contains(target)),
+    onPressOutside: notifications.closeList,
+    // Escape leaves focus on the page, as a key that closes the panel does, so Space plays or pauses afterwards.
+    onEscape() {
       const focused = document.activeElement as HTMLElement | null;
       notifications.closeList();
       if (focused && (list.current?.contains(focused) || bell()?.contains(focused))) focused.blur();
-    };
-    // A press outside leaves focus where it puts it.
-    const onPointerDown = (event: PointerEvent) => {
-      if (!notifications.listOpen.peek()) return;
-      const target = event.target as Node | null;
-      if (target && (list.current?.contains(target) || bell()?.contains(target))) return;
-      notifications.closeList();
-    };
+    }
+  });
+
+  useLayoutEffect(() => {
     const onResize = () => {
       if (notifications.listOpen.peek()) place();
     };
-    document.addEventListener("keydown", onKeyDown, true);
-    document.addEventListener("pointerdown", onPointerDown, true);
     window.addEventListener("resize", onResize);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown, true);
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("resize", onResize);
-    };
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   function close(): void {

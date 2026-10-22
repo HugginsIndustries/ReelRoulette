@@ -123,6 +123,7 @@ These need a person, real devices, or the Windows VM.
 - [ ] Restarting the server while a video plays on the phone keeps it playing from where it was, with no message, and so does a second restart in the same video.
 - [ ] On the iPad and an Android phone, setting half-star ratings by tapping each half and by dragging, and clearing one by tapping the first star's left edge, works, and a second device shows each change with its Other devices popup.
 - [ ] In a desktop browser, hovering the stars previews the rating in place of the set one, which shows again when the pointer leaves, and a click sets it.
+- [ ] On the iPad and an Android phone in both orientations, and in a desktop browser, the player's star shows the playing item's rating in its badge, and its popover sets one by touch or click and closes.
 
 ## Release Flow
 

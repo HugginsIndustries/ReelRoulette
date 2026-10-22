@@ -252,7 +252,8 @@ function setup(
     volumeReadOnly: false,
     activation: new EventTarget()
   });
-  const player = createPlayer({ apiBaseUrl: "http://server/", store, audio: audioStandIn ?? audio, api, connection, dialogs, notifications, frames });
+  const ratings = { takeRead: () => {} };
+  const player = createPlayer({ apiBaseUrl: "http://server/", store, audio: audioStandIn ?? audio, api, connection, dialogs, notifications, ratings, frames });
   const elements = {
     video: options.frameTimings ? withFrameTimings(fakeVideo()) : fakeVideo(),
     photo: fakePhoto(),

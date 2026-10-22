@@ -2,21 +2,34 @@
 import { fireEvent, screen, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  CLEAR_EDGE_X,
   COMPATIBLE_VERSION,
   currentStyle,
   FakeServer,
   json,
   mountPage,
+  movePointer,
   openNotices,
   pageReady,
+  PAST_LEFT_X,
+  PAST_RIGHT_X,
+  popupsShown,
+  pressRatingKey,
+  pressStars,
+  ratingAnswer,
+  ratingRequests,
+  releasePointer,
   REQUIRED_CAPABILITIES,
   resetPage,
   settle,
-  STAR_WIDTH,
+  sliderValue,
   STARS_LEFT,
+  starsShown,
   status,
   stubStarLayout,
+  tapStars,
   useStylesheet,
+  xFor,
   type FetchCall,
   type MountedPage
 } from "./pageHarness";
@@ -612,13 +625,6 @@ function pathButton(name: string): HTMLButtonElement | null {
   return [...statsBody().querySelectorAll<HTMLButtonElement>(".stats-path button")].find((button) => button.getAttribute("aria-label") === name) ?? null;
 }
 
-/** The popups showing, each as its text and second line, leaving out any that are fading out. */
-function popupsShown(): string[] {
-  return [...document.querySelectorAll<HTMLElement>("#toasts .toast:not(.is-leaving)")].map((toast) =>
-    [...toast.querySelectorAll(".toast-text > div")].map((line) => line.textContent).join(" | ")
-  );
-}
-
 /** Whether any line the page relayed names the file or its path. */
 function relayedFile(server: FakeServer): boolean {
   return server.logLines().some((line) => line.includes("holiday clip") || line.includes("C:\\media"));
@@ -785,93 +791,6 @@ function ratingStars(): HTMLElement | null {
   return statsBody().querySelector<HTMLElement>(".rating");
 }
 
-/** The rating the stars show, in stars, a half-filled star counting as half. */
-function starsShown(): number {
-  return [...ratingStars()!.querySelectorAll(".rating-star")].reduce(
-    (stars, star) => stars + (star.classList.contains("is-full") ? 1 : star.classList.contains("is-half") ? 0.5 : 0),
-    0
-  );
-}
-
-/** The slider's value and value text, which stay the rating set through a preview. */
-function sliderValue(): [string | null, string | null] {
-  const stars = ratingStars()!;
-  return [stars.getAttribute("aria-valuenow"), stars.getAttribute("aria-valuetext")];
-}
-
-/** Where on the laid-out stars `stars` is set: a star's right half for a whole star, and its left half for a half. */
-function xFor(stars: number): number {
-  return STARS_LEFT + STAR_WIDTH * (Math.ceil(stars) - 1) + (Number.isInteger(stars) ? 27 : 13);
-}
-/** On the first star's left edge, which clears the rating. */
-const CLEAR_EDGE_X = STARS_LEFT + 4;
-const PAST_RIGHT_X = STARS_LEFT + STAR_WIDTH * 5 + 20;
-const PAST_LEFT_X = STARS_LEFT - 30;
-
-type Pointer = "mouse" | "touch";
-
-/** Sends `mousedown` on the stars, which moves focus to them unless it is cancelled, as a browser does. */
-function mouseDownOnStars(x: number): void {
-  const stars = ratingStars()!;
-  if (fireEvent.mouseDown(stars, { button: 0, clientX: x })) {
-    stars.focus();
-  }
-}
-
-/** Presses on the stars at `x` and holds. A mouse's `mousedown` comes with its press. */
-async function pressStars(x: number, pointer: Pointer): Promise<void> {
-  fireEvent.pointerDown(ratingStars()!, { pointerId: 1, pointerType: pointer, button: 0, clientX: x });
-  if (pointer === "mouse") mouseDownOnStars(x);
-  await settle();
-}
-
-async function movePointer(x: number, pointer: Pointer): Promise<void> {
-  fireEvent.pointerMove(ratingStars()!, { pointerId: 1, pointerType: pointer, clientX: x });
-  await settle();
-}
-
-/** Lets go at `x`, as a drag ends, which a touch screen sends no mouse events for. */
-async function releasePointer(x: number, pointer: Pointer): Promise<void> {
-  fireEvent.pointerUp(ratingStars()!, { pointerId: 1, pointerType: pointer, button: 0, clientX: x });
-  if (pointer === "mouse") fireEvent.mouseUp(ratingStars()!, { button: 0, clientX: x });
-  await settle();
-}
-
-/**
- * A click or a tap on the stars at `x`, in the order a browser sends its events: a tap's pointer leaves as it lifts,
- * and its `mousedown` comes after that, each `mousedown` moving focus to the stars unless it is cancelled.
- */
-async function tapStars(x: number, pointer: Pointer = "mouse"): Promise<void> {
-  const stars = ratingStars()!;
-  const init = { pointerId: 1, pointerType: pointer, button: 0, clientX: x };
-  fireEvent.pointerDown(stars, init);
-  if (pointer === "mouse") mouseDownOnStars(x);
-  fireEvent.pointerUp(stars, init);
-  if (pointer === "touch") {
-    fireEvent.pointerLeave(stars, init);
-    mouseDownOnStars(x);
-  }
-  fireEvent.mouseUp(stars, { button: 0, clientX: x });
-  fireEvent.click(stars, { button: 0, clientX: x });
-  await settle();
-}
-
-async function pressRatingKey(key: string): Promise<void> {
-  fireEvent.keyDown(ratingStars()!, { key });
-  fireEvent.keyUp(ratingStars()!, { key });
-  await settle();
-}
-
-/** The rating requests' bodies, in order. */
-function ratingRequests(server: FakeServer): unknown[] {
-  return server.requests("POST", "/api/rating").map((call) => call.body);
-}
-
-/** The server's answer to a rating request, as it answers one it takes. */
-function ratingAnswer(call: FetchCall): Response {
-  return json({ itemId: call.body?.itemId, rating: call.body?.rating ?? null, revision: 9 });
-}
-
 /**
  * Plays the video, whose read gives it `rating`, with its stars laid out, and opens the Stats tab on it, with the server
  * taking ratings as `reply` answers them.
@@ -904,8 +823,8 @@ describe("Stats tab's rating", () => {
     const stars = screen.getByRole("slider", { name: "Rating" });
     expect(stars).toBe(ratingStars());
     expect([stars.getAttribute("aria-valuemin"), stars.getAttribute("aria-valuemax"), stars.tabIndex]).toEqual(["0", "5", 0]);
-    expect(sliderValue()).toEqual(["3.5", "3.5 stars"]);
-    expect(starsShown()).toBe(3.5);
+    expect(sliderValue(ratingStars()!)).toEqual(["3.5", "3.5 stars"]);
+    expect(starsShown(ratingStars()!)).toBe(3.5);
     const line = stars.closest(".stats-rating")!;
     expect(line.previousElementSibling?.classList.contains("stats-path")).toBe(true);
     expect(line.nextElementSibling?.matches("dl.stats-table")).toBe(true);
@@ -913,24 +832,24 @@ describe("Stats tab's rating", () => {
 
     resetPage();
     await openRated(null);
-    expect(sliderValue()).toEqual(["0", "Not rated"]);
-    expect(starsShown()).toBe(0);
+    expect(sliderValue(ratingStars()!)).toEqual(["0", "Not rated"]);
+    expect(starsShown(ratingStars()!)).toBe(0);
   });
 
   it("sets half a star less or the whole star on a click or tap on a star's left or right half, and clears it on the first star's left edge", async () => {
     const { page, server } = await openRated(null);
 
-    await tapStars(xFor(3), "mouse");
-    expect(sliderValue()).toEqual(["3", "3 stars"]);
+    await tapStars(ratingStars()!, xFor(3), "mouse");
+    expect(sliderValue(ratingStars()!)).toEqual(["3", "3 stars"]);
     await waitFor(() => expect(popupsShown()).toEqual(["Rated 3 stars | holiday clip.mp4"]));
 
     // A second rating's popup replaces the first.
-    await tapStars(xFor(1.5), "touch");
-    expect(sliderValue()).toEqual(["1.5", "1.5 stars"]);
+    await tapStars(ratingStars()!, xFor(1.5), "touch");
+    expect(sliderValue(ratingStars()!)).toEqual(["1.5", "1.5 stars"]);
     await waitFor(() => expect(popupsShown()).toEqual(["Rated 1.5 stars | holiday clip.mp4"]));
 
-    await tapStars(CLEAR_EDGE_X, "touch");
-    expect(sliderValue()).toEqual(["0", "Not rated"]);
+    await tapStars(ratingStars()!, CLEAR_EDGE_X, "touch");
+    expect(sliderValue(ratingStars()!)).toEqual(["0", "Not rated"]);
     await waitFor(() => expect(popupsShown()).toEqual(["Rating cleared | holiday clip.mp4"]));
 
     expect(ratingRequests(server)).toEqual([
@@ -954,27 +873,27 @@ describe("Stats tab's rating", () => {
     await wait(600);
 
     expect(ratingRequests(server)).toEqual([]);
-    expect(sliderValue()).toEqual(["2", "2 stars"]);
+    expect(sliderValue(ratingStars()!)).toEqual(["2", "2 stars"]);
   });
 
   it("shows a press's value as it drags, without changing the slider's value, and sets it on release, 5 stars past the right end", async () => {
     const { server } = await openRated(2);
 
-    await pressStars(xFor(1), "touch");
-    expect(starsShown()).toBe(1);
-    await movePointer(xFor(4.5), "touch");
-    expect(starsShown()).toBe(4.5);
-    expect(sliderValue()).toEqual(["2", "2 stars"]);
+    await pressStars(ratingStars()!, xFor(1), "touch");
+    expect(starsShown(ratingStars()!)).toBe(1);
+    await movePointer(ratingStars()!, xFor(4.5), "touch");
+    expect(starsShown(ratingStars()!)).toBe(4.5);
+    expect(sliderValue(ratingStars()!)).toEqual(["2", "2 stars"]);
     expect(ratingRequests(server)).toEqual([]);
-    await releasePointer(xFor(4), "touch");
-    expect(sliderValue()).toEqual(["4", "4 stars"]);
+    await releasePointer(ratingStars()!, xFor(4), "touch");
+    expect(sliderValue(ratingStars()!)).toEqual(["4", "4 stars"]);
     await waitFor(() => expect(ratingRequests(server)).toHaveLength(1));
 
-    await pressStars(xFor(2), "mouse");
-    await movePointer(PAST_RIGHT_X, "mouse");
-    expect(starsShown()).toBe(5);
-    await releasePointer(PAST_RIGHT_X, "mouse");
-    expect(sliderValue()).toEqual(["5", "5 stars"]);
+    await pressStars(ratingStars()!, xFor(2), "mouse");
+    await movePointer(ratingStars()!, PAST_RIGHT_X, "mouse");
+    expect(starsShown(ratingStars()!)).toBe(5);
+    await releasePointer(ratingStars()!, PAST_RIGHT_X, "mouse");
+    expect(sliderValue(ratingStars()!)).toEqual(["5", "5 stars"]);
     await waitFor(() => expect(ratingRequests(server).map((body) => (body as { rating: unknown }).rating)).toEqual([4, 5]));
   });
 
@@ -984,45 +903,45 @@ describe("Stats tab's rating", () => {
   ])("clears the rating for a drag that ends %s", async (_, x) => {
     const { server } = await openRated(3);
 
-    await pressStars(xFor(3), "touch");
-    await movePointer(x, "touch");
-    expect(starsShown()).toBe(0);
-    await releasePointer(x, "touch");
+    await pressStars(ratingStars()!, xFor(3), "touch");
+    await movePointer(ratingStars()!, x, "touch");
+    expect(starsShown(ratingStars()!)).toBe(0);
+    await releasePointer(ratingStars()!, x, "touch");
 
-    expect(sliderValue()).toEqual(["0", "Not rated"]);
+    expect(sliderValue(ratingStars()!)).toEqual(["0", "Not rated"]);
     await waitFor(() => expect(ratingRequests(server).map((body) => (body as { rating: unknown }).rating)).toEqual([null]));
   });
 
   it("sets nothing for a press the browser cancels", async () => {
     const { server } = await openRated(2);
 
-    await pressStars(xFor(1), "touch");
-    await movePointer(xFor(4), "touch");
+    await pressStars(ratingStars()!, xFor(1), "touch");
+    await movePointer(ratingStars()!, xFor(4), "touch");
     fireEvent.pointerCancel(ratingStars()!, { pointerId: 1, pointerType: "touch" });
     await settle();
     await wait(600);
 
-    expect(starsShown()).toBe(2);
+    expect(starsShown(ratingStars()!)).toBe(2);
     expect(ratingRequests(server)).toEqual([]);
   });
 
   it("previews the value under a mouse, none on the first star's left edge, without changing the slider's value, and shows the rating set once it leaves", async () => {
     const { server } = await openRated(2);
 
-    await movePointer(xFor(4), "mouse");
-    expect(starsShown()).toBe(4);
-    await movePointer(xFor(3.5), "mouse");
-    expect(starsShown()).toBe(3.5);
-    await movePointer(CLEAR_EDGE_X, "mouse");
-    expect(starsShown()).toBe(0);
-    expect(sliderValue()).toEqual(["2", "2 stars"]);
+    await movePointer(ratingStars()!, xFor(4), "mouse");
+    expect(starsShown(ratingStars()!)).toBe(4);
+    await movePointer(ratingStars()!, xFor(3.5), "mouse");
+    expect(starsShown(ratingStars()!)).toBe(3.5);
+    await movePointer(ratingStars()!, CLEAR_EDGE_X, "mouse");
+    expect(starsShown(ratingStars()!)).toBe(0);
+    expect(sliderValue(ratingStars()!)).toEqual(["2", "2 stars"]);
     fireEvent.pointerLeave(ratingStars()!, { pointerId: 1, pointerType: "mouse" });
     await settle();
-    expect(starsShown()).toBe(2);
+    expect(starsShown(ratingStars()!)).toBe(2);
 
     // A finger that isn't pressed previews nothing.
-    await movePointer(xFor(5), "touch");
-    expect(starsShown()).toBe(2);
+    await movePointer(ratingStars()!, xFor(5), "touch");
+    expect(starsShown(ratingStars()!)).toBe(2);
     expect(ratingRequests(server)).toEqual([]);
   });
 
@@ -1045,8 +964,8 @@ describe("Stats tab's rating", () => {
       ["Backspace", "Not rated"]
     ];
     for (const [key, text] of steps) {
-      await pressRatingKey(key);
-      expect(sliderValue()[1]).toBe(text);
+      await pressRatingKey(ratingStars()!, key);
+      expect(sliderValue(ratingStars()!)[1]).toBe(text);
     }
   });
 
@@ -1055,16 +974,16 @@ describe("Stats tab's rating", () => {
     ratingStars()!.focus();
 
     for (let i = 0; i < 6; i++) {
-      await pressRatingKey("ArrowRight");
+      await pressRatingKey(ratingStars()!, "ArrowRight");
     }
-    expect(sliderValue()).toEqual(["4", "4 stars"]);
+    expect(sliderValue(ratingStars()!)).toEqual(["4", "4 stars"]);
     expect(ratingRequests(server)).toEqual([]);
     await wait(600);
     expect(ratingRequests(server)).toEqual([{ itemId: "item-video", rating: 4, clientId: page.clientId() }]);
     await waitFor(() => expect(popupsShown()).toEqual(["Rated 4 stars | holiday clip.mp4"]));
 
-    await pressRatingKey("End");
-    await pressRatingKey("ArrowLeft");
+    await pressRatingKey(ratingStars()!, "End");
+    await pressRatingKey(ratingStars()!, "ArrowLeft");
     ratingStars()!.blur();
     await settle();
     expect(ratingRequests(server).map((body) => (body as { rating: unknown }).rating)).toEqual([4, 4.5]);
@@ -1075,7 +994,7 @@ describe("Stats tab's rating", () => {
   it("sends nothing once the page closes, not even a rating the keys were waiting to send", async () => {
     const { page, server } = await openRated(2);
     ratingStars()!.focus();
-    await pressRatingKey("ArrowRight");
+    await pressRatingKey(ratingStars()!, "ArrowRight");
 
     page.unmount();
     await wait(600);
@@ -1086,22 +1005,22 @@ describe("Stats tab's rating", () => {
   it("sends nothing and pops up nothing for the rating the file already has", async () => {
     const { server } = await openRated(3);
 
-    await tapStars(xFor(3), "mouse");
-    await tapStars(xFor(3), "touch");
+    await tapStars(ratingStars()!, xFor(3), "mouse");
+    await tapStars(ratingStars()!, xFor(3), "touch");
     ratingStars()!.focus();
-    await pressRatingKey("ArrowRight");
-    await pressRatingKey("ArrowLeft");
+    await pressRatingKey(ratingStars()!, "ArrowRight");
+    await pressRatingKey(ratingStars()!, "ArrowLeft");
     await wait(600);
 
     expect(ratingRequests(server)).toEqual([]);
     expect(popupsShown()).toEqual([]);
-    expect(sliderValue()).toEqual(["3", "3 stars"]);
+    expect(sliderValue(ratingStars()!)).toEqual(["3", "3 stars"]);
   });
 
   it("sends a rating to the file it was set on as soon as another file plays", async () => {
     const { page, server } = await openRated(2, { items: [itemRow(VIDEO, { rating: 2 }), itemRow(OTHER_VIDEO)], picks: [VIDEO, OTHER_VIDEO] });
     ratingStars()!.focus();
-    await pressRatingKey("ArrowRight");
+    await pressRatingKey(ratingStars()!, "ArrowRight");
 
     await playNext(OTHER_VIDEO);
     await waitFor(() => expect(ratingRequests(server)).toHaveLength(1));
@@ -1117,21 +1036,21 @@ describe("Stats tab's rating", () => {
     let answer: (response: Response) => void = () => {};
     const { server } = await openRated(2, { reply: () => new Promise<Response>((resolve) => (answer = resolve)) });
 
-    await tapStars(xFor(4), "touch");
-    expect(sliderValue()).toEqual(["4", "4 stars"]);
+    await tapStars(ratingStars()!, xFor(4), "touch");
+    expect(sliderValue(ratingStars()!)).toEqual(["4", "4 stars"]);
     await waitFor(() => expect(ratingRequests(server)).toHaveLength(1));
     answer(status(500));
     await waitFor(() => expect(openNotices()).toEqual(["Rating update failed."]));
-    expect(sliderValue()).toEqual(["2", "2 stars"]);
+    expect(sliderValue(ratingStars()!)).toEqual(["2", "2 stars"]);
     fireEvent.click(document.querySelector("dialog.app-dialog .dialog-actions button")!);
     await settle();
 
     server.on("POST", "/api/rating", () => {
       throw new TypeError("Failed to fetch");
     });
-    await tapStars(xFor(3), "mouse");
+    await tapStars(ratingStars()!, xFor(3), "mouse");
     await waitFor(() => expect(openNotices()).toEqual(["Rating update failed: Couldn't reach the server."]));
-    expect(sliderValue()).toEqual(["2", "2 stars"]);
+    expect(sliderValue(ratingStars()!)).toEqual(["2", "2 stars"]);
     expect(popupsShown()).toEqual([]);
     expect(server.logLines().some((line) => line.startsWith("status=Rating update failed (HTTP 500)."))).toBe(true);
   });
@@ -1146,25 +1065,25 @@ describe("Stats tab's rating", () => {
     server.on("GET", "/api/library/stats", () => json({ ...STATS, global: { ...STATS.global, rated: 13 } }));
     emit(page, "itemRatingChanged", { itemId: "item-video", path: VIDEO.id, rating: 4.5, previousRating: 2, clientId: "another-client" });
     await settle();
-    expect(sliderValue()).toEqual(["4.5", "4.5 stars"]);
+    expect(sliderValue(ratingStars()!)).toEqual(["4.5", "4.5 stars"]);
     expect(statsLoads()).toBe(loads);
 
     await waitFor(() => expect(cards()).toContainEqual(["Rated", "13"]));
-    expect(sliderValue()).toEqual(["4.5", "4.5 stars"]);
+    expect(sliderValue(ratingStars()!)).toEqual(["4.5", "4.5 stars"]);
   });
 
   it("keeps a rating the keys set until it is sent, through another device's change", async () => {
     const { page, server } = await openRated(2);
     ratingStars()!.focus();
-    await pressRatingKey("ArrowRight");
+    await pressRatingKey(ratingStars()!, "ArrowRight");
 
     emit(page, "itemRatingChanged", { itemId: "item-video", path: VIDEO.id, rating: 4, previousRating: 2, clientId: "another-client" });
     await settle();
-    expect(sliderValue()).toEqual(["2.5", "2.5 stars"]);
+    expect(sliderValue(ratingStars()!)).toEqual(["2.5", "2.5 stars"]);
 
     await waitFor(() => expect(ratingRequests(server)).toHaveLength(1));
     await settle();
-    expect(sliderValue()).toEqual(["2.5", "2.5 stars"]);
+    expect(sliderValue(ratingStars()!)).toEqual(["2.5", "2.5 stars"]);
   });
 
   it("keeps focus on the stars while the tab loads again", async () => {
@@ -1177,6 +1096,48 @@ describe("Stats tab's rating", () => {
     await settle();
 
     expect(document.activeElement).toBe(ratingStars());
+  });
+
+  it("draws empty stars in the panel's text color, white in the Dark theme and dark in the Light theme", async () => {
+    useStylesheet();
+    await openRated(1);
+    const empty = ratingStars()!.querySelectorAll<HTMLElement>(".rating-star")[4]!;
+    const root = document.documentElement;
+
+    for (const [theme, color] of [
+      ["theme-dark", "#e0e0e0"],
+      ["theme-light", "#1a1d21"]
+    ]) {
+      root.classList.remove("theme-dark", "theme-light");
+      root.classList.add(theme!);
+      expect(currentStyle(root).getPropertyValue("--page-fg").trim()).toBe(color);
+      expect([theme, currentStyle(empty).color]).toEqual([theme, color]);
+    }
+  });
+
+  it("shows a rating set on its stars on the player's star at once, and one set in the player's popover on its stars", async () => {
+    const { page, server } = await openRated(2);
+    const star = document.getElementById("rating-btn")!;
+
+    await tapStars(ratingStars()!, xFor(3), "mouse");
+    expect(star.getAttribute("aria-label")).toBe("Rating, 3 stars");
+    ratingStars()!.focus();
+    await pressRatingKey(ratingStars()!, "ArrowRight");
+    expect(star.getAttribute("aria-label")).toBe("Rating, 3.5 stars");
+    expect(ratingRequests(server)).toHaveLength(1);
+
+    fireEvent.pointerDown(star, { pointerType: "mouse", button: 0 });
+    fireEvent.click(star);
+    await settle();
+    const popoverStars = document.querySelector<HTMLElement>("#rating-popover .rating")!;
+    expect(sliderValue(popoverStars)).toEqual(["3.5", "3.5 stars"]);
+    await tapStars(popoverStars, xFor(1), "mouse");
+    expect(sliderValue(ratingStars()!)).toEqual(["1", "1 star"]);
+    await waitFor(() => expect(popupsShown()).toEqual(["Rated 1 star | holiday clip.mp4"]));
+    expect(ratingRequests(server)).toEqual([
+      { itemId: "item-video", rating: 3, clientId: page.clientId() },
+      { itemId: "item-video", rating: 1, clientId: page.clientId() }
+    ]);
   });
 
   it("keeps a touch that starts on the stars their own, so it never scrolls the tab", async () => {

@@ -51,6 +51,11 @@ exports[`page structure > keeps the starting markup 1`] = `
             <span class="material-symbol-icon">
               "right_panel_open"
             <span class="unsaved-dot" hidden="">
+          <button aria-controls="rating-popover" aria-expanded="false" aria-label="Rating" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" id="rating-btn" title="Rating" type="button">
+            <span class="material-symbol-icon">
+              "star"
+            <span aria-hidden="true" class="rating-badge" hidden="">
+          <div class="rating-popover" hidden="" id="rating-popover">
           <button aria-label="Favorite" class="overlay-btn icon-glyph-base icon-glyph-toggle overlay-toggle overlay-corner-btn" id="favorite-btn" title="Favorite">
             <span class="material-symbol-icon">
               "favorite"
@@ -818,6 +823,27 @@ exports[`page structure > keeps the starting markup 1`] = `
                     "Blacklist"
                   <dt>
                     <kbd>
+                      "Shift+1"
+                    "–"
+                    <kbd>
+                      "Shift+5"
+                  <dd>
+                    "Rate 1 to 5 stars"
+                  <dt>
+                    <kbd>
+                      "Shift+0"
+                  <dd>
+                    "Clear the rating"
+                  <dt>
+                    <kbd>
+                      "-"
+                    "/"
+                    <kbd>
+                      "="
+                  <dd>
+                    "Rating down or up by half a star"
+                  <dt>
+                    <kbd>
                       "A"
                   <dd>
                     "Autoplay on or off"
@@ -879,7 +905,7 @@ exports[`page structure > keeps the starting markup 1`] = `
                     <kbd>
                       "Esc"
                   <dd>
-                    "Close the top dialog, the notifications list, or the panel, or leave fullscreen"
+                    "Close the top dialog, the notifications list, the rating stars, or the panel, or leave fullscreen"
                 <p class="setting-hint">
                   "Shortcuts do nothing while you type in a text field."
             <section aria-labelledby="settings-diagnostics-heading" class="settings-section">

@@ -45,8 +45,8 @@ export function isTextField(target: EventTarget | null): boolean {
 }
 
 /**
- * What keeps the controls shown under Timeout, besides a pause and the bell's list: a mouse or pen pointer over a
- * control, a drag of the scrub bar or the volume, and keyboard focus on a control.
+ * What keeps the controls shown under Timeout, besides a pause, the bell's list, and the rating's stars: a mouse or pen
+ * pointer over a control, a drag of the scrub bar or the volume, and keyboard focus on a control.
  */
 export type ControlsHold = "pointer" | "drag" | "keyboardFocus";
 
@@ -54,8 +54,8 @@ export interface PlayerControlsOptions {
   device: DeviceStore;
   /** Playback waits for the user, which keeps the controls shown while Keep visible while paused is on. */
   paused: ReadonlySignal<boolean>;
-  /** The list behind the bell is open, which keeps the controls shown in every mode. */
-  listOpen: ReadonlySignal<boolean>;
+  /** The list behind the bell or the rating's stars are open, which keeps the controls shown in every mode. */
+  openFromControls: ReadonlySignal<boolean>;
 }
 
 /**
@@ -63,9 +63,9 @@ export interface PlayerControlsOptions {
  *
  * Timeout, the default: they hide after Hide after with no activity. Moving the mouse over the player, tapping or
  * clicking it, a press on the controls, a key press, the scroll wheel, and a two-finger drag show them and restart the
- * countdown. They stay while a hold lasts, while the bell's list is open, and, with Keep visible while paused, while
- * playback is paused, which also shows them; as each of those ends, the countdown starts again. On click/tap: a click
- * or tap on the player shows or hides them. Never: they stay. A new mode starts with them shown.
+ * countdown. They stay while a hold lasts, while the bell's list or the rating's stars are open, and, with Keep visible
+ * while paused, while playback is paused, which also shows them; as each of those ends, the countdown starts again. On
+ * click/tap: a click or tap on the player shows or hides them. Never: they stay. A new mode starts with them shown.
  */
 export interface PlayerControls {
   readonly mode: ReadonlySignal<HideControlsMode>;
@@ -97,7 +97,7 @@ export interface PlayerControls {
 }
 
 export function createPlayerControls(options: PlayerControlsOptions): PlayerControls {
-  const { device, paused, listOpen } = options;
+  const { device, paused, openFromControls } = options;
   const mode = signal(device.read(HIDE_CONTROLS_KEY, DEFAULT_HIDE_CONTROLS_MODE, isHideControlsMode));
   const hideAfterSeconds = signal(device.read(HIDE_AFTER_KEY, DEFAULT_HIDE_AFTER_SECONDS, isHideAfter));
   const keepWhilePaused = signal(device.read(KEEP_WHILE_PAUSED_KEY, true, isBoolean));
@@ -110,7 +110,7 @@ export function createPlayerControls(options: PlayerControlsOptions): PlayerCont
   }
 
   function held(): boolean {
-    return holds.size > 0 || listOpen.peek() || (keepWhilePaused.peek() && paused.peek());
+    return holds.size > 0 || openFromControls.peek() || (keepWhilePaused.peek() && paused.peek());
   }
 
   /** A hold that lasts when the countdown ends keeps the controls shown, and the countdown starts again as it ends. */
@@ -142,12 +142,13 @@ export function createPlayerControls(options: PlayerControlsOptions): PlayerCont
     untracked(followPlayback);
   });
 
-  // The controls stay while the list is open, so their countdown starts again when it closes, however it closes.
-  let listWasOpen = listOpen.peek();
+  // The controls stay while the list or the stars are open, so their countdown starts again when they close, however
+  // they close.
+  let wasOpen = openFromControls.peek();
   effect(() => {
-    const open = listOpen.value;
-    if (listWasOpen && !open) untracked(activity);
-    listWasOpen = open;
+    const open = openFromControls.value;
+    if (wasOpen && !open) untracked(activity);
+    wasOpen = open;
   });
 
   return {
@@ -171,7 +172,7 @@ export function createPlayerControls(options: PlayerControlsOptions): PlayerCont
       device.write(KEEP_WHILE_PAUSED_KEY, on);
       followPlayback();
     },
-    shown: computed(() => visible.value || listOpen.value),
+    shown: computed(() => visible.value || openFromControls.value),
     activity,
     tap() {
       if (mode.peek() === "click") {

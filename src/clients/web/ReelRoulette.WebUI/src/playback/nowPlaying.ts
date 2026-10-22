@@ -55,6 +55,11 @@ export function basenameFromPath(path: string | null | undefined): string {
   return idx >= 0 ? normalized.slice(idx + 1) : normalized;
 }
 
+/** The playing item's file name: the last segment of its display name, or of its path while it has none. */
+export function playingFileName(item: Pick<NowPlayingItem, "id" | "displayName">): string {
+  return basenameFromPath(item.displayName || item.id);
+}
+
 export function truncateName(name: string | null | undefined, maxChars: number): string {
   const text = String(name || "");
   if (text.length <= maxChars) return text;
@@ -66,7 +71,7 @@ export function nowPlayingView(item: NowPlayingItem | null | undefined): NowPlay
   if (!item) {
     return null;
   }
-  const title = basenameFromPath(item.displayName || item.id || "");
+  const title = playingFileName(item);
   return {
     name: truncateName(title, NOW_PLAYING_MAX_CHARS),
     title,

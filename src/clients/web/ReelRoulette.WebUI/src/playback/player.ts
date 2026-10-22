@@ -14,6 +14,7 @@ import { playRefusalFailure } from "../library/libraryPlayModel";
 import type { ItemStateChangedPayload } from "../library/libraryProjectionSync";
 import { errorType, playbackTraceLine } from "../logging/relayLogLines";
 import type { Notifications } from "../notifications/notifications";
+import type { ItemRatings } from "../rating/itemRatings";
 import type { AppApi } from "../state/appApi";
 import type { AppStore, PlayingItem } from "../state/appStore";
 import { playRefusalNotice } from "../state/lastingStates";
@@ -21,7 +22,7 @@ import type { ServerConnection } from "../state/serverConnection";
 import type { AudioStage } from "./audioStage";
 import { createFrameClock, type FramedVideo } from "./frameStep";
 import { mediaFailureMessage, probeMedia, SKIP_LIMIT, skipText, type MediaFailure } from "./mediaFailure";
-import { basenameFromPath, formatPlaybackPosition } from "./nowPlaying";
+import { basenameFromPath, formatPlaybackPosition, playingFileName } from "./nowPlaying";
 import { createPhotoTimer } from "./photoTimer";
 import { createRandomPicker, randomPickRequest } from "./randomPick";
 import { createSeekIndicator, type SeekIndicator } from "./seekIndicator";
@@ -247,6 +248,8 @@ export interface PlayerOptions {
   dialogs: Pick<Dialogs, "notice">;
   /** The one-off messages: a favorite or blacklist change made here, or on another device, and a skipped file. */
   notifications: Pick<Notifications, "notify">;
+  /** The ratings this device shows, which take the rating a history step's play answer gives the item. */
+  ratings: Pick<ItemRatings, "takeRead">;
   /** Defaults to the browser's animation frames, looked up on each request. */
   frames?: FrameScheduler;
 }
@@ -275,7 +278,7 @@ function absolutizeMediaUrl(apiBaseUrl: string, mediaUrl: string): string {
 }
 
 export function createPlayer(options: PlayerOptions): Player {
-  const { store, audio, api, connection, dialogs, notifications } = options;
+  const { store, audio, api, connection, dialogs, notifications, ratings } = options;
   const apiBaseUrl = String(options.apiBaseUrl || "").replace(/\/+$/, "");
   const frames: FrameScheduler = options.frames ?? {
     request: (callback) => requestAnimationFrame(callback),
@@ -830,7 +833,7 @@ export function createPlayer(options: PlayerOptions): Player {
 
   /** What the server answered a play request for the current item. */
   type PlayAnswer =
-    | { kind: "played"; mediaUrl: string }
+    | { kind: "played"; mediaUrl: string; rating: number | null }
     | { kind: "refused"; result: PlayItemFailure }
     | { kind: "unauthorized" }
     | { kind: "unreachable" }
@@ -855,7 +858,9 @@ export function createPlayer(options: PlayerOptions): Player {
     }
     const result = outcome.value;
     if (!result.ok) return { kind: "refused", result };
-    return result.response?.mediaUrl ? { kind: "played", mediaUrl: result.response.mediaUrl } : { kind: "error", error: "NoMediaUrl" };
+    return result.response?.mediaUrl
+      ? { kind: "played", mediaUrl: result.response.mediaUrl, rating: result.response.rating ?? null }
+      : { kind: "error", error: "NoMediaUrl" };
   }
 
   /**
@@ -895,7 +900,10 @@ export function createPlayer(options: PlayerOptions): Player {
     }
   }
 
-  /** A history step's play: its fresh media URL replaces the entry's, and its media loads with it. */
+  /**
+   * A history step's play: its fresh media URL replaces the entry's, and its media loads with it. Its rating becomes the
+   * entry's, so a change made while the entry wasn't playing shows.
+   */
   async function playFresh(item: PlayingItem, attemptId: number): Promise<void> {
     const attempt: ArmedAttempt = { mediaType: item.mediaType, id: item.id, attemptId };
     const answer = await requestPlay(item, true);
@@ -911,6 +919,7 @@ export function createPlayer(options: PlayerOptions): Player {
       return;
     }
     item.mediaUrl = answer.mediaUrl;
+    ratings.takeRead(item.itemId, answer.rating);
     loadMedia(item, attemptId);
   }
 
@@ -1096,15 +1105,14 @@ export function createPlayer(options: PlayerOptions): Player {
    */
   function failed(attempt: ArmedAttempt, failure: MediaFailure): void {
     failurePhase = "failing";
-    const item = store.current.peek()!;
-    const name = item.displayName || item.id || "";
+    const fileName = playingFileName(store.current.peek()!);
     const atOldest = attemptOrigin === "back" && store.historyIndex.peek() <= 0;
     if (failure === "unreadable" || attemptOrigin === "library" || skips >= SKIP_LIMIT || atOldest) {
-      stopOn(mediaFailureMessage(attempt.mediaType, failure, name));
+      stopOn(mediaFailureMessage(attempt.mediaType, failure, fileName));
       return;
     }
     skips += 1;
-    notifications.notify({ kind: "skips", text: skipText(failure), detail: basenameFromPath(name), key: "skip" });
+    notifications.notify({ kind: "skips", text: skipText(failure), detail: fileName, key: "skip" });
     if (attemptOrigin === "back") {
       stepHistory(-1);
     } else {
@@ -1228,7 +1236,7 @@ export function createPlayer(options: PlayerOptions): Player {
     if (!item?.itemId) return;
     const nextValue = !item[flag];
     // The item the request acts on, named as the now-playing line names it, though another may play by the answer.
-    const fileName = basenameFromPath(item.displayName || item.id || "");
+    const fileName = playingFileName(item);
     const path = isFavorite ? "/api/favorite" : "/api/blacklist";
     const taken = await requestWithNotice(dialogs, `${isFavorite ? "Favorite" : "Blacklist"} update failed`, () =>
       // The client id comes back on the change's event, so this device can tell its own change from another's.

@@ -14,6 +14,7 @@ import { createLoudnessNormalization, type LoudnessNormalization } from "../play
 import { createPlayer, type Player } from "../playback/player";
 import { createPlayerControls, type PlayerControls } from "../playback/playerControls";
 import { createItemRatings } from "../rating/itemRatings";
+import { createPlayerRating, type PlayerRating } from "../rating/playerRating";
 import { createStageFullscreen, type StageFullscreen } from "../playback/stageFullscreen";
 import { createSettings, type Settings } from "../settings/settings";
 import { createLibraryBaseline } from "../stats/libraryBaseline";
@@ -48,6 +49,8 @@ export interface AppServices {
   player: Player;
   /** Whether the player's controls show, as Hide player controls and its settings say. */
   playerControls: PlayerControls;
+  /** The playing item's rating, which the player's star, its popover, and the rating keys show and set. */
+  playerRating: PlayerRating;
   /** The player's sound: the volume, Mute, and Enhanced audio's gain stage. */
   audio: AudioStage;
   /** Loudness normalization and its settings, whose gain the audio stage applies. */
@@ -113,12 +116,6 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     notifications
   });
   const panel = createPanelHost({ device });
-  // The panel opening closes the list behind the bell, leaving focus where the panel put it.
-  panel.isOpen.subscribe((open) => {
-    if (open) {
-      notifications.closeList();
-    }
-  });
   const relay = (level: string, message: string) => void api.relayLog(level, message);
   // Automatic's target, the library's baseline, loaded from the library stats.
   const baseline = createLibraryBaseline({ store, api, connection, relay });
@@ -133,8 +130,23 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     normalizationGainDb: normalization.gainDb,
     compressor: compression.compressor
   });
-  const player = createPlayer({ apiBaseUrl: config.apiBaseUrl, store, audio, api, connection, dialogs, notifications });
-  const playerControls = createPlayerControls({ device, paused: player.paused, listOpen: notifications.listOpen });
+  // The ratings this device sets and shows, which the Stats tab's stars, the player's, and the rating keys set, and
+  // which a history step's play answer reads again.
+  const ratings = createItemRatings({ store, api, connection, dialogs, notifications });
+  const player = createPlayer({ apiBaseUrl: config.apiBaseUrl, store, audio, api, connection, dialogs, notifications, ratings });
+  const playerRating = createPlayerRating({ store, ratings, audio });
+  // The panel opening closes the list behind the bell and the rating's popover, leaving focus where the panel put it.
+  panel.isOpen.subscribe((open) => {
+    if (open) {
+      notifications.closeList();
+      playerRating.closePopover();
+    }
+  });
+  const playerControls = createPlayerControls({
+    device,
+    paused: player.paused,
+    openFromControls: computed(() => notifications.listOpen.value || playerRating.popoverOpen.value)
+  });
   // After the player, so the player handles an item-state event before the library does.
   const library = createLibrary({ config, store, api, connection, player, dialogs, notifications, panel, device });
   // The tag catalog the Filter and Tags tabs load, which the Stats tab orders a file's tags by.
@@ -152,8 +164,6 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     notifications,
     tagCatalog
   });
-  // The ratings this device sets and shows, which the Stats tab's stars set.
-  const ratings = createItemRatings({ store, api, connection, dialogs, notifications });
   const statsTab = createStatsTab({
     store,
     api,
@@ -230,6 +240,7 @@ export function createAppServices(config: RuntimeConfig): AppServices {
     connection,
     player,
     playerControls,
+    playerRating,
     audio,
     normalization,
     compression,

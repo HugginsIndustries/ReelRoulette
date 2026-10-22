@@ -5494,11 +5494,11 @@ const ratingPopover = (() => {
   popover.append(control.el);
   let open = false;
 
-  // Closing from the keyboard, with focus on the stars, gives focus back to the star.
-  function close({ refocus = false } = {}) {
+  // However it closes, focus on the stars goes back to the star. Focus that Tab moves out has already left them.
+  function close() {
     if (!open) return;
     open = false;
-    if (refocus && popover.contains(document.activeElement)) button.focus({ preventScroll: true });
+    if (popover.contains(document.activeElement)) button.focus({ preventScroll: true });
     popover.hidden = true;
     button.setAttribute("aria-expanded", "false");
     controlsActivity();
@@ -5506,7 +5506,7 @@ const ratingPopover = (() => {
   // Nothing opens with nothing playing or while the server asks for pairing, as Favorite does nothing then. Opened from
   // the keyboard, focus moves to the stars; a click or a tap leaves it where it is, as on the Stats tab's stars.
   button.addEventListener("click", () => {
-    if (open) return close({ refocus: true });
+    if (open) return close();
     if (!playback.item || state.pairing) return;
     open = true;
     control.show(playback.item);
@@ -5518,22 +5518,29 @@ const ratingPopover = (() => {
   popover.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
-    close({ refocus: true });
+    close();
   });
-  popover.addEventListener("focusout", (event) => !popover.contains(event.relatedTarget) && close());
+  // Focus leaving the stars, as Tab takes it, closes it. Focus a press on the star moves is left to the star, whose click
+  // closes it, so the press doesn't open it again.
+  let pressedStar = false;
+  popover.addEventListener("focusout", (event) => {
+    if (popover.contains(event.relatedTarget) || (!keyboardFocus && pressedStar)) return;
+    close();
+  });
   // A tap that sets a rating hides the popover as it lifts, so the click a browser sends after a touch could land on the
   // video under it, which would act on the player. A touch on the stars sends no click.
   popover.addEventListener("touchend", (event) => event.preventDefault());
   // A press elsewhere closes it and still does what it does, as a press outside the notifications list does, and Escape
   // closes it before anything else it would close.
   document.addEventListener("pointerdown", (event) => {
-    if (open && !popover.contains(event.target) && !button.contains(event.target)) close();
+    pressedStar = button.contains(event.target);
+    if (open && !popover.contains(event.target) && !pressedStar) close();
   }, true);
   document.addEventListener("keydown", (event) => {
     if (!open || event.key !== "Escape" || document.querySelector("dialog[open]")) return;
     event.preventDefault();
     event.stopPropagation();
-    close({ refocus: true });
+    close();
   }, true);
 
   return {

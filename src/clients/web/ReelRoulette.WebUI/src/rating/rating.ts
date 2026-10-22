@@ -44,35 +44,38 @@ export function ratingAt(x: number, starWidth: number): number | null {
   return index + (x - index * width < width / 2 ? 0.5 : 1);
 }
 
+/** `stars` within 0 to 5, with 0 as none. */
+function clampRating(stars: number): number | null {
+  const clamped = Math.min(RATING_MAX, Math.max(0, stars));
+  return clamped > 0 ? clamped : null;
+}
+
+/** `rating` stepped half a star down, for -1, or up, for 1, within none and 5 stars. */
+export function stepRating(rating: number | null, direction: -1 | 1): number | null {
+  return clampRating((rating ?? 0) + direction * 0.5);
+}
+
 /**
  * The rating a key sets from `rating`: the left and down arrows step down half a star, the right and up arrows step up
  * half a star, Home and Delete or Backspace clear it, and End is 5 stars. Null for any other key.
  */
 export function ratingForKey(rating: number | null, key: string): { rating: number | null } | null {
-  const stars = rating ?? 0;
-  let next: number;
   switch (key) {
     case "ArrowLeft":
     case "ArrowDown":
-      next = stars - 0.5;
-      break;
+      return { rating: stepRating(rating, -1) };
     case "ArrowRight":
     case "ArrowUp":
-      next = stars + 0.5;
-      break;
+      return { rating: stepRating(rating, 1) };
     case "End":
-      next = RATING_MAX;
-      break;
+      return { rating: RATING_MAX };
     case "Home":
     case "Delete":
     case "Backspace":
-      next = 0;
-      break;
+      return { rating: null };
     default:
       return null;
   }
-  const clamped = Math.min(RATING_MAX, Math.max(0, next));
-  return { rating: clamped > 0 ? clamped : null };
 }
 
 /** How the star at `index`, from 0, shows `rating`: full, half, or empty. */

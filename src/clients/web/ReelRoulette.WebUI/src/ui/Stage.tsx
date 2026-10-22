@@ -17,7 +17,7 @@ import { ScreenBoundary } from "./ScreenBoundary";
  * dragging the panel's handle doesn't render the player.
  */
 export function Stage() {
-  const { api, fullscreen, panel, player, audio, settings } = useApp();
+  const { api, fullscreen, panel, player, audio, settings, playerRating } = useApp();
   const stage = useRef<HTMLDivElement>(null);
   const playerColumn = useRef<HTMLElement>(null);
 
@@ -64,7 +64,7 @@ export function Stage() {
   }, []);
 
   // The keyboard shortcuts, from any key press the focused element leaves to the page.
-  useLayoutEffect(() => listenForShortcuts(document, { player, audio, panel, fullscreen, settings }), []);
+  useLayoutEffect(() => listenForShortcuts(document, { player, audio, panel, fullscreen, settings, rating: playerRating }), []);
 
   return (
     <div id="fullscreen-stage" class="fullscreen-stage" ref={stage}>

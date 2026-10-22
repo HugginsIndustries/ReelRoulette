@@ -527,7 +527,7 @@ describe("the bell", () => {
 
     expect(bell().parentElement).toBe(document.getElementById("overlay-controls"));
     const corners = [...document.querySelectorAll("#overlay-controls > .overlay-corner-btn")].map((button) => button.id);
-    expect(corners).toEqual(["notify-btn", "panel-btn", "favorite-btn", "blacklist-btn"]);
+    expect(corners).toEqual(["notify-btn", "panel-btn", "rating-btn", "favorite-btn", "blacklist-btn"]);
     expect(currentStyle(bell()).left).toBe("12px");
     expect(bell().querySelector(".material-symbol-icon")!.textContent).toBe("notifications");
     expect(bell().getAttribute("aria-label")).toBe("Notifications");
@@ -539,6 +539,10 @@ describe("the bell", () => {
     await notify(services, { kind: "actions", text: "Paired." });
     expect(badge().hidden).toBe(false);
     expect(badge().textContent).toBe("1");
+    // Over the bell's top right corner, its ring ending 2 px inside the bell's right edge, which Chrome on Android would
+    // otherwise clip.
+    const placed = currentStyle(badge());
+    expect([placed.position, placed.top, placed.right, placed.boxShadow]).toEqual(["absolute", "4px", "4px", "0 0 0 2px #000"]);
     expect(bell().getAttribute("aria-label")).toBe("Notifications, 1 unread");
     expect(bell().title).toBe("Notifications, 1 unread");
 
@@ -571,6 +575,26 @@ describe("the bell", () => {
     expect(bell().getAttribute("aria-expanded")).toBe("false");
     expect(currentStyle(bell()).color).not.toBe(orange());
     expect(server.requests("POST", "/api/random")).toEqual([]);
+  });
+
+  it("is orange while it has unread notifications, as while its list is open, and not otherwise", async () => {
+    keepSettings({ popups: false });
+    useStylesheet();
+    const services = await mountWithServices();
+    expect(currentStyle(bell()).color).not.toBe(orange());
+
+    await notify(services, { kind: "actions", text: "Paired." });
+    expect(bell().classList.contains("has-unread")).toBe(true);
+    expect(currentStyle(bell()).color).toBe(orange());
+
+    // Opening the list reads them, and it stays orange while the list is open.
+    await click(bell());
+    expect(badge().hidden).toBe(true);
+    expect(bell().classList.contains("has-unread")).toBe(false);
+    expect(currentStyle(bell()).color).toBe(orange());
+
+    await click(bell());
+    expect(currentStyle(bell()).color).not.toBe(orange());
   });
 
   it("keeps the player's controls shown while the list is open, with Hide player controls on On click/tap", async () => {

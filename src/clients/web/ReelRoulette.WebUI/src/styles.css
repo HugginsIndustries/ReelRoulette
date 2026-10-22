@@ -763,14 +763,33 @@ html.theme-light .ambient canvas {
   filter: drop-shadow(var(--control-drop-shadow));
 }
 /* The bell sits at the top left, so it can be reached in fullscreen and on a phone on its side, and it hides with the
-   other controls. The panel button sits on the panel's side: at the top right, or just right of the bell while the
-   panel is on the left. */
+   other controls. The panel button sits on the panel's side: at the top right, left of the rating's star, or just
+   right of the bell while the panel is on the left. */
 #notify-btn.overlay-corner-btn { left: 12px; }
-#notify-btn .notify-badge { box-shadow: 0 0 0 2px #000; }
-#panel-btn.overlay-corner-btn { right: 116px; }
+#notify-btn .notify-badge, #rating-btn .rating-badge { box-shadow: 0 0 0 2px #000; }
+#panel-btn.overlay-corner-btn { right: 168px; }
 .fullscreen-stage[data-side="left"] #panel-btn.overlay-corner-btn { right: auto; left: 64px; }
+#rating-btn.overlay-corner-btn { right: 116px; }
 #favorite-btn.overlay-corner-btn { right: 64px; }
 #blacklist-btn.overlay-corner-btn { right: 12px; }
+/* The rating's popover: the Stats tab's stars at the player's center, where the volume indicator shows, with no
+   background. It spans the player and centers the stars without a transform, and only the stars take presses. Empty
+   stars are white over the video. Each star's glyph has a text shadow matching the corner buttons' drop shadow, since
+   Safari on the iPad draws a drop shadow filter on the popover, or on each star, as a shadowed rectangle. A half
+   star's shadow is its outline's, so no shadow is cut off with its filled half. */
+.rating-popover {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.rating-popover[hidden] { display: none; }
+.rating-popover .rating { margin-left: 0; pointer-events: auto; }
+.rating-popover .rating-star { color: var(--icon-foreground); }
+.rating-popover .rating-outline, .rating-popover .is-full .rating-fill { text-shadow: var(--control-drop-shadow); }
 .overlay-seek-row {
   display: flex;
   align-items: center;
@@ -821,9 +840,9 @@ html.theme-light .ambient canvas {
 #time-display { font-size: 0.9rem; white-space: nowrap; color: var(--time-display-fg); font-variant-numeric: tabular-nums; }
 /* The player's indicator: one lasting state at a time, such as Reconnecting…, at the top center. Its live region
    always stays in the page and covers the media area without catching clicks; the state's box inside it is the pill.
-   At the top, centered, it stays clear of the corner buttons on both sides, which take the last 160 px at the right,
-   and a long state ends in an ellipsis instead. On a narrow player it sits below the corner buttons. A library
-   refresh's progress shows only while the player's controls do. */
+   At the top, centered, it stays clear of the corner buttons on both sides, which take the last 212 px at the right,
+   or 160 px while the panel is on the left, and a long state ends in an ellipsis instead. On a narrow player it sits
+   below the corner buttons. A library refresh's progress shows only while the player's controls do. */
 .player-indicator-region {
   position: absolute;
   inset: 0;
@@ -835,7 +854,7 @@ html.theme-light .ambient canvas {
   left: 50%;
   transform: translateX(-50%);
   z-index: 25;
-  max-width: calc(100% - 336px);
+  max-width: calc(100% - 440px);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -856,7 +875,9 @@ html.theme-light .ambient canvas {
 .player-indicator .material-symbol-icon.spins { animation: player-indicator-spin 1.2s linear infinite; }
 .player-indicator.is-warning .material-symbol-icon { color: var(--huggins-orange); }
 .media-container:not(.controls-visible) .player-indicator.follows-controls { opacity: 0; }
-/* A player narrower than 600 px, which the page measures and marks on the player column. */
+.fullscreen-stage[data-side="left"] .player-indicator { max-width: calc(100% - 336px); }
+/* A player narrower than 600 px, which the page measures and marks on the player column. After the panel's side, which
+   is as specific, so the narrow player's width wins. */
 .player-col.is-narrow .player-indicator { top: 64px; max-width: calc(100% - 24px); }
 @keyframes player-indicator-spin {
   to { transform: rotate(360deg); }
@@ -914,12 +935,14 @@ html.theme-light .ambient canvas {
   .seek-indicator.is-shown .material-symbol-icon { animation: none; }
 }
 /* Notifications: the player's bell, the list of recent messages under it, and the popups beside the player. The bell is
-   orange while its list is open. */
-.notify-btn[aria-expanded="true"] { color: var(--huggins-orange); }
-.notify-badge {
+   orange while its list is open, and while it has unread messages, as its badge is. */
+.notify-btn[aria-expanded="true"], .notify-btn.has-unread { color: var(--huggins-orange); }
+/* The bell's badge, which the player's rating star shares. It overlays its button, so it never moves an icon. Its ring
+   ends 2 px inside the button's right edge, since Chrome on Android clips a ring that reaches the edge. */
+.notify-badge, .rating-badge {
   position: absolute;
   top: 4px;
-  right: 2px;
+  right: 4px;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
@@ -1162,11 +1185,12 @@ html.theme-light .autotag-overlay { background: rgba(248, 249, 252, 0.98); }
 .stats-rating-label { color: var(--muted-fg); }
 .rating { display: flex; margin-left: auto; border-radius: 6px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
 .rating:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
-.rating-star { position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 30px; color: var(--muted-fg); }
+.rating-star { position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 30px; color: var(--page-fg); }
 .rating-star .material-symbol-icon { font-size: 30px; }
-/* A full star is the filled star in orange. A half star lays it, cut off at its middle, over the grey outline, so only
-   the filled half is orange. */
-.rating-fill { position: absolute; top: 0; left: 50%; transform: translateX(-50%); color: var(--huggins-orange); visibility: hidden; }
+/* A full star is the filled star in orange. A half star lays it, cut off at its middle, over the empty star's outline,
+   so only the filled half is orange. The filled star spans its star and centers its glyph there, as the outline is
+   centered, without a transform. */
+.rating-fill { position: absolute; inset: 0; color: var(--huggins-orange); visibility: hidden; }
 .rating-star.is-full .rating-fill, .rating-star.is-half .rating-fill { visibility: visible; }
 .rating-star.is-half .rating-fill { clip-path: inset(0 50% 0 0); }
 .rating-star.is-full .rating-outline { visibility: hidden; }

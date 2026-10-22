@@ -5,6 +5,9 @@ import {
   FakeServer,
   json,
   mountPage,
+  popupsShown,
+  ratingAnswer,
+  ratingRequests,
   resetPage,
   settle,
   STAR_WIDTH,
@@ -157,6 +160,29 @@ function stretchFrom(): number {
 
 function randomPicks(server: FakeServer): number {
   return server.requests("POST", "/api/random").length;
+}
+
+/** Has `server` take ratings, answering each with the rating it was sent. */
+function takeRatings(server: FakeServer): FakeServer {
+  return server.on("POST", "/api/rating", ratingAnswer);
+}
+
+/** The ratings sent, in order. */
+function ratingsSent(server: FakeServer): unknown[] {
+  return ratingRequests(server).map((body) => (body as { rating?: unknown } | undefined)?.rating);
+}
+
+/** The symbols Shift gives the digit keys 0 to 5 on a US keyboard. */
+const US_SHIFTED_DIGITS = ")!@#$%";
+
+/** Presses the digit key with Shift held, as a US keyboard sends it: the key's symbol, such as "!" for Digit1. */
+function pressShiftDigit(digit: number, target: Element = document.body): Promise<boolean> {
+  return press(US_SHIFTED_DIGITS[digit]!, { code: `Digit${digit}`, shiftKey: true }, target);
+}
+
+/** Waits past the pause after which a rating key's change is sent. */
+function waitForKeysPause(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 600));
 }
 
 beforeEach(() => {
@@ -409,6 +435,9 @@ describe("keyboard shortcuts", () => {
       ["R", "Random"],
       ["F", "Favorite"],
       ["B", "Blacklist"],
+      ["Shift+1 – Shift+5", "Rate 1 to 5 stars"],
+      ["Shift+0", "Clear the rating"],
+      ["- / =", "Rating down or up by half a star"],
       ["A", "Autoplay on or off"],
       ["M", "Mute"],
       [", / .", "One frame back or forward, while a video is paused"],
@@ -419,7 +448,7 @@ describe("keyboard shortcuts", () => {
       ["P", "Show or hide the panel"],
       ["Shift+F", "Fullscreen"],
       ["H", "These shortcuts"],
-      ["Esc", "Close the top dialog, the notifications list, or the panel, or leave fullscreen"]
+      ["Esc", "Close the top dialog, the notifications list, the rating stars, or the panel, or leave fullscreen"]
     ]);
     expect(within(shortcutsSection()).getByText("Shortcuts do nothing while you type in a text field.")).toBeTruthy();
   });
@@ -462,8 +491,8 @@ describe("keyboard shortcuts", () => {
     expect(playIcon()).toBe("pause");
   });
 
-  it("repeat only J, L, comma, period, [, and ] while a key is held down", async () => {
-    const server = serverPicking(VIDEO_ITEM);
+  it("repeat only J, L, comma, period, [, ], -, and = while a key is held down", async () => {
+    const server = takeRatings(serverPicking(VIDEO_ITEM));
     await mount(server);
     await press("k");
     await loadVideo(65);
@@ -482,6 +511,11 @@ describe("keyboard shortcuts", () => {
     await press("]", { repeat: true });
     await press("[", { repeat: true });
     expect([video().currentTime, volumeSlider().value]).toEqual([25, "95"]);
+
+    await press("=", { repeat: true });
+    await press("=", { repeat: true });
+    await press("-", { repeat: true });
+    await waitFor(() => expect(ratingsSent(server)).toEqual([0.5]));
   });
 
   it("comma and period step a paused video one frame by the browser's frame timings, and do nothing while it plays", async () => {
@@ -539,12 +573,109 @@ describe("keyboard shortcuts", () => {
   });
 });
 
+describe("rating keys", () => {
+  /** Plays the video, which the random pick gives `rating`, on a server that takes ratings, and returns the page. */
+  async function playRated(rating: number | null): Promise<MountedPage> {
+    const page = await mount(takeRatings(serverPicking({ ...VIDEO_ITEM, rating })));
+    await press("k");
+    expect(video().src).toContain("item-video");
+    return page;
+  }
+
+  it.each([
+    [1, "Rated 1 star"],
+    [2, "Rated 2 stars"],
+    [3, "Rated 3 stars"],
+    [4, "Rated 4 stars"],
+    [5, "Rated 5 stars"]
+  ])("Shift+%i sets the playing item's rating once the keys pause, with a popup naming the file, and opens no panel tab", async (stars, text) => {
+    const page = await playRated(null);
+    expect(await pressShiftDigit(stars)).toBe(false);
+    expect(shownTab()).toBeNull();
+    expect(page.server.requests("POST", "/api/rating")).toEqual([]);
+
+    await waitFor(() => expect(page.server.requests("POST", "/api/rating").map((call) => call.body)).toEqual([{ itemId: "item-video", rating: stars, clientId: page.clientId() }]));
+    await waitFor(() => expect(popupsShown()).toEqual([`${text} | holiday clip.mp4`]));
+  });
+
+  it("Shift+0 clears the playing item's rating, with a popup naming the file", async () => {
+    const page = await playRated(3);
+    expect(await pressShiftDigit(0)).toBe(false);
+    expect(shownTab()).toBeNull();
+
+    await waitFor(() => expect(page.server.requests("POST", "/api/rating").map((call) => call.body)).toEqual([{ itemId: "item-video", rating: null, clientId: page.clientId() }]));
+    await waitFor(() => expect(popupsShown()).toEqual(["Rating cleared | holiday clip.mp4"]));
+  });
+
+  it.each([
+    ["-", 1.5, "Rated 1.5 stars"],
+    ["=", 2.5, "Rated 2.5 stars"]
+  ])("%s steps the rating the random pick gives the playing item by half a star, with a popup naming the file", async (key, stepped, text) => {
+    const page = await playRated(2);
+    expect(await press(key)).toBe(false);
+
+    await waitFor(() => expect(page.server.requests("POST", "/api/rating").map((call) => call.body)).toEqual([{ itemId: "item-video", rating: stepped, clientId: page.clientId() }]));
+    await waitFor(() => expect(popupsShown()).toEqual([`${text} | holiday clip.mp4`]));
+  });
+
+  it("- and = repeat while held, sending the last step once the keys pause", async () => {
+    const page = await playRated(2);
+    await press("=");
+    await press("=", { repeat: true });
+    await press("=", { repeat: true });
+    await press("-", { repeat: true });
+
+    await waitFor(() => expect(ratingsSent(page.server)).toEqual([3]));
+    await waitForKeysPause();
+    expect(ratingsSent(page.server)).toEqual([3]);
+    expect(popupsShown()).toEqual(["Rated 3 stars | holiday clip.mp4"]);
+  });
+
+  it("Shift+3 then Shift+4 within the keys' pause send one request, with 4 stars", async () => {
+    const page = await playRated(null);
+    await pressShiftDigit(3);
+    await pressShiftDigit(4);
+
+    await waitFor(() => expect(ratingsSent(page.server)).toEqual([4]));
+    await waitForKeysPause();
+    expect(ratingsSent(page.server)).toEqual([4]);
+    expect(popupsShown()).toEqual(["Rated 4 stars | holiday clip.mp4"]);
+  });
+
+  it("do nothing while nothing plays, while typing in a text field, or while the server asks for pairing", async () => {
+    const server = takeRatings(serverPicking({ ...VIDEO_ITEM, rating: 2 }));
+    await mount(server);
+    await pressShiftDigit(3);
+    await press("=");
+    await press("-");
+    expect(shownTab()).toBeNull();
+
+    await press("k");
+    await press("1");
+    const search = screen.getByRole("searchbox", { name: "Search library", hidden: true });
+    search.focus();
+    expect([await pressShiftDigit(3, search), await pressShiftDigit(0, search), await press("=", {}, search), await press("-", {}, search)]).toEqual([true, true, true, true]);
+    search.blur();
+
+    server.on("POST", "/api/favorite", () => status(401));
+    await press("f");
+    await waitFor(() => expect((document.getElementById("pair-section") as HTMLElement).style.display).toBe("flex"));
+    expect(document.querySelector("dialog[open]")).toBeNull();
+    await pressShiftDigit(3);
+    await press("=");
+    await press("-");
+
+    await waitForKeysPause();
+    expect(ratingsSent(server)).toEqual([]);
+    expect(popupsShown()).toEqual([]);
+  });
+});
+
 describe("the Stats tab's rating", () => {
   /** A server that plays two videos, reads each one rated 2 stars for the Stats tab, and takes ratings. */
   function ratingServer(): FakeServer {
-    const server = serverPicking(VIDEO_ITEM, SECOND_VIDEO);
+    const server = takeRatings(serverPicking(VIDEO_ITEM, SECOND_VIDEO));
     server.on("POST", "/api/library/item", (call) => json({ id: call.body?.id, sourceId: "s1", fileName: "clip.mp4", mediaType: 0, rating: 2, tags: [] }));
-    server.on("POST", "/api/rating", (call) => json({ itemId: call.body?.itemId, rating: call.body?.rating ?? null, revision: 9 }));
     return server;
   }
 

@@ -4,7 +4,7 @@ import type { Dialogs } from "../dialogs/dialogs";
 import { parseLibraryItem, type LibraryProjectionItem } from "../library/libraryProjectionModel";
 import type { Notifications } from "../notifications/notifications";
 import type { LoudnessNormalization } from "../playback/loudnessNormalization";
-import { basenameFromPath } from "../playback/nowPlaying";
+import { playingFileName } from "../playback/nowPlaying";
 import type { ItemRatings } from "../rating/itemRatings";
 import type { AppApi } from "../state/appApi";
 import type { AppStore } from "../state/appStore";
@@ -98,7 +98,7 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
       const item = !unavailable && loaded?.itemId === playing.itemId ? loaded.item : null;
       file = {
         itemId: playing.itemId,
-        name: basenameFromPath(playing.displayName || playing.id),
+        name: playingFileName(playing),
         path: playing.id,
         canShowInFileManager: !!playing.itemId && store.serverCapabilities.value.includes(SHOW_IN_FILE_MANAGER_CAPABILITY),
         rows: item

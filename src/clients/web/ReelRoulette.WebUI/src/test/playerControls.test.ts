@@ -9,12 +9,12 @@ function setup(saved: Record<string, unknown> = {}) {
   const kept = new Map(Object.entries(saved).map(([key, value]) => [`rr_device.${key}`, JSON.stringify(value)]));
   const device = createDeviceStore({ getItem: (key) => kept.get(key) ?? null, setItem: (key, value) => void kept.set(key, value) });
   const paused = signal(false);
-  const listOpen = signal(false);
-  const controls = createPlayerControls({ device, paused, listOpen });
+  const openFromControls = signal(false);
+  const controls = createPlayerControls({ device, paused, openFromControls });
   return {
     controls,
     paused,
-    listOpen,
+    openFromControls,
     kept: (key: string) => kept.get(`rr_device.${key}`),
     shown: () => controls.shown.value,
     /** Lets `seconds` pass. */
@@ -112,13 +112,13 @@ describe("Timeout", () => {
     expect(page.shown()).toBe(false);
   });
 
-  it("stays while the bell's list is open, and its countdown starts again as the list closes", () => {
+  it("stays while the bell's list or the rating's stars are open, and its countdown starts again as they close", () => {
     const page = setup();
-    page.listOpen.value = true;
+    page.openFromControls.value = true;
     page.wait(10);
     expect(page.shown()).toBe(true);
 
-    page.listOpen.value = false;
+    page.openFromControls.value = false;
     page.wait(2.9);
     expect(page.shown()).toBe(true);
     page.wait(0.1);

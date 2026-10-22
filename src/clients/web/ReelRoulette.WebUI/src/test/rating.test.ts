@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RATING_CLEAR_EDGE_PX, ratingAt, ratingForKey, ratingText, starFill } from "../rating/rating";
+import { RATING_CLEAR_EDGE_PX, ratingAt, ratingForKey, ratingText, starFill, stepRating } from "../rating/rating";
 
 describe("rating", () => {
   it("reads as its value text says it: in stars, 1 star in the singular, or Not rated", () => {
@@ -44,6 +44,10 @@ describe("rating", () => {
     expect(ratingForKey(null, "End")).toEqual({ rating: 5 });
     expect(ratingForKey(3, "PageUp")).toBeNull();
     expect(ratingForKey(3, "a")).toBeNull();
+  });
+
+  it("steps half a star down or up within none and 5 stars", () => {
+    expect([stepRating(2, -1), stepRating(2, 1), stepRating(null, 1), stepRating(0.5, -1), stepRating(null, -1), stepRating(5, 1)]).toEqual([1.5, 2.5, 0.5, null, null, 5]);
   });
 
   it("fills each star full, half, or not at all", () => {

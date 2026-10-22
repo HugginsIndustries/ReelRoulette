@@ -198,6 +198,8 @@ export interface AudioStage {
    * unmuting restores, which the button doesn't, as the slider doesn't.
    */
   toggleMute(options?: { byKey?: boolean }): void;
+  /** Hides the volume indicator at once, as when the rating's stars open where it shows. */
+  hideIndicator(): void;
   /**
    * Takes the video whose sound it plays, applying the volume and mute to it, and listens for the page's first tap or
    * key. A new element, once one takes over the video, is attached in its place.
@@ -379,6 +381,12 @@ export function createAudioStage(options: AudioStageOptions): AudioStage {
     } else if (!muted.peek()) {
       keep(volumeBeforeChange ?? volume.peek(), true);
     }
+  }
+
+  function hideIndicator(): void {
+    if (indicatorFade !== null) clearTimeout(indicatorFade);
+    indicatorFade = null;
+    indicatorShown.value = false;
   }
 
   function showIndicator(): void {
@@ -588,6 +596,8 @@ export function createAudioStage(options: AudioStageOptions): AudioStage {
       if (options?.byKey) showIndicator();
     },
 
+    hideIndicator,
+
     attach(next) {
       if (video !== next) {
         video?.removeEventListener("play", videoPlay);
@@ -604,9 +614,7 @@ export function createAudioStage(options: AudioStageOptions): AudioStage {
     },
 
     detach() {
-      if (indicatorFade !== null) clearTimeout(indicatorFade);
-      indicatorFade = null;
-      indicatorShown.value = false;
+      hideIndicator();
       endVolumeChange();
       listen(activation, false);
       activation = null;

@@ -124,6 +124,18 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
   - Rendering the tooltip outside the field's containers, in the page, the open dialog, or the fullscreen stage, didn't help (measured).
   - The mockup's `ValidatedField` in `docs/mockups/reelroulette/build/common.js` places its tooltip the same way.
 
+## Player
+
+### A favorite changed while disconnected shows its old state on a later play
+
+- **What goes wrong**: The WebUI remembers the favorite and blacklist it last saw for each item and puts them over the ones a random pick, a library play, or a history step brings from the server. A resync doesn't clear what it remembers, so after this device misses a favorite or blacklist change made on another device, playing that file again shows the old heart and thumb (inferred). A rating doesn't have this problem on a later play, since a resync drops the ratings this device kept.
+- **How to make it happen**: Play a file on one device, let that device lose its connection, such as while the iPad sleeps or the server restarts, favorite or blacklist the same file on another device, reconnect the first device, and play that file there again by a random pick, from the library, or with Previous (inferred).
+- **How much it matters**: Low. It takes a change on another device while this one is disconnected, to a file this one has already played. The server keeps the right state, and the heart and thumb show it again after the next change to that file or a page reload (inferred).
+- **Since**: v0.9.0, whose WebUI first remembered each item's favorite and blacklist.
+- **Where**:
+  - `createItemStateCache` in `src/clients/web/ReelRoulette.WebUI/src/library/currentItemState.ts` keeps the states, and its `applyTo` overwrites an item's favorite and blacklist with them.
+  - `pushHistory` and `appendHistory` in `src/clients/web/ReelRoulette.WebUI/src/state/appStore.ts` and the play's start in `src/clients/web/ReelRoulette.WebUI/src/playback/player.ts` call `applyTo`, and no `resyncRequired` handler clears the cache.
+
 ## Server
 
 ### The ffmpeg check can hang on its own output

@@ -11,6 +11,7 @@ import { App } from "../../ui/App";
 import { FILE_NOT_IN_LIBRARY, LIBRARY_EMPTY } from "../serverReasons";
 import {
   API_BASE_URL,
+  CLEAR_EDGE_X,
   COMPATIBLE_VERSION,
   FakeServer,
   SSE_URL,
@@ -18,12 +19,23 @@ import {
   closeNotices,
   json,
   mountPage,
+  movePointer,
   openNotices,
   pageReady,
+  pressRatingKey,
+  pressStars,
+  ratingAnswer,
+  ratingRequests,
+  releasePointer,
   resetPage,
   setViewport,
   settle,
+  sliderValue,
+  starsShown,
   status,
+  stubStarLayout,
+  tapStars,
+  xFor,
   currentStyle,
   unauthorizedLogLine,
   stubCanvas,
@@ -294,6 +306,51 @@ async function swipe(target: Element, from: { x: number; y: number }, to: { x: n
   fireEvent.touchStart(target, { touches: [{ clientX: from.x, clientY: from.y }] });
   fireEvent.touchEnd(target, { changedTouches: [{ clientX: to.x, clientY: to.y }] });
   await flush();
+}
+
+function ratingButton(): HTMLButtonElement {
+  return document.getElementById("rating-btn") as HTMLButtonElement;
+}
+
+function ratingBadge(): HTMLElement {
+  return ratingButton().querySelector<HTMLElement>(".rating-badge")!;
+}
+
+function ratingPopover(): HTMLElement {
+  return document.getElementById("rating-popover") as HTMLElement;
+}
+
+/** The popover's stars, which are there only while it is open. */
+function popoverStars(): HTMLElement {
+  const stars = ratingPopover().querySelector<HTMLElement>(".rating");
+  if (!stars) {
+    throw new Error("The rating's popover is closed.");
+  }
+  return stars;
+}
+
+/** The rating's star as it shows: its name, whether it is lit, and its badge's text while the badge shows. */
+function starShows(): [string | null, boolean, string | null] {
+  const badge = ratingBadge();
+  return [ratingButton().getAttribute("aria-label"), ratingButton().classList.contains("active"), badge.hidden ? null : badge.textContent];
+}
+
+/** Presses the rating's star with a mouse: the press, then its click. */
+async function pressStar(): Promise<void> {
+  fireEvent.pointerDown(ratingButton(), { pointerType: "mouse", button: 0 });
+  await click(ratingButton());
+}
+
+/** Presses the rating's star from the keyboard, with focus on it, as Enter does. */
+async function pressStarByKey(): Promise<void> {
+  ratingButton().focus();
+  fireEvent.keyDown(ratingButton(), { key: "Enter" });
+  await click(ratingButton());
+}
+
+/** An item as the random pick and the play route give it with its rating. */
+function rated<T extends object>(item: T, rating: number): T & { rating: number } {
+  return { ...item, rating };
 }
 
 /** Unmounts what `mountWithServices` mounted. */
@@ -2418,6 +2475,41 @@ describe("Hide player controls", () => {
     expect(controlsShown()).toBe(false);
   });
 
+  it("show and hide the rating's star with them, and stay while its popover is open, the countdown starting again as it closes, and on click/tap, a click on the player closes it and still hides them", async () => {
+    useFakeClock();
+    useStylesheet();
+    const services = await mountWithServices(serverPicking(VIDEO_ITEM));
+    await click(emptyState());
+    await waitFor(() => expect(video().src).toBe(VIDEO_URL));
+    expect(currentStyle(ratingButton()).pointerEvents).toBe("auto");
+    await untilHidden();
+    expect(currentStyle(ratingButton()).pointerEvents).toBe("none");
+
+    // Timeout.
+    moveMouse();
+    await pressStar();
+    expect(ratingPopover().hidden).toBe(false);
+    await pass(10000);
+    expect(controlsShown()).toBe(true);
+    expect(currentStyle(popoverStars()).pointerEvents).toBe("auto");
+    services.playerRating.closePopover();
+    await flush();
+    await pass(2900);
+    expect(controlsShown()).toBe(true);
+    await pass(100);
+    expect(controlsShown()).toBe(false);
+
+    // On click/tap, the only thing that hides them is a click on the player, whose press closes the popover first.
+    services.playerControls.setMode("click");
+    await flush();
+    await pressStar();
+    expect(controlsShown()).toBe(true);
+    fireEvent.pointerDown(video(), { pointerType: "mouse", button: 0 });
+    await click(video());
+    expect(ratingPopover().hidden).toBe(true);
+    expect(controlsShown()).toBe(false);
+  });
+
   it("with Keep visible while paused, a pause shows them and they stay until it plays again; without it, they hide while paused", async () => {
     useFakeClock();
     const services = await mountWithServices(serverPicking(VIDEO_ITEM));
@@ -3105,8 +3197,8 @@ describe("the player's indicator", () => {
 
     const box = currentStyle(indicatorBox());
     expect([box.position, box.top, box.left, box.transform]).toEqual(["absolute", "14px", "50%", "translateX(-50%)"]);
-    // The corner buttons take the last 160 px at the right, so the indicator leaves that much on both sides.
-    expect(box.maxWidth).toBe("calc(100% - 336px)");
+    // The corner buttons take the last 212 px at the right, so the indicator leaves that much on both sides.
+    expect(box.maxWidth).toBe("calc(100% - 440px)");
     expect(box.pointerEvents).toBe("none");
     const text = currentStyle(indicatorText());
     expect([text.overflow, text.whiteSpace, text.textOverflow, text.minWidth]).toEqual(["hidden", "nowrap", "ellipsis", "0"]);
@@ -3117,6 +3209,23 @@ describe("the player's indicator", () => {
     store.compatibilityBlocked.value = true;
     await flush();
     expect(currentStyle(indicatorIcon()).color).toBe(currentStyle(document.documentElement).getPropertyValue("--huggins-orange").trim());
+  });
+
+  it("leaves 160 px on both sides while the panel is on the left, where its button sits by the bell", async () => {
+    localStorage.setItem("rr_device.panel.side", '"left"');
+    useStylesheet();
+    const { store } = await mountWithServices();
+    store.reconnecting.value = true;
+    await flush();
+
+    expect(currentStyle(indicatorBox()).maxWidth).toBe("calc(100% - 336px)");
+
+    // A narrow player's indicator sits below the corner buttons, on either side.
+    stubLayoutSize(599);
+    setViewport({ width: 1000, height: 768 });
+    await flush();
+    expect(stage().querySelector("main.player-col")!.classList.contains("is-narrow")).toBe(true);
+    expect(currentStyle(indicatorBox()).maxWidth).toBe("calc(100% - 24px)");
   });
 
   it("moves below the corner buttons on a player narrower than 600 px, by the player column's measured width", async () => {
@@ -3152,6 +3261,418 @@ describe("the player's indicator", () => {
       .flatMap((rule) => Array.from(rule.cssRules) as CSSStyleRule[])
       .find((rule) => rule.selectorText === ".player-indicator .material-symbol-icon.spins");
     expect(reduced?.style.animationDuration).toBe("3s");
+  });
+});
+
+describe("the player's rating", () => {
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  /** Plays the first of `items`, with the server taking ratings and the rating's stars laid out. */
+  async function playRated(...items: unknown[]): Promise<{ page: MountedPage; server: FakeServer }> {
+    stubStarLayout();
+    const server = serverPicking(...items);
+    server.on("POST", "/api/rating", ratingAnswer);
+    const page = await mountAndPlay(server);
+    return { page, server };
+  }
+
+  function orange(): string {
+    return currentStyle(document.documentElement).getPropertyValue("--huggins-orange").trim();
+  }
+
+  it("shows the playing item's rating on a star between the panel button and Favorite, orange with the rating in its badge, and outlined without one while unrated", async () => {
+    useStylesheet();
+    await playRated(rated(VIDEO_ITEM, 3.5), rated(SECOND_VIDEO, 3), PHOTO_ITEM);
+
+    const star = ratingButton();
+    expect(star.previousElementSibling?.id).toBe("panel-btn");
+    expect(star.nextElementSibling).toBe(ratingPopover());
+    expect(ratingPopover().nextElementSibling?.id).toBe("favorite-btn");
+    expect([star.type, star.title, star.getAttribute("aria-controls"), star.getAttribute("aria-expanded")]).toEqual([
+      "button",
+      "Rating, 3.5 stars",
+      "rating-popover",
+      "false"
+    ]);
+    expect(star.querySelector(".material-symbol-icon")!.textContent).toBe("star");
+    expect(ratingBadge().getAttribute("aria-hidden")).toBe("true");
+    expect(starShows()).toEqual(["Rating, 3.5 stars", true, "3.5"]);
+    expect(currentStyle(star).color).toBe(orange());
+    const right = (id: string) => currentStyle(document.getElementById(id)!).right;
+    expect([right("panel-btn"), right("rating-btn"), right("favorite-btn"), right("blacklist-btn")]).toEqual(["168px", "116px", "64px", "12px"]);
+    // The bell's badge, at the same place over its button.
+    const badge = currentStyle(ratingBadge());
+    expect([badge.position, badge.top, badge.right, badge.boxShadow]).toEqual(["absolute", "4px", "4px", "0 0 0 2px #000"]);
+
+    await click(button("Next"));
+    expect(starShows()).toEqual(["Rating, 3 stars", true, "3"]);
+
+    await click(button("Next"));
+    expect(starShows()).toEqual(["Rating", false, null]);
+    expect(star.title).toBe("Rating");
+    expect(currentStyle(star).color).not.toBe(orange());
+  });
+
+  it("stays left of Favorite while the panel is on the left, whose button then sits just right of the bell", async () => {
+    localStorage.setItem("rr_device.panel.side", '"left"');
+    useStylesheet();
+    await mount(serverPicking(VIDEO_ITEM));
+
+    const panelButton = currentStyle(document.getElementById("panel-btn")!);
+    expect([panelButton.left, panelButton.right]).toEqual(["64px", "auto"]);
+    expect(currentStyle(ratingButton()).right).toBe("116px");
+  });
+
+  it("opens nothing for a press while nothing plays or while the server asks for pairing", async () => {
+    const services = await mountWithServices(serverPicking(VIDEO_ITEM));
+
+    await pressStar();
+    expect(ratingPopover().hidden).toBe(true);
+    expect(ratingButton().getAttribute("aria-expanded")).toBe("false");
+
+    await click(emptyState());
+    await waitFor(() => expect(video().src).toBe(VIDEO_URL));
+    services.store.pairingRequired.value = true;
+    await flush();
+    await pressStar();
+    expect(ratingPopover().hidden).toBe(true);
+
+    services.store.pairingRequired.value = false;
+    await flush();
+    await pressStar();
+    expect(ratingPopover().hidden).toBe(false);
+    expect(ratingButton().getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("opens the Stats tab's stars at the player's center, which set a rating by a click, a tap, or a drag and close as they set it, with the popup and the request", async () => {
+    const { page, server } = await playRated(VIDEO_ITEM);
+    expect(ratingPopover().hidden).toBe(true);
+    expect(ratingPopover().querySelector(".rating")).toBeNull();
+
+    await pressStar();
+    expect(ratingPopover().hidden).toBe(false);
+    expect(screen.getByRole("slider", { name: "Rating" })).toBe(popoverStars());
+    expect(sliderValue(popoverStars())).toEqual(["0", "Not rated"]);
+
+    await tapStars(popoverStars(), xFor(3), "mouse");
+    expect(ratingPopover().hidden).toBe(true);
+    expect(ratingButton().getAttribute("aria-expanded")).toBe("false");
+    expect(starShows()).toEqual(["Rating, 3 stars", true, "3"]);
+    await waitFor(() => expect(popups()).toEqual([{ text: "Rated 3 stars", detail: "holiday clip.mp4" }]));
+
+    await pressStar();
+    expect(sliderValue(popoverStars())).toEqual(["3", "3 stars"]);
+    await tapStars(popoverStars(), xFor(1.5), "touch");
+    expect(ratingPopover().hidden).toBe(true);
+    expect(starShows()).toEqual(["Rating, 1.5 stars", true, "1.5"]);
+
+    // A drag shows the value under it and sets it as it ends.
+    await pressStar();
+    await pressStars(popoverStars(), xFor(1), "touch");
+    await movePointer(popoverStars(), xFor(4.5), "touch");
+    expect(starsShown(popoverStars())).toBe(4.5);
+    expect(ratingPopover().hidden).toBe(false);
+    await releasePointer(popoverStars(), xFor(4), "touch");
+    expect(ratingPopover().hidden).toBe(true);
+    expect(starShows()).toEqual(["Rating, 4 stars", true, "4"]);
+
+    await pressStar();
+    await tapStars(popoverStars(), CLEAR_EDGE_X, "mouse");
+    expect(ratingPopover().hidden).toBe(true);
+    expect(starShows()).toEqual(["Rating", false, null]);
+    await waitFor(() => expect(popups()).toEqual([{ text: "Rating cleared", detail: "holiday clip.mp4" }]));
+
+    // A release on the rating it has closes it too, and sends nothing.
+    await pressStar();
+    await tapStars(popoverStars(), CLEAR_EDGE_X, "touch");
+    expect(ratingPopover().hidden).toBe(true);
+
+    await waitFor(() => expect(ratingRequests(server)).toHaveLength(4));
+    expect(ratingRequests(server)).toEqual([
+      { itemId: "item-video", rating: 3, clientId: page.clientId() },
+      { itemId: "item-video", rating: 1.5, clientId: page.clientId() },
+      { itemId: "item-video", rating: 4, clientId: page.clientId() },
+      { itemId: "item-video", rating: null, clientId: page.clientId() }
+    ]);
+    // Its presses never reach the player behind it.
+    expect(randomPicks(server)).toBe(1);
+  });
+
+  it("stays open while its keys change the rating, which shows at once and is sent once they pause, and closes on Enter, giving focus back to the star", async () => {
+    const { page, server } = await playRated(rated(VIDEO_ITEM, 2));
+
+    await pressStarByKey();
+    expect(document.activeElement).toBe(popoverStars());
+    await pressRatingKey(popoverStars(), "ArrowRight");
+    await pressRatingKey(popoverStars(), "ArrowRight");
+    expect(ratingPopover().hidden).toBe(false);
+    expect(sliderValue(popoverStars())).toEqual(["3", "3 stars"]);
+    expect(starShows()).toEqual(["Rating, 3 stars", true, "3"]);
+    expect(ratingRequests(server)).toEqual([]);
+    await wait(600);
+    expect(ratingRequests(server)).toEqual([{ itemId: "item-video", rating: 3, clientId: page.clientId() }]);
+    await waitFor(() => expect(popups()).toEqual([{ text: "Rated 3 stars", detail: "holiday clip.mp4" }]));
+
+    expect(fireEvent.keyDown(popoverStars(), { key: "Enter" })).toBe(false);
+    await flush();
+    expect(ratingPopover().hidden).toBe(true);
+    expect(document.activeElement).toBe(ratingButton());
+
+    // Closing sends a change the keys were still waiting to send.
+    await pressStarByKey();
+    await pressRatingKey(popoverStars(), "End");
+    fireEvent.keyDown(popoverStars(), { key: "Enter" });
+    await flush();
+    expect(ratingRequests(server).map((body) => (body as { rating: unknown }).rating)).toEqual([3, 5]);
+  });
+
+  it("takes focus to its stars when opened from the keyboard, leaves focus where it was when opened with a pointer, and closes on a second press of the star", async () => {
+    await playRated(VIDEO_ITEM);
+    button("Loop").focus();
+
+    await pressStar();
+    expect(ratingPopover().hidden).toBe(false);
+    expect(document.activeElement).toBe(button("Loop"));
+    await pressStar();
+    expect(ratingPopover().hidden).toBe(true);
+    expect(document.activeElement).toBe(button("Loop"));
+
+    // A press on the star with focus on the stars gives focus back to the star where the press leaves focus, as Safari
+    // does, and closes it where a browser moves focus to the star as it's pressed.
+    await pressStarByKey();
+    expect(document.activeElement).toBe(popoverStars());
+    await pressStar();
+    expect(ratingPopover().hidden).toBe(true);
+    expect(document.activeElement).toBe(ratingButton());
+    await pressStarByKey();
+    fireEvent.pointerDown(ratingButton(), { pointerType: "mouse", button: 0 });
+    ratingButton().focus();
+    await click(ratingButton());
+    expect(ratingPopover().hidden).toBe(true);
+  });
+
+  it("closes on Escape before the stage does, so in pseudo-fullscreen the first Escape closes only it, but not while an in-app dialog is open", async () => {
+    await playRated(VIDEO_ITEM);
+    await click(button("Fullscreen"));
+    expect(isPseudoFullscreen()).toBe(true);
+
+    await pressStarByKey();
+    expect(fireEvent.keyDown(popoverStars(), { key: "Escape" })).toBe(false);
+    await flush();
+    expect(ratingPopover().hidden).toBe(true);
+    expect(isPseudoFullscreen()).toBe(true);
+    expect(document.activeElement).toBe(ratingButton());
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await flush();
+    expect(isPseudoFullscreen()).toBe(false);
+
+    await pressStar();
+    const dialog = document.createElement("dialog");
+    dialog.setAttribute("open", "");
+    document.body.append(dialog);
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await flush();
+    expect(ratingPopover().hidden).toBe(false);
+    dialog.remove();
+  });
+
+  it("closes as Tab takes focus out of it, either way, focus going where Tab takes it", async () => {
+    await playRated(VIDEO_ITEM);
+
+    await pressStarByKey();
+    fireEvent.keyDown(popoverStars(), { key: "Tab" });
+    button("Favorite").focus();
+    await flush();
+    expect(ratingPopover().hidden).toBe(true);
+    expect(document.activeElement).toBe(button("Favorite"));
+
+    await pressStarByKey();
+    fireEvent.keyDown(popoverStars(), { key: "Tab", shiftKey: true });
+    ratingButton().focus();
+    await flush();
+    expect(ratingPopover().hidden).toBe(true);
+    expect(document.activeElement).toBe(ratingButton());
+  });
+
+  it("closes on a press elsewhere, which still does what it does", async () => {
+    const { server } = await playRated(VIDEO_ITEM);
+
+    await pressStar();
+    fireEvent.pointerDown(button("Loop"), { pointerType: "mouse", button: 0 });
+    await flush();
+    expect(ratingPopover().hidden).toBe(true);
+    await click(button("Loop"));
+    expect(isLit("Loop")).toBe(true);
+
+    // A tap on the player beside the stars.
+    await pressStar();
+    fireEvent.pointerDown(video(), { pointerType: "touch" });
+    await flush();
+    expect(ratingPopover().hidden).toBe(true);
+    expect(ratingRequests(server)).toEqual([]);
+  });
+
+  it("closes on a volume change, by the wheel, [ and ], or M, so it and the volume indicator never show at once, and opening it hides the indicator", async () => {
+    await playRated(VIDEO_ITEM);
+    moveVolume(50);
+
+    const changes: Array<() => void> = [
+      () => wheel(-100),
+      () => fireEvent.keyDown(document.body, { key: "[" }),
+      () => fireEvent.keyDown(document.body, { key: "]" }),
+      () => fireEvent.keyDown(document.body, { key: "m" })
+    ];
+    for (const change of changes) {
+      await pressStar();
+      expect(ratingPopover().hidden).toBe(false);
+      change();
+      await flush();
+      expect(ratingPopover().hidden).toBe(true);
+      expect(indicatorShows()).not.toBeNull();
+    }
+
+    await pressStar();
+    expect(ratingPopover().hidden).toBe(false);
+    expect(indicatorShows()).toBeNull();
+  });
+
+  it("gives focus on its stars back to the star however it closes, as by a volume key or another item playing", async () => {
+    await playRated(VIDEO_ITEM, SECOND_VIDEO);
+    moveVolume(50);
+
+    await pressStarByKey();
+    expect(document.activeElement).toBe(popoverStars());
+    fireEvent.keyDown(popoverStars(), { key: "]" });
+    await flush();
+    expect(ratingPopover().hidden).toBe(true);
+    expect(document.activeElement).toBe(ratingButton());
+
+    await pressStarByKey();
+    fireEvent.keyDown(popoverStars(), { key: "r" });
+    await waitFor(() => expect(video().src).toBe(SECOND_VIDEO_URL));
+    expect(ratingPopover().hidden).toBe(true);
+    expect(document.activeElement).toBe(ratingButton());
+  });
+
+  it("closes when another item plays, so a rating goes only to the item it was opened for, and when the panel opens", async () => {
+    stubStarLayout();
+    const services = await mountWithServices(serverPicking(VIDEO_ITEM, SECOND_VIDEO));
+    await click(emptyState());
+    await waitFor(() => expect(video().src).toBe(VIDEO_URL));
+
+    await pressStar();
+    void services.player.next();
+    await waitFor(() => expect(video().src).toBe(SECOND_VIDEO_URL));
+    expect(ratingPopover().hidden).toBe(true);
+
+    await pressStar();
+    services.panel.toggle();
+    await flush();
+    expect(panel().hidden).toBe(false);
+    expect(ratingPopover().hidden).toBe(true);
+  });
+
+  it("cancels a touch's end on its stars, so the click after a tap never lands on the video under it as it hides, and a swipe there plays nothing", async () => {
+    const { server } = await playRated(VIDEO_ITEM);
+
+    await pressStar();
+    expect(fireEvent.touchEnd(popoverStars(), { changedTouches: [{ clientX: 120, clientY: 100 }] })).toBe(false);
+    await swipe(popoverStars(), { x: 300, y: 100 }, { x: 100, y: 100 });
+    expect(randomPicks(server)).toBe(1);
+    expect(video().src).toBe(VIDEO_URL);
+  });
+
+  it("looks like the player's other icons: the stars alone at the player's center, white when empty, each glyph with a text shadow, and only the stars take presses", async () => {
+    useStylesheet();
+    await playRated(rated(VIDEO_ITEM, 3.5));
+    // Hidden, it shows nothing, though it lays the stars out as a flexbox while open.
+    expect(currentStyle(ratingPopover()).display).toBe("none");
+    await pressStar();
+
+    const popover = currentStyle(ratingPopover());
+    expect([popover.position, popover.display, popover.alignItems, popover.justifyContent, popover.pointerEvents]).toEqual([
+      "absolute",
+      "flex",
+      "center",
+      "center",
+      "none"
+    ]);
+    // It spans the player, with no background, and centers the stars without a transform.
+    expect([popover.transform, popover.backgroundColor]).toEqual(["", ""]);
+    expect(stylesheetText()).toMatch(/\.rating-popover \{[^}]*inset: 0;/);
+    const stars = currentStyle(popoverStars());
+    expect([stars.pointerEvents, stars.marginLeft]).toEqual(["auto", "0px"]);
+
+    const root = currentStyle(document.documentElement);
+    const shadow = root.getPropertyValue("--control-drop-shadow").trim();
+    const [full, , , half, empty] = [...popoverStars().querySelectorAll<HTMLElement>(".rating-star")];
+    const part = (star: HTMLElement | undefined, name: "outline" | "fill") => currentStyle(star!.querySelector(`.rating-${name}`)!);
+    expect(currentStyle(empty!).color).toBe(root.getPropertyValue("--icon-foreground").trim());
+    expect([part(empty, "outline").textShadow, part(full, "fill").textShadow]).toEqual([shadow, shadow]);
+    // A half star's shadow is its outline's, so none is cut off with its filled half.
+    expect([part(half, "outline").textShadow, part(half, "fill").textShadow]).toEqual([shadow, ""]);
+    // The filled star spans its star and centers its glyph there without a transform.
+    expect(part(full, "fill").transform).toBe("");
+    expect(stylesheetText()).toMatch(/\.rating-fill \{ position: absolute; inset: 0;/);
+  });
+
+  it("follows a rating the keys set at once, on the star and in the popover", async () => {
+    stubStarLayout();
+    const server = serverPicking(rated(VIDEO_ITEM, 2));
+    server.on("POST", "/api/rating", ratingAnswer);
+    const services = await mountWithServices(server);
+    await click(emptyState());
+    await waitFor(() => expect(video().src).toBe(VIDEO_URL));
+    expect(starShows()).toEqual(["Rating, 2 stars", true, "2"]);
+
+    await pressStar();
+    services.playerRating.step(1);
+    await flush();
+    expect(starShows()).toEqual(["Rating, 2.5 stars", true, "2.5"]);
+    expect(sliderValue(popoverStars())).toEqual(["2.5", "2.5 stars"]);
+    expect(ratingPopover().hidden).toBe(false);
+
+    services.playerRating.set(null, { byKey: true });
+    await flush();
+    expect(starShows()).toEqual(["Rating", false, null]);
+    expect(sliderValue(popoverStars())).toEqual(["0", "Not rated"]);
+    await waitFor(() => expect(ratingRequests(server)).toHaveLength(1));
+    expect(ratingRequests(server).map((body) => (body as { rating: unknown }).rating)).toEqual([null]);
+  });
+
+  it("follows another device's rating, and keeps a rating set here through a resync", async () => {
+    const { page, server } = await playRated(rated(VIDEO_ITEM, 2));
+
+    await pressStar();
+    page.stream().emit("itemRatingChanged", 2, { itemId: "item-video", path: VIDEO_ITEM.id, rating: 4.5, previousRating: 2, clientId: "another-client" });
+    await flush();
+    expect(starShows()).toEqual(["Rating, 4.5 stars", true, "4.5"]);
+    expect(sliderValue(popoverStars())).toEqual(["4.5", "4.5 stars"]);
+
+    await tapStars(popoverStars(), xFor(3), "mouse");
+    await waitFor(() => expect(ratingRequests(server)).toHaveLength(1));
+    await flush();
+    page.stream().emit("resyncRequired", 3, {});
+    await flush();
+    expect(starShows()).toEqual(["Rating, 3 stars", true, "3"]);
+  });
+
+  it("shows the rating a history step's play answer gives, so a change made while the item wasn't playing shows after a resync", async () => {
+    const { page, server } = await playRated(rated(VIDEO_ITEM, 2), SECOND_VIDEO);
+    await click(button("Next"));
+    expect(video().src).toBe(SECOND_VIDEO_URL);
+
+    // Another device rates the first video while the second plays, and a resync drops what this device kept of it.
+    page.stream().emit("itemRatingChanged", 2, { itemId: "item-video", path: VIDEO_ITEM.id, rating: 4, previousRating: 2, clientId: "another-client" });
+    await flush();
+    page.stream().emit("resyncRequired", 3, {});
+    await flush();
+    server.on("POST", "/api/play/item-video", () => json(rated(VIDEO_ITEM, 4)));
+
+    await click(button("Previous"));
+    expect(video().src).toBe(VIDEO_URL);
+    expect(starShows()).toEqual(["Rating, 4 stars", true, "4"]);
   });
 });
 

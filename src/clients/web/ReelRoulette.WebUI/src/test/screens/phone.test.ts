@@ -347,6 +347,7 @@ describe("safe-area insets", () => {
     expect(currentStyle(controls()).paddingTop).toBe("calc(max(12px, 0px))");
     expect(currentStyle(controls()).paddingBottom).toBe("calc(max(12px, 21px))");
     expect(currentStyle(document.getElementById("favorite-btn")!).top).toBe("calc(max(12px, 0px))");
+    expect(currentStyle(document.getElementById("rating-btn")!).top).toBe("calc(max(12px, 0px))");
 
     await click(panelButton());
     expect(padding(panel())).toEqual(["0px", "47px", "21px", "47px"]);

@@ -13,6 +13,7 @@ import {
   json,
   mountPage,
   pageReady,
+  popupsShown,
   resetPage,
   setViewport,
   settle,
@@ -1243,7 +1244,7 @@ describe("the panel's side", () => {
     const button = document.getElementById("panel-btn")!;
     const bell = document.getElementById("notify-btn")!;
     const stage = document.getElementById("fullscreen-stage")!;
-    expect(currentStyle(button).right).toBe("116px");
+    expect(currentStyle(button).right).toBe("168px");
 
     await openSettings();
     expect(radio("Right").checked).toBe(true);
@@ -1265,7 +1266,7 @@ describe("the panel's side", () => {
     await click(radio("Right"));
     expect(stage.dataset.side).toBe("right");
     expect(button.querySelector(".material-symbol-icon")!.textContent).toBe("right_panel_close");
-    expect(currentStyle(button).right).toBe("116px");
+    expect(currentStyle(button).right).toBe("168px");
     expect(localStorage.getItem("rr_device.panel.side")).toBe('"right"');
   });
 });
@@ -1671,13 +1672,6 @@ function positionSelect(): HTMLSelectElement {
 /** The popup settings' controls inside Popup settings: the five kinds, Position, Show in fullscreen, and Show for. */
 function popupSettingControls(): HTMLElement[] {
   return Array.from(popupSettings().querySelectorAll<HTMLElement>("fieldset input, fieldset select"));
-}
-
-/** The popups showing, each as its text and second line, leaving out any that are fading out. */
-function popupsShown(): string[] {
-  return Array.from(document.querySelectorAll<HTMLElement>("#toasts .toast:not(.is-leaving)")).map((toast) =>
-    Array.from(toast.querySelectorAll(".toast-text > div")).map((line) => line.textContent).join(" | ")
-  );
 }
 
 function bell(): HTMLButtonElement {

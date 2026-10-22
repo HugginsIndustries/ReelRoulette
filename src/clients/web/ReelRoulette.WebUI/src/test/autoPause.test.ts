@@ -125,6 +125,7 @@ function setup(mode: AutoPauseMode, size: Size, item: PlayingItem = VIDEO) {
     connection,
     dialogs: { notice: () => Promise.resolve() },
     notifications: { notify() {} },
+    ratings: { takeRead() {} },
     // No animation frames outside a browser; the bar's own tests run them.
     frames: { request: () => 0, cancel: () => {} }
   });

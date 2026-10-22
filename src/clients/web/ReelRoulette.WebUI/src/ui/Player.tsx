@@ -1,8 +1,11 @@
 import { useLayoutEffect, useMemo, useRef } from "preact/hooks";
 import { createMediaGestures } from "../playback/mediaGestures";
 import { isTextField } from "../playback/playerControls";
+import { ratingText } from "../rating/rating";
 import { useApp } from "./appContext";
+import { useLightDismiss } from "./LightDismiss";
 import { NotifyButton } from "./Notifications";
+import { RatingStars } from "./RatingStars";
 
 /** The video's boolean attributes, present and empty as in the page's HTML. */
 const VIDEO_FLAGS: Record<string, string> = {
@@ -57,6 +60,8 @@ export function Player() {
   const seekStretch = useRef<HTMLSpanElement>(null);
   /** The volume slider is pressed, so its drag is one volume change until it's let go. */
   const sliderPressed = useRef(false);
+  /** The last input was a key, not a pointer. */
+  const keyInput = useRef(false);
   const gestures = useMemo(
     () =>
       createMediaGestures({
@@ -142,16 +147,15 @@ export function Player() {
     // when it's keyboard focus, which `:focus-visible` matches: the last input was a key, not a pointer, so focus a tap or
     // click leaves on a control doesn't. A touch never counts as over a control.
     const controlsLayer = overlay.current!;
-    let keyInput = false;
     const followFocus = (focused: EventTarget | null) =>
-      controls.hold("keyboardFocus", keyInput && controlsLayer.contains(focused as Node | null));
+      controls.hold("keyboardFocus", keyInput.current && controlsLayer.contains(focused as Node | null));
     const onKeyDown = (event: KeyboardEvent) => {
-      keyInput = true;
+      keyInput.current = true;
       followFocus(document.activeElement);
       if (!isTextField(event.target)) controls.activity();
     };
     const onPointerDown = (event: PointerEvent) => {
-      keyInput = false;
+      keyInput.current = false;
       followFocus(document.activeElement);
       if (controlsLayer.contains(event.target as Node | null)) controls.activity();
     };
@@ -259,6 +263,7 @@ export function Player() {
       <div id="overlay-controls" class="overlay-controls" ref={overlay} onTouchStart={stopPropagation} onTouchMove={stopPropagation} onTouchEnd={stopPropagation} onClick={stopPropagation}>
         <NotifyButton />
         <PanelButton />
+        <RatingButton keyInput={keyInput} />
         <button id="favorite-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, player.favorite.value)} aria-label="Favorite" title="Favorite" onClick={press(player.toggleFavorite)}><span class="material-symbol-icon">favorite</span></button>
         <button id="blacklist-btn" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, player.blacklisted.value)} aria-label="Blacklist" title="Blacklist" onClick={press(player.toggleBlacklist)}><span class="material-symbol-icon">thumb_down</span></button>
         <div class="overlay-controls-row overlay-controls-transport">
@@ -363,6 +368,107 @@ function SeekIndicator() {
       <div id="seek-indicator-forward" class={forward.shown ? "seek-indicator is-forward is-shown" : "seek-indicator is-forward"} aria-hidden="true">
         <span class="seek-indicator-text">{forward.seconds ? `+ ${forward.seconds}` : ""}</span>
         <span class="material-symbol-icon">chevron_right</span>
+      </div>
+    </>
+  );
+}
+
+/**
+ * The playing item's rating: the star at the top right, orange with the rating in its badge while the item is rated,
+ * and the popover it opens, the Stats tab's stars at the player's center. Pressing the star does nothing while nothing
+ * plays or while the server asks for pairing. Opened from the keyboard, focus moves to the stars; a click or a tap
+ * leaves it where it is, as on the Stats tab's stars. The stars are built anew each time it opens, so no preview is
+ * left from the last time. A click, tap, or drag that sets a rating closes it; the keys don't, and Enter, Escape, Tab,
+ * or a press elsewhere, which still does what it does, does. So do another item playing, a volume change, and the panel
+ * opening. Escape comes to it before anything else, except while an in-app dialog is open. However it closes, focus on
+ * its stars goes back to the star.
+ */
+function RatingButton({ keyInput }: { keyInput: { readonly current: boolean } }) {
+  const { playerRating } = useApp();
+  const button = useRef<HTMLButtonElement>(null);
+  const popover = useRef<HTMLDivElement>(null);
+  /** The popover opened from the keyboard, so focus moves to its stars once they show. */
+  const focusStars = useRef(false);
+  /** The last press was on the star. */
+  const pressedStar = useRef(false);
+  const open = playerRating.popoverOpen.value;
+  const rating = playerRating.shown.value;
+
+  useLayoutEffect(() => {
+    if (!open || !focusStars.current) return;
+    focusStars.current = false;
+    popover.current!.querySelector<HTMLElement>(".rating")?.focus({ preventScroll: true });
+  }, [open]);
+
+  // As it closes, before its stars are gone, focus on them goes to the star. Focus that Tab moves out has already left.
+  useLayoutEffect(
+    () =>
+      playerRating.popoverOpen.subscribe((isOpen) => {
+        if (!isOpen && popover.current?.contains(document.activeElement)) button.current?.focus({ preventScroll: true });
+      }),
+    []
+  );
+
+  // Each press notes whether it was on the star, for focus leaving the stars, before the press moves focus.
+  useLayoutEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      pressedStar.current = button.current!.contains(event.target as Node | null);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, []);
+
+  useLightDismiss({
+    open: playerRating.popoverOpen,
+    keepsOpen: (target) => button.current!.contains(target) || popover.current!.contains(target),
+    onPressOutside: playerRating.closePopover,
+    onEscape: playerRating.closePopover
+  });
+
+  function onClick(event: Event): void {
+    event.stopPropagation();
+    if (playerRating.popoverOpen.peek()) {
+      playerRating.closePopover();
+      return;
+    }
+    focusStars.current = playerRating.openPopover() && keyInput.current;
+  }
+
+  // Focus leaving the popover, as Tab takes it, closes it. Focus a press on the star moves is left to the star, which
+  // closes the popover, so the press doesn't open it again.
+  function onFocusOut(event: FocusEvent): void {
+    if (popover.current!.contains(event.relatedTarget as Node | null) || (!keyInput.current && pressedStar.current)) return;
+    playerRating.closePopover();
+  }
+
+  function onKeyDown(event: KeyboardEvent): void {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    playerRating.closePopover();
+  }
+
+  const rated = rating !== null;
+  const label = rated ? `Rating, ${ratingText(rating)}` : "Rating";
+  return (
+    <>
+      <button id="rating-btn" type="button" class={lit(`${OVERLAY_TOGGLE} overlay-corner-btn`, rated)} aria-label={label} title={label} aria-expanded={open ? "true" : "false"} aria-controls="rating-popover" ref={button} onClick={onClick}>
+        <span class="material-symbol-icon">star</span>
+        <span class="rating-badge" aria-hidden="true" hidden={!rated}>{rated ? String(rating) : ""}</span>
+      </button>
+      {/* A tap that sets a rating hides the popover as it lifts, so the click a browser sends after a touch would land on
+          the video under it; a touch on the stars sends no click. */}
+      <div id="rating-popover" class="rating-popover" hidden={!open} ref={popover} onKeyDown={onKeyDown} onFocusOut={onFocusOut} onTouchEnd={(event) => event.preventDefault()}>
+        {open ? (
+          <RatingStars
+            rating={rating}
+            label="Rating"
+            onSet={(next, byKey) => {
+              playerRating.set(next, { byKey });
+              if (!byKey) playerRating.closePopover();
+            }}
+            onBlur={playerRating.send}
+          />
+        ) : null}
       </div>
     </>
   );
