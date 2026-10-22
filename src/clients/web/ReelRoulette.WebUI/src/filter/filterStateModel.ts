@@ -3,6 +3,7 @@
  * Enums use numeric values (System.Text.Json default for C# enums).
  */
 
+import { parseRating } from "../rating/rating";
 import type { components } from "../types/openapi.generated";
 
 /** A filter state as it goes over the wire, holding durations as text. */
@@ -26,6 +27,10 @@ export interface FilterState {
   onlyKnownDuration: boolean;
   onlyKnownLoudness: boolean;
   onlyBrowserPlayable: boolean;
+  /** Only items with no rating. */
+  onlyUnrated: boolean;
+  /** Only items rated at or above this many stars, from 0.5 to 5 in half-star steps, or null for no minimum. */
+  minRating: number | null;
   audioFilter: AudioFilterMode;
   mediaTypeFilter: MediaTypeFilter;
   /** true = AND across categories, false = OR; null/absent treated as AND on server via Core */
@@ -46,6 +51,8 @@ export function createDefaultFilterState(): FilterState {
     onlyKnownDuration: false,
     onlyKnownLoudness: false,
     onlyBrowserPlayable: false,
+    onlyUnrated: false,
+    minRating: null,
     audioFilter: AUDIO_FILTER.PlayAll,
     mediaTypeFilter: MEDIA_TYPE_FILTER.All,
     globalMatchMode: true,
@@ -381,7 +388,10 @@ function durationToApiValue(seconds: number): string {
   return formatDurationForApi(seconds);
 }
 
-/** Serialize for POST /api/random and preset snapshots. Each flag filter is written as its mode. */
+/**
+ * Serialize for POST /api/random and preset snapshots. Each flag filter is written as its mode, and the minimum rating
+ * and each duration only when the filter has one.
+ */
 export function serializeFilterStateForApi(state: FilterState): ApiFilterState {
   const out: ApiFilterState = {
     favoritesMode: state.favoritesMode,
@@ -390,6 +400,7 @@ export function serializeFilterStateForApi(state: FilterState): ApiFilterState {
     onlyKnownDuration: state.onlyKnownDuration,
     onlyKnownLoudness: state.onlyKnownLoudness,
     onlyBrowserPlayable: state.onlyBrowserPlayable,
+    onlyUnrated: state.onlyUnrated,
     audioFilter: state.audioFilter,
     mediaTypeFilter: state.mediaTypeFilter,
     globalMatchMode: state.globalMatchMode,
@@ -406,6 +417,9 @@ export function serializeFilterStateForApi(state: FilterState): ApiFilterState {
     out.categoryLocalMatchModes = modes;
   }
 
+  if (state.minRating !== null) {
+    out.minRating = state.minRating;
+  }
   if (state.minDurationSeconds != null && Number.isFinite(state.minDurationSeconds)) {
     out.minDuration = durationToApiValue(state.minDurationSeconds);
   }
@@ -492,6 +506,12 @@ export function filterStateFromApiObject(raw: ApiFilterState | null | undefined)
   if (typeof o.onlyBrowserPlayable === "boolean") {
     base.onlyBrowserPlayable = o.onlyBrowserPlayable;
   }
+  if (typeof o.onlyUnrated === "boolean") {
+    base.onlyUnrated = o.onlyUnrated;
+  }
+  // A value that isn't a rating reads as no minimum, as the server's parser reads it. Locked to
+  // shared/fixtures/filter-min-rating.json.
+  base.minRating = parseRating(o.minRating);
 
   base.audioFilter = (readEnumValue(o.audioFilter, AUDIO_FILTER) ?? base.audioFilter) as AudioFilterMode;
   base.mediaTypeFilter = (readEnumValue(o.mediaTypeFilter, MEDIA_TYPE_FILTER) ?? base.mediaTypeFilter) as MediaTypeFilter;

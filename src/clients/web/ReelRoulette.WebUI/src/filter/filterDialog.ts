@@ -322,6 +322,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       problems,
       flagged: {
         flagModes: isFlagged(problems.flagModes),
+        ratingFilters: isFlagged(problems.ratingFilters),
         minDuration: isFlagged(problems.minDuration),
         maxDuration: isFlagged(problems.maxDuration),
         newPresetName: isFlagged(problems.newPresetName)

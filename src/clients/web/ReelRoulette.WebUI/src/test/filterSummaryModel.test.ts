@@ -33,6 +33,18 @@ describe("filterSummaryParts", () => {
     expect(filterSummaryParts(filter({ onlyBrowserPlayable: true }), null)).toEqual(["Only files this browser can play"]);
   });
 
+  it("names Only unrated and the minimum rating in stars after the other Basic Filters options", () => {
+    expect(filterSummaryParts(filter({ onlyUnrated: true }), null)).toEqual(["Only unrated"]);
+    expect(filterSummaryParts(filter({ minRating: 3.5 }), null)).toEqual(["Min 3.5 stars"]);
+    expect(filterSummaryParts(filter({ minRating: 1 }), null)).toEqual(["Min 1 star"]);
+    expect(filterSummaryParts(filter({ minRating: 0.5 }), null)).toEqual(["Min 0.5 stars"]);
+    expect(filterSummaryParts(filter({ onlyBrowserPlayable: true, minRating: 4, mediaTypeFilter: MEDIA_TYPE_FILTER.VideosOnly }), null)).toEqual([
+      "Only files this browser can play",
+      "Min 4 stars",
+      "Videos only"
+    ]);
+  });
+
   it("names a media type or audio choice other than the first by its label", () => {
     expect(filterSummaryParts(filter({ mediaTypeFilter: MEDIA_TYPE_FILTER.All }), null)).toEqual([]);
     expect(filterSummaryParts(filter({ mediaTypeFilter: MEDIA_TYPE_FILTER.VideosOnly }), null)).toEqual(["Videos only"]);

@@ -164,6 +164,8 @@ exports[`page structure > keeps the starting markup 1`] = `
                   "Duration"
                 <option value="DateAdded">
                   "Date added"
+                <option value="Rating">
+                  "Rating"
               <button aria-label="Toggle sort direction" class="library-overlay-sort-direction" id="library-sort-direction-btn" type="button">
                 "A–Z"
             <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">

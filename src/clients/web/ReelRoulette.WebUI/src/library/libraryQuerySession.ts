@@ -1,6 +1,8 @@
 import { requestFailure } from "../api/serverRequest";
 import type { ApiFilterState, FilterState, FlagFilterMode } from "../filter/filterStateModel";
 import { cloneFilterState, createDefaultFilterState, serializeFilterStateForApi } from "../filter/filterStateModel";
+import { parseRating } from "../rating/rating";
+import type { ItemRatingChangedPayload } from "../types/serverContracts";
 import {
   createDefaultBrowseControls,
   formatBrowseResultSummary,
@@ -10,7 +12,7 @@ import {
 } from "./libraryBrowseModel";
 import { DEFAULT_GRID_OVERSCAN_PX } from "./libraryGridVirtualizer";
 import type { LibraryProjectionItem } from "./libraryProjectionModel";
-import { applyItemStateChanged, applyPlaybackRecorded, findProjectionItem } from "./libraryProjectionSync";
+import { applyItemRatingChanged, applyItemStateChanged, applyPlaybackRecorded, findProjectionItem } from "./libraryProjectionSync";
 import type { ItemStateChangedPayload, PlaybackRecordedPayload } from "./libraryProjectionSync";
 
 export const LIBRARY_QUERY_WINDOW_SIZE = 200;
@@ -19,7 +21,7 @@ export const LIBRARY_QUERY_RELOAD_LIMIT = 10_000;
 export const LIBRARY_QUERY_SEARCH_DEBOUNCE_MS = 300;
 
 export type LibraryQueryKind = "reset" | "reload" | "append";
-export type LibraryQueryTileEvent = "favorite" | "playback" | "tags";
+export type LibraryQueryTileEvent = "favorite" | "playback" | "tags" | "rating";
 export type LibraryQueryTileEffect = "patch" | "reload";
 export type LibraryWindowPhase = "idle" | "loading" | "ready" | "empty" | "error";
 
@@ -87,8 +89,9 @@ export interface LibraryTileFlags {
 }
 
 /**
- * One item's change from a favorite, blacklist, playback, or tag event. `before` is the favorite and blacklist
- * before the event: the loaded tile's, or the event's previous values for an item that is not loaded.
+ * One item's change from a favorite, blacklist, playback, tag, or rating event. `before` is the favorite and blacklist
+ * before the event: the loaded tile's, or the event's previous values for an item that is not loaded. A rating change
+ * gives the event's rating and the one before, in stars or null for none.
  */
 export interface LibraryTileChange {
   kind: LibraryQueryTileEvent;
@@ -97,11 +100,13 @@ export interface LibraryTileChange {
   after?: LibraryTileFlags | null;
   addedTags?: readonly string[] | null;
   removedTags?: readonly string[] | null;
+  rating?: number | null;
+  previousRating?: number | null;
 }
 
 export type LibraryTileEffectFilter = Pick<
   FilterState,
-  "favoritesMode" | "blacklistedMode" | "onlyNeverPlayed" | "selectedTags" | "excludedTags"
+  "favoritesMode" | "blacklistedMode" | "onlyNeverPlayed" | "onlyUnrated" | "minRating" | "selectedTags" | "excludedTags"
 >;
 
 export type LibraryQueryFn = (request: LibraryQueryRequest, signal: AbortSignal) => Promise<LibraryQueryPage>;
@@ -117,6 +122,7 @@ export interface LibraryQuerySession {
   applyFavorite(payload: ItemStateChangedPayload): Promise<void>;
   applyPlayback(payload: PlaybackRecordedPayload): Promise<void>;
   applyTags(payload: ItemTagsChangedPayload): Promise<void>;
+  applyRating(payload: ItemRatingChangedPayload): Promise<void>;
   writeTags(updates: readonly { itemId: string; tags: readonly string[] }[]): void;
   reviseStoredFilter(revise: (selected: string[], excluded: string[]) => void): void;
   reloadLoaded(): Promise<void>;
@@ -187,6 +193,9 @@ export function libraryQueryTileEffect(
     case "tags":
       reload = tagChangeReloads(change, filter);
       break;
+    case "rating":
+      reload = sortMode === "Rating" || ratingChangeReloads(change, filter);
+      break;
   }
   return reload ? "reload" : "patch";
 }
@@ -239,6 +248,20 @@ function tagChangeReloads(change: LibraryTileChange, filter: LibraryTileEffectFi
     return hits(change.removedTags, selected) || hits(change.addedTags, excluded);
   }
   return hits(change.addedTags, selected) || hits(change.removedTags, excluded);
+}
+
+/**
+ * Only unrated and a minimum rating keep a loaded tile while its new rating still matches, and reload for an item that
+ * is not loaded only when its new rating matches and the one before didn't.
+ */
+function ratingChangeReloads(change: LibraryTileChange, filter: LibraryTileEffectFilter): boolean {
+  const { onlyUnrated, minRating } = filter;
+  if (!onlyUnrated && minRating === null) {
+    return false;
+  }
+  const matches = (rating: number | null) => (!onlyUnrated || rating === null) && (minRating === null || (rating ?? 0) >= minRating);
+  const rating = change.rating ?? null;
+  return change.loaded ? !matches(rating) : matches(rating) && !matches(change.previousRating ?? null);
 }
 
 /** An in-flight reset stays a reset. Any other open query, or a reload effect, reads the loaded window again. */
@@ -613,6 +636,25 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
         changed = true;
       }
       if (changed) {
+        notify({ scroll: "keep", statusMessage: null });
+      }
+    },
+    async applyRating(payload) {
+      if (!hasResult && !inFlight) {
+        return;
+      }
+      const change: LibraryTileChange = {
+        kind: "rating",
+        loaded: findProjectionItem(items, payload.itemId) != null,
+        rating: parseRating(payload.rating),
+        previousRating: parseRating(payload.previousRating)
+      };
+      const replay = libraryQueryReplayKind(inFlight, libraryQueryTileEffect(change, filterState, controls.sortMode));
+      if (replay) {
+        await run(replay);
+        return;
+      }
+      if (applyItemRatingChanged(items, payload)) {
         notify({ scroll: "keep", statusMessage: null });
       }
     },

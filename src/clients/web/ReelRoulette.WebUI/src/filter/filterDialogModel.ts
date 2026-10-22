@@ -34,6 +34,10 @@ export const BASIC_FILTERS: readonly {
   { id: "filter-browser-playable", field: "onlyBrowserPlayable", label: "Only files this browser can play" }
 ];
 
+/** The rating filters' labels, which the Filters line names them by too. */
+export const ONLY_UNRATED_LABEL = "Only unrated";
+export const MIN_RATING_LABEL = "Min Rating";
+
 /** The General tab's media type choices. The first is no filter. */
 export const MEDIA_TYPES = [
   { value: MEDIA_TYPE_FILTER.All, label: "All (Videos and Photos)" },
@@ -83,6 +87,9 @@ export interface GeneralDraft {
   onlyKnownDuration: boolean;
   onlyKnownLoudness: boolean;
   onlyBrowserPlayable: boolean;
+  onlyUnrated: boolean;
+  /** The minimum rating in stars, or null for none. */
+  minRating: number | null;
   mediaTypeFilter: MediaTypeFilter;
   audioFilter: AudioFilterMode;
   minText: string;
@@ -163,6 +170,8 @@ export function generalDraftFromFilter(filter: FilterState, sources: readonly Fi
     onlyKnownDuration: filter.onlyKnownDuration,
     onlyKnownLoudness: filter.onlyKnownLoudness,
     onlyBrowserPlayable: filter.onlyBrowserPlayable,
+    onlyUnrated: filter.onlyUnrated,
+    minRating: filter.minRating,
     mediaTypeFilter: filter.mediaTypeFilter,
     audioFilter: filter.audioFilter,
     minText: filter.minDurationSeconds != null ? formatDurationForDisplay(filter.minDurationSeconds) : "",
@@ -202,6 +211,8 @@ export function filterWithGeneralDraft(
   next.onlyKnownDuration = draft.onlyKnownDuration;
   next.onlyKnownLoudness = draft.onlyKnownLoudness;
   next.onlyBrowserPlayable = draft.onlyBrowserPlayable;
+  next.onlyUnrated = draft.onlyUnrated;
+  next.minRating = draft.minRating;
   next.mediaTypeFilter = draft.mediaTypeFilter;
   next.audioFilter = draft.audioFilter;
   next.minDurationSeconds = draftDuration(draft.minText);
@@ -232,18 +243,18 @@ export function filterWithTypedDurations(filter: FilterState, draft: GeneralDraf
 
 /**
  * The filter dialog's fields that can hold a value that is not valid. The flag modes are the Favorites and Blacklisted
- * filters, checked as a pair.
+ * filters, and the rating filters are Only unrated and Min Rating, each checked as a pair.
  */
-export type FilterField = "flagModes" | "minDuration" | "maxDuration" | "newPresetName";
+export type FilterField = "flagModes" | "ratingFilters" | "minDuration" | "maxDuration" | "newPresetName";
 
 /** The filter dialog's actions that use those fields. */
 export type FilterAction = "apply" | "addPreset" | "updatePreset";
 
-/** The fields each action uses, in the order a held action moves to them. */
+/** The fields each action uses, in the order a held action moves to them, which is their order on screen. */
 export const FILTER_ACTION_FIELDS: Readonly<Record<FilterAction, readonly FilterField[]>> = {
-  apply: ["flagModes", "minDuration", "maxDuration"],
-  addPreset: ["newPresetName", "flagModes", "minDuration", "maxDuration"],
-  updatePreset: ["flagModes", "minDuration", "maxDuration"]
+  apply: ["flagModes", "ratingFilters", "minDuration", "maxDuration"],
+  addPreset: ["newPresetName", "flagModes", "ratingFilters", "minDuration", "maxDuration"],
+  updatePreset: ["flagModes", "ratingFilters", "minDuration", "maxDuration"]
 };
 
 /** The fields right next to each action, any problem in which disables it: Add Preset's name sits beside it. */
@@ -259,6 +270,7 @@ export type GeneralField = Exclude<FilterField, "newPresetName">;
 /** The dialog section each field is in. */
 export const FILTER_FIELD_SECTION: Readonly<Record<FilterField, "general" | "presets">> = {
   flagModes: "general",
+  ratingFilters: "general",
   minDuration: "general",
   maxDuration: "general",
   newPresetName: "presets"
@@ -283,6 +295,9 @@ export const NO_CHOSEN_PRESET_REASON = "Choose a preset to update.";
 /** Favorites only with Blacklisted only matches nothing, since the app never lets an item be both. */
 export const FLAG_MODES_PROBLEM = "Nothing is both a favorite and blacklisted. Use excluded for one of them.";
 
+/** Only unrated with a minimum rating matches nothing, since a minimum leaves unrated files out. */
+export const RATING_FILTERS_PROBLEM = "Nothing unrated has a minimum rating. Clear one of them.";
+
 function durationProblem(text: string): FieldProblem | null {
   return parseTypedDuration(text) === "invalid" ? { message: DURATION_PROBLEM } : null;
 }
@@ -298,6 +313,7 @@ export function filterFieldProblems(
     draft.favoritesOn && draft.favoritesChoice === "only" && draft.blacklistedOn && draft.blacklistedChoice === "only";
   return {
     flagModes: bothOnly ? { message: FLAG_MODES_PROBLEM } : null,
+    ratingFilters: draft.onlyUnrated && draft.minRating !== null ? { message: RATING_FILTERS_PROBLEM } : null,
     minDuration: durationProblem(draft.minText),
     maxDuration: durationProblem(draft.maxText),
     newPresetName: !name
@@ -348,6 +364,9 @@ export function filterHeldReason(action: FilterAction, field: GeneralField): str
   const ending = action === "apply" ? "to apply" : "first";
   if (field === "flagModes") {
     return `Change Favorites or Blacklisted ${ending}.`;
+  }
+  if (field === "ratingFilters") {
+    return `Clear ${ONLY_UNRATED_LABEL} or ${MIN_RATING_LABEL} ${ending}.`;
   }
   return `Correct the ${field === "minDuration" ? "minimum" : "maximum"} duration ${ending}.`;
 }

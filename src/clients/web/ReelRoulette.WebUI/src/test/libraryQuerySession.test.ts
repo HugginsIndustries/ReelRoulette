@@ -27,6 +27,8 @@ interface TileEffectCase {
   after?: LibraryTileChange["after"];
   addedTags?: string[];
   removedTags?: string[];
+  rating?: number | null;
+  previousRating?: number | null;
   /** A filter as the wire carries it, read the way the WebUI reads one. */
   filter: ApiFilterState;
   sortMode: string;
@@ -587,6 +589,54 @@ describe("libraryQuerySession", () => {
     expect(calls).toHaveLength(4);
   });
 
+  it("patches a rating on a loaded tile without a query while no rating filter or sort applies", async () => {
+    let calls = 0;
+    const renders: string[] = [];
+    const session = createLibraryQuerySession(async () => {
+      calls += 1;
+      return page([item("a"), item("b")], 2, 2);
+    });
+    session.setListener((event) => renders.push(event.scroll));
+    await session.ensureLoaded(createDefaultFilterState(), controls());
+    const rendered = renders.length;
+
+    await session.applyRating({ itemId: "a", rating: 3.5, previousRating: null });
+    await session.applyRating({ itemId: "other", rating: 2, previousRating: null });
+
+    expect(calls).toBe(1);
+    expect(session.snapshot().items.map((entry) => entry.rating)).toEqual([3.5, null]);
+    expect(renders.slice(rendered)).toEqual(["keep"]);
+  });
+
+  it("reloads the loaded window under Only unrated when a loaded tile gets a rating, keeping the scroll position", async () => {
+    const filters: unknown[] = [];
+    const session = createLibraryQuerySession(async (request) => {
+      filters.push(request.filterState.onlyUnrated);
+      return page(filters.length > 1 ? [item("b")] : [item("a"), item("b")], filters.length > 1 ? 1 : 2, 2);
+    });
+    await session.ensureLoaded({ ...createDefaultFilterState(), onlyUnrated: true }, controls());
+    session.noteScroll(80);
+
+    await session.applyRating({ itemId: "a", rating: 4, previousRating: null });
+
+    expect(filters).toEqual([true, true]);
+    expect(session.snapshot().items.map((entry) => entry.id)).toEqual(["b"]);
+    expect(session.snapshot().scrollTop).toBe(80);
+  });
+
+  it("reloads under the rating sort for a rating change on an item that is not loaded", async () => {
+    let calls = 0;
+    const session = createLibraryQuerySession(async () => {
+      calls += 1;
+      return page([item("a")], 1, 1);
+    });
+    await session.ensureLoaded(createDefaultFilterState(), controls({ sortMode: "Rating", sortDescending: true }));
+
+    await session.applyRating({ itemId: "other", rating: 5, previousRating: 4.5 });
+
+    expect(calls).toBe(2);
+  });
+
   it("reloads a catalog rename or delete under any tag filter", async () => {
     let calls = 0;
     const session = createLibraryQuerySession(async () => {
@@ -623,7 +673,9 @@ describe("library query decisions", () => {
       before: entry.before ?? null,
       after: entry.after ?? null,
       addedTags: entry.addedTags ?? [],
-      removedTags: entry.removedTags ?? []
+      removedTags: entry.removedTags ?? [],
+      rating: entry.rating ?? null,
+      previousRating: entry.previousRating ?? null
     };
     expect(libraryQueryTileEffect(change, filterStateFromApiObject(entry.filter), entry.sortMode)).toBe(entry.expected);
   });

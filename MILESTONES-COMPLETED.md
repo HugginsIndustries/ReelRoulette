@@ -6,6 +6,191 @@ The archive of finished milestones, moved here from `MILESTONES.md` as-is. The r
 
 Latest completions first:
 
+### M12k4 - Rating Filter and Sort
+
+- **Status**: ✅ Complete
+- **Goal**: Browse and random play can be limited to unrated files or to files rated at or above a minimum, and the Library tab sorts by rating.
+- **Depends on**: Item Ratings.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- An Only unrated checkbox, off by default, keeps only files with no rating. It's how the user finds files to rate.
+- A minimum rating, from ½ to 5 stars, keeps files rated at or above it, so it always leaves unrated files out.
+- Only unrated together with a minimum rating matches nothing, so the Filter tab flags it with the field validation pattern, as it flags Favorites only with Blacklisted only: an error with a message in the same style, "Nothing unrated has a minimum rating. Clear one of them.", and the filter can't be applied or saved until one changes.
+  - The error shows only on the Only unrated line, as Favorites only with Blacklisted only shows only on the Blacklisted line, and a held action moves to it.
+  - The server applies both as sent, which matches nothing, with no refusal of its own.
+- Both sit in the Filter tab's Basic Filters: Only unrated below the other "Only…" options, and the minimum right below it, so the pair is together.
+- The minimum is the same five-star control the Stats tab and the player's popover use, with a "Min Rating" label beside it and no checkbox.
+  - No stars means no minimum, cleared by the first star's left edge or Delete or Backspace, as the other stars are, and screen readers hear "No minimum" in place of "Not rated".
+  - The stars only change the filter in the tab until Apply, and never send a rating.
+- A `minRating` that isn't a multiple of 0.5 from 0.5 to 5, such as a string or 3.2, reads as no minimum, in the server and the WebUI alike, as each already reads a rating.
+- A stored preset without the filter's fields reads them as no minimum and Only unrated off, as Browser-Playable Filter's field reads as off.
+- Unrated files sort as 0 stars in the rating sort, so they come first in Lowest → Highest and last in Highest → Lowest, as the other sorts treat a missing value.
+- Rating cases for preset matching, the tile effect rule, and the sort direction labels go in `preset-filter-equality.json`, `library-tile-effect.json`, and `sort-direction-labels.json`.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ✅ Complete | Only unrated and Min Rating in the Filter tab's Basic Filters, flagged together with the field validation pattern, their Filters line wording, and Rating in the sort list with its direction labels, approved in the user's review on their devices. |
+| Contract | ✅ Complete | The minimum rating and Only unrated in the FilterState schema, applied by the server in the list query, its counts, and random selection, and a rating sort with its indexes. |
+| WebUI | ✅ Complete | Only unrated and Min Rating in the Filter tab, flagged together, and in the Filters line, saved in presets and compared in preset matching, the rating sort, and rating changes patching or reloading the loaded window. |
+
+#### Mockup slice
+
+**Scope**
+
+- In `layout.src.html`'s Filter tab, Basic Filters ends with an Only unrated checkbox and a Min Rating line below it, the label with the stars beside it, as the Decisions describe. On a screen too narrow for both, the stars wrap under the label, as the Stats tab's rating line does.
+- The stars are the Stats tab's and the popover's control, `ratingStars`, whose value text for no rating becomes the caller's, "No minimum" here, and whose flush of a key change when focus leaves becomes the caller's too, so the filter's stars never touch the rating's shared state.
+- Only unrated with a minimum is flagged by a pair check in `common.js` beside `flagPairField`, with its icon after the Only unrated label and the stars marked with it. It holds Apply, Add Preset, and Update with "Clear Only unrated or Min Rating to apply." or "Clear Only unrated or Min Rating first.", and shows the General tab's problem badge.
+- The tab's filter value, its default, its snapshot, the filter each device remembers, and the applied filter take both fields, so presets, Load, Clear all filters, and Discard changes carry them.
+- The Filters line names "Only unrated", and the minimum as "Min 3.5 stars" or "Min 1 star", after the other Basic Filters options.
+- Rating comes last in the Library tab's sort list, with "Highest → Lowest" and "Lowest → Highest", starting on Highest → Lowest as every sort but Name does, and unrated files sorting as 0 stars.
+- The grid lays out again after a rating change while the rating filter or sort applies, from the Stats tab, the popover, the rating keys, or the Mockup tab's "A rating from another device", as it does after a favorite change.
+- The rating's styles move from `layout.src.html` to `common.css`, so the validation page can show the stars.
+- The validation page gets an Only unrated and Min Rating group beside Favorites and Blacklisted's, and the index page describes the filter and the sort.
+- Before the app is built, the user approves the design on a desktop browser, the iPad, and an Android phone.
+
+**Traps**
+
+- The mockup compares filters as `JSON.stringify` text (`sameFilter`), so a new field must sit at the same place in `DEFAULT_FILTER` and `filterValue`.
+- Basic Filters' checkboxes are read by position from `.filter-stack > label` into `basic`, which the "Not yet watched" preset and the Filters line use.
+- The tab's snapshot, Discard changes, and the remembered filter read only the General section's inputs and selects, which the stars aren't.
+- `ratingStars` reads its value from `item.rating`, says "Not rated" for none, and flushes `ratings` when focus leaves it.
+- `.rating` has `margin-left: auto`, which pushes the Stats tab's stars to the right.
+- `ValidatedField` finds its icon in its control's closest `.vfield` and updates on `input`, and `flagPairField` adds `change` listeners for its dropdowns.
+- `check.mjs` runs the pages in happy-dom, with no layout and no pointer drags, so the stars' look and touches on them can only be judged on the devices.
+
+**Acceptance**
+
+- The mockup shows Only unrated and Min Rating, their flag, their Filters line wording, and the rating sort as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+
+**Evidence**
+
+- `layout.src.html` has the Mockup slice's Scope:
+  - Only unrated and the Min Rating line at the end of Basic Filters, with the stars keeping the tab's minimum in a hidden field, so the tab's snapshot, Discard changes, and the remembered filter carry it.
+  - The pair flagged by `ratingPairField` in `common.js`, its icon after the Only unrated label and the stars marked with the checkbox for screen readers, as Favorites' dropdown is with Blacklisted's, holding Apply, Add Preset, and Update.
+  - `ratingStars` taking its value text for no rating and what it does when focus leaves from its caller, with the Stats tab and the popover passing "Not rated" and the flush they had.
+  - The Filters line's "Only unrated" and "Min 3.5 stars", the Rating sort with its direction labels, and the grid laying out again after a rating change while the rating filter or sort applies.
+- In the review, the rating sort changed from unrated files last in both directions to unrated files as 0 stars, which the Decisions and the Contract slice record.
+- `common.css` has the rating's styles, moved from `layout.src.html`, and the Min Rating line's, which the admin and recovery pages take without a change in look. The validation page has the Only unrated and Min Rating group, and the index page describes the filter and the sort.
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passes all 66 steps.
+- The user approved the mockup in their review.
+
+#### Contract slice
+
+**Scope**
+
+- `minRating`, in stars or null for no minimum, and `onlyUnrated` fields in the FilterState schema, applied by the server in the list query, its counts, and random selection.
+- `FilterStateModel` keeps the minimum in half stars, as the catalog keeps a rating, read with `ItemRating.TryFromStars`.
+- A shared fixture under `shared/fixtures/` locks how the server's filter parser and the WebUI read `minRating`: a valid number reads as itself, and a string, a value between half steps, one out of range, and null read as no minimum. Core tests read it.
+- A Rating sort mode, sorting unrated items as 0 stars, as the other modes sort a missing value.
+- The sort's two indexes, one per direction, come with the catalog's move to the next schema version, with its upgrade step from the version before, and go in their own constant.
+- Core's preset comparison, `FilterStateComparison`, compares both fields, so a preset whose only filter is a rating one isn't the default filter, as the browser-playable filter's comparison change came with its contract.
+- OpenAPI, `docs/api.md`, and generated WebUI types.
+
+**Traps**
+
+- FilterState goes through `FilterStateModel` (`FilteringContracts.cs`), `LibraryListFilterParser`, and `AppendFilter` in `LibraryCatalogListQuery.cs`, which the list query, its counts, and random selection share.
+- `FilterStateSchema_NamesEveryFieldTheParserReads` fails when the parser reads a field the schema doesn't name.
+- The catalog keeps a rating as 1 to 10 half stars, never 0, with null for none (`ItemRating`).
+- `items.rating >= {min}` leaves unrated items out by itself, and `items.rating IS NULL AND items.rating >= {min}` matches nothing (measured).
+- Counts are cached by the WHERE text and its values until the next catalog write, and a rating change is one.
+- `BuildOrderBy` sorts the other modes by `COALESCE({column}, 0)` and then the name key, which puts a missing value first ascending and last descending (measured), and the rating sort does the same with `COALESCE(items.rating, 0)`.
+- Each sort index's expression must match the ORDER BY. Indexes on `COALESCE(rating, 0)` and on `COALESCE(rating, 0) DESC`, each followed by the name key, put unrated items first ascending and last descending, and SQLite scans each one for its sort, with or without a minimum rating in the WHERE, as `EXPLAIN QUERY PLAN` shows on a synthetic 49,000-item catalog (measured).
+- A rating sort index cost about 2.4 MB on a synthetic 49,000-item catalog with 40-byte sort keys (measured).
+- Item Ratings gives the 2→3 step its own index SQL, so the new indexes go in their own constant, run for a new catalog and by the new step.
+- `LibraryListSort` rejects an unknown mode with a message that lists the modes (`LibraryOperationsService.cs`).
+
+**Acceptance**
+
+- With a minimum rating, the list query, its counts, and random selection keep only items rated at or above it, with Only unrated only unrated items, with both none, and without either the results are unchanged, in server tests for the filter in the list query, counts, and random selection.
+- A stored preset without the fields filters with no minimum and without Only unrated, in server tests of a stored preset without them.
+- The server's parser reads `minRating` as the shared fixture says, in Core tests of the fixture.
+- The rating sort orders by rating in both directions, with unrated items as 0 stars, and reads its index, in server tests of the sort and its query plan.
+- A catalog at each older version opens upgraded and imports upgraded with the sort indexes, in the catalog upgrade tests.
+- OpenAPI and the generated WebUI types carry the fields and the sort mode, in contract tests.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+**Evidence**
+
+- `FilterStateModel` has `OnlyUnrated` and `MinRatingHalfStars`. `LibraryListFilterParser` reads `onlyUnrated` like the other booleans, and `minRating` with `ItemRating.TryFromStars` when it is a JSON number, and anything else as no minimum. `AppendFilter` adds `items.rating IS NULL` and `items.rating >= {min}`, and `FilterStateComparison` compares both fields.
+- `LibraryListSort.Rating` sorts by `COALESCE(items.rating, 0)` in both directions. The refusal of an unknown `sortMode` builds its list from the enum, so it names Rating and any later mode.
+- The catalog is at schema version 8: `RatingSortIndexesSql` holds `idx_items_rating_asc` and `idx_items_rating_desc`, which a new catalog runs after `SortIndexesSql` and `UpgradeSchema7To8` runs. The test seed has version 8's tables.
+- `shared/fixtures/filter-min-rating.json` has 12 cases, which `FilterStateTests.Parser_ReadsMinRating_AsTheSharedFixtureSays` reads.
+- New tests: `LibraryQueryAndRandomPick_ApplyRatingFilters`, `StoredPresetWithoutRatingFields_PicksWithNoMinimumAndOnlyUnratedOff`, and `Comparison_TellsFiltersApartByRating` in `FilterStateTests`; `Rating_ListCountAndRandomCandidates_KeepWhatEachRatingFilterSays` and `RatingSort_PageQueryReadsItsIndexInBothDirections` in `LibraryListQueryTests`; `LibraryQuerySortModes_MatchTheServersSortModes` in `OpenApiRouteContractTests`, which checks OpenAPI's sort modes against `LibraryListSort`; and Rating in `Query_EverySortInBothDirections_MatchesThePreviousOrder`, whose seed now has ratings. `QueryLibrary_RejectsInvalidPagingSortAndFilter_AndEnrichesOnlyThePage` checks the refusal's wording. The upgrade tests cover version 7 through `OlderSchemaVersions`.
+- Each new test fails with its code broken, restored from a copy afterward (measured): without the parser's `minRating` read, 3 fail; without either WHERE clause, 2; with Rating sorting by name, 2; with the 7 to 8 step emptied, 13 upgrade tests; without the comparison's fields, 1; with Only unrated read as on by default, the stored preset test; with Rating left out of OpenAPI's sort modes, the sort mode test; and with the refusal listing the modes without its final "or", the refusal test.
+- The two indexes took about 55 ms to build on a synthetic 49,000-item catalog (measured), and SQLite reads each one for its direction even on a test catalog without statistics (measured).
+- `dotnet test ReelRoulette.sln` passes (Core 571, ServerApp 19), `npm run generate:contracts` regenerated the types, `npm run verify` passes (1,962 tests), and the Core system checks pass.
+- `shared/api/openapi.yaml` has `onlyUnrated`, `minRating`, and the Rating sort mode. `docs/api.md`, CONTEXT.md, `docs/domain-inventory.md`, and `docs/dev-setup.md` describe the fields, the sort, and schema version 8.
+- No changelog entry: nothing a user can see changes until the WebUI slice.
+
+#### WebUI slice
+
+**Scope**
+
+- Only unrated and Min Rating in the Filter tab's Basic Filters, as the approved mockup has them, saved in presets and compared in preset matching.
+- The Min Rating stars are `RatingStars`, with "No minimum" as their value text for none, changing only the tab's filter until Apply.
+- Only unrated with a minimum rating is flagged with the field validation pattern, its icon on the Only unrated line, holding Apply, Add Preset, and Update with its message and held reason, as Favorites only with Blacklisted only is.
+- The Filters line names them as the approved mockup does.
+- Rating in the Library tab's sort, with its direction labels.
+- A rating change kind in the tile effect rule, from `itemRatingChanged`'s rating and previous rating:
+  - Under Only unrated, a loaded tile reloads when it gets a rating, and an item that isn't loaded reloads when its rating is cleared.
+  - Under a minimum rating, a loaded tile reloads when its rating falls below the minimum, and an item that isn't loaded reloads when its rating reaches it.
+  - Under the rating sort, a rating change reloads.
+  - Otherwise a rating change patches.
+- The WebUI reads `minRating` as the shared fixture says.
+
+**Traps**
+
+- `serializeFilterStateForApi`, `filterStateFromApiObject`, and `filterStatesEqualForPresetMatch` in `src/filter/filterStateModel.ts` write, read, and compare FilterState, and a field the serializer writes joins preset matching.
+- Core's filter comparison, behind the preset routes' refusal of a filter another preset holds, reads `shared/fixtures/preset-filter-equality.json` too, and compares the rating fields already, so the rating cases go in the fixture with the WebUI's comparison.
+- `docs/api.md`'s paragraph on the random playback filter payload says "Core also compares" `onlyUnrated` and `minRating`, which becomes "Both compare" once the WebUI's comparison does.
+- `filterFieldProblems`, `FILTER_ACTION_FIELDS`, `FILTER_FIELD_SECTION`, and `filterHeldReason` in `src/filter/filterDialogModel.ts` hold the Favorites and Blacklisted pair's problem and held reasons, and `FlagFilterRows` in `src/ui/FilterDialog.tsx` marks its partner and places its icon with `useFieldValidation`.
+- The Basic Filters checkboxes come from `BASIC_FILTERS`, which the Filters line also reads by label.
+- `RatingStars` (`src/ui/RatingStars.tsx`) gives its value text from `ratingText`, which says "Not rated" for none, and takes its blur handling from its caller.
+- No Library tab code listens for `itemRatingChanged` yet: only `src/rating/itemRatings.ts` and the Stats tab do.
+- `libraryQueryTileEffect` in `src/library/libraryQuerySession.ts` is locked to `library-tile-effect.json`.
+- The WebUI remembers its sort per device and checks it against its list of sort modes.
+
+**Acceptance**
+
+- Only unrated and the minimum rating are saved in presets and compared in preset matching, in tests of `preset-filter-equality.json`.
+- Only unrated with a minimum rating is flagged on the Only unrated line and holds Apply, Add Preset, and Update, in filter dialog model and Filter screen tests.
+- The Min Rating stars change only the tab's filter and say "No minimum" for none, in Filter screen tests.
+- The Filters line names them, in Library screen tests.
+- The rating sort shows its direction labels, in tests of `sort-direction-labels.json`.
+- A rating change patches or reloads as the rule says, in tests of `library-tile-effect.json`.
+- The WebUI reads `minRating` as the shared fixture says, in WebUI filter model tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- `npm run verify` passes.
+
+**Evidence**
+
+- `filterStateModel.ts` writes `onlyUnrated` always and `minRating` only when the filter has one, and reads `minRating` with `parseRating`, so preset matching, which compares what the filter writes, compares both. `filterStateModel.test.ts` reads the 12 cases of `filter-min-rating.json`.
+- `filterDialogModel.ts`'s General draft carries both fields, so Load, Clear all filters, Discard changes, and Apply do. `ratingFilters` holds Apply, Add Preset, and Update after `flagModes`, the order on screen, with "Clear Only unrated or Min Rating to apply." or "Clear Only unrated or Min Rating first."
+- `FilterDialog.tsx`'s `RatingFilterRows` puts the icon after the Only unrated label, which a held action focuses, and marks the stars with the checkbox. `RatingStars` takes `noneText`, which the Stats tab and the popover leave out for "Not rated", and the partner's `onFocus`, `aria-invalid`, and `aria-describedby`. `styles.css` has the mockup's `.min-rating-row` rules and gives the Only unrated label, inside its icon's wrapper, the other checkboxes' height.
+- `filterSummaryModel.ts` names "Only unrated" and "Min 3.5 stars" after the other Basic Filters options.
+- `libraryBrowseModel.ts`'s `LIBRARY_SORTS`, keyed by the contract's sort modes, gives each sort's name in the sort list, which `LibraryOverlay.tsx` renders from it, and its direction labels, so a sort mode the contract adds fails the typecheck until it has them (measured).
+- `library.ts` passes `itemRatingChanged` to the query session's `applyRating`, which reloads by `libraryQueryTileEffect`'s rating kind or puts the rating on the loaded tile with `applyItemRatingChanged`. Both, and `itemRatings.ts`, read the event as `ItemRatingChangedPayload`, with `previousRating`, which `serverContracts.ts` takes from the generated contract in place of the one `itemRatings.ts` kept.
+- Fixtures: 9 rating cases in `preset-filter-equality.json`, which Core's `Comparison_AgreesWithEveryCaseOfTheSharedFixture` reads too, 18 in `library-tile-effect.json`, 2 in `sort-direction-labels.json`, and both fields in `filter-state-written.json`.
+- New tests: the shared fixture and the rating filters' reading and writing in `filterStateModel.test.ts`; the draft, the pair's problem, and its held reasons in `filterDialogModel.test.ts`; the pair holding every action after Favorites and Blacklisted in `filterDialog.test.ts`; the Filters line in `filterSummaryModel.test.ts`; a patch, a reload under Only unrated, and a reload under the rating sort in `libraryQuerySession.test.ts`; "Only unrated and Min Rating" in the Filter screen tests, for their place, the stars changing only the tab's filter and saying "No minimum", the pair's flag and held actions, and a preset keeping them; and the Filters line, the Rating sort, and a rating event's reload in the Library screen tests.
+- The Filter tab's, Library tab's, and page's markup snapshots take the new rows and the Rating option, with the generated ids after them one higher.
+- Each new piece, broken and restored from a copy afterward, fails its tests (measured): without the `minRating` read, 7 fail; without `onlyUnrated` written, 3; without `minRating` written, 6; without the pair's problem, 3; without its held reason, 2; without the draft's minimum, 4; with the rating rule always patching, 12; without the rating sort's reload, 4; without the tile's rating update, 1; without the Library's listener, 1; without "No minimum", 4; without the stars' `aria-invalid`, 1; without either Filters line part, 2; and without Rating's labels, the typecheck. Core's fixture test fails on the new cases with `FilterStateComparison` comparing neither field.
+- `npm run verify` passes (2,019 tests), `dotnet test ReelRoulette.sln` passes (Core 571, ServerApp 19), and `node docs/mockups/reelroulette/build/check.mjs` passes all 66 steps.
+- The mockup already shows what shipped, so it is unchanged.
+- CONTEXT.md, `docs/api.md`, `docs/architecture.md`, `docs/domain-inventory.md`, and CHANGELOG.md's Ratings entry describe the filter, the sort, and the Library tab's rating updates.
+- Date Added and Date Filters' traps name `LIBRARY_SORTS`, which a new sort mode needs for the typecheck, and the unknown sort mode's message, which lists the enum's names.
+
+#### Release checks
+
+- Manual: In the WebUI, Only unrated and a Min Rating each limit browse and random play, the rating sort orders the library, and a preset saved with a Min Rating keeps it.
+
+#### Not included
+
+- Weighting random picks by rating, which is Random Pick Options.
+
 ### M12k3 - WebUI Player Rating
 
 - **Status**: ✅ Complete

@@ -36,6 +36,12 @@ const ALL_FAVORITES_PRESET = {
   filterState: { favoritesMode: "only", selectedTags: [], excludedTags: [], includedSourceIds: [] }
 };
 
+const UNRATED_PRESET = {
+  id: "preset-unrated",
+  name: "Unrated",
+  filterState: { onlyUnrated: true, selectedTags: [], excludedTags: [], includedSourceIds: [] }
+};
+
 const BEACH_PRESET = {
   id: "preset-beach",
   name: "Beach",
@@ -627,6 +633,28 @@ describe("search and sort", () => {
     expect(sortSelect().value).toBe("LastPlayed");
   });
 
+  it("the Rating sort comes last, starting on Highest → Lowest, and the direction button reverses it", async () => {
+    const { library } = await mountLibrary(libraryItems(3));
+    await openLibrary();
+    expect([...sortSelect().options].map((option) => [option.value, option.textContent])).toEqual([
+      ["Name", "Name"],
+      ["LastPlayed", "Last played"],
+      ["PlayCount", "Play count"],
+      ["Duration", "Duration"],
+      ["DateAdded", "Date added"],
+      ["Rating", "Rating"]
+    ]);
+
+    fireEvent.change(sortSelect(), { target: { value: "Rating" } });
+    await flush();
+    expect(library.queries()[1]).toMatchObject({ sortMode: "Rating", sortDescending: true, offset: 0 });
+    expect(directionButton().textContent).toBe("Highest → Lowest");
+
+    await click(directionButton());
+    expect(library.queries()[2]).toMatchObject({ sortMode: "Rating", sortDescending: false, offset: 0 });
+    expect(directionButton().textContent).toBe("Lowest → Highest");
+  });
+
   it("search and sort stay after closing and reopening, and a new query scrolls back to the top", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { library } = await mountLibrary(libraryItems(450));
@@ -900,6 +928,26 @@ describe("live updates", () => {
     await flush();
     expect(library.queries()).toHaveLength(3);
     expect(library.queries()[2]).toMatchObject({ sortMode: "PlayCount", offset: 0, limit: 3 });
+  });
+
+  it("a rating event leaves the window as it is with no rating filter or sort, and under Only unrated reloads it when a loaded tile gets a rating", async () => {
+    const { page, library } = await mountLibrary(libraryItems(3), (server) => {
+      server.on("GET", "/api/presets", () => json([UNRATED_PRESET]));
+    });
+    await openLibrary();
+    page.stream().emit("itemRatingChanged", 2, { itemId: "item-1", path: "C:\\media\\clip 1.mp4", rating: 4, previousRating: null, clientId: page.clientId() });
+    await flush();
+    expect(library.queries()).toHaveLength(1);
+
+    await pickPreset("preset-unrated");
+    expect(library.queries()).toHaveLength(2);
+    library.items = library.items.slice(1);
+    page.stream().emit("itemRatingChanged", 3, { itemId: "item-1", path: "C:\\media\\clip 1.mp4", rating: 2.5, previousRating: null, clientId: "another-client" });
+    await flush();
+
+    expect(library.queries()).toHaveLength(3);
+    expect(library.queries()[2]).toMatchObject({ filterState: { onlyUnrated: true }, offset: 0, limit: 3 });
+    expect(tileNames()).toEqual(["clip 2.mp4", "clip 3.mp4"]);
   });
 
   it("a tag event on a loaded tile reloads the window under a tag filter", async () => {
@@ -1308,6 +1356,26 @@ describe("Filters line", () => {
     // Blacklisted excluded is the default, which the line doesn't name.
     await pickPreset("");
     expect(filtersLine().hidden).toBe(true);
+  });
+
+  it("names Only unrated and the minimum rating in stars after the other Basic Filters options", async () => {
+    await mountLibrary(libraryItems(3), (server) => {
+      server.on("GET", "/api/presets", () =>
+        json([
+          UNRATED_PRESET,
+          { id: "preset-good", name: "Good", filterState: { onlyBrowserPlayable: true, minRating: 3.5, mediaTypeFilter: 1 } },
+          { id: "preset-any", name: "Any", filterState: { minRating: 1 } }
+        ])
+      );
+    });
+    await openLibrary();
+
+    await pickPreset("preset-unrated");
+    expect(filtersLine().textContent).toBe("Filters: Only unrated");
+    await pickPreset("preset-good");
+    expect(filtersLine().textContent).toBe("Filters: Only files this browser can play · Min 3.5 stars · Videos only");
+    await pickPreset("preset-any");
+    expect(filtersLine().textContent).toBe("Filters: Min 1 star");
   });
 
   it("counts the chosen sources out of all the sources, loading them for a source filter", async () => {

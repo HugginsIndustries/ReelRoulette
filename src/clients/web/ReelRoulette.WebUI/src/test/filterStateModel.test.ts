@@ -327,6 +327,38 @@ describe("filter enum values shared fixture", () => {
   });
 });
 
+interface MinRatingCase {
+  name: string;
+  filter: ApiFilterState;
+  minRating: number | null;
+}
+
+// Core reads the same fixture.
+const minRatingCases = readFixture<MinRatingCase[]>("filter-min-rating.json");
+
+describe("minimum rating shared fixture", () => {
+  it.each(minRatingCases)("$name", ({ filter, minRating }) => {
+    expect(filterStateFromApiObject(filter).minRating).toBe(minRating);
+  });
+});
+
+describe("rating filters", () => {
+  it("read a stored filter without them as Only unrated off and no minimum", () => {
+    const read = filterStateFromApiObject({ favoritesMode: "only" });
+    expect(read.onlyUnrated).toBe(false);
+    expect(read.minRating).toBeNull();
+  });
+
+  it("are written with Only unrated always, and the minimum only when there is one, and read back", () => {
+    const none = serializeFilterStateForApi(createDefaultFilterState());
+    expect(none.onlyUnrated).toBe(false);
+    expect(none).not.toHaveProperty("minRating");
+    const written = serializeFilterStateForApi({ ...createDefaultFilterState(), onlyUnrated: true, minRating: 0.5 });
+    expect(written).toMatchObject({ onlyUnrated: true, minRating: 0.5 });
+    expect(filterStateFromApiObject(written)).toMatchObject({ onlyUnrated: true, minRating: 0.5 });
+  });
+});
+
 interface WrittenFilterFixture {
   webui: ApiFilterState;
 }
@@ -354,7 +386,9 @@ function writtenFixtureFilter(): FilterState {
     includedSourceIds: ["source-1"],
     onlyKnownDuration: false,
     onlyKnownLoudness: false,
-    onlyBrowserPlayable: true
+    onlyBrowserPlayable: true,
+    onlyUnrated: false,
+    minRating: 3.5
   };
 }
 

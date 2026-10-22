@@ -1361,14 +1361,18 @@ html.theme-light .tag-category-header { background: #e4e6ec; border-color: #c8ce
 .filter-section h3 { margin: 0 0 8px; font-size: 0.95rem; font-weight: 600; }
 .filter-hint { font-size: 0.85rem; opacity: 0.75; margin: 0 0 8px; }
 .filter-stack { display: flex; flex-direction: column; gap: 4px; }
-.filter-stack > label { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.filter-stack > label, .filter-stack > .vfield-after > label { display: flex; align-items: center; gap: 8px; min-height: 40px; }
 /* Stacked text fields sit 10px apart. */
 .duration-stack { gap: 10px; }
-/* The Favorites and Blacklisted filters: a checkbox and an only-or-excluded dropdown, usable while it is checked. */
+/* A filter's row: Favorites' or Blacklisted's checkbox and only-or-excluded dropdown, usable while it is checked, or Min
+   Rating's label and stars. */
 .mode-row { display: flex; align-items: center; gap: 10px; min-height: 40px; }
 .mode-row > label { display: flex; align-items: center; gap: 8px; min-width: 7.5rem; }
 .mode-select { min-height: 36px; padding: 0 8px; }
 .mode-select:disabled { opacity: 0.5; }
+/* Min Rating: its label, then the stars beside it, wrapping under the label on a screen too narrow for both. */
+.min-rating-row { flex-wrap: wrap; }
+.min-rating-row .rating { margin-left: 0; }
 .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .filter-row > label { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .grow { flex: 1 1 auto; min-width: 0; }

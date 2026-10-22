@@ -6,6 +6,7 @@ import { basenameFromPath } from "../playback/nowPlaying";
 import type { AppApi } from "../state/appApi";
 import type { AppStore } from "../state/appStore";
 import type { ServerConnection } from "../state/serverConnection";
+import type { ItemRatingChangedPayload } from "../types/serverContracts";
 import { parseRating, RATING_KEY_PAUSE_MS, ratingText } from "./rating";
 
 /** An item as a rating control shows it: its id, its file's name for the popups, and the rating it shows now. */
@@ -46,14 +47,6 @@ export interface ItemRatingsOptions {
   connection: Pick<ServerConnection, "on">;
   dialogs: Pick<Dialogs, "notice">;
   notifications: Pick<Notifications, "notify">;
-}
-
-/** `itemRatingChanged` as the WebUI reads it. */
-interface ItemRatingChangedPayload {
-  itemId?: string | null;
-  path?: string | null;
-  rating?: number | null;
-  clientId?: string | null;
 }
 
 /** A change waiting for the keys to pause: the item it was set on, the rating it started from, and the new one. */

@@ -1,12 +1,22 @@
-export type LibrarySortMode = "Name" | "LastPlayed" | "PlayCount" | "Duration" | "DateAdded";
+import type { components } from "../types/openapi.generated";
 
-export const LIBRARY_SORT_MODES: LibrarySortMode[] = [
-  "Name",
-  "LastPlayed",
-  "PlayCount",
-  "Duration",
-  "DateAdded"
-];
+/** A sort the library query takes. */
+export type LibrarySortMode = NonNullable<components["schemas"]["LibraryQueryRequest"]["sortMode"]>;
+
+/**
+ * Each sort, in the order the Library tab lists them: its name there, and its direction button's text for each
+ * direction. Keyed by every sort the server takes, so a new one needs its labels here.
+ */
+const LIBRARY_SORTS: Readonly<Record<LibrarySortMode, { label: string; ascending: string; descending: string }>> = {
+  Name: { label: "Name", ascending: "A–Z", descending: "Z–A" },
+  LastPlayed: { label: "Last played", ascending: "Oldest → Newest", descending: "Newest → Oldest" },
+  PlayCount: { label: "Play count", ascending: "Least Plays → Most Plays", descending: "Most Plays → Least Plays" },
+  Duration: { label: "Duration", ascending: "Shortest → Longest", descending: "Longest → Shortest" },
+  DateAdded: { label: "Date added", ascending: "Oldest → Newest", descending: "Newest → Oldest" },
+  Rating: { label: "Rating", ascending: "Lowest → Highest", descending: "Highest → Lowest" }
+};
+
+export const LIBRARY_SORT_MODES = Object.keys(LIBRARY_SORTS) as LibrarySortMode[];
 
 export interface LibraryBrowseControls {
   sortMode: LibrarySortMode;
@@ -22,22 +32,19 @@ export function createDefaultBrowseControls(): LibraryBrowseControls {
   };
 }
 
+/** Every sort but Name starts on its highest, newest, or longest first. */
 export function isDefaultDescendingForSortMode(sortMode: LibrarySortMode): boolean {
   return sortMode !== "Name";
 }
 
+/** The sort's name in the Library tab's sort list. */
+export function getSortLabel(sortMode: LibrarySortMode): string {
+  return LIBRARY_SORTS[sortMode].label;
+}
+
 export function getSortDirectionLabel(sortMode: LibrarySortMode, descending: boolean): string {
-  switch (sortMode) {
-    case "LastPlayed":
-    case "DateAdded":
-      return descending ? "Newest → Oldest" : "Oldest → Newest";
-    case "PlayCount":
-      return descending ? "Most Plays → Least Plays" : "Least Plays → Most Plays";
-    case "Duration":
-      return descending ? "Longest → Shortest" : "Shortest → Longest";
-    default:
-      return descending ? "Z–A" : "A–Z";
-  }
+  const sort = LIBRARY_SORTS[sortMode];
+  return descending ? sort.descending : sort.ascending;
 }
 
 /** The Library tab's count line: the numbers it shows, and the words screen readers hear in their place. */

@@ -497,6 +497,12 @@ export function createLibrary(options: LibraryOptions): Library {
   connection.on("playbackRecorded", (payload) => {
     void session.applyPlayback(payload);
   });
+  // Under Only unrated, a minimum rating, or the rating sort, a rating change can take a tile out, bring an item in, or
+  // move one.
+  connection.on("itemRatingChanged", (payload) => {
+    if (!payload?.itemId) return;
+    void session.applyRating(payload);
+  });
   // A finished refresh can add items and rewrite thumbnails, so the loaded window reloads once per run.
   connection.on("refreshCompleted", () => {
     void session.reloadLoaded();

@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { FILTER_SUMMARY_LABEL, FILTER_SUMMARY_SEPARATOR } from "../filter/filterSummaryModel";
+import { getSortLabel, LIBRARY_SORT_MODES } from "../library/libraryBrowseModel";
 import type { LibraryOverlayMessage } from "../library/libraryOverlayModel";
 import { RANDOMIZATION_MODES } from "../state/appStore";
 import { useApp } from "./appContext";
@@ -64,11 +65,9 @@ export function LibraryOverlay() {
         </div>
         <div class="library-controls-sort">
           <select id="library-sort-select" class="library-overlay-sort-select" aria-label="Sort library" value={controls.sortMode} disabled={blocked} onChange={(event) => library.setSortMode(event.currentTarget.value)}>
-            <option value="Name">Name</option>
-            <option value="LastPlayed">Last played</option>
-            <option value="PlayCount">Play count</option>
-            <option value="Duration">Duration</option>
-            <option value="DateAdded">Date added</option>
+            {LIBRARY_SORT_MODES.map((mode) => (
+              <option key={mode} value={mode}>{getSortLabel(mode)}</option>
+            ))}
           </select>
           <button id="library-sort-direction-btn" class="library-overlay-sort-direction" type="button" aria-label="Toggle sort direction" disabled={blocked} onClick={library.toggleSortDirection}>{library.directionLabel.value}</button>
         </div>

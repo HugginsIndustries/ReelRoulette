@@ -20,18 +20,24 @@ import {
   pointerMove,
   pointerUp,
   pressKey,
+  pressRatingKey,
+  ratingRequests,
   resetPage,
   currentStyle,
   scrollOnFocus,
   selectedPresetLabel,
   setViewport,
   settle,
+  sliderValue,
   status,
+  stubStarLayout,
   stubRowLayout,
   stubReducedMotion,
   stubScroller,
+  tapStars,
   unauthorizedLogLine,
   useStylesheet,
+  xFor,
   type MountedPage
 } from "./pageHarness";
 
@@ -1442,6 +1448,131 @@ describe("Favorites only with Blacklisted only", () => {
     expect(flagSelect("Blacklisted").hasAttribute("aria-invalid")).toBe(false);
     expect(flagSelect("Favorites").hasAttribute("aria-invalid")).toBe(false);
     expect(heldState(applyButton()).held).toBe(false);
+  });
+});
+
+/** Min Rating's stars, found while their tab is hidden too, as `box` finds checkboxes. */
+function minRatingStars(): HTMLElement {
+  return within(dialog()).getByRole("slider", { name: "Min Rating", hidden: true });
+}
+
+/** Sets Min Rating with a key on its stars, as from the keyboard. */
+async function minRatingKey(key: string): Promise<void> {
+  minRatingStars().focus();
+  await pressRatingKey(minRatingStars(), key);
+}
+
+describe("Only unrated and Min Rating", () => {
+  it("sit at the end of Basic Filters, Only unrated after the other options and Min Rating's stars below it, saying No minimum for none", async () => {
+    await mountFilter();
+    await openDialog();
+    const stack = box("Only never played").closest(".filter-stack")!;
+    const labels = [...stack.querySelectorAll("label")].map((label) => label.textContent!.trim());
+    expect(labels.slice(-2)).toEqual(["Only files this browser can play", "Only unrated"]);
+    const row = minRatingStars().closest(".min-rating-row")!;
+    expect(row.parentElement).toBe(stack);
+    expect(row.previousElementSibling).toBe(box("Only unrated").closest(".vfield"));
+    expect(row.firstElementChild!.textContent).toBe("Min Rating");
+    expect(row.lastElementChild).toBe(minRatingStars());
+    expect(box("Only unrated").checked).toBe(false);
+    expect(sliderValue(minRatingStars())).toEqual(["0", "No minimum"]);
+  });
+
+  it("the stars change only the tab's filter until Apply, never a rating, and Delete clears them", async () => {
+    stubStarLayout();
+    const { server } = await mountFilter();
+    await openDialog();
+
+    await tapStars(minRatingStars(), xFor(3.5));
+    expect(sliderValue(minRatingStars())).toEqual(["3.5", "3.5 stars"]);
+    expect(applyShowsChanges()).toBe(true);
+    expect((await nextPick(server)).filterState).not.toHaveProperty("minRating");
+
+    await minRatingKey("ArrowLeft");
+    expect(sliderValue(minRatingStars())).toEqual(["3", "3 stars"]);
+    expect(await applyAndWait(server)).toMatchObject({ minRating: 3, onlyUnrated: false });
+    expect((await nextPick(server)).filterState).toMatchObject({ minRating: 3 });
+
+    await minRatingKey("Delete");
+    expect(sliderValue(minRatingStars())).toEqual(["0", "No minimum"]);
+    minRatingStars().blur();
+    await settle();
+    expect(await applyAndWait(server)).not.toHaveProperty("minRating");
+    expect(ratingRequests(server)).toEqual([]);
+  });
+
+  it("are flagged together on Only unrated with a minimum, marking the stars, and hold Apply, Add Preset, and Update", async () => {
+    const { server, presets } = await mountFilter([FAVORITES_PRESET]);
+    await openDialog();
+    await showTab("Presets");
+    await loadInDialog("Favorites");
+    fireEvent.input(byId("filter-new-preset-name"), { target: { value: "Mine" } });
+    await showTab("General");
+    const queries = libraryQueries(server).length;
+    const unrated = box("Only unrated");
+
+    await click(unrated);
+    expect(unrated.hasAttribute("aria-invalid")).toBe(false);
+    await minRatingKey("End");
+    // After the first key, which starts the audio stage and logs it.
+    const logsBefore = server.logLines().length;
+    for (const field of [unrated, minRatingStars()]) {
+      expect(field.getAttribute("aria-invalid"), field.id).toBe("true");
+      expect(tooltipOf(field)?.textContent, field.id).toBe("Nothing unrated has a minimum rating. Clear one of them.");
+    }
+    expect(unrated.closest("label")!.nextElementSibling?.classList.contains("vfield-icon")).toBe(true);
+    expect(dialog().querySelectorAll(".vfield-icon")).toHaveLength(1);
+    expect(tabMarked("General")).toBe(true);
+    const presetButton = (name: string) => within(dialog()).getByRole("button", { name, hidden: true }) as HTMLButtonElement;
+    for (const button of [applyButton(), presetButton("Add preset"), presetButton("Update preset")]) {
+      expect(heldState(button), button.id).toEqual({ held: true, marked: true });
+    }
+    expect(applyButton().title).toBe("Clear Only unrated or Min Rating to apply.");
+    expect(presetButton("Update preset").title).toBe("Clear Only unrated or Min Rating first.");
+    expect(presetButton("Add preset").title).toBe("Clear Only unrated or Min Rating first.");
+    expect(tooltipShown(unrated)).toBe(true);
+
+    for (const button of ["Update preset", "Add preset"]) {
+      await showTab("Presets");
+      await click(dialogButton(button));
+      expect(selectedTab(), button).toBe("General");
+      expect(document.activeElement, button).toBe(unrated);
+    }
+    await showTab("Tags");
+    await apply();
+    expect(selectedTab()).toBe("General");
+    expect(document.activeElement).toBe(unrated);
+    expect(presets.writes).toHaveLength(0);
+    expect(libraryQueries(server)).toHaveLength(queries);
+    expect(server.logLines().slice(logsBefore)).toEqual([]);
+
+    await minRatingKey("Backspace");
+    expect(unrated.hasAttribute("aria-invalid")).toBe(false);
+    expect(minRatingStars().hasAttribute("aria-invalid")).toBe(false);
+    expect(heldState(applyButton()).held).toBe(false);
+    const applied = await applyAndWait(server);
+    expect(applied).toMatchObject({ onlyUnrated: true, favoritesMode: "only" });
+    expect(applied).not.toHaveProperty("minRating");
+  });
+
+  it("are saved in a preset, and loading it shows them again", async () => {
+    stubStarLayout();
+    const { server, presets } = await mountFilter([FAVORITES_PRESET]);
+    await openDialog();
+    await tapStars(minRatingStars(), xFor(2.5));
+    await showTab("Presets");
+    await addPreset("Good ones");
+    expect(await applyAndWait(server)).toMatchObject({ minRating: 2.5 });
+    expect(presets.writes[0]!.body.filterState).toMatchObject({ minRating: 2.5, onlyUnrated: false });
+
+    await click(clearAllButton());
+    await showTab("General");
+    expect(sliderValue(minRatingStars())).toEqual(["0", "No minimum"]);
+    await showTab("Presets");
+    await loadInDialog("Good ones");
+    await showTab("General");
+    expect(sliderValue(minRatingStars())).toEqual(["2.5", "2.5 stars"]);
+    expect(heading()).toBe("Preset: Good ones");
   });
 });
 

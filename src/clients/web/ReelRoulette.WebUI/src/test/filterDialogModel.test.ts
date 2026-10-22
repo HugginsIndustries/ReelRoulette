@@ -6,6 +6,7 @@ import {
   FILTER_ACTION_BESIDE,
   FILTER_ACTION_FIELDS,
   FLAG_MODES_PROBLEM,
+  RATING_FILTERS_PROBLEM,
   editPresetNameProblem,
   filterFieldProblems,
   filterHeldReason,
@@ -103,6 +104,15 @@ describe("filterWithGeneralDraft", () => {
     expect(read).toMatchObject({ favoritesMode, blacklistedMode });
   });
 
+  it("keeps Only unrated and the minimum rating through the draft", () => {
+    for (const change of [{ onlyUnrated: true, minRating: null }, { onlyUnrated: false, minRating: 3.5 }, { onlyUnrated: false, minRating: null }]) {
+      const working = filter(change);
+      const shown = generalDraftFromFilter(working, SOURCES);
+      expect(shown, JSON.stringify(change)).toMatchObject(change);
+      expect(filterWithGeneralDraft(filter(), shown, SOURCES), JSON.stringify(change)).toMatchObject(change);
+    }
+  });
+
   it("reads a checked filter as its choice and an unchecked one as off, whatever its choice", () => {
     const read = (change: Partial<GeneralDraft>) => {
       const { favoritesMode, blacklistedMode } = filterWithGeneralDraft(filter(), draft(change), SOURCES);
@@ -189,7 +199,13 @@ describe("filterFieldProblems", () => {
   const PRESETS = [{ id: "fav", name: "Favorites", filterState: filter() }];
 
   it("flags a duration that is not valid, read strictly, and not an empty one", () => {
-    expect(filterFieldProblems(draft(), "Mine", PRESETS)).toEqual({ flagModes: null, minDuration: null, maxDuration: null, newPresetName: null });
+    expect(filterFieldProblems(draft(), "Mine", PRESETS)).toEqual({
+      flagModes: null,
+      ratingFilters: null,
+      minDuration: null,
+      maxDuration: null,
+      newPresetName: null
+    });
     for (const text of ["1:7x", "12abc", "1:75"]) {
       expect(filterFieldProblems(draft({ minText: text }), "Mine", PRESETS).minDuration, text).toEqual({ message: DURATION_PROBLEM });
       expect(filterFieldProblems(draft({ maxText: text }), "Mine", PRESETS).maxDuration, text).toEqual({ message: DURATION_PROBLEM });
@@ -214,6 +230,18 @@ describe("filterFieldProblems", () => {
 
   it("does not flag Favorites only with a Blacklisted only choice whose box is off", () => {
     expect(filterFieldProblems(draft({ favoritesOn: true, favoritesChoice: "only", blacklistedOn: false, blacklistedChoice: "only" }), "Mine", PRESETS).flagModes).toBeNull();
+  });
+
+  it("flags Only unrated with a minimum rating, and either one alone not at all", () => {
+    const problem = (onlyUnrated: boolean, minRating: number | null) =>
+      filterFieldProblems(draft({ onlyUnrated, minRating }), "Mine", PRESETS).ratingFilters;
+    expect(problem(true, 0.5)).toEqual({ message: RATING_FILTERS_PROBLEM });
+    expect(problem(true, 5)).toEqual({ message: RATING_FILTERS_PROBLEM });
+    expect(isFlagged(problem(true, 3))).toBe(true);
+    expect(problem(true, null)).toBeNull();
+    expect(problem(false, 3)).toBeNull();
+    expect(problem(false, null)).toBeNull();
+    expect(RATING_FILTERS_PROBLEM).toBe("Nothing unrated has a minimum rating. Clear one of them.");
   });
 });
 
@@ -253,13 +281,16 @@ describe("filterHeldReason", () => {
     expect(filterHeldReason("updatePreset", "maxDuration")).toBe("Correct the maximum duration first.");
     expect(filterHeldReason("addPreset", "flagModes")).toBe("Change Favorites or Blacklisted first.");
     expect(filterHeldReason("addPreset", "minDuration")).toBe("Correct the minimum duration first.");
+    expect(filterHeldReason("apply", "ratingFilters")).toBe("Clear Only unrated or Min Rating to apply.");
+    expect(filterHeldReason("updatePreset", "ratingFilters")).toBe("Clear Only unrated or Min Rating first.");
+    expect(filterHeldReason("addPreset", "ratingFilters")).toBe("Clear Only unrated or Min Rating first.");
   });
 
   it("checks the General fields for every action and Add Preset's name first, which sits beside it", () => {
     expect(FILTER_ACTION_FIELDS).toEqual({
-      apply: ["flagModes", "minDuration", "maxDuration"],
-      addPreset: ["newPresetName", "flagModes", "minDuration", "maxDuration"],
-      updatePreset: ["flagModes", "minDuration", "maxDuration"]
+      apply: ["flagModes", "ratingFilters", "minDuration", "maxDuration"],
+      addPreset: ["newPresetName", "flagModes", "ratingFilters", "minDuration", "maxDuration"],
+      updatePreset: ["flagModes", "ratingFilters", "minDuration", "maxDuration"]
     });
     expect(FILTER_ACTION_BESIDE).toEqual({ apply: [], addPreset: ["newPresetName"], updatePreset: [] });
   });

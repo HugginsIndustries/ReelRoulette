@@ -8,5 +8,7 @@
   { "sortMode": "PlayCount", "descending": true, "label": "Most Plays → Least Plays" },
   { "sortMode": "PlayCount", "descending": false, "label": "Least Plays → Most Plays" },
   { "sortMode": "Duration", "descending": true, "label": "Longest → Shortest" },
-  { "sortMode": "Duration", "descending": false, "label": "Shortest → Longest" }
+  { "sortMode": "Duration", "descending": false, "label": "Shortest → Longest" },
+  { "sortMode": "Rating", "descending": true, "label": "Highest → Lowest" },
+  { "sortMode": "Rating", "descending": false, "label": "Lowest → Highest" }
 ]

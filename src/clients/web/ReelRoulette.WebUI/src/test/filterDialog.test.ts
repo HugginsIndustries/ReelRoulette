@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ConfirmRequest } from "../dialogs/dialogs";
 import { createFilterDialog } from "../filter/filterDialog";
-import { DEFAULT_FILTER_PRESET_REASON, DURATION_PROBLEM, FLAG_MODES_PROBLEM, NO_CHOSEN_PRESET_REASON } from "../filter/filterDialogModel";
+import {
+  DEFAULT_FILTER_PRESET_REASON,
+  DURATION_PROBLEM,
+  FLAG_MODES_PROBLEM,
+  NO_CHOSEN_PRESET_REASON,
+  RATING_FILTERS_PROBLEM
+} from "../filter/filterDialogModel";
 import type { FilterDialog } from "../filter/filterDialog";
 import { createDefaultFilterState, TAG_MATCH_MODE } from "../filter/filterStateModel";
 import type { NotifyRequest } from "../notifications/notifications";
@@ -183,7 +189,7 @@ function setup(presets: ApiPreset[] = [FAVORITES], shared?: FakePresets) {
   const view = () => dialog.view.value!;
   /** The fields the dialog moved to, each with the section it showed as it did, as the fields' components move. */
   const moves: string[] = [];
-  for (const field of ["flagModes", "minDuration", "maxDuration", "newPresetName"] as const) {
+  for (const field of ["flagModes", "ratingFilters", "minDuration", "maxDuration", "newPresetName"] as const) {
     dialog.reveal.attach(field, () => moves.push(`${field} on ${dialog.tab.peek()}`));
   }
   return {
@@ -624,6 +630,34 @@ describe("General tab", () => {
 
     dialog.changeGeneral({ favoritesOn: false });
     expect(view().actions).toEqual({ apply: FREE, addPreset: FREE, updatePreset: FREE });
+  });
+
+  it("flags Only unrated with a minimum rating and holds every action that uses it, after Favorites and Blacklisted", async () => {
+    const { dialog, view, store, library, moves } = setup([FAVORITES, RECENT]);
+    await dialog.open();
+    dialog.choosePreset(RECENT.id);
+    dialog.typeNewPresetName("Mine");
+
+    dialog.changeGeneral({ minRating: 3 });
+    expect(view().working.minRating).toBe(3);
+    expect(view().problems.ratingFilters).toBeNull();
+    dialog.changeGeneral({ onlyUnrated: true });
+    expect(view().problems.ratingFilters).toEqual({ message: RATING_FILTERS_PROBLEM });
+    expect(view().flagged.ratingFilters).toBe(true);
+    expect(view().actions).toEqual({ apply: heldBy("ratingFilters"), addPreset: heldBy("ratingFilters"), updatePreset: heldBy("ratingFilters") });
+    await dialog.apply();
+    expect(moves).toEqual(["ratingFilters on general"]);
+    expect(library.commitQuery).not.toHaveBeenCalled();
+
+    // Favorites only with Blacklisted only comes first on screen, so it holds the actions first.
+    dialog.changeGeneral({ favoritesOn: true, favoritesChoice: "only", blacklistedOn: true, blacklistedChoice: "only" });
+    expect(view().actions.apply).toEqual(heldBy("flagModes"));
+    dialog.changeGeneral({ favoritesOn: false });
+
+    dialog.changeGeneral({ minRating: null });
+    expect(view().actions).toEqual({ apply: FREE, addPreset: FREE, updatePreset: FREE });
+    await dialog.apply();
+    expect(store.appliedFilter.peek()).toMatchObject({ onlyUnrated: true, minRating: null });
   });
 
   it("stores the checked sources", async () => {

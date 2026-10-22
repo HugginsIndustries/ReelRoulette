@@ -20,12 +20,11 @@ Instructions:
 
 Commit Message:
 
-M12k4: Add the server's rating filter and Rating sort, with the sort's indexes in catalog schema 8
+M12k4: Add Only unrated, Min Rating, and the Rating sort to the WebUI
 
-- Server: FilterState's `onlyUnrated` keeps only unrated items and `minRating`, in stars, keeps items rated at or above it, in the library query, its counts, and random selection. A `minRating` that isn't a rating reads as no minimum, and both together match nothing, as sent.
-- Server: preset comparison tells filters apart by both fields, so a preset whose only filter is a rating one isn't the default filter.
-- Server: the library query sorts by `Rating`, with an unrated item as 0 stars, and the refusal of an unknown sort mode lists the modes from the enum.
-- Catalog: schema version 8 adds the rating sort's two indexes, for a new catalog and in the upgrade step from version 7.
-- Contract: `onlyUnrated`, `minRating`, and the Rating sort mode in `openapi.yaml`, with the regenerated WebUI types, and `shared/fixtures/filter-min-rating.json` locking how `minRating` is read.
-- Tests: the fixture, the filters through the list, its count, the random candidates, and the query and pick services, a stored preset without the fields, the comparison, the Rating sort's order and its index in both directions, OpenAPI's sort modes against the server's, the unknown sort mode's refusal, and the upgrade from version 7.
-- Docs: MILESTONES.md records the Contract slice, with the comparison change moved into it from the WebUI slice. CONTEXT.md, docs/api.md, docs/domain-inventory.md, and docs/dev-setup.md describe the fields, the sort, and schema version 8.
+- WebUI: the Filter tab's Basic Filters end with Only unrated and Min Rating, set with the rating's stars, which say "No minimum" for none and change only the tab's filter. Only unrated with a minimum is flagged with the field validation pattern and holds Apply, Add Preset, and Update.
+- WebUI: the filter sends, reads, and compares `onlyUnrated` and `minRating`, so presets keep them and preset matching tells them apart, and the Filters line names them as "Only unrated" and "Min 3.5 stars".
+- WebUI: Rating comes last in the Library tab's sort, from Highest → Lowest, and the sort modes are one table typed against the contract's, which the sort list renders.
+- WebUI: the Library tab follows `itemRatingChanged`, patching the loaded tile or reloading the loaded window under Only unrated, a minimum rating, or the Rating sort when the change can alter what it shows or its order. The event's type comes from the generated contract.
+- Tests: rating cases in `preset-filter-equality.json`, which Core reads too, `library-tile-effect.json`, and `sort-direction-labels.json`, the WebUI read of `filter-min-rating.json`, the Filter tab's pair and stars, the Filters line, the Rating sort, and the rating event's reload, with the Filter tab's and sort list's markup snapshots.
+- Docs: MILESTONES.md completes Rating Filter and Sort, moved to MILESTONES-COMPLETED.md, with its release check in the testing checklist, and M12k5's traps name `LIBRARY_SORTS` and the sort refusal built from the enum. CONTEXT.md, docs/api.md, docs/architecture.md, docs/domain-inventory.md, and CHANGELOG.md describe the filter, the sort, and the Library tab's rating updates.

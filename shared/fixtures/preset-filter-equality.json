@@ -51,5 +51,14 @@
   { "name": "favorites only differs from favorites excluded", "left": { "favoritesMode": "only" }, "right": { "favoritesMode": "excluded" }, "same": false },
   { "name": "blacklisted only differs from unset", "left": { "blacklistedMode": "only" }, "right": {}, "same": false },
   { "name": "only browser-playable files differs from unset", "left": { "onlyBrowserPlayable": true }, "right": {}, "same": false },
-  { "name": "browser-playable off written out equals unset", "left": { "onlyBrowserPlayable": false }, "right": {}, "same": true }
+  { "name": "browser-playable off written out equals unset", "left": { "onlyBrowserPlayable": false }, "right": {}, "same": true },
+  { "name": "only unrated differs from unset", "left": { "onlyUnrated": true }, "right": {}, "same": false },
+  { "name": "only unrated off written out equals unset", "left": { "onlyUnrated": false }, "right": {}, "same": true },
+  { "name": "a minimum rating differs from unset", "left": { "minRating": 3 }, "right": {}, "same": false },
+  { "name": "a null minimum rating equals unset", "left": { "minRating": null }, "right": {}, "same": true },
+  { "name": "the same minimum rating is the same filter", "left": { "minRating": 3.5 }, "right": { "minRating": 3.5 }, "same": true },
+  { "name": "different minimum ratings", "left": { "minRating": 3 }, "right": { "minRating": 3.5 }, "same": false },
+  { "name": "a minimum rating that isn't a rating equals unset", "left": { "minRating": 3.2 }, "right": {}, "same": true },
+  { "name": "a minimum rating as a string equals unset", "left": { "minRating": "3" }, "right": {}, "same": true },
+  { "name": "only unrated differs from a minimum rating", "left": { "onlyUnrated": true }, "right": { "minRating": 0.5 }, "same": false }
 ]

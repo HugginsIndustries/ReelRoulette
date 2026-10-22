@@ -463,5 +463,183 @@
     "filter": { "favoritesMode": "off", "blacklistedMode": "only", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": [] },
     "sortMode": "Name",
     "expected": "patch"
+  },
+  {
+    "name": "a rating on a loaded tile under the default filter and name sort patches",
+    "event": "rating",
+    "loaded": true,
+    "rating": 3.5,
+    "previousRating": null,
+    "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "a rating cleared on a loaded tile under the default filter patches",
+    "event": "rating",
+    "loaded": true,
+    "rating": null,
+    "previousRating": 4,
+    "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": []},
+    "sortMode": "DateAdded",
+    "expected": "patch"
+  },
+  {
+    "name": "a rating on a loaded tile under favorites only patches",
+    "event": "rating",
+    "loaded": true,
+    "rating": 2,
+    "previousRating": 1,
+    "filter": {"favoritesMode": "only", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "a rating on a loaded tile under only unrated reloads",
+    "event": "rating",
+    "loaded": true,
+    "rating": 3,
+    "previousRating": null,
+    "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "onlyUnrated": true, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "a rating on an unloaded item under only unrated patches because it cannot enter",
+    "event": "rating",
+    "loaded": false,
+    "rating": 3,
+    "previousRating": null,
+    "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "onlyUnrated": true, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "a rating cleared on an unloaded item under only unrated reloads because it may enter",
+    "event": "rating",
+    "loaded": false,
+    "rating": null,
+    "previousRating": 2.5,
+    "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "onlyUnrated": true, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "a loaded tile's rating changed above the minimum patches",
+    "event": "rating",
+    "loaded": true,
+    "rating": 3.5,
+    "previousRating": 4,
+    "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "minRating": 3, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "a loaded tile's rating falling below the minimum reloads",
+    "event": "rating",
+    "loaded": true,
+    "rating": 2.5,
+    "previousRating": 4,
+    "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "minRating": 3, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "a loaded tile's rating cleared under a minimum reloads",
+    "event": "rating",
+    "loaded": true,
+    "rating": null,
+    "previousRating": 4,
+    "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "minRating": 3, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "an unloaded item's rating reaching the minimum reloads because it may enter",
+    "event": "rating",
+    "loaded": false,
+    "rating": 3,
+    "previousRating": 2,
+    "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "minRating": 3, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "an unloaded unrated item rated above the minimum reloads because it may enter",
+    "event": "rating",
+    "loaded": false,
+    "rating": 5,
+    "previousRating": null,
+    "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "minRating": 3, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Name",
+    "expected": "reload"
+  },
+  {
+    "name": "an unloaded item's rating still below the minimum patches",
+    "event": "rating",
+    "loaded": false,
+    "rating": 2,
+    "previousRating": 1,
+    "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "minRating": 3, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "an unloaded item's rating changed above the minimum patches because it was already in",
+    "event": "rating",
+    "loaded": false,
+    "rating": 4.5,
+    "previousRating": 4,
+    "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "minRating": 3, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "an unloaded item's rating falling below the minimum patches because it cannot enter",
+    "event": "rating",
+    "loaded": false,
+    "rating": 2,
+    "previousRating": 4,
+    "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "minRating": 3, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Name",
+    "expected": "patch"
+  },
+  {
+    "name": "a rating on a loaded tile under the rating sort reloads",
+    "event": "rating",
+    "loaded": true,
+    "rating": 3,
+    "previousRating": 2,
+    "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Rating",
+    "expected": "reload"
+  },
+  {
+    "name": "a rating cleared on an unloaded item under the rating sort reloads because it may move in",
+    "event": "rating",
+    "loaded": false,
+    "rating": null,
+    "previousRating": 1,
+    "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Rating",
+    "expected": "reload"
+  },
+  {
+    "name": "a rating change under the rating sort reloads where the filter keeps the tile too",
+    "event": "rating",
+    "loaded": true,
+    "rating": 4,
+    "previousRating": 3.5,
+    "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "minRating": 3, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Rating",
+    "expected": "reload"
+  },
+  {
+    "name": "playback on a loaded tile under a minimum rating patches",
+    "event": "playback",
+    "loaded": true,
+    "filter": {"favoritesMode": "off", "blacklistedMode": "excluded", "onlyNeverPlayed": false, "minRating": 3, "selectedTags": [], "excludedTags": []},
+    "sortMode": "Name",
+    "expected": "patch"
   }
 ]

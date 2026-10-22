@@ -1,3 +1,5 @@
+import { parseRating } from "../rating/rating";
+import type { ItemRatingChangedPayload } from "../types/serverContracts";
 import type { LibraryProjectionItem } from "./libraryProjectionModel";
 
 export interface ItemStateChangedPayload {
@@ -59,6 +61,17 @@ export function applyItemStateChanged(
   item.isFavorite = nextFavorite;
   item.isBlacklisted = nextBlacklisted;
   return { changed: true, item, before };
+}
+
+/** Puts the event's rating on the loaded tile with its id, saying whether it changed. */
+export function applyItemRatingChanged(items: LibraryProjectionItem[], payload: ItemRatingChangedPayload): boolean {
+  const item = findProjectionItem(items, payload.itemId);
+  const rating = parseRating(payload.rating);
+  if (!item || item.rating === rating) {
+    return false;
+  }
+  item.rating = rating;
+  return true;
 }
 
 export function applyPlaybackRecorded(

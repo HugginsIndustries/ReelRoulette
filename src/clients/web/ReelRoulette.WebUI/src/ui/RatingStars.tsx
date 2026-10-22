@@ -8,6 +8,13 @@ interface RatingStarsBaseProps {
   onSet(rating: number | null, byKey: boolean): void;
   /** Focus left the control. */
   onBlur(): void;
+  /** Focus came to the control. */
+  onFocus?(): void;
+  /** What screen readers hear for no rating. "Not rated" when not given. */
+  noneText?: string;
+  /** Set while a field checked with the control is flagged, as the validation pattern marks a partner. */
+  "aria-invalid"?: "true";
+  "aria-describedby"?: string;
 }
 
 /** The control is named by an element on screen, or by its own name where none shows. */
@@ -32,7 +39,17 @@ type RatingStarsProps = RatingStarsBaseProps &
  * tap the arrow keys still play the previous or next item. While the stars have focus, their keys are their own: the
  * arrows step by half a star, Home, Delete, and Backspace clear the rating, and End is 5 stars.
  */
-export function RatingStars({ rating, labelledBy, label, onSet, onBlur }: RatingStarsProps) {
+export function RatingStars({
+  rating,
+  labelledBy,
+  label,
+  onSet,
+  onBlur,
+  onFocus,
+  noneText,
+  "aria-invalid": invalid,
+  "aria-describedby": describedBy
+}: RatingStarsProps) {
   /** A press's value, or a mouse's preview, shown in place of the rating set; undefined while there is none. */
   const [preview, setPreview] = useState<number | null | undefined>(undefined);
   const pressId = useRef<number | null>(null);
@@ -64,7 +81,9 @@ export function RatingStars({ rating, labelledBy, label, onSet, onBlur }: Rating
       aria-valuemin={0}
       aria-valuemax={RATING_MAX}
       aria-valuenow={rating ?? 0}
-      aria-valuetext={ratingText(rating)}
+      aria-valuetext={rating === null && noneText !== undefined ? noneText : ratingText(rating)}
+      aria-invalid={invalid}
+      aria-describedby={describedBy}
       // A browser moves focus on `mousedown`, which a tap sends too, so the stars set a rating without taking focus.
       onMouseDown={(event) => event.preventDefault()}
       onPointerDown={(event) => {
@@ -96,6 +115,7 @@ export function RatingStars({ rating, labelledBy, label, onSet, onBlur }: Rating
         event.preventDefault();
         onSet(next.rating, true);
       }}
+      onFocus={onFocus}
       onBlur={onBlur}
     >
       {Array.from({ length: RATING_MAX }, (_, index) => {

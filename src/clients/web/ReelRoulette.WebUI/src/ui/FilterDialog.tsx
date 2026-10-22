@@ -6,6 +6,8 @@ import {
   BASIC_FILTERS,
   FILTER_FIELD_SECTION,
   MEDIA_TYPES,
+  MIN_RATING_LABEL,
+  ONLY_UNRATED_LABEL,
   filterHeldReason,
   filterTagCategories,
   sourceLabel,
@@ -27,6 +29,7 @@ import {
   useFieldValidation,
   type ValidatedControlProps
 } from "./FieldValidation";
+import { RatingStars } from "./RatingStars";
 import { DragHandle, ReorderStatus, useReorder } from "./Reorder";
 import { TagCategory as Category, tagsInUse } from "./TagCategory";
 
@@ -194,6 +197,7 @@ function GeneralPanel({ view }: { view: FilterDialogView }) {
           {BASIC_FILTERS.map(({ id, field, label }) => (
             <label key={id}><input type="checkbox" id={id} checked={draft[field]} onChange={(event) => filterDialog.changeGeneral({ [field]: event.currentTarget.checked })} /> {label}</label>
           ))}
+          <RatingFilterRows view={view} />
         </div>
       </div>
       <div class="filter-section">
@@ -305,6 +309,33 @@ function FlagFilterRow({
         </span>
       )}
     </div>
+  );
+}
+
+/**
+ * Only unrated and Min Rating, checked as a pair: a minimum rating leaves unrated files out, so with Only unrated it
+ * matches nothing. The icon sits just after the Only unrated label, which a held action moves to, and the stars are
+ * marked and described with it. The stars change only the tab's filter, never a rating.
+ */
+function RatingFilterRows({ view }: { view: FilterDialogView }) {
+  const { filterDialog } = useApp();
+  const pair = useFieldValidation<HTMLInputElement, FilterField>({
+    problem: view.problems.ratingFilters,
+    flagged: view.flagged.ratingFilters,
+    reveal: { from: filterDialog.reveal, field: "ratingFilters", show: () => showSection(filterDialog.tab.peek()) }
+  });
+  const draft = view.general;
+  return (
+    <>
+      <span class="vfield vfield-after">
+        <label><input {...pair.control} type="checkbox" id="filter-unrated" checked={draft.onlyUnrated} onChange={(event) => filterDialog.changeGeneral({ onlyUnrated: event.currentTarget.checked })} /> {ONLY_UNRATED_LABEL}</label>
+        {pair.mark}
+      </span>
+      <div class="mode-row min-rating-row">
+        <span id="filter-min-rating-label">{MIN_RATING_LABEL}</span>
+        <RatingStars {...pair.partner} rating={draft.minRating} labelledBy="filter-min-rating-label" noneText="No minimum" onSet={(minRating) => filterDialog.changeGeneral({ minRating })} />
+      </div>
+    </>
   );
 }
 
