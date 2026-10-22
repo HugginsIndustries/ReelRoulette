@@ -136,6 +136,16 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
   - `createItemStateCache` in `src/clients/web/ReelRoulette.WebUI/src/library/currentItemState.ts` keeps the states, and its `applyTo` overwrites an item's favorite and blacklist with them.
   - `pushHistory` and `appendHistory` in `src/clients/web/ReelRoulette.WebUI/src/state/appStore.ts` and the play's start in `src/clients/web/ReelRoulette.WebUI/src/playback/player.ts` call `applyTo`, and no `resyncRequired` handler clears the cache.
 
+### A video that fails at the same point mid-file may recover without end
+
+- **What goes wrong**: A video that fails after it has played gets a fresh media URL and plays on from where it failed. The flag that allows one recovery clears on every `playing` event, so when the video plays again from there and fails at the same point, it recovers again, without end, and never reaches the range request that shows a message or skips the file (inferred).
+- **How to make it happen**: Play a video whose decoding fails at a fixed point after it has started, in a browser that plays it up to there (inferred). The files measured so far all failed at load, before they played.
+- **How much it matters**: Low. It takes a file that fails partway through, but then the player keeps reloading it from that point, sending `POST /api/play/{itemId}` each time, instead of showing a message or moving on (inferred).
+- **Since**: v0.15.0, not yet released, whose WebUI recovers a video that fails after it has played.
+- **Where**:
+  - `mediaFailedNow` in `src/clients/web/ReelRoulette.WebUI/src/playback/player.ts` recovers a video that has played while `recovered` is false.
+  - `recover` sets `recovered` and plays the fresh URL from the failed position, and `videoPlaying` clears `recovered` on every `playing` event.
+
 ## Server
 
 ### The ffmpeg check can hang on its own output

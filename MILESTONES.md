@@ -2159,12 +2159,14 @@ Last milestone completed: M12k4
 #### Scope
 
 - Defines OpenAPI contracts for playback-session create and read and the stream URL.
+- The session-create request can say that direct playback of the item failed in this browser.
 - Playback-session and transcode capability markers join the capability list served by `/api/version` and `/api/capabilities`.
 - The WebUI types are regenerated.
 
 #### Acceptance
 
 - OpenAPI includes the playback-session surfaces and validates, in contract tests.
+- The session-create request's field saying direct playback failed is in OpenAPI, in contract tests.
 - The WebUI detects a server without playback sessions from the capability list, in a capability check against a server without the feature.
 - Generated WebUI types match OpenAPI, and `npm run verify:contracts` passes.
 
@@ -2182,14 +2184,27 @@ Last milestone completed: M12k4
 - A playback-session decision service that decides from media probe metadata and client capability hints.
 - Probe results are cached by file path and modification time to avoid repeated `ffprobe` runs.
 - Decision output: playback mode (`direct`, `remux`, `transcode`), delivery type (`progressive` or `hls-fmp4`), and a reason for troubleshooting.
+- A session request that says direct playback failed decides `transcode`, never `remux`, whatever the probe metadata and client hints say, since a file the browser rejected has a container like one it plays.
+- A decision is made for its request alone: nothing remembers that a file failed direct playback, so each play of it tries direct playback again before its transcode, which costs under a second.
 - Each decision is logged through the structured log API (component, operation, mode, reason), without file names or paths.
+
+#### Traps
+
+- A YouTube VP9 MP4 that Safari on the iPad rejects and one it plays have the same codec string, a byte-identical `vpcC` box, and matching sample tables, and both decode without errors in ffmpeg and libvpx (measured), so probe metadata can't tell which files a browser will reject.
+- On iOS and iPadOS, WebKit plays VP9 only through a hardware decoder, with no software fallback, so the iPad's capability hints will say it plays VP9 in MP4 (inferred).
+- Safari on the iPad rejects such a file 0.15–0.7 s after its play starts (measured).
 
 #### Acceptance
 
 - The server chooses `direct`, `remux`, or `transcode` for each session request, and the same inputs give the same decision, in decision tests over a fixture of probe results and client hints.
+- A request that says direct playback failed decides `transcode` for a file that would otherwise play directly, in decision tests over the same fixture.
 - Session responses include the delivery type and a reason, in decision tests over the same fixture.
 - Each decision appears in `last.log` as a structured entry without file names or paths.
 - A probe result is reused for an unchanged file and probed again for a changed one, in probe-cache tests for unchanged and changed files.
+
+#### Not included
+
+- Remembering per file or browser that direct playback failed.
 
 ### P2c - Media Token Lifetime and Direct-Stream Sessions
 
@@ -2238,30 +2253,45 @@ Last milestone completed: M12k4
 ### P2f - WebUI Playback Cutover and Format Resilience
 
 - **Status**: ⏳ Planned
-- **Goal**: WebUI playback starts through playback sessions and handles formats the browser cannot play.
+- **Goal**: WebUI playback starts through playback sessions and handles files the browser cannot play, including ones it claims to support.
+- **Depends on**: Playback Session Contracts and Capability Surface, Server Playback Decision Engine, Media Token Lifetime and Direct-Stream Sessions, and Remux/Transcode and Segmented Streaming (HLS fMP4 Baseline).
 
 #### Scope
 
 - WebUI playback start goes through the playback-session API.
 - Direct playback is preferred when supported, with a fallback to the HLS fMP4 stream when needed.
+- When direct playback fails on a file the server can read, the player retries it once from where it failed, through a new session whose request says direct playback failed.
+- The retry takes the place of today's format failure: it follows the range-request probe's `200` or `206`, so a video that had played still gets its fresh media URL first.
+- A retry that fails too shows today's format notice, or skips the file during autoplay, Next, Previous, and random picks.
+- Best-quality downloads stay as they are: this retry is what makes the YouTube VP9 MP4 files the iPad rejects play there.
 - The WebUI's seamless loop stays on both progressive and HLS playback.
 - Checks long-form buffering, seek, reconnect, and format edge cases.
+
+#### Traps
+
+- Safari on the iPad rejected 7 of 15 YouTube VP9 MP4 downloads in one session, each 0.15–0.7 s after its play started, before any `playing` event (measured).
+- A file it rejects plays in Chrome on Android and Firefox on Linux (measured).
+- `videoFailed` in `src/playback/player.ts` doesn't read `video.error`, and `probeMedia` in `src/playback/mediaFailure.ts` reads any `200` or `206` as a format the browser can't play, so a decode failure and a source the browser refused look the same.
+- A video that fails at the same point mid-file may get fresh media URLs without end and never reach the probe, which `ISSUES.md` lists as "A video that fails at the same point mid-file may recover without end" (inferred).
 
 #### Acceptance
 
 - WebUI playback starts from server-issued playback sessions, in WebUI tests of session start.
 - Formats the browser cannot play are handled by the server pipeline, in WebUI tests of fallback.
+- A file whose direct playback fails while the server can read it plays on through a transcode session from where it failed, in WebUI tests of the retry before and after the video has played.
+- A retry that fails too shows the format notice, or skips the file during autoplay, in WebUI tests of the retry.
 - Looping behaves the same on progressive and HLS playback, in WebUI tests.
 - `npm run verify` passes.
 
 #### Release checks
 
 - Manual: Movie-length playback in the WebUI works on the long-form validation set.
+- Manual: On the iPad, a YouTube VP9 MP4 that Safari rejects plays through the server's transcode.
 
 ### P2g - Resume Position and Session Continuity
 
 - **Status**: ⏳ Planned
-- **Goal**: The server remembers playback position for the WebUI on every device.
+- **Goal**: The server remembers playback position for the WebUI on every device and counts only plays that start.
 
 #### Scope
 
@@ -2269,16 +2299,16 @@ Last milestone completed: M12k4
 - Resume-position query and clear APIs.
 - Resume settings (on or off, threshold windows, retention) through server settings.
 - Loop iterations do not count as plays and do not create resume points.
+- A play counts only once its media starts: the WebUI records it through `POST /api/record-playback` once the video first fires `playing` or the photo loads, so a file that fails to load isn't counted.
+- No playback start request records a play, so their `recordPlayback` option goes.
 - Resume positions are kept per server, shared by every device, until accounts exist.
-- WebUI playback recovers when the server restarts mid-video: the player notices the media error, waits for the server to come back, requests a fresh media link for the same item, and continues from the same position.
-- Requesting the fresh link does not count as a new play.
 
 #### Traps
 
-- When the server restarts mid-video, the WebUI player does not recover, even when the server is back before the buffered part runs out (measured).
-- Media tokens are held only in memory, so a link issued before the restart returns not found afterward.
-- The server cuts media downloads still in progress when it starts stopping, so the player's download fails as the stop begins rather than when a timeout runs out.
-- `POST /api/play/{itemId}` records a play today.
+- `POST /api/play/{itemId}` records a play before the browser loads anything, for a library play and a history step.
+- A random pick records its play through `POST /api/record-playback` as its attempt starts (`beginAttempt` in `src/playback/player.ts`).
+- Only the recovery of a video that had played and the recheck after a `404` send `recordPlayback: false`.
+- A file Safari rejected at load still counted a play: one file's only recorded play was its failed attempt (measured).
 
 #### Acceptance
 
@@ -2286,7 +2316,8 @@ Last milestone completed: M12k4
 - The WebUI resumes from the server's position on every device, in client tests for resume.
 - Clearing a resume position works and is visible on every device, in server tests for clearing.
 - Resume settings are stored and enforced by the server, and documented, checked by reading the docs.
-- After a server restart mid-video, the WebUI continues the same item from the same position without recording a new play, in a WebUI test that a media error during a server restart fetches a fresh link and continues from the same position without recording a play.
+- A video or photo that fails before it plays or shows records no play, and one that plays or shows records one, in WebUI tests of play recording for a library play, a history step, and a random pick.
+- No playback start request records a play, in server tests of the start routes.
 - Loop iterations record no play and create no resume point, in server tests for the loop rule.
 
 #### Not included
@@ -3321,7 +3352,6 @@ Last milestone completed: M12k4
 
 - The server's own settings findings (partial posts, the non-atomic write, and the silent load failure), which is Server Settings Robustness, since the admin section saves server settings from any device.
 - Logging slow sources and refresh durations, which is Server Instrumentation.
-- Telling a file the server can't read from a missing one in the media and play routes, which is Browser-Playable Filter.
 - The server's known bugs, which `ISSUES.md` lists.
 
 ---

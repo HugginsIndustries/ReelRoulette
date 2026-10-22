@@ -20,11 +20,8 @@ Instructions:
 
 Commit Message:
 
-M12k4: Add Only unrated, Min Rating, and the Rating sort to the WebUI
+Docs: Plan a transcode retry for files a browser rejects, count only plays that start, and record the recovery loop
 
-- WebUI: the Filter tab's Basic Filters end with Only unrated and Min Rating, set with the rating's stars, which say "No minimum" for none and change only the tab's filter. Only unrated with a minimum is flagged with the field validation pattern and holds Apply, Add Preset, and Update.
-- WebUI: the filter sends, reads, and compares `onlyUnrated` and `minRating`, so presets keep them and preset matching tells them apart, and the Filters line names them as "Only unrated" and "Min 3.5 stars".
-- WebUI: Rating comes last in the Library tab's sort, from Highest → Lowest, and the sort modes are one table typed against the contract's, which the sort list renders.
-- WebUI: the Library tab follows `itemRatingChanged`, patching the loaded tile or reloading the loaded window under Only unrated, a minimum rating, or the Rating sort when the change can alter what it shows or its order. The event's type comes from the generated contract.
-- Tests: rating cases in `preset-filter-equality.json`, which Core reads too, `library-tile-effect.json`, and `sort-direction-labels.json`, the WebUI read of `filter-min-rating.json`, the Filter tab's pair and stars, the Filters line, the Rating sort, and the rating event's reload, with the Filter tab's and sort list's markup snapshots.
-- Docs: MILESTONES.md completes Rating Filter and Sort, moved to MILESTONES-COMPLETED.md, with its release check in the testing checklist, and M12k5's traps name `LIBRARY_SORTS` and the sort refusal built from the enum. CONTEXT.md, docs/api.md, docs/architecture.md, docs/domain-inventory.md, and CHANGELOG.md describe the filter, the sort, and the Library tab's rating updates.
+- MILESTONES.md: Playback Session Contracts and Capability Surface lets a session request say direct playback failed, Server Playback Decision Engine decides transcode for such a request, remembering nothing, and WebUI Playback Cutover and Format Resilience retries a file the server can read through that transcode, with the measured Safari VP9 rejections in its traps and its dependencies named.
+- MILESTONES.md: Resume Position and Session Continuity counts a play only once the video plays or the photo shows, and drops the server-restart recovery that already shipped; Server Robustness Findings no longer names the completed Browser-Playable Filter as future work.
+- ISSUES.md: a video that fails at the same point mid-file may recover without end.
