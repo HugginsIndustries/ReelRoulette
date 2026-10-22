@@ -3491,7 +3491,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            503: components["responses"]["LibraryUnavailable"];
+            /** @description The server is running without a library, with a `code` as the LibraryUnavailable response describes; or, without a `code`, the library has no items or the server couldn't read it. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     postPlayItem: {
@@ -4006,6 +4014,24 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description No named item is in the library, as after a refresh removed its file. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Every named item already has each added tag and lacks each removed one, so nothing changes. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             503: components["responses"]["LibraryUnavailable"];
         };
     };
@@ -4070,6 +4096,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description A tag with that name is already in the category the request names, or exists and no category is named. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             503: components["responses"]["LibraryUnavailable"];
         };
     };
@@ -4095,6 +4130,15 @@ export interface operations {
             };
             /** @description Invalid request */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No tag has the old name. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4134,6 +4178,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Neither the tag list nor any item has the tag. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             503: components["responses"]["LibraryUnavailable"];
         };
     };
@@ -4159,6 +4212,15 @@ export interface operations {
             };
             /** @description Invalid request */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The category doesn't exist, or is Uncategorized, which can't be deleted. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

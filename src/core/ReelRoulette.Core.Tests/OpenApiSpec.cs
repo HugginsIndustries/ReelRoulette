@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Http;
 using Xunit;
 
 namespace ReelRoulette.Core.Tests;
@@ -221,6 +222,12 @@ internal static class OpenApiSpec
     public static JsonElement SerializeAsServer<T>(T value)
     {
         return JsonSerializer.SerializeToElement(value, ServerJsonOptions);
+    }
+
+    /// <summary>The reason a route's refusal gives the user: the <c>error</c> of its body as the server sends it.</summary>
+    public static string? ErrorReason(IResult result)
+    {
+        return SerializeAsServer(Assert.IsAssignableFrom<IValueHttpResult>(result).Value).GetProperty("error").GetString();
     }
 
     public static void AssertMatchesSchema(JsonElement json, string schemaName)

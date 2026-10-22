@@ -12,27 +12,29 @@ Each issue is a `###` heading with a short title, then these bullets:
 - **How much it matters**: how often it happens and what it costs.
 - **Since**: the first release it is in, such as "v0.14.1".
 - **Where**: the code involved, when known.
+- **Intended fix**: how the user has decided to fix it, when that is settled.
 
 Mark a fact that was run or measured "(measured)" and one reasoned but not checked "(inferred)". An unmarked fact was read from the code, the docs, or git history.
 
 ## Tags and presets
 
-### Deleting a tag added since the last save fails Save
+### Deleting a tag or category added since the last save fails Save
 
-- **What goes wrong**: Save sends a delete for a tag the server never had. The server refuses it with 409, and the save stops there with "Tag delete failed (409)": changes sent before it, such as categories, new tags, and renames, land, and the item's tag adds and removes, sent after it, don't (inferred).
-- **How to make it happen**: In the Tags tab, add a new tag, delete it in Edit Tag, and press Save, alone or with other changes. Save stays enabled with only the add and delete, and posts `delete-tag` for the new tag, ahead of the item's adds and removes (measured).
-- **How much it matters**: Moderate. It takes adding and deleting a tag before one Save, but then the rest of that save's item changes are dropped, with an error that doesn't say why.
-- **Since**: v0.11.0, when the server began refusing a delete that changes nothing. The WebUI has sent the delete since v0.9.0.
+- **What goes wrong**: Save sends a delete for a tag or category the server never had. The server refuses it with 409, and the save stops there with 'Tag delete failed: There's no tag named "{name}".' or "Category delete failed: That category doesn't exist.": changes sent before it land, and the ones sent after it don't (inferred). A category's delete goes before new tags, renames, tag deletes, and the item's adds and removes, and a tag's delete before the item's adds and removes.
+- **How to make it happen**: In the Tags tab, add a new tag and delete it in Edit Tag, or add a new category and delete it in Edit Category, and press Save, alone or with other changes. Save stays enabled with only the add and delete, and posts `delete-tag` or `delete-category` for the new one (measured).
+- **How much it matters**: Moderate. It takes adding and deleting a tag or category before one Save, but then the rest of that save's changes after the delete are dropped, with an error that says only that the tag or category doesn't exist.
+- **Since**: v0.11.0, when the server began refusing a delete that changes nothing. The WebUI has sent the tag's delete since v0.9.0, and the category's since at least v0.11.0 (inferred).
 - **Where**:
-  - `deleteTag` in `src/clients/web/ReelRoulette.WebUI/src/tags/tagEditor.ts` drops the tag's held add and queues a delete for it.
-  - `planTagEditorSave` in `src/clients/web/ReelRoulette.WebUI/src/library/tagSave.ts` sends category changes, new tags, renames, deletes, and then the item's adds and removes, and `runTagEditorSave` stops at the first step the server refuses.
-  - `/api/tag-editor/delete-tag` in `src/core/ReelRoulette.Server/Hosting/ServerHostComposition.cs` answers 409 when `LibraryCatalogSession.DeleteTag` changes nothing.
+  - `deleteTag` and `deleteCategory` in `src/clients/web/ReelRoulette.WebUI/src/tags/tagEditor.ts` drop the tag's or category's held add and queue a delete for it.
+  - `planTagEditorSave` in `src/clients/web/ReelRoulette.WebUI/src/library/tagSave.ts` sends category changes, category deletes, new tags, renames, tag deletes, and then the item's adds and removes, and `runTagEditorSave` stops at the first step the server refuses.
+  - `/api/tag-editor/delete-tag` and `/api/tag-editor/delete-category` in `src/core/ReelRoulette.Server/Hosting/ServerHostComposition.cs` answer 409 when `LibraryCatalogSession.DeleteTag` or `DeleteCategory` changes nothing.
+- **Intended fix**: The Tags tab blocks deleting a tag or category that isn't saved yet, with a clear reason, such as a disabled Delete with a tooltip, rather than sending the delete. The server's refusal stays.
 
 ### A new tag named after a just-renamed tag is lost
 
 - **What goes wrong**: Save sends the new tag before the rename, so the server takes it as the tag about to be renamed (inferred):
   - When the new tag's category differs, that tag moves to it and is then renamed, so the renamed tag ends up in the new tag's category and the new tag doesn't exist.
-  - When the category is the same, the server refuses the new tag with 409, and the save stops with "Tag create/update failed (409)" before the rename.
+  - When the category is the same, the server refuses the new tag with 409, and the save stops with 'Tag update failed: A tag named "Bob" already exists.' before the rename.
 - **How to make it happen**: In the Tags tab, rename Bob to Robert in Edit Tag, add a new tag named Bob, and press Save. Add tag accepts the name, and Save posts `upsert-tag` for Bob, then `rename-tag` from Bob to Robert (measured).
 - **How much it matters**: Moderate. It's rare, and saving the rename before adding the tag avoids it, but the new tag goes missing without an error, or the save fails partway.
 - **Since**: v0.9.0 (inferred): every release's WebUI sends new tags before renames.
@@ -40,6 +42,42 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
   - `newTagNameProblem` in `src/clients/web/ReelRoulette.WebUI/src/tags/tagEditorModel.ts` frees a renamed tag's old name, since the tag shows under its new one.
   - `planTagEditorSave` in `src/clients/web/ReelRoulette.WebUI/src/library/tagSave.ts` sends new tags before renames.
   - `LibraryCatalogSession.UpsertTag` in `src/core/ReelRoulette.Core/Library/LibraryCatalogSession.cs` takes an existing name as that tag, moving it to the given category, or refusing when it is already there, which `/api/tag-editor/upsert-tag` answers with 409.
+- **Intended fix**: The Tags tab blocks adding a tag named after one whose rename isn't saved yet, with a clear reason, such as a disabled Add tag with a tooltip. The server's behavior stays.
+
+### Add or Remove on a tag the file already matches fails Save
+
+- **What goes wrong**: Add on a tag the playing file already has, or Remove on one it doesn't have, is sent as a change. When every add and remove in the save changes nothing, the server refuses it with 409, and Save fails with "Tag apply failed: The tags were already that way." A save that also changes something takes it all (inferred).
+- **How to make it happen**: In the Tags tab, press Add on a green tag, or Remove on one that isn't green, and press Save. The WebUI posts `apply-item-tags` with that add or remove (measured), and the server refuses an apply that changes nothing (measured, in `TagEditorRouteTests`).
+- **How much it matters**: Low. Nothing is lost, but one tap on a lit chip's Add gives an error for a change that does nothing.
+- **Since**: v0.11.0, when the server began refusing an apply that changes nothing.
+- **Where**:
+  - `Chip` in `src/clients/web/ReelRoulette.WebUI/src/ui/TagEditor.tsx` enables Add and Remove whatever the item has, disabling them only when the items can't change.
+  - `LibraryCatalogSession.ApplyItemTagEdits` in `src/core/ReelRoulette.Core/Library/LibraryCatalogSession.cs` returns false when nothing changes, which `/api/tag-editor/apply-item-tags` answers with 409.
+- **Intended fix**: The Tags tab blocks Add on a tag every file has and Remove on one none has, with a clear reason, such as a disabled button with a tooltip. The server's refusal stays.
+
+### Deleting a tag and adding it back before a save fails Save
+
+- **What goes wrong**: Adding a tag deleted since the last save, in its own category, drops the held delete, so Save sends only a new tag that is already there. The server refuses it with 409, and the save stops with 'Tag update failed: A tag named "{name}" already exists.': renames, deletes, and the item's adds and removes, sent after it, don't land (inferred).
+- **How to make it happen**: In the Tags tab, delete Bob in Edit Tag, add a new tag named Bob in Bob's category, and press Save. Save posts only `upsert-tag` for Bob (measured).
+- **How much it matters**: Low. It's an odd sequence that leaves the tag as it was, but the rest of that save's changes are dropped with an error.
+- **Since**: v0.11.0, when the server began refusing a new tag already in its category (inferred).
+- **Where**:
+  - `addTag` in `src/clients/web/ReelRoulette.WebUI/src/tags/tagEditor.ts` drops a held delete of the same name.
+  - `planTagEditorSave` in `src/clients/web/ReelRoulette.WebUI/src/library/tagSave.ts` sends new tags before renames, deletes, and the item's adds and removes.
+  - `LibraryCatalogSession.UpsertTag` in `src/core/ReelRoulette.Core/Library/LibraryCatalogSession.cs` refuses a tag already in the category it names, which `/api/tag-editor/upsert-tag` answers with 409.
+- **Intended fix**: The Tags tab blocks adding a tag whose delete isn't saved yet, with a clear reason, such as a disabled Add tag with a tooltip. The server's refusal stays.
+
+### An add or remove waiting on a renamed tag goes to its old name
+
+- **What goes wrong**: Save sends a tag's rename before the item's adds and removes, which still name the tag's old name, so the file gets or loses the old name instead of the renamed tag, and an add brings the old name back as a tag of its own (inferred).
+- **How to make it happen**: In the Tags tab, press Add on Bob, rename Bob to Robert in Edit Tag, and press Save. Save posts `rename-tag` from Bob to Robert, then `apply-item-tags` adding Bob (measured).
+- **How much it matters**: Moderate. It's rare, but the file ends up with a tag the user just renamed away, without an error.
+- **Since**: v0.9.0 (inferred): every release's WebUI sends renames before the item's adds and removes.
+- **Where**:
+  - `saveEdit` in `src/clients/web/ReelRoulette.WebUI/src/tags/tagEditor.ts` renames the tag without carrying its waiting add or remove to the new name.
+  - `planTagEditorSave` in `src/clients/web/ReelRoulette.WebUI/src/library/tagSave.ts` sends renames before the item's adds and removes.
+  - `LibraryCatalogSession.ApplyItemTagEdits` in `src/core/ReelRoulette.Core/Library/LibraryCatalogSession.cs` adds a tag the catalog doesn't have.
+- **Intended fix**: The Tags tab blocks renaming a tag with an add or remove waiting, and adding or removing a tag with a rename waiting, with a clear reason, such as a disabled control with a tooltip. The server's behavior stays.
 
 ### A tag delete or rename can leave a preset that shows as None or as another preset
 

@@ -14,6 +14,7 @@ import {
   type TaggedItem,
   type TagSaveStep
 } from "../library/tagSave";
+import { noTagNamed } from "./serverReasons";
 
 const people = { id: "people", name: "People", sortOrder: 0 };
 const places = { id: "places", name: "Places", sortOrder: 1 };
@@ -214,7 +215,7 @@ describe("tag save apply", () => {
       post: async (step) => {
         posted.push(step.kind);
         if (step.kind === "delete-tag") {
-          throw new HttpStatusError(409, "Day is already deleted.");
+          throw new HttpStatusError(409, noTagNamed("Day"));
         }
       },
       label: (step) => (step.kind === "delete-tag" ? "Tag delete" : "Other")
@@ -223,7 +224,7 @@ describe("tag save apply", () => {
       ok: false,
       accepted: [steps[0]],
       failed: steps[1],
-      failure: { text: "Tag delete failed: Day is already deleted.", logText: "Tag delete failed (HTTP 409)." }
+      failure: { text: `Tag delete failed: ${noTagNamed("Day")}`, logText: "Tag delete failed (HTTP 409)." }
     });
     expect(posted).toEqual(["upsert-tag", "delete-tag"]);
 

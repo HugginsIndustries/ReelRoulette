@@ -972,7 +972,7 @@ public sealed class LibraryPlaybackServiceTests : IDisposable
         Assert.False(ok);
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, statusCode);
         Assert.Null(response);
-        Assert.Equal("Library not loaded or empty.", error);
+        Assert.Equal("The library is empty.", error);
     }
 
     [Fact]

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { statusLogLine } from "../../logging/relayLogLines";
 import { REFRESH_GATHER_MS } from "../../stats/coalescedRefresh";
 import { createFakePresets, type FakePresets } from "../fakePresetServer";
+import { REMOTE_CONNECTIONS_OFF } from "../serverReasons";
 import {
   closeNotices,
   COMPATIBLE_VERSION,
@@ -817,7 +818,7 @@ describe("opening and closing", () => {
     const { page, server } = await mountFilter([], (server) => {
       server.on("GET", "/api/sources", () => (sourcesStatus === 200 ? json(SOURCES) : status(sourcesStatus)));
       server.on("POST", "/api/tag-editor/model", () =>
-        tagModelStatus === 200 ? json(TAG_MODEL) : json({ error: "Library not loaded or empty." }, tagModelStatus)
+        tagModelStatus === 200 ? json(TAG_MODEL) : tagModelStatus === 403 ? json({ error: REMOTE_CONNECTIONS_OFF }, 403) : status(tagModelStatus)
       );
     });
 
@@ -827,10 +828,10 @@ describe("opening and closing", () => {
     expect(dialog().querySelector("input")).toBeNull();
 
     sourcesStatus = 200;
-    tagModelStatus = 503;
+    tagModelStatus = 403;
     await click(panelTab("Library"));
     await chooseFilterTab();
-    await expectNotice(server, "Filter load failed: Library not loaded or empty.", "Filter load failed (HTTP 503).");
+    await expectNotice(server, `Filter load failed: ${REMOTE_CONNECTIONS_OFF}`, "Filter load failed (HTTP 403).");
     expect(dialog().querySelector("input")).toBeNull();
 
     tagModelStatus = 200;

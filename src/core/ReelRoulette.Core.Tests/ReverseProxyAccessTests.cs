@@ -1,4 +1,6 @@
 using System.Net;
+using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -207,17 +209,27 @@ public sealed class ReverseProxyAccessTests : IDisposable
     [InlineData("/", true)]
     [InlineData("/api/version", true)]
     [InlineData("/control/pair", true)]
-    public async Task WithRemoteConnectionsOff_EveryRequestFromAnotherDeviceIsRefused(string path, bool throughProxy)
+    public async Task WithRemoteConnectionsOff_EveryRequestFromAnotherDeviceIsRefused_SayingHowToAllowIt(string path, bool throughProxy)
     {
         var context = throughProxy
             ? ProxiedRequest(path, IPAddress.Loopback)
             : DirectRequest(path, LanClient);
+        var body = new MemoryStream();
+        context.Response.Body = body;
 
         // The pipeline runs with pairing off, so nothing but the remote connections setting refuses the request.
         var reachedEndpoint = await InvokePipelineAsync(context, Settings(allowRemote: false));
 
         Assert.False(reachedEndpoint);
         Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
+        // An API or control request gets it as the reason the WebUI shows, and anything else as text.
+        var text = Encoding.UTF8.GetString(body.ToArray());
+        var reason = path.StartsWith("/api/", StringComparison.Ordinal) || path.StartsWith("/control/", StringComparison.Ordinal)
+            ? JsonDocument.Parse(text).RootElement.GetProperty("error").GetString()
+            : text;
+        Assert.Equal(
+            "Remote connections are turned off on this ReelRoulette server. Turn on Allow remote connections in the Operator on the server machine.",
+            reason);
     }
 
     [Theory]
@@ -322,6 +334,18 @@ public sealed class ReverseProxyAccessTests : IDisposable
         var setCookie = context.Response.Headers.SetCookie.ToString();
         Assert.StartsWith("rr_paired=", setCookie);
         Assert.Contains("secure", setCookie, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Pairing_WithAWrongToken_SaysTheTokenIsWrong_AndSetsNoCookie()
+    {
+        var context = DirectRequest("/api/pair", LanClient);
+
+        var result = ServerHostComposition.HandlePairRequest(context, "wrong", TokenRequired(), new ServerSessionStore());
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+        Assert.Equal("The pairing token is wrong.", OpenApiSpec.ErrorReason(result));
+        Assert.Empty(context.Response.Headers.SetCookie.ToString());
     }
 
     [Fact]

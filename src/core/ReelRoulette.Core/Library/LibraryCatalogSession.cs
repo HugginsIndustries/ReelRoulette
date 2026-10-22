@@ -1747,7 +1747,8 @@ public sealed class LibraryCatalogSession
     }
 
     /// <summary>
-    /// <paramref name="resolvedItemIds"/> is the catalog id of each named item that is in the catalog, in request order.
+    /// <paramref name="resolvedItemIds"/> is the catalog id of each named item that is in the catalog, in request order,
+    /// also when nothing changed, so a caller can tell items that already had the tags from items no longer there.
     /// </summary>
     public bool ApplyItemTagEdits(
         IReadOnlyList<string> identifiers,
@@ -1765,7 +1766,7 @@ public sealed class LibraryCatalogSession
             .ToList();
         var adds = DistinctTagNames(addTags);
         var removes = DistinctTagNames(removeTags);
-        if (ids.Count == 0 || (adds.Count == 0 && removes.Count == 0))
+        if (ids.Count == 0)
         {
             return false;
         }
@@ -1813,11 +1814,7 @@ public sealed class LibraryCatalogSession
             return changed;
         });
         catalogChanged = committed && insertedCatalog;
-        if (committed)
-        {
-            resolvedItemIds = resolved;
-        }
-
+        resolvedItemIds = resolved;
         return committed;
     }
 

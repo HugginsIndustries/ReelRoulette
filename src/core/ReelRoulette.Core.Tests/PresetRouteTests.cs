@@ -85,11 +85,11 @@ public sealed class PresetRouteTests : IDisposable
             Rename(state, "Night", "Other"),
             ServerHostComposition.DeletePreset("Night", null, state)
         ];
-        Assert.All(unknown, result => Assert.Equal((404, "Preset not found."), Refusal(result)));
+        Assert.All(unknown, result => Assert.Equal((404, "That preset no longer exists."), Refusal(result)));
 
         // An order that doesn't name every preset once is 409.
-        Assert.Equal((409, "The order must name every preset once."), Refusal(Reorder(state, ids[0], ids[1])));
-        Assert.Equal((409, "The order must name every preset once."), Refusal(Reorder(state, ids[0], ids[1], ids[1])));
+        Assert.Equal((409, "The presets changed since they were loaded."), Refusal(Reorder(state, ids[0], ids[1])));
+        Assert.Equal((409, "The presets changed since they were loaded."), Refusal(Reorder(state, ids[0], ids[1], ids[1])));
 
         Assert.Equal(before, Describe(state));
         Assert.Empty(PresetEvents(state, revision));
@@ -114,7 +114,7 @@ public sealed class PresetRouteTests : IDisposable
             ServerHostComposition.DeletePreset(ids[1], null, state)
         ];
 
-        Assert.All(results, result => Assert.Equal((500, "The preset change couldn't be saved."), Refusal(result)));
+        Assert.All(results, result => Assert.Equal((500, "The server couldn't write to the library."), Refusal(result)));
         Assert.Equal(before, Describe(state));
         Assert.Empty(PresetEvents(state, revision));
         Assert.Equal(4, Warnings().Count);
@@ -140,7 +140,7 @@ public sealed class PresetRouteTests : IDisposable
             ];
         }
 
-        Assert.All(results, result => Assert.Equal((500, "The preset change couldn't be saved."), Refusal(result)));
+        Assert.All(results, result => Assert.Equal((500, "The server couldn't write to the library."), Refusal(result)));
         Assert.Equal(before, Describe(state));
         Assert.Equal(before, Describe(Restarted()));
         Assert.Empty(PresetEvents(state, revision));
@@ -220,8 +220,7 @@ public sealed class PresetRouteTests : IDisposable
 
     private static (int? Status, string? Error) Refusal(IResult result)
     {
-        var body = OpenApiSpec.SerializeAsServer(Assert.IsAssignableFrom<IValueHttpResult>(result).Value);
-        return (Status(result), body.GetProperty("error").GetString());
+        return (Status(result), OpenApiSpec.ErrorReason(result));
     }
 
     private static T Request<T>(string json)

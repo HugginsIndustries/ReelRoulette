@@ -5,6 +5,7 @@ import {
   withoutAndLocalModes,
   type ApiFilterState
 } from "../filter/filterStateModel";
+import { PRESET_GONE, PRESETS_CHANGED } from "./serverReasons";
 
 /** A preset as the fake keeps it: its id, its name, and its filter as the page posted it. */
 export interface FakePreset {
@@ -104,7 +105,7 @@ export function createFakePresets(initial: readonly FakePreset[] = []): FakePres
       const ids: unknown[] = Array.isArray(body?.presetIds) ? body.presetIds : [];
       const ordered = ids.map((id) => fake.list.find((preset) => preset.id === id));
       if (ordered.length !== fake.list.length || new Set(ids).size !== ids.length || ordered.some((preset) => !preset)) {
-        return refused(409, "The order must name every preset once.");
+        return refused(409, PRESETS_CHANGED);
       }
       fake.list = ordered as FakePreset[];
       return new Response(null, { status: 200 });
@@ -115,7 +116,7 @@ export function createFakePresets(initial: readonly FakePreset[] = []): FakePres
     }
     const preset = fake.list.find((candidate) => candidate.id === decodeURIComponent(match[1]!));
     if (!preset) {
-      return refused(404, "Preset not found.");
+      return refused(404, PRESET_GONE);
     }
     if (match[2] === "delete") {
       fake.list = fake.list.filter((candidate) => candidate !== preset);

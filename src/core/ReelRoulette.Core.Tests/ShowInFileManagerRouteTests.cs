@@ -105,6 +105,7 @@ public sealed class ShowInFileManagerRouteTests : IDisposable
         var result = await ServerHostComposition.ShowInFileManager(context, itemId, _catalog);
 
         Assert.Equal((StatusCodes.Status404NotFound, ServerHostComposition.FileManagerErrorItemNotFound), Refusal(result));
+        Assert.Equal("The file is no longer in the library.", OpenApiSpec.ErrorReason(result));
         Assert.Empty(launcher.Shown);
         Assert.Contains("outcome=not-found.", Assert.Single(LogLines()));
     }
@@ -161,6 +162,7 @@ public sealed class ShowInFileManagerRouteTests : IDisposable
         var result = await ServerHostComposition.ShowInFileManager(context, OnDiskId, _catalog);
 
         Assert.Equal((StatusCodes.Status500InternalServerError, ServerHostComposition.FileManagerErrorFailed), Refusal(result));
+        Assert.Equal("No file manager on the server machine answered.", OpenApiSpec.ErrorReason(result));
         Assert.Single(launcher.Shown);
         Assert.Contains("[warn] Show in file manager item=on-disk outcome=failed error=Win32Exception.", Assert.Single(LogLines()));
     }

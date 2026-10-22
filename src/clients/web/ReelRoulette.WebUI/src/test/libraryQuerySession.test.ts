@@ -17,6 +17,7 @@ import {
   type LibraryQueryRequest,
   type LibraryTileChange
 } from "../library/libraryQuerySession";
+import { REMOTE_CONNECTIONS_OFF } from "./serverReasons";
 
 interface TileEffectCase {
   name: string;
@@ -429,7 +430,7 @@ describe("libraryQuerySession", () => {
   });
 
   it("keeps a failed load's text and the status its error carries, relays its log line, and clears both once a load succeeds", async () => {
-    const failures: unknown[] = [new HttpStatusError(408), new HttpStatusError(503, "Library not loaded or empty."), new ServerUnreachableError()];
+    const failures: unknown[] = [new HttpStatusError(408), new HttpStatusError(403, REMOTE_CONNECTIONS_OFF), new ServerUnreachableError()];
     const statusMessages: Array<[string | null, string | undefined]> = [];
     const session = createLibraryQuerySession(async () => {
       const failure = failures.shift();
@@ -443,14 +444,14 @@ describe("libraryQuerySession", () => {
     await session.resetQuery(createDefaultFilterState(), controls());
     expect(session.snapshot()).toMatchObject({ phase: "error", failureText: "Library load failed.", errorStatus: 408 });
     await session.resetQuery(createDefaultFilterState(), controls());
-    expect(session.snapshot()).toMatchObject({ phase: "error", failureText: "Library load failed: Library not loaded or empty.", errorStatus: 503 });
+    expect(session.snapshot()).toMatchObject({ phase: "error", failureText: `Library load failed: ${REMOTE_CONNECTIONS_OFF}`, errorStatus: 403 });
     await session.resetQuery(createDefaultFilterState(), controls());
     expect(session.snapshot()).toMatchObject({ phase: "error", failureText: "Library load failed: Couldn't reach the server.", errorStatus: null });
     await session.resetQuery(createDefaultFilterState(), controls());
     expect(session.snapshot()).toMatchObject({ phase: "ready", failureText: null, errorStatus: null });
     expect(statusMessages.filter(([message]) => message)).toEqual([
       ["Library load failed (HTTP 408).", "load"],
-      ["Library load failed (HTTP 503).", "load"],
+      ["Library load failed (HTTP 403).", "load"],
       ["Library load failed: Couldn't reach the server.", "load"]
     ]);
   });

@@ -8,6 +8,7 @@ import {
   type RandomPickOutcome,
   type RandomPickSend
 } from "../playback/randomPick";
+import { LIBRARY_EMPTY } from "./serverReasons";
 
 interface SentRequest {
   body: string;
@@ -122,7 +123,7 @@ describe("randomPick", () => {
   it("maps each kind of answer and frees the next press after it", async () => {
     const answers: Array<() => Promise<Response>> = [
       async () => new Response("", { status: 401 }),
-      async () => jsonResponse({ error: "Library not loaded or empty." }, 503),
+      async () => jsonResponse({ error: LIBRARY_EMPTY }, 503),
       async () => jsonResponse({}),
       async () => {
         throw new TypeError("Failed to fetch");
@@ -135,7 +136,7 @@ describe("randomPick", () => {
     await expect(picker.pick({})).resolves.toEqual({ kind: "unauthorized" });
     const refused = await picker.pick({});
     expect(refused).toEqual({ kind: "failed", error: expect.any(HttpStatusError) });
-    expect(refused).toMatchObject({ error: { status: 503, reason: "Library not loaded or empty." } });
+    expect(refused).toMatchObject({ error: { status: 503, reason: LIBRARY_EMPTY } });
     await expect(picker.pick({})).resolves.toEqual({ kind: "none" });
     await expect(picker.pick({})).resolves.toEqual({ kind: "failed", error: new TypeError("Failed to fetch") });
     const unexpected = await picker.pick({});

@@ -8,6 +8,7 @@ import { HIDE_CONTROLS_KEY } from "../../playback/playerControls";
 import { SEEK_INDICATOR_MS } from "../../playback/seekIndicator";
 import { createAppServices, type AppServices } from "../../state/appServices";
 import { App } from "../../ui/App";
+import { FILE_NOT_IN_LIBRARY, LIBRARY_EMPTY } from "../serverReasons";
 import {
   API_BASE_URL,
   COMPATIBLE_VERSION,
@@ -499,7 +500,7 @@ describe("random pick", () => {
     const failures: Array<[() => Response, string, string?]> = [
       [() => json({ mediaUrl: null }), "No eligible media for current filters."],
       [() => status(500), "Random selection failed.", "Random selection failed (HTTP 500)."],
-      [() => json({ error: "Library not loaded or empty." }, 503), "Random selection failed: Library not loaded or empty.", "Random selection failed (HTTP 503)."],
+      [() => json({ error: LIBRARY_EMPTY }, 503), `Random selection failed: ${LIBRARY_EMPTY}`, "Random selection failed (HTTP 503)."],
       [
         () => {
           throw new TypeError("Failed to fetch");
@@ -768,7 +769,7 @@ describe("favorite and blacklist", () => {
   it("show an update the server refuses in the notice, with its reason when it gives one, and leave the buttons as they were", async () => {
     const server = serverPicking(VIDEO_ITEM);
     server.on("POST", "/api/favorite", () => status(500));
-    server.on("POST", "/api/blacklist", () => json({ error: "The file isn't in the library." }, 404));
+    server.on("POST", "/api/blacklist", () => json({ error: FILE_NOT_IN_LIBRARY }, 404));
     await mountAndPlay(server);
 
     await click(button("Favorite"));
@@ -778,7 +779,7 @@ describe("favorite and blacklist", () => {
     await closeNotices();
 
     await click(button("Blacklist"));
-    expect(openNotices()).toEqual(["Blacklist update failed: The file isn't in the library."]);
+    expect(openNotices()).toEqual([`Blacklist update failed: ${FILE_NOT_IN_LIBRARY}`]);
     expect(isLit("Blacklist")).toBe(false);
     await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Blacklist update failed (HTTP 404).", VIDEO_ITEM, 1)));
     expect([...relayedLines(server, "Added to favorites"), ...relayedLines(server, "Blacklisted")]).toEqual([]);

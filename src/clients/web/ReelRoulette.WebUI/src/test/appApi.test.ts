@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { HttpStatusError, ServerUnreachableError, UnauthorizedError } from "../api/serverRequest";
 import { createAppApi } from "../state/appApi";
+import { REMOTE_CONNECTIONS_OFF } from "./serverReasons";
 
 function recordingFetch(reply: () => Response | Promise<Response>) {
   const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
@@ -53,12 +54,16 @@ describe("createAppApi", () => {
   });
 
   it("carries the server's reason on a failed read, and none for the empty body an unhandled error gets", async () => {
-    let reply = () => new Response(JSON.stringify({ error: "Library not loaded or empty." }), { status: 503, headers: { "Content-Type": "application/json" } });
+    let reply = () =>
+      new Response(JSON.stringify({ error: REMOTE_CONNECTIONS_OFF }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" }
+      });
     const { fetchImpl } = recordingFetch(() => reply());
     const api = createAppApi("http://localhost:51301", { onUnauthorized: () => {}, fetch: fetchImpl });
 
-    await expect(api.getJson("/api/presets")).rejects.toMatchObject({ status: 503, reason: "Library not loaded or empty.", message: "HTTP 503" });
-    await expect(api.postJson("/api/library/query", {})).rejects.toMatchObject({ status: 503, reason: "Library not loaded or empty." });
+    await expect(api.getJson("/api/presets")).rejects.toMatchObject({ status: 403, reason: REMOTE_CONNECTIONS_OFF, message: "HTTP 403" });
+    await expect(api.postJson("/api/library/query", {})).rejects.toMatchObject({ status: 403, reason: REMOTE_CONNECTIONS_OFF });
 
     reply = () => new Response(null, { status: 500 });
     await expect(api.getJson("/api/presets")).rejects.toMatchObject({ status: 500, reason: null });

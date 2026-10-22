@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { statusLogLine } from "../../logging/relayLogLines";
+import { REMOTE_CONNECTIONS_OFF } from "../serverReasons";
 import {
   API_BASE_URL,
   COMPATIBLE_VERSION,
@@ -555,12 +556,12 @@ describe("first page", () => {
     const { server } = await mountLibrary(libraryItems(2));
     await openLibrary();
 
-    server.on("POST", "/api/library/query", () => json({ error: "Library not loaded or empty." }, 503));
+    server.on("POST", "/api/library/query", () => json({ error: REMOTE_CONNECTIONS_OFF }, 403));
     fireEvent.change(sortSelect(), { target: { value: "PlayCount" } });
     await flush();
 
-    expect(within(overlay()).getByRole("alert").textContent).toBe("Library load failed: Library not loaded or empty.");
-    await expectRelayed(server, "Library load failed (HTTP 503).");
+    expect(within(overlay()).getByRole("alert").textContent).toBe(`Library load failed: ${REMOTE_CONNECTIONS_OFF}`);
+    await expectRelayed(server, "Library load failed (HTTP 403).");
   });
 
   it("says when the library is empty", async () => {

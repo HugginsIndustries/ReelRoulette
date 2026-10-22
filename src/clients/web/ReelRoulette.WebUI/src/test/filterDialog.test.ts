@@ -11,6 +11,7 @@ import { createDeviceStore } from "../state/deviceStore";
 import { REFRESH_GATHER_MS } from "../stats/coalescedRefresh";
 import { createFakePresets, type FakePresets } from "./fakePresetServer";
 import { EMPTY_FIELD } from "../validation/fieldValidation";
+import { PRESETS_CHANGED, REMOTE_CONNECTIONS_OFF } from "./serverReasons";
 
 const FAVORITES: ApiPreset = { id: "preset-favorites", name: "Favorites", filterState: { favoritesMode: "only" } };
 const LONG: ApiPreset = { id: "preset-long", name: "Long", filterState: { minDuration: "00:10:00" } };
@@ -355,12 +356,14 @@ describe("opening", () => {
     expect(notices).toEqual(["Filter load failed."]);
     expect(noticeLogs).toEqual(["Filter load failed (HTTP 503)."]);
 
-    server.modelReason = "Library not loaded or empty.";
+    server.modelStatus = 403;
+    server.modelReason = REMOTE_CONNECTIONS_OFF;
     await dialog.open();
-    expect(notices).toEqual(["Filter load failed.", "Filter load failed: Library not loaded or empty."]);
-    expect(noticeLogs).toEqual(["Filter load failed (HTTP 503).", "Filter load failed (HTTP 503)."]);
+    expect(notices).toEqual(["Filter load failed.", `Filter load failed: ${REMOTE_CONNECTIONS_OFF}`]);
+    expect(noticeLogs).toEqual(["Filter load failed (HTTP 503).", "Filter load failed (HTTP 403)."]);
 
     server.modelStatus = 200;
+    server.modelReason = null;
     await dialog.open();
     server.modelStatus = 503;
     await serverEvents("tagCatalogChanged");
@@ -1180,7 +1183,7 @@ describe("per-preset writes", () => {
     await dialog.apply();
 
     expect(server.fakePresets.summaries()).toEqual(["create Mine", "reorder preset-4,preset-favorites,preset-recent,preset-long (409)"]);
-    expect(notices).toEqual(["Saving presets failed: The order must name every preset once."]);
+    expect(notices).toEqual([`Saving presets failed: ${PRESETS_CHANGED}`]);
     expect(view().presets.map((preset) => preset.id)).toEqual(["preset-4", "preset-favorites", "preset-recent", "preset-long", "preset-other"]);
     expect(view().headingPreset).toBe("preset-4");
 

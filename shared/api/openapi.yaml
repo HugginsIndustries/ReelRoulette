@@ -1046,7 +1046,20 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
-          $ref: "#/components/responses/LibraryUnavailable"
+          description: >
+            The server is running without a library, with a `code` as the LibraryUnavailable response describes; or,
+            without a `code`, the library has no items or the server couldn't read it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                empty:
+                  value:
+                    error: The library is empty.
+                unreadable:
+                  value:
+                    error: The server couldn't read the library.
 
   /api/play/{itemId}:
     post:
@@ -1201,7 +1214,7 @@ paths:
               examples:
                 notFound:
                   value:
-                    error: Item not found
+                    error: The file is no longer in the library.
                     code: file_manager_item_not_found
                 fileMissing:
                   value:
@@ -1229,7 +1242,7 @@ paths:
               examples:
                 failed:
                   value:
-                    error: The file manager couldn't be opened.
+                    error: No file manager on the server machine answered.
                     code: file_manager_failed
         "503":
           $ref: "#/components/responses/LibraryUnavailable"
@@ -1518,6 +1531,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No named item is in the library, as after a refresh removed its file.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notInLibrary:
+                  value:
+                    error: The file is no longer in the library.
+        "409":
+          description: Every named item already has each added tag and lacks each removed one, so nothing changes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                unchanged:
+                  value:
+                    error: The tags were already that way.
         "503":
           $ref: "#/components/responses/LibraryUnavailable"
 
@@ -1562,6 +1595,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            A tag with that name is already in the category the request names, or exists and no category is
+            named.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                exists:
+                  value:
+                    error: A tag named "Bob" already exists.
         "503":
           $ref: "#/components/responses/LibraryUnavailable"
 
@@ -1584,6 +1629,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: No tag has the old name.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                noTag:
+                  value:
+                    error: There's no tag named "Bob".
         "503":
           $ref: "#/components/responses/LibraryUnavailable"
 
@@ -1606,6 +1661,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Neither the tag list nor any item has the tag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                noTag:
+                  value:
+                    error: There's no tag named "Bob".
         "503":
           $ref: "#/components/responses/LibraryUnavailable"
 
@@ -1628,6 +1693,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The category doesn't exist, or is Uncategorized, which can't be deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                noCategory:
+                  value:
+                    error: That category doesn't exist.
         "503":
           $ref: "#/components/responses/LibraryUnavailable"
 

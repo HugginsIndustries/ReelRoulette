@@ -374,7 +374,7 @@ public sealed class LibraryOperationsService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        if (itemIds.Count == 0 || (addTags.Count == 0 && removeTags.Count == 0))
+        if (itemIds.Count == 0)
         {
             return false;
         }

@@ -10,6 +10,7 @@ import { createAppStore, type PlayingItem } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
 import { NO_LIBRARY_PLAY_NOTICE, noLibraryText } from "../state/lastingStates";
 import type { ServerConnection, ServerConnectionEvents } from "../state/serverConnection";
+import { REMOTE_CONNECTIONS_OFF } from "./serverReasons";
 
 const PLAYED: PlayingItem = {
   id: "/media/clip 1.mp4",
@@ -289,13 +290,13 @@ describe("library window", () => {
     expect(t.statuses).toEqual(["Library load failed (HTTP 500)."]);
     expect(t.notified).toEqual([]);
 
-    t.replies.set("/api/library/query", () => json({ error: "Library not loaded or empty." }, 503));
+    t.replies.set("/api/library/query", () => json({ error: REMOTE_CONNECTIONS_OFF }, 403));
     await t.library.commitQuery();
     expect(t.library.body.peek()).toEqual({
       kind: "message",
-      message: { text: "Library load failed: Library not loaded or empty.", error: true, live: false }
+      message: { text: `Library load failed: ${REMOTE_CONNECTIONS_OFF}`, error: true, live: false }
     });
-    expect(t.statuses).toEqual(["Library load failed (HTTP 500).", "Library load failed (HTTP 503)."]);
+    expect(t.statuses).toEqual(["Library load failed (HTTP 500).", "Library load failed (HTTP 403)."]);
     t.replies.delete("/api/library/query");
 
     t.fakeLibrary.items = [];

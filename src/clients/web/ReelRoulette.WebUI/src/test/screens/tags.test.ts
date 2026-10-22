@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import { beforeEach, describe, expect, it } from "vitest";
 import { statusLogLine } from "../../logging/relayLogLines";
 import { REFRESH_GATHER_MS } from "../../stats/coalescedRefresh";
+import { noTagNamed } from "../serverReasons";
 import {
   closeNotices,
   FakeServer,
@@ -1942,9 +1943,9 @@ describe("saving", () => {
     await deleteAndSave("Bob");
     await expectNotice(server, "Tag delete failed.", "Tag delete failed (HTTP 500).");
     tags.failures.set("/api/tag-editor/delete-tag", 409);
-    tags.failureReason = "Bob is already deleted.";
+    tags.failureReason = noTagNamed("Bob");
     await deleteAndSave("Bob");
-    await expectNotice(server, "Tag delete failed: Bob is already deleted.", "Tag delete failed (HTTP 409).");
+    await expectNotice(server, `Tag delete failed: ${noTagNamed("Bob")}`, "Tag delete failed (HTTP 409).");
     tags.failures.set("/api/tag-editor/delete-tag", 0);
     await deleteAndSave("Alice");
     await expectNotice(server, "Tag delete failed: Couldn't reach the server.");

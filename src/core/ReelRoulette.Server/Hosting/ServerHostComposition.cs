@@ -17,6 +17,9 @@ public static class ServerHostComposition
     internal const string FileManagerErrorItemNotFound = "file_manager_item_not_found";
     internal const string FileManagerErrorFileMissing = "file_manager_file_missing";
     internal const string FileManagerErrorFailed = "file_manager_failed";
+
+    /// <summary>The reason for a 404 about an item id the catalog doesn't hold, as after a refresh removed its file.</summary>
+    internal const string ItemNotInLibrary = "The file is no longer in the library.";
     private static readonly FileExtensionContentTypeProvider ContentTypeProvider = new();
 
     public static void AddReelRouletteServer(this IServiceCollection services)
@@ -268,21 +271,7 @@ public static class ServerHostComposition
             return Results.Ok(response);
         });
 
-        app.MapPost("/api/library/item", (LibraryItemReadRequest? request, LibraryOperationsService operations) =>
-        {
-            if (request == null || string.IsNullOrWhiteSpace(request.Id))
-            {
-                return Results.BadRequest(new { error = "id is required" });
-            }
-
-            var item = operations.ReadLibraryItem(request.Id);
-            if (item == null)
-            {
-                return Results.NotFound(new { error = "item not found" });
-            }
-
-            return Results.Json(item);
-        });
+        app.MapPost("/api/library/item", ReadLibraryItem);
 
         app.MapPost("/api/library/query", (LibraryQueryRequest? request, LibraryOperationsService operations, RefreshPipelineService refresh) =>
         {
@@ -392,177 +381,15 @@ public static class ServerHostComposition
 
         app.MapPost("/api/tag-editor/apply-item-tags", ApplyItemTags);
 
-        app.MapPost("/api/tag-editor/upsert-category", (UpsertCategoryRequest request, ServerStateService state, LibraryOperationsService operations) =>
-        {
-            if (string.IsNullOrWhiteSpace(request.Id) || string.IsNullOrWhiteSpace(request.Name))
-            {
-                return Results.BadRequest(new { error = "id and name are required" });
-            }
+        app.MapPost("/api/tag-editor/upsert-category", UpsertCategory);
 
-            var accepted = operations.UpsertCategory(request);
-            if (!accepted)
-            {
-                return Results.Json(new { error = "upsert category rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
-            }
+        app.MapPost("/api/tag-editor/upsert-tag", UpsertTag);
 
-            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
-            var envelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
-            {
-                Reason = "upsertCategory",
-                Categories = model.Categories,
-                Tags = model.Tags
-            });
-            return Results.Ok(new
-            {
-                accepted = true,
-                revision = envelope.Revision,
-                categories = model.Categories,
-                tags = model.Tags
-            });
-        });
+        app.MapPost("/api/tag-editor/rename-tag", RenameTag);
 
-        app.MapPost("/api/tag-editor/upsert-tag", (UpsertTagRequest request, ServerStateService state, LibraryOperationsService operations) =>
-        {
-            if (string.IsNullOrWhiteSpace(request.Name))
-            {
-                return Results.BadRequest(new { error = "name is required" });
-            }
+        app.MapPost("/api/tag-editor/delete-tag", DeleteTag);
 
-            var accepted = operations.UpsertTag(request);
-            if (!accepted)
-            {
-                return Results.Json(new { error = "upsert tag rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
-            }
-
-            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
-            var envelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
-            {
-                Reason = "upsertTag",
-                Categories = model.Categories,
-                Tags = model.Tags
-            });
-            return Results.Ok(new
-            {
-                accepted = true,
-                revision = envelope.Revision,
-                categories = model.Categories,
-                tags = model.Tags
-            });
-        });
-
-        app.MapPost("/api/tag-editor/rename-tag", (RenameTagRequest request, ServerStateService state, LibraryOperationsService operations) =>
-        {
-            if (string.IsNullOrWhiteSpace(request.OldName) || string.IsNullOrWhiteSpace(request.NewName))
-            {
-                return Results.BadRequest(new { error = "oldName and newName are required" });
-            }
-
-            var accepted = operations.RenameTag(request, out var changedItemIds);
-            if (!accepted)
-            {
-                return Results.Json(new { error = "rename tag rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
-            }
-
-            _ = state.RenameTagInPresetCatalogOnly(request.OldName, request.NewName);
-            var oldName = request.OldName.Trim();
-            var newName = request.NewName.Trim();
-            if (changedItemIds.Count > 0 && !string.Equals(oldName, newName, StringComparison.Ordinal))
-            {
-                state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
-                {
-                    ResolvedItemIds = changedItemIds,
-                    AddedTags = [newName],
-                    RemovedTags = [oldName],
-                    CatalogReplacedTag = oldName,
-                    CatalogReplacementTag = newName
-                });
-            }
-
-            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
-            var envelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
-            {
-                Reason = "renameTag",
-                Categories = model.Categories,
-                Tags = model.Tags
-            });
-            return Results.Ok(new
-            {
-                accepted = true,
-                revision = envelope.Revision,
-                categories = model.Categories,
-                tags = model.Tags
-            });
-        });
-
-        app.MapPost("/api/tag-editor/delete-tag", (DeleteTagRequest request, ServerStateService state, LibraryOperationsService operations) =>
-        {
-            if (string.IsNullOrWhiteSpace(request.Name))
-            {
-                return Results.BadRequest(new { error = "name is required" });
-            }
-
-            var accepted = operations.DeleteTag(request, out var changedItemIds);
-            if (!accepted)
-            {
-                return Results.Json(new { error = "delete tag rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
-            }
-
-            _ = state.RemoveTagFromPresetCatalogOnly(request.Name);
-            if (changedItemIds.Count > 0)
-            {
-                state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
-                {
-                    ResolvedItemIds = changedItemIds,
-                    AddedTags = [],
-                    RemovedTags = [request.Name.Trim()],
-                    CatalogReplacedTag = request.Name.Trim()
-                });
-            }
-
-            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
-            var envelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
-            {
-                Reason = "deleteTag",
-                Categories = model.Categories,
-                Tags = model.Tags
-            });
-            return Results.Ok(new
-            {
-                accepted = true,
-                revision = envelope.Revision,
-                categories = model.Categories,
-                tags = model.Tags
-            });
-        });
-
-        app.MapPost("/api/tag-editor/delete-category", (DeleteCategoryRequest request, ServerStateService state, LibraryOperationsService operations) =>
-        {
-            if (string.IsNullOrWhiteSpace(request.CategoryId))
-            {
-                return Results.BadRequest(new { error = "categoryId is required" });
-            }
-
-            var accepted = operations.DeleteCategory(request);
-            if (!accepted)
-            {
-                return Results.Json(new { error = "delete category rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
-            }
-
-            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
-            var envelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
-            {
-                Reason = "deleteCategory",
-                Categories = model.Categories,
-                Tags = model.Tags
-            });
-            return Results.Ok(new
-            {
-                accepted = true,
-                revision = envelope.Revision,
-                categories = model.Categories,
-                tags = model.Tags
-            });
-        });
+        app.MapPost("/api/tag-editor/delete-category", DeleteCategory);
 
         app.MapPost("/api/refresh/start", (RefreshStartRequest? request, RefreshPipelineService refresh) =>
         {
@@ -792,6 +619,18 @@ public static class ServerHostComposition
         }
     }
 
+    /// <summary>Reads one item by its catalog id, and refuses with 404 an id the catalog doesn't hold.</summary>
+    internal static IResult ReadLibraryItem(LibraryItemReadRequest? request, LibraryOperationsService operations)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.Id))
+        {
+            return Results.BadRequest(new { error = "id is required" });
+        }
+
+        var item = operations.ReadLibraryItem(request.Id);
+        return item == null ? Results.NotFound(new { error = ItemNotInLibrary }) : Results.Json(item);
+    }
+
     /// <summary>
     /// Opens the server machine's file manager at an item's file, for a browser on the server machine. The item is
     /// looked up by its catalog id; the route never takes a path.
@@ -824,7 +663,7 @@ public static class ServerHostComposition
         if (item == null || string.IsNullOrWhiteSpace(item.FullPath))
         {
             Log("not-found");
-            return Results.Json(new { error = "Item not found", code = FileManagerErrorItemNotFound }, statusCode: StatusCodes.Status404NotFound);
+            return Results.Json(new { error = ItemNotInLibrary, code = FileManagerErrorItemNotFound }, statusCode: StatusCodes.Status404NotFound);
         }
 
         if (!File.Exists(item.FullPath))
@@ -838,7 +677,7 @@ public static class ServerHostComposition
         {
             Log($"failed error={result.ErrorType}", "warn");
             return Results.Json(
-                new { error = "The file manager couldn't be opened.", code = FileManagerErrorFailed },
+                new { error = "No file manager on the server machine answered.", code = FileManagerErrorFailed },
                 statusCode: StatusCodes.Status500InternalServerError);
         }
 
@@ -887,7 +726,7 @@ public static class ServerHostComposition
         var after = operations.SetRating(request.ItemId, halfStars, out var before);
         if (after == null || before == null)
         {
-            return Results.NotFound(new { error = "item not found in library" });
+            return Results.NotFound(new { error = ItemNotInLibrary });
         }
 
         var rating = Stars(after.RatingHalfStars);
@@ -917,7 +756,7 @@ public static class ServerHostComposition
     {
         if (persisted == null || previous == null)
         {
-            return Results.NotFound(new { error = "item not found in library" });
+            return Results.NotFound(new { error = ItemNotInLibrary });
         }
 
         var envelope = state.PublishExternal("itemStateChanged", new ItemStateChangedPayload
@@ -975,7 +814,7 @@ public static class ServerHostComposition
         var recorded = operations.RecordPlayback(request.ItemId);
         if (!recorded.Found)
         {
-            return Results.NotFound(new { error = "item not found in library" });
+            return Results.NotFound(new { error = ItemNotInLibrary });
         }
 
         var envelope = state.PublishExternal("playbackRecorded", new PlaybackRecordedPayload
@@ -996,6 +835,131 @@ public static class ServerHostComposition
         });
     }
 
+    /// <summary>Saves a category. Its only refusal, a blank name, is answered 400 before the catalog sees it.</summary>
+    internal static IResult UpsertCategory(UpsertCategoryRequest request, ServerStateService state, LibraryOperationsService operations)
+    {
+        if (string.IsNullOrWhiteSpace(request.Id) || string.IsNullOrWhiteSpace(request.Name))
+        {
+            return Results.BadRequest(new { error = "id and name are required" });
+        }
+
+        _ = operations.UpsertCategory(request);
+        return ReplyWithTagCatalog(state, operations, "upsertCategory");
+    }
+
+    /// <summary>Creates a tag, or moves one to another category, and refuses one already in the category it names.</summary>
+    internal static IResult UpsertTag(UpsertTagRequest request, ServerStateService state, LibraryOperationsService operations)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            return Results.BadRequest(new { error = "name is required" });
+        }
+
+        return operations.UpsertTag(request)
+            ? ReplyWithTagCatalog(state, operations, "upsertTag")
+            : TagChangeRefused($"A tag named \"{request.Name.Trim()}\" already exists.");
+    }
+
+    /// <summary>Renames a tag, merging it into one that has the new name, and refuses a tag the catalog doesn't have.</summary>
+    internal static IResult RenameTag(RenameTagRequest request, ServerStateService state, LibraryOperationsService operations)
+    {
+        if (string.IsNullOrWhiteSpace(request.OldName) || string.IsNullOrWhiteSpace(request.NewName))
+        {
+            return Results.BadRequest(new { error = "oldName and newName are required" });
+        }
+
+        var oldName = request.OldName.Trim();
+        if (!operations.RenameTag(request, out var changedItemIds))
+        {
+            return TagChangeRefused($"There's no tag named \"{oldName}\".");
+        }
+
+        _ = state.RenameTagInPresetCatalogOnly(request.OldName, request.NewName);
+        var newName = request.NewName.Trim();
+        if (changedItemIds.Count > 0 && !string.Equals(oldName, newName, StringComparison.Ordinal))
+        {
+            state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
+            {
+                ResolvedItemIds = changedItemIds,
+                AddedTags = [newName],
+                RemovedTags = [oldName],
+                CatalogReplacedTag = oldName,
+                CatalogReplacementTag = newName
+            });
+        }
+
+        return ReplyWithTagCatalog(state, operations, "renameTag");
+    }
+
+    /// <summary>Deletes a tag from the catalog and every item, and refuses one that neither has.</summary>
+    internal static IResult DeleteTag(DeleteTagRequest request, ServerStateService state, LibraryOperationsService operations)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            return Results.BadRequest(new { error = "name is required" });
+        }
+
+        var name = request.Name.Trim();
+        if (!operations.DeleteTag(request, out var changedItemIds))
+        {
+            return TagChangeRefused($"There's no tag named \"{name}\".");
+        }
+
+        _ = state.RemoveTagFromPresetCatalogOnly(request.Name);
+        if (changedItemIds.Count > 0)
+        {
+            state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
+            {
+                ResolvedItemIds = changedItemIds,
+                AddedTags = [],
+                RemovedTags = [name],
+                CatalogReplacedTag = name
+            });
+        }
+
+        return ReplyWithTagCatalog(state, operations, "deleteTag");
+    }
+
+    /// <summary>Deletes a category, moving its tags to Uncategorized, and refuses one the catalog doesn't have.</summary>
+    internal static IResult DeleteCategory(DeleteCategoryRequest request, ServerStateService state, LibraryOperationsService operations)
+    {
+        if (string.IsNullOrWhiteSpace(request.CategoryId))
+        {
+            return Results.BadRequest(new { error = "categoryId is required" });
+        }
+
+        return operations.DeleteCategory(request)
+            ? ReplyWithTagCatalog(state, operations, "deleteCategory")
+            : TagChangeRefused("That category doesn't exist.");
+    }
+
+    /// <summary>The 409 for a tag editor change the catalog didn't take, with its reason for the user.</summary>
+    private static IResult TagChangeRefused(string reason) =>
+        Results.Json(new { error = reason }, statusCode: StatusCodes.Status409Conflict);
+
+    /// <summary>Publishes the tag catalog after a change, named by <paramref name="reason"/>, and answers with it.</summary>
+    private static IResult ReplyWithTagCatalog(ServerStateService state, LibraryOperationsService operations, string reason)
+    {
+        var model = operations.GetTagEditorModel(new TagEditorModelRequest());
+        var envelope = PublishTagCatalog(state, model, reason);
+        return Results.Ok(new
+        {
+            accepted = true,
+            revision = envelope.Revision,
+            categories = model.Categories,
+            tags = model.Tags
+        });
+    }
+
+    /// <summary>Publishes <paramref name="model"/> as the tag catalog after a change named by <paramref name="reason"/>.</summary>
+    private static ServerEventEnvelope PublishTagCatalog(ServerStateService state, TagEditorModelResponse model, string reason) =>
+        state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
+        {
+            Reason = reason,
+            Categories = model.Categories,
+            Tags = model.Tags
+        });
+
     internal static IResult ApplyItemTags(ApplyItemTagsRequest request, ServerStateService state, LibraryOperationsService operations)
     {
         if (request.ItemIds.Count == 0)
@@ -1006,7 +970,10 @@ public static class ServerHostComposition
         var accepted = operations.ApplyItemTags(request, out var catalogChanged, out var resolvedItemIds);
         if (!accepted)
         {
-            return Results.Json(new { error = "apply rejected or produced no changes" }, statusCode: StatusCodes.Status409Conflict);
+            // No named file is in the catalog, as after a refresh removed the playing file, or each already had the tags.
+            return resolvedItemIds.Count == 0
+                ? Results.NotFound(new { error = ItemNotInLibrary })
+                : TagChangeRefused("The tags were already that way.");
         }
 
         var itemTagsEnvelope = state.PublishExternal("itemTagsChanged", new ItemTagsChangedPayload
@@ -1016,16 +983,7 @@ public static class ServerHostComposition
             RemovedTags = request.RemoveTags
         });
         var model = operations.GetTagEditorModel(new TagEditorModelRequest());
-        ServerEventEnvelope? catalogEnvelope = null;
-        if (catalogChanged)
-        {
-            catalogEnvelope = state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
-            {
-                Reason = "applyItemTags",
-                Categories = model.Categories,
-                Tags = model.Tags
-            });
-        }
+        var catalogEnvelope = catalogChanged ? PublishTagCatalog(state, model, "applyItemTags") : null;
 
         return Results.Ok(new
         {
@@ -1053,13 +1011,7 @@ public static class ServerHostComposition
                 });
             }
 
-            var model = operations.GetTagEditorModel(new TagEditorModelRequest());
-            state.PublishExternal("tagCatalogChanged", new TagCatalogChangedPayload
-            {
-                Reason = "autotagApply",
-                Categories = model.Categories,
-                Tags = model.Tags
-            });
+            PublishTagCatalog(state, operations.GetTagEditorModel(new TagEditorModelRequest()), "autotagApply");
         }
 
         return Results.Ok(response);
@@ -1253,7 +1205,7 @@ public static class ServerHostComposition
         if (string.IsNullOrEmpty(effectiveToken) ||
             !string.Equals(effectiveToken, options.PairingToken, StringComparison.Ordinal))
         {
-            return Results.Json(new { error = "Unauthorized" }, statusCode: StatusCodes.Status401Unauthorized);
+            return Results.Json(new { error = "The pairing token is wrong." }, statusCode: StatusCodes.Status401Unauthorized);
         }
 
         var sessionId = sessions.CreateSession(

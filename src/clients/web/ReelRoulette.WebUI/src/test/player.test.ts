@@ -11,6 +11,7 @@ import { createAppStore, type PlayingItem } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
 import { NO_LIBRARY_PLAY_NOTICE } from "../state/lastingStates";
 import type { ServerConnection, ServerConnectionEvents } from "../state/serverConnection";
+import { FILE_NOT_IN_LIBRARY, LIBRARY_EMPTY } from "./serverReasons";
 
 const VIDEO: PlayingItem = {
   id: "/media/clip.mp4",
@@ -418,7 +419,7 @@ describe("createPlayer", () => {
     const page = setup();
     const answers: Array<[() => Response, string]> = [
       [() => json({}, 503), "Random selection failed."],
-      [() => json({ error: "Library not loaded or empty." }, 503), "Random selection failed: Library not loaded or empty."],
+      [() => json({ error: LIBRARY_EMPTY }, 503), `Random selection failed: ${LIBRARY_EMPTY}`],
       [() => new Response("<html></html>", { headers: { "Content-Type": "text/html" } }), "Random selection failed: The server sent an unexpected response."]
     ];
     for (const [answer, notice] of answers) {
@@ -1311,9 +1312,9 @@ describe("createPlayer", () => {
 
     page.replies.set("/api/favorite", () => json({}, 500));
     await page.player.toggleFavorite();
-    page.replies.set("/api/favorite", () => json({ error: "The file isn't in the library." }, 404));
+    page.replies.set("/api/favorite", () => json({ error: FILE_NOT_IN_LIBRARY }, 404));
     await page.player.toggleFavorite();
-    expect(page.notices).toEqual(["Favorite update failed.", "Favorite update failed: The file isn't in the library."]);
+    expect(page.notices).toEqual(["Favorite update failed.", `Favorite update failed: ${FILE_NOT_IN_LIBRARY}`]);
     expect(page.player.blacklisted.value).toBe(true);
     // Each change it made pops up as Your actions, with the file name, and replaces the one before.
     expect(page.notified).toEqual([

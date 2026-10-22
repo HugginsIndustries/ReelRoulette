@@ -15,6 +15,7 @@ import {
   UnauthorizedError,
   UnexpectedResponseError
 } from "../api/serverRequest";
+import { FILE_NOT_IN_LIBRARY } from "./serverReasons";
 
 function failingWith(error: unknown): typeof fetch {
   return (async () => {
@@ -181,7 +182,7 @@ describe("requestWithNotice", () => {
       }
       return response;
     };
-    const refused = new Response(JSON.stringify({ error: "Item not found." }), { status: 404, headers: { "Content-Type": "application/json" } });
+    const refused = new Response(JSON.stringify({ error: FILE_NOT_IN_LIBRARY }), { status: 404, headers: { "Content-Type": "application/json" } });
 
     expect(await requestWithNotice(dialogs, "Favorite update failed", send(new Response(null, { status: 204 })))).toBe(true);
     expect(await requestWithNotice(dialogs, "Favorite update failed", send(refused))).toBe(false);
@@ -189,7 +190,7 @@ describe("requestWithNotice", () => {
     expect(await requestWithNotice(dialogs, "Favorite update failed", send(new ServerUnreachableError()))).toBe(false);
     expect(await requestWithNotice(dialogs, "Favorite update failed", send(new UnauthorizedError()))).toBe(false);
     expect(notice.mock.calls).toEqual([
-      ["Favorite update failed: Item not found.", "Favorite update failed (HTTP 404)."],
+      [`Favorite update failed: ${FILE_NOT_IN_LIBRARY}`, "Favorite update failed (HTTP 404)."],
       ["Favorite update failed.", "Favorite update failed (HTTP 500)."],
       ["Favorite update failed: Couldn't reach the server.", "Favorite update failed: Couldn't reach the server."]
     ]);

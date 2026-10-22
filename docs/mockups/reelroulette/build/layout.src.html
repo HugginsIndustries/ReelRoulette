@@ -4903,7 +4903,7 @@ const TESTS = {
   "refresh-failed": () => notes.notify({ kind: "refresh", level: "warning", text: "Library refresh failed", detail: "Source \"Videos\" is unavailable: /media/videos was not found.", key: "refresh" }),
   skips: () => notes.notify({ kind: "skips", text: "Skipped a file this browser can't play.", detail: sampleName(), key: "skip" }),
   connection: () => notes.notify({ kind: "connection", text: "Reconnected.", key: "connection" }),
-  notice: () => noticeDialog({ message: "Saving presets failed: The preset change couldn't be saved." }),
+  notice: () => noticeDialog({ message: "Saving presets failed: The server couldn't write to the library." }),
   burst: () => {
     acknowledge("Filters applied.", "filter");
     notes.notify({ kind: "devices", text: "Added to favorites on another device", detail: ITEMS[1].name });
@@ -5967,7 +5967,7 @@ $("pair").addEventListener("submit", (event) => {
   if (pairField.holds) return;
   if (state.situation === "incompatible") return void noticeDialog({ message: "Pairing blocked by server compatibility check." });
   if (state.situation === "reconnecting") return void noticeDialog({ message: "Pairing failed: Couldn't reach the server." });
-  if (pairField.input.value.trim().toLowerCase() === "wrong") return void noticeDialog({ message: "Pairing failed." });
+  if (pairField.input.value.trim().toLowerCase() === "wrong") return void noticeDialog({ message: "Pairing failed: The pairing token is wrong." });
   state.pairing = false;
   store.set("pairing", false);
   $("mock-pairing").checked = false;

@@ -225,7 +225,7 @@ public sealed class ServerStateService
                 !order.All(id => id != null && byId.ContainsKey(id)) ||
                 order.Distinct(StringComparer.Ordinal).Count() != order.Count)
             {
-                return PresetRefused(PresetWriteStatus.OrderMismatch, "The order must name every preset once.");
+                return PresetRefused(PresetWriteStatus.OrderMismatch, "The presets changed since they were loaded.");
             }
 
             var unsaved = WritePresetChange("reorder", session => session.ReorderPresets(order));
@@ -571,7 +571,7 @@ public sealed class ServerStateService
             FilterStateComparison.SameFilter(held ?? new FilterStateModel(), filter);
     }
 
-    private static PresetWriteResult PresetNotFound() => PresetRefused(PresetWriteStatus.NotFound, "Preset not found.");
+    private static PresetWriteResult PresetNotFound() => PresetRefused(PresetWriteStatus.NotFound, "That preset no longer exists.");
 
     private static PresetWriteResult PresetRefused(PresetWriteStatus status, string error) => new() { Status = status, Error = error };
 
@@ -628,7 +628,7 @@ public sealed class ServerStateService
         }
 
         _serverLog?.Append("warn", $"Preset {change} was not saved: {reason}");
-        return PresetRefused(PresetWriteStatus.NotSaved, "The preset change couldn't be saved.");
+        return PresetRefused(PresetWriteStatus.NotSaved, "The server couldn't write to the library.");
     }
 
     /// <summary>

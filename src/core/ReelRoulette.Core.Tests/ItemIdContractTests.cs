@@ -181,8 +181,23 @@ public sealed class ItemIdContractTests : IDisposable
 
         Assert.Equal(StatusCodes.Status404NotFound, Status("missing", 3));
         Assert.Equal(StatusCodes.Status404NotFound, Status(path, 3));
+        Assert.Equal(
+            "The file is no longer in the library.",
+            OpenApiSpec.ErrorReason(ServerHostComposition.SetRating(new RatingRequest { ItemId = "missing", Rating = 3 }, state, operations)));
         Assert.Empty(state.GetReplayAfter(0).Events);
         Assert.Equal(6, host.Session.ReadItemState("item-1")!.RatingHalfStars);
+    }
+
+    [Fact]
+    public void LibraryItemRead_RefusesAnItemNotInTheLibrary()
+    {
+        CatalogSeed.Write(_tempDir, items: [new SeedItem("item-1", Path.Combine(_tempDir, "clip.mp4"))]);
+        var operations = CreateOperations(CatalogOpen.Host(_tempDir));
+
+        var result = ServerHostComposition.ReadLibraryItem(new LibraryItemReadRequest { Id = "missing" }, operations);
+
+        Assert.Equal(StatusCodes.Status404NotFound, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+        Assert.Equal("The file is no longer in the library.", OpenApiSpec.ErrorReason(result));
     }
 
     [Fact]
@@ -207,6 +222,7 @@ public sealed class ItemIdContractTests : IDisposable
         };
 
         Assert.All(results, result => Assert.Equal(StatusCodes.Status404NotFound, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode));
+        Assert.All(results[..3], result => Assert.Equal("The file is no longer in the library.", OpenApiSpec.ErrorReason(result)));
         Assert.Empty(state.GetReplayAfter(0).Events);
         var item = host.Session.ReadItemState("item-1")!;
         Assert.Equal((false, false, 0), (item.IsFavorite, item.IsBlacklisted, item.PlayCount));

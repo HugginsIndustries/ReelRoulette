@@ -6,6 +6,7 @@ import { createDeviceStore } from "../state/deviceStore";
 import { createPlayerIndicator } from "../state/lastingStates";
 import { createServerConnection, VERSION_CHECK_TIMEOUT_MS, VERSION_RECHECK_MS } from "../state/serverConnection";
 import { REFRESH_GATHER_MS } from "../stats/coalescedRefresh";
+import { PAIRING_TOKEN_WRONG } from "./serverReasons";
 
 const COMPATIBLE_VERSION = {
   apiVersion: "2",
@@ -865,9 +866,9 @@ describe("createServerConnection", () => {
     notices.length = 0;
 
     await connection.pair("wrong");
-    pairReply = () => json({ error: "That token isn't this server's." }, 401);
+    pairReply = () => json({ error: PAIRING_TOKEN_WRONG }, 401);
     await connection.pair("wrong");
-    expect(notices).toEqual(["Pairing failed.", "Pairing failed: That token isn't this server's."]);
+    expect(notices).toEqual(["Pairing failed.", `Pairing failed: ${PAIRING_TOKEN_WRONG}`]);
     notices.length = 1;
 
     for (const message of ["Failed to fetch", "Load failed", "NetworkError when attempting to fetch resource."]) {

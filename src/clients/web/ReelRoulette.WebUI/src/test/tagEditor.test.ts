@@ -10,6 +10,7 @@ import { REFRESH_GATHER_MS } from "../stats/coalescedRefresh";
 import { createTagEditor } from "../tags/tagEditor";
 import type { TagEditorModel } from "../tags/tagEditorModel";
 import { EMPTY_FIELD } from "../validation/fieldValidation";
+import { noTagNamed, REMOTE_CONNECTIONS_OFF } from "./serverReasons";
 
 /** A landed save's message, Auto Tag's Apply's too. */
 const APPLIED: NotifyRequest = { kind: "actions", text: "Tag editor changes applied", key: "tags" };
@@ -328,8 +329,8 @@ describe("opening and closing", () => {
   it("says Discard changes' load failed, with the server's reason, and tags that aren't JSON are an unexpected response, naming the content type only in the log", async () => {
     const context = setup();
     await openOn(context);
-    context.server.modelStatus = 503;
-    context.server.failureReason = "Library not loaded or empty.";
+    context.server.modelStatus = 403;
+    context.server.failureReason = REMOTE_CONNECTIONS_OFF;
     context.editor.discardChanges();
     await settle();
     context.server.modelStatus = 200;
@@ -337,11 +338,11 @@ describe("opening and closing", () => {
     context.editor.discardChanges();
     await settle();
     expect(context.notices).toEqual([
-      "Tag load failed: Library not loaded or empty.",
+      `Tag load failed: ${REMOTE_CONNECTIONS_OFF}`,
       "Tag load failed: The server sent an unexpected response."
     ]);
     expect(context.noticeLogs).toEqual([
-      "Tag load failed (HTTP 503).",
+      "Tag load failed (HTTP 403).",
       "Tag load failed: The server sent an unexpected response (text/html)."
     ]);
     expect(context.notified).toEqual([]);
@@ -1028,13 +1029,13 @@ describe("saving", () => {
     context.server.failures.set("/api/tag-editor/delete-tag", 0);
     await save("Bob");
     context.server.failures.set("/api/tag-editor/delete-tag", 409);
-    context.server.failureReason = "Bob is already deleted.";
+    context.server.failureReason = noTagNamed("Bob");
     await save("Bob");
     context.server.failures.set("/api/tag-editor/delete-tag", 0);
     await save("Beach");
     expect(context.notices).toEqual([
       "Tag delete failed: Couldn't reach the server.",
-      "Tag delete failed: Bob is already deleted.",
+      `Tag delete failed: ${noTagNamed("Bob")}`,
       "Tag delete failed: Couldn't reach the server."
     ]);
     expect(context.noticeLogs[1]).toBe("Tag delete failed (HTTP 409).");
@@ -1345,7 +1346,7 @@ describe("Auto Tag", () => {
 
   it.each([
     ["the server refuses it", 500, null, "application/json", "Scan failed.", "Scan failed (HTTP 500)."],
-    ["the server refuses it with a reason", 503, "Library not loaded or empty.", "application/json", "Scan failed: Library not loaded or empty.", "Scan failed (HTTP 503)."],
+    ["the server refuses it with a reason", 403, REMOTE_CONNECTIONS_OFF, "application/json", `Scan failed: ${REMOTE_CONNECTIONS_OFF}`, "Scan failed (HTTP 403)."],
     ["it can't reach the server", 0, null, "application/json", "Scan failed: Couldn't reach the server.", "Scan failed: Couldn't reach the server."],
     // A 401 shows nothing in place, since the pairing prompt is the only thing to show.
     ["the server answers 401", 401, null, "application/json", "", null],

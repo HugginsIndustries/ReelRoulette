@@ -9,6 +9,10 @@ namespace ReelRoulette.Server.Auth;
 /// </summary>
 public static class RemoteConnectionsGate
 {
+    /// <summary>What a refused request says, as the page's text and as the API's reason.</summary>
+    private const string RefusalText =
+        "Remote connections are turned off on this ReelRoulette server. Turn on Allow remote connections in the Operator on the server machine.";
+
     public static bool Refuses(HttpContext context, CoreSettingsService settings)
     {
         return !LocalRequest.IsLocal(context) && !settings.GetWebRuntimeSettings().BindOnLan;
@@ -19,12 +23,11 @@ public static class RemoteConnectionsGate
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
         if (context.Request.Path.StartsWithSegments("/api") || context.Request.Path.StartsWithSegments("/control"))
         {
-            await context.Response.WriteAsJsonAsync(new { error = "Forbidden. Remote connections are turned off." });
+            await context.Response.WriteAsJsonAsync(new { error = RefusalText });
             return;
         }
 
         context.Response.ContentType = "text/plain; charset=utf-8";
-        await context.Response.WriteAsync(
-            "Remote connections are turned off on this ReelRoulette server. Turn on Allow remote connections in the Operator on the server machine.");
+        await context.Response.WriteAsync(RefusalText);
     }
 }

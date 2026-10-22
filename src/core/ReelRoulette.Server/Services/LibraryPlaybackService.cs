@@ -60,14 +60,14 @@ public sealed class LibraryPlaybackService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not count library items in '{DatabasePath}'.", _catalog.Session.DatabasePath);
-            error = "Library not loaded or empty.";
+            error = "The server couldn't read the library.";
             statusCode = StatusCodes.Status503ServiceUnavailable;
             return false;
         }
 
         if (itemCount == 0)
         {
-            error = "Library not loaded or empty.";
+            error = "The library is empty.";
             statusCode = StatusCodes.Status503ServiceUnavailable;
             return false;
         }
@@ -100,7 +100,7 @@ public sealed class LibraryPlaybackService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not query eligible library items in '{DatabasePath}'.", _catalog.Session.DatabasePath);
-            error = "Library not loaded or empty.";
+            error = "The server couldn't read the library.";
             statusCode = StatusCodes.Status503ServiceUnavailable;
             return false;
         }
