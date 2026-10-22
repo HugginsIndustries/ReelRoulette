@@ -534,11 +534,14 @@ html.hide-mock .mock-small:not(.mock-keep) { display: none !important; }
 
 /* Notifications: the bell, its list of recent messages, and the popups. */
 .notify-btn { position: relative; }
-.notify-btn[aria-expanded="true"] { color: var(--huggins-orange); }
-.notify-badge {
+/* The bell is orange while its list is open, and while it has unread messages, as its badge is. */
+.notify-btn[aria-expanded="true"], .notify-btn.has-unread { color: var(--huggins-orange); }
+/* The bell's badge, which the player's rating star shares. It overlays its button, so it never moves an icon. Its ring
+   ends 2 px inside the button's right edge, since Chrome on Android clips a ring that reaches the edge. */
+.notify-badge, .rating-badge {
   position: absolute;
   top: 4px;
-  right: 2px;
+  right: 4px;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
@@ -669,8 +672,8 @@ th { font-weight: 600; }
     <h2><span class="material-symbol-icon">dock_to_right</span>Main page</h2>
     <ul>
       <li>Nothing plays until a tap or Play starts a random pick. Previous and Next step through what played, and Next, R, and autoplay pick at random at its end. Each skips a missing file or one this browser can't play, saying so in a popup.</li>
-      <li>No status line. Lasting states (reconnecting, a server that fails the compatibility check or runs without a library, loading, and a library refresh) show one at a time on the player's indicator. One-off messages pop up briefly, three at most. The bell at the player's top left, which shows and hides with its other controls, lists recent messages, the in-app notices included, and every lasting state under Now; its badge counts what didn't pop up.</li>
-      <li>The player's one panel button opens the panel on its last tab, and closes it. It sits on the panel's side, at the top right, or just right of the bell while the panel is on the left. Favorite and Blacklist stay on the player; the seek row ends with Mute and the volume slider.</li>
+      <li>No status line. Lasting states (reconnecting, a server that fails the compatibility check or runs without a library, loading, and a library refresh) show one at a time on the player's indicator. One-off messages pop up briefly, three at most. The bell at the player's top left, which shows and hides with its other controls, lists recent messages, the in-app notices included, and every lasting state under Now; its badge counts what didn't pop up, and the bell is orange while there is any.</li>
+      <li>The player's one panel button opens the panel on its last tab, and closes it. It sits on the panel's side, at the top right, or just right of the bell while the panel is on the left. The rating's star, Favorite, and Blacklist stay on the player; the seek row ends with Mute and the volume slider.</li>
       <li>The player's controls don't appear, hide, or move on their own; a control may hide only because of a user setting, as the volume slider does on iOS while Enhanced audio is off.</li>
       <li>Drag the handle between the player and the panel, or focus it and use the arrow keys. Open or closed, side, width, and last tab survive a reload.</li>
       <li>Below 800 px wide, or on a touch screen under 500 px tall, the panel is a full-screen overlay. On a phone on its side the header also hides and the player fills the screen. The chip at the player's top left shows what Auto-Pause did.</li>
@@ -684,10 +687,11 @@ th { font-weight: 600; }
       <li>Tag categories start collapsed and remember which are open, separately in the Tags tab and the Filter tab. A category's header, expanded or collapsed, shows how many of its tags are in use and, with unsaved changes, the orange dot; adding a tag to a category, or moving one into it, opens it.</li>
       <li>Auto Tag opens from the Tags tab over the whole page. Its scan runs for about 5 seconds, then lists the tags file names match, and its own Apply applies the checked changes.</li>
       <li>Stats: the current file, with Show in File Manager or Copy Path as an icon button beside its path and its tags below its stats, and the library. Click the file name in the header to open it. A video's Adjustment shows what loudness normalization applies, with “(limited by peak)” when the video's peak holds a boost back, or Off while it or Enhanced audio is off. True peak is the loudness scan's, Not measured, or N/A, and Last played is the time before this play. The Mockup tab's Stats load shows a failed load.</li>
-      <li>Rating: the current file's 5-star rating, with half stars, on its own line in Stats. Click or tap a star's left half for half a star less, drag along the stars on a touch screen, where a touch on them never scrolls the tab, or Tab to it and use the arrow keys, Home, End, and Delete. A click or a tap sets it without moving focus there, so the arrow keys still play the previous or next item. The first star's left edge clears it, with no Clear button, and so does a drag off the stars' left end. A half star is orange only on its filled half. A mouse over the stars previews the rating in place of the set one. A popup says each change, and the Library's Rated card counts the rated files.</li>
+      <li>Rating: the current file's 5-star rating, with half stars, on its own line in Stats. Click or tap a star's left half for half a star less, drag along the stars on a touch screen, where a touch on them never scrolls the tab, or Tab to it and use the arrow keys, Home, End, and Delete. A click or a tap sets it without moving focus there, so the arrow keys still play the previous or next item. The first star's left edge clears it, with no Clear button, and so does a drag off the stars' left end. A half star is orange only on its filled half. A mouse over the stars previews the rating in place of the set one. Empty stars are the panel's text color. A popup says each change, and the Library's Rated card counts the rated files.</li>
+      <li>The player's rating: the star left of Favorite turns orange, with the rating in a badge, while the playing file is rated. Press it for the same stars at the player's center, white where empty, which set the rating as in Stats. A click, tap, or drag that sets it closes them, and so does Enter, Escape, Tab, a press elsewhere, another file playing, or a volume change; the keys change the rating without closing them. Shift+1 to Shift+5 rate the playing file, Shift+0 clears its rating, and - and = step it by half a star.</li>
       <li>Settings, in sections: Playback (autoplay mode, Advance after, Loop stops autoplay, seek step), Audio (volume step, Enhanced audio, Loudness normalization with its target, boost limit, and Allow limiting, and Compression with its strength, Light, Medium, Strong, or Custom with its values), Player controls (when they hide), Appearance (theme, ambient mode and its settings, file names on tiles), Notifications (whether popups show, and under Popup settings, for which kinds, where, whether in fullscreen, and for how long), Panel (side, Auto-Pause), Keyboard shortcuts (collapsed; <b>H</b> opens it), and Diagnostics. Checkboxes, radio buttons, and sliders use the orange accent.</li>
       <li>Keyboard focus shows in orange everywhere. In the Library, Tab enters the grid once, the arrow keys move between tiles, Tab from a tile reaches its check icon, Space or Enter toggles it, and Tab again leaves the grid.</li>
-      <li>Keyboard shortcuts work: H (shows them), K or Space, J, L, arrows, R, F, B, A, M, comma and period (one frame, while paused), [ and ] (volume), 1 to 5, T, S, P, and Shift+F.</li>
+      <li>Keyboard shortcuts work: H (shows them), K or Space, J, L, arrows, R, F, B, A, M, comma and period (one frame, while paused), [ and ] (volume), Shift+0 to Shift+5, - and = (rating), 1 to 5, T, S, P, and Shift+F.</li>
       <li>The <b>Mockup</b> tab on the left edge sets the situation: the server reconnecting, not answering, running without a library, failing the compatibility check, or with an empty library; pairing asked for (a token of "wrong" fails); the server machine; a read-only volume; and a phone on its side. It also starts and ends each lasting state, sends a test notification of each kind, a favorite, a rating, and preset changes from another device, and a runtime config failure, and can hide every mockup note to show screens as they will ship.</li>
     </ul>
   </a>
@@ -726,7 +730,7 @@ th { font-weight: 600; }
     <tr><th>Popups</th><td>At most 3 at once, each for 3, 5 (the default), or 10 seconds.</td></tr>
     <tr><th>Notifications list</th><td>The last 50 messages, for the page's life.</td></tr>
     <tr><th>Seek indicator</th><td>A double-tap's taps within 300 ms of each other. The total starts over a second after the last seek, as the indicator fades out. It fades in over 120 ms, its chevron sliding out over 300 ms, and out over 250 ms.</td></tr>
-    <tr><th>Player indicator</th><td>Loading… after half a second. Below the corner buttons on a player under 600 px wide; above that, at most the player's width less 336 px, so it clears them.</td></tr>
+    <tr><th>Player indicator</th><td>Loading… after half a second. Below the corner buttons on a player under 600 px wide; above that, at most the player's width less 440 px, or 336 px while the panel is on the left, so it clears them.</td></tr>
     <tr><th>Rating</th><td>Each star 36 px wide and 30 px tall, its icon's size, with the first star's left 8 px clearing the rating. Key changes are sent once the keys pause for 500 ms.</td></tr>
   </table>
 </div>
@@ -1518,6 +1522,7 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   function renderBadge() {
     badge.hidden = unread === 0;
     badge.textContent = unread > 9 ? "9+" : String(unread);
+    button.classList.toggle("has-unread", unread > 0);
     const label = unread ? `Notifications, ${unread} unread` : "Notifications";
     button.setAttribute("aria-label", label);
     button.title = label;

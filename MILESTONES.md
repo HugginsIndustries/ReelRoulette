@@ -140,46 +140,186 @@ Last milestone completed: M12k2
 
 ### M12k3 - WebUI Player Rating
 
-- **Status**: ⏳ Planned
+- **Status**: 🚧 In Progress
 - **Goal**: The player shows the playing item's rating, and the player and rating keys set it without opening the Stats tab.
-- **Depends on**: Item Ratings, whose rating route, event, and star control it uses, and WebUI Keyboard Shortcuts, whose shortcut handling the rating keys use and whose shortcut reference lists them.
+- **Depends on**: Item Ratings, whose rating column, route, event, and star control it uses, and WebUI Keyboard Shortcuts, whose shortcut handling the rating keys use and whose shortcut reference lists them.
 - **Design**: `docs/mockups/reelroulette/`.
 
-#### Scope
+#### Decisions
 
-- The player shows the playing item's rating and sets it by mouse, touch, and keyboard.
-- Before the app is built, its design is settled in the mockup and approved on a desktop browser, the iPad, and an Android phone: where it sits on the player, how it shows the rating at a glance, how it sets one by mouse, touch, and keyboard, and how it looks at phone widths and on a phone on its side.
-- It sets a rating as Item Ratings' control does, with the same popups.
-- It shows and hides with the player's other controls.
+- A star button sits in the player's top-right corner, just left of the favorite heart, as an overlay button like the others. While the panel is on the right, the panel button moves one place left to make room.
+- Its star stays outlined and turns orange when the playing item is rated, as the heart does for a favorite, with the rating as a number in a small badge at the star's corner, and no badge when unrated.
+  - The badge gives the rating in stars, such as "3.5", or "3" for a whole number of stars, as the rating's value text does.
+  - The badge is only an overlay on the star button, like the bell's badge, so showing or changing it never moves any icon.
+- Pressing the star opens a popover at the player's exact center with the Stats tab's five-star control, at the same size and with the same behavior: its clear edge, half stars, hover preview, drag, and keys.
+- The popover has no background, only the stars, with a drop shadow like the player's other icons. Empty stars are white over the video; set stars are orange.
+- The popover closes when a rating is set, on a tap or click elsewhere, or on Escape, and the player's controls stay shown while it's open.
+  - A tap or click elsewhere closes it and still does what it does, as a press outside the notifications list does.
+  - From the keyboard, the stars' keys change the rating without closing the popover, and their change is sent once they pause, as in the Stats tab. Enter, Escape, or Tab closes it.
+  - It also closes when another item plays, so a rating goes only to the item it was opened for.
+- The popover sits where the volume indicator shows, at the player's center. A volume change or mute while it's open closes it, so the two never show at once.
+- The popover, the rating keys, and the Stats tab's control share one change waiting to be sent, so a change made in one shows at once in the others, with Item Ratings' popups.
+- In the Stats tab, empty stars change from grey to the panel's text color: white in the Dark theme, dark in the Light theme.
 - Rating keys set the playing item's rating as Item Ratings' control does, with its popups, and do nothing while nothing plays:
   - Shift+1 to Shift+5 set 1 to 5 stars, and Shift+0 clears the rating.
-  - `-` and `=` step the rating down and up by half a star.
+  - `-` and `=` step the rating down and up by half a star, and repeat while held, as the volume steps do.
+  - Their changes are sent once the keys pause for 500 ms, as the Stats tab's keys are, so Shift+3 then Shift+4 sends one request.
   - Shift and a digit are matched by the key's position (`event.code`), since Shift changes the character a digit key gives.
-- The shortcut reference lists the rating keys, and the mockup's reference shows them.
+- The random and play responses carry the item's rating, as they carry its favorite and blacklist flags, so the player shows it without a read of its own.
+- The bell turns orange while it has unread notifications, matching its badge, as it already does while its list is open.
 
-#### Traps
+#### Slices
 
-- The player's top corners hold the bell at the left, and the panel button, favorite, and blacklist at the right, with the panel button at the left beside the bell while the panel is on the left, each 44 px (`.overlay-btn` in `src/styles.css`).
-- The player's indicator sits between them with `max-width: calc(100% - 336px)`, and on a player narrower than 600 px (`NARROW_PLAYER_BELOW_WIDTH` in `src/panel/panelHost.ts`) it drops below them.
-- On a 360 px phone about 144 px is left between the two corner groups, which the indicator uses (inferred).
-- The swipe gestures skip touches inside `#overlay-controls` (`src/ui/Player.tsx`), so a control there doesn't trigger next or previous.
-- The Stats tab is one tap away, through the header's file name.
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ✅ Complete | The player's star button with its badge, the rating popover, the Stats tab's empty stars in the text color, the rating keys in the mockup's keys and shortcut reference, and the bell in orange while it has unread notifications, approved on a desktop browser, the iPad, and an Android phone. |
+| Contract | ⏳ Planned | The item's rating in the random and play responses, in OpenAPI and the generated WebUI types. |
+| WebUI | ⏳ Planned | The star button, its badge, and the rating popover on the player, the Stats tab's empty stars in the text color, the rating keys with their lines in the shortcut reference, and the bell in orange while it has unread notifications. |
+
+#### Mockup slice
+
+**Scope**
+
+- The star button in `layout.src.html`'s `#overlay-controls`, as the Decisions describe, at `right: 116px`, with `#panel-btn` moving from `right: 116px` to `168px` while the panel is on the right.
+- The badge, in the bell's badge's look (`.notify-badge` in `common.css`), at the star's top right, with both badges' rings ending 2 px inside their button's right edge (`right: 4px` in place of `2px`).
+- The star button is named "Rating" by its tooltip, with the rating's value text after it for screen readers, such as "Rating, 3.5 stars", and `aria-expanded` while the popover is open. The badge is hidden from screen readers.
+- With nothing playing, or while the server asks for pairing, pressing the star does nothing, as Favorite does.
+- The popover inside `#overlay-controls`, always in the page and shown by `hidden`, spanning the player and centering its stars without a transform, with only the stars taking presses, white empty stars (`--icon-foreground`), and orange set stars.
+- Each of the popover's star glyphs has a text shadow matching the corner buttons' drop shadow (`--control-drop-shadow`), a half star's on its outline.
+- `.rating-fill` spans its star and centers its glyph there in place of `left: 50%` and `translateX(-50%)`, so no star has a transform, in the Stats tab too.
+- The mockup's `ratingControl` splits into the rating's shared state, which keeps the change waiting to be sent, the 500 ms key pause, and the commit with its popups and failure notice, and a star control that the Stats tab and the popover each build on it.
+- The popover's closing, as the Decisions describe: a click, tap, or drag that sets a rating, a capture-phase press outside it, a capture-phase Escape before the page's other Escape handlers, Enter or Tab on its stars, a volume change or mute, another item playing, and the panel opening, as it closes the notifications list.
+- Opening the popover from the keyboard moves focus to its stars; opening it with a pointer leaves focus where it is, as a click on the Stats tab's stars does. Closing it from the keyboard returns focus to the star button.
+- A touch on the popover's stars sends no click, by cancelling its `touchend`, since the popover hides as a tap lifts and the click a browser sends after it could land on the video and act on the player.
+- `controlsHeld()` holds the controls while the popover is open, and closing it restarts their countdown, as the notifications list does.
+- The media's `touchstart` skips touches on the popover, so a touch on its stars never swipes to the next or previous item.
+- The player indicator's `max-width` becomes `calc(100% - 440px)` while the panel is on the right, clearing the wider corner group, and stays `calc(100% - 336px)` while the panel is on the left. The narrow player still starts below 600 px.
+- `.rating-star`'s empty color becomes `--page-fg` in place of `--muted-fg`.
+- The rating keys in the mockup's key handler and `SHORTCUTS`, as the Decisions describe, and the Esc line naming the rating's stars.
+- The star button and its badge follow a rating set in the Stats tab, by a key, and by the Mockup tab's "A rating from another device".
+- The bell in orange while it has unread notifications, in `common.css` and `common.js`, which the admin page's bell shares.
+- The index page describes the player's rating, the rating keys, and the bell's unread color, and its numbers table gives the indicator's new width.
+- Before the app is built, the user approves the star button, its badge, and the popover on a desktop browser, the iPad, and an Android phone, at phone widths and on a phone on its side.
+
+**Traps**
+
+- `#panel-btn` sits at `right: 116px`, `#favorite-btn` at `64px`, and `#blacklist-btn` at `12px`, and while the panel is on the left the panel button sits at `left: 64px`, beside the bell.
+- `.player-indicator`'s `max-width: calc(100% - 336px)` clears a right corner group 160 px wide; with the star that group is 212 px while the panel is on the right (inferred).
+- On a 360 px phone, about 92 px is left between the bell and the star (inferred).
+- `ratingControl` in `layout.src.html` is one element kept across the Stats tab's redraws, so focus stays on it, and it holds the waiting change and the key pause itself.
+- Two copies of the control, each with its own waiting change, could send two requests for one item (inferred).
+- Clicks inside `#overlay-controls` stop there (`stopPropagation`), and hidden controls take no pointer events, so a popover inside it never reaches the media's click handler.
+- The media's `touchstart` skips swipes only for `#overlay-controls .overlay-btn, .overlay-seek-row`.
+- The notifications list closes on a capture-phase `pointerdown` outside it, without swallowing the press, and on a capture-phase Escape unless a dialog is open (`initNotifications` in `common.js`), and `controlsHeld()` holds the controls through `notes.listShown()`.
+- The shortcut handler returns on any Shift key but Shift+F before it reaches the tab keys, so Shift and a digit open no tab.
 - With Shift held, a digit key's `event.key` is the shifted character, such as "!" on a US layout (inferred).
-- WebUI Keyboard Shortcuts binds 1 to 5 to the panel tabs, so Shift and a digit must not also open a tab (inferred).
+- The volume indicator sits at the media area's center, where the popover goes, and the scroll wheel, a two-finger drag, `[`, `]`, and M show it.
+- The bell is orange only while its list is open (`.notify-btn[aria-expanded="true"]` in `common.css`), and `renderBadge` in `common.js` shows the unread count, on the main page and the admin page alike.
+- In the browser's fullscreen, Escape leaves fullscreen and the page may not see the key (inferred).
+- `check.mjs` runs the pages in happy-dom, with no layout and no pointer drags, so the button's place, the badge, the popover's look, and touches on its stars can only be judged on the devices.
 
-#### Acceptance
+**Acceptance**
 
-- The player shows the playing item's rating and sets it as the approved mockup shows, by mouse, touch, and keyboard, with Item Ratings' popups, in Player screen tests.
-- The player's rating follows a rating set in the Stats tab or on another device, in Player screen tests.
-- It shows and hides with the player's controls, in Player screen tests.
-- Shift+1 to Shift+5 set 1 to 5 stars, Shift+0 clears the rating, and `-` and `=` step it by half a star, on the playing item with Item Ratings' popups, and they do nothing while nothing plays, in keyboard tests per binding.
+- The mockup shows the star button, its badge, the popover, the Stats tab's empty stars in the text color, the rating keys in its keys and shortcut reference, and the bell's unread color as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+
+**Evidence**
+
+- `layout.src.html` has the Mockup slice's Scope:
+  - The star button left of Favorite, with `#panel-btn` at `right: 168px`, its badge, and its name with the rating's value text.
+  - The popover, the Stats tab's stars at the player's center, closing as the Decisions say, holding the controls shown, and skipped by swipes.
+  - The rating's shared state, `ratings`, which keeps the one waiting change, the key pause, and the commit with its popups, and `ratingStars`, which builds the stars for the Stats tab and the popover.
+  - The rating keys in the key handler and the shortcut list, and the Esc line naming the rating stars.
+  - The player indicator at most the player's width less 440 px while the panel is on the right.
+  - The Stats tab's empty stars in `--page-fg`.
+- Two additions while building, which the Scope records: the panel opening closes the popover, as it closes the notifications list, and a touch on the popover's stars sends no click.
+- `common.css` and `common.js` turn the bell orange while it has unread messages, on the main page and the admin page, and give the star's badge the bell's badge's look. The index page describes the player's rating, the rating keys, and the bell, and its numbers table has the indicator's new width.
+- The review ran three rounds, which the Scope records:
+  - The first approved the design, but Safari on the iPad drew one shadowed rectangle behind the popover's stars, and Chrome on the Pixel clipped both badges' right edges.
+  - The badges moved 2 px in, to `right: 4px`, which fixed the clipping, but a drop shadow filter on each star's icon still drew a band on the iPad.
+  - A text shadow on each star's glyph, matching the corner buttons' drop shadow, with the popover and the filled half stars placed without a transform, drew right on the iPad.
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages each round, and `node docs/mockups/reelroulette/build/check.mjs` passes all 66 steps.
+- The user approved the mockup in their review on a desktop browser, the iPad, and an Android phone.
+
+#### Contract slice
+
+**Scope**
+
+- `rating` in the `RandomResponse` schema, which `/api/random` and `/api/play` both answer with, in stars or null for an unrated item, always sent and named in `required`.
+- The playback read (`ReadPlaybackRow` in `LibraryCatalogSession.cs`, into `CatalogPlaybackItem`) reads the item's rating, and `MapRandomResult` (`ApiContractMapper.cs`) gives it in stars.
+- `ApiContracts.cs`, OpenAPI, `docs/api.md`, and the generated WebUI types.
+
+**Traps**
+
+- `MapRandomResult` builds both routes' responses from `CatalogPlaybackItem`, whose read selects no rating.
+- The catalog keeps a rating as a whole number of half stars (`RatingHalfStars`), and `ItemRating.ToStars` gives it in stars.
+- `ItemIdContractTests` checks the random response against the `RandomResponse` schema (`OpenApiSpec.AssertMatchesSchema`).
+- The WebUI's `PlayingItem` is `RandomResponse` (`src/state/appStore.ts`), so a required field makes every test that builds a whole playing item name it. About 25 WebUI test files build whole items with `isBlacklisted` (measured), not all of them playing items.
+
+**Acceptance**
+
+- `/api/random` and `/api/play` give a rated item's rating in stars and null for an unrated one, in server tests of both routes.
+- OpenAPI and the generated WebUI types carry `rating` in `RandomResponse`, in contract tests.
+- `dotnet test ReelRoulette.sln` and `npm run verify` pass.
+
+#### WebUI slice
+
+**Scope**
+
+- The star button and its badge in `#overlay-controls` (`src/ui/Player.tsx`), between the panel button and Favorite, as the approved mockup shows, with the panel button's place and the player indicator's `max-width` as the mockup's.
+- The popover, always in the page and shown by `hidden`, holding `RatingStars` (`src/ui/RatingStars.tsx`) for the playing item, opening and closing as the Decisions and the approved mockup describe.
+- The playing item's rating comes from `ItemRatings.shown` (`src/rating/itemRatings.ts`), with the random or play response's `rating` as its read, so a waiting change, the server's answer, and another device's `itemRatingChanged` show at once.
+- The popover keeps the controls shown in every Hide player controls mode, as the notifications list does.
+- The rating keys in `src/keyboard/shortcuts.ts`, with `event.code` for Shift and a digit, and their lines in the shortcut reference; `-` and `=` join the keys that repeat.
+- `.rating-star`'s empty color becomes `--page-fg`, and the popover's stars use `--icon-foreground`, in `src/styles.css`.
+- The bell in orange while it has unread notifications, in `NotifyButton` (`src/ui/Notifications.tsx`) and `src/styles.css`.
+- The bell's badge, and the star's, end their ring 2 px inside the button's right edge (`right: 4px` in place of `2px` in `.notify-badge`), so Chrome on the Pixel no longer clips it.
+- The popover's star glyphs have a text shadow matching the corner buttons' drop shadow, a half star's on its outline, and the popover and `.rating-fill` are placed without a transform, as the mockup's are.
+
+**Traps**
+
+- `.overlay-controls` is its own stacking context at `z-index: 10`, below the volume, seek, and player indicators at 25, so a popover inside it draws under them.
+- A Player screen test fails when anything is added to or removed from the stage, `main`, or the media area (`src/test/screens/player.test.ts`), so the popover stays in the page and toggles `hidden`, as `#notify-list` does.
+- `RatingStars` calls `onSet(rating, true)` on every key it handles and `onSet(rating, false)` on every pointer release, even one that keeps the value, so closing on a pointer set reads `byKey`.
+- Hidden controls give every descendant `pointer-events: none`, and only `.overlay-btn` and the seek row take them back, so the popover's stars need `pointer-events: auto`.
+- `startsOnControls` in `Player.tsx` checks `#overlay-controls`, and `#overlay-controls` stops `touchstart`, `touchmove`, `touchend`, and `click` from bubbling, so swipes and taps skip a popover inside it; a two-finger touch there still changes the volume.
+- The wheel over the media area changes the volume, through a non-passive listener on the media container.
+- A popover that hides as a tap lifts can have the click a browser sends after the touch land on the video under it, as iOS Safari hit-tests that click after `touchend` (inferred), so the mockup cancels its stars' `touchend`.
+- The controls' holds are `"pointer" | "drag" | "keyboardFocus"` (`src/playback/playerControls.ts`), and the notifications list keeps them shown in every mode through `listOpen`, which `createPlayerControls` takes (`src/state/appServices.ts`).
+- The notifications list closes on a capture-phase `pointerdown` outside it and on a capture-phase Escape unless a dialog is open (`src/ui/Notifications.tsx`), and the Stage's bubble-phase Escape then closes the panel or leaves pseudo-fullscreen (`src/ui/Stage.tsx`).
+- `KeyPress` in `src/keyboard/shortcuts.ts` has no `code`, and `boundAction` matches on `event.key` alone; a key a focused control handles arrives with `defaultPrevented` and binds nothing.
+- Shift+1 gives "!" on a US layout, which binds nothing, so Shift and a digit open no tab today.
+- `ShortcutServices` has no ratings or store, and the shortcuts leave "nothing plays" to the player's methods, such as `toggleFlag`.
+- The test that the shortcut table binds exactly its keys runs all 95 printable characters with and without Shift (`src/test/keyboardShortcuts.test.ts`), and the reference's test lists its rows exactly (`src/test/screens/keyboard.test.ts`).
+- `ItemRatings` is created once in `appServices.ts` and passed only to the Stats tab.
+- The Stats tab's rating test helpers in `src/test/screens/stats.test.ts` are local to that file, and `stubStarLayout` in `src/test/screens/pageHarness.ts` lays out any `.rating-star`.
+- `.notify-btn[aria-expanded="true"]` in `src/styles.css` makes the bell orange only while its list is open, and `NotifyButton` reads the unread count from `notifications.unread`.
+- `.notify-badge` sits at `right: 2px` with a 2 px ring, which reaches the bell's right edge, and Chrome on the Pixel clips it there, as the mockup review found; the panel button's dot, whose ring ends 3 px inside, isn't clipped.
+- Safari on the iPad draws a drop shadow filter on the popover, or on each star's icon, as a shadowed rectangle behind the stars, as the mockup review found, while the corner buttons' drop shadow draws right.
+- `.rating-fill` in `src/styles.css` is centered with `left: 50%` and `translateX(-50%)`.
+- The corner buttons' order (`notifications.test.ts`), the phone's safe area (`phone.test.ts`), and the indicator's `max-width` (`player.test.ts`) have tests of their own.
+
+**Acceptance**
+
+- The star shows the playing item's rating as the approved mockup shows, orange with its badge when rated and outlined without one when not, in Player screen tests.
+- The popover sets a rating by click, tap, drag, and keys as the Stats tab's control does, with Item Ratings' popups, and closes as the Decisions describe, in Player screen tests.
+- The star and the popover follow a rating set in the Stats tab, by a key, or on another device, in Player screen tests.
+- The star shows and hides with the player's controls, and the controls stay shown while the popover is open, in every Hide player controls mode, in Player screen tests.
+- Shift+1 to Shift+5 set 1 to 5 stars, Shift+0 clears the rating, and `-` and `=` step it by half a star, on the playing item with Item Ratings' popups and one request per pause, and they do nothing while nothing plays, in keyboard tests per binding.
+- Shift and a digit open no panel tab, in the shortcut table's test.
 - The shortcut reference lists the rating keys, in the test that the reference lists every binding.
-- The mockup shows the player's rating as approved and matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
+- The Stats tab's empty stars use the panel's text color, in Stats screen tests.
+- The bell is orange while it has unread notifications and while its list is open, and not otherwise, in notifications screen tests.
+- The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and a spot check on the user's phone.
 
 #### Release checks
 
-- Manual: On the iPad and an Android phone, in both orientations, the player's rating shows the playing item's rating and sets one by touch.
+- Manual: On the iPad and an Android phone in both orientations, and in a desktop browser, the player's star shows the playing item's rating in its badge, and its popover sets one by touch or click and closes.
+
+#### Not included
+
+- Ratings on library tiles, which is WebUI Ratings on Tiles.
+- Rebinding the rating keys, which is Customizable Keyboard Shortcuts.
 
 ### M12k4 - Rating Filter and Sort
 

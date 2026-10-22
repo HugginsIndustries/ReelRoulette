@@ -534,11 +534,14 @@ html.hide-mock .mock-small:not(.mock-keep) { display: none !important; }
 
 /* Notifications: the bell, its list of recent messages, and the popups. */
 .notify-btn { position: relative; }
-.notify-btn[aria-expanded="true"] { color: var(--huggins-orange); }
-.notify-badge {
+/* The bell is orange while its list is open, and while it has unread messages, as its badge is. */
+.notify-btn[aria-expanded="true"], .notify-btn.has-unread { color: var(--huggins-orange); }
+/* The bell's badge, which the player's rating star shares. It overlays its button, so it never moves an icon. Its ring
+   ends 2 px inside the button's right edge, since Chrome on Android clips a ring that reaches the edge. */
+.notify-badge, .rating-badge {
   position: absolute;
   top: 4px;
-  right: 2px;
+  right: 4px;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
@@ -823,14 +826,24 @@ html.theme-light .ambient canvas { filter: blur(var(--ambient-blur)) brightness(
 .overlay-btn.active { color: var(--huggins-orange); }
 .overlay-corner-btn { position: absolute; top: 12px; z-index: 20; filter: drop-shadow(var(--control-drop-shadow)); }
 /* The bell sits at the top left, so it can be reached in fullscreen and on a phone on its side, and it hides with the
-   other controls. The panel button sits on the panel's side: at the top right, or just right of the bell while the
-   panel is on the left. */
+   other controls. The panel button sits on the panel's side: at the top right, left of the rating's star, or just
+   right of the bell while the panel is on the left. */
 #notify-btn { left: 12px; }
-#notify-btn .notify-badge { box-shadow: 0 0 0 2px #000; }
-#panel-btn { right: 116px; }
+#notify-btn .notify-badge, #rating-btn .rating-badge { box-shadow: 0 0 0 2px #000; }
+#panel-btn { right: 168px; }
 .stage[data-side="left"] #panel-btn { right: auto; left: 64px; }
+#rating-btn { right: 116px; }
 #favorite-btn { right: 64px; }
 #blacklist-btn { right: 12px; }
+/* The rating's popover: the Stats tab's stars at the player's center, where the volume indicator shows, with no
+   background. It spans the player and centers the stars without a transform, and only the stars take presses. Empty
+   stars are white over the video. Each star's glyph has a text shadow matching the corner buttons' drop shadow: Safari
+   on iPad draws a drop shadow filter on the popover, or on each star, as a shadowed rectangle. A half star's shadow is
+   its outline's, so no shadow is cut off with its filled half. */
+.rating-popover { position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.rating-popover .rating { margin-left: 0; pointer-events: auto; }
+.rating-popover .rating-star { color: var(--icon-foreground); }
+.rating-popover .rating-outline, .rating-popover .is-full .rating-fill { text-shadow: var(--control-drop-shadow); }
 .overlay-seek-row { display: flex; align-items: center; gap: 12px; pointer-events: auto; }
 /* The sliders drop a browser's own margin, 2 px, so the bar, the time, Mute, and the volume sit the row's gap apart. */
 .overlay-seek-row input[type="range"] { flex: 1; min-width: 0; height: 24px; margin: 0; }
@@ -1172,11 +1185,12 @@ html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
 .stats-rating-label { color: var(--muted-fg); }
 .rating { display: flex; margin-left: auto; border-radius: 6px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
 .rating:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
-.rating-star { position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 30px; color: var(--muted-fg); }
+.rating-star { position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 30px; color: var(--page-fg); }
 .rating-star .material-symbol-icon { font-size: 30px; }
-/* A full star is the filled star in orange. A half star lays it, cut off at its middle, over the grey outline, so only
-   the filled half is orange. */
-.rating-fill { position: absolute; top: 0; left: 50%; transform: translateX(-50%); color: var(--huggins-orange); visibility: hidden; }
+/* A full star is the filled star in orange. A half star lays it, cut off at its middle, over the empty star's outline,
+   so only the filled half is orange. The filled star spans its star and centers its glyph there, as the outline is
+   centered, without a transform. */
+.rating-fill { position: absolute; inset: 0; color: var(--huggins-orange); visibility: hidden; }
 .rating-star.is-full .rating-fill, .rating-star.is-half .rating-fill { visibility: visible; }
 .rating-star.is-half .rating-fill { clip-path: inset(0 50% 0 0); }
 .rating-star.is-full .rating-outline { visibility: hidden; }
@@ -1289,15 +1303,16 @@ body.short-screen .stage:not(.covers-player):not(.fullscreen-pseudo):not(:fullsc
 /* The player's indicator: one lasting state at a time, such as Reconnecting…, at the top center. On a player narrower
    than 600 px, by the class the layout sets on the player column, it sits below the corner buttons. A library
    refresh's progress shows only while the player's controls do. At the top, centered, it stays clear of the corner
-   buttons on both sides, which take the last 160 px at the right, and a long state ends in an ellipsis instead. The
-   live region around it stays in the page, so a state that starts showing is announced. */
+   buttons on both sides, which take the last 212 px at the right, or 160 px while the panel is on the left, and a long
+   state ends in an ellipsis instead. The live region around it stays in the page, so a state that starts showing is
+   announced. */
 .player-indicator {
   position: absolute;
   top: 14px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 25;
-  max-width: calc(100% - 336px);
+  max-width: calc(100% - 440px);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1318,6 +1333,7 @@ body.short-screen .stage:not(.covers-player):not(.fullscreen-pseudo):not(:fullsc
 .player-indicator .material-symbol-icon.spins { animation: spin 1.2s linear infinite; }
 .player-indicator.is-warning .material-symbol-icon { color: var(--huggins-orange); }
 .media-container:not(.controls-visible) .player-indicator.follows-controls { opacity: 0; }
+.stage[data-side="left"] .player-indicator { max-width: calc(100% - 336px); }
 .player-col.is-narrow .player-indicator { top: 64px; max-width: calc(100% - 24px); }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .player-indicator .material-symbol-icon.spins { animation-duration: 3s; } }
@@ -1488,6 +1504,8 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <div class="overlay-controls" id="overlay-controls">
           <button id="notify-btn" class="overlay-btn overlay-corner-btn notify-btn" type="button" aria-label="Notifications" title="Notifications"><span class="material-symbol-icon">notifications</span><span class="notify-badge" hidden></span></button>
           <button id="panel-btn" class="overlay-btn overlay-corner-btn" aria-expanded="false" aria-controls="panel"><span class="material-symbol-icon">right_panel_open</span><span class="unsaved-dot" hidden></span></button>
+          <button id="rating-btn" class="overlay-btn overlay-corner-btn" type="button" aria-label="Rating" title="Rating" aria-expanded="false" aria-controls="rating-popover"><span class="material-symbol-icon">star</span><span id="rating-badge" class="rating-badge" aria-hidden="true" hidden></span></button>
+          <div id="rating-popover" class="rating-popover" hidden></div>
           <button id="favorite-btn" class="overlay-btn overlay-corner-btn" aria-label="Favorite" title="Favorite"><span class="material-symbol-icon">favorite</span></button>
           <button id="blacklist-btn" class="overlay-btn overlay-corner-btn" aria-label="Blacklist" title="Blacklist"><span class="material-symbol-icon">thumb_down</span></button>
           <div class="overlay-controls-row overlay-controls-transport">
@@ -2875,6 +2893,7 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   function renderBadge() {
     badge.hidden = unread === 0;
     badge.textContent = unread > 9 ? "9+" : String(unread);
+    button.classList.toggle("has-unread", unread > 0);
     const label = unread ? `Notifications, ${unread} unread` : "Notifications";
     button.setAttribute("aria-label", label);
     button.title = label;
@@ -3652,6 +3671,7 @@ function renderPlayback() {
   renderAmbient();
   $("favorite-btn").classList.toggle("active", !!item?.favorite);
   $("blacklist-btn").classList.toggle("active", !!item?.blacklisted);
+  ratingPopover.draw();
   // Mute and the volume slider stay enabled before anything plays and on a photo, where they apply to the next video,
   // and Mute always shows whether sound is muted. While it is, the slider sits at 0.
   $("mute-btn").classList.toggle("active", playback.muted);
@@ -3709,6 +3729,10 @@ function skipNotice(item) {
 // Starts an item. While its media loads, the player's indicator says Loading… after the grace time.
 let mediaLoads = 0;
 function start(item) {
+  // A rating change still waiting goes to the item it was made on, and the rating's popover closes, so a rating goes
+  // only to the item it was opened for.
+  ratings.flush();
+  ratingPopover.close();
   playback.item = item;
   // The Stats tab shows when the item was last played before this play.
   item.playedBefore = item.lastPlayedAt;
@@ -4034,6 +4058,7 @@ let opener = null;
 function openPanel(tab, from) {
   opener = from || null;
   notes.closeList(false);
+  ratingPopover.close();
   state.open = true;
   store.set("open", true);
   $("mock-hint").hidden = true;
@@ -4153,7 +4178,7 @@ let tapWindow = 0;
 let singleTapWaits = false;
 media.addEventListener("touchstart", (event) => {
   tapX = null;
-  swipeStart = event.target.closest("#overlay-controls .overlay-btn, .overlay-seek-row") ? null : { x: event.touches[0].clientX, y: event.touches[0].clientY };
+  swipeStart = event.target.closest("#overlay-controls .overlay-btn, .overlay-seek-row, .rating-popover") ? null : { x: event.touches[0].clientX, y: event.touches[0].clientY };
 }, { passive: true });
 media.addEventListener("touchend", (event) => {
   if (!swipeStart || !event.changedTouches[0]) return;
@@ -4258,7 +4283,7 @@ function waitsForUser() {
 }
 function controlsHeld() {
   const focusHolds = keyboardFocus && overlayControls.contains(document.activeElement);
-  return pointerOnControls || draggingControl || focusHolds || (state.keepWhilePaused && waitsForUser()) || notes.listShown();
+  return pointerOnControls || draggingControl || focusHolds || (state.keepWhilePaused && waitsForUser()) || notes.listShown() || ratingPopover.isOpen();
 }
 function restartHideCountdown() {
   clearTimeout(hideTimer);
@@ -6404,7 +6429,7 @@ $("mock-sync-rating").addEventListener("click", () => {
   item.rating = item.rating ? null : 3.5;
   const text = item.rating ? `Rated ${ratingText(item.rating)}` : "Rating cleared";
   notes.notify({ kind: "devices", text: `${text} on another device`, detail: item.name, key: `sync-rating:${item.id}` });
-  renderStats();
+  renderPlayback();
 });
 
 // Preset changes from another device. The page reloads the presets and tells the changes apart by comparing the list
@@ -6988,21 +7013,54 @@ function statsHint(text, error) {
 const ratingText = (rating) => (!rating ? "Not rated" : rating === 1 ? "1 star" : `${rating} stars`);
 const RATING_KEY_PAUSE_MS = 500;
 const RATING_CLEAR_EDGE_PX = 8;
-// The Current file section's rating: the label and one control, a slider from 0 to 5 to screen readers. It is one
-// element kept across the tab's redraws, which move it into the new rows, so a redraw keeps focus on it.
-const ratingControl = (() => {
-  const line = document.createElement("div");
-  line.className = "stats-rating";
-  const label = document.createElement("span");
-  label.className = "stats-rating-label";
-  label.id = "stats-rating-label";
-  label.textContent = "Rating";
+// The rating's one change waiting to be sent, which the Stats tab's stars, the player's, and the rating keys share, so
+// a change made in one shows at once in the others: the item it was made on and its rating before. A click, tap, or drag
+// sends it as it is set; keys send it once they pause, when focus leaves the stars, or when another item plays.
+const ratings = (() => {
+  let pending = null;
+  let pauseTimer = 0;
+  // What the app does once its request lands: a rating it already had changes nothing, and one the server can't be
+  // reached for goes back, with the notice. The Rated card counts it after any redraw under way.
+  function commit(target, before) {
+    if ((target.rating ?? null) === before) return;
+    if (state.situation === "reconnecting") {
+      target.rating = before;
+      void noticeDialog({ message: "Rating update failed: Couldn't reach the server." });
+    } else {
+      acknowledge(target.rating ? `Rated ${ratingText(target.rating)}` : "Rating cleared", "rating", target.name);
+    }
+    queueMicrotask(() => {
+      renderStats();
+      renderRating();
+    });
+  }
+  function flush() {
+    clearTimeout(pauseTimer);
+    if (!pending) return;
+    const { target, before } = pending;
+    pending = null;
+    commit(target, before);
+  }
+  // A new value shows at once.
+  function set(item, value, byKey) {
+    if (pending && pending.target !== item) flush();
+    if (!pending) pending = { target: item, before: item.rating ?? null };
+    item.rating = value || null;
+    renderRating();
+    clearTimeout(pauseTimer);
+    if (byKey) pauseTimer = setTimeout(flush, RATING_KEY_PAUSE_MS);
+    else flush();
+  }
+  return { set, flush };
+})();
+// The five stars, a slider from 0 to 5 to screen readers, for one item at a time. `onSet` gets the item, the value, and
+// whether a key set it.
+function ratingStars(labelAttributes, onSet) {
   const el = document.createElement("div");
   el.className = "rating";
-  el.id = "stats-rating";
   el.tabIndex = 0;
   el.setAttribute("role", "slider");
-  el.setAttribute("aria-labelledby", label.id);
+  Object.entries(labelAttributes).forEach(([name, value]) => el.setAttribute(name, value));
   el.setAttribute("aria-valuemin", "0");
   el.setAttribute("aria-valuemax", "5");
   const stars = Array.from({ length: 5 }, () => {
@@ -7012,15 +7070,11 @@ const ratingControl = (() => {
     return star;
   });
   el.append(...stars);
-  line.append(label, el);
 
   let item = null;
   // A mouse's preview, or the value under a press, shown in place of the set rating.
   let shown = null;
   let pressId = null;
-  // A change not sent yet: the item it was made on and its rating before. Keys wait for a pause before sending.
-  let pending = null;
-  let pauseTimer = 0;
 
   function draw() {
     const rating = item?.rating || 0;
@@ -7043,35 +7097,6 @@ const ratingControl = (() => {
     if (x < RATING_CLEAR_EDGE_PX) return 0;
     const index = Math.floor(x / width);
     return index >= 5 ? 5 : index + (x - index * width < width / 2 ? 0.5 : 1);
-  }
-  // What the app does once its request lands: a rating it already had changes nothing, and one the server can't be
-  // reached for goes back, with the notice. The Rated card counts it after any redraw under way.
-  function commit(target, before) {
-    if ((target.rating ?? null) === before) return;
-    if (state.situation === "reconnecting") {
-      target.rating = before;
-      void noticeDialog({ message: "Rating update failed: Couldn't reach the server." });
-    } else {
-      acknowledge(target.rating ? `Rated ${ratingText(target.rating)}` : "Rating cleared", "rating", target.name);
-    }
-    queueMicrotask(renderStats);
-  }
-  function flush() {
-    clearTimeout(pauseTimer);
-    if (!pending) return;
-    const { target, before } = pending;
-    pending = null;
-    commit(target, before);
-  }
-  // A new value shows at once. A click, tap, or drag sends it as it is set; keys send it once they pause.
-  function set(value, byKey) {
-    if (!item) return;
-    if (!pending) pending = { target: item, before: item.rating ?? null };
-    item.rating = value || null;
-    draw();
-    clearTimeout(pauseTimer);
-    if (byKey) pauseTimer = setTimeout(flush, RATING_KEY_PAUSE_MS);
-    else flush();
   }
   function endPress(event) {
     if (pressId !== event.pointerId) return false;
@@ -7099,7 +7124,7 @@ const ratingControl = (() => {
   });
   // A release sets the value under it. A mouse still over the control previews it again on its next move.
   el.addEventListener("pointerup", (event) => {
-    if (endPress(event)) set(valueAt(event.clientX), false);
+    if (endPress(event)) onSet(item, valueAt(event.clientX), false);
   });
   // A press the browser or a redraw cuts short sets nothing.
   const cancelPress = (event) => endPress(event) && draw();
@@ -7117,26 +7142,124 @@ const ratingControl = (() => {
     const steps = { ArrowLeft: rating - 0.5, ArrowDown: rating - 0.5, ArrowRight: rating + 0.5, ArrowUp: rating + 0.5, Home: 0, End: 5, Delete: 0, Backspace: 0 };
     if (!(event.key in steps)) return;
     event.preventDefault();
-    set(Math.min(5, Math.max(0, steps[event.key])), true);
+    onSet(item, Math.min(5, Math.max(0, steps[event.key])), true);
   });
-  // Leaving the control sends a key change at once; a redraw gives focus straight back, so it sends nothing.
-  el.addEventListener("blur", () => queueMicrotask(() => document.activeElement !== el && flush()));
+  // Leaving the stars sends a key change at once; a redraw that gives focus straight back sends nothing.
+  el.addEventListener("blur", () => queueMicrotask(() => document.activeElement !== el && ratings.flush()));
 
   return {
     el,
-    // The line for the playing item. Another item sends a change still waiting, to the item it was made on.
-    line(next) {
+    draw,
+    // The stars for this item. Another item ends a press or preview under way.
+    show(next) {
       if (next !== item) {
-        flush();
         pressId = null;
         shown = null;
       }
       item = next;
       draw();
+    }
+  };
+}
+// The Current file section's rating: the label and the stars. It is one element kept across the tab's redraws, which
+// move it into the new rows, so a redraw keeps focus on it.
+const ratingControl = (() => {
+  const line = document.createElement("div");
+  line.className = "stats-rating";
+  const label = document.createElement("span");
+  label.className = "stats-rating-label";
+  label.id = "stats-rating-label";
+  label.textContent = "Rating";
+  const control = ratingStars({ "aria-labelledby": label.id }, (item, value, byKey) => ratings.set(item, value, byKey));
+  control.el.id = "stats-rating";
+  line.append(label, control.el);
+  return {
+    el: control.el,
+    draw: control.draw,
+    // The line for the playing item.
+    line(item) {
+      control.show(item);
       return line;
     }
   };
 })();
+// The player's rating: the star at the top right, orange with the rating in its badge while the playing item is rated,
+// and its popover, the same stars at the player's center. A click, tap, or drag that sets a rating closes the popover;
+// the keys don't, and Enter, Escape, Tab, or a press elsewhere does. So does another item playing, a volume change, or
+// the panel opening. The player's controls stay while it is open, and their countdown starts again when it closes.
+const ratingPopover = (() => {
+  const button = $("rating-btn");
+  const popover = $("rating-popover");
+  const control = ratingStars({ "aria-label": "Rating" }, (item, value, byKey) => {
+    ratings.set(item, value, byKey);
+    if (!byKey) close();
+  });
+  popover.append(control.el);
+  let open = false;
+
+  // Closing from the keyboard, with focus on the stars, gives focus back to the star.
+  function close({ refocus = false } = {}) {
+    if (!open) return;
+    open = false;
+    if (refocus && popover.contains(document.activeElement)) button.focus({ preventScroll: true });
+    popover.hidden = true;
+    button.setAttribute("aria-expanded", "false");
+    controlsActivity();
+  }
+  // Nothing opens with nothing playing or while the server asks for pairing, as Favorite does nothing then. Opened from
+  // the keyboard, focus moves to the stars; a click or a tap leaves it where it is, as on the Stats tab's stars.
+  button.addEventListener("click", () => {
+    if (open) return close({ refocus: true });
+    if (!playback.item || state.pairing) return;
+    open = true;
+    control.show(playback.item);
+    $("volume-indicator").classList.remove("is-shown");
+    popover.hidden = false;
+    button.setAttribute("aria-expanded", "true");
+    if (keyboardFocus) control.el.focus({ preventScroll: true });
+  });
+  popover.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    close({ refocus: true });
+  });
+  popover.addEventListener("focusout", (event) => !popover.contains(event.relatedTarget) && close());
+  // A tap that sets a rating hides the popover as it lifts, so the click a browser sends after a touch could land on the
+  // video under it, which would act on the player. A touch on the stars sends no click.
+  popover.addEventListener("touchend", (event) => event.preventDefault());
+  // A press elsewhere closes it and still does what it does, as a press outside the notifications list does, and Escape
+  // closes it before anything else it would close.
+  document.addEventListener("pointerdown", (event) => {
+    if (open && !popover.contains(event.target) && !button.contains(event.target)) close();
+  }, true);
+  document.addEventListener("keydown", (event) => {
+    if (!open || event.key !== "Escape" || document.querySelector("dialog[open]")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    close({ refocus: true });
+  }, true);
+
+  return {
+    isOpen: () => open,
+    close,
+    draw() {
+      const rating = playback.item?.rating || 0;
+      button.classList.toggle("active", !!rating);
+      const badge = $("rating-badge");
+      badge.hidden = !rating;
+      badge.textContent = rating ? String(rating) : "";
+      const label = rating ? `Rating, ${ratingText(rating)}` : "Rating";
+      button.setAttribute("aria-label", label);
+      button.title = label;
+      control.draw();
+    }
+  };
+})();
+// Every place the playing item's rating shows.
+function renderRating() {
+  ratingControl.draw();
+  ratingPopover.draw();
+}
 function fileStats(item) {
   const name = document.createElement("p");
   name.className = "stats-file-name";
@@ -7522,6 +7645,9 @@ const SHORTCUTS = [
   ["R", "Random"],
   ["F", "Favorite"],
   ["B", "Blacklist"],
+  ["Shift+1 – Shift+5", "Rate 1 to 5 stars"],
+  ["Shift+0", "Clear the rating"],
+  ["- / =", "Rating down or up by half a star"],
   ["A", "Autoplay on or off"],
   ["M", "Mute"],
   [", / .", "One frame back or forward, while a video is paused"],
@@ -7532,7 +7658,7 @@ const SHORTCUTS = [
   ["P", "Show or hide the panel"],
   ["Shift+F", "Fullscreen"],
   ["H", "These shortcuts"],
-  ["Esc", "Close the top dialog, the notifications list, or the panel, stop selecting, or leave fullscreen"]
+  ["Esc", "Close the top dialog, the notifications list, the rating stars, or the panel, stop selecting, or leave fullscreen"]
 ];
 function showShortcuts() {
   openPanel("settings");
@@ -7548,9 +7674,15 @@ const isTextField = (el) =>
 // A field nothing is typed into, as a slider is, keeps only its own keys: the shortcuts work there otherwise, so they
 // work at once after a mouse drag of the scrub bar or the volume.
 const takesEveryKey = (el) => isTextField(el) && el.type !== "range";
-// Only seeks, frame steps, and volume steps repeat while a key is held down; every other key acts once per press, and
-// its repeats stay the page's, so holding Space doesn't scroll.
-const REPEATING_KEYS = ["j", "l", ",", ".", "[", "]"];
+// Only seeks, frame steps, volume steps, and rating steps repeat while a key is held down; every other key acts once per
+// press, and its repeats stay the page's, so holding Space doesn't scroll.
+const REPEATING_KEYS = ["j", "l", ",", ".", "[", "]", "-", "="];
+// The rating keys rate the playing item as its stars' keys do, sending once the keys pause, and do nothing while nothing
+// plays or while the server asks for pairing.
+function rateByKey(value) {
+  if (!playback.item || state.pairing) return;
+  ratings.set(playback.item, Math.min(5, Math.max(0, value)), true);
+}
 // The muted-volume rules, for the slider, the scroll wheel, a two-finger drag, and [ and ]. The slider shows the volume,
 // or 0 while muted. Raising it while muted unmutes and starts from 0, so the remembered volume isn't restored, and
 // lowering it while muted changes nothing. Lowering it to 0 while not muted mutes, and unmuting then restores the volume
@@ -7585,10 +7717,12 @@ function moveVolume(target) {
 // The volume indicator shows the volume as a percentage, or Muted while muted, with Mute's icon, while the scroll wheel,
 // a two-finger drag, or [ and ] step it, on a photo too, where they set the next video's level, and Muted for a step
 // down while muted. M shows it too, Muted as it mutes and the volume it restores as it unmutes. The slider and the Mute
-// button don't show it. It fades out 800 ms after the last change.
+// button don't show it. It fades out 800 ms after the last change. It shows where the rating's popover does, which it
+// closes, so the two never show at once.
 const VOLUME_INDICATOR_MS = 800;
 let volumeIndicatorTimer = 0;
 function showVolumeIndicator() {
+  ratingPopover.close();
   const indicator = $("volume-indicator");
   setIcon(indicator.querySelector(".material-symbol-icon"), playback.muted ? "volume_off" : "volume_up");
   $("volume-indicator-text").textContent = playback.muted ? "Muted" : `${shownVolume()}%`;
@@ -7610,6 +7744,9 @@ document.addEventListener("keydown", (event) => {
   // A shortcut's key is the page's, held or not; true for a held key that doesn't repeat, which doesn't act again.
   const handled = () => (event.preventDefault(), held);
   if (event.shiftKey && key === "f") return handled() || $("fullscreen-btn").click();
+  // Shift and a digit set the rating, 0 clearing it. They are matched by the key's position, since Shift changes the
+  // character a digit key gives, such as "!" for 1 on a US layout.
+  if (event.shiftKey && /^Digit[0-5]$/.test(event.code)) return handled() || rateByKey(Number(event.code.slice(5)));
   if (event.shiftKey) return;
   // H opens Settings with the shortcuts shown, from anywhere outside a text field. Not ?, which Firefox takes for its
   // quick find.
@@ -7627,6 +7764,7 @@ document.addEventListener("keydown", (event) => {
   if (key === "r") return handled() || pickRandom();
   if (key === "f") return handled() || toggleFlag("favorite");
   if (key === "b") return handled() || toggleFlag("blacklisted");
+  if (key === "-" || key === "=") return handled() || rateByKey((item?.rating || 0) + (key === "=" ? 0.5 : -0.5));
   if (key === "a") return handled() || $("autoplay-btn").click();
   if (key === "m") return handled() || (toggleMute(), showVolumeIndicator());
   // Frame stepping, as YouTube does: the mockup assumes 30 frames a second; the WebUI uses the browser's frame

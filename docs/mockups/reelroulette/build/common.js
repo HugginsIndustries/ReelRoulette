@@ -785,6 +785,7 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   function renderBadge() {
     badge.hidden = unread === 0;
     badge.textContent = unread > 9 ? "9+" : String(unread);
+    button.classList.toggle("has-unread", unread > 0);
     const label = unread ? `Notifications, ${unread} unread` : "Notifications";
     button.setAttribute("aria-label", label);
     button.title = label;

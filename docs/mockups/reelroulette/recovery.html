@@ -534,11 +534,14 @@ html.hide-mock .mock-small:not(.mock-keep) { display: none !important; }
 
 /* Notifications: the bell, its list of recent messages, and the popups. */
 .notify-btn { position: relative; }
-.notify-btn[aria-expanded="true"] { color: var(--huggins-orange); }
-.notify-badge {
+/* The bell is orange while its list is open, and while it has unread messages, as its badge is. */
+.notify-btn[aria-expanded="true"], .notify-btn.has-unread { color: var(--huggins-orange); }
+/* The bell's badge, which the player's rating star shares. It overlays its button, so it never moves an icon. Its ring
+   ends 2 px inside the button's right edge, since Chrome on Android clips a ring that reaches the edge. */
+.notify-badge, .rating-badge {
   position: absolute;
   top: 4px;
-  right: 2px;
+  right: 4px;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
@@ -1492,6 +1495,7 @@ function initNotifications({ button, host, indicator, listHost = document.body, 
   function renderBadge() {
     badge.hidden = unread === 0;
     badge.textContent = unread > 9 ? "9+" : String(unread);
+    button.classList.toggle("has-unread", unread > 0);
     const label = unread ? `Notifications, ${unread} unread` : "Notifications";
     button.setAttribute("aria-label", label);
     button.title = label;
