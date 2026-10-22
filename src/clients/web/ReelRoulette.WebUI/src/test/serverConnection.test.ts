@@ -857,15 +857,18 @@ describe("createServerConnection", () => {
     expect(sources).toHaveLength(1);
   });
 
-  it("says a wrong token's 401 failed, and a pairing that couldn't reach the server why, whatever the browser calls it", async () => {
-    let pairReply = () => json({ error: "Invalid token" }, 401);
+  it("says a wrong token's 401 failed, with the server's reason when it gives one, and a pairing that couldn't reach the server why, whatever the browser calls it", async () => {
+    let pairReply = () => json({}, 401);
     const { connection, notices } = setup({ "POST /api/pair": () => pairReply() });
     connection.start();
     await settle();
     notices.length = 0;
 
     await connection.pair("wrong");
-    expect(notices).toEqual(["Pairing failed."]);
+    pairReply = () => json({ error: "That token isn't this server's." }, 401);
+    await connection.pair("wrong");
+    expect(notices).toEqual(["Pairing failed.", "Pairing failed: That token isn't this server's."]);
+    notices.length = 1;
 
     for (const message of ["Failed to fetch", "Load failed", "NetworkError when attempting to fetch resource."]) {
       pairReply = () => {

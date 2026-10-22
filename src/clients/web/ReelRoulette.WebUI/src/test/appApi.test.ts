@@ -47,9 +47,21 @@ describe("createAppApi", () => {
 
     status = 503;
     await expect(api.getJson("/api/presets")).rejects.toThrow("HTTP 503");
-    await expect(api.getJson("/api/presets")).rejects.toMatchObject({ status: 503 });
+    await expect(api.getJson("/api/presets")).rejects.toMatchObject({ status: 503, reason: null });
     await expect(api.getJson("/api/presets")).rejects.toBeInstanceOf(HttpStatusError);
     expect(onUnauthorized).toHaveBeenCalledTimes(2);
+  });
+
+  it("carries the server's reason on a failed read, and none for the empty body an unhandled error gets", async () => {
+    let reply = () => new Response(JSON.stringify({ error: "Library not loaded or empty." }), { status: 503, headers: { "Content-Type": "application/json" } });
+    const { fetchImpl } = recordingFetch(() => reply());
+    const api = createAppApi("http://localhost:51301", { onUnauthorized: () => {}, fetch: fetchImpl });
+
+    await expect(api.getJson("/api/presets")).rejects.toMatchObject({ status: 503, reason: "Library not loaded or empty.", message: "HTTP 503" });
+    await expect(api.postJson("/api/library/query", {})).rejects.toMatchObject({ status: 503, reason: "Library not loaded or empty." });
+
+    reply = () => new Response(null, { status: 500 });
+    await expect(api.getJson("/api/presets")).rejects.toMatchObject({ status: 500, reason: null });
   });
 
   it("posts JSON and reads the JSON answer, failing as a read does", async () => {

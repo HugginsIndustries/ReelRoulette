@@ -1,4 +1,4 @@
-import { errorText, UnauthorizedError } from "../api/serverRequest";
+import { requestFailure, UnauthorizedError, type RequestFailure } from "../api/serverRequest";
 import { mergeLibraryItemTags } from "./libraryQuerySession";
 
 export type TagSaveCategory = {
@@ -55,19 +55,15 @@ export type TagSaveRun = {
   accepted: TagSaveStep[];
   failed: TagSaveStep | null;
   /**
-   * Why the failed step failed, naming it: "{step} failed ({status})" when the server refused it, or
-   * "{step} failed: {error}" when its request failed. Null when every step was taken, and when the server answered
-   * 401, whose pairing prompt is the only thing to show.
+   * Why the failed step failed, naming it as "{step} failed", worded as `requestFailure` words it. Null when every step
+   * was taken, and when the server answered 401, whose pairing prompt is the only thing to show.
    */
-  error: string | null;
+  failure: RequestFailure | null;
 };
 
-/** One step's answer: taken, or refused with the server's status. */
-export type TagSaveStepResult = { ok: true } | { ok: false; status: number };
-
 export interface TagSaveClient {
-  /** Sends one step. A request that fails throws. */
-  post(step: TagSaveStep): Promise<TagSaveStepResult>;
+  /** Sends one step. A request that fails, or that the server refuses, throws. */
+  post(step: TagSaveStep): Promise<void>;
   /** Names the step in its failure, such as "Tag apply". */
   label(step: TagSaveStep): string;
 }
@@ -179,19 +175,15 @@ export function planTagEditorSave(input: TagSavePlanInput): TagSaveStep[] {
 export async function runTagEditorSave(steps: readonly TagSaveStep[], client: TagSaveClient): Promise<TagSaveRun> {
   const accepted: TagSaveStep[] = [];
   for (const step of steps) {
-    let result: TagSaveStepResult;
     try {
-      result = await client.post(step);
+      await client.post(step);
     } catch (error) {
-      const message = error instanceof UnauthorizedError ? null : `${client.label(step)} failed: ${errorText(error)}`;
-      return { ok: false, accepted, failed: step, error: message };
-    }
-    if (!result.ok) {
-      return { ok: false, accepted, failed: step, error: `${client.label(step)} failed (${result.status})` };
+      const failure = error instanceof UnauthorizedError ? null : requestFailure(`${client.label(step)} failed`, error);
+      return { ok: false, accepted, failed: step, failure };
     }
     accepted.push(step);
   }
-  return { ok: true, accepted, failed: null, error: null };
+  return { ok: true, accepted, failed: null, failure: null };
 }
 
 function itemMatches(item: TaggedItem, itemId: string): boolean {

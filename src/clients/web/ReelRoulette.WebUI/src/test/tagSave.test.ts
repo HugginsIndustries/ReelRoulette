@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { UnauthorizedError } from "../api/serverRequest";
+import { HttpStatusError, UnauthorizedError } from "../api/serverRequest";
 import {
   applyTagSaveLocally,
   createTagSaveSession,
@@ -45,12 +45,11 @@ describe("planTagEditorSave", () => {
     const result = await runTagEditorSave(steps, {
       post: async (step) => {
         posted.push(step);
-        return { ok: true };
       },
       label: () => "Tag apply"
     });
     expect(result.ok).toBe(true);
-    expect(result.error).toBeNull();
+    expect(result.failure).toBeNull();
     expect(posted).toEqual(steps);
     expect(posted.some((step) => step.kind === "upsert-category")).toBe(false);
   });
@@ -178,14 +177,13 @@ describe("tag save apply", () => {
         if (step.kind === "apply-item-tags") {
           throw new Error("network down");
         }
-        return { ok: true };
       },
       label: (step) => (step.kind === "apply-item-tags" ? "Tag apply" : "Tag rename")
     });
     expect(result.ok).toBe(false);
     expect(result.accepted).toEqual([steps[0]]);
     expect(result.failed).toEqual(steps[1]);
-    expect(result.error).toBe("Tag apply failed: network down");
+    expect(result.failure).toEqual({ text: "Tag apply failed: network down", logText: "Tag apply failed: network down" });
 
     const items = [item("a", ["Day"])];
     const snapshot = snapshotTags(items);
@@ -202,10 +200,10 @@ describe("tag save apply", () => {
       },
       label: () => "Tag apply"
     });
-    expect(result).toEqual({ ok: false, accepted: [], failed: steps[0], error: null });
+    expect(result).toEqual({ ok: false, accepted: [], failed: steps[0], failure: null });
   });
 
-  it("reports the refused step's status, and sends no step after it", async () => {
+  it("reports the refused step with the server's reason, or without one, keeping its status for the log, and sends no step after it", async () => {
     const steps: TagSaveStep[] = [
       { kind: "upsert-tag", name: "Night", categoryId: "uncategorized" },
       { kind: "delete-tag", name: "Day" },
@@ -215,12 +213,27 @@ describe("tag save apply", () => {
     const result = await runTagEditorSave(steps, {
       post: async (step) => {
         posted.push(step.kind);
-        return step.kind === "delete-tag" ? { ok: false, status: 409 } : { ok: true };
+        if (step.kind === "delete-tag") {
+          throw new HttpStatusError(409, "Day is already deleted.");
+        }
       },
       label: (step) => (step.kind === "delete-tag" ? "Tag delete" : "Other")
     });
-    expect(result).toEqual({ ok: false, accepted: [steps[0]], failed: steps[1], error: "Tag delete failed (409)" });
+    expect(result).toEqual({
+      ok: false,
+      accepted: [steps[0]],
+      failed: steps[1],
+      failure: { text: "Tag delete failed: Day is already deleted.", logText: "Tag delete failed (HTTP 409)." }
+    });
     expect(posted).toEqual(["upsert-tag", "delete-tag"]);
+
+    const withoutReason = await runTagEditorSave([steps[1]!], {
+      post: async () => {
+        throw new HttpStatusError(500);
+      },
+      label: () => "Tag delete"
+    });
+    expect(withoutReason.failure).toEqual({ text: "Tag delete failed.", logText: "Tag delete failed (HTTP 500)." });
   });
 
   it("still applies an echo from another client", () => {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PLAYBACK_REQUEST_TIMEOUT_MS } from "../api/serverRequest";
+import { HttpStatusError, PLAYBACK_REQUEST_TIMEOUT_MS, UnexpectedResponseError } from "../api/serverRequest";
 import { HEADER_PRESET_STARRED_VALUE, createDefaultFilterState } from "../filter/filterStateModel";
 import {
   createRandomPicker,
@@ -133,10 +133,13 @@ describe("randomPick", () => {
     const picker = createRandomPicker(() => answers.shift()!());
 
     await expect(picker.pick({})).resolves.toEqual({ kind: "unauthorized" });
-    await expect(picker.pick({})).resolves.toEqual({ kind: "failed", statusCode: 503 });
+    const refused = await picker.pick({});
+    expect(refused).toEqual({ kind: "failed", error: expect.any(HttpStatusError) });
+    expect(refused).toMatchObject({ error: { status: 503, reason: "Library not loaded or empty." } });
     await expect(picker.pick({})).resolves.toEqual({ kind: "none" });
-    await expect(picker.pick({})).resolves.toEqual({ kind: "error", message: "Failed to fetch" });
-    await expect(picker.pick({})).resolves.toEqual({ kind: "error", message: "The server sent an unexpected response (text/html)." });
+    await expect(picker.pick({})).resolves.toEqual({ kind: "failed", error: new TypeError("Failed to fetch") });
+    const unexpected = await picker.pick({});
+    expect(unexpected).toEqual({ kind: "failed", error: expect.any(UnexpectedResponseError) });
     await expect(picker.pick({})).resolves.toEqual({ kind: "picked", item: randomItem("a") });
   });
 });

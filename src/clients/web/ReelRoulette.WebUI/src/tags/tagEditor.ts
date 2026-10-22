@@ -1,5 +1,5 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
-import { errorText, UnauthorizedError } from "../api/serverRequest";
+import { noticeRequestFailure, refusalError, requestFailure, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { FilterDialog } from "../filter/filterDialog";
 import { cloneFilterState } from "../filter/filterStateModel";
@@ -14,7 +14,6 @@ import {
   runTagEditorSave,
   type TagSaveHandle,
   type TagSaveStep,
-  type TagSaveStepResult,
   type TaggedItem
 } from "../library/tagSave";
 import type { AppApi } from "../state/appApi";
@@ -465,18 +464,14 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
 
   /**
    * Loads the tags again, unless a save is on its way, which loads them once it lands, so a reply can't undo it. A
-   * failure shows in the in-app notice with `failure` before the reason, except a 401, whose pairing prompt is the
-   * thing to act on.
+   * failure shows in the in-app notice as `failure`, with the server's reason when it gives one, except a 401, whose
+   * pairing prompt is the thing to act on.
    */
   function reload(failure: string): void {
     if (savesInFlight > 0) {
       return;
     }
-    loadModel().catch((error) => {
-      if (!(error instanceof UnauthorizedError)) {
-        void dialogs.notice(`${failure}: ${errorText(error)}`);
-      }
-    });
+    loadModel().catch((error) => noticeRequestFailure(dialogs, failure, error));
   }
 
   /** Follows the playing item, as `follow` does, and while the tab shows, loads its tags. Says whether the item changed. */
@@ -583,17 +578,16 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     }
   }
 
-  async function postStep(handle: TagSaveHandle, step: TagSaveStep): Promise<TagSaveStepResult> {
+  async function postStep(handle: TagSaveHandle, step: TagSaveStep): Promise<void> {
     const request = tagSaveRequest(step);
     const response = await api.post(request.path, request.body);
     if (!response.ok) {
-      return { ok: false, status: response.status };
+      throw await refusalError(response);
     }
     if (step.kind === "apply-auto-tag") {
       saves.noteAutoTagResult(handle, autoTagAppliedFromResponse(await response.json().catch(() => null)));
     }
     retargetTag(step);
-    return { ok: true };
   }
 
   function projectLoadedTagItems(): void {
@@ -625,9 +619,9 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
     if (!result.ok) {
       // A step the server confirmed through its event before refusing a later one is not rolled back.
       if (failSave(handle, result.accepted)) {
-        // A 401 has no error to show: the pairing prompt shows instead.
-        if (result.error) {
-          void dialogs.notice(result.error);
+        // A 401 has no failure to show: the pairing prompt shows instead.
+        if (result.failure) {
+          void dialogs.notice(result.failure.text, result.failure.logText);
         }
       } else {
         savedMessage();
@@ -1129,10 +1123,16 @@ export function createTagEditor(options: TagEditorOptions): TagEditor {
       try {
         rows = autoTagRowsFromScan(await api.postJson("/api/autotag/scan", createAutoTagScanRequest(state.autoTag.scanFull)));
       } catch (error) {
-        // A failed scan shows its error in place, with the results as before any scan and nothing to apply. A 401 shows
-        // nothing there, since the pairing prompt, which the request has asked for, is the only thing to show.
+        // A failed scan shows its failure in place, and relays it, with the results as before any scan and nothing to
+        // apply. A 401 shows nothing there, since the pairing prompt, which the request has asked for, is the only thing
+        // to show.
         scans += 1;
-        const status = error instanceof UnauthorizedError ? "" : `Scan failed: ${errorText(error)}`;
+        let status = "";
+        if (!(error instanceof UnauthorizedError)) {
+          const failure = requestFailure("Scan failed", error);
+          status = failure.text;
+          store.relayStatus(failure.logText);
+        }
         update({ autoTag: { ...state.autoTag, rows: [], hasRun: false, scanning: false, status } });
         return;
       }

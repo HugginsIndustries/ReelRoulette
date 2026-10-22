@@ -1,4 +1,4 @@
-import { errorText, refusalReason, UnauthorizedError } from "../api/serverRequest";
+import { requestWithNotice } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { Notifications } from "../notifications/notifications";
 import type { AppApi } from "../state/appApi";
@@ -31,26 +31,12 @@ export function createFileLocation(options: FileLocationOptions): FileLocation {
   const { api, dialogs, notifications } = options;
 
   async function showInFileManager(itemId: string, fileName: string): Promise<void> {
-    const failed = "Show in File Manager failed";
-    let response: Response;
-    try {
-      response = await api.request(api.url(`/api/show-in-file-manager/${encodeURIComponent(itemId)}`), {
-        method: "POST"
-      });
-    } catch (error) {
-      // A 401 shows only the pairing prompt, which the request has asked for.
-      if (!(error instanceof UnauthorizedError)) {
-        void dialogs.notice(`${failed}: ${errorText(error)}`);
-      }
-      return;
+    const taken = await requestWithNotice(dialogs, "Show in File Manager failed", () =>
+      api.request(api.url(`/api/show-in-file-manager/${encodeURIComponent(itemId)}`), { method: "POST" })
+    );
+    if (taken) {
+      notifications.notify({ kind: "actions", text: "Opened in the file manager.", detail: fileName, key: "path" });
     }
-    if (!response.ok) {
-      const logText = `${failed} (${response.status}).`;
-      const reason = await refusalReason(response);
-      void dialogs.notice(reason ? `${failed}: ${reason}` : logText, logText);
-      return;
-    }
-    notifications.notify({ kind: "actions", text: "Opened in the file manager.", detail: fileName, key: "path" });
   }
 
   async function copyPath(path: string, fileName: string, button: HTMLElement): Promise<void> {

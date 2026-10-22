@@ -1,5 +1,5 @@
 import { signal } from "@preact/signals";
-import { postWithNotice } from "../api/serverRequest";
+import { requestWithNotice } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { Notifications } from "../notifications/notifications";
 import { basenameFromPath } from "../playback/nowPlaying";
@@ -98,13 +98,9 @@ export function createItemRatings(options: ItemRatingsOptions): ItemRatings {
     const request = ++requests;
     sending.set(change.itemId, { rating: change.rating, request });
     changed();
-    const taken = await postWithNotice(
-      api,
-      dialogs,
-      "/api/rating",
+    const taken = await requestWithNotice(dialogs, "Rating update failed", () =>
       // The client id comes back on the change's event, so this device can tell its own change from another's.
-      { itemId: change.itemId, rating: change.rating, clientId: store.identity.clientId },
-      "Rating update failed"
+      api.post("/api/rating", { itemId: change.itemId, rating: change.rating, clientId: store.identity.clientId })
     );
     if (taken) {
       confirmed.set(change.itemId, change.rating);

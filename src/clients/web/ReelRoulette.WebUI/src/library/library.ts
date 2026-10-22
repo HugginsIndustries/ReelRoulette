@@ -1,6 +1,6 @@
 import { computed, signal, type ReadonlySignal } from "@preact/signals";
 import { requestPlayItem } from "../api/coreApi";
-import { errorText, UnauthorizedError } from "../api/serverRequest";
+import { errorText, noticeRequestFailure, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { FilterSource } from "../filter/filterDialogModel";
 import { filterSummaryParts } from "../filter/filterSummaryModel";
@@ -31,7 +31,7 @@ import {
   type LibraryGridCoverage
 } from "./libraryGridController";
 import { libraryOverlayMessage, type LibraryOverlayMessage } from "./libraryOverlayModel";
-import { mapPlayItemErrorToStatus } from "./libraryPlayModel";
+import { playRefusalFailure } from "./libraryPlayModel";
 import { parseLibraryQueryPage } from "./libraryProjectionModel";
 import {
   LIBRARY_QUERY_SEARCH_DEBOUNCE_MS,
@@ -290,7 +290,7 @@ export function createLibrary(options: LibraryOptions): Library {
     if (!ready) {
       summary.value = null;
       const phase = snap.phase === "error" ? "error" : snap.phase === "empty" ? "empty" : "loading";
-      body.value = { kind: "message", message: libraryOverlayMessage(phase, snap.errorMessage, snap.errorStatus) };
+      body.value = { kind: "message", message: libraryOverlayMessage(phase, snap.failureText, snap.errorStatus) };
       return;
     }
 
@@ -442,11 +442,11 @@ export function createLibrary(options: LibraryOptions): Library {
 
       if (!result.ok) {
         trace("warn", "library-play-failed", {
-          statusCode: result.statusCode,
-          code: result.code || "none"
+          statusCode: result.refusal.status,
+          code: result.refusal.code || "none"
         });
-        // The server's error text can name a file, so the log keeps one line for every refusal.
-        void dialogs.notice(mapPlayItemErrorToStatus(result, tileMediaType(trimmedItemId)), "Playback failed");
+        const { text, logText } = playRefusalFailure(result.refusal, tileMediaType(trimmedItemId));
+        void dialogs.notice(text, logText);
         return;
       }
 
@@ -467,7 +467,7 @@ export function createLibrary(options: LibraryOptions): Library {
         return;
       }
       trace("warn", "library-play-error", { message: errorText(error) });
-      void dialogs.notice(`Playback failed: ${errorText(error)}`);
+      noticeRequestFailure(dialogs, "Playback failed", error);
     } finally {
       playInFlight = false;
       // The media holds Loading… by now when the play went ahead, so the play and its media load are one loading period.

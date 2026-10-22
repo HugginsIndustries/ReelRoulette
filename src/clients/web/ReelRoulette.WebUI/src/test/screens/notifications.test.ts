@@ -665,7 +665,7 @@ describe("the list", () => {
 
   it("keeps every in-app notice, unmarked, with the error icon, and the bell doesn't count it", async () => {
     const services = await mountWithServices();
-    void services.dialogs.notice("Saving presets failed (500).");
+    void services.dialogs.notice("Saving presets failed.");
     await flush();
     fireEvent.click(within(document.querySelector("dialog.app-dialog") as HTMLElement).getByRole("button", { name: "OK" }));
     await flush();
@@ -673,7 +673,7 @@ describe("the list", () => {
     expect(toasts()).toEqual([]);
 
     await click(bell());
-    expect(rows("recent")).toEqual([{ icon: "error", text: "Saving presets failed (500).", time: "Just now", detail: null, classes: ["is-error"] }]);
+    expect(rows("recent")).toEqual([{ icon: "error", text: "Saving presets failed.", time: "Just now", detail: null, classes: ["is-error"] }]);
   });
 
   it("keeps the last 50 messages, and Clear empties it", async () => {
@@ -736,7 +736,7 @@ describe("the list", () => {
     expect(list().hidden).toBe(true);
     expect(services.panel.isOpen.value).toBe(true);
 
-    void services.dialogs.notice("Saving presets failed (500).");
+    void services.dialogs.notice("Saving presets failed.");
     services.notifications.openList();
     await flush();
     fireEvent.keyDown(document.body, { key: "Escape" });

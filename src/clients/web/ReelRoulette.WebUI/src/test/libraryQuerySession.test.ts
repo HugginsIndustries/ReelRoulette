@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { HttpStatusError, ServerUnreachableError } from "../api/serverRequest";
 import { createDefaultFilterState, filterStateFromApiObject, type ApiFilterState } from "../filter/filterStateModel";
 import { createDefaultBrowseControls, type LibraryBrowseControls } from "../library/libraryBrowseModel";
 import type { LibraryProjectionItem } from "../library/libraryProjectionModel";
@@ -427,8 +428,8 @@ describe("libraryQuerySession", () => {
     expect(calls.filter((offset) => offset === 0).length).toBeGreaterThan(1);
   });
 
-  it("keeps a failed load's message and the status its error carries, and clears both once a load succeeds", async () => {
-    const failures: unknown[] = [Object.assign(new Error("HTTP 408"), { status: 408 }), new Error("Couldn't reach the server.")];
+  it("keeps a failed load's text and the status its error carries, relays its log line, and clears both once a load succeeds", async () => {
+    const failures: unknown[] = [new HttpStatusError(408), new HttpStatusError(503, "Library not loaded or empty."), new ServerUnreachableError()];
     const statusMessages: Array<[string | null, string | undefined]> = [];
     const session = createLibraryQuerySession(async () => {
       const failure = failures.shift();
@@ -440,13 +441,16 @@ describe("libraryQuerySession", () => {
     session.setListener((event) => statusMessages.push([event.statusMessage, event.failure]));
 
     await session.resetQuery(createDefaultFilterState(), controls());
-    expect(session.snapshot()).toMatchObject({ phase: "error", errorMessage: "HTTP 408", errorStatus: 408 });
+    expect(session.snapshot()).toMatchObject({ phase: "error", failureText: "Library load failed.", errorStatus: 408 });
     await session.resetQuery(createDefaultFilterState(), controls());
-    expect(session.snapshot()).toMatchObject({ phase: "error", errorMessage: "Couldn't reach the server.", errorStatus: null });
+    expect(session.snapshot()).toMatchObject({ phase: "error", failureText: "Library load failed: Library not loaded or empty.", errorStatus: 503 });
     await session.resetQuery(createDefaultFilterState(), controls());
-    expect(session.snapshot()).toMatchObject({ phase: "ready", errorMessage: null, errorStatus: null });
+    expect(session.snapshot()).toMatchObject({ phase: "error", failureText: "Library load failed: Couldn't reach the server.", errorStatus: null });
+    await session.resetQuery(createDefaultFilterState(), controls());
+    expect(session.snapshot()).toMatchObject({ phase: "ready", failureText: null, errorStatus: null });
     expect(statusMessages.filter(([message]) => message)).toEqual([
-      ["Library load failed: HTTP 408", "load"],
+      ["Library load failed (HTTP 408).", "load"],
+      ["Library load failed (HTTP 503).", "load"],
       ["Library load failed: Couldn't reach the server.", "load"]
     ]);
   });

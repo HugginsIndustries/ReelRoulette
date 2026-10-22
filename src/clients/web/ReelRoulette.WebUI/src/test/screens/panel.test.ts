@@ -615,8 +615,8 @@ describe("Filter tab's Apply and Discard changes", () => {
     await mount(server);
     await click(panelButton());
     await click(tab("Filter"));
-    await waitFor(() => expect(openNotices()).toEqual(["Filter load failed: HTTP 503"]));
-    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Filter load failed: HTTP 503", null, 0)));
+    await waitFor(() => expect(openNotices()).toEqual(["Filter load failed."]));
+    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Filter load failed (HTTP 503).", null, 0)));
     await closeNotices();
 
     sources = 200;

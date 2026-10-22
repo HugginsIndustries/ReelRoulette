@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RuntimeConfig } from "../types/runtimeConfig";
 import { requestPlayItem } from "../api/coreApi";
+import { HttpStatusError } from "../api/serverRequest";
 
 const CONFIG: RuntimeConfig = {
   apiBaseUrl: "http://localhost:51301",
@@ -62,7 +63,8 @@ describe("requestPlayItem", () => {
   it("escapes item id in request path", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: "Item not found", code: "play_item_not_found" }), {
-        status: 404
+        status: 404,
+        headers: { "Content-Type": "application/json" }
       })
     ) as unknown as typeof fetch;
 
@@ -72,10 +74,11 @@ describe("requestPlayItem", () => {
     expect(fetchSpy.mock.calls[0]?.[0]).toBe("http://localhost:51301/api/play/item%2Fwith%2Fslash");
   });
 
-  it("returns structured failure with error and code", async () => {
+  it("returns the refusal with its status, reason, and code", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: "Source is disabled for this item", code: "play_source_disabled" }), {
-        status: 409
+        status: 409,
+        headers: { "Content-Type": "application/json" }
       })
     ) as unknown as typeof fetch;
 
@@ -88,9 +91,8 @@ describe("requestPlayItem", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.statusCode).toBe(409);
-      expect(result.error).toBe("Source is disabled for this item");
-      expect(result.code).toBe("play_source_disabled");
+      expect(result.refusal).toBeInstanceOf(HttpStatusError);
+      expect(result.refusal).toMatchObject({ status: 409, reason: "Source is disabled for this item", code: "play_source_disabled" });
     }
   });
 
@@ -126,8 +128,7 @@ describe("requestPlayItem", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.statusCode).toBe(400);
-      expect(result.code).toBe("play_item_id_invalid");
+      expect(result.refusal).toMatchObject({ status: 400, code: "play_item_id_invalid" });
     }
     expect(fetchMock).not.toHaveBeenCalled();
   });

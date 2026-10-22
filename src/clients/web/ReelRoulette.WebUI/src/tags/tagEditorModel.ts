@@ -549,7 +549,7 @@ export function planAutoTagApply(assignments: readonly AutoTagSaveAssignment[]):
 export interface TagSaveRequest {
   path: string;
   body: unknown;
-  /** Names the step in a failed save's message, such as "Tag apply failed (500)". */
+  /** Names the step in a failed save's message, such as "Tag apply failed.". */
   label: string;
 }
 
@@ -572,7 +572,7 @@ export function tagSaveRequest(step: TagSaveStep): TagSaveRequest {
       return {
         path: "/api/tag-editor/upsert-tag",
         body: { name: step.name, categoryId: step.categoryId || "" },
-        label: "Tag create/update"
+        label: "Tag update"
       };
     case "rename-tag":
       return {

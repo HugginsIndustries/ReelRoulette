@@ -1,5 +1,5 @@
 import { batch, computed, signal, type ReadonlySignal } from "@preact/signals";
-import { errorText, HttpStatusError, UnauthorizedError } from "../api/serverRequest";
+import { HttpStatusError, requestFailure, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import { parseLibraryItem, type LibraryProjectionItem } from "../library/libraryProjectionModel";
 import type { Notifications } from "../notifications/notifications";
@@ -159,9 +159,9 @@ export function createStatsTab(options: StatsTabOptions): StatsTab {
       if (error instanceof UnauthorizedError) {
         return;
       }
-      const text = `Stats load failed: ${errorText(error)}`;
+      const { text, logText } = requestFailure("Stats load failed", error);
       failure.value = text;
-      store.relayStatus(text);
+      store.relayStatus(logText);
     }
   }
 

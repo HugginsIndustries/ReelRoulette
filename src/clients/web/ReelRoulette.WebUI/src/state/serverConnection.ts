@@ -7,7 +7,7 @@ import {
   settledKeptSources,
   type RefreshSnapshotInput
 } from "../events/refreshStatusProjection";
-import { errorText, sendRequest, UnauthorizedError } from "../api/serverRequest";
+import { errorText, noticeRequestFailure, refusalError, sendRequest, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import { findPresetById } from "../filter/filterStateModel";
 import { presetChanges, presetPopups, type PresetEventRecord } from "../filter/presetEvents";
@@ -547,11 +547,11 @@ export function createServerConnection(options: ServerConnectionOptions): Server
         body: JSON.stringify({ token: trimmed })
       });
     } catch (error) {
-      void dialogs.notice(`Pairing failed: ${errorText(error)}`);
+      noticeRequestFailure(dialogs, "Pairing failed", error);
       return;
     }
     if (!response.ok) {
-      void dialogs.notice("Pairing failed.");
+      noticeRequestFailure(dialogs, "Pairing failed", await refusalError(response));
       return;
     }
     // The stream's failures were the server refusing a device that wasn't paired, so they don't show Reconnecting… once

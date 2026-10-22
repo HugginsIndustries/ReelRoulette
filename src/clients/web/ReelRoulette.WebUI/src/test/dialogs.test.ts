@@ -38,11 +38,11 @@ describe("dialogs", () => {
 
   it("relays a notice's text to the server log as a status message is, or its log text in its place", async () => {
     const { dialogs, relayed } = setup();
-    const notice = dialogs.notice("Saving presets failed (500).");
+    const notice = dialogs.notice("Saving presets failed.");
     void dialogs.notice('Preset "Beach days" could not be saved.', "Preset could not be saved.");
-    expect(relayed).toEqual(["Saving presets failed (500).", "Preset could not be saved."]);
+    expect(relayed).toEqual(["Saving presets failed.", "Preset could not be saved."]);
     expect(dialogs.open.value).toEqual([
-      { id: 1, kind: "notice", message: "Saving presets failed (500)." },
+      { id: 1, kind: "notice", message: "Saving presets failed." },
       { id: 2, kind: "notice", message: 'Preset "Beach days" could not be saved.' }
     ]);
 

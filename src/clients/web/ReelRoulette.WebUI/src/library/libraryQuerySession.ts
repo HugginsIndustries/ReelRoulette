@@ -1,3 +1,4 @@
+import { requestFailure } from "../api/serverRequest";
 import type { ApiFilterState, FilterState, FlagFilterMode } from "../filter/filterStateModel";
 import { cloneFilterState, createDefaultFilterState, serializeFilterStateForApi } from "../filter/filterStateModel";
 import {
@@ -43,7 +44,8 @@ export interface LibraryQuerySessionSnapshot {
   searchBaselineCount: number;
   hasResult: boolean;
   phase: LibraryWindowPhase;
-  errorMessage: string | null;
+  /** What a failed first load says in place of the tiles, such as "Library load failed.", or null. */
+  failureText: string | null;
   /** The failed load's HTTP status, when the error carried one, such as 408 from a server stalled on its storage. */
   errorStatus: number | null;
   /** The count line, while the window is ready. */
@@ -56,6 +58,10 @@ export interface LibraryQuerySessionSnapshot {
 
 export interface LibraryQuerySessionEvent {
   scroll: "top" | "keep";
+  /**
+   * A failed load's message: for the first page, its `last.log` line, with its status, since the body shows
+   * `failureText`; for a later one, the popup's text.
+   */
   statusMessage: string | null;
   /**
    * Which load `statusMessage` reports failed: the first page, which the body shows in place of the tiles, or a later
@@ -299,7 +305,7 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
   let totalCount = 0;
   let searchBaselineCount = 0;
   let hasResult = false;
-  let errorMessage: string | null = null;
+  let failureText: string | null = null;
   let errorStatus: number | null = null;
   let overlayVisible = false;
   let scrollTop = 0;
@@ -320,7 +326,7 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       searchBaselineCount,
       hasResult,
       phase,
-      errorMessage,
+      failureText,
       errorStatus,
       summary: phase === "ready" ? formatBrowseResultSummary(totalCount, searchBaselineCount) : null,
       searchQuery: controls.searchQuery,
@@ -335,7 +341,7 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       if (inFlight) {
         return "loading";
       }
-      if (errorMessage) {
+      if (failureText) {
         return "error";
       }
       return "idle";
@@ -424,7 +430,7 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       totalCount = pageTotal;
       searchBaselineCount = pageBaseline;
       hasResult = true;
-      errorMessage = null;
+      failureText = null;
       errorStatus = null;
       appendFailed = false;
       exhausted = items.length >= pageTotal || lastReturned < lastLimit;
@@ -440,18 +446,18 @@ export function createLibraryQuerySession(query: LibraryQueryFn): LibraryQuerySe
       if (gen !== generation || controller.signal.aborted) {
         return;
       }
-      const message = error instanceof Error && error.message ? error.message : "Could not load library.";
       if (kind === "reset" || !hasResult) {
+        const failure = requestFailure("Library load failed", error);
         items = [];
         totalCount = 0;
         searchBaselineCount = 0;
         hasResult = false;
-        errorMessage = message;
+        failureText = failure.text;
         errorStatus = errorHttpStatus(error);
         exhausted = false;
         if (gen === generation) {
           inFlight = null;
-          notify({ scroll: "keep", statusMessage: `Library load failed: ${message}`, failure: "load", failureStatus: errorStatus });
+          notify({ scroll: "keep", statusMessage: failure.logText, failure: "load", failureStatus: errorStatus });
         }
         return;
       }

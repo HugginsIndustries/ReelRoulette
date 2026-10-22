@@ -457,12 +457,12 @@ describe("Stats tab", () => {
     const { server } = await mountStats({ setup: (fake) => fake.on("GET", "/api/library/stats", () => status(500)) });
     fireEvent.click(document.getElementById("now-playing-name")!);
 
-    await waitFor(() => expect(sections()[1]!.querySelector('[role="alert"]')?.textContent).toBe("Stats load failed: HTTP 500"));
+    await waitFor(() => expect(sections()[1]!.querySelector('[role="alert"]')?.textContent).toBe("Stats load failed."));
     expect(statsBody().querySelectorAll('[role="alert"]')).toHaveLength(1);
     expect(sections()[0]!.querySelector(".stats-file-name")?.textContent).toBe("holiday clip.mp4");
     expect(sections()[0]!.querySelector(".stats-path code")?.textContent).toBe("C:\\media\\holiday clip.mp4");
     expect(statsBody().querySelector("dl")).toBeNull();
-    expect(server.logLines().some((line) => line.startsWith("status=Stats load failed: HTTP 500"))).toBe(true);
+    expect(server.logLines().some((line) => line.startsWith("status=Stats load failed (HTTP 500)."))).toBe(true);
   });
 
   it("keeps what it showed when a later load fails", async () => {
@@ -710,7 +710,7 @@ describe("Stats tab's Show in File Manager and Copy Path", () => {
     expect(relayedFile(server)).toBe(false);
   });
 
-  it("says why the server refused to open its file manager, or its status without a reason", async () => {
+  it("says why the server refused to open its file manager, or that it failed without a reason, logging only the status", async () => {
     const { server } = await openOnFile({
       fileManager: true,
       setup: (fake) =>
@@ -721,14 +721,14 @@ describe("Stats tab's Show in File Manager and Copy Path", () => {
 
     fireEvent.click(pathButton("Show in File Manager")!);
     await waitFor(() => expect(openNotices()).toEqual(["Show in File Manager failed: The server has no desktop to open a file manager in."]));
-    expect(server.logLines().some((line) => line.startsWith("status=Show in File Manager failed (409)."))).toBe(true);
+    expect(server.logLines().some((line) => line.startsWith("status=Show in File Manager failed (HTTP 409)."))).toBe(true);
     fireEvent.click(document.querySelector("dialog.app-dialog .dialog-actions button")!);
     await settle();
 
     server.on("POST", SHOW_IN_FILE_MANAGER_ROUTE, () => new Response("Internal error", { status: 500 }));
     fireEvent.click(pathButton("Show in File Manager")!);
-    await waitFor(() => expect(openNotices()).toEqual(["Show in File Manager failed (500)."]));
-    expect(server.logLines().some((line) => line.startsWith("status=Show in File Manager failed (500)."))).toBe(true);
+    await waitFor(() => expect(openNotices()).toEqual(["Show in File Manager failed."]));
+    expect(server.logLines().some((line) => line.startsWith("status=Show in File Manager failed (HTTP 500)."))).toBe(true);
     expect(popupsShown()).toEqual([]);
     expect(relayedFile(server)).toBe(false);
   });
@@ -1121,7 +1121,7 @@ describe("Stats tab's rating", () => {
     expect(sliderValue()).toEqual(["4", "4 stars"]);
     await waitFor(() => expect(ratingRequests(server)).toHaveLength(1));
     answer(status(500));
-    await waitFor(() => expect(openNotices()).toEqual(["Rating update failed (500)."]));
+    await waitFor(() => expect(openNotices()).toEqual(["Rating update failed."]));
     expect(sliderValue()).toEqual(["2", "2 stars"]);
     fireEvent.click(document.querySelector("dialog.app-dialog .dialog-actions button")!);
     await settle();
@@ -1133,7 +1133,7 @@ describe("Stats tab's rating", () => {
     await waitFor(() => expect(openNotices()).toEqual(["Rating update failed: Couldn't reach the server."]));
     expect(sliderValue()).toEqual(["2", "2 stars"]);
     expect(popupsShown()).toEqual([]);
-    expect(server.logLines().some((line) => line.startsWith("status=Rating update failed (500)."))).toBe(true);
+    expect(server.logLines().some((line) => line.startsWith("status=Rating update failed (HTTP 500)."))).toBe(true);
   });
 
   it("shows another device's rating at once, and loads the tab again, as the Rated card shows", async () => {

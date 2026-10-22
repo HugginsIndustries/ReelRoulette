@@ -1,10 +1,14 @@
 /**
  * Sending requests to the server and reading their JSON, with one wording for each way they fail, whatever the
- * browser or a proxy in between says.
+ * browser or a proxy in between says. An error's message is what `last.log` gets; `requestFailure` words it for the
+ * user, without a status code or a content type.
  */
 
 /** The one message for a request that couldn't reach the server, in every browser. */
 export const SERVER_UNREACHABLE_MESSAGE = "Couldn't reach the server.";
+
+/** What the user sees for a success whose body isn't JSON, without its content type. */
+const UNEXPECTED_RESPONSE_MESSAGE = "The server sent an unexpected response.";
 
 /** A request that couldn't reach the server, such as one to a server that is stopped. */
 export class ServerUnreachableError extends Error {
@@ -14,9 +18,18 @@ export class ServerUnreachableError extends Error {
   }
 }
 
-/** The server answered with a status that isn't a success. Its message is "HTTP {status}". */
+/**
+ * The server answered with a status that isn't a success, with its reason and its code, such as
+ * "play_media_unreadable", when it gave them. Its message is "HTTP {status}", for `last.log`, since the reason can name
+ * a file or a preset.
+ */
 export class HttpStatusError extends Error {
-  constructor(readonly status: number, message = `HTTP ${status}`) {
+  constructor(
+    readonly status: number,
+    readonly reason: string | null = null,
+    readonly code: string | null = null,
+    message = `HTTP ${status}`
+  ) {
     super(message);
     this.name = "HttpStatusError";
   }
@@ -25,12 +38,12 @@ export class HttpStatusError extends Error {
 /** The server answered 401, so the page asks for pairing, which is the only thing to act on. */
 export class UnauthorizedError extends HttpStatusError {
   constructor() {
-    super(401, "Unauthorized");
+    super(401, null, null, "Unauthorized");
     this.name = "UnauthorizedError";
   }
 }
 
-/** A success whose body isn't JSON, such as a proxy's HTML page. */
+/** A success whose body isn't JSON, such as a proxy's HTML page. Its message names the content type, for `last.log`. */
 export class UnexpectedResponseError extends Error {
   constructor(contentType: string) {
     super(`The server sent an unexpected response (${contentType}).`);
@@ -132,14 +145,20 @@ export async function readJson<T = any>(response: Response): Promise<T> {
   }
 }
 
-/** The server's reason for refusing a request, from its `{ "error": ... }` body, or null when it gave none. */
-export async function refusalReason(response: Response): Promise<string | null> {
+/**
+ * The error for a response whose status isn't a success, with the server's reason and code when its
+ * `{ "error": ..., "code": ... }` body gives them.
+ */
+export async function refusalError(response: Response): Promise<HttpStatusError> {
+  let body: { error?: unknown; code?: unknown } | null = null;
   try {
-    const body = await readJson<{ error?: unknown }>(response);
-    return typeof body?.error === "string" && body.error.trim() ? body.error : null;
+    body = await readJson(response);
   } catch {
-    return null;
+    // A body that isn't JSON gives neither.
   }
+  const reason = typeof body?.error === "string" && body.error.trim() ? body.error : null;
+  const code = typeof body?.code === "string" && body.code ? body.code : null;
+  return new HttpStatusError(response.status, reason, code);
 }
 
 /** An error's message, or the value itself as text. */
@@ -147,32 +166,56 @@ export function errorText(error: unknown): string {
   return (error instanceof Error && error.message) || String(error);
 }
 
+/** Where a failure shows: the in-app notice, which relays `logText` to `last.log` in place of the message. */
+type NoticeDialogs = { notice(message: string, logText?: string): Promise<void> };
+
+/** A failed request, worded for the user and for `last.log`. */
+export interface RequestFailure {
+  text: string;
+  logText: string;
+}
+
 /**
- * Posts a change with `api` and says whether the server took it. A request that fails shows "{failed}: {why}" in
- * `dialogs`' notice, and one the server refuses "{failed} ({status})."; a 401 shows only the pairing prompt, which the
- * request has asked for.
+ * Words a failed request, with `failed` naming what failed, such as "Saving presets failed". A refusal reads
+ * "{failed}: {the server's reason}", or "{failed}." without one, and is logged as "{failed} (HTTP {status}).", without
+ * the reason, which can name a file or a preset. Any other failure reads "{failed}: {why}", and only the log names a
+ * response's content type.
  */
-export async function postWithNotice(
-  api: { post(path: string, payload: unknown): Promise<Response> },
-  dialogs: { notice(message: string): Promise<void> },
-  path: string,
-  payload: unknown,
-  failed: string
-): Promise<boolean> {
-  let response: Response;
+export function requestFailure(failed: string, error: unknown): RequestFailure {
+  if (error instanceof HttpStatusError) {
+    return { text: error.reason ? `${failed}: ${error.reason}` : `${failed}.`, logText: `${failed} (HTTP ${error.status}).` };
+  }
+  const logText = `${failed}: ${errorText(error)}`;
+  return { text: error instanceof UnexpectedResponseError ? `${failed}: ${UNEXPECTED_RESPONSE_MESSAGE}` : logText, logText };
+}
+
+/**
+ * Shows a failed request in `dialogs`' notice, worded as `requestFailure` words it, except a 401, which shows only the
+ * pairing prompt the request has asked for.
+ */
+export function noticeRequestFailure(dialogs: NoticeDialogs, failed: string, error: unknown): void {
+  if (error instanceof UnauthorizedError) {
+    return;
+  }
+  const { text, logText } = requestFailure(failed, error);
+  void dialogs.notice(text, logText);
+}
+
+/**
+ * Sends a change with `send` and says whether the server took it. A failure shows in `dialogs`' notice, as
+ * `noticeRequestFailure` shows it.
+ */
+export async function requestWithNotice(dialogs: NoticeDialogs, failed: string, send: () => Promise<Response>): Promise<boolean> {
   try {
-    response = await api.post(path, payload);
-  } catch (error) {
-    if (!(error instanceof UnauthorizedError)) {
-      void dialogs.notice(`${failed}: ${errorText(error)}`);
+    const response = await send();
+    if (!response.ok) {
+      throw await refusalError(response);
     }
+    return true;
+  } catch (error) {
+    noticeRequestFailure(dialogs, failed, error);
     return false;
   }
-  if (!response.ok) {
-    void dialogs.notice(`${failed} (${response.status}).`);
-    return false;
-  }
-  return true;
 }
 
 /**

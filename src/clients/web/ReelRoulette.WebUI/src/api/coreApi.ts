@@ -1,5 +1,5 @@
 import type { RuntimeConfig } from "../types/runtimeConfig";
-import { readJson, sendRequest } from "./serverRequest";
+import { HttpStatusError, readJson, refusalError, sendRequest } from "./serverRequest";
 import type { components } from "../types/openapi.generated";
 
 type RandomResponse = components["schemas"]["RandomResponse"];
@@ -10,11 +10,10 @@ export type PlayItemSuccess = {
   response: RandomResponse;
 };
 
+/** A play the server refused, with its status and, when it gave them, its reason and code. */
 export type PlayItemFailure = {
   ok: false;
-  statusCode: number;
-  error?: string;
-  code?: string;
+  refusal: HttpStatusError;
 };
 
 export type PlayItemResult = PlayItemSuccess | PlayItemFailure;
@@ -96,18 +95,6 @@ export function getDeviceName(): string {
   return `${prefix} (${platform}${ua ? `; ${ua.slice(0, 40)}` : ""})`;
 }
 
-function tryReadJsonErrorBody(body: string): { error?: string; code?: string } {
-  try {
-    const parsed = JSON.parse(body) as { error?: unknown; code?: unknown };
-    return {
-      error: typeof parsed.error === "string" ? parsed.error : undefined,
-      code: typeof parsed.code === "string" ? parsed.code : undefined
-    };
-  } catch {
-    return {};
-  }
-}
-
 export interface PlayItemOptions {
   /**
    * False gets a fresh media URL for an item already playing, which counts no play and publishes no
@@ -119,8 +106,9 @@ export interface PlayItemOptions {
 }
 
 /**
- * Plays an item through `POST /api/play/{itemId}`. A request that couldn't reach the server throws a
- * `ServerUnreachableError`, and a success whose body isn't JSON an `UnexpectedResponseError`.
+ * Plays an item through `POST /api/play/{itemId}`. A refusal comes back as a `PlayItemFailure`, read as `refusalError`
+ * reads it. A request that couldn't reach the server throws a `ServerUnreachableError`, and a success whose body isn't
+ * JSON an `UnexpectedResponseError`.
  */
 export async function requestPlayItem(
   config: Pick<RuntimeConfig, "apiBaseUrl">,
@@ -131,12 +119,7 @@ export async function requestPlayItem(
 ): Promise<PlayItemResult> {
   const trimmedItemId = itemId.trim();
   if (!trimmedItemId) {
-    return {
-      ok: false,
-      statusCode: 400,
-      error: "itemId is required",
-      code: "play_item_id_invalid"
-    };
+    return { ok: false, refusal: new HttpStatusError(400, "itemId is required", "play_item_id_invalid") };
   }
 
   const encodedItemId = encodeURIComponent(trimmedItemId);
@@ -162,12 +145,5 @@ export async function requestPlayItem(
     };
   }
 
-  const body = await response.text();
-  const { error, code } = tryReadJsonErrorBody(body);
-  return {
-    ok: false,
-    statusCode: response.status,
-    error,
-    code
-  };
+  return { ok: false, refusal: await refusalError(response) };
 }

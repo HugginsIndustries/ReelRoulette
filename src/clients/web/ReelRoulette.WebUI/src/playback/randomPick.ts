@@ -7,7 +7,7 @@ import {
   type ApiFilterState,
   type FilterState
 } from "../filter/filterStateModel";
-import { errorText, PLAYBACK_REQUEST_TIMEOUT_MS, readJson, UnauthorizedError, withTimeout } from "../api/serverRequest";
+import { PLAYBACK_REQUEST_TIMEOUT_MS, readJson, refusalError, UnauthorizedError, withTimeout } from "../api/serverRequest";
 import type { components } from "../types/openapi.generated";
 
 type RandomResponse = components["schemas"]["RandomResponse"];
@@ -60,8 +60,8 @@ export type RandomPickOutcome =
   /** The server found nothing eligible for the filter. */
   | { kind: "none" }
   | { kind: "unauthorized" }
-  | { kind: "failed"; statusCode: number }
-  | { kind: "error"; message: string }
+  /** The server refused the pick, with an `HttpStatusError`, or the request failed. */
+  | { kind: "failed"; error: unknown }
   /** The server did not answer in time, and the request was cancelled. */
   | { kind: "timedOut"; timeoutMs: number };
 
@@ -98,7 +98,7 @@ export function createRandomPicker(send: RandomPickSend, timeoutMs: number = PLA
             return { kind: "timedOut", timeoutMs };
           case "failed":
             // `request` answers every failure itself, so this only keeps the outcome whole.
-            return { kind: "error", message: errorText(outcome.error) };
+            return { kind: "failed", error: outcome.error };
         }
       } finally {
         inFlight = false;
@@ -114,7 +114,7 @@ async function request(send: RandomPickSend, body: string, signal: AbortSignal):
       return { kind: "unauthorized" };
     }
     if (!response.ok) {
-      return { kind: "failed", statusCode: response.status };
+      return { kind: "failed", error: await refusalError(response) };
     }
 
     const data = await readJson<Partial<RandomResponse> | null>(response);
@@ -127,6 +127,6 @@ async function request(send: RandomPickSend, body: string, signal: AbortSignal):
     if (error instanceof UnauthorizedError) {
       return { kind: "unauthorized" };
     }
-    return { kind: "error", message: errorText(error) };
+    return { kind: "failed", error };
   }
 }

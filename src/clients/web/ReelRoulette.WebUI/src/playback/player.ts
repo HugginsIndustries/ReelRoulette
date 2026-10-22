@@ -1,15 +1,16 @@
 import { signal, type ReadonlySignal } from "@preact/signals";
 import { requestPlayItem, type PlayItemFailure } from "../api/coreApi";
 import {
+  noticeRequestFailure,
   PLAYBACK_REQUEST_TIMEOUT_MS,
-  postWithNotice,
+  requestWithNotice,
   ServerUnreachableError,
   UnauthorizedError,
   withTimeout
 } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import { applyItemStateToCurrent } from "../library/currentItemState";
-import { mapPlayItemErrorToStatus } from "../library/libraryPlayModel";
+import { playRefusalFailure } from "../library/libraryPlayModel";
 import type { ItemStateChangedPayload } from "../library/libraryProjectionSync";
 import { errorType, playbackTraceLine } from "../logging/relayLogLines";
 import type { Notifications } from "../notifications/notifications";
@@ -867,15 +868,15 @@ export function createPlayer(options: PlayerOptions): Player {
         stopSilently();
         return;
       case "refused": {
-        const { statusCode, code } = answer.result;
-        trace("warn", event, { statusCode, code: code || "none" });
-        if (statusCode === 404) {
+        const { refusal } = answer.result;
+        trace("warn", event, { statusCode: refusal.status, code: refusal.code || "none" });
+        if (refusal.status === 404) {
           failed(attempt, "missing");
-        } else if (statusCode >= 500) {
+        } else if (refusal.status >= 500) {
           failed(attempt, "unreadable");
         } else {
-          // The server's error text can name a file, so the log keeps one line for every refusal.
-          stopOn(mapPlayItemErrorToStatus(answer.result, attempt.mediaType), "Playback failed");
+          const { text, logText } = playRefusalFailure(refusal, attempt.mediaType);
+          stopOn(text, logText);
         }
         return;
       }
@@ -1184,10 +1185,7 @@ export function createPlayer(options: PlayerOptions): Player {
           // The request asked for pairing, whose prompt is the only signal, and sent its line.
           return;
         case "failed":
-          void dialogs.notice(`Random selection failed (${outcome.statusCode}).`);
-          return;
-        case "error":
-          void dialogs.notice(`Random selection failed: ${outcome.message}`);
+          noticeRequestFailure(dialogs, "Random selection failed", outcome.error);
           return;
         case "none":
           void dialogs.notice("No eligible media for current filters.");
@@ -1231,13 +1229,10 @@ export function createPlayer(options: PlayerOptions): Player {
     const nextValue = !item[flag];
     // The item the request acts on, named as the now-playing line names it, though another may play by the answer.
     const fileName = basenameFromPath(item.displayName || item.id || "");
-    const taken = await postWithNotice(
-      api,
-      dialogs,
-      isFavorite ? "/api/favorite" : "/api/blacklist",
+    const path = isFavorite ? "/api/favorite" : "/api/blacklist";
+    const taken = await requestWithNotice(dialogs, `${isFavorite ? "Favorite" : "Blacklist"} update failed`, () =>
       // The client id comes back on the change's event, so this device can tell its own change from another's.
-      { itemId: item.itemId, [flag]: nextValue, clientId: store.identity.clientId },
-      `${isFavorite ? "Favorite" : "Blacklist"} update failed`
+      api.post(path, { itemId: item.itemId, [flag]: nextValue, clientId: store.identity.clientId })
     );
     if (!taken) return;
     // Applied to the item playing when the server answers.

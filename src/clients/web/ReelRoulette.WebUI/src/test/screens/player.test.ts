@@ -496,9 +496,10 @@ describe("random pick", () => {
   it("shows no eligible media, a refused pick, and a pick that cannot reach the server in the notice alone", async () => {
     const server = serverPicking({ mediaUrl: null });
     await mount(server);
-    const failures: Array<[() => Response, string]> = [
+    const failures: Array<[() => Response, string, string?]> = [
       [() => json({ mediaUrl: null }), "No eligible media for current filters."],
-      [() => status(500), "Random selection failed (500)."],
+      [() => status(500), "Random selection failed.", "Random selection failed (HTTP 500)."],
+      [() => json({ error: "Library not loaded or empty." }, 503), "Random selection failed: Library not loaded or empty.", "Random selection failed (HTTP 503)."],
       [
         () => {
           throw new TypeError("Failed to fetch");
@@ -507,15 +508,16 @@ describe("random pick", () => {
       ],
       [
         () => new Response("<html>Bad gateway</html>", { status: 200, headers: { "Content-Type": "text/html" } }),
+        "Random selection failed: The server sent an unexpected response.",
         "Random selection failed: The server sent an unexpected response (text/html)."
       ]
     ];
-    for (const [answer, notice] of failures) {
+    for (const [answer, notice, logText = notice] of failures) {
       server.on("POST", "/api/random", answer);
       await click(emptyState());
       expect(openNotices()).toEqual([notice]);
       expect(indicatorState()).toBeNull();
-      await waitFor(() => expect(server.logLines()).toContain(statusLogLine(notice, null, 0)));
+      await waitFor(() => expect(server.logLines()).toContain(statusLogLine(logText, null, 0)));
       await closeNotices();
     }
     expect(emptyState().style.display).not.toBe("none");
@@ -763,22 +765,22 @@ describe("favorite and blacklist", () => {
     expect(server.logLines().some((line) => line.includes("holiday"))).toBe(false);
   });
 
-  it("show an update the server refuses in the notice and leave the buttons as they were", async () => {
+  it("show an update the server refuses in the notice, with its reason when it gives one, and leave the buttons as they were", async () => {
     const server = serverPicking(VIDEO_ITEM);
     server.on("POST", "/api/favorite", () => status(500));
-    server.on("POST", "/api/blacklist", () => status(403));
+    server.on("POST", "/api/blacklist", () => json({ error: "The file isn't in the library." }, 404));
     await mountAndPlay(server);
 
     await click(button("Favorite"));
-    expect(openNotices()).toEqual(["Favorite update failed (500)."]);
+    expect(openNotices()).toEqual(["Favorite update failed."]);
     expect(isLit("Favorite")).toBe(false);
-    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Favorite update failed (500).", VIDEO_ITEM, 1)));
+    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Favorite update failed (HTTP 500).", VIDEO_ITEM, 1)));
     await closeNotices();
 
     await click(button("Blacklist"));
-    expect(openNotices()).toEqual(["Blacklist update failed (403)."]);
+    expect(openNotices()).toEqual(["Blacklist update failed: The file isn't in the library."]);
     expect(isLit("Blacklist")).toBe(false);
-    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Blacklist update failed (403).", VIDEO_ITEM, 1)));
+    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Blacklist update failed (HTTP 404).", VIDEO_ITEM, 1)));
     expect([...relayedLines(server, "Added to favorites"), ...relayedLines(server, "Blacklisted")]).toEqual([]);
   });
 

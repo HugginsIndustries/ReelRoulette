@@ -595,7 +595,7 @@ describe("pairing", () => {
     fireEvent.click(pairButton);
     const notice = await screen.findByText("Pairing failed.");
     expect(notice.closest("dialog.app-dialog")).not.toBeNull();
-    await waitFor(() => expect(server.logLines()).toContain("status=Pairing failed. hasCurrent=false attempt=0"));
+    await waitFor(() => expect(server.logLines()).toContain("status=Pairing failed (HTTP 403). hasCurrent=false attempt=0"));
     expect((pairButton.closest(".pair-section") as HTMLElement).style.display).toBe("flex");
   });
 

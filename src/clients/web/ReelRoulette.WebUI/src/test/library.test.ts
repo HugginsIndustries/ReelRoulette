@@ -283,11 +283,20 @@ describe("library window", () => {
     await settle();
     expect(t.library.body.peek()).toEqual({
       kind: "message",
-      message: { text: "Library load failed: HTTP 500", error: true, live: false }
+      message: { text: "Library load failed.", error: true, live: false }
     });
-    // The body shows it, so it only relays.
-    expect(t.statuses).toEqual(["Library load failed: HTTP 500"]);
+    // The body shows it, so it only relays, with the status in place of the text.
+    expect(t.statuses).toEqual(["Library load failed (HTTP 500)."]);
     expect(t.notified).toEqual([]);
+
+    t.replies.set("/api/library/query", () => json({ error: "Library not loaded or empty." }, 503));
+    await t.library.commitQuery();
+    expect(t.library.body.peek()).toEqual({
+      kind: "message",
+      message: { text: "Library load failed: Library not loaded or empty.", error: true, live: false }
+    });
+    expect(t.statuses).toEqual(["Library load failed (HTTP 500).", "Library load failed (HTTP 503)."]);
+    t.replies.delete("/api/library/query");
 
     t.fakeLibrary.items = [];
     await t.library.commitQuery();
@@ -309,7 +318,7 @@ describe("library window", () => {
       kind: "message",
       message: { text: LIBRARY_LOAD_TIMEOUT_MESSAGE, error: true, live: false }
     });
-    expect(t.statuses).toEqual([`Library load failed: HTTP ${failure}`]);
+    expect(t.statuses).toEqual([`Library load failed (HTTP ${failure}).`]);
     expect(t.notified).toEqual([]);
   });
 
@@ -361,7 +370,7 @@ describe("library window", () => {
     ]);
   });
 
-  it("says a load answered with a page that isn't JSON failed, naming its content type", async () => {
+  it("says a load answered with a page that isn't JSON failed, naming its content type only in the log", async () => {
     const t = setup();
     t.replies.set("/api/library/query", () => new Response("<html></html>", { headers: { "Content-Type": "text/html" } }));
     t.emit("serverReady");
@@ -369,8 +378,9 @@ describe("library window", () => {
     await settle();
 
     expect(t.library.body.peek()).toMatchObject({
-      message: { text: "Library load failed: The server sent an unexpected response (text/html)." }
+      message: { text: "Library load failed: The server sent an unexpected response." }
     });
+    expect(t.statuses).toEqual(["Library load failed: The server sent an unexpected response (text/html)."]);
   });
 
   it("keeps the grid while hidden when a query fails, and opening loads again with a message in its place", async () => {
@@ -385,7 +395,7 @@ describe("library window", () => {
     await t.library.commitQuery();
     expect(t.library.body.peek()).toEqual({ kind: "grid" });
     expect(t.library.summary.peek()).toEqual({ shown: "3 / 3", spoken: "3 of 3 items" });
-    expect(t.statuses).toEqual(["Library load failed: HTTP 503"]);
+    expect(t.statuses).toEqual(["Library load failed (HTTP 503)."]);
 
     t.showTab();
     expect(t.library.body.peek()).toMatchObject({ kind: "message", message: { text: "Loading library…" } });
@@ -670,30 +680,34 @@ describe("play", () => {
     const t = setup();
     t.showTab();
 
-    const plays: Array<[() => Response, string]> = [
-      [() => json({ error: "gone", code: "play_item_not_found" }, 404), "Media not found. The file may have moved or been deleted."],
-      [() => json({ error: "disabled" }, 409), "This item is unavailable."],
-      [() => json({}, 415), "This file type is not supported."],
+    const plays: Array<[number, () => Response, string]> = [
+      [404, () => json({ error: "gone", code: "play_item_not_found" }, 404), "Media not found. The file may have moved or been deleted."],
+      [409, () => json({ error: "disabled" }, 409), "This item is unavailable."],
+      [415, () => json({}, 415), "This file type is not supported."],
       [
+        503,
         () => json({ error: "Media can't be read", code: "play_media_unreadable" }, 503),
         "This video couldn't load. The server may be waiting on a slow or disconnected drive or share."
       ],
-      [() => json({ error: "The library is missing.", code: "library_missing" }, 503), "The library is missing."],
-      [() => json({ error: "Server exploded" }, 500), "Server exploded"],
-      [() => json({}, 500), "Playback failed."]
+      [503, () => json({ error: "The library is missing.", code: "library_missing" }, 503), "Playback failed: The library is missing."],
+      [500, () => json({ error: "Server exploded" }, 500), "Playback failed: Server exploded"],
+      [500, () => json({}, 500), "Playback failed."]
     ];
-    for (const [answer, notice] of plays) {
+    for (const [status, answer, notice] of plays) {
       t.replies.set("/api/play/item-1", answer);
       await t.library.play("item-1");
       expect(t.notices.at(-1)).toBe(notice);
-      // The server's text can name a file, so every refusal relays one line.
-      expect(t.noticeLogs.at(-1)).toBe("Playback failed");
+      // The server's text can name a file, so the log names only the status.
+      expect(t.noticeLogs.at(-1)).toBe(`Playback failed (HTTP ${status}).`);
     }
     expect(t.relayed).toContain("playback=library-play-failed attempt=0 hasCurrent=false statusCode=404 code=play_item_not_found");
 
     t.replies.set("/api/play/item-1", () => new Response("<html></html>", { headers: { "Content-Type": "text/html" } }));
     await t.library.play("item-1");
-    expect(t.notices.at(-1)).toBe("Playback failed: The server sent an unexpected response (text/html).");
+    expect([t.notices.at(-1), t.noticeLogs.at(-1)]).toEqual([
+      "Playback failed: The server sent an unexpected response.",
+      "Playback failed: The server sent an unexpected response (text/html)."
+    ]);
 
     t.replies.set("/api/play/item-1", () => json({ itemId: "item-1" }));
     await t.library.play("item-1");
@@ -719,7 +733,7 @@ describe("play", () => {
     await t.library.play("item-1");
 
     expect(t.notices).toEqual(["This photo couldn't load. The server may be waiting on a slow or disconnected drive or share."]);
-    expect(t.noticeLogs).toEqual(["Playback failed"]);
+    expect(t.noticeLogs).toEqual(["Playback failed (HTTP 503)."]);
   });
 
   it.each(["Failed to fetch", "Load failed", "NetworkError when attempting to fetch resource."])(

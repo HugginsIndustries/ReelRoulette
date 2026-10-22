@@ -121,6 +121,8 @@ interface FakeTags {
   scanStatus: number;
   /** Save paths that answer with a status, or throw as an unreachable server does when the status is 0. */
   failures: Map<string, number>;
+  /** The reason a save path in `failures` gives, or null for none. */
+  failureReason: string | null;
   /** While set, scan and save replies wait until `release`. */
   holding: boolean;
   release(): Promise<void>;
@@ -138,6 +140,7 @@ function serveTags(server: FakeServer): FakeTags {
     scan: SCAN,
     scanStatus: 200,
     failures: new Map(),
+    failureReason: null,
     holding: false,
     async release() {
       tags.holding = false;
@@ -175,7 +178,7 @@ function serveTags(server: FakeServer): FakeTags {
         throw new TypeError("Failed to fetch");
       }
       if (failure) {
-        return status(failure);
+        return tags.failureReason ? json({ error: tags.failureReason }, failure) : status(failure);
       }
       // The catalog takes item tag changes, so the tags the tab loads again once a save lands show them.
       if (path === "/api/tag-editor/apply-item-tags") {
@@ -548,9 +551,9 @@ async function expectSaved(): Promise<void> {
  * Expects the in-app notice to show `message`, alone, with the `last.log` line a message gets while the video
  * `mountTags` plays is current, then closes it.
  */
-async function expectNotice(server: FakeServer, message: string): Promise<void> {
+async function expectNotice(server: FakeServer, message: string, logText = message): Promise<void> {
   await waitFor(() => expect(openNotices()).toEqual([message]));
-  await waitFor(() => expect(server.logLines()).toContain(statusLogLine(message, { id: VIDEO_ITEM.id }, 1)));
+  await waitFor(() => expect(server.logLines()).toContain(statusLogLine(logText, { id: VIDEO_ITEM.id }, 1)));
   await closeNotices();
   expect(openNotices()).toEqual([]);
 }
@@ -794,7 +797,7 @@ describe("opening and closing", () => {
   it("stays open and says why when the tags cannot load", async () => {
     const { server, tags } = await mountTags({ setup: (_server, fake) => (fake.modelStatus = 500) });
     await openEditor();
-    await expectNotice(server, "Tag editor unavailable: HTTP 500");
+    await expectNotice(server, "Tag editor unavailable.", "Tag editor unavailable (HTTP 500).");
     expect(body().textContent).toBe("");
 
     tags.modelStatus = 200;
@@ -804,14 +807,18 @@ describe("opening and closing", () => {
     await click(chipButton("Calm", "Add tag"));
     tags.modelStatus = 503;
     await press(discardButton());
-    await expectNotice(server, "Tag load failed: HTTP 503");
+    await expectNotice(server, "Tag load failed.", "Tag load failed (HTTP 503).");
     expect(isOpen()).toBe(true);
   });
 
-  it("names the content type of tags that aren't JSON, such as a proxy's page", async () => {
+  it("says tags that aren't JSON, such as a proxy's page, are an unexpected response, naming the content type only in the log", async () => {
     const { server } = await mountTags({ setup: (fake) => fake.on("POST", "/api/tag-editor/model", () => htmlPage()) });
     await openEditor();
-    await expectNotice(server, "Tag editor unavailable: The server sent an unexpected response (text/html).");
+    await expectNotice(
+      server,
+      "Tag editor unavailable: The server sent an unexpected response.",
+      "Tag editor unavailable: The server sent an unexpected response (text/html)."
+    );
     expect(body().textContent).toBe("");
   });
 
@@ -1911,7 +1918,7 @@ describe("saving", () => {
     await click(chipButton("Alice", "Add tag"));
 
     await save();
-    await expectNotice(server, "Tag rename failed (500)");
+    await expectNotice(server, "Tag rename failed.", "Tag rename failed (HTTP 500).");
     expect(isOpen()).toBe(true);
     expect(tags.saves().map((call) => call.path)).toEqual(["/api/tag-editor/rename-tag"]);
     // The tags load again, so the tab shows the server's tags in place of the changes it showed as saved.
@@ -1920,7 +1927,7 @@ describe("saving", () => {
     expect(chipState("Alice").has).toBe("none");
   });
 
-  it("a failed save shows its own error, whether the server couldn't be reached or refused it", async () => {
+  it("a failed save shows its own failure, whether the server couldn't be reached or refused it, with its reason when it gives one", async () => {
     const { server, tags } = await mountTags({ setup: (_server, fake) => fake.failures.set("/api/tag-editor/delete-tag", 0) });
     const deleteAndSave = async (name: string) => {
       await openEditor();
@@ -1933,7 +1940,11 @@ describe("saving", () => {
     await expectNotice(server, "Tag delete failed: Couldn't reach the server.");
     tags.failures.set("/api/tag-editor/delete-tag", 500);
     await deleteAndSave("Bob");
-    await expectNotice(server, "Tag delete failed (500)");
+    await expectNotice(server, "Tag delete failed.", "Tag delete failed (HTTP 500).");
+    tags.failures.set("/api/tag-editor/delete-tag", 409);
+    tags.failureReason = "Bob is already deleted.";
+    await deleteAndSave("Bob");
+    await expectNotice(server, "Tag delete failed: Bob is already deleted.", "Tag delete failed (HTTP 409).");
     tags.failures.set("/api/tag-editor/delete-tag", 0);
     await deleteAndSave("Alice");
     await expectNotice(server, "Tag delete failed: Couldn't reach the server.");
@@ -2432,7 +2443,7 @@ describe("Auto Tag", () => {
     expect(autoTagStatus()).toBe("Scan complete: 1 matching tags, 1 matches, 0/0 selected changes.");
   });
 
-  it("a failed scan shows its error beside Scan Files, with the results as before any scan, until the next scan", async () => {
+  it("a failed scan shows its failure beside Scan Files, relaying it to the log, with the results as before any scan, until the next scan", async () => {
     const { tags } = await mountTags();
     await openEditor();
     await openAutoTag();
@@ -2442,13 +2453,13 @@ describe("Auto Tag", () => {
 
     tags.scanStatus = 500;
     await scan();
-    expect(autoTagStatus()).toBe("Scan failed: HTTP 500");
+    expect(autoTagStatus()).toBe("Scan failed.");
     expect(results().querySelector(".autotag-empty")?.textContent).toBe("Scan to find files whose names contain a tag's name.");
     expect(autoTagButton("Apply").disabled).toBe(true);
     expect(progressShown()).toBe(false);
     expect(scanButton().disabled).toBe(false);
     expect(openNotices()).toEqual([]);
-    expect(relayedLines("Scan")).toEqual([]);
+    await waitFor(() => expect(relayedLines("Scan")).toEqual([statusLogLine("Scan failed (HTTP 500).", { id: VIDEO_ITEM.id }, 1)]));
 
     tags.scanStatus = 200;
     await scan();
@@ -2470,12 +2481,17 @@ describe("Auto Tag", () => {
     expect(autoTagStatus()).toBe("");
   });
 
-  it("a scan answered with a page that isn't JSON names its content type", async () => {
+  it("a scan answered with a page that isn't JSON is an unexpected response, naming its content type only in the log", async () => {
     await mountTags({ setup: (fake) => fake.on("POST", "/api/autotag/scan", () => htmlPage()) });
     await openEditor();
     await openAutoTag();
     await scan();
-    expect(autoTagStatus()).toBe("Scan failed: The server sent an unexpected response (text/html).");
+    expect(autoTagStatus()).toBe("Scan failed: The server sent an unexpected response.");
+    await waitFor(() =>
+      expect(relayedLines("Scan")).toEqual([
+        statusLogLine("Scan failed: The server sent an unexpected response (text/html).", { id: VIDEO_ITEM.id }, 1)
+      ])
+    );
     expect(results().querySelector(".autotag-empty")?.textContent).toBe("Scan to find files whose names contain a tag's name.");
   });
 

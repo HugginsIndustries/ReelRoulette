@@ -282,11 +282,11 @@ describe("the dialog component", () => {
 
   it("a notice shows its message with one OK, which takes focus, and OK or Escape closes it", async () => {
     const { dialogs } = renderWithDialogs();
-    const first = dialogs.notice("Saving presets failed (500).");
+    const first = dialogs.notice("Saving presets failed.");
     await settle();
     const notice = top();
     expect(notice.getAttribute("role")).toBe("alertdialog");
-    expect(document.getElementById(notice.getAttribute("aria-labelledby")!)?.textContent).toBe("Saving presets failed (500).");
+    expect(document.getElementById(notice.getAttribute("aria-labelledby")!)?.textContent).toBe("Saving presets failed.");
     expect(Array.from(notice.querySelectorAll("button")).map((button) => button.textContent)).toEqual(["OK"]);
     expect(document.activeElement).toBe(buttonIn(notice, "OK"));
     await press(buttonIn(notice, "OK"));
@@ -391,17 +391,17 @@ describe("the dialog in the page", () => {
     const { services, server } = mountWithServices();
     await pageReady(server);
 
-    void services.dialogs.notice("Saving presets failed (500).");
+    void services.dialogs.notice("Saving presets failed.");
     void services.dialogs.notice('Preset "Beach days" could not be saved.', "Preset could not be saved.");
     await settle();
     expect(openDialogs().map((dialog) => dialog.querySelector(".dialog-message")?.textContent)).toEqual([
-      "Saving presets failed (500).",
+      "Saving presets failed.",
       'Preset "Beach days" could not be saved.'
     ]);
     await waitFor(() =>
       expect(server.logLines()).toEqual(
         expect.arrayContaining([
-          statusLogLine("Saving presets failed (500).", null, 0),
+          statusLogLine("Saving presets failed.", null, 0),
           statusLogLine("Preset could not be saved.", null, 0)
         ])
       )

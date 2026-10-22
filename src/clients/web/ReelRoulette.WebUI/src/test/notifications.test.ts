@@ -177,8 +177,8 @@ describe("notifications", () => {
 
   it("keeps a notice unmarked with the error icon, relaying nothing, and keeps the last 50 messages", () => {
     const { notes, relayed } = setup();
-    notes.record("Saving presets failed (500).");
-    expect(notes.entries.value[0]).toMatchObject({ kind: "notice", icon: "error", text: "Saving presets failed (500).", unread: false });
+    notes.record("Saving presets failed.");
+    expect(notes.entries.value[0]).toMatchObject({ kind: "notice", icon: "error", text: "Saving presets failed.", unread: false });
     expect(notes.unread.value).toBe(0);
     expect(relayed).toEqual([]);
 

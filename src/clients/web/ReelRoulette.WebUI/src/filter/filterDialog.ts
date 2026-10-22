@@ -1,5 +1,5 @@
 import { batch, signal, type ReadonlySignal } from "@preact/signals";
-import { errorText, readJson, refusalReason, UnauthorizedError } from "../api/serverRequest";
+import { noticeRequestFailure, readJson, refusalError, UnauthorizedError } from "../api/serverRequest";
 import type { Dialogs } from "../dialogs/dialogs";
 import type { Library } from "../library/library";
 import { eventLoadFailedLine } from "../logging/relayLogLines";
@@ -506,8 +506,8 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
 
   /**
    * Sends the tab's preset changes, one write at a time in order, and says whether every one landed. Each that lands is
-   * saved, so only what didn't land stays unsaved. At the first write the server refuses, it says why, with the
-   * server's reason, and takes the server's list by the merge. A write that couldn't reach the server keeps the tab's
+   * saved, so only what didn't land stays unsaved. At the first write the server refuses, it says so, with the
+   * server's reason when it gives one, and takes the server's list by the merge. A write that couldn't reach the server keeps the tab's
    * list as the writes left it, and a 401 shows only the pairing prompt. While it runs, Apply and the loads for server
    * events do nothing.
    */
@@ -523,19 +523,13 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
         try {
           const response = await sendWrite(write);
           if (!response.ok) {
-            // The server's reason can name a preset, which the log leaves out.
-            const logText = `Saving presets failed (${response.status}).`;
-            const reason = await refusalReason(response);
-            void dialogs.notice(reason ? `Saving presets failed: ${reason}` : logText, logText);
+            noticeRequestFailure(dialogs, "Saving presets failed", await refusalError(response));
             await reloadPresets();
             return false;
           }
           await takeLanded(write, response);
         } catch (saveError) {
-          // A 401 shows only the pairing prompt, which the request has asked for.
-          if (!(saveError instanceof UnauthorizedError)) {
-            void dialogs.notice(`Saving presets failed: ${errorText(saveError)}`);
-          }
+          noticeRequestFailure(dialogs, "Saving presets failed", saveError);
           return false;
         }
       }
@@ -548,8 +542,8 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
   /**
    * Loads the sources, tags, and presets. The first time, it starts the working copy from the applied filter, on
    * General; after that it keeps the working copy and only takes what loaded, as a load for a server event does. Says
-   * whether it loaded; a failure shows in the in-app notice with `failure` before the reason, except a 401, whose
-   * pairing prompt is the thing to act on. Nothing loads while the server fails the compatibility check or runs
+   * whether it loaded; a failure shows in the in-app notice as `failure`, with the server's reason when it gives one,
+   * except a 401, whose pairing prompt is the thing to act on. Nothing loads while the server fails the compatibility check or runs
    * without a library.
    */
   async function start(failure: string): Promise<boolean> {
@@ -560,7 +554,7 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
     try {
       remote = await loadRemote();
     } catch (error) {
-      showLoadFailure(failure, error);
+      noticeRequestFailure(dialogs, failure, error);
       return false;
     }
     const current = view.peek();
@@ -586,13 +580,6 @@ export function createFilterDialog(options: FilterDialogOptions): FilterDialog {
       tab.value = "general";
     }
     return true;
-  }
-
-  /** Shows a failed load in the in-app notice, except a 401, which shows only the pairing prompt. */
-  function showLoadFailure(failure: string, error: unknown): void {
-    if (!(error instanceof UnauthorizedError)) {
-      void dialogs.notice(`${failure}: ${errorText(error)}`);
-    }
   }
 
   /** Puts back the applied filter and the saved presets, with the sources and tags already loaded. */

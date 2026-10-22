@@ -1988,10 +1988,10 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
         <h1>ReelRoulette</h1>
         <section class="card error">
           <h2>Runtime Configuration Error</h2>
-          <p>Failed to load /runtime-config.json (HTTP 404).</p>
+          <p>Couldn't load the connection settings from the server.</p>
           <p>Reload the page, or check that the ReelRoulette server is running.</p>
         </section>
-        <p class="mock-note mock-inline">Today's page, kept as it is apart from its heading, which says only ReelRoulette, and its last line, which says what to try.</p>
+        <p class="mock-note mock-inline">Today's page, kept as it is apart from its heading, which says only ReelRoulette, its message, which says in plain words what didn't load, with no status code, and its last line, which says what to try.</p>
         <button type="button" class="mock-back" id="startup-error-back">Back to the mockup</button>
       </main>
     </div>
@@ -2014,14 +2014,14 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
       <fieldset>
         <legend>Library load</legend>
         <label><input type="radio" name="mock-library-load" value="loads" checked> Loads</label>
-        <label><input type="radio" name="mock-library-load" value="failed"> Fails, here with HTTP 500</label>
+        <label><input type="radio" name="mock-library-load" value="failed"> Fails, here without a reason from the server</label>
         <label><input type="radio" name="mock-library-load" value="timeout"> Times out: the server answers 408, as one stalled on its storage does, or a proxy 504</label>
         <p class="mock-small mock-keep">What the Library tab's grid says in place of the tiles.</p>
       </fieldset>
       <fieldset>
         <legend>Stats load</legend>
         <label><input type="radio" name="mock-stats-load" value="loads" checked> Loads</label>
-        <label><input type="radio" name="mock-stats-load" value="failed"> Fails, here with HTTP 500</label>
+        <label><input type="radio" name="mock-stats-load" value="failed"> Fails, here without a reason from the server</label>
         <label><input type="radio" name="mock-stats-load" value="removed"> Playing file removed: the server no longer has it, as after a refresh drops its file or a duplicate's delete removes it</label>
         <p class="mock-small mock-keep">What the Stats tab says when its first load fails, and shows for a playing file the server no longer has. A later failed load keeps what the tab showed.</p>
       </fieldset>
@@ -3343,7 +3343,8 @@ function loudnessGain(item) {
 const NO_LIBRARY_REASON = "The catalog was saved by a newer version of ReelRoulette and was left unchanged.";
 const NO_LIBRARY_MESSAGE = `Running without a library. ${NO_LIBRARY_REASON}`;
 // A load the server or a proxy answers with 408 or 504, as a server stalled on its storage does, says so in place of
-// "Library load failed: HTTP 408". Any other failed load shows "Library load failed:" and its error.
+// "Library load failed.". Any other failed load shows "Library load failed: {the server's reason}", or
+// "Library load failed." without one, and never its status code.
 const LIBRARY_TIMEOUT_MESSAGE = "The server didn't answer in time, so the library couldn't load. It may be waiting on a slow or disconnected drive or share.";
 
 // Many tags across many categories, to see long lists and try reordering them.
@@ -4863,7 +4864,7 @@ function libraryMessage() {
   if (state.situation === "incompatible") return { text: "Unsupported server API version: 2.", error: true };
   if (state.situation === "nolibrary") return { text: NO_LIBRARY_MESSAGE, error: true };
   if (state.libraryLoad === "timeout") return { text: LIBRARY_TIMEOUT_MESSAGE, error: true };
-  if (state.libraryLoad === "failed") return { text: "Library load failed: HTTP 500", error: true };
+  if (state.libraryLoad === "failed") return { text: "Library load failed.", error: true };
   if (state.situation === "empty") return { text: "No media in library." };
   if (libLoading) return { text: "Loading library…" };
   return null;
@@ -6973,7 +6974,7 @@ function statsMessage() {
   if (state.pairing) return { text: "" };
   if (state.situation === "incompatible") return { text: "Unsupported server API version: 2.", error: true };
   if (state.situation === "nolibrary") return { text: NO_LIBRARY_MESSAGE, error: true };
-  if (state.statsLoad === "failed") return { text: "Stats load failed: HTTP 500", error: true };
+  if (state.statsLoad === "failed") return { text: "Stats load failed.", error: true };
   return null;
 }
 function statsHint(text, error) {

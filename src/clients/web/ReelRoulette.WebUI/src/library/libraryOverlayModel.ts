@@ -63,13 +63,13 @@ export interface LibraryOverlayMessage {
 }
 
 /**
- * A failed load reads "Library load failed: {error}", or the timeout message when the server answered 408 or 504, and
- * says nothing when it answered 401, whose pairing prompt is the only thing to show. `errorStatus` is the failed load's
- * HTTP status, or null when it has none.
+ * A failed load reads `failureText`, such as "Library load failed.", or the timeout message when the server answered
+ * 408 or 504, and says nothing when it answered 401, whose pairing prompt is the only thing to show. `errorStatus` is
+ * the failed load's HTTP status, or null when it has none.
  */
 export function libraryOverlayMessage(
   phase: LibraryOverlayMessagePhase,
-  errorMessage: string | null,
+  failureText: string | null,
   errorStatus: number | null = null
 ): LibraryOverlayMessage {
   if (phase === "loading") {
@@ -82,7 +82,7 @@ export function libraryOverlayMessage(
     if (errorStatus !== null && TIMEOUT_STATUSES.includes(errorStatus)) {
       return { text: LIBRARY_LOAD_TIMEOUT_MESSAGE, error: true, live: false };
     }
-    return { text: `Library load failed: ${errorMessage || "Could not load library."}`, error: true, live: false };
+    return { text: failureText || "Library load failed.", error: true, live: false };
   }
   return { text: "No media in library.", error: false, live: false };
 }

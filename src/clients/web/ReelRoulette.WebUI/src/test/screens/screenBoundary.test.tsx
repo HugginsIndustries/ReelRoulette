@@ -292,7 +292,7 @@ describe("ScreenBoundary", () => {
     server.on("POST", "/api/tag-editor/model", () => json({ categories: [], tags: [], items: [] }));
     const page = mountPage({ server });
     // The library's body shows the failure, which only relays, and the library overlay has failed.
-    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Library load failed: HTTP 500", null, 0)));
+    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Library load failed (HTTP 500).", null, 0)));
 
     showPanelTab("Library");
     await waitFor(() => expect(server.logLines()).toContain("ui-error screen=library error=TypeError"));

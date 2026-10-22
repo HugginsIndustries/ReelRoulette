@@ -1,4 +1,4 @@
-import { createServerRequester, HttpStatusError, readJson } from "../api/serverRequest";
+import { createServerRequester, readJson, refusalError } from "../api/serverRequest";
 
 /**
  * Server requests the screens share, against the runtime config's API base URL. A request that couldn't reach the
@@ -13,8 +13,8 @@ export interface AppApi {
   /** Posts a JSON body. The caller checks the response. */
   post(path: string, payload?: unknown): Promise<Response>;
   /**
-   * Reads a JSON response. A failed status throws an `HttpStatusError`, and a body that isn't JSON an
-   * `UnexpectedResponseError`.
+   * Reads a JSON response. A failed status throws an `HttpStatusError`, with the server's reason when it gave one, and
+   * a body that isn't JSON an `UnexpectedResponseError`.
    */
   getJson(path: string, options?: RequestInit): Promise<any>;
   /** Posts a JSON body and reads the JSON response, failing as `getJson` does. */
@@ -52,9 +52,9 @@ export function createAppApi(apiBaseUrl: string, options: AppApiOptions): AppApi
     });
   }
 
-  function readSuccess(response: Response): Promise<any> {
+  async function readSuccess(response: Response): Promise<any> {
     if (!response.ok) {
-      throw new HttpStatusError(response.status);
+      throw await refusalError(response);
     }
     return readJson(response);
   }

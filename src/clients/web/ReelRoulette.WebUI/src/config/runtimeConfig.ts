@@ -2,6 +2,12 @@ import type { RuntimeConfig } from "../types/runtimeConfig";
 
 const RUNTIME_CONFIG_PATH = "/runtime-config.json";
 
+/**
+ * What the startup page says when the config doesn't load. Nothing names its status: before the config loads, the page
+ * has no server address to send a `last.log` line to.
+ */
+const RUNTIME_CONFIG_LOAD_FAILED = "Couldn't load the connection settings from the server.";
+
 type RuntimeConfigInput = {
   apiBaseUrl?: unknown;
   sseUrl?: unknown;
@@ -56,18 +62,22 @@ export function parseRuntimeConfig(raw: RuntimeConfigInput | null | undefined): 
   };
 }
 
+/** Loads the config. A request that can't reach the server or that it refuses throws `RUNTIME_CONFIG_LOAD_FAILED`. */
 export async function loadRuntimeConfig(fetchImpl: typeof fetch = fetch): Promise<RuntimeConfig> {
-  const response = await fetchImpl(RUNTIME_CONFIG_PATH, {
-    cache: "no-store",
-    headers: {
-      Accept: "application/json"
-    }
-  });
+  let response: Response;
+  try {
+    response = await fetchImpl(RUNTIME_CONFIG_PATH, {
+      cache: "no-store",
+      headers: {
+        Accept: "application/json"
+      }
+    });
+  } catch {
+    throw new Error(RUNTIME_CONFIG_LOAD_FAILED);
+  }
 
   if (!response.ok) {
-    throw new Error(
-      `Runtime config could not be loaded from '${RUNTIME_CONFIG_PATH}' (HTTP ${response.status}).`
-    );
+    throw new Error(RUNTIME_CONFIG_LOAD_FAILED);
   }
 
   const data = (await response.json()) as RuntimeConfigInput;

@@ -433,7 +433,7 @@ describe("first page", () => {
     const { server, library } = await mountLibrary(libraryItems(2), (_, lib) => {
       lib.failures.push(500);
     });
-    await expectRelayed(server, "Library load failed: HTTP 500");
+    await expectRelayed(server, "Library load failed (HTTP 500).");
 
     await openLibrary();
     await waitFor(() => expect(library.queries()).toHaveLength(2));
@@ -449,9 +449,9 @@ describe("first page", () => {
     fireEvent.change(sortSelect(), { target: { value: "PlayCount" } });
     await flush();
 
-    expect(within(overlay()).getByRole("alert").textContent).toBe("Library load failed: HTTP 503");
-    // It shows in place, so it only relays.
-    await expectRelayed(server, "Library load failed: HTTP 503");
+    expect(within(overlay()).getByRole("alert").textContent).toBe("Library load failed.");
+    // It shows in place, so it only relays, with the status in place of the text.
+    await expectRelayed(server, "Library load failed (HTTP 503).");
     expect(controlsShown()).toBe(true);
     expect(summary().hidden).toBe(true);
     expect(tileNames()).toEqual([]);
@@ -460,7 +460,7 @@ describe("first page", () => {
   it.each([
     [408, "The server didn't answer in time, so the library couldn't load. It may be waiting on a slow or disconnected drive or share."],
     [504, "The server didn't answer in time, so the library couldn't load. It may be waiting on a slow or disconnected drive or share."],
-    [500, "Library load failed: HTTP 500"]
+    [500, "Library load failed."]
   ])("shows a load answered with %i as its own message in the body, and relays its status", async (failure, message) => {
     const { server, library } = await mountLibrary(libraryItems(2));
     await openLibrary();
@@ -470,7 +470,7 @@ describe("first page", () => {
     await flush();
 
     expect(within(overlay()).getByRole("alert").textContent).toBe(message);
-    await expectRelayed(server, `Library load failed: HTTP ${failure}`);
+    await expectRelayed(server, `Library load failed (HTTP ${failure}).`);
   });
 
   it("shows no failure for a load answered with 401, only the pairing prompt, and logs it", async () => {
@@ -539,7 +539,7 @@ describe("first page", () => {
     expect(server.logLines()).not.toContain(statusLogLine("Ready (API offline)", null, 0));
   });
 
-  it("shows a load answered with a page that isn't JSON as an unexpected response, naming its content type", async () => {
+  it("shows a load answered with a page that isn't JSON as an unexpected response, naming its content type only in the log", async () => {
     const { server } = await mountLibrary(libraryItems(2));
     await openLibrary();
 
@@ -547,9 +547,20 @@ describe("first page", () => {
     fireEvent.change(sortSelect(), { target: { value: "PlayCount" } });
     await flush();
 
-    const message = "Library load failed: The server sent an unexpected response (text/html).";
-    expect(within(overlay()).getByRole("alert").textContent).toBe(message);
-    await expectRelayed(server, message);
+    expect(within(overlay()).getByRole("alert").textContent).toBe("Library load failed: The server sent an unexpected response.");
+    await expectRelayed(server, "Library load failed: The server sent an unexpected response (text/html).");
+  });
+
+  it("shows the server's reason for a load it refuses, relaying only the status", async () => {
+    const { server } = await mountLibrary(libraryItems(2));
+    await openLibrary();
+
+    server.on("POST", "/api/library/query", () => json({ error: "Library not loaded or empty." }, 503));
+    fireEvent.change(sortSelect(), { target: { value: "PlayCount" } });
+    await flush();
+
+    expect(within(overlay()).getByRole("alert").textContent).toBe("Library load failed: Library not loaded or empty.");
+    await expectRelayed(server, "Library load failed (HTTP 503).");
   });
 
   it("says when the library is empty", async () => {
@@ -993,12 +1004,12 @@ describe("playing a tile", () => {
       [json({ error: "Not found", code: "play_item_not_found" }, 404), "Media not found. The file may have moved or been deleted."],
       [json({ error: "Unavailable", code: "play_item_unavailable" }, 409), "This item is unavailable."],
       [json({ error: "Unsupported" }, 415), "This file type is not supported."],
-      [json({ error: "Disk C:\\media is offline" }, 500), "Disk C:\\media is offline"],
+      [json({ error: "Disk C:\\media is offline" }, 500), "Playback failed: Disk C:\\media is offline"],
       [json({}, 500), "Playback failed."],
       [json({ itemId: "item-1" }), "Playback failed."],
       [
         new Response("<html>Bad gateway</html>", { status: 200, headers: { "Content-Type": "text/html" } }),
-        "Playback failed: The server sent an unexpected response (text/html)."
+        "Playback failed: The server sent an unexpected response."
       ]
     ];
     for (const [reply, message] of cases) {
@@ -1017,7 +1028,8 @@ describe("playing a tile", () => {
     expect(server.logLines()).toContain("playback=library-play-failed attempt=0 hasCurrent=false statusCode=415 code=none");
     expect(server.logLines()).toEqual(
       expect.arrayContaining([
-        statusLogLine("Playback failed", null, 0),
+        statusLogLine("Playback failed (HTTP 404).", null, 0),
+        statusLogLine("Playback failed (HTTP 500).", null, 0),
         statusLogLine("Playback failed.", null, 0),
         statusLogLine("Playback failed: The server sent an unexpected response (text/html).", null, 0)
       ])

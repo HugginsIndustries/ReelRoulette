@@ -7,6 +7,7 @@ Instructions:
   - A milestone's own slices use its milestone-id prefix even when they change only docs. Planning edits that record or reorder milestones are not milestone work, so they use `Docs:`.
   - `Bugfix: {concise summary}` for defect fixes.
   - `Feature: {concise summary}` for net-new feature work outside milestone framing.
+  - `Improvement: {concise summary}` for changes users would notice to existing behavior, outside milestone framing, that aren't defect fixes.
   - `Refactor: {concise summary}` for internal code restructuring with no behavior change.
   - `Test: {concise summary}` for test-only additions/updates.
   - `Chore: {concise summary}` for tooling/maintenance updates.
@@ -19,12 +20,10 @@ Instructions:
 
 Commit Message:
 
-M12k2: Add the Stats tab's 5-star rating with half stars, its popups, and the Rated card, and make the path's button an icon
+Improvement: Word every failed request the WebUI shows in one place, with the server's reason and without status codes
 
-- The Stats tab's Current file section has a Rating line under the path. It has five stars with half stars, set by a click, a tap, or a drag and cleared on the first star's left edge, with a mouse previewing the value under it, and screen readers hear it as one slider. A click or a tap takes no focus, so the arrow keys still play the previous or next item afterwards; once Tab reaches the stars, the arrows, Home, End, Delete, and Backspace set the rating.
-- A new rating shows at once. A click, tap, or drag sends it to `POST /api/rating` at once, and the keys' once they pause for 500 ms, focus leaves the stars, or another item plays, each to the item it was set on. Setting the rating a file already has sends nothing, a failure puts it back with a notice, through one helper the favorite and blacklist toggle now shares, and a change still waiting when the page closes is dropped.
-- Each change pops up as Your actions. The event stream now listens for `itemRatingChanged`: another device's change pops up as Other devices, and the Settings tab's Other devices description names rating changes. The event also updates the stars at once and loads the tab again.
-- The Rated card follows Blacklisted, Show in File Manager and Copy Path are an icon button named by its tooltip, and the file's tags sit in a row of their own below the table.
-- The mockup's stars also take no focus on a click or tap, and have the app's orange focus ring.
-- Tests cover the rating's rules and parse, every way of setting and clearing it, the preview, the keys and their pause, the item a change goes to, failures, other devices' changes and popups, focus, the stars' absence in each state, the Rated card, the icon button, and the tags row. Each guarded behavior, broken on its own, failed its tests.
-- CONTEXT.md, the architecture, API, and domain inventory docs, and the changelog describe the rating. The user's spot check passed on the phone and the desktop, so Item Ratings is complete: it moves to the completed milestones, and its release checks go into the testing checklist.
+- One shared helper words a failed request the user sees: "{what failed}: {the server's reason}", or "{what failed}." without one, with "Couldn't reach the server." as before. Status codes and content types go only to last.log, never the reason, which can name a file or a preset.
+- Failed loads now carry the server's reason, and favorite, blacklist, rating, Show in File Manager, preset saves, the Filter and Tags tabs' loads, tag save steps, Auto Tag scans, random picks, the Stats tab, the Library grid, library plays and history steps, and pairing all use the helper in place of their own copies, so each shows the reason when the server gives one. A refused play keeps its own words for a missing, unavailable, unsupported, or unreadable file, and reads the server's code through the shared reader in place of its own.
+- "(500)" and "HTTP 500" no longer show: favorite, rating, file manager, preset, tag save, and random pick refusals end "failed." when the server gives no reason, and the startup page says it couldn't load the connection settings from the server. A failed Auto Tag scan now logs a line, and the "Tag create/update" step reads "Tag update".
+- AGENTS.md's Architecture Guardrails add the rule, and CONTEXT.md, the domain inventory, the mockup, and the changelog describe the new wording.
+- Tests cover every wording, the reason on each screen, the log lines, and the startup message. Making the helper show the status again failed 48 tests, and dropping the reason failed 26.

@@ -230,9 +230,12 @@ function setup(
     }
   } as unknown as ServerConnection;
   const notices: string[] = [];
+  /** The line each notice sent to the log, its message unless it named one of its own, as the in-app dialog does. */
+  const noticeLogs: string[] = [];
   const dialogs = {
-    notice(message: string) {
+    notice(message: string, logText = message) {
       notices.push(message);
+      noticeLogs.push(logText);
       return Promise.resolve();
     }
   };
@@ -265,6 +268,7 @@ function setup(
     kept,
     frames,
     notices,
+    noticeLogs,
     relayed,
     statuses,
     notified,
@@ -413,8 +417,9 @@ describe("createPlayer", () => {
   it("shows each pick that ends without playing in the notice alone", async () => {
     const page = setup();
     const answers: Array<[() => Response, string]> = [
-      [() => json({}, 503), "Random selection failed (503)."],
-      [() => new Response("<html></html>", { headers: { "Content-Type": "text/html" } }), "Random selection failed: The server sent an unexpected response (text/html)."]
+      [() => json({}, 503), "Random selection failed."],
+      [() => json({ error: "Library not loaded or empty." }, 503), "Random selection failed: Library not loaded or empty."],
+      [() => new Response("<html></html>", { headers: { "Content-Type": "text/html" } }), "Random selection failed: The server sent an unexpected response."]
     ];
     for (const [answer, notice] of answers) {
       page.replies.set("/api/random", answer);
@@ -1306,7 +1311,9 @@ describe("createPlayer", () => {
 
     page.replies.set("/api/favorite", () => json({}, 500));
     await page.player.toggleFavorite();
-    expect(page.notices).toEqual(["Favorite update failed (500)."]);
+    page.replies.set("/api/favorite", () => json({ error: "The file isn't in the library." }, 404));
+    await page.player.toggleFavorite();
+    expect(page.notices).toEqual(["Favorite update failed.", "Favorite update failed: The file isn't in the library."]);
     expect(page.player.blacklisted.value).toBe(true);
     // Each change it made pops up as Your actions, with the file name, and replaces the one before.
     expect(page.notified).toEqual([
@@ -2494,24 +2501,33 @@ describe("history steps", () => {
   });
 
   it.each([
-    ["503 play_media_unreadable", () => json({ error: "Media can't be read", code: "play_media_unreadable" }, 503), COULD_NOT_LOAD_VIDEO],
-    ["another 5xx", () => json({ error: "Server exploded" }, 500), COULD_NOT_LOAD_VIDEO],
-    ["409", () => json({ error: "Source disabled", code: "play_source_disabled" }, 409), "This item is unavailable."],
-    ["415", () => json({ error: "Unsupported", code: "play_unsupported_media" }, 415), "This file type is not supported."],
+    [
+      "503 play_media_unreadable",
+      () => json({ error: "Media can't be read", code: "play_media_unreadable" }, 503),
+      COULD_NOT_LOAD_VIDEO,
+      COULD_NOT_LOAD_VIDEO
+    ],
+    ["another 5xx", () => json({ error: "Server exploded" }, 500), COULD_NOT_LOAD_VIDEO, COULD_NOT_LOAD_VIDEO],
+    // A refusal's log line names only its status, since the server's reason can name a file.
+    ["409", () => json({ error: "Source disabled", code: "play_source_disabled" }, 409), "This item is unavailable.", "Playback failed (HTTP 409)."],
+    ["415", () => json({ error: "Unsupported", code: "play_unsupported_media" }, 415), "This file type is not supported.", "Playback failed (HTTP 415)."],
+    ["another 4xx", () => json({ error: "The source is offline." }, 400), "Playback failed: The source is offline.", "Playback failed (HTTP 400)."],
     [
       "no answer",
       () => {
         throw new TypeError("Failed to fetch");
       },
+      COULD_NOT_LOAD_VIDEO,
       COULD_NOT_LOAD_VIDEO
     ]
-  ])("stop on the message for a play route's %s, without skipping or asking about the file", async (_answer, reply, message) => {
+  ])("stop on the message for a play route's %s, without skipping or asking about the file", async (_answer, reply, message, logText) => {
     const page = setup();
     seedHistory(page, [VIDEO, MKV, SECOND_VIDEO], 0);
     page.replies.set("/api/play/item-mkv", reply);
     page.player.next();
 
     await vi.waitFor(() => expect(page.notices).toEqual([message]));
+    expect(page.noticeLogs).toEqual([logText]);
     expect(page.notified).toEqual([]);
     expect(page.store.current.value?.itemId).toBe("item-mkv");
     expect(page.store.historyIndex.value).toBe(1);

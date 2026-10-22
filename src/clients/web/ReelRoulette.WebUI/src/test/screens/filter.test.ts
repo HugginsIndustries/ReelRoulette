@@ -483,9 +483,9 @@ function relayed(server: FakeServer, text: string): boolean {
 }
 
 /** Expects the in-app notice to show `message`, alone, with the `last.log` line a message gets, then closes it. */
-async function expectNotice(server: FakeServer, message: string): Promise<void> {
+async function expectNotice(server: FakeServer, message: string, logText = message): Promise<void> {
   await waitFor(() => expect(openNotices()).toEqual([message]));
-  await waitFor(() => expect(server.logLines()).toContain(statusLogLine(message, null, 0)));
+  await waitFor(() => expect(server.logLines()).toContain(statusLogLine(logText, null, 0)));
   await closeNotices();
   expect(openNotices()).toEqual([]);
 }
@@ -816,11 +816,13 @@ describe("opening and closing", () => {
     let sourcesStatus = 500;
     const { page, server } = await mountFilter([], (server) => {
       server.on("GET", "/api/sources", () => (sourcesStatus === 200 ? json(SOURCES) : status(sourcesStatus)));
-      server.on("POST", "/api/tag-editor/model", () => (tagModelStatus === 200 ? json(TAG_MODEL) : status(tagModelStatus)));
+      server.on("POST", "/api/tag-editor/model", () =>
+        tagModelStatus === 200 ? json(TAG_MODEL) : json({ error: "Library not loaded or empty." }, tagModelStatus)
+      );
     });
 
     await chooseFilterTab();
-    await expectNotice(server, "Filter load failed: HTTP 500");
+    await expectNotice(server, "Filter load failed.", "Filter load failed (HTTP 500).");
     expect(isOpen()).toBe(true);
     expect(dialog().querySelector("input")).toBeNull();
 
@@ -828,7 +830,7 @@ describe("opening and closing", () => {
     tagModelStatus = 503;
     await click(panelTab("Library"));
     await chooseFilterTab();
-    await expectNotice(server, "Filter load failed: HTTP 503");
+    await expectNotice(server, "Filter load failed: Library not loaded or empty.", "Filter load failed (HTTP 503).");
     expect(dialog().querySelector("input")).toBeNull();
 
     tagModelStatus = 200;
@@ -845,12 +847,16 @@ describe("opening and closing", () => {
     expect(box("Movies (C:\\media\\movies)").checked).toBe(true);
   });
 
-  it("names the content type of a tag model that isn't JSON, such as a proxy's page", async () => {
+  it("says a tag model that isn't JSON, such as a proxy's page, is an unexpected response, naming its content type only in the log", async () => {
     const { server } = await mountFilter([], (server) => {
       server.on("POST", "/api/tag-editor/model", () => new Response("<html>Bad gateway</html>", { status: 200, headers: { "Content-Type": "text/html" } }));
     });
     await chooseFilterTab();
-    await expectNotice(server, "Filter load failed: The server sent an unexpected response (text/html).");
+    await expectNotice(
+      server,
+      "Filter load failed: The server sent an unexpected response.",
+      "Filter load failed: The server sent an unexpected response (text/html)."
+    );
     expect(dialog().querySelector("input")).toBeNull();
   });
 
@@ -2154,7 +2160,7 @@ describe("Presets tab", () => {
     const queries = libraryQueries(server).length;
 
     await apply();
-    await expectNotice(server, "Saving presets failed (500).");
+    await expectNotice(server, "Saving presets failed.", "Saving presets failed (HTTP 500).");
     expect(isOpen()).toBe(true);
     expect(libraryQueries(server)).toHaveLength(queries);
     expect(presetRows()).toEqual(["Favorites", "Unplayed"]);
@@ -2266,7 +2272,7 @@ describe("a preset save the server refuses", () => {
 
     const reason = 'Saving presets failed: Preset "Other" already has this filter.';
     await waitFor(() => expect(openNotices()).toEqual([reason]));
-    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Saving presets failed (409).", null, 0)));
+    await waitFor(() => expect(server.logLines()).toContain(statusLogLine("Saving presets failed (HTTP 409).", null, 0)));
     expect(server.logLines().some((line) => line.includes("Other"))).toBe(false);
     await closeNotices();
     expect(presets.summaries()).toEqual(["rename preset-beach Sunny days", "update preset-favorites (409)"]);

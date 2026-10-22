@@ -19,6 +19,7 @@ Keep this file short and enforceable. For details, use `CONTEXT.md`, `MILESTONES
 - Random selection and playback eligibility are decided by the server.
 - Don't change user-facing UX without explicit approval.
 - "WebUI" is an internal name, for code, comments, logs, and developer docs. Text users see says "ReelRoulette" instead: labels, settings, admin, notices, dialogs, and release notes. `CHANGELOG.md` keeps "WebUI", since it is developer history.
+- A failure the user sees names in plain words what failed, followed by the server's reason when it sends one. It never shows a status code: status codes go only to `last.log`. In the WebUI, word a failed request with `requestFailure` and the helpers beside it in `api/serverRequest.ts`.
 - When a rule must behave identically in C# and the WebUI (ordering, comparison, normalization), implement it once per language next to its counterpart and lock both to one shared fixture under `shared/fixtures/`.
 - Add `last.log`-based logging where appropriate.
 - Fix lints introduced by your changes.

@@ -1,9 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createServerRequester,
+  HttpStatusError,
+  noticeRequestFailure,
   readJson,
-  refusalReason,
+  refusalError,
+  requestFailure,
   requestRoute,
+  requestWithNotice,
   sendRequest,
   SERVER_UNREACHABLE_MESSAGE,
   ServerUnreachableError,
@@ -113,17 +117,82 @@ describe("requestRoute", () => {
   });
 });
 
-describe("refusalReason", () => {
+describe("refusalError", () => {
   const answer = (body: string | null, type = "application/json") =>
     new Response(body, { status: 409, headers: type ? { "Content-Type": type } : {} });
 
-  it("reads the server's reason from its error, or gives null for a body without one", async () => {
-    expect(await refusalReason(answer(JSON.stringify({ error: 'Another preset is named "Cats".' })))).toBe('Another preset is named "Cats".');
-    for (const body of ["{}", '{"error":""}', '{"error":3}', "[]", "not json"]) {
-      expect(await refusalReason(answer(body)), body).toBeNull();
+  it("carries the status and the server's reason and code, or neither for a body without them", async () => {
+    const refused = await refusalError(answer(JSON.stringify({ error: 'Another preset is named "Cats".' })));
+    expect(refused).toBeInstanceOf(HttpStatusError);
+    expect(refused).toMatchObject({ status: 409, reason: 'Another preset is named "Cats".', code: null, message: "HTTP 409" });
+    expect(await refusalError(answer(JSON.stringify({ error: "Media can't be read", code: "play_media_unreadable" })))).toMatchObject({
+      reason: "Media can't be read",
+      code: "play_media_unreadable"
+    });
+    for (const body of ["{}", '{"error":"","code":""}', '{"error":3,"code":3}', "[]", "not json"]) {
+      expect(await refusalError(answer(body)), body).toMatchObject({ reason: null, code: null });
     }
-    expect(await refusalReason(answer(null, ""))).toBeNull();
-    expect(await refusalReason(answer('{"error":"Proxy"}', "text/html"))).toBeNull();
+    expect((await refusalError(answer(null, ""))).reason).toBeNull();
+    expect((await refusalError(answer('{"error":"Proxy"}', "text/html"))).reason).toBeNull();
+  });
+});
+
+describe("requestFailure", () => {
+  it("gives the server's reason, or says what failed, and keeps the status for the log", () => {
+    expect(requestFailure("Saving presets failed", new HttpStatusError(409, 'Another preset is named "Cats".'))).toEqual({
+      text: 'Saving presets failed: Another preset is named "Cats".',
+      logText: "Saving presets failed (HTTP 409)."
+    });
+    expect(requestFailure("Saving presets failed", new HttpStatusError(500))).toEqual({
+      text: "Saving presets failed.",
+      logText: "Saving presets failed (HTTP 500)."
+    });
+  });
+
+  it("says the server couldn't be reached, and names a response's content type only in the log", () => {
+    expect(requestFailure("Filter load failed", new ServerUnreachableError())).toEqual({
+      text: "Filter load failed: Couldn't reach the server.",
+      logText: "Filter load failed: Couldn't reach the server."
+    });
+    expect(requestFailure("Filter load failed", new UnexpectedResponseError("text/html"))).toEqual({
+      text: "Filter load failed: The server sent an unexpected response.",
+      logText: "Filter load failed: The server sent an unexpected response (text/html)."
+    });
+    expect(requestFailure("Filter load failed", "Boom")).toEqual({ text: "Filter load failed: Boom", logText: "Filter load failed: Boom" });
+  });
+});
+
+describe("noticeRequestFailure", () => {
+  it("shows the failure, logging its status in place of the reason, and nothing for a 401", () => {
+    const notice = vi.fn(async (_message: string, _logText?: string) => {});
+    noticeRequestFailure({ notice }, "Rating update failed", new HttpStatusError(404, "The file isn't on disk."));
+    noticeRequestFailure({ notice }, "Rating update failed", new UnauthorizedError());
+    expect(notice.mock.calls).toEqual([["Rating update failed: The file isn't on disk.", "Rating update failed (HTTP 404)."]]);
+  });
+});
+
+describe("requestWithNotice", () => {
+  it("says whether the server took the change, showing why it didn't", async () => {
+    const notice = vi.fn(async (_message: string, _logText?: string) => {});
+    const dialogs = { notice };
+    const send = (response: Response | Error) => async () => {
+      if (response instanceof Error) {
+        throw response;
+      }
+      return response;
+    };
+    const refused = new Response(JSON.stringify({ error: "Item not found." }), { status: 404, headers: { "Content-Type": "application/json" } });
+
+    expect(await requestWithNotice(dialogs, "Favorite update failed", send(new Response(null, { status: 204 })))).toBe(true);
+    expect(await requestWithNotice(dialogs, "Favorite update failed", send(refused))).toBe(false);
+    expect(await requestWithNotice(dialogs, "Favorite update failed", send(new Response(null, { status: 500 })))).toBe(false);
+    expect(await requestWithNotice(dialogs, "Favorite update failed", send(new ServerUnreachableError()))).toBe(false);
+    expect(await requestWithNotice(dialogs, "Favorite update failed", send(new UnauthorizedError()))).toBe(false);
+    expect(notice.mock.calls).toEqual([
+      ["Favorite update failed: Item not found.", "Favorite update failed (HTTP 404)."],
+      ["Favorite update failed.", "Favorite update failed (HTTP 500)."],
+      ["Favorite update failed: Couldn't reach the server.", "Favorite update failed: Couldn't reach the server."]
+    ]);
   });
 });
 

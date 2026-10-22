@@ -47,7 +47,7 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
     <input aria-label="Search library" autocomplete="off" class="library-overlay-search" id="library-search-input" placeholder="Search…" type="search">
   <div class="library-overlay-body" id="library-overlay-body">
     <p class="library-overlay-status library-overlay-status-error" role="alert">
-      "Library load failed: HTTP 500"
+      "Library load failed."
 "
 `;
 

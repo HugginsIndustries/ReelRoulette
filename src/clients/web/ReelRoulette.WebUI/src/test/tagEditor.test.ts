@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ConfirmRequest } from "../dialogs/dialogs";
 import { createDefaultFilterState } from "../filter/filterStateModel";
 import type { NotifyRequest } from "../notifications/notifications";
+import { statusLogLine } from "../logging/relayLogLines";
 import { createAppApi } from "../state/appApi";
 import { createAppStore, type ApiPreset, type PlayingItem } from "../state/appStore";
 import { createDeviceStore } from "../state/deviceStore";
@@ -60,12 +61,16 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     replyType: "application/json",
     /** Paths that answer with a status, or throw as an unreachable server does when the status is 0. */
     failures: new Map<string, number>(),
+    /** The reason a failed tag model, scan, or path in `failures` gives, or null for none. */
+    failureReason: null as string | null,
     /** Paths whose replies wait, each until the test calls the function it puts in the list. */
     held: new Map<string, Array<() => void>>(),
     posts: [] as Array<{ path: string; body: any }>,
     /** The lines the editor sent to the log, as level and message. */
     relayed: [] as string[]
   };
+  /** A failure, with `failureReason` when it is set. */
+  const refused = (status: number) => json(server.failureReason ? { error: server.failureReason } : {}, status);
   /** A success, as JSON or as the page `replyType` names. */
   const reply200 = (body: unknown) =>
     server.replyType === "application/json"
@@ -89,13 +94,13 @@ function setup(options: { scanFullLibrary?: string } = {}) {
       if (holdModels) {
         await new Promise<void>((resolve) => heldModels.push(resolve));
       }
-      return server.modelStatus === 200 ? reply200(reply) : json({}, server.modelStatus);
+      return server.modelStatus === 200 ? reply200(reply) : refused(server.modelStatus);
     }
     if (path === "/api/autotag/scan") {
       if (server.scanStatus === 0) {
         throw new TypeError("Load failed");
       }
-      return server.scanStatus === 200 ? reply200(server.scan) : json({}, server.scanStatus);
+      return server.scanStatus === 200 ? reply200(server.scan) : refused(server.scanStatus);
     }
     const waiting = server.held.get(path);
     if (waiting) {
@@ -105,7 +110,7 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     if (failure === 0) {
       throw new TypeError("Failed to fetch");
     }
-    return failure ? json({}, failure) : json({ applied: [] });
+    return failure ? refused(failure) : json({ applied: [] });
   }) as typeof fetch;
 
   /** The one-off messages, which pop up and which the list keeps. */
@@ -115,11 +120,15 @@ function setup(options: { scanFullLibrary?: string } = {}) {
       notified.push(request);
     }
   };
+  /** The status lines the store relayed to the log. */
+  const statuses: string[] = [];
   const store = createAppStore({
     identity: { clientId: "client-1", sessionId: "session-1", clientType: "web", deviceName: "Web Browser" },
     storage: { getItem: () => null, setItem: () => {} },
     device: createDeviceStore(null),
-    relay: () => {}
+    relay: (_level, message) => {
+      statuses.push(message);
+    }
   });
   const api = createAppApi("http://server", {
     onUnauthorized: () => {
@@ -166,10 +175,12 @@ function setup(options: { scanFullLibrary?: string } = {}) {
     localStorage.setItem("rr_autoTagScanFullLibrary", options.scanFullLibrary);
   }
   const confirm = vi.fn(async (_request: ConfirmRequest) => true);
-  /** The messages shown in the in-app notice, in order. */
+  /** The messages shown in the in-app notice, in order, and the line each sent to the log. */
   const notices: string[] = [];
-  const notice = async (message: string) => {
+  const noticeLogs: string[] = [];
+  const notice = async (message: string, logText = message) => {
     notices.push(message);
+    noticeLogs.push(logText);
   };
   const editor = createTagEditor({
     store,
@@ -201,7 +212,7 @@ function setup(options: { scanFullLibrary?: string } = {}) {
   };
   /** The item ids each tag model request asked for. */
   const modelRequests = () => server.posts.filter((post) => post.path === "/api/tag-editor/model").map((post) => post.body.itemIds);
-  return { editor, view, titles, store, server, notified, notices, steps, listeners, tiles, storedFilter, session, remembered, localStorage, confirm, models, modelRequests };
+  return { editor, view, titles, store, server, notified, notices, noticeLogs, statuses, steps, listeners, tiles, storedFilter, session, remembered, localStorage, confirm, models, modelRequests };
 }
 
 /** Lets fetch replies finish. */
@@ -299,7 +310,8 @@ describe("opening and closing", () => {
     const context = setup();
     context.server.modelStatus = 500;
     await openOn(context);
-    expect(context.notices).toEqual(["Tag editor unavailable: HTTP 500"]);
+    expect(context.notices).toEqual(["Tag editor unavailable."]);
+    expect(context.noticeLogs).toEqual(["Tag editor unavailable (HTTP 500)."]);
     expect(context.notified).toEqual([]);
     expect(context.editor.isOpen.value).toBe(true);
     expect(context.view().categories).toBeNull();
@@ -313,10 +325,11 @@ describe("opening and closing", () => {
     expect(context.view().noModel).toBe(true);
   });
 
-  it("says Discard changes' load failed, and names the content type of tags that aren't JSON", async () => {
+  it("says Discard changes' load failed, with the server's reason, and tags that aren't JSON are an unexpected response, naming the content type only in the log", async () => {
     const context = setup();
     await openOn(context);
     context.server.modelStatus = 503;
+    context.server.failureReason = "Library not loaded or empty.";
     context.editor.discardChanges();
     await settle();
     context.server.modelStatus = 200;
@@ -324,7 +337,11 @@ describe("opening and closing", () => {
     context.editor.discardChanges();
     await settle();
     expect(context.notices).toEqual([
-      "Tag load failed: HTTP 503",
+      "Tag load failed: Library not loaded or empty.",
+      "Tag load failed: The server sent an unexpected response."
+    ]);
+    expect(context.noticeLogs).toEqual([
+      "Tag load failed (HTTP 503).",
       "Tag load failed: The server sent an unexpected response (text/html)."
     ]);
     expect(context.notified).toEqual([]);
@@ -993,12 +1010,13 @@ describe("saving", () => {
     context.editor.save();
     expect(context.tiles[0]!.tags).toEqual([]);
     await settle();
-    expect(context.notices).toEqual(["Tag apply failed (500)"]);
+    expect(context.notices).toEqual(["Tag apply failed."]);
+    expect(context.noticeLogs).toEqual(["Tag apply failed (HTTP 500)."]);
     expect(context.notified).toEqual([]);
     expect(context.tiles[0]!.tags).toEqual(["Beach"]);
   });
 
-  it("shows each failed save's own error, whether the server refused it or couldn't be reached", async () => {
+  it("shows each failed save's own failure, with the server's reason, or that it couldn't reach the server", async () => {
     const context = setup();
     const save = async (name: string) => {
       await openOn(context);
@@ -1010,14 +1028,16 @@ describe("saving", () => {
     context.server.failures.set("/api/tag-editor/delete-tag", 0);
     await save("Bob");
     context.server.failures.set("/api/tag-editor/delete-tag", 409);
+    context.server.failureReason = "Bob is already deleted.";
     await save("Bob");
     context.server.failures.set("/api/tag-editor/delete-tag", 0);
     await save("Beach");
     expect(context.notices).toEqual([
       "Tag delete failed: Couldn't reach the server.",
-      "Tag delete failed (409)",
+      "Tag delete failed: Bob is already deleted.",
       "Tag delete failed: Couldn't reach the server."
     ]);
+    expect(context.noticeLogs[1]).toBe("Tag delete failed (HTTP 409).");
     expect(context.notified).toEqual([]);
   });
 
@@ -1026,7 +1046,7 @@ describe("saving", () => {
     const { editor, store, session } = context;
     store.appliedFilter.value = { ...createDefaultFilterState(), selectedTags: ["Beach"] };
     await openOn(context);
-    session.reloadLoaded.mockRejectedValueOnce(new Error("Library load failed: HTTP 500"));
+    session.reloadLoaded.mockRejectedValueOnce(new Error("Library load failed."));
     editor.toggleTag("Bob", "add");
     editor.save();
     await settle();
@@ -1196,7 +1216,7 @@ describe("Auto Tag", () => {
     editor.applyAutoTag();
     expect(context.view().autoTag.rows[0]!.files[0]!.needsChange).toBe(false);
     await settle();
-    expect(context.notices).toEqual(["Auto-tag apply failed (500)"]);
+    expect(context.notices).toEqual(["Auto-tag apply failed."]);
     expect(context.notified).toEqual([]);
     expect(context.view().autoTag.rows[0]!.files[0]).toMatchObject({ needsChange: true, selected: true });
     expect(context.view().autoTagApplyPending).toBe(true);
@@ -1212,7 +1232,7 @@ describe("Auto Tag", () => {
     await editor.scan();
     replies.forEach((reply) => reply());
     await settle();
-    expect(context.notices).toEqual(["Auto-tag apply failed (500)", "Auto-tag apply failed (500)"]);
+    expect(context.notices).toEqual(["Auto-tag apply failed.", "Auto-tag apply failed."]);
     expect(context.view().autoTag.rows[0]).toMatchObject({ tagName: "Sun", wouldChangeCount: 0 });
     expect(context.view().autoTag.rows[0]!.files[0]).toMatchObject({ needsChange: false, selected: false });
     expect(context.view().autoTagApplyPending).toBe(false);
@@ -1324,12 +1344,20 @@ describe("Auto Tag", () => {
   });
 
   it.each([
-    ["the server refuses it", 500, "application/json", "Scan failed: HTTP 500"],
-    ["it can't reach the server", 0, "application/json", "Scan failed: Couldn't reach the server."],
+    ["the server refuses it", 500, null, "application/json", "Scan failed.", "Scan failed (HTTP 500)."],
+    ["the server refuses it with a reason", 503, "Library not loaded or empty.", "application/json", "Scan failed: Library not loaded or empty.", "Scan failed (HTTP 503)."],
+    ["it can't reach the server", 0, null, "application/json", "Scan failed: Couldn't reach the server.", "Scan failed: Couldn't reach the server."],
     // A 401 shows nothing in place, since the pairing prompt is the only thing to show.
-    ["the server answers 401", 401, "application/json", ""],
-    ["the reply isn't JSON", 200, "text/html", "Scan failed: The server sent an unexpected response (text/html)."]
-  ])("shows a failed scan's error in place, with nothing to apply, when %s", async (_name, status, type, error) => {
+    ["the server answers 401", 401, null, "application/json", "", null],
+    [
+      "the reply isn't JSON",
+      200,
+      null,
+      "text/html",
+      "Scan failed: The server sent an unexpected response.",
+      "Scan failed: The server sent an unexpected response (text/html)."
+    ]
+  ])("shows a failed scan's failure in place, relaying its log line, with nothing to apply, when %s", async (_name, status, reason, type, error, logText) => {
     const context = setup();
     const { editor, server } = context;
     server.scan = SCAN;
@@ -1340,9 +1368,13 @@ describe("Auto Tag", () => {
     expect(context.view().autoTagApplyPending).toBe(true);
 
     server.scanStatus = status;
+    server.failureReason = reason;
     server.replyType = type;
     await editor.scan();
     expect(context.view().autoTag).toMatchObject({ scanning: false, hasRun: false, rows: [], status: error });
+    expect(context.statuses.filter((line) => line.startsWith("status=Scan failed"))).toEqual(
+      logText === null ? [] : [statusLogLine(logText, context.store.current.peek(), 0)]
+    );
     expect(context.view().results).toEqual({ kind: "placeholder", text: "Scan to find files whose names contain a tag's name." });
     expect(context.view().autoTagApplyPending).toBe(false);
     expect(context.store.pairingRequired.value).toBe(status === 401);
@@ -1363,7 +1395,7 @@ describe("Auto Tag", () => {
     server.scanStatus = 500;
     await openOn(context);
     await editor.scan();
-    expect(context.view().autoTag.status).toBe("Scan failed: HTTP 500");
+    expect(context.view().autoTag.status).toBe("Scan failed.");
 
     server.scanStatus = 200;
     server.scan = SCAN;

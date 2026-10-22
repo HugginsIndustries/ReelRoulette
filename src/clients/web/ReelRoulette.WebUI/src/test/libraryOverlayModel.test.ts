@@ -50,13 +50,13 @@ describe("libraryOverlayModel", () => {
   it("describes the loading, empty, and error messages", () => {
     expect(libraryOverlayMessage("loading", null)).toEqual({ text: "Loading library…", error: false, live: true });
     expect(libraryOverlayMessage("empty", "ignored")).toEqual({ text: "No media in library.", error: false, live: false });
-    expect(libraryOverlayMessage("error", "HTTP 500", 500)).toEqual({ text: "Library load failed: HTTP 500", error: true, live: false });
-    expect(libraryOverlayMessage("error", "Couldn't reach the server.")).toEqual({
+    expect(libraryOverlayMessage("error", "Library load failed.", 500)).toEqual({ text: "Library load failed.", error: true, live: false });
+    expect(libraryOverlayMessage("error", "Library load failed: Couldn't reach the server.")).toEqual({
       text: "Library load failed: Couldn't reach the server.",
       error: true,
       live: false
     });
-    expect(libraryOverlayMessage("error", null).text).toBe("Library load failed: Could not load library.");
+    expect(libraryOverlayMessage("error", null).text).toBe("Library load failed.");
   });
 
   it("says a load answered with 408 or 504 timed out, in place of its status", () => {
@@ -72,7 +72,7 @@ describe("libraryOverlayModel", () => {
     expect(libraryOverlayMessage("error", "Unauthorized", 401)).toEqual({ text: "", error: false, live: false });
   });
 
-  it("keeps an error message as text", () => {
-    expect(libraryOverlayMessage("error", "<b>HTTP</b> 500").text).toBe("Library load failed: <b>HTTP</b> 500");
+  it("keeps a failure's text as text", () => {
+    expect(libraryOverlayMessage("error", "Library load failed: <b>reason</b>").text).toBe("Library load failed: <b>reason</b>");
   });
 });

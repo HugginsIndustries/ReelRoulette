@@ -35,8 +35,9 @@ function setup(presets: ApiPreset[] = [FAVORITES], shared?: FakePresets) {
     /** The sources the server lists. */
     sources: [{ id: "source-1", displayName: "Movies" }, { id: "source-2", displayName: "Photos" }] as Array<{ id: string; displayName: string }>,
     sourcesStatus: 200,
-    /** The tag model's status, and its content type, for a proxy's page in place of JSON. */
+    /** The tag model's status, the reason a failed one gives, and its content type, for a proxy's page in place of JSON. */
     modelStatus: 200,
+    modelReason: null as string | null,
     modelType: "application/json",
     /** While set, the sources request waits for it, so a test can act while the dialog loads. */
     held: null as Promise<void> | null,
@@ -64,7 +65,8 @@ function setup(presets: ApiPreset[] = [FAVORITES], shared?: FakePresets) {
     }
     if (path === "/api/tag-editor/model") {
       const model = { categories: [{ id: "places", name: "Places", sortOrder: 0 }], tags: [{ name: "Beach", categoryId: "places" }] };
-      const body = server.modelType === "application/json" ? JSON.stringify(model) : "<html>Bad gateway</html>";
+      const answer = server.modelStatus >= 400 && server.modelReason ? { error: server.modelReason } : model;
+      const body = server.modelType === "application/json" ? JSON.stringify(answer) : "<html>Bad gateway</html>";
       return new Response(body, { status: server.modelStatus, headers: { "Content-Type": server.modelType } });
     }
     return fakePresets.answer(method, path, body) ?? json({}, 404);
@@ -259,7 +261,7 @@ describe("opening", () => {
     store.compatibilityBlocked.value = false;
     server.sourcesStatus = 500;
     await dialog.open();
-    expect(notices).toEqual(["Filter load failed: HTTP 500"]);
+    expect(notices).toEqual(["Filter load failed."]);
     expect(messages).toEqual([]);
     expect(dialog.isOpen.value).toBe(true);
     expect(dialog.view.value).toBeNull();
@@ -329,7 +331,7 @@ describe("opening", () => {
     const { dialog, view, server, messages, notices, serverEvents, loads } = setup();
     server.sourcesStatus = 500;
     await dialog.open();
-    expect(notices).toEqual(["Filter load failed: HTTP 500"]);
+    expect(notices).toEqual(["Filter load failed."]);
     expect(dialog.view.value).toBeNull();
 
     server.sourcesStatus = 200;
@@ -342,30 +344,37 @@ describe("opening", () => {
     expect(dialog.tab.value).toBe("general");
     expect(view().sources.map((source) => source.id)).toEqual(["source-1", "source-2"]);
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites"]);
-    expect(notices).toEqual(["Filter load failed: HTTP 500"]);
+    expect(notices).toEqual(["Filter load failed."]);
     expect(messages).toEqual([]);
   });
 
-  it("reads a failed tag model as HTTP and its status, in a notice on loading and in a log line on a server event", async () => {
-    const { dialog, server, messages, notices, serverEvents, relayed } = setup();
+  it("says a failed tag model failed, with the server's reason when it gives one, logging its status, and only logs it on a server event", async () => {
+    const { dialog, server, messages, notices, noticeLogs, serverEvents, relayed } = setup();
     server.modelStatus = 503;
     await dialog.open();
-    expect(notices).toEqual(["Filter load failed: HTTP 503"]);
+    expect(notices).toEqual(["Filter load failed."]);
+    expect(noticeLogs).toEqual(["Filter load failed (HTTP 503)."]);
+
+    server.modelReason = "Library not loaded or empty.";
+    await dialog.open();
+    expect(notices).toEqual(["Filter load failed.", "Filter load failed: Library not loaded or empty."]);
+    expect(noticeLogs).toEqual(["Filter load failed (HTTP 503).", "Filter load failed (HTTP 503)."]);
 
     server.modelStatus = 200;
     await dialog.open();
     server.modelStatus = 503;
     await serverEvents("tagCatalogChanged");
-    expect(notices).toEqual(["Filter load failed: HTTP 503"]);
+    expect(notices).toHaveLength(2);
     expect(relayed()).toEqual(["warn filter=event-load-failed status=503"]);
     expect(messages).toEqual([]);
   });
 
-  it("names the content type of a tag model that isn't JSON, such as a proxy's page", async () => {
-    const { dialog, server, notices } = setup();
+  it("says a tag model that isn't JSON, such as a proxy's page, is an unexpected response, naming its content type only in the log", async () => {
+    const { dialog, server, notices, noticeLogs } = setup();
     server.modelType = "text/html";
     await dialog.open();
-    expect(notices).toEqual(["Filter load failed: The server sent an unexpected response (text/html)."]);
+    expect(notices).toEqual(["Filter load failed: The server sent an unexpected response."]);
+    expect(noticeLogs).toEqual(["Filter load failed: The server sent an unexpected response (text/html)."]);
     expect(dialog.view.value).toBeNull();
   });
 
@@ -1130,7 +1139,7 @@ describe("per-preset writes", () => {
 
     expect(server.fakePresets.summaries()).toEqual(["rename preset-recent Fresh", "update preset-favorites (409)"]);
     expect(notices).toEqual(['Saving presets failed: Preset "Other" already has this filter.']);
-    expect(noticeLogs).toEqual(["Saving presets failed (409)."]);
+    expect(noticeLogs).toEqual(["Saving presets failed (HTTP 409)."]);
     // The rename landed, so the saved list has it; the update didn't, so the tab still holds it.
     expect(view().savedPresets.map((preset) => preset.name)).toEqual(["Favorites", "Fresh", "Long", "Other"]);
     expect(view().presets.map((preset) => preset.name)).toEqual(["Favorites", "Fresh", "Long", "Other"]);
@@ -1269,7 +1278,7 @@ describe("applying", () => {
 
     await dialog.apply();
 
-    expect(notices).toEqual(["Saving presets failed (500)."]);
+    expect(notices).toEqual(["Saving presets failed."]);
     expect(messages).toEqual([]);
     expect(dialog.isOpen.value).toBe(true);
     expect(panel.closeIfOverlay).not.toHaveBeenCalled();
