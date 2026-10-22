@@ -20,8 +20,7 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan a transcode retry for files a browser rejects, count only plays that start, and record the recovery loop
+Docs: Correct the refresh's per-file check numbers and record thumbnail cleanup's message burst
 
-- MILESTONES.md: Playback Session Contracts and Capability Surface lets a session request say direct playback failed, Server Playback Decision Engine decides transcode for such a request, remembering nothing, and WebUI Playback Cutover and Format Resilience retries a file the server can read through that transcode, with the measured Safari VP9 rejections in its traps and its dependencies named.
-- MILESTONES.md: Resume Position and Session Continuity counts a play only once the video plays or the photo shows, and drops the server-restart recovery that already shipped; Server Robustness Findings no longer names the completed Browser-Playable Filter as future work.
-- ISSUES.md: a video that fails at the same point mid-file may recover without end.
+- MILESTONES.md: Server Robustness Findings counts about one share request per file in the check loop, since the second stat is answered from the CIFS attribute cache, notes that the walk reads only paths, and accepts one stat per file in either the walk or the check loop.
+- ISSUES.md: thumbnail cleanup sends a refresh message for each thumbnail it removes.

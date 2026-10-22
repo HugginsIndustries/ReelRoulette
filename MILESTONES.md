@@ -3323,7 +3323,7 @@ Last milestone completed: M12k4
 
 - Storage:
   - Stalled source: the refresh stops working on a source whose storage stops responding, keeps that source's items as they are, and logs a warning, instead of crawling on. Decides the threshold and whether the rest of the run continues.
-  - Two stats per file: the fingerprint stage's check loop stats each file once, or reuses the size and write time the walk already read.
+  - Two stats per file: the fingerprint stage's check loop stats each file once, or takes each file's size and write time from the walk.
 - Needless work:
   - Telemetry reads: `ApiTelemetryService` keeps a ring buffer that reads newest first.
   - Session list under lock: `ServerSessionStore.GetActiveSessions` copies the records under the lock and sorts outside it.
@@ -3335,7 +3335,10 @@ Last milestone completed: M12k4
   - With the media on a soft CIFS mount whose server answered slowly, the largest source's walk took 17 min 48 s against 8.5–15 s normally, the check loop advanced one file every 50–65 s, and the run took 48.5 min against 3.5–6.5 min (measured).
   - `Directory.EnumerateFiles` with `AllDirectories` throws on an I/O error rather than returning a partial list.
   - A source whose folder lists no media files while the library holds items from it already keeps them, with a `last.log` warning.
-  - Two stats per file: the check loop calls `File.Exists` and then `new FileInfo` for every item, about 98,000 stats on a 49,100-item library, which take 3.4–4.6 min, about 2.1–2.8 ms a stat (measured).
+  - Two stats per file: the check loop calls `File.Exists` and then `new FileInfo` for every item, and on a 49,100-item library on a CIFS share it takes 3.4–4.6 min (measured).
+  - On a CIFS mount with a 1 s attribute cache (`actimeo=1`), the second stat is answered from the client's cache, so the share sees about one request per item, about 49,500 a run at 4.2–5.6 ms each (inferred, from the kernel's CIFS operation counters).
+  - So statting each file once saves few share requests on such a mount, while reading size and write time in the walk, right after each folder is listed, is answered from the attribute cache the listing fills and spares about one share request per item (inferred).
+  - The walk (`EnumerateMediaFiles`) returns only paths and reads no size or write time.
 - Needless work:
   - Telemetry reads: `ApiTelemetryService.GetIncoming` and `GetOutgoing` call `Reverse()` over the whole queue on every control status poll.
   - Session list under lock: `ServerSessionStore.GetActiveSessions` filters, sorts, and projects inside the session lock.
@@ -3343,7 +3346,7 @@ Last milestone completed: M12k4
 #### Acceptance
 
 - A refresh stops working on a source whose storage stops responding, keeps that source's items, and logs a warning, in its finding's tests with a source whose walk stalls and one whose file checks stall.
-- The check loop stats each file once, in its finding's test.
+- The refresh stats each file once, in the walk or in the check loop, in its finding's test.
 - Each finding above is fixed or explicitly declined with a reason in this entry.
 - Each fixed finding has a test.
 - `dotnet test ReelRoulette.sln` passes.

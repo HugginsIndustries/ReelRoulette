@@ -219,3 +219,11 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
 - **How much it matters**: Low. A full refresh with ffmpeg scans every video it can read.
 - **Since**: v0.9.0.
 - **Where**: `LibraryCatalogListQuery` in `src/core/ReelRoulette.Core/Library/LibraryCatalogListQuery.cs`.
+
+### Thumbnail cleanup sends a refresh message per removed thumbnail
+
+- **What goes wrong**: The thumbnail stage's cleanup sends every connected client a refresh status message for each thumbnail it removes, with no gap between them, while the stage's other progress messages go out at most every 500 ms. A cleanup that removes thousands of thumbnails sends thousands of messages in a burst, and a client that reconnects after more than 256 of them gets `resyncRequired` and reloads everything (inferred).
+- **How to make it happen**: Delete or move out of a source a folder holding many files, then refresh. The source stage removes the folder's items, and the thumbnail stage of the same run removes their thumbnails.
+- **How much it matters**: Low. It takes many files leaving the library at once. Each message carries the whole refresh status, about 1 KB, so 5,000 removed thumbnails send about 5 MB to every client (inferred).
+- **Since**: v0.13.0.
+- **Where**: `RemoveThumbnailsOutsideCatalog` in `src/core/ReelRoulette.Server/Services/RefreshPipelineService.cs` calls `UpdateStage` for each removed thumbnail, and `UpdateStage` publishes `refreshStatusChanged` on every call.
