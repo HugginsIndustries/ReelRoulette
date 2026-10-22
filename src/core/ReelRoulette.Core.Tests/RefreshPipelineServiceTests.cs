@@ -1364,6 +1364,56 @@ public sealed class RefreshPipelineServiceTests
     }
 
     [Fact]
+    public async Task ThumbnailStage_UsesTheStoredDuration_WithoutProbingTheVideoAgain()
+    {
+        using var scope = new DataFolderScope();
+        var mediaPath = Path.Combine(scope.RootPath, "stored-duration.mp4");
+        await GenerateTinyVideoAsync(mediaPath);
+        CatalogSeed.Write(
+            scope.RootPath,
+            items: [new SeedItem("stored-duration", mediaPath) { Duration = TimeSpan.FromSeconds(1) }]);
+
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        var probes = 0;
+        service.SetDurationProbe((_, _) =>
+        {
+            Interlocked.Increment(ref probes);
+            return Task.FromResult<TimeSpan?>(TimeSpan.FromSeconds(1));
+        });
+        await service.RunThumbnailStageAsync(CancellationToken.None);
+
+        Assert.Equal(0, Volatile.Read(ref probes));
+        Assert.True(File.Exists(service.GetThumbnailPath("stored-duration")));
+        var stage = service.GetStatus().Stages.Single(item => item.Stage == "thumbnailGeneration");
+        Assert.Contains("1 generated", stage.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ThumbnailStage_ProbesAVideoWithoutAStoredDuration()
+    {
+        using var scope = new DataFolderScope();
+        var mediaPath = Path.Combine(scope.RootPath, "no-duration.mp4");
+        await GenerateTinyVideoAsync(mediaPath);
+        CatalogSeed.Write(scope.RootPath, items: [new SeedItem("no-duration", mediaPath)]);
+
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        var probedPaths = new List<string>();
+        service.SetDurationProbe((path, _) =>
+        {
+            lock (probedPaths)
+            {
+                probedPaths.Add(path);
+            }
+
+            return Task.FromResult<TimeSpan?>(TimeSpan.FromSeconds(1));
+        });
+        await service.RunThumbnailStageAsync(CancellationToken.None);
+
+        Assert.Equal([mediaPath], probedPaths);
+        Assert.True(File.Exists(service.GetThumbnailPath("no-duration")));
+    }
+
+    [Fact]
     public async Task ThumbnailStage_RemovesDeletedItemThumbnail_AndKeepsLibraryThumbnails()
     {
         using var scope = new DataFolderScope();

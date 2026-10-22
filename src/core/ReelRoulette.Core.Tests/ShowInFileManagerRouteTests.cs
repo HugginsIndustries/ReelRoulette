@@ -50,7 +50,6 @@ public sealed class ShowInFileManagerRouteTests : IDisposable
 
     public void Dispose()
     {
-        LibraryCatalogBackup.WaitForPending();
         try
         {
             Directory.Delete(_tempDir, recursive: true);

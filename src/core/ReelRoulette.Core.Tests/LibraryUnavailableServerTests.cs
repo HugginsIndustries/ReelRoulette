@@ -335,7 +335,6 @@ public sealed class LibraryUnavailableCompositionTests : IDisposable
             await hosted.StopAsync(CancellationToken.None);
         }
 
-        LibraryCatalogBackup.WaitForPending();
     }
 
     /// <summary>The catalog files in the data folder and the catalog backups, with their content hashes.</summary>

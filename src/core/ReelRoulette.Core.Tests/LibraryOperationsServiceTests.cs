@@ -9,7 +9,7 @@ namespace ReelRoulette.Core.Tests;
 public sealed class LibraryOperationsServiceTests
 {
     [Fact]
-    public void Constructor_CreatesACatalogBackup()
+    public void OpenLibraryCatalog_CreatesACatalogBackup()
     {
         var appDataRoot = CreateTempAppDataRoot();
         try
@@ -17,7 +17,7 @@ public sealed class LibraryOperationsServiceTests
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 360, numberOfBackups: 8);
             CatalogSeed.Write(appDataRoot);
 
-            _ = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            _ = CatalogOpen.ServerHost(appDataRoot);
 
             var backupDir = Path.Combine(appDataRoot, "backups");
             Assert.True(File.Exists(Path.Combine(appDataRoot, "library.db")));
@@ -26,6 +26,29 @@ public sealed class LibraryOperationsServiceTests
         finally
         {
             LibraryCatalogBackup.WaitForPending();
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Constructor_LeavesTheCatalogBackupToStartup()
+    {
+        var appDataRoot = CreateTempAppDataRoot();
+        try
+        {
+            SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 1, numberOfBackups: 8);
+            CatalogSeed.Write(appDataRoot, items: [new SeedItem("item-1", @"C:\media\movie.mp4")]);
+
+            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            Assert.True(service.RecordPlayback("item-1").Found);
+
+            Assert.False(Directory.Exists(Path.Combine(appDataRoot, "backups")));
+        }
+        finally
+        {
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -56,7 +79,7 @@ public sealed class LibraryOperationsServiceTests
             File.WriteAllText(leftover, "{\"items\":[]}");
             SetBackupTimestampUtc(leftover, DateTime.UtcNow.AddHours(-12));
 
-            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.ServerHost(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             Assert.True(service.RecordPlayback("item-1").Found);
 
             var backupFiles = Directory.GetFiles(backupDir, "other.backup.*");
@@ -107,7 +130,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -133,7 +155,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -171,7 +192,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -208,7 +228,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -296,7 +315,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -343,7 +361,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -388,7 +405,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -432,7 +448,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -470,7 +485,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -538,7 +552,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -586,7 +599,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -659,7 +671,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -709,7 +720,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -765,7 +775,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -826,7 +835,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -863,7 +871,7 @@ public sealed class LibraryOperationsServiceTests
             SetBackupTimestampUtc(backupB, DateTime.UtcNow.AddHours(-7));
             SetBackupTimestampUtc(backupC, DateTime.UtcNow.AddMinutes(-10));
 
-            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.ServerHost(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var before = Directory.GetFiles(backupDir, "other.backup.*").OrderBy(path => path).ToArray();
             _ = service.RecordPlayback("item-1");
             var after = Directory.GetFiles(backupDir, "other.backup.*").OrderBy(path => path).ToArray();
@@ -897,7 +905,7 @@ public sealed class LibraryOperationsServiceTests
                     }
                 ]);
 
-            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.ServerHost(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var backupDir = Path.Combine(appDataRoot, "backups");
             var before = Assert.Single(Directory.GetFiles(backupDir, "library.db.backup.*"));
             var bytes = File.ReadAllBytes(before);
@@ -946,7 +954,7 @@ public sealed class LibraryOperationsServiceTests
             SetBackupTimestampUtc(backupB, DateTime.UtcNow.AddHours(-8));
             SetBackupTimestampUtc(backupC, DateTime.UtcNow.AddHours(-7));
 
-            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.ServerHost(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             foreach (var existing in Directory.GetFiles(backupDir, "library.db.backup.*"))
             {
                 SetBackupTimestampUtc(existing, DateTime.UtcNow.AddHours(-3));
@@ -991,7 +999,7 @@ public sealed class LibraryOperationsServiceTests
                     }
                 ]);
 
-            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.ServerHost(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var backupDir = Path.Combine(appDataRoot, "backups");
             foreach (var existing in Directory.GetFiles(backupDir, "library.db.backup.*"))
             {
@@ -1038,7 +1046,7 @@ public sealed class LibraryOperationsServiceTests
                     }
                 ]);
 
-            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.ServerHost(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var backupDir = Path.Combine(appDataRoot, "backups");
             foreach (var existing in Directory.GetFiles(backupDir, "library.db.backup.*"))
             {
@@ -1094,7 +1102,7 @@ public sealed class LibraryOperationsServiceTests
                     }
                 ]);
 
-            var service = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            var service = new LibraryOperationsService(CatalogOpen.ServerHost(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var backupDir = Path.Combine(appDataRoot, "backups");
             foreach (var existing in ListCatalogBackupFiles(backupDir))
             {
@@ -1153,12 +1161,8 @@ public sealed class LibraryOperationsServiceTests
                     }
                 ]);
 
-            _ = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
             var backupDir = Path.Combine(appDataRoot, "backups");
-            foreach (var existing in Directory.GetFiles(backupDir, "library.db.backup.*"))
-            {
-                File.Delete(existing);
-            }
+            Directory.CreateDirectory(backupDir);
 
             // Written just now, so it would block the copy if it counted toward the gap.
             var partial = Path.Combine(backupDir, "library.db.backup.partial");
@@ -1178,7 +1182,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -1218,7 +1221,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -1249,7 +1251,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -1267,7 +1268,10 @@ public sealed class LibraryOperationsServiceTests
             SeedCoreSettings(appDataRoot, enabled: true, minimumGapMinutes: 60, numberOfBackups: 8);
             CatalogSeed.Write(appDataRoot);
 
-            _ = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
+            LibraryCatalogBackup.TryCreate(
+                Path.Combine(appDataRoot, "library.db"),
+                appDataRoot,
+                NullLogger.Instance);
             var backupDir = Path.Combine(appDataRoot, "backups");
             blocked = Assert.Single(
                 Directory.GetFiles(backupDir, "library.db.backup.*"),
@@ -1296,7 +1300,6 @@ public sealed class LibraryOperationsServiceTests
                 File.SetUnixFileMode(blocked, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             }
 
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -1378,7 +1381,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -1687,7 +1689,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -1762,7 +1763,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -1795,7 +1795,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -1844,7 +1843,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -1897,7 +1895,6 @@ public sealed class LibraryOperationsServiceTests
         }
         finally
         {
-            LibraryCatalogBackup.WaitForPending();
             if (Directory.Exists(appDataRoot))
             {
                 Directory.Delete(appDataRoot, recursive: true);
@@ -2030,7 +2027,6 @@ public sealed class LibraryOperationsServiceTests
 
     private static void Cleanup(string appDataRoot)
     {
-        LibraryCatalogBackup.WaitForPending();
         if (Directory.Exists(appDataRoot))
         {
             Directory.Delete(appDataRoot, recursive: true);

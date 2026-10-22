@@ -227,3 +227,15 @@ Mark a fact that was run or measured "(measured)" and one reasoned but not check
 - **How much it matters**: Low. It takes many files leaving the library at once. Each message carries the whole refresh status, about 1 KB, so 5,000 removed thumbnails send about 5 MB to every client (inferred).
 - **Since**: v0.13.0.
 - **Where**: `RemoveThumbnailsOutsideCatalog` in `src/core/ReelRoulette.Server/Services/RefreshPipelineService.cs` calls `UpdateStage` for each removed thumbnail, and `UpdateStage` publishes `refreshStatusChanged` on every call.
+
+### A video replaced at the same path keeps its old duration and loudness
+
+- **What goes wrong**: When a video's file is replaced by a different one at the same path, refresh hashes the new file but keeps the old file's duration and loudness. The Filter tab's duration limits, the Stats tab, and the frame the thumbnail stage picks use the old length, and Loudness normalization sets the new file's volume from the old file's loudness (inferred).
+- **How to make it happen**: Replace a video in a source folder with a different video under the same name, such as a re-encoded or trimmed copy, then refresh. A forced duration or loudness rescan corrects it, but no ReelRoulette screen offers one yet: it is set through `POST /api/refresh/settings` or in `core-settings.json`.
+- **How much it matters**: Low. Replacing a file in place is rare, and the thumbnail still gets made when the old length is wrong (inferred), but the wrong values stay until a forced rescan, with nothing to show they're stale.
+- **Since**: v0.9.0 for the duration and loudness, when the server took over refresh: that release's duration stage already scanned only videos without a duration. The thumbnail's frame since v0.15.0, not yet released, whose thumbnail stage picks frames from the stored duration instead of probing the video again.
+- **Where**: In `src/core/ReelRoulette.Server/Services/RefreshPipelineService.cs`:
+  - The fingerprint stage marks a changed file's fingerprint stale (`FingerprintStatus = 3`) and clears neither its duration nor its loudness.
+  - `RunDurationStageAsync` scans only videos without a stored duration, unless the rescan is forced.
+  - `NeedsLoudness` scans again only a video never scanned, scanned under an older analysis version, or with a recorded error.
+  - The thumbnail stage picks its frames from the stored duration.

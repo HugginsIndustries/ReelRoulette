@@ -151,7 +151,6 @@ public sealed class PresetRouteTests : IDisposable
 
     public void Dispose()
     {
-        LibraryCatalogBackup.WaitForPending();
         if (Directory.Exists(_tempDir))
         {
             Directory.Delete(_tempDir, recursive: true);

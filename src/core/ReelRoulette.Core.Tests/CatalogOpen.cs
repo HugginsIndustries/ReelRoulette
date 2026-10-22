@@ -1,4 +1,6 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using ReelRoulette.Core.Library;
+using ReelRoulette.Server.Hosting;
 using ReelRoulette.Server.Services;
 
 namespace ReelRoulette.Core.Tests;
@@ -11,11 +13,20 @@ internal static class CatalogOpen
     }
 
     /// <summary>
-    /// Opens the catalog in a server data folder the way the server does.
+    /// Opens the catalog in a server data folder, without the catalog backup the server attaches at startup.
     /// </summary>
     public static LibraryCatalogHost Host(string directory)
     {
         return LibraryCatalogHost.Open(directory);
+    }
+
+    /// <summary>
+    /// Opens the catalog in a server data folder the way the server does at startup, with the catalog backup
+    /// attached.
+    /// </summary>
+    public static LibraryCatalogHost ServerHost(string directory)
+    {
+        return ServerHostComposition.OpenLibraryCatalog(directory, NullLogger.Instance);
     }
 
     /// <summary>

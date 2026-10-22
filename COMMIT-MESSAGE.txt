@@ -20,7 +20,9 @@ Instructions:
 
 Commit Message:
 
-Docs: Correct the refresh's per-file check numbers and record thumbnail cleanup's message burst
+Bugfix: Attach the catalog backup only at startup and pick thumbnail frames from the stored duration
 
-- MILESTONES.md: Server Robustness Findings counts about one share request per file in the check loop, since the second stat is answered from the CIFS attribute cache, notes that the walk reads only paths, and accepts one stat per file in either the walk or the check loop.
-- ISSUES.md: thumbnail cleanup sends a refresh message for each thumbnail it removes.
+- Server startup alone attaches the catalog backup. The operations service also attached it when the first library request created it, so a second backup attempt could come hours after startup, skip the hold during a refresh, and write an extra backup that rotated out the oldest one.
+- The refresh's thumbnail stage picks each video's frames from the duration the duration stage stored, and probes with ffprobe only a video without one, such as after that stage's probe failed.
+- Tests: the backup tests open the catalog through startup's own path, and new tests keep the operations service from attaching the backup and the thumbnail stage from probing a video with a stored duration, while still probing one without. Backup waits are gone from tests that never attach a backup.
+- ISSUES.md: a video replaced at the same path keeps its old duration and loudness.

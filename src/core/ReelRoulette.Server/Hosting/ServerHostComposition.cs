@@ -24,31 +24,9 @@ public static class ServerHostComposition
 
     public static void AddReelRouletteServer(this IServiceCollection services)
     {
-        services.AddSingleton(sp =>
-        {
-            var appDataRoot = ServerDataPaths.DataDirectory();
-            var host = LibraryCatalogHost.Open(appDataRoot);
-            var logger = sp.GetRequiredService<ILogger<LibraryCatalogHost>>();
-            if (!host.HasLibrary)
-            {
-                // No backup is attached, so neither a backup nor rotation runs against these files.
-                logger.LogWarning("Running without a library: {Reason}", host.UnavailableMessage);
-                new ServerLogService(appDataRoot, logger).Append("warn", host.UnavailableMessage!);
-                return host;
-            }
-
-            logger.LogInformation(
-                "Opened library catalog {DatabasePath}.",
-                host.Session.DatabasePath);
-            if (host.MigrationMessage != null)
-            {
-                logger.LogInformation("{Message}", host.MigrationMessage);
-                new ServerLogService(appDataRoot, logger).Append("info", host.MigrationMessage);
-            }
-
-            LibraryCatalogBackup.Attach(host.Session, appDataRoot, logger);
-            return host;
-        });
+        services.AddSingleton(sp => OpenLibraryCatalog(
+            ServerDataPaths.DataDirectory(),
+            sp.GetRequiredService<ILogger<LibraryCatalogHost>>()));
         services.AddSingleton(sp =>
         {
             var logger = sp.GetRequiredService<ILogger<ServerStateService>>();
@@ -71,6 +49,34 @@ public static class ServerHostComposition
         services.AddSingleton<OperatorTestingService>();
         services.AddSingleton(_ => new ServerLogService());
         services.AddHostedService(sp => sp.GetRequiredService<RefreshPipelineService>());
+    }
+
+    /// <summary>
+    /// Opens the catalog as the server starts: logs the outcome and, with a library, attaches the catalog
+    /// backup, which takes a startup backup and backs up after each catalog write.
+    /// </summary>
+    internal static LibraryCatalogHost OpenLibraryCatalog(string appDataRoot, ILogger logger)
+    {
+        var host = LibraryCatalogHost.Open(appDataRoot);
+        if (!host.HasLibrary)
+        {
+            // No backup is attached, so neither a backup nor rotation runs against these files.
+            logger.LogWarning("Running without a library: {Reason}", host.UnavailableMessage);
+            new ServerLogService(appDataRoot, logger).Append("warn", host.UnavailableMessage!);
+            return host;
+        }
+
+        logger.LogInformation(
+            "Opened library catalog {DatabasePath}.",
+            host.Session.DatabasePath);
+        if (host.MigrationMessage != null)
+        {
+            logger.LogInformation("{Message}", host.MigrationMessage);
+            new ServerLogService(appDataRoot, logger).Append("info", host.MigrationMessage);
+        }
+
+        LibraryCatalogBackup.Attach(host.Session, appDataRoot, logger);
+        return host;
     }
 
     /// <summary>The steps every request passes before its endpoint, in order.</summary>

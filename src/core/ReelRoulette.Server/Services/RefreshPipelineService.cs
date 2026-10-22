@@ -63,6 +63,7 @@ public sealed class RefreshPipelineService : BackgroundService
     private Func<DateTimeOffset> _progressClock = () => DateTimeOffset.UtcNow;
     private bool _assumeFfmpegAvailable;
     private Func<string, string, TimeSpan?, CancellationToken, Task<FileLoudnessInfo?>> _analyzeLoudness = AnalyzeLoudnessAsync;
+    private Func<string, CancellationToken, Task<TimeSpan?>> _probeDuration = GetVideoDurationAsync;
 
     public RefreshPipelineService(
         ServerStateService state,
@@ -227,6 +228,15 @@ public sealed class RefreshPipelineService : BackgroundService
     {
         ArgumentNullException.ThrowIfNull(analyze);
         _analyzeLoudness = (path, _, duration, token) => analyze(path, duration, token);
+    }
+
+    /// <summary>
+    /// Probes a video's duration with <paramref name="probe"/>, given the file's path, in place of running
+    /// ffprobe: in the duration stage, and in the thumbnail stage for a video without a stored duration.
+    /// </summary>
+    internal void SetDurationProbe(Func<string, CancellationToken, Task<TimeSpan?>> probe)
+    {
+        _probeDuration = probe ?? throw new ArgumentNullException(nameof(probe));
     }
 
     internal void HoldNextFingerprintWrite(Task hold)
@@ -999,7 +1009,7 @@ public sealed class RefreshPipelineService : BackgroundService
                 return;
             }
 
-            var duration = await GetVideoDurationAsync(item.FullPath, cancellationToken);
+            var duration = await _probeDuration(item.FullPath, cancellationToken);
             if (duration.HasValue && duration.Value.TotalSeconds > 0)
             {
                 var prior = item.DurationTicks;
@@ -1198,7 +1208,12 @@ public sealed class RefreshPipelineService : BackgroundService
                     }
 
                     generatedThumb = ffmpegAvailable
-                        ? await TryGenerateVideoThumbnailAsync(fullPath, thumbPath, ffmpegPath, cancellationToken)
+                        ? await TryGenerateVideoThumbnailAsync(
+                            fullPath,
+                            await ThumbnailDurationSecondsAsync(item.DurationTicks, fullPath, cancellationToken),
+                            thumbPath,
+                            ffmpegPath,
+                            cancellationToken)
                         : null;
                 }
                 else
@@ -1752,10 +1767,31 @@ public sealed class RefreshPipelineService : BackgroundService
     }
 
 
-    private async Task<ThumbnailGenerationResult?> TryGenerateVideoThumbnailAsync(string sourcePath, string thumbPath, string ffmpegPath, CancellationToken cancellationToken)
+    /// <summary>
+    /// The length a video's thumbnail frames are picked from: the duration the duration stage stored, so the
+    /// video isn't probed again, or a fresh probe when none is stored, such as after that stage's probe failed.
+    /// </summary>
+    private async Task<double> ThumbnailDurationSecondsAsync(
+        long? storedDurationTicks,
+        string sourcePath,
+        CancellationToken cancellationToken)
     {
-        var duration = await GetVideoDurationAsync(sourcePath, cancellationToken);
-        var durationSeconds = Math.Max(duration?.TotalSeconds ?? 0, 0);
+        if (storedDurationTicks is long ticks && ticks > 0)
+        {
+            return TimeSpan.FromTicks(ticks).TotalSeconds;
+        }
+
+        var probed = await _probeDuration(sourcePath, cancellationToken);
+        return Math.Max(probed?.TotalSeconds ?? 0, 0);
+    }
+
+    private static async Task<ThumbnailGenerationResult?> TryGenerateVideoThumbnailAsync(
+        string sourcePath,
+        double durationSeconds,
+        string thumbPath,
+        string ffmpegPath,
+        CancellationToken cancellationToken)
+    {
         var attempts = BuildVideoThumbnailOffsets(durationSeconds);
 
         foreach (var offset in attempts)

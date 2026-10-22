@@ -66,6 +66,7 @@ Write **[Unreleased]** bullets at the same level as the released sections below.
 - **Preset star clears when the filter is put back:** In the WebUI, setting a category's match mode to ANY (OR) and back, or unchecking sources and checking them again for a preset that names every source, no longer leaves a star on the Filter tab's preset heading or the preset dropdown, or Apply showing changes, and moving a preset and back no longer leaves Apply showing changes.
 - **Refresh keeps files from an unmounted drive or share:** When a source's folder is there but holds no media files, as when its drive or network share isn't mounted, a refresh no longer removes every file of that source from the library along with its tags, favorites, and play stats. It keeps them, writes a warning to the server log naming the folder, and the WebUI says so in a dialog naming the folder, once per page load.
 - **FFmpeg's license in Windows server packages:** Windows server packages now include the GPL-3.0 license text for the FFmpeg and ffprobe they bundle, as `FFmpeg-LICENSE.txt` beside them.
+- **No extra catalog backup after startup:** The server no longer backs up the catalog again when a device first loads the library after the server starts. When that came hours after startup, it added an extra backup, sometimes during a refresh, and pushed the oldest one out.
 
 ### Security
 

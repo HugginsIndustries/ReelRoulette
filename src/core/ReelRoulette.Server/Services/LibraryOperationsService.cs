@@ -46,14 +46,9 @@ public sealed class LibraryOperationsService
     {
         _logger = logger ?? NullLogger<LibraryOperationsService>.Instance;
         var appData = appDataPathOverride ?? ServerDataPaths.DataDirectory();
-        Directory.CreateDirectory(appData);
         _serverLog = new ServerLogService(appData, _logger);
         _catalog = catalog;
         _enumerateFiles = enumerateMediaFiles ?? EnumerateAllFiles;
-        if (_catalog.HasLibrary)
-        {
-            LibraryCatalogBackup.Attach(_catalog.Session, appData, _logger);
-        }
     }
 
     public void WriteCatalogCheckpoint(string destinationPath)

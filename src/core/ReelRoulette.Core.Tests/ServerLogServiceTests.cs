@@ -99,12 +99,8 @@ public sealed class ServerLogServiceTests
 
     private static (LibraryOperationsService Operations, ServerLogService ServerLog) CreateWriters(string appDataRoot)
     {
-        // Backups off, so the only lines in last.log are the ones the test writes.
-        File.WriteAllText(Path.Combine(appDataRoot, "core-settings.json"), """{ "backup": { "enabled": false } }""");
         CatalogSeed.Write(appDataRoot);
         var operations = new LibraryOperationsService(CatalogOpen.Host(appDataRoot), NullLogger<LibraryOperationsService>.Instance, appDataRoot);
-        LibraryCatalogBackup.WaitForPending();
-        File.Delete(Path.Combine(appDataRoot, "last.log"));
         return (operations, new ServerLogService(appDataRoot));
     }
 
@@ -117,7 +113,6 @@ public sealed class ServerLogServiceTests
 
     private static void DeleteTempAppDataRoot(string appDataRoot)
     {
-        LibraryCatalogBackup.WaitForPending();
         if (Directory.Exists(appDataRoot))
         {
             Directory.Delete(appDataRoot, recursive: true);

@@ -528,7 +528,6 @@ public sealed class ItemIdContractTests : IDisposable
 
     public void Dispose()
     {
-        LibraryCatalogBackup.WaitForPending();
         if (Directory.Exists(_tempDir))
         {
             Directory.Delete(_tempDir, recursive: true);
