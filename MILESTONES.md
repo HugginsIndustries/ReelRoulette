@@ -9,7 +9,7 @@ An outline of upcoming releases and the milestones each one ships, in order. Eac
 
 The WebUI is the only client on every device from v0.15.0, which removes the desktop client. The native Android client is dropped.
 
-- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts and full keyboard navigation, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Random tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12l1, M12l2, M12l3, M12m, M12n1, M12n2, M12n3, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t, M12u.
+- **v0.15.0 — WebUI overhaul**: Serve the WebUI over HTTPS so it installs as an app, move it to Preact, design the release's UI in one approved mockup, roll out the new logo and icons, give it a responsive layout with a side panel and phone overlays, and give it everything the desktop does: keyboard shortcuts, volume and loudness normalization, stats, settings, an admin section that replaces the Operator page and manages refresh, backups, duplicates, sources, and catalog transfer, Show in File Manager, a browser-playable filter, and multi-select. It also adds 5-star ratings with half stars, which filter and sort, date added and date created filters and sorts, a Random tab whose options combine shuffle, folder and tag spread, and favoring less played, new, or higher-rated files in place of the randomization modes, and profiles, chosen from the header, that each show only the sources, tags, and presets picked for them. It removes the desktop client, its packaging, and its tests, and moves preset writes to per-preset routes. M12a, M12b, M12c, M12d, M12e, M12f1, M12f2, M12f3, M12f4, M12f5, M12f6, M12f7, M12f8, M12g, M12h, M12i1, M12i2, M12i3, M12i4, M12i5, M12i6, M12i7, M12i8, M12i9, M12i10, M12j, M12k1, M12k2, M12k3, M12k4, M12k5, M12k6, M12k7, M12l1, M12l2, M12l3, M12m, M12n1, M12n2, M12n3, M12o1, M12o2, M12o3, M12p, M12q, M12r, M12s, M12t.
 - **v0.15.1 — Structured log foundation**: Write `last.log` as structured JSON Lines through one server writer and give the WebUI a typed, privacy-safe log API. P27a, P27b.
 - **v0.16.0 — Playback sessions**: Let the server choose direct, remux, or transcode playback per session for the WebUI. P2a, P2b, P2c, P2d, P2f, P2g, P2h.
 - **v0.17.0 — Structured log migration and Log Viewer**: Move every server and WebUI log to the structured API and give the admin section a filterable Log Viewer. P27d, P27e, P27f, P27g.
@@ -549,7 +549,7 @@ Last milestone completed: M12k4
 - `randomPick.test.ts` checks the request body's keys in order.
 - `library.test.ts` checks the exact `localStorage` keys after startup, so the options aren't written without a user action.
 - The preset and randomization dropdowns share `.library-controls-pair`, a row from a 414 px container (`src/styles.css`), which a library screen test matches by its text, and on a phone on its side the controls are a two-column grid that the dropdown's removal leaves with three items.
-- `FilterSummary` in `src/ui/LibraryOverlay.tsx` builds the Filters line from `filterSummaryParts` (`src/filter/filterSummaryModel.ts`) and opens the Filter tab through `library.openFilterTab()`, and the collapse toggle's `aria-controls` names the Filters line and the controls.
+- `FilterSummary` in `src/ui/LibraryOverlay.tsx` builds the Filters line from `filterSummaryParts` (`src/filter/filterSummaryModel.ts`) and opens the Filter tab through `library.openFilterTab()`.
 - The panel's tabs are `PANEL_TABS` (`src/panel/panelHost.ts`) and `TABS` (`src/ui/Panel.tsx`), each page has its ref and section, and `connectTabs` takes hooks for every tab.
 - The remembered tab is kept by its id (`panel.tab`), so a new tab leaves a remembered one valid.
 - Panel screen, Stats screen, and `panelHost` tests list the five tabs.
@@ -583,6 +583,182 @@ Last milestone completed: M12k4
 - Spreading by a folder other than a file's immediate parent.
 - Lasting random-pick totals and other library-wide stats, a possible future addition to the Stats tab.
 - Random picks from each account's own data, which is Per-Account Library Data.
+
+### M12k7 - WebUI Keyboard Navigation and Screen Reader Code Removal
+
+- **Status**: ⏳ Planned
+- **Goal**: The keyboard serves only the app's shortcuts: the WebUI and its mockup lose their keyboard navigation and screen-reader-only code, and Space, ←, and → reach the shortcuts from every control but text fields and dropdowns.
+- **Design**: `docs/mockups/reelroulette/`.
+
+#### Decisions
+
+- Only text fields, dropdowns, and editable text keep the keys pressed in them, where a text field is any `input` but a checkbox, radio button, button, or slider, or a `textarea`. Every other control leaves Space, ←, and → to the shortcuts.
+- A dropdown gives up focus right after a pick, so → after picking a preset with the mouse plays the next item instead of changing the preset.
+- When a shortcut runs, the focused control loses focus first, so Space's release can't press a button and focus doesn't stay for the next key.
+- Of the markup screen readers use, only what names a control or says what kind it is stays: `aria-label`, `aria-labelledby` where it names, `title`, `<label>`, and `alt`; the roles `tab`, `tablist`, and `tabpanel` with `aria-selected`, `radiogroup`, `group`, and the in-app dialogs' roles; and `aria-hidden` on icons inside controls.
+- The rest of that markup goes: what announces, describes, or reports state, the roles on things that only looked focusable or that announce, and the text only screen readers hear.
+- In-app dialogs keep the control they focus on opening, Cancel, OK, or the name field with its text selected, and focus goes back nowhere when they close.
+- The field validation pattern keeps showing a field's tooltip while it has focus and moving a held action to its flagged field, since a pointer or a touch starts both.
+- The browser's own focus ring and Tab order stay, and nothing hides or changes them.
+
+#### Slices
+
+| Slice | Status | Delivers |
+| --- | --- | --- |
+| Mockup | ⏳ Planned | Keyboard navigation, screen-reader-only markup and text, and the grid's and menus' focus designs removed from the mockup, and its keys routed as the Decisions say, approved on a desktop browser, the iPad, and an Android phone. |
+| Keyboard navigation | ⏳ Planned | The WebUI's own tab stops, keys inside controls, focus moves, focus tracking, and focus rings removed, with the tests that used them as setup moved to the pointer and the shortcuts. |
+| Shortcut keys | ⏳ Planned | Space, ←, and → reaching the shortcuts from every control but text fields and dropdowns, the focused control blurred when a shortcut runs, and dropdowns giving up focus after a pick. |
+| Screen reader | ⏳ Planned | Announcements, descriptions, state attributes, the roles that only looked focusable or that announce, and screen-reader-only text removed, with tests finding things by what they show. |
+
+#### Mockup slice
+
+**Scope**
+
+- In `docs/mockups/reelroulette/`, the focus ring goes: `--focus-ring` in both themes, every `:focus-visible` rule, and the global `:focus { outline: none }` with them, so the browser's own ring shows, as in the app.
+- The grid's focus design goes: the focused tile's `.tile-focus` border, the check icon's focus ring and its showing on focus, the grid's single tab stop, its arrow keys, and Enter and Space on a tile.
+- Keys inside other controls go: the panel tab row's arrow keys, Home, and End and its moving tab stop, the resize handle's tab stop and keys, the drag handles' up and down arrows, the stars' tab stop and keys, the rating popover's Enter and its closing as focus leaves, the file name's tab stop and its Enter and Space, and the Actions menu's arrow keys.
+- Focus moves go: the rating popover's to its stars and back to the star, the Actions menu's to its first item, and those after Add Preset, Add tag, a drop, Notification settings, H, Auto Tag opening and closing, and a click closing the panel or the bell's list.
+- The dialogs keep the control they focus on opening and no longer give focus back when they close.
+- Tab stops on the bell list's title, the recovery page's log, and the validation page's stars go, as do the player controls' and the popups' holds for keyboard focus.
+- Escape keeps leaving focus on the page as it closes the panel or the bell's list.
+- The screen-reader-only markup goes, as the Decisions say: live regions, `role=status` and `role=alert`, the drag handles' help and announcements (`#sort-live` and `announce()`), `aria-describedby`, `aria-invalid`, `aria-disabled`, `aria-expanded`, `aria-controls`, `aria-haspopup`, `aria-pressed`, `aria-modal`, `aria-orientation`, `aria-valuetext` and the value attributes, and the roles `menu`, `menuitem`, `slider`, `separator`, `checkbox`, `progressbar`, `tooltip`, `list`, and `listitem` and the bell list's `dialog`, with the `aria-labelledby` and container `aria-label`s that named only them.
+- Text only screen readers hear goes: the count line's spoken text, "Saved", a held action's hidden reason, the drag handles' help, the `.vh` class, and comments about what screen readers hear.
+- The validation page drops its 19 "aria-invalid / accessible description" readouts and its screen-reader wording, keeping its "In use" readout.
+- The index page's descriptions of keyboard focus and of keys inside controls, and the README's line about what a screen reader is given, are rewritten.
+- Three stylesheet rules that read ARIA attributes use classes: held buttons `.shows-problem` in place of `aria-disabled`, the bell a class of its own while its list is open in place of `aria-expanded`, and the validation page's theme switch a class in place of `aria-pressed`. `.tab[aria-selected]` stays with the tab role.
+- The shortcut handler leaves keys only to text fields, dropdowns, and editable text, and blurs the focused control when a shortcut runs, and a dropdown gives up focus after a pick.
+- Before the app is built, the user approves the mockup on a desktop browser, the iPad, and an Android phone.
+
+**Traps**
+
+- `check.mjs` finds controls by id, `data-sub`, `dialog.app-dialog`, a button's text, and a tile's title, never by a role, an ARIA attribute, or focus, and it passed before this milestone (measured).
+- `common.css` sets `:focus { outline: none }` on everything, so removing only the `:focus-visible` rules would leave keyboard focus showing nothing, where the WebUI has no such rule (measured).
+- The shortcut handler in `layout.src.html` leaves Space to `button, a, input:not([type=range]), select, textarea, summary, [tabindex]` and ← and → to any `input`, and the grid's, tab row's, handles', stars', and Actions menu's own key handlers win through `defaultPrevented`.
+- The stars' keys share `ratings.set(…, byKey)` and `RATING_KEY_PAUSE_MS` with the - and = and Shift+digit shortcuts, which keep them.
+- `holdAction` in `common.js` already sets `.shows-problem` whenever it sets `aria-disabled`.
+- `.tab[aria-selected="true"]` in `common.css` draws the selected panel tab's and Filter section tab's color and underline.
+- Icons are ligature text set by `setIcon` in `common.js`, so `aria-hidden` on an icon keeps its glyph's name out of its control's name (inferred).
+- While selecting, the mockup's tiles become `role=checkbox` with `aria-checked`, and the check icon is a `role=checkbox` named "Select {name}"; the names stay.
+- Updating tiles in place during selection stays, though its comment gives keeping focus as its reason.
+- The mockup's dialogs focus their control on opening and give focus back with `returnTo` in `common.js`.
+
+**Acceptance**
+
+- The mockup shows no focus ring of its own and has none of the removed keyboard navigation, screen-reader-only markup, or text, as the user approved in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+- In the mockup, after a click on Next, Space plays or pauses, after a click on the seek bar, → plays the next item, and after a preset is picked, → plays the next item, as the user approved in their review on their devices.
+
+#### Keyboard navigation slice
+
+**Scope**
+
+- The WebUI's own tab stops go: the tiles' (`renderGridTileHtml` in `src/library/libraryGridTileModel.ts`), the file name's (`src/ui/Header.tsx`), the stars' (`src/ui/RatingStars.tsx`), the panel handle's (`src/ui/Panel.tsx`), and the bell list title's (`src/ui/Notifications.tsx`).
+- Keys inside controls go: the stars' arrows, Home, End, Delete, and Backspace (`ratingForKey` in `src/rating/rating.ts`), the panel handle's arrows, Home, and End, the drag handles' up and down arrows (`src/ui/Reorder.tsx`, `arrowKeyTarget` in `src/reorder/reorder.ts`), Enter and Space on a tile (`src/ui/LibraryOverlay.tsx`) and on the file name, and the rating popover's Enter and its closing as Tab leaves it (`src/ui/Player.tsx`).
+- Focus moves go: the rating popover's to its stars and back to the star, the panel button's on a close (`attachButton` in `src/panel/panelHost.ts` and its effect in `Player.tsx`), the bell's after its click, the bell list title's on opening and after Clear, a drag handle's after a click, a drop, or a move, Add Preset's to the new row's handle (`src/ui/FilterDialog.tsx`), Add tag's to the new chip (`src/ui/TagEditor.tsx`), and Copy Path's back to its button (`src/stats/fileLocation.ts`).
+- Notification settings and H keep opening and scrolling to their sections without focusing Show popups or the Keyboard shortcuts heading (`src/ui/SettingsTab.tsx`).
+- In-app dialogs keep `initialFocus` and `selectInitial` and lose `returnTo` and `fallbackFocus`, with the fallback helpers in `FilterDialog.tsx` and `TagEditor.tsx` (`src/ui/Dialog.tsx`).
+- Focus tracking goes: the player controls' `keyboardFocus` hold (`src/playback/playerControls.ts`, `Player.tsx`) and the popups' pause while focus is in one (`src/notifications/notifications.ts`, `Notifications.tsx`).
+- The stylesheet's 15 `:focus-visible` rules, `--focus-ring` in both themes, and the `outline: none` on the bell list's title and the panel handle go (`src/styles.css`).
+- Dead code goes with them, such as `ratingForKey`, `arrowKeyTarget`, Reorder's handle refs and focus key, `HANDLE_STEP`, `attachButton`, the stars' `onFocus` and `onBlur`, and the ratings' `send` chain that only the stars' blur used.
+- The comment in `src/state/appServices.ts` that says the panel puts focus somewhere when it opens is corrected.
+- Tests of the removed behavior go, and tests that used it as setup move to the pointer: reordering by drag, and ratings set by the - and = shortcuts.
+- `CONTEXT.md`, `docs/domain-inventory.md`, and the `[Unreleased]` Ratings and Drag to reorder bullets in `CHANGELOG.md` drop the removed behavior.
+
+**Traps**
+
+- Hidden player controls only turn transparent (`.overlay-controls` in `src/styles.css`), so a control keeps focus while they're hidden (measured).
+- The panel's and the Filter tab's tab rows have no arrow keys or moving tab stop of their own (measured).
+- The rating's send pause (`byKey` and `RATING_KEY_PAUSE_MS` in `src/rating/itemRatings.ts` and `src/rating/playerRating.ts`) also serves the - and = and Shift+digit shortcuts, and stays.
+- `itemRatings` has no unit test, and the Stats screen tests that set ratings with the stars' keys are the only tests of a waiting rating sent when the page closes, another file plays, or another device changes it (measured), so they move to the - and = shortcuts rather than go.
+- The stars cancel `mousedown` so a press doesn't focus them (`RatingStars.tsx`); once they can't take focus, it only keeps a press from taking focus off another control (inferred).
+- Reorder's `dropScroll` keeps the list's scroll after a drop against the browser scrolling as rows move, not against the focus call, so it stays (inferred).
+- In each in-app dialog, the control `initialFocus` names is already its first focusable one, and browsers may give focus back to the opener when a dialog closes (inferred).
+- Copy Path's fallback focuses and selects a temporary text field, which `document.execCommand('copy')` needs.
+- 32 tests and one `it.each` case test only removed behavior, about 20 more check focus besides what stays, and 11 tests reorder with a handle's arrow keys and 7 Stats tests set ratings with the stars' keys as setup (measured).
+- `npm run test` ran 2,019 tests in 85 files, all passing, before this milestone (measured).
+- No test helper moves Tab or collects a focus order, and `pressRatingKey`, `scrollOnFocus`, `pressStarByKey`, and the Filter and Tags tests' `pressWithKeyboard` serve only removed behavior (measured).
+- The snapshots in `src/test/screens/__snapshots__/` serialize every attribute through `normalizedMarkup` (`src/test/screens/pageHarness.ts`) (measured).
+
+**Acceptance**
+
+- No `tabindex` or `:focus-visible` rule remains, and the only key handlers left are the shortcuts', Escape's, and Enter in text fields, by a search of the WebUI's `src`.
+- The only `.focus(` calls left are the in-app dialogs' opening focus, the field validation pattern's, and Copy Path's text field, by a search of the WebUI's `src`.
+- Reordering by drag, ratings set by the - and = shortcuts with their send pause, the in-app dialogs' opening focus, and the field validation pattern's focus work as before, in the Filter, Tags, Stats, keyboard, dialog, and field validation tests.
+- `npm run verify` passes.
+
+#### Shortcut keys slice
+
+**Scope**
+
+- `focusTakesKey` (`src/keyboard/shortcuts.ts`) leaves keys only to text fields, dropdowns, and editable text, and `SLIDER_KEYS`, `SPACE_ACTIVATES`, and `UNTYPED_INPUTS` go.
+- `listenForShortcuts` blurs the focused control before it runs a shortcut.
+- A dropdown gives up focus right after a pick, through one listener for the page's dropdowns beside `listenForShortcuts`.
+- `isTextField` in `src/playback/playerControls.ts` merges into the same text field check, so a key on a slider counts as activity.
+- Every way of closing the panel blurs focus inside it, and `PanelCloseOptions.byKey` goes (`src/panel/panelHost.ts`, `src/ui/Stage.tsx`, `shortcuts.ts`).
+- `CONTEXT.md` and `docs/domain-inventory.md` describe which keys reach the shortcuts.
+
+**Traps**
+
+- Only Space, ←, and → conflict: ↑, ↓, Home, End, Enter, Page Up, and Page Down are bound to nothing, and every other shortcut key already reaches the shortcuts from every control but text fields (measured).
+- `listenForShortcuts` runs on the document after the focused element's own handlers, does nothing while a `dialog[open]` exists, skips a key already default-prevented, and prevents the default of a key it takes.
+- A button activates on Space as the key comes back up and on Enter as it goes down, and whether preventing the key press stops Space's activation differs by browser (inferred). Blurring first lands the release on the page in every browser (inferred).
+- Preventing the key press stops a slider's or radio button's arrow step, since that step is the key press's default action (inferred).
+- Chrome and Firefox on Linux focus a button when it is clicked, and the arrow keys change a closed, focused dropdown there (inferred). The tests run in happy-dom, which shows none of this, so the spot check is the browsers' answer.
+- iOS and Android show a dropdown's choices in a picker of their own, and when it reports the pick relative to its closing is unknown, so the blur after a pick must not cut a pick short (inferred).
+- `isTextField` counts a slider as taking keys and repeats `focusTakesKey`'s text field test.
+- Escape on the bell's list already blurs (`src/ui/Notifications.tsx`).
+- Tests that flip: in `src/test/keyboardShortcuts.test.ts`, a slider keeping its keys and `focusTakesKey`'s cases for sliders, checkboxes, radio buttons, and Space on a button, link, `summary`, or tile; and in `src/test/screens/keyboard.test.ts`, "leaves Space on a focused button to the button", a focused slider keeping its arrow keys, and held Space on a focused Favorite (measured).
+
+**Acceptance**
+
+- Space, ←, and → run their shortcuts on a focused button, slider, checkbox, radio button, or section heading, and not in a text field, a dropdown, or editable text, in keyboard shortcut unit tests and keyboard screen tests.
+- After a click on Next, Space pauses instead of pressing Next again, and after a click on the seek bar, → plays the next item, in keyboard screen tests.
+- After a pick from a dropdown, focus has left it, and → after picking a preset plays the next item, in keyboard screen tests.
+- Closing the panel any way leaves no focus inside it, in Panel screen tests.
+- `npm run verify` passes, and a quick spot check in Firefox and Chrome on the Linux desktop: a click on Next then Space, a click on the seek bar then →, and a preset pick then →.
+
+#### Screen reader slice
+
+**Scope**
+
+- Announcements go: the live regions and `role=status` and `role=alert` in `src/ui/AutoTag.tsx`, `LibraryOverlay.tsx`, `Notifications.tsx`, `Player.tsx`, `StatsTab.tsx`, and `TagEditor.tsx`, the field validation pattern's "Saved" (`src/ui/FieldValidation.tsx`), and the drag handles' announcement (`src/ui/Reorder.tsx`, `movedAnnouncement` in `src/reorder/reorder.ts`).
+- Descriptions go: `aria-describedby` in `FieldValidation.tsx`, `src/ui/SettingsTab.tsx`, `src/ui/RatingStars.tsx`, and `Reorder.tsx`, with the validation tip's `role=tooltip` and id, a held button's hidden reason, and the drag handles' help.
+- States and values go: `aria-invalid`, `aria-disabled`, `aria-expanded`, `aria-controls`, and `aria-orientation`, and `aria-valuetext` and the value attributes on the stars, the panel handle, and the ambient sliders.
+- Roles go: `slider` on the stars, `separator` on the panel handle, `button` on tiles and the file name, `progressbar` on Auto Tag's scan, and `dialog` on the bell's list, with the names and `aria-labelledby` that named only them.
+- `aria-hidden` goes everywhere but icons inside controls.
+- Text only screen readers hear goes: the count line's spoken "{matching} of {total} items" (`spoken` in `src/library/libraryBrowseModel.ts`, `live` in `src/library/libraryOverlayModel.ts`), "Saved", "N pixels", the stars' "No minimum" (`noneText`), and `.visually-hidden` in `src/styles.css`.
+- The bell's open state and held buttons' look move to classes in place of `aria-expanded` and `aria-disabled`, held buttons to the `shows-problem` class they already get (`src/styles.css`).
+- Comments that describe screen-reader behavior are rewritten.
+- Tests find flagged fields by their red icon, held buttons by class, tooltips and hints by the visible element, star values through `starsShown`, the panel's width through `--panel-width`, and errors and states by their text or class, and the snapshots are regenerated.
+- `CONTEXT.md`, `docs/domain-inventory.md`, and Long-Press Tooltips on Touch Screens' trap about `HeldButton`'s accessible description drop the removed markup.
+- `AGENTS.md`'s rule on screen readers and keyboard navigation drops its last sentence, about a planned milestone removing the existing code.
+
+**Traps**
+
+- Three stylesheet rules read ARIA attributes: `.tab[aria-selected="true"]`, which stays with the tab role, `.notify-btn[aria-expanded="true"]`, and `.held-action[aria-disabled="true"]` (`src/styles.css`), and no script reads an ARIA attribute or role (measured).
+- Tooltips are plain `title`s, and nothing reads `aria-label` (measured).
+- Icons are ligature text, so without `aria-hidden` an icon's name joins its control's name, as "chevron_right Compression settings" would (inferred).
+- Tests find flagged fields by `aria-invalid` (27 tests, through `problemOf` and `fieldProblem`), held buttons by `aria-disabled` (19, through `heldState`), tooltips and hints by `aria-describedby` (18, through `hintOf`, `tooltipOf`, and `description`), star values by `aria-valuenow` and `aria-valuetext` (20, through `sliderValue`, beside an existing `starsShown`), the panel's width by the handle's value (6, through `shownWidth`), and errors and states by `role=alert` (16) and `role=status` (6) (measured).
+- 111 screen tests and the harness's `pickPreset` find tabs by role and `aria-selected`, which stay (measured).
+- Four snapshot files in `src/test/screens/__snapshots__/` hold these attributes (measured).
+- `ratingText` shows in the Filters line, popups, and the rating button's tooltip, so it stays.
+- Some accessible names differ from their tooltips, such as a tab's "Filter, unsaved changes" against "Filter (unsaved changes)", and they stay.
+
+**Acceptance**
+
+- No live region, `role=status`, `role=alert`, `aria-describedby`, `aria-invalid`, `aria-disabled`, `aria-expanded`, `aria-controls`, `aria-valuetext`, value attribute, removed role, or `.visually-hidden` remains, and `aria-hidden` is only on icons inside controls, by a search of the WebUI's `src`.
+- The selected tab, the open bell, and held buttons look as before, in Filter, Notifications, and field validation tests.
+- Tests find flagged fields, held buttons, tooltips, hints, star values, the panel's width, errors, and states by what they show, in the Settings, Filter, Tags, Stats, Panel, Library, Player, and field validation tests.
+- `npm run verify` passes.
+
+#### Release checks
+
+- Manual: In Chrome and Firefox on the Linux desktop, after a click on Next, Space pauses instead of pressing Next again, after a click on the seek bar, → plays the next item, and after a preset is picked, → plays the next item.
+- Manual: On the iPad and an Android phone, picking from a dropdown, such as the preset, still picks, now that a dropdown gives up focus after a pick.
+
+#### Not included
+
+- Rebinding keys, which is Customizable Keyboard Shortcuts.
+- Changing accessible names, including those whose words differ from their tooltips.
 
 ### M12l1 - WebUI Grid Row Reuse and Zoom
 
@@ -631,7 +807,7 @@ Last milestone completed: M12k4
 
 - Keep row elements that stay visible, add and remove only the rows that enter or leave, and update a patched tile in place.
 - Grid rows stop going through `innerHTML`.
-- Apart from that, grid layout, scrolling, focus, and tile behavior stay as they are.
+- Apart from that, grid layout, scrolling, and tile behavior stay as they are.
 
 **Traps**
 
@@ -764,7 +940,7 @@ Last milestone completed: M12k4
 - Size the grid to the full result count with placeholder tiles, and load the page at the scroll position, so dragging the scrollbar far down works without scrolling through every page.
 - A reload, a patch-or-reload decision, and a resync request work with scattered loaded pages as the design note sets out.
 - No contract change: the library query already takes an offset.
-- Apart from placeholder tiles and loading the page at the scroll position, grid layout, scrolling, focus, and tile behavior stay as they are.
+- Apart from placeholder tiles and loading the page at the scroll position, grid layout, scrolling, and tile behavior stay as they are.
 
 **Traps**
 
@@ -852,7 +1028,7 @@ Last milestone completed: M12k4
   - Selecting a tile turns the same icon filled orange, and the thumbnail shrinks inside the tile so the icon sits on its top-left corner.
   - Hovering dims only the thumbnail, so the icon stays bright.
   - On a touch screen a long press starts selection, and the icons then show on every tile.
-  - To screen readers the icon is a checkbox named "Select {file name}", and its tooltip reads "Select" or "Deselect".
+  - Its accessible name is "Select {file name}", and its tooltip reads "Select" or "Deselect".
 - Once selection is on, a click adds or removes a tile, and Shift+click adds the range from the last tile chosen. Ctrl or Cmd+click isn't used.
 - The grid's text isn't selectable, so Shift+click selects only tiles and doesn't also highlight text across them.
 - While selecting, a bar at the bottom of the Library tab shows Stop selecting (the `deselect` icon), "{n} selected", Select all (an icon-only button with the `select_all` icon and "Select all" as its tooltip), and Actions, whose menu the Bulk actions slice fills.
@@ -945,7 +1121,6 @@ Last milestone completed: M12k4
 
 #### Not included
 
-- Reaching a tile's check icon with Tab, which is WebUI Keyboard Navigation and Focus. Until it ships, keyboard users can't start selection, accepted since both ship in the same release.
 - The filter summary line, which is WebUI Library Tab.
 - Clearing the whole library's playback stats, which is Admin Refresh, Backup, and Duplicate Review.
 - Keep Playing, which is WebUI Autoplay Modes, whose Timer mode replaces it.
@@ -964,7 +1139,7 @@ Last milestone completed: M12k4
 - With Loop on, the user can set a start and an end marker on a video's scrub bar, and the video repeats between them, in Normal and Timer mode and with Autoplay off.
 - While markers are set, they define Timer mode's repeating stretch, in place of the stretch that starts where a seek lands and runs for Advance after.
 - A repeat between the markers only moves the video's position: nothing loads again, shows Loading…, or records another play, as Loop's other repeats do.
-- Before the app is built, the markers are designed in the mockup and approved: how they are set, moved, and cleared with a mouse, on a touch screen, and from the keyboard; how they show on the scrub bar beside Timer mode's stretch; whether a video keeps them when it plays again or the page refreshes; and what they do while Loop stops autoplay is off.
+- Before the app is built, the markers are designed in the mockup and approved: how they are set, moved, and cleared with a mouse and on a touch screen, and whether a shortcut sets one at the current position; how they show on the scrub bar beside Timer mode's stretch; whether a video keeps them when it plays again or the page refreshes; and what they do while Loop stops autoplay is off.
 
 #### Traps
 
@@ -978,7 +1153,7 @@ Last milestone completed: M12k4
 - With Loop on and both markers set, a video repeats between them with Autoplay off and in Normal and Timer mode, in player and Player screen tests.
 - While markers are set, Timer mode's repeating stretch is the range between them, in a test.
 - A repeat between the markers records no other play and keeps the video's source, in a test.
-- The markers are set, moved, and cleared as the approved mockup shows, by mouse, touch, and keyboard, in Player screen tests.
+- The markers are set, moved, and cleared as the approved mockup shows, by mouse and touch, and by a shortcut if the approved mockup gives one, in Player screen tests.
 - The mockup shows the markers as approved and matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and one quick spot check.
 
@@ -994,7 +1169,7 @@ Last milestone completed: M12k4
 
 - **Status**: ⏳ Planned
 - **Goal**: Each device chooses a profile from a picker in the header, a named view of the library that shows only the sources picked for it.
-- **Depends on**: Per-Preset Preset Writes, whose preset ids each profile remembers its preset by, Item Ratings, whose rating event gains the item's source id, WebUI Keyboard Shortcuts, whose shortcut handling the picker's key uses and whose shortcut reference lists it, Browser-Playable Filter, whose shared tab rule Add Profile and Edit Profile's tabs use, and WebUI Multi-Select and Bulk Actions, whose ids-only query, selection, and bulk events follow the active profile.
+- **Depends on**: Per-Preset Preset Writes, whose preset ids each profile remembers its preset by, Item Ratings, whose rating event gains the item's source id, Browser-Playable Filter, whose shared tab rule Add Profile and Edit Profile's tabs use, and WebUI Multi-Select and Bulk Actions, whose ids-only query, selection, and bulk events follow the active profile.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
@@ -1014,7 +1189,6 @@ Last milestone completed: M12k4
 - Each profile has its own default filter, which None and Clear all load and which the Filter tab's Update changes while Choose Preset is on None.
 - A new profile starts with the default profile's default filter.
 - Switching while the Filter or Tags tab holds unsaved changes asks "Discard changes?" first.
-- U opens the picker, and the arrow keys and Enter choose a profile.
 - The picker hides with the header, in fullscreen and on a phone on its side, where the user turns the phone upright to switch.
 - Add Profile and Edit Profile's tabs are text tabs of the shared tab rule that Browser-Playable Filter adds, as the Filter tab's sub-tabs are.
 
@@ -1043,7 +1217,7 @@ Last milestone completed: M12k4
   - Edit Profile has a red Delete that asks first. The default profile's Edit Profile has only the General tab and no Delete.
 - The visibility design that Profile Tag and Preset Visibility builds: the "Only this profile" or "All profiles" question on creating a tag, category, or preset once a second profile exists, and Show in in Edit Tag, Edit Category, and Edit Preset.
 - The Library, Filter, Tags, and Stats tabs in a profile: the Filter tab's sources, the Filters line's source count, and the Stats tab's library cards cover only the profile's sources.
-- Switching: "Discard changes?" while the Filter or Tags tab holds unsaved changes, U and the arrow keys, the picker's place in the Esc order, and U's row in the shortcut reference.
+- Switching: "Discard changes?" while the Filter or Tags tab holds unsaved changes, and the picker's place in the Esc order.
 - A Mockup-tab button for another device deleting the active profile, after which this device shows the default profile.
 - Before the app is built, the user approves the design on a desktop browser, the iPad, and an Android phone.
 
@@ -1139,8 +1313,7 @@ Last milestone completed: M12k4
 **Scope**
 
 - The header's profile button and its picker, as the Decisions and the approved mockup describe, first in a right-hand group that the admin icon later joins.
-- U opens the picker with focus on the active profile, the arrow keys move between profiles, and Enter chooses one. U does nothing while the header hides or focus is in a text field.
-- Escape closes the picker first, before the bell's list, the panel, and pseudo-fullscreen, and gives focus back to the button. The shortcut reference lists U.
+- Escape closes the picker first, before the bell's list, the panel, and pseudo-fullscreen.
 - Add Profile and Edit Profile with their General and Sources tabs, and Delete. Profile Tag and Preset Visibility adds the Tags and Presets tabs.
 - The per-device store keeps the active profile as `profiles.active`, and each profile's applied filter and its preset as `filter.appliedByProfile`, which replaces `filter.applied` with no carry-over.
 - Every request the Decisions scope sends the active profile's `profileId`.
@@ -1171,7 +1344,7 @@ Last milestone completed: M12k4
 **Acceptance**
 
 - The button shows the active profile's circle and first letter in a readable color, the picker lists the default profile first and the others alphabetically, and it closes as the Decisions describe, in Header screen tests.
-- U opens the picker, the arrow keys and Enter choose, U does nothing while the header hides or in a text field, and Escape closes the picker first, in keyboard tests.
+- Escape closes the picker first, before the bell's list, the panel, and pseudo-fullscreen, in keyboard tests.
 - Add Profile and Edit Profile create, change, and delete a profile, a taken name is flagged with the field validation pattern, and the default profile's dialog has only the General tab, in profile dialog tests.
 - Each scoped request sends `profileId`, in WebUI tests of each request.
 - A switch asks "Discard changes?" while the Filter or Tags tab holds unsaved changes, applies the new profile's remembered filter or preset, loads the Library and Stats tabs again, starts the Filter tab over, ends a selection, and leaves the playing item playing, in WebUI tests of switching.
@@ -1192,7 +1365,7 @@ Last milestone completed: M12k4
 - Showing tags, categories, and presets in only some profiles, which is Profile Tag and Preset Visibility.
 - Favorites, ratings, history, tags, presets, and profiles kept per account, which is Per-Account Library Data.
 - Switching accounts from the picker, which is Account and Profile Picker.
-- Keyboard focus rings and Tab order for the picker and its dialog, which is WebUI Keyboard Navigation and Focus.
+- A shortcut key for the picker.
 - Switching profiles on a phone on its side, where the header hides.
 - Profiles in the admin section, which covers the whole library.
 
@@ -2132,61 +2305,6 @@ Last milestone completed: M12k4
 #### Release checks
 
 - Manual: Every testing suite scenario shows its expected WebUI message, and resetting it leaves the WebUI connected.
-
-### M12u - WebUI Keyboard Navigation and Focus
-
-- **Status**: ⏳ Planned
-- **Goal**: Every part of the WebUI works from the keyboard alone, and keyboard focus is always visible, in the brand orange.
-- **Depends on**: WebUI In-App Dialogs, WebUI Drag Reordering, WebUI Responsive Layout and Panels, WebUI Library Tab, WebUI Tags and Filter Tabs, WebUI Auto-Pause and Photo Scrub Bar, WebUI Notifications, WebUI Settings Panel, WebUI Admin Section, Log Viewer Redesign, Recovery Page and Operator Retirement, Admin Refresh, Backup, and Duplicate Review, Admin Source Management, Admin Library Catalog Transfer, WebUI Stats Panel, WebUI Ambient Mode, WebUI Volume and Enhanced Audio, WebUI Player Controls, WebUI Keyboard Shortcuts, Testing Suite Overhaul, WebUI Grid Row Reuse and Zoom, WebUI Multi-Select and Bulk Actions, Item Ratings, WebUI Player Rating, Rating Filter and Sort, WebUI Loop Range, whose markers can be set from the keyboard, Library Profiles, whose picker and profile dialog it reaches, and Profile Tag and Preset Visibility, whose Show in and profile dialog tabs it reaches.
-- **Design**: `docs/mockups/reelroulette/`.
-
-#### Scope
-
-- The focus look: keyboard focus shows as one ring in the brand orange at a little transparency, in place of the browser's own, with no extra outline, and a mouse click shows none (`:focus-visible`).
-  - The ring's color is the brand orange (`#ef7f22`) at 80% opacity in the dark theme and 95% in the light theme, `rgba(239, 127, 34, 0.8)` and `rgba(239, 127, 34, 0.95)`, as the mockup sets it.
-  - It is a 2 px solid outline, 2 px outside the control; buttons, fields, icon buttons, panel tabs, and drag handles draw it 1 px outside, and tag category headers 2 px inside their edge.
-  - Menu items show focus as their hover highlight instead.
-- In the grid, as Google Photos shows it, a focused tile gets an orange border drawn above its thumbnail, and its focused check icon turns bright white inside a thick orange ring, which starts at the icon's visible edge with no gap, reaches about 22 px from its center, and is cropped by the tile.
-  - A focused tile's border is 3 px, drawn inside the tile, and a focused check icon's ring is an 11 px outline set 2 px into the icon's box.
-  - The focused tile's border is a layer of its own, after the thumbnail's frame.
-- The grid is one tab stop, and Tab enters it on the last tile focused, or the first.
-- The arrow keys move between tiles, left and right in order and up and down to the nearest tile in the next row, without playing the previous or next item.
-- Tab from a tile reaches its check icon, which shows as hovering shows it, and Space or Enter toggles it, starting selection as a click does, with focus staying on it. Tab again leaves the grid.
-- Enter or Space on a tile still chooses it.
-- Selection updates the tiles in place, as WebUI Grid Row Reuse and Zoom patches a tile, so focus is never lost to a redraw.
-- Every other screen works from the keyboard, each control in a sensible Tab order and with an accessible name: the player's controls and seek bar; the notifications bell, its list with Clear, Close, and Notification settings, and the popups' Dismiss; the panel button and tab row, where the arrow keys, Home, and End move between tabs; the header's profile button and its picker, and Add and Edit Profile, whose tab row the arrow keys, Home, and End move along as the panel's do, with its color palette and its Tags and Presets checkboxes, and Show in in Edit Tag, Edit Category, and Edit Preset; the Library controls; the Filter tab and its sections; the Tags tab, its chips, category headers, and drag handles, and Auto Tag; the Stats tab; the Settings tab, including the Ambient mode settings section and its sliders and the Keyboard shortcuts section; the in-app dialogs; the admin view, its sections, the Log Viewer, duplicate review, and the control-token gate; and the recovery page.
-- What covers the page keeps Tab inside it while open and returns focus where it was on close: the panel as a full-screen overlay, as Auto Tag and the in-app dialogs already do.
-- A button that disables itself when pressed moves focus to a sensible place instead of dropping it to the page: the Filter tab's Discard changes, Clear all filters, and Apply beside the player, and the Tags tab's Save.
-- The keyboard shortcuts stay as WebUI Keyboard Shortcuts binds them.
-- Revisit where focus goes when Esc closes the panel or the bell's list. WebUI Keyboard Shortcuts leaves it on the page, as for every key that closes the panel, so Space plays or pauses afterwards, where before it went to the panel button or the bell.
-- Where the arrow keys have a local job, in the grid, the tab row, sliders, and on a focused drag handle, they keep it instead of playing the previous or next item.
-
-#### Traps
-
-- The pairing prompt, the library overlay's buttons, and the grid's tiles style their focus in blue (`#7aa7ff`, and `#2563eb` for tiles in the light theme, in `src/styles.css`). In the Filter and Tags tabs and Auto Tag, the controls with the shared `.btn`, `.ctl`, and `.icon-btn` classes and the drag handles already show the orange ring 1 px outside, and the tag category headers' toggles 2 px inside; their section tabs, checkboxes, and radio buttons don't. The in-app dialogs' buttons, fields, and selects and the panel's tabs and Close show it 1 px outside too. Other controls show the browser's own ring or none.
-- Every grid tile is a tab stop (`tabindex="0"` in `renderGridTileHtml`, `src/library/libraryGridTileModel.ts`), and Enter or Space on one plays it.
-- The grid's keyboard model uses WebUI Multi-Select and Bulk Actions' check icons.
-- In the mockup, the thumbnail's frame fills the tile and paints over anything the tile itself draws, an outline or an inset shadow alike, so a focused tile's border drawn by the tile is invisible.
-
-#### Acceptance
-
-- Keyboard focus shows as one orange ring on every focusable control, in both themes, and a mouse click shows none, in WebUI tests of a focus style on each kind of control.
-- The grid is one tab stop: the arrow keys move between tiles without playing anything, Tab from a tile reaches its check icon, Space or Enter toggles it and starts selection with focus staying on it, and Tab again leaves the grid, in WebUI tests for the grid's tab stop, arrow keys, and check icon toggling and the focus it keeps.
-- A focused tile shows an orange border above its thumbnail, and a focused check icon a thick orange ring, starting at its edge, that the tile crops, in WebUI tests of a focus style on each kind of control.
-- In the panel's tab row, the arrow keys, Home, and End move between tabs, in WebUI tests of the tab row's keys.
-- On every screen listed in Scope, each control is reached by Tab in a sensible order and has an accessible name, in WebUI tests of each screen's Tab order and its controls' accessible names.
-- The full-screen panel keeps Tab inside it while open and returns focus on close, in WebUI tests of focus staying inside the full-screen panel.
-- Pressing the Filter tab's Discard changes, Clear all filters, or Apply beside the player, or the Tags tab's Save, from the keyboard leaves focus on a control in the tab rather than on the page, in WebUI tests of where focus goes after each of those buttons disables itself.
-- The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
-- `npm run verify` passes, and one quick keyboard-only spot check.
-
-#### Release checks
-
-- Manual: In Chrome, Firefox, and Safari on a desktop, every screen, including the admin view and the recovery page, works with the keyboard alone, focus always shows in orange, and the Library grid's Tab, arrow, Space, and Enter keys work as described.
-
-#### Not included
-
-- Rebinding keys, which is Customizable Keyboard Shortcuts.
 
 ## Planned Milestones
 
