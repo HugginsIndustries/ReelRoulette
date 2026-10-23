@@ -20,8 +20,9 @@ Instructions:
 
 Commit Message:
 
-Docs: Plan removing keyboard navigation and screen-reader-only code, and drop the keyboard navigation milestone
+M12k5: Add each file's date added to the catalog
 
-- MILESTONES.md: M12k7 WebUI Keyboard Navigation and Screen Reader Code Removal follows Random Pick Options. It removes the WebUI's and the mockup's keyboard navigation and screen-reader-only code, keeping controls' accessible names and the roles tests find them by, and lets Space, ←, and → reach the shortcuts from every control but text fields and dropdowns, with a dropdown giving up focus after a pick.
-- MILESTONES.md: M12u WebUI Keyboard Navigation and Focus is dropped, and the v0.15.0 outline no longer promises full keyboard navigation.
-- MILESTONES.md: Library Profiles drops the U key and the picker's arrow keys and no longer depends on WebUI Keyboard Shortcuts. Loop Range's markers are set by mouse and touch, with a shortcut left to its mockup review. Multi-Select's check icon is described by its accessible name, and Random Pick Options and the two grid entries drop their `aria-controls` and focus mentions.
+- Catalog: schema version 9 adds each item's date added, set to its modified time when an older catalog upgrades, with the date added sort's indexes, and renames the modified-time sort indexes for the date created, which the Date added sort still reads.
+- Refresh: the files one refresh adds share one date added, the time its source stage started, and a file moved within a source keeps its date added.
+- Tests: the upgrade tests check every older version's backfill and schema, and the refresh tests check new and moved files' dates added.
+- Docs: CONTEXT.md, docs/domain-inventory.md, and docs/dev-setup.md describe schema version 9, and MILESTONES.md records the Server slice as complete with its evidence.

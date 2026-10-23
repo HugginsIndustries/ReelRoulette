@@ -146,7 +146,10 @@ public sealed class LibraryCatalogItem
     public string FingerprintAlgorithm { get; init; } = string.Empty;
     public int FingerprintVersion { get; init; }
     public long? FileSizeBytes { get; init; }
+
+    /// <summary>The file's modified time, which the app calls its date created.</summary>
     public DateTime? LastWriteTimeUtc { get; init; }
+
     public DateTime? FingerprintLastUtc { get; init; }
     public int? FingerprintStatus { get; init; }
     public string? LoudnessError { get; init; }
@@ -156,6 +159,12 @@ public sealed class LibraryCatalogItem
 
     /// <summary>The rating in half stars, from 1 to 10, or null for none (see <see cref="ItemRating"/>).</summary>
     public int? RatingHalfStars { get; init; }
+
+    /// <summary>
+    /// When the file was added to the catalog: the start of the source stage of the refresh that found it, or its
+    /// modified time for a file the catalog already held when it moved to schema version 9. Null for none.
+    /// </summary>
+    public DateTime? DateAddedUtc { get; init; }
 
     public IReadOnlyList<string> Tags { get; internal set; } = [];
 }
@@ -171,7 +180,7 @@ public sealed class LibraryCatalogPreset
 
 public static class LibraryCatalogStore
 {
-    public const int SchemaVersion = 8;
+    public const int SchemaVersion = 9;
 
     /// <summary>
     /// The oldest schema version a release shipped. Open and import upgrade a catalog at it, or at any later
@@ -215,11 +224,11 @@ public static class LibraryCatalogStore
     internal const string NameSortKeyVersionKey = "name_sort_key_version";
 
     /// <summary>
-    /// The sort indexes a new catalog gets, with <see cref="RatingSortIndexesSql"/>: one index per sort mode and
-    /// direction, each followed by the name key tie-break, so no sort reads the whole library. The item id
-    /// tie-break is left out to keep the indexes small: SQLite sorts only rows whose name ties exactly. The
-    /// expressions must match the list query's ORDER BY. A change here also needs an upgrade step that makes the
-    /// same change, since the shipped 2 to 3 step creates its own, <see cref="Schema3SortIndexesSql"/>.
+    /// The sort indexes a new catalog gets, with <see cref="RatingSortIndexesSql"/> and <see cref="DateSortIndexesSql"/>:
+    /// one index per sort mode and direction, each followed by the name key tie-break, so no sort reads the whole
+    /// library. The item id tie-break is left out to keep the indexes small: SQLite sorts only rows whose name ties
+    /// exactly. The expressions must match the list query's ORDER BY. A change here also needs an upgrade step that
+    /// makes the same change, since the shipped 2 to 3 step creates its own, <see cref="Schema3SortIndexesSql"/>.
     /// </summary>
     private const string SortIndexesSql = """
         CREATE INDEX idx_items_name_sort ON items(file_name_sort_key);
@@ -229,8 +238,6 @@ public static class LibraryCatalogStore
         CREATE INDEX idx_items_play_count_desc ON items(play_count DESC, file_name_sort_key);
         CREATE INDEX idx_items_duration_asc ON items(COALESCE(duration_ticks, 0), file_name_sort_key);
         CREATE INDEX idx_items_duration_desc ON items(COALESCE(duration_ticks, 0) DESC, file_name_sort_key);
-        CREATE INDEX idx_items_date_added_asc ON items(COALESCE(last_write_time_utc, 0), file_name_sort_key);
-        CREATE INDEX idx_items_date_added_desc ON items(COALESCE(last_write_time_utc, 0) DESC, file_name_sort_key);
         """;
 
     /// <summary>
@@ -259,6 +266,18 @@ public static class LibraryCatalogStore
         CREATE INDEX idx_items_rating_desc ON items(COALESCE(rating, 0) DESC, file_name_sort_key);
         """;
 
+    /// <summary>
+    /// The date sorts' indexes, one per direction, as <see cref="SortIndexesSql"/> describes: the date created, which
+    /// is the file's modified time, and the date added. A new catalog gets them, and the 8 to 9 step adds them, so a
+    /// later change to them needs a step and SQL of its own.
+    /// </summary>
+    private const string DateSortIndexesSql = """
+        CREATE INDEX idx_items_date_created_asc ON items(COALESCE(last_write_time_utc, 0), file_name_sort_key);
+        CREATE INDEX idx_items_date_created_desc ON items(COALESCE(last_write_time_utc, 0) DESC, file_name_sort_key);
+        CREATE INDEX idx_items_date_added_asc ON items(COALESCE(date_added_utc, 0), file_name_sort_key);
+        CREATE INDEX idx_items_date_added_desc ON items(COALESCE(date_added_utc, 0) DESC, file_name_sort_key);
+        """;
+
     private static readonly string[] CatalogTables =
     [
         "sources",
@@ -284,6 +303,8 @@ public static class LibraryCatalogStore
 
     private static readonly string[] Schema7ItemColumns = [.. Schema4ItemColumns, "rating"];
 
+    private static readonly string[] Schema9ItemColumns = [.. Schema7ItemColumns, "date_added_utc"];
+
     /// <summary>The <c>items</c> columns each usable schema version must have, from the oldest shipped one to the current one.</summary>
     private static readonly Dictionary<int, string[]> ItemColumnsBySchemaVersion = new()
     {
@@ -293,7 +314,8 @@ public static class LibraryCatalogStore
         [5] = Schema4ItemColumns,
         [6] = Schema4ItemColumns,
         [7] = Schema7ItemColumns,
-        [8] = Schema7ItemColumns
+        [8] = Schema7ItemColumns,
+        [9] = Schema9ItemColumns
     };
 
     /// <summary>
@@ -308,7 +330,8 @@ public static class LibraryCatalogStore
         [4] = UpgradeSchema4To5,
         [5] = UpgradeSchema5To6,
         [6] = UpgradeSchema6To7,
-        [7] = UpgradeSchema7To8
+        [7] = UpgradeSchema7To8,
+        [8] = UpgradeSchema8To9
     };
 
     /// <summary>
@@ -543,6 +566,20 @@ public static class LibraryCatalogStore
     private static void UpgradeSchema7To8(SqliteConnection connection, SqliteTransaction transaction)
     {
         Execute(connection, transaction, RatingSortIndexesSql);
+    }
+
+    /// <summary>
+    /// Schema version 8 to 9: adds each item's date added, set to its modified time, the closest date the catalog
+    /// has for a file it already holds, and the date sorts' indexes (see <see cref="DateSortIndexesSql"/>) in place
+    /// of the modified-time indexes that had the date added's names.
+    /// </summary>
+    private static void UpgradeSchema8To9(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        Execute(connection, transaction, "ALTER TABLE items ADD COLUMN date_added_utc INTEGER NULL;");
+        Execute(connection, transaction, "UPDATE items SET date_added_utc = last_write_time_utc;");
+        Execute(connection, transaction, "DROP INDEX IF EXISTS idx_items_date_added_asc;");
+        Execute(connection, transaction, "DROP INDEX IF EXISTS idx_items_date_added_desc;");
+        Execute(connection, transaction, DateSortIndexesSql);
     }
 
     private static string WithFlagModesWritten(string filterStateJson)
@@ -1068,7 +1105,8 @@ public static class LibraryCatalogStore
                 thumbnail_height INTEGER NULL,
                 file_name_sort_key BLOB NULL,
                 loudness_analysis_version INTEGER NOT NULL DEFAULT 0,
-                rating INTEGER NULL
+                rating INTEGER NULL,
+                date_added_utc INTEGER NULL
             );
             CREATE TABLE categories (
                 id TEXT PRIMARY KEY,
@@ -1108,6 +1146,7 @@ public static class LibraryCatalogStore
             """);
         Execute(connection, SortIndexesSql);
         Execute(connection, RatingSortIndexesSql);
+        Execute(connection, DateSortIndexesSql);
 
         Execute(
             connection,

@@ -210,6 +210,52 @@ public sealed class RefreshPipelineServiceTests
         Assert.Equal(["existing.mp4 mediaType=0", "phone.m4v mediaType=0", "web.WEBM mediaType=0"], added);
     }
 
+    // Every file one refresh adds shares the time its source stage started, so the date added sort orders them by name.
+    [Fact]
+    public async Task SourceRefresh_GivesTheFilesItAddsItsStartAsTheirDateAdded_AndKeepsTheDateOfAFileItHolds()
+    {
+        using var scope = new DataFolderScope();
+        var sourceDir = Path.Combine(scope.RootPath, "source-a");
+        Directory.CreateDirectory(sourceDir);
+
+        var existingPath = Path.Combine(sourceDir, "existing.mp4");
+        await File.WriteAllTextAsync(existingPath, "existing");
+        await File.WriteAllTextAsync(Path.Combine(sourceDir, "new-a.mp4"), "new a");
+        await File.WriteAllTextAsync(Path.Combine(sourceDir, "new-b.mp4"), "new b");
+        var existingAdded = new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+
+        CatalogSeed.Write(
+            scope.RootPath,
+            sources: [new SeedSource("src-a", sourceDir)],
+            items:
+            [
+                new SeedItem("item-existing", existingPath)
+                {
+                    SourceId = "src-a",
+                    RelativePath = "existing.mp4",
+                    FileName = "existing.mp4",
+                    DateAddedUtc = existingAdded
+                }
+            ]);
+
+        var service = CreateService(new ServerStateService(), scope.RootPath);
+        var before = DateTime.UtcNow;
+        Assert.True(service.TryStartManual().Accepted);
+        await WaitForCompletionAsync(service, TimeSpan.FromSeconds(30));
+        var after = DateTime.UtcNow;
+
+        var dates = CatalogSeed.ReadDatesAdded(Path.Combine(scope.RootPath, LibraryCatalogStore.DatabaseFileName));
+        Assert.Equal(existingAdded, dates["item-existing"]);
+        var added = LoadCatalog(scope.RootPath).Items
+            .Where(item => item.FileName.StartsWith("new-", StringComparison.Ordinal))
+            .Select(item => dates[item.Id])
+            .ToList();
+        Assert.Equal(2, added.Count);
+        var addedUtc = Assert.Single(added.Distinct());
+        Assert.NotNull(addedUtc);
+        Assert.InRange(addedUtc.Value, before, after);
+    }
+
     [Fact]
     public async Task SourceRefresh_KeepsItemsOfARootThatListsNoMediaFiles()
     {
@@ -1023,6 +1069,7 @@ public sealed class RefreshPipelineServiceTests
         var fingerprint = ComputeSha256(oldPath);
         var fileInfo = new FileInfo(oldPath);
         var oldRelative = Path.GetRelativePath(sourceRoot, oldPath);
+        var dateAdded = new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc);
 
         var sourceId = "source-1";
         CatalogSeed.Write(
@@ -1038,7 +1085,8 @@ public sealed class RefreshPipelineServiceTests
                     Fingerprint = fingerprint,
                     FingerprintStatus = 1,
                     FileSizeBytes = fileInfo.Length,
-                    LastWriteTimeUtc = fileInfo.LastWriteTimeUtc
+                    LastWriteTimeUtc = fileInfo.LastWriteTimeUtc,
+                    DateAddedUtc = dateAdded
                 }
             ]);
 
@@ -1053,6 +1101,7 @@ public sealed class RefreshPipelineServiceTests
         var only = Assert.Single(LoadCatalog(scope.RootPath).Items);
         Assert.Equal("item-1", only.Id);
         Assert.Equal(newPath, only.FullPath);
+        Assert.Equal(dateAdded, CatalogSeed.ReadDatesAdded(Path.Combine(scope.RootPath, LibraryCatalogStore.DatabaseFileName))["item-1"]);
 
         var sourceStage = final.Stages.Single(s => s.Stage == "sourceRefresh");
         Assert.Contains("0 added", sourceStage.Message, StringComparison.OrdinalIgnoreCase);

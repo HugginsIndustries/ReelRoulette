@@ -13,6 +13,9 @@ namespace ReelRoulette.Core.Tests;
 /// </summary>
 public sealed class LibraryCatalogMigrationTests
 {
+    /// <summary>A file's modified time, which an upgrade to schema version 9 makes its date added.</summary>
+    private static readonly DateTime Modified = new(2024, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+
     /// <summary>
     /// Every schema version from the oldest shipped one to the one before current. A schema version bump adds
     /// the version it replaces here, so it fails until the seed has that version's tables and the store has
@@ -33,7 +36,7 @@ public sealed class LibraryCatalogMigrationTests
             sources: [new SeedSource("on", "/media", "On")],
             items:
             [
-                new SeedItem("a", "/media/Beta.mp4") { SourceId = "on", PlayCount = 2, Tags = ["Ann"] },
+                new SeedItem("a", "/media/Beta.mp4") { SourceId = "on", PlayCount = 2, LastWriteTimeUtc = Modified, Tags = ["Ann"] },
                 new SeedItem("b", "/media/alpha.jpg") { SourceId = "on", MediaType = 1 }
             ],
             tags: [new SeedTag("Ann")],
@@ -48,6 +51,9 @@ public sealed class LibraryCatalogMigrationTests
         Assert.Equal(
             before.Items.Select(item => (item.Id, item.FileName, item.MediaType, item.PlayCount, string.Join("|", item.Tags))),
             opened.Snapshot()!.Items.Select(item => (item.Id, item.FileName, item.MediaType, item.PlayCount, string.Join("|", item.Tags))));
+        Assert.Equal(
+            new Dictionary<string, DateTime?> { ["a"] = Modified, ["b"] = null },
+            CatalogSeed.ReadDatesAdded(opened.Session.DatabasePath));
         AssertUpgradedNightPreset(Assert.Single(opened.Session.ReadPresets()));
     }
 
@@ -61,7 +67,7 @@ public sealed class LibraryCatalogMigrationTests
         var export = CatalogSeed.WriteAtVersion(
             source.Path,
             version,
-            items: [new SeedItem("import", "/clips/Import.mp4")],
+            items: [new SeedItem("import", "/clips/Import.mp4") { LastWriteTimeUtc = Modified }],
             standalone: true,
             presets: [NightPreset(version)]);
 
@@ -70,6 +76,7 @@ public sealed class LibraryCatalogMigrationTests
         var incoming = Path.Combine(dir.Path, LibraryCatalogStore.IncomingFileName);
         Assert.Equal(LibraryCatalogStore.CatalogFileInspection.Usable, LibraryCatalogStore.InspectCatalogFile(incoming));
         Assert.Equal(DescribeNewCatalog(), CatalogSeedTests.DescribeSchema(incoming));
+        Assert.Equal(new Dictionary<string, DateTime?> { ["import"] = Modified }, CatalogSeed.ReadDatesAdded(incoming));
         LibraryCatalogStore.PublishIncoming(dir.Path);
         var opened = CatalogOpen.Open(dir.Path);
         Assert.Null(opened.MigratedFromSchemaVersion);

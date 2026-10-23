@@ -53,6 +53,9 @@ internal sealed record SeedItem(string Id, string FullPath)
     /// <summary>The rating in half stars, written from schema version 7.</summary>
     public int? RatingHalfStars { get; init; }
 
+    /// <summary>When the file was added to the catalog, written from schema version 9.</summary>
+    public DateTime? DateAddedUtc { get; init; }
+
     public IReadOnlyList<string> Tags { get; init; } = [];
 }
 
@@ -116,6 +119,7 @@ internal static class CatalogSeed
             6 => Schema6,
             7 => Schema7,
             8 => Schema8,
+            9 => Schema9,
             _ => throw new ArgumentOutOfRangeException(nameof(schemaVersion), schemaVersion, "The seed has no tables for this schema version.")
         };
 
@@ -184,10 +188,12 @@ internal static class CatalogSeed
                 var fileName = item.FileName ?? Path.GetFileName(item.FullPath);
                 var laterColumns = (schemaVersion >= 3 ? ", file_name_sort_key" : string.Empty) +
                                    (schemaVersion >= 4 ? ", loudness_analysis_version" : string.Empty) +
-                                   (schemaVersion >= 7 ? ", rating" : string.Empty);
+                                   (schemaVersion >= 7 ? ", rating" : string.Empty) +
+                                   (schemaVersion >= 9 ? ", date_added_utc" : string.Empty);
                 var laterValues = (schemaVersion >= 3 ? ", $fileKey" : string.Empty) +
                                   (schemaVersion >= 4 ? ", $loudnessVersion" : string.Empty) +
-                                  (schemaVersion >= 7 ? ", $rating" : string.Empty);
+                                  (schemaVersion >= 7 ? ", $rating" : string.Empty) +
+                                  (schemaVersion >= 9 ? ", $added" : string.Empty);
                 Execute(
                     connection,
                     $"""
@@ -236,7 +242,8 @@ internal static class CatalogSeed
                     ("$thumbHeight", item.ThumbnailHeight),
                     ("$fileKey", LibraryCatalogNameSortKey.Compute(fileName)),
                     ("$loudnessVersion", item.LoudnessAnalysisVersion),
-                    ("$rating", item.RatingHalfStars));
+                    ("$rating", item.RatingHalfStars),
+                    ("$added", item.DateAddedUtc?.ToUniversalTime().Ticks));
 
                 foreach (var (name, tagPosition) in item.Tags.Select((row, index) => (row, index)))
                 {
@@ -429,6 +436,31 @@ internal static class CatalogSeed
         File.WriteAllBytes(databasePath, bytes);
     }
 
+    /// <summary>
+    /// Each item's date added by id, read with SQL, since <see cref="LibraryCatalogStore.Read"/> reads only schema
+    /// 2's columns.
+    /// </summary>
+    public static Dictionary<string, DateTime?> ReadDatesAdded(string databasePath)
+    {
+        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Mode = SqliteOpenMode.ReadOnly,
+            Pooling = false
+        }.ToString());
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT id, date_added_utc FROM items;";
+        using var reader = command.ExecuteReader();
+        var dates = new Dictionary<string, DateTime?>(StringComparer.Ordinal);
+        while (reader.Read())
+        {
+            dates[reader.GetString(0)] = reader.IsDBNull(1) ? null : new DateTime(reader.GetInt64(1), DateTimeKind.Utc);
+        }
+
+        return dates;
+    }
+
     /// <summary>The catalog store's case fold; a test keeps the two in step.</summary>
     public static string Fold(string value) => value.ToLowerInvariant();
 
@@ -548,20 +580,30 @@ internal static class CatalogSeed
 
     private const string Schema7ItemColumns = Schema4ItemColumns + ",\n    rating INTEGER NULL";
 
-    private const string Schema3 = "CREATE TABLE items (\n" + Schema3ItemColumns + "\n);\n" + SharedTables + Schema2Presets + SortIndexes;
+    private const string Schema9ItemColumns = Schema7ItemColumns + ",\n    date_added_utc INTEGER NULL";
 
-    private const string Schema4 = "CREATE TABLE items (\n" + Schema4ItemColumns + "\n);\n" + SharedTables + Schema2Presets + SortIndexes;
+    /// <summary>The sort indexes versions 3 to 8 had: every later version's, and the date added's by modified time.</summary>
+    private const string Schema3SortIndexes = SortIndexes + "\n" + ModifiedTimeDateAddedIndexes;
 
-    private const string Schema5 = "CREATE TABLE items (\n" + Schema4ItemColumns + "\n);\n" + SharedTables + Schema5Presets + SortIndexes;
+    private const string Schema3 = "CREATE TABLE items (\n" + Schema3ItemColumns + "\n);\n" + SharedTables + Schema2Presets + Schema3SortIndexes;
+
+    private const string Schema4 = "CREATE TABLE items (\n" + Schema4ItemColumns + "\n);\n" + SharedTables + Schema2Presets + Schema3SortIndexes;
+
+    private const string Schema5 = "CREATE TABLE items (\n" + Schema4ItemColumns + "\n);\n" + SharedTables + Schema5Presets + Schema3SortIndexes;
 
     /// <summary>Schema version 6 changed stored values only, so its tables are version 5's.</summary>
     private const string Schema6 = Schema5;
 
-    private const string Schema7 = "CREATE TABLE items (\n" + Schema7ItemColumns + "\n);\n" + SharedTables + Schema5Presets + SortIndexes;
+    private const string Schema7 = "CREATE TABLE items (\n" + Schema7ItemColumns + "\n);\n" + SharedTables + Schema5Presets + Schema3SortIndexes;
 
     /// <summary>Schema version 8 added the rating sort's indexes, so its tables are version 7's.</summary>
     private const string Schema8 = Schema7 + RatingSortIndexes;
 
+    private const string Schema9 =
+        "CREATE TABLE items (\n" + Schema9ItemColumns + "\n);\n" + SharedTables + Schema5Presets +
+        SortIndexes + "\n" + RatingSortIndexes + "\n" + DateSortIndexes;
+
+    /// <summary>The sort indexes every version from 3 has.</summary>
     private const string SortIndexes =
         """
         CREATE INDEX idx_items_name_sort ON items(file_name_sort_key);
@@ -571,6 +613,11 @@ internal static class CatalogSeed
         CREATE INDEX idx_items_play_count_desc ON items(play_count DESC, file_name_sort_key);
         CREATE INDEX idx_items_duration_asc ON items(COALESCE(duration_ticks, 0), file_name_sort_key);
         CREATE INDEX idx_items_duration_desc ON items(COALESCE(duration_ticks, 0) DESC, file_name_sort_key);
+        """;
+
+    /// <summary>Versions 3 to 8 sorted the date added by the modified time, under the date added's index names.</summary>
+    private const string ModifiedTimeDateAddedIndexes =
+        """
         CREATE INDEX idx_items_date_added_asc ON items(COALESCE(last_write_time_utc, 0), file_name_sort_key);
         CREATE INDEX idx_items_date_added_desc ON items(COALESCE(last_write_time_utc, 0) DESC, file_name_sort_key);
         """;
@@ -579,5 +626,14 @@ internal static class CatalogSeed
         """
         CREATE INDEX idx_items_rating_asc ON items(COALESCE(rating, 0), file_name_sort_key);
         CREATE INDEX idx_items_rating_desc ON items(COALESCE(rating, 0) DESC, file_name_sort_key);
+        """;
+
+    /// <summary>The date created's indexes, on the modified time, and the date added's, from version 9.</summary>
+    private const string DateSortIndexes =
+        """
+        CREATE INDEX idx_items_date_created_asc ON items(COALESCE(last_write_time_utc, 0), file_name_sort_key);
+        CREATE INDEX idx_items_date_created_desc ON items(COALESCE(last_write_time_utc, 0) DESC, file_name_sort_key);
+        CREATE INDEX idx_items_date_added_asc ON items(COALESCE(date_added_utc, 0), file_name_sort_key);
+        CREATE INDEX idx_items_date_added_desc ON items(COALESCE(date_added_utc, 0) DESC, file_name_sort_key);
         """;
 }

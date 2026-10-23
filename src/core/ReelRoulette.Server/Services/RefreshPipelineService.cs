@@ -427,6 +427,9 @@ public sealed class RefreshPipelineService : BackgroundService
     private Task RunSourceRefreshAsync(CancellationToken cancellationToken)
     {
         UpdateStage("sourceRefresh", 5, "Loading sources...");
+
+        // Every file this refresh adds shares one date added, so the date added sort orders them by name.
+        var addedUtc = DateTime.UtcNow;
         var sources = _catalog.Session.ReadRefreshSources();
         var items = _catalog.Session.ReadRefreshItems().ToList();
         var defaultsChanged = new HashSet<CatalogRefreshItem>();
@@ -677,7 +680,8 @@ public sealed class RefreshPipelineService : BackgroundService
                     newPathMediaType[path],
                     newPathSize,
                     newPathWrite,
-                    candidateNewFingerprints);
+                    candidateNewFingerprints,
+                    addedUtc);
                 added++;
             }
 
@@ -1453,7 +1457,8 @@ public sealed class RefreshPipelineService : BackgroundService
         int mediaType,
         Dictionary<string, long> sizes,
         Dictionary<string, DateTime> writes,
-        Dictionary<string, string> fingerprints)
+        Dictionary<string, string> fingerprints,
+        DateTime addedUtc)
     {
         var id = Guid.NewGuid().ToString();
         var relative = GetRelativePath(rootPath, path);
@@ -1485,7 +1490,8 @@ public sealed class RefreshPipelineService : BackgroundService
                 FingerprintStatus = status,
                 FileSizeBytes = size,
                 LastWriteTimeUtc = write,
-                FingerprintLastUtc = fingerprintLast
+                FingerprintLastUtc = fingerprintLast,
+                DateAddedUtc = addedUtc
             });
         }
 

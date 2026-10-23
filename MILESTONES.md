@@ -146,7 +146,7 @@ Last milestone completed: M12k4
 
 #### Decisions
 
-- A file's date added is when the refresh's source stage first inserts its row.
+- A file's date added is when the source stage of the refresh that first finds it started, so the files one refresh adds share it and the Date added sort orders them by name.
 - A file already in the catalog when it upgrades takes its modified time as its date added.
 - A file's date created is its modified time (`last_write_time_utc`), which is what "created" usually means for media files.
 - The API, the WebUI, and the fixtures call it `DateCreated`, and the code's comments say it is the modified time.
@@ -169,7 +169,7 @@ Last milestone completed: M12k4
 | Slice | Status | Delivers |
 | --- | --- | --- |
 | Mockup | ✅ Complete | Added and Created in the Filter tab with the custom range's date picker, their Filters line wording, Date added and Date created in the sort list, and Added and Created in the Stats tab with Show exact times, approved on a desktop browser, the iPad, and an Android phone. |
-| Server | ⏳ Planned | The date added column in a new catalog schema step with its sort indexes, the modified-time sort indexes renamed for Date created, and the date added written when a row is inserted. |
+| Server | ✅ Complete | The date added column in a new catalog schema step with its sort indexes, the modified-time sort indexes renamed for Date created, and every file the refresh's source stage adds given the time the stage started. |
 | Contract | ⏳ Planned | `addedRange` and `createdRange` in the FilterState schema, applied by the server in the list query, its counts, and random selection, the `DateAdded` and `DateCreated` sorts, the item read's dates, a shared fixture for reading the fields, OpenAPI, the generated WebUI types, and `docs/api.md`. |
 | WebUI | ⏳ Planned | Added and Created in the Filter tab and the Filters line, saved in presets and compared in preset matching, the two date sorts with their direction labels, and the Stats tab's Added and Created rows. |
 
@@ -230,7 +230,7 @@ Last milestone completed: M12k4
 - The catalog moves to the next schema version, with its own upgrade step from the version before that adds a nullable `date_added_utc` column last in `items`, sets it to each item's `last_write_time_utc`, and adds the date added sort indexes, one per direction, on `COALESCE(date_added_utc, 0)` and the name key. A new catalog has the same.
 - The step renames the modified-time sort indexes from `idx_items_date_added_asc` and `idx_items_date_added_desc` to `idx_items_date_created_asc` and `idx_items_date_created_desc`.
 - The new and renamed indexes go in a constant of their own, run for a new catalog and by the new step.
-- `InsertItem` writes the date added, the time the row is inserted, for the refresh's source stage.
+- `InsertItem` writes the date added it is given, and the refresh's source stage gives every file it adds the time the stage started.
 
 **Traps**
 
@@ -254,8 +254,23 @@ Last milestone completed: M12k4
 **Acceptance**
 
 - A catalog at each older version opens upgraded and imports upgraded with the column set to each item's modified time and both pairs of indexes, and matches a new catalog's schema, in the catalog upgrade tests.
-- A file the refresh's source stage finds gets the time it was inserted as its date added, and a file moved within a source keeps its date added, in server tests of the source stage.
+- Every file the refresh's source stage adds gets the time the stage started as its date added, and a file moved within a source keeps its date added, in server tests of the source stage.
 - `dotnet test ReelRoulette.sln` passes.
+
+**Evidence**
+
+- `LibraryCatalogStore.SchemaVersion` is 9. `UpgradeSchema8To9` adds `date_added_utc INTEGER NULL` last in `items`, sets it to `last_write_time_utc`, drops `idx_items_date_added_asc` and `idx_items_date_added_desc`, and runs `DateSortIndexesSql`: `idx_items_date_created_asc` and `idx_items_date_created_desc` on `COALESCE(last_write_time_utc, 0)`, and `idx_items_date_added_asc` and `idx_items_date_added_desc` on `COALESCE(date_added_utc, 0)`, each with the name key.
+- A new catalog has the column last and runs `DateSortIndexesSql` too. `SortIndexesSql` no longer holds the date indexes, and `Schema3SortIndexesSql` is unchanged.
+- `LibraryCatalogItem.DateAddedUtc` carries the date added, and `InsertItem` writes it. The refresh's source stage takes the time once when it starts and gives it to every file it adds. `ReadListedItem` doesn't read it yet.
+- `ImportSourceFolder` is unchanged, so the files `POST /api/sources/import` inserts get no date added. No client calls the route, and the Not included section names the milestone that removes its direct insert.
+- `LibraryCatalogStore.Read`, which only tests use, still reads only schema 2's columns, so tests read the date added with `CatalogSeed.ReadDatesAdded`.
+- `CatalogSeed` has version 9's tables and keeps the modified-time indexes under the date added's names for versions 3 to 8, and `SeedItem.DateAddedUtc` writes a date added from version 9.
+- The upgrade theories run from every version from 2 to 8 and check that each item's date added is its modified time after open and after import, and none after open for an item without one.
+- New test: `SourceRefresh_GivesTheFilesItAddsItsStartAsTheirDateAdded_AndKeepsTheDateOfAFileItHolds`. `SourceRefresh_ShouldReconcileMovedFile_ByFingerprintWithoutAddRemove` checks that the moved file keeps its date added.
+- Each guarded behavior broken on its own, restored from a copy under `artifacts/scratch/`, failed its tests (measured): the step without the backfill, and the step without its index changes, each failed both upgrade theories at every version; a new catalog without the date indexes failed the seed's schema test and both theories; the source stage writing no date added, or a time per insert, failed the new refresh test; and a move that rewrote the date added failed the moved-file test.
+- A scratch harness, deleted afterward, ran the real step on a copy of the developer's 49,451-item catalog on 2026-10-22 (measured): it upgraded from 8 in 613 ms, the file grew by 7.1 MB, from 100.1 to 107.1 MB, every item's date added equals its modified time with none missing, the integrity check passes, and the Date added sort's page query reads `idx_items_date_created_desc` and `idx_items_date_created_asc`.
+- `dotnet build ReelRoulette.sln` has no warnings, `dotnet test ReelRoulette.sln` passes 577 Core tests and 19 ServerApp tests, and `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passes.
+- CONTEXT.md, `docs/domain-inventory.md`, and `docs/dev-setup.md` say `user_version` 9 and describe the 8→9 step, and CONTEXT.md and `docs/domain-inventory.md` say a refresh gives the files it adds the time its source stage started and that the `DateAdded` sort still orders by the modified time.
 
 #### Contract slice
 
@@ -281,7 +296,7 @@ Last milestone completed: M12k4
 - Counts are cached by the WHERE text and its values until the next catalog write, 64 entries at most, all dropped when full. A bound that changed with every request would miss on every page and move the range between pages, while a bound at the start of a day stays the same all day (inferred).
 - `COALESCE` reads a missing date as 0, so a range leaves out files without that date.
 - Of the developer's 49,228 files, 140 were modified in the last 7 days, 475 in the last 30, 1,449 in the last 90, and 10,786 this year (measured).
-- `BuildOrderBy` sorts `DateAdded` by `COALESCE(items.last_write_time_utc, 0)` today, with the indexes `idx_items_date_added_asc` and `idx_items_date_added_desc`.
+- `BuildOrderBy` sorts `DateAdded` by `COALESCE(items.last_write_time_utc, 0)` today, which reads `idx_items_date_created_asc` and `idx_items_date_created_desc` since the Server slice (measured).
 - The sort modes are the `LibraryListSort` names, which `TryParseSort` (`LibraryOperationsService.cs`) matches ignoring case, and its message for an unknown mode lists the enum's names, so it names `DateCreated` with no change of its own. `QueryLibrary_RejectsInvalidPagingSortAndFilter_AndEnrichesOnlyThePage` (`LibraryListQueryTests.cs`) checks that message word for word.
 - A device that remembers the `DateAdded` sort keeps it, and right after the upgrade it orders as before, since the date added starts as the modified time (inferred).
 - `LIBRARY_SORTS` in the WebUI's `src/library/libraryBrowseModel.ts` is keyed by the contract's sort modes, so once the generated types have `DateCreated`, the WebUI's typecheck in `npm run verify` fails until `LIBRARY_SORTS` has its name in the sort list and its direction labels (measured).
@@ -290,7 +305,8 @@ Last milestone completed: M12k4
 - `ToItem` sends the modified time as `lastWriteTimeUtc`, an ISO UTC string left out when null, which the WebUI parses into `lastWriteTimeUtcMs` and reads only in tests and a placeholder item (`libraryGridController.ts`).
 - `LibraryProjectionItem` allows fields it doesn't name and names neither `lastPlayedUtc` nor `lastWriteTimeUtc` (measured), so the generated WebUI types have neither.
 - `LibraryProjectionItem_NamesEveryFieldTheServerAlwaysSends_AndTheRatingAndAudio` (`ItemIdContractTests`) fails only for a field the server always sends, so a date left out when null needs its own check that the schema names it.
-- `ReadListedItem` reads `ListedItemColumnsSql` by position, so a new column goes last, and the catalog store has another item reader with ordinals of its own.
+- `ReadListedItem` reads `ListedItemColumnsSql` by position, so a new column goes last. It doesn't read `LibraryCatalogItem.DateAddedUtc` yet, which `InsertItem` writes.
+- `LibraryCatalogStore.Read`, which only tests use, reads only schema 2's columns so the upgrade tests can read a catalog before it upgrades, so it gets no dates. `CatalogSeed.ReadDatesAdded` reads the date added, and `SeedItem.DateAddedUtc` seeds one.
 - Random pick and direct play answer with `RandomResponse`, which carries no dates, and the Stats tab takes only the playing item's id, name, and path from it.
 
 **Acceptance**
@@ -356,6 +372,7 @@ Last milestone completed: M12k4
 #### Not included
 
 - A file's real creation time, from the file system or its metadata.
+- A date added for the files `POST /api/sources/import` inserts, since that direct insert goes, which is Admin Source Management.
 - Ranges in the device's own time zone.
 - Favoring newly added or newly created files in random picks, which is Random Pick Options.
 

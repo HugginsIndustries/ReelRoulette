@@ -885,13 +885,13 @@ public sealed class LibraryCatalogSession
                     is_favorite, is_blacklisted, play_count, last_played_utc, media_type, fingerprint,
                     fingerprint_algorithm, fingerprint_version, file_size_bytes, last_write_time_utc,
                     fingerprint_last_utc, fingerprint_status, loudness_error,
-                    thumbnail_revision, thumbnail_width, thumbnail_height, file_name_sort_key, rating)
+                    thumbnail_revision, thumbnail_width, thumbnail_height, file_name_sort_key, rating, date_added_utc)
                 VALUES (
                     $id, $position, $source, $full, $fullFold, $relative, $relativeFold,
                     $file, $fileFold, $duration, $audio, $loudness, $peak,
                     $favorite, $blacklisted, $plays, $played, $media, $fingerprint,
                     $algorithm, $fpVersion, $size, $write, $fpLast, $fpStatus, $loudnessError,
-                    $thumbRevision, $thumbWidth, $thumbHeight, $fileKey, $rating);
+                    $thumbRevision, $thumbWidth, $thumbHeight, $fileKey, $rating, $added);
                 """,
                 ("$id", item.Id),
                 ("$position", position),
@@ -923,7 +923,8 @@ public sealed class LibraryCatalogSession
                 ("$thumbWidth", (object?)item.ThumbnailWidth ?? DBNull.Value),
                 ("$thumbHeight", (object?)item.ThumbnailHeight ?? DBNull.Value),
                 ("$fileKey", LibraryCatalogNameSortKey.Compute(item.FileName)),
-                ("$rating", (object?)item.RatingHalfStars ?? DBNull.Value)) > 0;
+                ("$rating", (object?)item.RatingHalfStars ?? DBNull.Value),
+                ("$added", item.DateAddedUtc is null ? DBNull.Value : item.DateAddedUtc.Value.ToUniversalTime().Ticks)) > 0;
             if (!inserted)
             {
                 return false;
