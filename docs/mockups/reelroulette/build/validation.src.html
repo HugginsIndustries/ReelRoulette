@@ -186,6 +186,37 @@ h1 { font-size: 1.4rem; margin: 0; }
   </section>
 
   <section class="group">
+    <h2>Custom range (Filter tab, General)</h2>
+    <p class="group-note">Added and Created each offer Custom range, with From and To from the device's date picker. Choosing it fills an empty date with today, so the range is valid at once. A range needs both dates, so an emptied date is flagged, and a To before its From is flagged on To. Each icon sits just after its field, as a dropdown's does, since a desktop browser draws its calendar button at the field's right end. Apply, Add Preset, and Update preset can't proceed until the range is corrected, and pressing one moves to the flagged date.</p>
+    <div class="specimens">
+      <figure class="specimen" data-date-range>
+        <div class="filter-stack duration-stack">
+          <div class="filter-row"><span class="date-label">From</span><span class="vfield vfield-after"><input class="ctl date-field" type="date" aria-label="Added from" value="2026-01-03"><span class="vfield-icon material-symbol-icon">error</span></span></div>
+          <div class="filter-row"><span class="date-label">To</span><span class="vfield vfield-after"><input class="ctl date-field" type="date" aria-label="Added to" value="2026-03-31"><span class="vfield-icon material-symbol-icon">error</span></span></div>
+        </div>
+        <figcaption><b>Jan 3 to Mar 31, 2026</b>Valid.</figcaption>
+        <p class="attrs mock-note"></p>
+      </figure>
+      <figure class="specimen" data-date-range data-pinned>
+        <div class="filter-stack duration-stack">
+          <div class="filter-row"><span class="date-label">From</span><span class="vfield vfield-after"><input class="ctl date-field" type="date" aria-label="Added from" value="2026-03-31"><span class="vfield-icon material-symbol-icon">error</span></span></div>
+          <div class="filter-row"><span class="date-label">To</span><span class="vfield vfield-after"><input class="ctl date-field" type="date" aria-label="Added to" value="2026-01-03"><span class="vfield-icon material-symbol-icon">error</span></span></div>
+        </div>
+        <figcaption><b>To before From</b>Flagged on To; tooltip held open here so it shows.</figcaption>
+        <p class="attrs mock-note"></p>
+      </figure>
+      <figure class="specimen" data-date-range data-pinned>
+        <div class="filter-stack duration-stack">
+          <div class="filter-row"><span class="date-label">From</span><span class="vfield vfield-after"><input class="ctl date-field" type="date" aria-label="Added from" value="2026-01-03"><span class="vfield-icon material-symbol-icon">error</span></span></div>
+          <div class="filter-row"><span class="date-label">To</span><span class="vfield vfield-after"><input class="ctl date-field" type="date" aria-label="Added to" value=""><span class="vfield-icon material-symbol-icon">error</span></span></div>
+        </div>
+        <figcaption><b>To emptied</b>Flagged; tooltip held open here so it shows.</figcaption>
+        <p class="attrs mock-note"></p>
+      </figure>
+    </div>
+  </section>
+
+  <section class="group">
     <h2>New preset name (Filter tab, Presets)</h2>
     <p class="group-note">Required, but an empty name is never flagged: Add Preset is disabled until the field has a name. A name a saved preset already has, ignoring case, is flagged as it is typed, and Add Preset, which sits beside the field, is disabled too, without an icon. A problem in a General field, such as a duration that is not valid, holds Add Preset instead, as it holds Apply. Saved presets here: Favorites, Short clips, Long videos.</p>
     <div class="specimens">
@@ -431,6 +462,21 @@ document.querySelectorAll(".specimen[data-rating-pair]").forEach((specimen) => {
   }));
 });
 
+// A custom date range, From and To.
+document.querySelectorAll(".specimen[data-date-range]").forEach((specimen) => {
+  const [fromInput, toInput] = specimen.querySelectorAll('input[type="date"]');
+  const fields = Object.values(dateRangeFields(fromInput, toInput, { pinned: specimen.hasAttribute("data-pinned") }));
+  const out = specimen.querySelector(".attrs");
+  const show = () => (out.textContent = `From\n${attrsOf(fromInput)}\n\nTo\n${attrsOf(toInput)}`);
+  fields.forEach((field) => {
+    field.onChange(show);
+    field.input.addEventListener("focus", () => {
+      field.pinned = false;
+    });
+  });
+  show();
+});
+
 // A setting's field, with the value in use below it, so its saves show.
 document.querySelectorAll(".specimen[data-setting]").forEach((specimen) => {
   let inUse = 10;
@@ -447,7 +493,7 @@ document.querySelectorAll(".specimen[data-setting]").forEach((specimen) => {
   show();
 });
 
-document.querySelectorAll(".specimen:not([data-pair]):not([data-rating-pair]):not([data-setting])").forEach((specimen) => {
+document.querySelectorAll(".specimen:not([data-pair]):not([data-rating-pair]):not([data-date-range]):not([data-setting])").forEach((specimen) => {
   const input = specimen.querySelector("input[data-check]");
   const kind = input.dataset.check;
   const field = new ValidatedField(input, CHECKS[kind], { pinned: input.hasAttribute("data-pinned") });

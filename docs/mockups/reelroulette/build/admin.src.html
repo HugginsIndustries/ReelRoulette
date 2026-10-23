@@ -546,20 +546,23 @@ $("update-apply").addEventListener("click", async () => {
 });
 
 // ---- Refresh: its card shows the stage and progress, and its result pops up ----
-$("refresh-now").addEventListener("click", () => {
+// Adding a source starts a refresh too, canceling one that runs, which ends without a report.
+let refreshTimer = null;
+function startRefresh() {
+  clearInterval(refreshTimer);
   const bar = $("refresh-progress");
   bar.hidden = false;
   $("refresh-now").disabled = true;
   let percent = 0;
   const stages = ["Refreshing sources", "Scanning durations", "Scanning loudness", "Generating thumbnails"];
-  const timer = setInterval(() => {
+  refreshTimer = setInterval(() => {
     percent += 10;
     bar.firstElementChild.style.width = `${percent}%`;
     const stage = stages[Math.min(3, Math.floor(percent / 25))];
     $("refresh-state").textContent = `Refreshing: ${stage} (${percent}%)`;
     notes.setLasting("refresh", { icon: "autorenew", title: `Library refresh: ${stage}`, progress: `(${percent}%)` });
     if (percent >= 100) {
-      clearInterval(timer);
+      clearInterval(refreshTimer);
       bar.hidden = true;
       $("refresh-now").disabled = state.noLibrary;
       $("refresh-state").textContent = "Last refresh just now: 2 added, 0 removed, 0 renamed.";
@@ -567,7 +570,8 @@ $("refresh-now").addEventListener("click", () => {
       notes.notify({ kind: "refresh", text: "Library refresh finished", detail: "Source: 2 added", key: "refresh" });
     }
   }, 300);
-});
+}
+$("refresh-now").addEventListener("click", startRefresh);
 $("clear-all-stats").addEventListener("click", async () => {
   if (await confirmDialog({ message: "Clear the playback stats of every item in the library? Plays and last played go back to none.", confirmLabel: "Clear", danger: true })) {
     status("Cleared the library's playback stats.");
@@ -753,7 +757,14 @@ const sourceField = new ValidatedField($("source-path"), (value) => {
   const path = value.trim();
   if (!path) return { empty: true };
   if (!path.startsWith("/")) return { message: "Use a full path on the server, starting with /." };
-  if (SOURCES.some((source) => source.path === path.replace(/\/$/, ""))) return { message: "That folder is already a source." };
+  const folder = path.replace(/\/$/, "");
+  if (SOURCES.some((source) => source.path === folder)) return { message: "That folder is already a source." };
+  // A refresh compares a file only with its own source's, so a folder inside a source, or one holding a source, would
+  // bring in the shared files twice.
+  const outer = SOURCES.find((source) => folder.startsWith(`${source.path}/`));
+  if (outer) return { message: `That folder is inside the source "${outer.name}".` };
+  const inner = SOURCES.find((source) => source.path.startsWith(`${folder}/`));
+  if (inner) return { message: `That folder contains the source "${inner.name}".` };
   return null;
 });
 // Add Source sits beside the path, so any problem in it disables Add Source, and the field's icon says why.
@@ -767,7 +778,8 @@ $("source-add").addEventListener("submit", (event) => {
   SOURCES.push({ name: path.split("/").pop() || path, path, media: 0, videos: 0, photos: 0, hours: 0, withAudio: 0, enabled: true });
   sourceField.reset("");
   renderSources();
-  status("Source added. Importing its files…");
+  status("Source added. Refreshing the library…");
+  startRefresh();
 });
 
 // ---- Duplicate review ----

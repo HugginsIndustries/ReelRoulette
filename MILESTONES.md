@@ -140,59 +140,88 @@ Last milestone completed: M12k4
 
 ### M12k5 - Date Added and Date Filters
 
-- **Status**: ⏳ Planned
-- **Goal**: The catalog records when each file was added, and browse and random play can filter and sort by the date added and the date created.
+- **Status**: 🚧 In Progress
+- **Goal**: The catalog records when each file was added, browse and random play can filter and sort by the date added and the date created, and the Stats tab shows both.
 - **Design**: `docs/mockups/reelroulette/`.
 
 #### Decisions
 
-- A file's date added is when the refresh's source stage or a source import first inserts its row.
+- A file's date added is when the refresh's source stage first inserts its row.
 - A file already in the catalog when it upgrades takes its modified time as its date added.
-- Importing a source gives all its files the same date added, and their date created tells them apart.
 - A file's date created is its modified time (`last_write_time_utc`), which is what "created" usually means for media files.
 - The API, the WebUI, and the fixtures call it `DateCreated`, and the code's comments say it is the modified time.
 - The Library tab's sort offers Date added and Date created: `DateAdded` sorts by the date added, and a new `DateCreated` sorts by the modified time, which `DateAdded` reads today.
-- Two filters, Added in and Created in, can be used together. Each is Last 7 days, Last 30 days, Last 90 days, This year, or a custom range of two dates from the device's date picker.
+- Two filters, Added and Created, can be used together. Each is Any time, Last 7 days, Last 30 days, Last 90 days, This year, or Custom range, a range of two dates from the device's date picker.
+- Both sit in a Date Filter section at the end of the Filter tab's General section, after Duration Filter, each a dropdown labeled Added or Created.
+- The FilterState fields are `addedRange` and `createdRange`.
+- The Filters line names each as "Added in last 30 days", "Added this year", or a custom range in the device's own date format, such as "Added Jan 3 – Mar 31, 2026", and Created the same way.
 - A filter stores the choice, never resolved dates, so a preset with Last 30 days always means the last 30 days, and preset matching compares the choice.
 - The server resolves a range in its own time zone, to whole days: Last {N} days is today and the {N − 1} days before it, This year starts on 1 January, and a custom range covers its first and last days.
-- A custom range needs both dates, and one that ends before it starts is flagged with the field validation pattern.
+- Choosing Custom range fills an empty From or To with today, so the range is valid at once.
+- A custom range needs both dates, so an emptied date is flagged with the field validation pattern, and so is a range that ends before it starts.
 - A file without a date is outside every range of that date.
+- The Stats tab's Current file section shows Added and Created right after Last played, or "Unknown" for a file without that date.
+- Last played, Added, and Created say how long ago: "Just now", then minutes, hours, and days, then months once a whole calendar month has passed, and years once a whole year has, such as "2 minutes ago" or "3 months ago". Last played's "2 min ago" becomes "2 minutes ago".
+- Show exact times, a `calendar_clock` icon button at the right of the Stats tab's header, as Auto Tag sits in the Tags tab's, shows all three as YYYY-MM-DD HH:MM:SS in 24-hour time in the device's local time. It is off by default, orange while on, and remembered on each device.
 
 #### Slices
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Mockup | ⏳ Planned | Added in and Created in in the Filter tab with the custom range's date picker, their Filters line wording, and Date added and Date created in the sort list, approved on a desktop browser, the iPad, and an Android phone. |
+| Mockup | ✅ Complete | Added and Created in the Filter tab with the custom range's date picker, their Filters line wording, Date added and Date created in the sort list, and Added and Created in the Stats tab with Show exact times, approved on a desktop browser, the iPad, and an Android phone. |
 | Server | ⏳ Planned | The date added column in a new catalog schema step with its sort indexes, the modified-time sort indexes renamed for Date created, and the date added written when a row is inserted. |
-| Contract | ⏳ Planned | `addedIn` and `createdIn` in the FilterState schema, applied by the server in the list query, its counts, and random selection, the `DateAdded` and `DateCreated` sorts, a shared fixture for reading the fields, OpenAPI, the generated WebUI types, and `docs/api.md`. |
-| WebUI | ⏳ Planned | Added in and Created in in the Filter tab and the Filters line, saved in presets and compared in preset matching, and the two date sorts with their direction labels. |
+| Contract | ⏳ Planned | `addedRange` and `createdRange` in the FilterState schema, applied by the server in the list query, its counts, and random selection, the `DateAdded` and `DateCreated` sorts, the item read's dates, a shared fixture for reading the fields, OpenAPI, the generated WebUI types, and `docs/api.md`. |
+| WebUI | ⏳ Planned | Added and Created in the Filter tab and the Filters line, saved in presets and compared in preset matching, the two date sorts with their direction labels, and the Stats tab's Added and Created rows. |
 
 #### Mockup slice
 
 **Scope**
 
-- In `docs/mockups/reelroulette/`, Added in and Created in in the Filter tab, each with its choices and the custom range's From and To from the device's date picker, flagged with the field validation pattern when the range ends before it starts.
-- Where they sit in the Filter tab, in the General section or a section of their own, is settled in the mockup.
-- The Filters line's wording for each choice is settled in the mockup.
-- Date added and Date created in the Library tab's sort list, in place of today's Date added, with their direction labels.
-- The mockup's items get a date added and a date created from each item's id, so the filters and sorts work on them.
-- Any new icon goes in the mockup's icon subset.
+- In `docs/mockups/reelroulette/`, the Date Filter section with Added and Created as the Decisions describe, each with From and To on their own rows below its dropdown while Custom range is chosen, as Duration Filter has Min and Max.
+- An emptied date is flagged with "Choose a start date." or "Choose an end date.", and a To before its From with "Choose an end date on or after the start date.", the icon after the field, as a dropdown's is. They hold Apply, Add Preset, and Update with "Correct the Added dates to apply." or "Correct the Created dates first.", and show the General tab's problem badge.
+- The Filters line names them after the durations, as the Decisions word them.
+- Date added and Date created in the Library tab's sort list, in place of today's Date added, after Duration, each with "Newest → Oldest" and "Oldest → Newest" and starting on Newest → Oldest.
+- Each sort reads the item's own value, so Last played and Play count sort by the last-played time and the play count, as the app does.
+- The mockup's items get a date added and a date created from each item's id, so the filters and sorts work on them, and a "Recently added" preset holds Added Last 30 days.
+- The date picker brings its own icon, and Show exact times adds `calendar_clock` to the mockup's icon subset.
+- The Stats tab's Current file section shows Added and Created after Last played, as the Decisions describe.
+- Show exact times in the Stats tab's header, as the Decisions describe.
+- The validation page gets a Custom range group, and the index page describes the filters, the sorts, and the Stats tab's rows.
 - Before the app is built, the user approves the design on a desktop browser, the iPad, and an Android phone, including the date picker on each.
 
 **Traps**
 
-- The mockup's items have no dates, and its Date added sort uses a key made up for it (`layout.src.html`).
+- The mockup's items have no dates, and its Date added sort uses a key made up for it, which Last played and Play count share (`layout.src.html`).
 - Drawing the dates from `statRand` would shift every random value drawn after them (inferred).
 - No date input exists in the WebUI or the mockup (measured).
 - `<input type="date">` opens each platform's own picker, so its look can only be judged on the devices (inferred).
 - `check.mjs` runs the pages in happy-dom, with no layout.
 - `calendar_today`, `date_range`, `calendar_month`, and `event` aren't in the mockup's icon subset, which `build_font.py` cuts from its `ICONS` list (measured).
+- `calendar_clock` is in the WebUI's icon font, which `build_font.py` cuts the mockup's subset from (measured).
 - The Filter tab's General section holds Basic Filters, Media Type, Sources, Audio Filter, and Duration Filter, and Browser-Playable Filter and Rating Filter and Sort add to it.
-- `renderFilterSummary` builds the mockup's Filters line (`layout.src.html`).
+- `readApplied` builds the mockup's Filters line parts, which `renderFilterSummary` shows (`layout.src.html`).
+- A date input's `valueAsDate` is midnight UTC, which is the day before in a time zone west of UTC, so a date's text is read as a local day (measured in happy-dom).
+- happy-dom keeps a valid `YYYY-MM-DD` in a date input and empties one that isn't, as browsers do, and has no `showPicker` (measured).
 
 **Acceptance**
 
-- The mockup shows Added in and Created in, their Filters line wording, and both date sorts as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+- The mockup shows Added and Created, their Filters line wording, both date sorts, and the Stats tab's rows and Show exact times as the user approved them in their review on their devices, and the mockup's smoke check, `node docs/mockups/reelroulette/build/check.mjs`, passes.
+
+**Evidence**
+
+- `layout.src.html` has the Mockup slice's Scope:
+  - The Date Filter section at the end of General, with From and To checked by `dateRangeFields` in `common.js`. The tab's filter value, its default, Load, Discard changes, Clear all, Apply, and the filter each device remembers carry `addedRange` and `createdRange`.
+  - The General section's checked fields in one list, `generalFields`, which Apply, Add Preset, and Update use, and which is checked again in full when another device changes the applied preset, where only the durations were before.
+  - The Filters line's wording, and `inDateRange`, which limits the grid and random picks to whole days in the device's time zone, standing in for the server's.
+  - Date created in the sort list, and each sort reading the item's own value, with equal values by name, A–Z in both directions, as the server orders them; the mockup used to reverse them in descending sorts.
+  - Each item's date added and date created from its id, and a "Recently added" preset.
+  - The Stats tab's Added and Created rows, how-long-ago wording for Last played, Added, and Created, and Show exact times in its header, orange with an `active` class.
+- In the review, the dropdowns became Added and Created, without "in", the FilterState fields `addedRange` and `createdRange`, the Stats tab gained the rows and Show exact times, and the toggle marks its state only with its color. The Decisions record each.
+- The admin page's Add Source starts a refresh, restarting one that runs, and its path check flags a folder inside a source or holding one, as Admin Source Management's Decisions record.
+- `common.css` has the Date Filter's styles, the validation page has a Custom range group, the index page describes the changes, and `build_font.py` adds `calendar_clock`, cut with the rest by running it.
+- A scratch script, deleted afterward, drove the page in happy-dom on 2026-10-22 (measured): Added matched 4, 8, 11, and 15 tiles and Created 2, 3, 5, and 7 for Last 7, 30, and 90 days and This year; Custom range filled today; a reversed range was flagged on To and held Apply with "Correct the Added dates to apply."; Show exact times switched the three rows and was remembered; and the wording ran from "Just now" through "2 minutes ago", "29 days ago", and "3 months ago" to "1 year ago".
+- `python3 docs/mockups/reelroulette/build/build_pages.py` rebuilt the pages, and `node docs/mockups/reelroulette/build/check.mjs` passes all 66 steps.
+- The user approved the mockup in their review.
 
 #### Server slice
 
@@ -201,7 +230,7 @@ Last milestone completed: M12k4
 - The catalog moves to the next schema version, with its own upgrade step from the version before that adds a nullable `date_added_utc` column last in `items`, sets it to each item's `last_write_time_utc`, and adds the date added sort indexes, one per direction, on `COALESCE(date_added_utc, 0)` and the name key. A new catalog has the same.
 - The step renames the modified-time sort indexes from `idx_items_date_added_asc` and `idx_items_date_added_desc` to `idx_items_date_created_asc` and `idx_items_date_created_desc`.
 - The new and renamed indexes go in a constant of their own, run for a new catalog and by the new step.
-- `InsertItem` writes the date added, the time the row is inserted, for the refresh's source stage and for source import.
+- `InsertItem` writes the date added, the time the row is inserted, for the refresh's source stage.
 
 **Traps**
 
@@ -212,32 +241,33 @@ Last milestone completed: M12k4
 - `LibraryCatalogMigrationTests` compares an upgraded catalog with a new one through `CatalogSeedTests.DescribeSchema`, column by column in order and each index's SQL as text, so the column is last in a new catalog's table and each index's SQL is the same in both.
 - SQLite can't rename an index, so renaming one drops and creates it.
 - On a copy of the developer's 49,228-item catalog the step took about 590 ms in one transaction, and the catalog grew from 94.2 to 100.9 MB, 3.06 MB per new index (measured).
-- Every new row goes through `InsertItem` (`LibraryCatalogSession.cs`), which names its columns. The refresh's source stage calls it through `InsertDiscoveredItem` (`RefreshPipelineService.cs`), and source import through `ImportSourceFolder`.
+- Every new row goes through `InsertItem` (`LibraryCatalogSession.cs`), which names its columns, and the refresh's source stage calls it through `InsertDiscoveredItem` (`RefreshPipelineService.cs`).
 - The refresh keeps a file's row when it moves or is renamed within one source, matched by a ready fingerprint, the same media type and size, and the same fingerprint (`PersistMovedItem` and `UpdateItemIdentity`), so the file keeps its date added.
 - A move to another source, or a move of a file whose content also changed, is a delete and an insert, so the file gets a new date added.
 - Every item in the developer's catalog has a ready fingerprint (measured).
-- Source import inserts rows with no modified time or size and starts no refresh, so an imported file has no date created until the next refresh's fingerprint stage writes it.
-- No client calls `POST /api/sources/import` yet, and Admin Source Management is the first.
 - Catalog transfer and backup restore upgrade an older catalog through the same steps, so they get the backfill.
 - A refresh writes a file's modified time again whenever it changes (`SetLastWriteTime`), so a file's date created moves when the file is modified.
+- The source stage reads a new file's size and modified time before inserting its row and writes them with it (`InsertDiscoveredItem`), so a file has no date created only when that read fails, until the fingerprint stage writes them.
+- An item without a modified time when the catalog upgrades gets no date added (inferred).
 - The developer's modified times cluster on the days batches were copied, 12,042 files on one day in 2018 and 6,161 on one day in June 2026, so after the step a file's date added is often its copy day too (measured).
 
 **Acceptance**
 
 - A catalog at each older version opens upgraded and imports upgraded with the column set to each item's modified time and both pairs of indexes, and matches a new catalog's schema, in the catalog upgrade tests.
-- A file the refresh's source stage finds and a file a source import adds get the time they were inserted as their date added, and a file moved within a source keeps its date added, in server tests of the source stage and of source import.
+- A file the refresh's source stage finds gets the time it was inserted as its date added, and a file moved within a source keeps its date added, in server tests of the source stage.
 - `dotnet test ReelRoulette.sln` passes.
 
 #### Contract slice
 
 **Scope**
 
-- `addedIn` and `createdIn` in the FilterState schema, each null for no limit, a preset (`last7Days`, `last30Days`, `last90Days`, or `thisYear`), or a custom range of `from` and `to` dates, applied by the server in the list query, its counts, and random selection.
+- `addedRange` and `createdRange` in the FilterState schema, each null for no limit, a preset (`last7Days`, `last30Days`, `last90Days`, or `thisYear`), or a custom range of `from` and `to` dates, applied by the server in the list query, its counts, and random selection.
 - The server resolves each range as the Decisions describe, with a clock and a time zone that tests can set.
 - A date condition is written on `COALESCE({column}, 0)`, the expression its sort index has.
 - `DateAdded` sorts by the date added and `DateCreated` by the modified time, each reading its own index in both directions.
-- A shared fixture under `shared/fixtures/` locks how the server's filter parser and the WebUI read `addedIn` and `createdIn`: each preset, a custom range, a range that ends before it starts, an unknown preset, a date that isn't one, and null. Core and WebUI tests read it.
-- OpenAPI, the generated WebUI types, and `docs/api.md`, which describes the fields, the time zone and whole days, and both sorts.
+- The item read (`POST /api/library/item`) and the library query's page send `dateAddedUtc` and `dateCreatedUtc`, the modified time, in place of `lastWriteTimeUtc`, each an ISO UTC string left out for an item without that date, as `lastPlayedUtc` is, and `LibraryProjectionItem` names both.
+- A shared fixture under `shared/fixtures/` locks how the server's filter parser and the WebUI read `addedRange` and `createdRange`: each preset, a custom range, a range that ends before it starts, an unknown preset, a date that isn't one, and null. Core and WebUI tests read it.
+- OpenAPI, the generated WebUI types, and `docs/api.md`, which describes the fields, the time zone and whole days, both sorts, and the item read's dates.
 
 **Traps**
 
@@ -256,27 +286,36 @@ Last milestone completed: M12k4
 - A device that remembers the `DateAdded` sort keeps it, and right after the upgrade it orders as before, since the date added starts as the modified time (inferred).
 - `LIBRARY_SORTS` in the WebUI's `src/library/libraryBrowseModel.ts` is keyed by the contract's sort modes, so once the generated types have `DateCreated`, the WebUI's typecheck in `npm run verify` fails until `LIBRARY_SORTS` has its name in the sort list and its direction labels (measured).
 - `npm run verify:contracts` only checks that the generated types match the OpenAPI file.
+- The Stats tab's Current file section reads `POST /api/library/item`, and `LibraryCatalogSession.ToItem` builds that read and each item of the query's page as JSON, so a field `ToItem` sends goes on both.
+- `ToItem` sends the modified time as `lastWriteTimeUtc`, an ISO UTC string left out when null, which the WebUI parses into `lastWriteTimeUtcMs` and reads only in tests and a placeholder item (`libraryGridController.ts`).
+- `LibraryProjectionItem` allows fields it doesn't name and names neither `lastPlayedUtc` nor `lastWriteTimeUtc` (measured), so the generated WebUI types have neither.
+- `LibraryProjectionItem_NamesEveryFieldTheServerAlwaysSends_AndTheRatingAndAudio` (`ItemIdContractTests`) fails only for a field the server always sends, so a date left out when null needs its own check that the schema names it.
+- `ReadListedItem` reads `ListedItemColumnsSql` by position, so a new column goes last, and the catalog store has another item reader with ordinals of its own.
+- Random pick and direct play answer with `RandomResponse`, which carries no dates, and the Stats tab takes only the playing item's id, name, and path from it.
 
 **Acceptance**
 
-- Each preset and a custom range of Added in and Created in keep only files whose date falls in the range, each alone and both together, and without them results are unchanged, in server tests for the fields in the list query, its counts, and random selection with a set clock and time zone.
+- Each preset and a custom range of Added and Created keep only files whose date falls in the range, each alone and both together, and without them results are unchanged, in server tests for the fields in the list query, its counts, and random selection with a set clock and time zone.
 - Last {N} days, This year, and a custom range resolve to whole days in the server's time zone, in Core tests of range resolution.
 - A stored preset without the fields filters with no date limit, in server tests of a stored preset without them.
 - The server's parser reads the fields as the shared fixture says, in Core tests of the fixture.
 - `DateAdded` and `DateCreated` order by their dates in both directions and read their indexes, and a date condition reads its index, in server tests of the sorts and their query plans.
-- OpenAPI and the generated WebUI types carry the fields and the sorts, in contract tests, and `docs/api.md` describes them, checked by reading it.
+- The item read and the query's page send `dateAddedUtc` and `dateCreatedUtc`, and leave each out for an item without it, in server tests of the item read.
+- OpenAPI and the generated WebUI types carry the fields, the sorts, and the item read's dates, in contract tests, and `docs/api.md` describes them, checked by reading it.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
 #### WebUI slice
 
 **Scope**
 
-- Added in and Created in in the Filter tab, as the approved mockup places them, each with None, the four presets, and Custom range, whose From and To take the device's date picker (`<input type="date">`).
+- Added and Created in the Filter tab, as the approved mockup places them, each with Any time, the four presets, and Custom range, whose From and To take the device's date picker (`<input type="date">`).
 - With Custom range chosen, an empty date or a range that ends before it starts is flagged with the field validation pattern and holds Apply, Add Preset, and Update, as a duration that isn't valid does.
 - Both are saved in presets and compared in preset matching by the choice, never resolved dates, with cases in `preset-filter-equality.json`.
 - The Filters line names each as the mockup words it.
 - Date added and Date created in the Library tab's sort, each with "Newest → Oldest" and "Oldest → Newest" in `sort-direction-labels.json`.
 - The WebUI reads the fields as the shared fixture says.
+- The Stats tab's Current file section shows Added and Created right after Last played, for photos too, from the item read's `dateAddedUtc` and `dateCreatedUtc`, as the Decisions describe.
+- Show exact times in the Stats tab's header, kept in the device store, and Last played, Added, and Created worded as the Decisions describe, in place of `playedAgo`'s wording.
 
 **Traps**
 
@@ -289,24 +328,33 @@ Last milestone completed: M12k4
 - The WebUI remembers its sort per device and drops a remembered mode that isn't in its list, falling back to Name ascending (`isRememberedSort` in `src/library/library.ts`).
 - Dates change only in a refresh, and a finished refresh reloads the loaded window once, so the tile effect rule (`library-tile-effect.json`) needs no date change kind (inferred).
 - A rolling range moves with the clock without an event, so a window loaded before midnight keeps its tiles until it next reloads (inferred).
+- `fileRows` (`src/stats/statsModel.ts`) builds the Current file rows, which `src/ui/StatsTab.tsx` renders. `statsModel.test.ts` checks a video's and a photo's full row lists, and `stats.test.ts` a slice of them.
+- No WebUI code formats a date as YYYY-MM-DD HH:MM:SS. `playedAgo` (`statsModel.ts`) words Last played as "N min ago" and stops at days, and `statsModel.test.ts` and `stats.test.ts` check its wording. The mockup's `timeAgo` and `dateTimeText` give the new wording.
+- The Stats tab's header (`src/ui/StatsTab.tsx`) holds only its title, and the Tags tab's puts Auto Tag after its title (`src/ui/TagEditor.tsx`).
+- The player's toggles turn orange with `icon-glyph-toggle`'s `active` class (`src/ui/Player.tsx`, `styles.css`), as the mockup's Show exact times does with `active`.
+- Per-device choices go through `createDeviceStore` (`src/state/deviceStore.ts`).
+- Vitest pins no time zone and CI runs on Windows, so a test builds its times with a local `new Date(year, month, day, hours, minutes, seconds)` rather than writing out a UTC time's local reading.
+- `parseQueryItem` (`src/library/libraryProjectionModel.ts`) reads `lastWriteTimeUtc` into `lastWriteTimeUtcMs`, and literal items in `libraryGridController.ts` and the grid and projection tests carry it, so they take the new names.
+- The Stats tab loads again on `refreshCompleted`, so a date a refresh changes shows with no event of its own (inferred).
 
 **Acceptance**
 
-- Added in and Created in are saved in presets and compared in preset matching by the choice, so Last 30 days matches Last 30 days and not the same days as a custom range, in tests of `preset-filter-equality.json`.
+- Added and Created are saved in presets and compared in preset matching by the choice, so Last 30 days matches Last 30 days and not the same days as a custom range, in tests of `preset-filter-equality.json`.
 - A custom range with an empty date, or one that ends before it starts, is flagged and holds Apply, Add Preset, and Update, in Filter screen tests.
 - The Filters line names each choice as the mockup words it, in Library screen tests.
 - Date added and Date created show their direction labels, in tests of `sort-direction-labels.json`.
 - The WebUI reads the fields as the shared fixture says, in WebUI filter model tests.
+- The Stats tab shows Added and Created after Last played, or Unknown for a file without the date, for photos too, and all three say how long ago through months and years, in Stats model and Stats screen tests.
+- Show exact times shows all three as YYYY-MM-DD HH:MM:SS in local time, starts off, turns orange while on, and is remembered on the device, in Stats screen tests.
 - The mockup matches what this slice shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.
 - `npm run verify` passes, and a spot check of the date picker on the user's phone.
 
 #### Release checks
 
-- Manual: In the WebUI, Added in and Created in limit browse and random play, a preset saved with Last 30 days keeps it rolling, and Date added and Date created order the library.
+- Manual: In the WebUI, Added and Created limit browse and random play, a preset saved with Last 30 days keeps it rolling, and Date added and Date created order the library.
 
 #### Not included
 
-- Showing a file's dates in the Stats tab.
 - A file's real creation time, from the file system or its metadata.
 - Ranges in the device's own time zone.
 - Favoring newly added or newly created files in random picks, which is Random Pick Options.
@@ -1636,7 +1684,7 @@ Last milestone completed: M12k4
 | --- | --- | --- |
 | Refresh | ⏳ Planned | Refresh Now with the refresh status, the refresh settings, and clearing the whole library's playback stats from the Library refresh card. |
 | Backup | ⏳ Planned | The backup settings, and daily retention in catalog backup rotation with its days setting. |
-| Duplicate contract | ⏳ Planned | Each duplicate group file's rating, in OpenAPI and the generated WebUI types. |
+| Duplicate contract | ⏳ Planned | Each duplicate group file's rating, and its modified time renamed `dateCreatedUtc`, in OpenAPI and the generated WebUI types. |
 | Duplicate review | ⏳ Planned | Scanning for duplicates, reviewing each group with each file's rating, Select Best preferring the highest-rated file, and deleting the files not kept after a confirmation. |
 
 #### Refresh slice
@@ -1700,17 +1748,20 @@ Last milestone completed: M12k4
 **Scope**
 
 - Each file in a duplicate group carries its rating, in stars, when it is rated, as library items do.
-- OpenAPI and generated WebUI types; the change only adds.
+- `DuplicateGroupItemResponse`'s `LastWriteTimeUtc` is renamed `DateCreatedUtc`, sent as `dateCreatedUtc`, matching the file read.
+- OpenAPI and generated WebUI types.
 
 **Traps**
 
 - `DuplicateGroupItemResponse` carries each file's item id, full path, source id, favorite, blacklisted, play count, tag count, and last write time, and no rating.
+- The duplicate scan's `LibraryOperationsService` sets `LastWriteTimeUtc`, and OpenAPI's `DuplicateGroupItemResponse` doesn't name it.
 - Desktop Client Removal leaves `/api/duplicates/scan` with no caller.
 
 **Acceptance**
 
 - A duplicate scan returns each rated file's rating and leaves it out for an unrated one, in server tests of the duplicate scan.
-- OpenAPI and the generated WebUI types carry the field, in contract tests, and `npm run verify:contracts` passes.
+- A duplicate scan sends each file's modified time as `dateCreatedUtc` and no `lastWriteTimeUtc`, in server tests of the duplicate scan.
+- OpenAPI and the generated WebUI types carry the rating and `dateCreatedUtc`, in contract tests, and `npm run verify:contracts` passes.
 - `dotnet test ReelRoulette.sln` passes.
 
 #### Duplicate review slice
@@ -1764,13 +1815,15 @@ Last milestone completed: M12k4
 #### Decisions
 
 - Everything this milestone adds is gated like the rest of the admin section: localhost, or the control token from other machines.
-- Adding a folder takes a path on the server machine. The admin section takes a plain typed path, with no autocomplete or folder browser, and the server checks it as it is typed: a folder on the server that is not already a source.
+- Adding a folder takes a path on the server machine. The admin section takes a plain typed path, with no autocomplete or folder browser, and the server checks it as it is typed: a folder on the server that is not already a source, inside one, or holding one, since a refresh compares a file only with its own source's files and would give shared files a second row.
+- Adding a source only adds it to the source list and starts a refresh at once, so files enter the library only through the refresh pipeline, and `POST /api/sources/import`'s direct insert of files goes.
+- Adding a source while a refresh runs cancels that run and starts a new one. Work the canceled run already saved stays, and the canceled run isn't reported as a failure.
 
 #### Slices
 
 | Slice | Status | Delivers |
 | --- | --- | --- |
-| Contract | ⏳ Planned | Server routes to rename and remove a source and check a typed source path, with events for source changes, in OpenAPI and the generated WebUI types. |
+| Contract | ⏳ Planned | Server routes to rename and remove a source and check a typed source path, adding a source that starts a refresh in place of import, and `POST /api/presets/add` in place of `POST /api/presets/create`, with events for source changes, in OpenAPI and the generated WebUI types. |
 | Manage Sources | ⏳ Planned | The admin section's source list with statistics, adding by server path, Edit Source with rename and Remove, enable and disable, and one Refresh. |
 | WebUI source sync | ⏳ Planned | Every open WebUI reloads its library window and Filter tab source list on a source event, with one resync in flight at a time. |
 
@@ -1779,8 +1832,13 @@ Last milestone completed: M12k4
 **Scope**
 
 - Server routes to rename a source and remove a source (its items leave the catalog; files stay on disk).
-- An admin-only route that checks a typed path: a folder on the server that is not already a source. A contract change that only adds.
-- Source changes publish events so connected clients update. Import gets an event too.
+- An admin-only route that checks a typed path: a folder on the server that is not already a source, inside one, or holding one. A contract change that only adds.
+- `POST /api/sources/import` becomes `POST /api/sources/add`, and `POST /api/presets/create` becomes `POST /api/presets/add`, so the API uses one verb for adding.
+- Adding a source adds it, enabled, and starts a refresh, keeping import's root normalization, its matching of a root's slash variants, and its display-name default.
+- Each refresh run gets a cancellation of its own, linked to the server's shutdown, so adding a source can cancel the run and start a new one once it has stopped, and the canceled run's end never writes over the new run's status.
+- `last.log` records each source added and each refresh it canceled.
+- `ImportSourceFolder`, the helpers only it uses, the file listing in `LibraryOperationsService` only import uses, import's tests, and its OpenAPI schemas go, and `docs/api.md`, CONTEXT.md, and `docs/domain-inventory.md` stop describing import.
+- Source changes publish events so connected clients update, adding a source included.
 - Removing a source also removes it from every profile's chosen list of sources in the same transaction, and publishes `profilesChanged` when a profile changed.
 - A source added later joins only the profiles that follow all sources, as Library Profiles sets out.
 - OpenAPI and generated WebUI types for the new routes.
@@ -1790,15 +1848,32 @@ Last milestone completed: M12k4
 - No route renames or removes a source.
 - The path check is a new admin-only route, a contract change that only adds (inferred).
 - Only enabling or disabling a source publishes an event (`sourceStateChanged`), and `POST /api/sources/import` publishes nothing.
+- `POST /api/presets/create` is mapped in `ServerHostComposition.cs`, named in OpenAPI and `docs/api.md`, called by the Filter tab's Add Preset (`src/filter/filterDialog.ts`), and answered by the WebUI tests' preset server (`src/test/fakePresetServer.ts`) and the Tags screen tests.
 - Library Profiles keeps a profile's chosen sources in `profile_sources`, and the catalog has no foreign keys, so removing a source doesn't remove its rows there by itself.
+- `POST /api/sources/import` inserts every media file of the folder in one transaction, with no size or modified time, starts no refresh, and publishes nothing. It looks each path up across all sources and moves a row it finds onto the new source (`ImportSourceFolder`).
+- `InsertSource` has no caller but `ImportSourceFolder`, so the add path is the only thing left that creates a source row.
+- Only tests, the generated WebUI types, and docs name the import route or `ImportSourceFolder` (measured).
+- The only way to stop a refresh is the service-wide `_shutdown` cancellation (`RefreshPipelineService.cs`), and canceling it stops every later run, so a cancel per run is new.
+- A manual run starts as a task nobody keeps, an automatic run is awaited inside the background loop, and `TryReserveRun` refuses a new run until the old run's `finally` clears `_isRunLoopActive`, so starting after a cancel needs the old run's task or a pending restart.
+- A canceled run's catch writes `IsRunning = false` onto whatever status is current, so a new run reserved before it runs would show as stopped (inferred).
+- A run notices a cancel between files and stages, not during a source's folder walk or one file's hash, so on a large NAS source a cancel can lag by a whole walk (inferred).
+- A run reads the source list once, at its start, so it never sees a source added while it runs.
+- A canceled run already ends with neither `completedUtc` nor `lastError`, which the WebUI shows as idle, with no notice and no `refreshCompleted` reload (`ShutdownCancel_ShouldStopManualRunWithoutRecordingAFailure`), so the rows it saved show once the new run finishes.
+- Every refresh write commits on its own, per item, or per 1,000 name sort keys, so a canceled run keeps what it wrote.
+- The refresh compares a new path only with its own source's items, and `items.full_path_fold` has no unique index, so a source inside another, or holding one, would get a second row for each shared file (inferred).
+- The refresh skips a disabled source, or one whose folder is missing, with no status entry.
+- The refresh writes no `last.log` line for its start, end, failure, or cancel; failure and cancel go only to `ILogger`.
 
 **Acceptance**
 
 - Removing a source removes its items from the catalog and leaves its files, in server tests of the route.
 - Removing a source removes it from every profile's chosen list and publishes `profilesChanged`, in server tests of the route.
-- The path check route flags a typed path that is not a folder on the server, or is already a source, in server tests of the route.
+- The path check route flags a typed path that is not a folder on the server, is already a source, is inside one, or holds one, in server tests of the route.
+- Adding a source adds it and starts a refresh that brings in its files, and nothing inserts files outside the refresh, in server tests of the add route.
+- Adding a source while a refresh runs cancels it and starts a new one, the canceled run's saved rows stay, and it ends with neither a completion nor an error, in refresh pipeline tests.
 - Adding, renaming, removing, enabling, and disabling a source each publish an event, in server tests of the event each source change publishes.
-- New routes are in OpenAPI, and `npm run verify:contracts` passes.
+- Add Preset creates a preset through `POST /api/presets/add`, in Filter screen tests.
+- New routes are in OpenAPI, and neither the import route nor `POST /api/presets/create` is, and `npm run verify:contracts` passes.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
 #### Manage Sources slice
@@ -1812,9 +1887,9 @@ Last milestone completed: M12k4
 - Edit opens an Edit Source dialog with the name, built as Edit Tag, Edit Category, and Edit Preset are.
 - The name uses the field validation pattern: a name another source has, ignoring case, is flagged with "Use a name no other source has.", and Save is disabled while the name is taken or empty, as WebUI In-App Dialogs sets out for the fields of a dialog. An empty name is not flagged.
 - Edit Source has **Remove**, not Delete, since the source's files stay on disk. It asks `Remove the source "{name}"? Its items leave the library; its files stay on disk.` in a dialog stacked above, with a red Remove.
-- The path field uses the field validation pattern, and a path that is already a source is flagged with "That folder is already a source.". An empty path is not flagged.
+- The path field uses the field validation pattern. A path that is already a source is flagged with "That folder is already a source.", one inside a source with `That folder is inside the source "{name}".`, and one holding a source with `That folder contains the source "{name}".`. An empty path is not flagged.
 - Add Source sits beside the path field, so it is disabled while the path is empty or flagged, with no icon on the button, as WebUI In-App Dialogs sets out for an action whose fields sit right next to it.
-- A Your actions popup acknowledges each change: "Source renamed.", "Source added. Importing its files…", "{name} enabled." or "{name} disabled.", and "Source removed.", the last three followed by "ReelRoulette updates the library everywhere it's open.".
+- A Your actions popup acknowledges each change: "Source renamed.", "Source added. Refreshing the library…", "{name} enabled." or "{name} disabled.", and "Source removed.", the last three followed by "ReelRoulette updates the library everywhere it's open.".
 
 **Traps**
 
@@ -1827,7 +1902,7 @@ Last milestone completed: M12k4
 **Acceptance**
 
 - From the admin section, sources can be added by server path, renamed, removed, enabled, disabled, and refreshed, with per-source statistics, and one Refresh covers the whole list, in admin section UI tests for Manage Sources.
-- A typed path that is not a folder on the server, or is already a source, is flagged with the field validation pattern as it is typed, and Add Source is disabled without an icon on it until the path is corrected, as it is while the path is empty, in admin section UI tests for Manage Sources.
+- A typed path that is not a folder on the server, is already a source, is inside one, or holds one, is flagged with the field validation pattern as it is typed, and Add Source is disabled without an icon on it until the path is corrected, as it is while the path is empty, in admin section UI tests for Manage Sources.
 - An Edit Source name another source has, ignoring case, is flagged with the field validation pattern, and Save is disabled without an icon on it while the name is taken or empty, in admin section UI tests for Manage Sources.
 - Edit Source's button and its confirmation's button say Remove, not Delete, in admin section UI tests for Manage Sources.
 - The mockup matches what this milestone shipped, including deviations found during implementation, and `node docs/mockups/reelroulette/build/check.mjs` passes.

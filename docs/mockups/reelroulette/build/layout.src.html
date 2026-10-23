@@ -484,7 +484,7 @@ a.icon-btn { text-decoration: none; }
   flex: 0 0 auto;
 }
 .lib-filters b { color: var(--page-fg); font-weight: 600; }
-.icon-btn[aria-pressed="true"] { color: var(--huggins-orange); }
+.icon-btn.active { color: var(--huggins-orange); }
 .lib-tile.is-placeholder { background: var(--placeholder, #2b2b2b); animation: pulse 1.1s ease-in-out infinite; }
 html.theme-light .lib-tile.is-placeholder { --placeholder: #dde1e8; }
 .lib-tile.is-placeholder > * { visibility: hidden; }
@@ -934,6 +934,7 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
               <option value="PlayCount">Play count</option>
               <option value="Duration">Duration</option>
               <option value="DateAdded">Date added</option>
+              <option value="DateCreated">Date created</option>
               <option value="Rating">Rating</option>
             </select>
             <button class="btn" id="lib-dir" type="button" aria-label="Toggle sort direction">A–Z</button>
@@ -1023,6 +1024,21 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
                 </div>
               </div>
             </div>
+            <div class="filter-section">
+              <h3>Date Filter</h3>
+              <div class="filter-stack duration-stack">
+                <div class="filter-row"><label class="date-label" for="filter-added">Added</label><select class="ctl date-choice" id="filter-added"><option value="">Any time</option><option value="last7Days">Last 7 days</option><option value="last30Days">Last 30 days</option><option value="last90Days">Last 90 days</option><option value="thisYear">This year</option><option value="custom">Custom range</option></select></div>
+                <div class="date-range" id="filter-added-range" hidden>
+                  <div class="filter-row"><span class="date-label">From</span><span class="vfield vfield-after"><input class="ctl date-field" type="date" id="filter-added-from" aria-label="Added from" disabled><span class="vfield-icon material-symbol-icon">error</span></span></div>
+                  <div class="filter-row"><span class="date-label">To</span><span class="vfield vfield-after"><input class="ctl date-field" type="date" id="filter-added-to" aria-label="Added to" disabled><span class="vfield-icon material-symbol-icon">error</span></span></div>
+                </div>
+                <div class="filter-row"><label class="date-label" for="filter-created">Created</label><select class="ctl date-choice" id="filter-created"><option value="">Any time</option><option value="last7Days">Last 7 days</option><option value="last30Days">Last 30 days</option><option value="last90Days">Last 90 days</option><option value="thisYear">This year</option><option value="custom">Custom range</option></select></div>
+                <div class="date-range" id="filter-created-range" hidden>
+                  <div class="filter-row"><span class="date-label">From</span><span class="vfield vfield-after"><input class="ctl date-field" type="date" id="filter-created-from" aria-label="Created from" disabled><span class="vfield-icon material-symbol-icon">error</span></span></div>
+                  <div class="filter-row"><span class="date-label">To</span><span class="vfield vfield-after"><input class="ctl date-field" type="date" id="filter-created-to" aria-label="Created to" disabled><span class="vfield-icon material-symbol-icon">error</span></span></div>
+                </div>
+              </div>
+            </div>
           </div>
           <div data-subpanel="tags" hidden>
             <div class="filter-section">
@@ -1088,7 +1104,10 @@ body.pairing #filter-body > [data-subpanel], body.held-back #filter-body > [data
       </section>
 
       <section id="tab-stats" class="panel-page" role="tabpanel" aria-labelledby="tab-btn-stats" hidden>
-        <div class="panel-page-head"><h2>Stats</h2></div>
+        <div class="panel-page-head">
+          <h2 class="grow">Stats</h2>
+          <button class="icon-btn" type="button" id="stats-exact-times" aria-label="Show exact times" title="Show exact times"><span class="material-symbol-icon">calendar_clock</span></button>
+        </div>
         <div id="stats-body" class="stats-body scroll-y themed-scrollbar"></div>
       </section>
       <section id="tab-settings" class="panel-page" role="tabpanel" aria-labelledby="tab-btn-settings" hidden>
@@ -1506,6 +1525,7 @@ const state = {
   iosVolume: store.get("iosVolume", false),
   sound: store.get("sound", true),
   mockShort: store.get("mockShort", false),
+  statsExactTimes: store.get("statsExactTimes", false),
   libCollapsed: store.get("libCollapsed", false),
   tileNames: store.get("tileNames", false),
   hideControls: store.get("hideControls", "timeout"),
@@ -1570,6 +1590,13 @@ const isPlayable = (item) => isPhoto(item) || PLAYABLE.includes(extOf(item));
 // The filter keeps every photo, as the server does.
 const browserCanShow = (item) => (isPhoto(item) ? extOf(item) !== "heic" : PLAYABLE.includes(extOf(item)));
 const statRand = rng(23);
+// How many days ago each recently added item was added, in id order.
+const RECENT_ADDED_DAYS = [0, 1, 3, 5, 8, 12, 17, 23, 29, 36, 45, 58, 72, 86, 104, 130, 160, 200];
+// A time on the day `days` before today, `minute` minutes and `second` seconds into it, and never later than a minute ago.
+function atDaysAgo(days, minute, second) {
+  const now = new Date();
+  return Math.min(now.getTime() - 60e3, new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, 0, minute, second).getTime());
+}
 ITEMS.forEach((item) => {
   item.plays = statRand() < 0.2 ? 0 : 1 + Math.floor(statRand() * 40);
   // When it was last played before this page: days ago for most, and hours or minutes ago for a few.
@@ -1594,6 +1621,18 @@ ITEMS.forEach((item) => {
   // rather than statRand, whose values the stats above share.
   const halves = (item.id * 7) % 13;
   item.rating = halves >= 1 && halves <= 10 ? halves / 2 : null;
+  // When it was added and created, as times, from its id too. Most were added the day they were created, in the year
+  // their name shows, as the catalog's upgrade takes an existing file's modified time as its date added. Every fourth
+  // was added recently, and every eighth created a few days before that, so each of the Date Filter's choices matches
+  // some tiles.
+  const [minute, second] = [(item.id * 37) % 1440, (item.id * 13) % 60];
+  item.dateCreated = new Date(item.year, (item.id * 5) % 12, 1 + ((item.id * 7) % 28), 0, minute, second).getTime();
+  item.dateAdded = item.dateCreated;
+  if (item.id % 4 === 1) {
+    const addedDays = RECENT_ADDED_DAYS[(item.id - 1) / 4];
+    item.dateAdded = atDaysAgo(addedDays, minute, second);
+    if (item.id % 8 === 1) item.dateCreated = atDaysAgo(addedDays + 1 + (item.id % 3), minute, second);
+  }
   item.missing = item.id === 13;
   item.removed = false;
   item.path = `${isPhoto(item) ? "/media/phone" : "/media/videos"}/${item.year}/${item.name}`;
@@ -1682,7 +1721,7 @@ ITEMS.forEach((item) => {
     .map((chip) => chip.key));
 });
 const PRESET_NAMES = ["Favorites", "Short clips", "Photos only", "Long videos", "Beach days", "Family", "Not yet watched", "Night shots",
-  "Trips abroad", "Drone footage", "Concerts", "Kids", "Cooking", "Timelapses", "Winter", "Summer"];
+  "Trips abroad", "Drone footage", "Concerts", "Kids", "Cooking", "Timelapses", "Winter", "Summer", "Recently added"];
 // The presets by id, in their order, as the app names them: an id of its own, which a rename keeps, and each one's name.
 const presets = PRESET_NAMES.map((_, index) => `preset-${index + 1}`);
 let presetNames = new Map(presets.map((id, index) => [id, PRESET_NAMES[index]]));
@@ -3159,6 +3198,7 @@ const DIRECTION_LABELS = {
   Name: ["A–Z", "Z–A"],
   LastPlayed: ["Oldest → Newest", "Newest → Oldest"],
   DateAdded: ["Oldest → Newest", "Newest → Oldest"],
+  DateCreated: ["Oldest → Newest", "Newest → Oldest"],
   PlayCount: ["Least Plays → Most Plays", "Most Plays → Least Plays"],
   Duration: ["Shortest → Longest", "Longest → Shortest"],
   Rating: ["Lowest → Highest", "Highest → Lowest"]
@@ -3189,11 +3229,23 @@ function visibleItems() {
   if (lib.search) items = items.filter((item) => item.name.toLowerCase().includes(lib.search.toLowerCase()));
   const baseline = items.length;
   items = items.filter((item) => passesApplied(item));
-  const key = lib.sort === "Duration" ? (item) => item.duration : lib.sort === "Name" ? (item) => item.name : lib.sort === "Rating" ? (item) => item.rating || 0 : (item) => (item.id * 37) % 101;
-  items.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
-  if (lib.descending) items.reverse();
+  const value = SORT_VALUES[lib.sort];
+  const direction = lib.descending ? -1 : 1;
+  items.sort((a, b) => direction * compareSortValues(value(a), value(b)) || compareSortValues(a.name, b.name) || a.id - b.id);
   return { items, baseline };
 }
+// What each sort orders by, as the server reads it: a missing value sorts as 0. Equal values go by name, A–Z in both
+// directions, as the server orders them.
+const SORT_VALUES = {
+  Name: (item) => item.name,
+  LastPlayed: (item) => item.lastPlayedAt || 0,
+  PlayCount: (item) => item.plays,
+  Duration: (item) => item.duration,
+  DateAdded: (item) => item.dateAdded || 0,
+  DateCreated: (item) => item.dateCreated || 0,
+  Rating: (item) => item.rating || 0
+};
+const compareSortValues = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 // The count line reads "{matching} / {total}"; screen readers hear it in words.
 function showSummary(matching, total) {
@@ -3463,8 +3515,9 @@ function checkPresetName(value, own) {
   return null;
 }
 // A filter as the app compares it, read from the tab's fields: a duration as its field's text reads it, one that is not
-// valid reading as "invalid", and only the categories matched with ANY (OR), since one without an entry matches ALL.
-const DEFAULT_FILTER = { fav: null, bl: "excluded", basic: [false, false, false, false], unrated: false, minRating: null, media: "all", audio: "all", sources: null, min: null, max: null, include: [], exclude: [], global: "AND", local: {} };
+// valid reading as "invalid", a date range as its choice, or a custom range's From and To as their fields hold them, and
+// only the categories matched with ANY (OR), since one without an entry matches ALL.
+const DEFAULT_FILTER = { fav: null, bl: "excluded", basic: [false, false, false, false], unrated: false, minRating: null, media: "all", audio: "all", sources: null, min: null, max: null, addedRange: null, createdRange: null, include: [], exclude: [], global: "AND", local: {} };
 const sameFilter = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 // Each preset's filter, none of them the default one, which no preset may hold.
 const PRESET_FILTERS = {
@@ -3483,7 +3536,8 @@ const PRESET_FILTERS = {
   Cooking: { include: ["activities-cooking"] },
   Timelapses: { include: ["activities-timelapse"] },
   Winter: { include: ["weather-snow"] },
-  Summer: { include: ["weather-sunny"] }
+  Summer: { include: ["weather-sunny"] },
+  "Recently added": { addedRange: "last30Days" }
 };
 // The tab's presets' filters, by id, and the saved names and filters, which Discard changes and Clear all put back.
 let presetFilters = new Map(presets.map((id) => [id, { ...DEFAULT_FILTER, ...PRESET_FILTERS[presetNames.get(id)] }]));
@@ -3575,6 +3629,41 @@ function workingValue() {
   });
   return value;
 }
+// Date Filter: Added and Created, each a choice, with From and To shown, and in use, only while Custom range is chosen.
+const DATE_FILTERS = ["added", "created"].map((name) => ({
+  key: `${name}Range`,
+  label: name === "added" ? "Added" : "Created",
+  choice: $(`filter-${name}`),
+  range: $(`filter-${name}-range`),
+  ...dateRangeFields($(`filter-${name}-from`), $(`filter-${name}-to`))
+}));
+const dateFields = DATE_FILTERS.flatMap(({ from, to }) => [from, to]);
+function syncDateRanges() {
+  DATE_FILTERS.forEach(({ choice, range, from, to }) => {
+    const custom = choice.value === "custom";
+    range.hidden = !custom;
+    from.input.disabled = !custom;
+    to.input.disabled = !custom;
+  });
+}
+// A date as its field holds it, YYYY-MM-DD, for a local day; and a local day read from one. A date field's
+// `valueAsDate` is midnight UTC, which is the day before west of UTC.
+const dayText = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+function localDay(text) {
+  const [year, month, day] = text.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+// Choosing Custom range fills an empty From or To with today, so the range is valid at once.
+DATE_FILTERS.forEach(({ choice, from, to }) => choice.addEventListener("change", () => {
+  if (choice.value === "custom") [from, to].forEach((field) => (field.input.value ||= dayText(new Date())));
+  syncDateRanges();
+  [from, to].forEach((field) => field.update());
+}));
+// A date filter as the app keeps it: null for Any time, the rolling choice, or a custom range's dates.
+function dateRangeValue({ choice, from, to }) {
+  if (!choice.value) return null;
+  return choice.value === "custom" ? { from: from.input.value, to: to.input.value } : choice.value;
+}
 const nameField = new ValidatedField($("filter-new-preset"), (value) => checkPresetName(value, null));
 const flagModesField = flagPairField($("filter-fav"), $("filter-fav-mode"), $("filter-bl"), $("filter-bl-mode"));
 // An empty duration field means no limit, and its placeholder says so.
@@ -3587,10 +3676,14 @@ function syncModeSelects() {
 $("filter-fav").addEventListener("change", syncModeSelects);
 $("filter-bl").addEventListener("change", syncModeSelects);
 // A filter that is off holds no choice, so the app keeps an unchecked dropdown's choice only while the filter is
-// edited, and the applied filter shows it at its default.
-function resetUncheckedModes() {
+// edited, and the applied filter shows it at its default. A date filter holds dates only while Custom range is chosen,
+// so the app keeps them only while the filter is edited too.
+function resetUnusedFields() {
   if (!$("filter-fav").checked) $("filter-fav-mode").value = "only";
   if (!$("filter-bl").checked) $("filter-bl-mode").value = "excluded";
+  DATE_FILTERS.forEach(({ choice, from, to }) => {
+    if (choice.value !== "custom") [from, to].forEach((field) => (field.input.value = ""));
+  });
 }
 // Min Rating: the rating's stars, holding the tab's minimum in a hidden field, so the tab's snapshot and the filter this
 // device remembers carry it as they carry the other fields. No stars is no minimum. The stars change only the tab's
@@ -3607,6 +3700,8 @@ minRatingStars.show({ get rating() { return minRating(); } });
 const unratedField = ratingPairField($("filter-unrated"), minRating, minRatingStars.el);
 // The stars show the minimum the pair was last checked with, however it changed.
 unratedField.onChange(minRatingStars.draw);
+// The General section's checked fields, in their order on screen, which Apply, Add Preset, and Update use.
+const generalFields = [flagModesField, unratedField, minField, maxField, ...dateFields];
 
 // The tab's filter, as the comparisons read it. A mode dropdown holds no choice while its checkbox is off.
 function generalSection(heading) {
@@ -3631,6 +3726,7 @@ function filterValue() {
     sources: on.length < boxes.length ? on.map(sourceRoot).sort() : null,
     min: duration(minField),
     max: duration(maxField),
+    ...Object.fromEntries(DATE_FILTERS.map((filter) => [filter.key, dateRangeValue(filter)])),
     include: tagged("inc"),
     exclude: tagged("exc"),
     global: $("filter-global").value,
@@ -3654,6 +3750,14 @@ function applyFilterValue(value) {
   generalSection("Sources").querySelectorAll('input[type="checkbox"]').forEach((box) => (box.checked = !value.sources || value.sources.includes(sourceRoot(box))));
   minField.reset(value.min === null ? "" : formatDuration(value.min));
   maxField.reset(value.max === null ? "" : formatDuration(value.max));
+  DATE_FILTERS.forEach(({ key, choice, from, to }) => {
+    const range = value[key];
+    choice.value = range && typeof range === "object" ? "custom" : range || "";
+    from.input.value = range?.from || "";
+    to.input.value = range?.to || "";
+  });
+  syncDateRanges();
+  dateFields.forEach((field) => field.update());
   filterTagState.clear();
   value.include.forEach((key) => filterTagState.set(key, "inc"));
   value.exclude.forEach((key) => filterTagState.set(key, "exc"));
@@ -3706,7 +3810,7 @@ function renderApply() {
   const named = !anchor.id ? DEFAULT_FILTER : presets.includes(anchor.id) ? presetFilters.get(anchor.id) : null;
   $("filter-heading").textContent = `Preset: ${anchorLabel({ id: anchor.id, starred: !named || !sameFilter(filterValue(), named) }, presets, presetNames)}`;
   const generalTab = document.querySelector('.filter-tab[data-sub="general"]');
-  const generalProblem = flagModesField.flagged || unratedField.flagged || minField.flagged || maxField.flagged;
+  const generalProblem = generalFields.some((field) => field.flagged);
   generalTab.classList.toggle("has-problem", generalProblem);
   fadeShown(generalTab.querySelector(".tab-problem"), generalProblem);
   generalTab.title = generalProblem ? "A field here is not valid" : "";
@@ -3715,11 +3819,13 @@ function renderApply() {
   fadeShown(presetsTab.querySelector(".tab-problem"), nameField.flagged);
   presetsTab.title = nameField.flagged ? "A field here is not valid" : "";
 }
-// Apply, Add Preset, and Update all use the General section's pair and durations; Add Preset uses the name too.
+// Apply, Add Preset, and Update all use the General section's fields; Add Preset uses the name too.
 // Add Preset sits beside the name, so an empty or taken name disables it, and only the General fields hold it.
 function generalReason(field, ending) {
   if (field === flagModesField) return `Change Favorites or Blacklisted ${ending}.`;
   if (field === unratedField) return `Clear Only unrated or Min Rating ${ending}.`;
+  const dates = DATE_FILTERS.find(({ from, to }) => field === from || field === to);
+  if (dates) return `Correct the ${dates.label} dates ${ending}.`;
   return `Correct the ${field === minField ? "minimum" : "maximum"} duration ${ending}.`;
 }
 // Apply saves each changed preset by id, each rename after the rename that frees its name and each filter update after
@@ -3767,7 +3873,7 @@ function loopReason() {
 }
 // A loop blocks Apply, which turns its dot red, as a held Apply does, and pressing it shows the reason in a notice, since
 // a phone or tablet shows no tooltip.
-applyHold = holdAction($("filter-apply"), () => [flagModesField, unratedField, minField, maxField], {
+applyHold = holdAction($("filter-apply"), () => generalFields, {
   idle: () => !filterChanges(),
   blocked: loopReason,
   onBlocked: (reason) => void noticeDialog({ message: reason }),
@@ -3784,19 +3890,19 @@ function presetReason() {
   const holder = presets.find((id) => sameFilter(presetFilters.get(id), value));
   return holder ? `Preset "${presetNames.get(holder)}" already has this filter.` : null;
 }
-addPresetHold = holdAction($("filter-add-preset"), () => [nameField, flagModesField, unratedField, minField, maxField], {
+addPresetHold = holdAction($("filter-add-preset"), () => [nameField, ...generalFields], {
   beside: () => [nameField],
   unavailable: presetReason,
   reason: (field) => generalReason(field, "first"),
   beforeReveal: () => showSub("general")
 });
 // Update has nothing to write into while Choose Preset is on None, which it says before the filter's reasons.
-updatePresetHold = holdAction($("filter-update-preset"), () => [flagModesField, unratedField, minField, maxField], {
+updatePresetHold = holdAction($("filter-update-preset"), () => generalFields, {
   unavailable: () => (chosenPreset ? presetReason() : "Choose a preset to update."),
   reason: (field) => generalReason(field, "first"),
   beforeReveal: () => showSub("general")
 });
-[flagModesField, unratedField, minField, maxField, nameField].forEach((field) => field.onChange(renderApply));
+[...generalFields, nameField].forEach((field) => field.onChange(renderApply));
 
 filterBody.addEventListener("change", (event) => {
   if (event.target.closest('[data-subpanel="presets"]') && event.target.id !== "filter-preset-select") return;
@@ -3830,7 +3936,8 @@ function restoreSnapshot() {
   startOver();
   renderPresets();
   renderFilterTags();
-  [flagModesField, unratedField, minField, maxField, nameField].forEach((field) => field.reset());
+  syncDateRanges();
+  [...generalFields, nameField].forEach((field) => field.reset());
 }
 // The applied filter is remembered on this device, as the per-device store keeps it.
 function saveFilterState() {
@@ -3853,7 +3960,8 @@ function restoreFilterState() {
   $("filter-global").value = store.get("filterGlobal", "AND");
   filterLocalModes = new Map(store.get("filterLocal", []));
   syncModeSelects();
-  [flagModesField, unratedField, minField, maxField].forEach((field) => field.update());
+  syncDateRanges();
+  generalFields.forEach((field) => field.update());
 }
 
 $("filter-apply").addEventListener("click", () => {
@@ -3861,7 +3969,7 @@ $("filter-apply").addEventListener("click", () => {
   if (state.pairing || heldBack()) return;
   // The dropdown takes the preset the tab names.
   lib.preset = presetAnchor(filterValue(), tabBase, presets, presetFilters).id;
-  resetUncheckedModes();
+  resetUnusedFields();
   takeSnapshot();
   startOver();
   // The categories' dots compare the tab's tags with the applied ones, which these now are.
@@ -4040,7 +4148,8 @@ function followAppliedFilter(value) {
     filterLocalModes = new Map(working.local);
     tabBase = working.base;
     syncModeSelects();
-    [minField, maxField].forEach((field) => field.update());
+    syncDateRanges();
+    generalFields.forEach((field) => field.update());
   }
   renderFilterTags();
   renderApply();
@@ -4973,6 +5082,8 @@ const applied = {
   sources: null,
   min: null,
   max: null,
+  addedRange: null,
+  createdRange: null,
   include: [],
   exclude: [],
   parts: []
@@ -5011,6 +5122,10 @@ function readApplied() {
   // Durations read as the Filter tab shows them after a reload, not as typed: 2:00 reads 02:00.
   if (min !== null) parts.push(`Min ${formatDuration(min)}`);
   if (max !== null) parts.push(`Max ${formatDuration(max)}`);
+  const ranges = Object.fromEntries(DATE_FILTERS.map((filter) => [filter.key, dateRangeValue(filter)]));
+  DATE_FILTERS.forEach(({ key, label }) => {
+    if (ranges[key]) parts.push(`${label} ${dateRangeText(ranges[key])}`);
+  });
   const include = [...filterTagState].filter(([, mode]) => mode === "inc").map(([key]) => key);
   const exclude = [...filterTagState].filter(([, mode]) => mode === "exc").map(([key]) => key);
   if (include.length) parts.push(`${include.length} tag${include.length === 1 ? "" : "s"}`);
@@ -5029,11 +5144,35 @@ function readApplied() {
     sources: on.length < boxes.length ? on.map((box) => /\(([^)]+)\)/.exec(box.parentElement.textContent)[1]) : null,
     min,
     max,
+    ...ranges,
     include,
     exclude,
     parts
   });
   renderFilterSummary();
+}
+// The rolling date ranges' lengths in days.
+const ROLLING_DAYS = { last7Days: 7, last30Days: 30, last90Days: 90 };
+// How the Filters line names a date range after its label: "in last 30 days", "this year", or a custom range in the
+// device's own date format, such as "Jan 3 – Mar 31, 2026".
+function dateRangeText(range) {
+  if (range === "thisYear") return "this year";
+  if (typeof range === "string") return `in last ${ROLLING_DAYS[range]} days`;
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).formatRange(localDay(range.from), localDay(range.to));
+}
+// Whether a time falls in a date range, resolved as the server resolves it, in its own time zone, to whole days: Last
+// {N} days is today and the N − 1 days before it, This year starts on 1 January, and a custom range covers its first
+// and last days. The device's time zone stands in for the server's. A file without the date is outside every range.
+function inDateRange(time, range) {
+  if (!range) return true;
+  if (time == null) return false;
+  const now = new Date();
+  const first = ROLLING_DAYS[range]
+    ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - (ROLLING_DAYS[range] - 1))
+    : range === "thisYear" ? new Date(now.getFullYear(), 0, 1) : localDay(range.from);
+  const last = typeof range === "string" ? now : localDay(range.to);
+  const end = new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1);
+  return time >= first.getTime() && time < end.getTime();
 }
 function passesApplied(item) {
   const a = applied;
@@ -5052,6 +5191,7 @@ function passesApplied(item) {
   if (a.sources && !a.sources.some((root) => item.path.startsWith(`${root}/`))) return false;
   if (a.min !== null && (isPhoto(item) || item.duration < a.min)) return false;
   if (a.max !== null && (isPhoto(item) || item.duration > a.max)) return false;
+  if (!inDateRange(item.dateAdded, a.addedRange) || !inDateRange(item.dateCreated, a.createdRange)) return false;
   if (a.include.some((key) => !item.tags.has(key))) return false;
   if (a.exclude.some((key) => item.tags.has(key))) return false;
   return true;
@@ -5297,16 +5437,30 @@ function statRow(list, label, value) {
   list.append(dt, dd);
 }
 const yesNo = (value) => (value ? "Yes" : "No");
-// How long ago the item was last played before this play.
-function playedAgo(at) {
-  if (at == null) return "Never";
-  const minutes = Math.floor((Date.now() - at) / 60000);
+// A time as the Stats tab shows Last played, Added, and Created: how long ago, or, with the header's Show exact times on,
+// YYYY-MM-DD HH:MM:SS in 24-hour time and the device's local time. `none` is the text for no time.
+function statTime(time, none) {
+  if (time == null) return none;
+  return state.statsExactTimes ? dateTimeText(time) : timeAgo(time);
+}
+function dateTimeText(time) {
+  const date = new Date(time);
+  const two = (n) => String(n).padStart(2, "0");
+  return `${dayText(date)} ${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}`;
+}
+// How long ago a time was: Just now, then minutes, hours, and days, then months once a whole calendar month has passed,
+// and years once a whole year has.
+function timeAgo(time) {
+  const ago = (count, unit) => `${count} ${unit}${count === 1 ? "" : "s"} ago`;
+  const minutes = Math.floor((Date.now() - time) / 60000);
   if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 60) return ago(minutes, "minute");
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
-  const days = Math.floor(hours / 24);
-  return `${days} ${days === 1 ? "day" : "days"} ago`;
+  if (hours < 24) return ago(hours, "hour");
+  const [now, then] = [new Date(), new Date(time)];
+  const months = (now.getFullYear() - then.getFullYear()) * 12 + now.getMonth() - then.getMonth() - (now.getDate() < then.getDate() ? 1 : 0);
+  if (months < 1) return ago(Math.floor(hours / 24), "day");
+  return months < 12 ? ago(months, "month") : ago(Math.floor(months / 12), "year");
 }
 // The scan's true peak, N/A without audio, or Not measured. A digitally silent track has no audio, since the server
 // counts it as a video without audio.
@@ -5627,7 +5781,9 @@ function fileStats(item) {
   const table = document.createElement("dl");
   table.className = "stats-table";
   statRow(table, "Plays", String(item.plays));
-  statRow(table, "Last played", playedAgo(item.playedBefore));
+  statRow(table, "Last played", statTime(item.playedBefore, "Never"));
+  statRow(table, "Added", statTime(item.dateAdded, "Unknown"));
+  statRow(table, "Created", statTime(item.dateCreated, "Unknown"));
   statRow(table, "Favorite", yesNo(item.favorite));
   statRow(table, "Blacklisted", yesNo(item.blacklisted));
   if (!isPhoto(item)) {
@@ -5652,6 +5808,17 @@ function fileStats(item) {
   // A file without tags shows nothing in their place.
   return tags.childElementCount ? [name, path, rating, table, tags] : [name, path, rating, table];
 }
+// Show exact times, in the tab's header: a toggle, orange while on, remembered on this device.
+function renderExactTimes() {
+  $("stats-exact-times").classList.toggle("active", state.statsExactTimes);
+}
+$("stats-exact-times").addEventListener("click", () => {
+  state.statsExactTimes = !state.statsExactTimes;
+  store.set("statsExactTimes", state.statsExactTimes);
+  renderExactTimes();
+  renderStats();
+});
+renderExactTimes();
 function renderStats() {
   const host = $("stats-body");
   if (!host) return;

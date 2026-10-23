@@ -20,9 +20,13 @@ Instructions:
 
 Commit Message:
 
-Bugfix: Attach the catalog backup only at startup and pick thumbnail frames from the stored duration
+M12k5: Add the Date Filter, the Date created sort, and the Stats tab's Added and Created to the mockup
 
-- Server startup alone attaches the catalog backup. The operations service also attached it when the first library request created it, so a second backup attempt could come hours after startup, skip the hold during a refresh, and write an extra backup that rotated out the oldest one.
-- The refresh's thumbnail stage picks each video's frames from the duration the duration stage stored, and probes with ffprobe only a video without one, such as after that stage's probe failed.
-- Tests: the backup tests open the catalog through startup's own path, and new tests keep the operations service from attaching the backup and the thumbnail stage from probing a video with a stored duration, while still probing one without. Backup waits are gone from tests that never attach a backup.
-- ISSUES.md: a video replaced at the same path keeps its old duration and loudness.
+- The Filter tab's General section ends with a Date Filter section: Added and Created, each Any time, Last 7, 30, or 90 days, This year, or Custom range, whose From and To come from the device's date picker and start on today. An emptied date, or a To before its From, is flagged with the field validation pattern and holds Apply, Add Preset, and Update.
+- The Filters line names "Added in last 30 days", "Added this year", or a custom range in the device's own date format, such as "Added Jan 3 – Mar 31, 2026", and Created the same way. A Recently added preset holds Added Last 30 days.
+- The Library tab's sort adds Date created after Date added, each Newest → Oldest or Oldest → Newest. Every sort reads the item's own value, so Last played and Play count no longer use a made-up order, and equal values go by name, as the server orders them.
+- The Stats tab's Current file shows Added and Created after Last played, and all three say how long ago, through months and years. Show exact times, a toggle in the tab's header, shows them as YYYY-MM-DD HH:MM:SS in local time.
+- The admin page's Add Source starts a library refresh, restarting one that runs, and its path check flags a folder inside a source or holding one.
+- The mockup's items get a date added and a date created. The validation page gets a Custom range group, and the index page describes the changes.
+- AGENTS.md: Screen reader support and keyboard navigation aren't goals for the app, so new work adds neither, keeping controls' accessible names and the browser's own behavior in fields and forms.
+- MILESTONES.md: Date Added and Date Filters' Mockup slice is complete, and its Decisions take the settled design, with the `addedRange` and `createdRange` field names, the item read's `dateAddedUtc` and `dateCreatedUtc`, and the Stats tab's rows, and drop source import. Admin Source Management's Decisions have adding a source start a refresh, canceling one that runs, in place of import's direct insert, with the traps for a cancel per run, and its Contract slice names `POST /api/sources/add` and renames `POST /api/presets/create` to `POST /api/presets/add`. Duplicate review's contract renames its modified time `dateCreatedUtc`.

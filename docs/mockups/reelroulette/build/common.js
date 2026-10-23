@@ -299,6 +299,28 @@ function ratingPairField(unratedBox, minimum, stars, options) {
 }
 
 /**
+ * A custom range of the Filter tab's Date Filter: From and To, each the device's date picker, holding `YYYY-MM-DD`,
+ * which compares as text in date order. A range needs both dates, so an emptied one is flagged, and a To before its
+ * From is flagged on To. Each icon sits after its field, as a dropdown's does, since a desktop browser draws its
+ * calendar button at the field's right end. A picker may report a date only on `change`, and a change to From checks
+ * To again. Returns the two fields.
+ */
+const DATE_START_PROBLEM = "Choose a start date.";
+const DATE_END_PROBLEM = "Choose an end date.";
+const DATE_ORDER_PROBLEM = "Choose an end date on or after the start date.";
+function dateRangeFields(fromInput, toInput, options) {
+  const from = new ValidatedField(fromInput, (value) => (value ? null : { message: DATE_START_PROBLEM }), options);
+  const to = new ValidatedField(toInput, (value) => {
+    if (!value) return { message: DATE_END_PROBLEM };
+    return fromInput.value && value < fromInput.value ? { message: DATE_ORDER_PROBLEM } : null;
+  }, options);
+  fromInput.addEventListener("change", () => from.update());
+  toInput.addEventListener("change", () => to.update());
+  ["input", "change"].forEach((type) => fromInput.addEventListener(type, () => to.update()));
+  return { from, to };
+}
+
+/**
  * A setting that applies without Save and must always hold a value, on a field using the validation pattern. A valid
  * value typed is saved only on Enter or when the field loses focus, so a value passed through on the way, such as the
  * "1" of "120", is never saved. While the field has focus, a value that is not valid stays flagged; once it loses focus,
