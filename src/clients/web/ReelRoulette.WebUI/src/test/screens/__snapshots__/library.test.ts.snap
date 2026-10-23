@@ -42,6 +42,8 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
           "Duration"
         <option value="DateAdded">
           "Date added"
+        <option value="DateCreated">
+          "Date created"
         <option value="Rating">
           "Rating"
       <button aria-label="Toggle sort direction" class="library-overlay-sort-direction" id="library-sort-direction-btn" type="button">
@@ -95,6 +97,8 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
           "Duration"
         <option value="DateAdded">
           "Date added"
+        <option value="DateCreated">
+          "Date created"
         <option value="Rating">
           "Rating"
       <button aria-label="Toggle sort direction" class="library-overlay-sort-direction" id="library-sort-direction-btn" type="button">
@@ -150,6 +154,8 @@ exports[`overlay > keeps its markup while loading, with tiles, and when a query 
           "Duration"
         <option value="DateAdded">
           "Date added"
+        <option value="DateCreated">
+          "Date created"
         <option value="Rating">
           "Rating"
       <button aria-label="Toggle sort direction" class="library-overlay-sort-direction" id="library-sort-direction-btn" type="button">

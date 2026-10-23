@@ -642,6 +642,7 @@ describe("search and sort", () => {
       ["PlayCount", "Play count"],
       ["Duration", "Duration"],
       ["DateAdded", "Date added"],
+      ["DateCreated", "Date created"],
       ["Rating", "Rating"]
     ]);
 
@@ -653,6 +654,20 @@ describe("search and sort", () => {
     await click(directionButton());
     expect(library.queries()[2]).toMatchObject({ sortMode: "Rating", sortDescending: false, offset: 0 });
     expect(directionButton().textContent).toBe("Lowest → Highest");
+  });
+
+  it("the Date created sort follows Date added, starting on Newest → Oldest, and the direction button reverses it", async () => {
+    const { library } = await mountLibrary(libraryItems(3));
+    await openLibrary();
+
+    fireEvent.change(sortSelect(), { target: { value: "DateCreated" } });
+    await flush();
+    expect(library.queries()[1]).toMatchObject({ sortMode: "DateCreated", sortDescending: true, offset: 0 });
+    expect(directionButton().textContent).toBe("Newest → Oldest");
+
+    await click(directionButton());
+    expect(library.queries()[2]).toMatchObject({ sortMode: "DateCreated", sortDescending: false, offset: 0 });
+    expect(directionButton().textContent).toBe("Oldest → Newest");
   });
 
   it("search and sort stay after closing and reopening, and a new query scrolls back to the top", async () => {

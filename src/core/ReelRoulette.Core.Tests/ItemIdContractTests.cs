@@ -509,21 +509,81 @@ public sealed class ItemIdContractTests : IDisposable
     }
 
     [Fact]
-    public void LibraryProjectionItem_NamesEveryFieldTheServerAlwaysSends_AndTheRatingAndAudio()
+    public void LibraryItems_CarryTheirDatesAddedAndCreated_AndLeaveThemOutWhenUnknown()
     {
         CatalogSeed.Write(
             _tempDir,
             sources: [new SeedSource("s1", _tempDir)],
-            items: [new SeedItem("plain", Path.Combine(_tempDir, "plain.mp4")) { SourceId = "s1" }]);
+            items:
+            [
+                new SeedItem("dated", Path.Combine(_tempDir, "dated.mp4"))
+                {
+                    SourceId = "s1",
+                    DateAddedUtc = new DateTime(2030, 3, 4, 5, 6, 7, DateTimeKind.Utc),
+                    LastWriteTimeUtc = new DateTime(2029, 8, 9, 10, 11, 12, DateTimeKind.Utc)
+                },
+                new SeedItem("undated", Path.Combine(_tempDir, "undated.mp4")) { SourceId = "s1" }
+            ]);
+        var operations = CreateOperations(CatalogOpen.Host(_tempDir));
+
+        var listed = operations.QueryLibrary(new LibraryQueryRequest()).Body!["items"]!.AsArray()
+            .ToDictionary(item => item!["id"]!.GetValue<string>(), item => item!);
+        foreach (var dated in new[] { listed["dated"], operations.ReadLibraryItem("dated")! })
+        {
+            Assert.Equal("2030-03-04T05:06:07.0000000Z", dated["dateAddedUtc"]!.GetValue<string>());
+            Assert.Equal("2029-08-09T10:11:12.0000000Z", dated["dateCreatedUtc"]!.GetValue<string>());
+            Assert.False(dated.AsObject().ContainsKey("lastWriteTimeUtc"));
+        }
+
+        foreach (var undated in new[] { listed["undated"], operations.ReadLibraryItem("undated")! })
+        {
+            Assert.False(undated.AsObject().ContainsKey("dateAddedUtc"));
+            Assert.False(undated.AsObject().ContainsKey("dateCreatedUtc"));
+        }
+    }
+
+    // An item with every optional value: its single read sends exactly the fields the schema names, but the browse
+    // page's thumbnail layout fields, and the page sends only fields the schema names.
+    [Fact]
+    public void LibraryProjectionItem_NamesEveryFieldTheServerSends()
+    {
+        var at = new DateTime(2030, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+        CatalogSeed.Write(
+            _tempDir,
+            sources: [new SeedSource("s1", _tempDir)],
+            items:
+            [
+                new SeedItem("full", Path.Combine(_tempDir, "full.mp4"))
+                {
+                    SourceId = "s1",
+                    RelativePath = "full.mp4",
+                    Duration = TimeSpan.FromSeconds(90),
+                    HasAudio = true,
+                    IntegratedLoudness = -20.5,
+                    PeakDb = -1.5,
+                    LoudnessError = "The scan failed.",
+                    PlayCount = 2,
+                    LastPlayedUtc = at,
+                    Fingerprint = "abc",
+                    FileSizeBytes = 42,
+                    LastWriteTimeUtc = at,
+                    FingerprintLastUtc = at,
+                    FingerprintStatus = 1,
+                    ThumbnailWidth = 320,
+                    ThumbnailHeight = 180,
+                    RatingHalfStars = 7,
+                    DateAddedUtc = at,
+                    Tags = ["Ann"]
+                }
+            ]);
         var operations = CreateOperations(CatalogOpen.Host(_tempDir));
         var named = OpenApiSpec.ReadSchemaProperties("LibraryProjectionItem");
+        string[] pageOnly = ["hasThumbnail", "thumbnailVersion", "thumbnailWidth", "thumbnailHeight"];
 
-        // A single read of an item without optional data sends only the fields the server always sends.
-        var sent = operations.ReadLibraryItem("plain")!.AsObject().Select(property => property.Key).ToList();
-        Assert.Contains("fullPath", sent);
-        Assert.All(sent, field => Assert.Contains(field, named));
-        Assert.Contains("rating", named);
-        Assert.Contains("hasAudio", named);
+        var read = operations.ReadLibraryItem("full")!.AsObject().Select(property => property.Key).Order(StringComparer.Ordinal);
+        Assert.Equal(named.Except(pageOnly), read);
+        var page = operations.QueryLibrary(new LibraryQueryRequest()).Body!["items"]!.AsArray().Single()!.AsObject();
+        Assert.All(page.Select(property => property.Key), field => Assert.Contains(field, named));
     }
 
     public void Dispose()

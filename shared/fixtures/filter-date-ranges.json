@@ -1,0 +1,60 @@
+[
+  { "name": "missing reads as no limit", "filter": {}, "addedRange": null, "createdRange": null },
+  { "name": "null reads as no limit", "filter": { "addedRange": null, "createdRange": null }, "addedRange": null, "createdRange": null },
+  { "name": "last 7 days", "filter": { "addedRange": "last7Days" }, "addedRange": "last7Days", "createdRange": null },
+  { "name": "last 30 days", "filter": { "createdRange": "last30Days" }, "addedRange": null, "createdRange": "last30Days" },
+  { "name": "last 90 days", "filter": { "addedRange": "last90Days" }, "addedRange": "last90Days", "createdRange": null },
+  { "name": "this year", "filter": { "createdRange": "thisYear" }, "addedRange": null, "createdRange": "thisYear" },
+  { "name": "a preset in another case", "filter": { "addedRange": "LAST7DAYS" }, "addedRange": "last7Days", "createdRange": null },
+  {
+    "name": "a custom range",
+    "filter": { "addedRange": { "from": "2026-01-03", "to": "2026-03-31" } },
+    "addedRange": { "from": "2026-01-03", "to": "2026-03-31" },
+    "createdRange": null
+  },
+  {
+    "name": "a custom range of one day",
+    "filter": { "createdRange": { "from": "2026-02-28", "to": "2026-02-28" } },
+    "addedRange": null,
+    "createdRange": { "from": "2026-02-28", "to": "2026-02-28" }
+  },
+  {
+    "name": "both together",
+    "filter": { "addedRange": "last30Days", "createdRange": { "from": "2020-01-01", "to": "2020-12-31" } },
+    "addedRange": "last30Days",
+    "createdRange": { "from": "2020-01-01", "to": "2020-12-31" }
+  },
+  {
+    "name": "a range that ends before it starts reads as no limit",
+    "filter": { "addedRange": { "from": "2026-03-31", "to": "2026-01-03" } },
+    "addedRange": null,
+    "createdRange": null
+  },
+  { "name": "an unknown preset reads as no limit", "filter": { "addedRange": "last365Days" }, "addedRange": null, "createdRange": null },
+  { "name": "an empty preset reads as no limit", "filter": { "createdRange": "" }, "addedRange": null, "createdRange": null },
+  {
+    "name": "a date that isn't one reads as no limit",
+    "filter": { "addedRange": { "from": "2026-02-30", "to": "2026-03-31" } },
+    "addedRange": null,
+    "createdRange": null
+  },
+  {
+    "name": "a date written another way reads as no limit",
+    "filter": { "createdRange": { "from": "01/03/2026", "to": "2026-03-31" } },
+    "addedRange": null,
+    "createdRange": null
+  },
+  {
+    "name": "a range without its end reads as no limit",
+    "filter": { "addedRange": { "from": "2026-01-03" } },
+    "addedRange": null,
+    "createdRange": null
+  },
+  {
+    "name": "a date that isn't a string reads as no limit",
+    "filter": { "addedRange": { "from": 20260103, "to": "2026-03-31" } },
+    "addedRange": null,
+    "createdRange": null
+  },
+  { "name": "a number reads as no limit", "filter": { "createdRange": 7 }, "addedRange": null, "createdRange": null }
+]

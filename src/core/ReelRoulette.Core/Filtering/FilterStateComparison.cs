@@ -12,7 +12,8 @@ public static class FilterStateComparison
     /// <summary>
     /// Tags compare as sets ignoring case, and source ids as sets with case counting, so a list naming every source
     /// differs from all sources. An unset global match mode is AND, a category's AND match mode counts as no entry,
-    /// and durations compare in whole seconds.
+    /// durations compare in whole seconds, and a date range compares by its choice, so Last 30 days differs from a
+    /// custom range of the same days.
     /// </summary>
     public static bool SameFilter(FilterStateModel left, FilterStateModel right)
     {
@@ -50,7 +51,9 @@ public static class FilterStateComparison
                 .Where(pair => pair.Value != TagMatchModeValue.And)
                 .OrderBy(pair => pair.Key, StringComparer.Ordinal),
             MinDuration = WholeSeconds(filter.MinDuration),
-            MaxDuration = WholeSeconds(filter.MaxDuration)
+            MaxDuration = WholeSeconds(filter.MaxDuration),
+            AddedRange = filter.AddedRange?.ComparisonKey,
+            CreatedRange = filter.CreatedRange?.ComparisonKey
         });
     }
 

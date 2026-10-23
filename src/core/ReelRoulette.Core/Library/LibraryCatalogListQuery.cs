@@ -12,6 +12,9 @@ public enum LibraryListSort
     PlayCount,
     Duration,
     DateAdded,
+
+    /// <summary>The file's modified time, which the app calls its date created.</summary>
+    DateCreated,
     Rating
 }
 
@@ -49,17 +52,19 @@ internal static class LibraryCatalogListSql
             (left, right) => StringComparer.OrdinalIgnoreCase.Compare(left, right));
     }
 
+    /// <summary>The query's WHERE clause, with the filter's date ranges resolved against <paramref name="clock"/>.</summary>
     public static string BuildWhere(
         LibraryListRequest request,
         bool includeFilter,
         IReadOnlyList<LibraryCatalogTag> catalogTags,
+        FilterClock clock,
         SqlArgs args)
     {
         var where = new StringBuilder("WHERE 1 = 1");
         AppendSearch(where, request.Search, args);
         if (includeFilter && request.Filter != null)
         {
-            AppendFilter(where, request.Filter, catalogTags, args);
+            AppendFilter(where, request.Filter, catalogTags, clock, args);
         }
 
         return where.ToString();
@@ -78,7 +83,8 @@ internal static class LibraryCatalogListSql
             LibraryListSort.LastPlayed => $"COALESCE(items.last_played_utc, 0) {direction}",
             LibraryListSort.PlayCount => $"items.play_count {direction}",
             LibraryListSort.Duration => $"COALESCE(items.duration_ticks, 0) {direction}",
-            LibraryListSort.DateAdded => $"COALESCE(items.last_write_time_utc, 0) {direction}",
+            LibraryListSort.DateAdded => $"COALESCE(items.date_added_utc, 0) {direction}",
+            LibraryListSort.DateCreated => $"COALESCE(items.last_write_time_utc, 0) {direction}",
             LibraryListSort.Rating => $"COALESCE(items.rating, 0) {direction}",
             _ => $"{fileName} {direction}"
         };
@@ -103,6 +109,7 @@ internal static class LibraryCatalogListSql
         StringBuilder where,
         FilterStateModel filter,
         IReadOnlyList<LibraryCatalogTag> catalogTags,
+        FilterClock clock,
         SqlArgs args)
     {
         var included = filter.IncludedSourceIds.Where(id => !string.IsNullOrWhiteSpace(id)).ToList();
@@ -185,6 +192,8 @@ internal static class LibraryCatalogListSql
             where.Append(CultureInfo.InvariantCulture, $" AND items.rating >= {min}");
         }
 
+        AppendDateRange(where, "items.date_added_utc", filter.AddedRange, clock, args);
+        AppendDateRange(where, "items.last_write_time_utc", filter.CreatedRange, clock, args);
         AppendSelectedTags(where, filter, catalogTags, args);
         AppendExcludedTags(where, filter, args);
 
@@ -208,6 +217,23 @@ internal static class LibraryCatalogListSql
         {
             where.Append(CultureInfo.InvariantCulture, $" AND {column} = 0");
         }
+    }
+
+    /// <summary>
+    /// Keeps the files whose date falls in the range. The condition is written on the date sorts' index expression,
+    /// so it reads an index, and a missing date reads as 0, which is outside every range.
+    /// </summary>
+    private static void AppendDateRange(StringBuilder where, string column, FilterDateRange? range, FilterClock clock, SqlArgs args)
+    {
+        if (range is null)
+        {
+            return;
+        }
+
+        var (fromTicks, toTicks) = range.Resolve(clock);
+        var from = args.Add(fromTicks);
+        var to = args.Add(toTicks);
+        where.Append(CultureInfo.InvariantCulture, $" AND COALESCE({column}, 0) >= {from} AND COALESCE({column}, 0) < {to}");
     }
 
     /// <summary>

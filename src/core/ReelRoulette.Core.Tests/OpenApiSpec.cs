@@ -228,6 +228,27 @@ internal static class OpenApiSpec
         return values;
     }
 
+    /// <summary>Returns the values listed under <c>components.schemas.{name}.enum</c>, in order.</summary>
+    public static List<string> ReadSchemaEnum(string schemaName)
+    {
+        var values = new List<string>();
+        var inEnum = false;
+        foreach (var line in ReadSchemaLines(schemaName))
+        {
+            if (Indent(line) == 6)
+            {
+                inEnum = line == "      enum:";
+            }
+            else if (inEnum && line.TrimStart().StartsWith("- ", StringComparison.Ordinal))
+            {
+                values.Add(line.TrimStart()[2..]);
+            }
+        }
+
+        Assert.True(values.Count > 0, $"openapi.yaml lists no enum values for {schemaName}.");
+        return values;
+    }
+
     /// <summary>The non-blank lines of <c>components.schemas.{name}</c> below its name.</summary>
     private static IEnumerable<string> ReadSchemaLines(string schemaName)
     {

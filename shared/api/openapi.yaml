@@ -2682,6 +2682,51 @@ components:
           description: |
             Longest video duration, written as `minDuration` is. Videos without a known duration are left out,
             and photos always pass. Defaults to no limit.
+        addedRange:
+          anyOf:
+            - $ref: "#/components/schemas/FilterDateRangePreset"
+            - $ref: "#/components/schemas/FilterDateRange"
+            - type: "null"
+          description: |
+            The days an item's date added, when its file came into the library, must fall in: a preset, which rolls
+            with the clock, or a custom range. The server resolves it in its own time zone, to whole days:
+            `last7Days` is today and the 6 days before it, `last30Days` and `last90Days` likewise, `thisYear` is
+            1 January to 31 December, and a custom range covers its first and last days. Items without a date
+            added are left out. Another value, such as an unknown preset, a date that isn't one, or a range that
+            ends before it starts, counts as missing, which is no limit. Defaults to no limit.
+        createdRange:
+          anyOf:
+            - $ref: "#/components/schemas/FilterDateRangePreset"
+            - $ref: "#/components/schemas/FilterDateRange"
+            - type: "null"
+          description: |
+            The days an item's date created, its file's modified time, must fall in, written and read as
+            `addedRange` is. Items without a date created are left out. Defaults to no limit.
+
+    FilterDateRangePreset:
+      type: string
+      description: A date range that rolls with the clock, as a filter's `addedRange` or `createdRange`, matched in any case.
+      enum:
+        - last7Days
+        - last30Days
+        - last90Days
+        - thisYear
+
+    FilterDateRange:
+      type: object
+      description: A custom range of whole days, as a filter's `addedRange` or `createdRange`.
+      required:
+        - from
+        - to
+      properties:
+        from:
+          type: string
+          format: date
+          description: The range's first day, written YYYY-MM-DD.
+        to:
+          type: string
+          format: date
+          description: The range's last day, written YYYY-MM-DD, on or after `from`.
 
     PresetResponse:
       type: object
@@ -2780,6 +2825,7 @@ components:
             - PlayCount
             - Duration
             - DateAdded
+            - DateCreated
             - Rating
           default: Name
         sortDescending:
@@ -2887,6 +2933,36 @@ components:
           type: number
           format: double
           description: The true peak the loudness scan measured, in dBTP, present when the scan has measured one.
+        loudnessError:
+          type: string
+          description: Why the loudness scan couldn't measure the video, present when its last scan failed.
+        lastPlayedUtc:
+          type: string
+          format: date-time
+          description: When the item last played, in UTC, present once it has played.
+        dateAddedUtc:
+          type: string
+          format: date-time
+          description: When the item's file came into the library, in UTC, present when the catalog has it.
+        dateCreatedUtc:
+          type: string
+          format: date-time
+          description: The file's modified time, which the app calls its date created, in UTC, present when the catalog has it.
+        fileSizeBytes:
+          type: integer
+          format: int64
+          description: The file's size in bytes, present when the catalog has it.
+        fingerprint:
+          type: string
+          description: The file's content fingerprint, a SHA-256 hash, present once the fingerprint scan has hashed it.
+        fingerprintLastUtc:
+          type: string
+          format: date-time
+          description: When the fingerprint scan last hashed the file, in UTC, present once it has.
+        fingerprintStatus:
+          type: integer
+          format: int32
+          description: The fingerprint's state, present when the catalog has one. 0 is pending, 1 ready, 2 failed, and 3 stale.
         hasThumbnail:
           type: boolean
           description: True when a generated thumbnail JPEG exists for this item id.

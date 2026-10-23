@@ -20,9 +20,10 @@ Instructions:
 
 Commit Message:
 
-M12k5: Add each file's date added to the catalog
+M12k5: Filter and sort by date added and date created on the server
 
-- Catalog: schema version 9 adds each item's date added, set to its modified time when an older catalog upgrades, with the date added sort's indexes, and renames the modified-time sort indexes for the date created, which the Date added sort still reads.
-- Refresh: the files one refresh adds share one date added, the time its source stage started, and a file moved within a source keeps its date added.
-- Tests: the upgrade tests check every older version's backfill and schema, and the refresh tests check new and moved files' dates added.
-- Docs: CONTEXT.md, docs/domain-inventory.md, and docs/dev-setup.md describe schema version 9, and MILESTONES.md records the Server slice as complete with its evidence.
+- Filters: addedRange and createdRange keep files by when they were added and created, as a preset or a custom range resolved to whole days in the server's time zone, in the library query, its counts, and random selection, and Core's preset comparison tells presets apart by them.
+- Sorts: Date added sorts by the date added and a new Date created sort by the modified time, each on its own index, and the WebUI's Library tab lists Date created.
+- Items: the item read and the query page send dateAddedUtc and dateCreatedUtc in place of lastWriteTimeUtc, and LibraryProjectionItem names every field the item read sends.
+- Contract: OpenAPI, the generated WebUI types, and shared/fixtures/filter-date-ranges.json, which locks how the server reads the fields.
+- Docs: docs/api.md, CONTEXT.md, docs/domain-inventory.md, CHANGELOG.md, and MILESTONES.md, which records the Contract slice as complete with its evidence and drops what it did from the WebUI slice.

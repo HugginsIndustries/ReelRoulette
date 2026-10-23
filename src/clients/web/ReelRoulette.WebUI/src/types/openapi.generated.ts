@@ -1377,8 +1377,40 @@ export interface components {
              *     and photos always pass. Defaults to no limit.
              */
             maxDuration?: string | number | null;
+            /**
+             * @description The days an item's date added, when its file came into the library, must fall in: a preset, which rolls
+             *     with the clock, or a custom range. The server resolves it in its own time zone, to whole days:
+             *     `last7Days` is today and the 6 days before it, `last30Days` and `last90Days` likewise, `thisYear` is
+             *     1 January to 31 December, and a custom range covers its first and last days. Items without a date
+             *     added are left out. Another value, such as an unknown preset, a date that isn't one, or a range that
+             *     ends before it starts, counts as missing, which is no limit. Defaults to no limit.
+             */
+            addedRange?: components["schemas"]["FilterDateRangePreset"] | components["schemas"]["FilterDateRange"] | null;
+            /**
+             * @description The days an item's date created, its file's modified time, must fall in, written and read as
+             *     `addedRange` is. Items without a date created are left out. Defaults to no limit.
+             */
+            createdRange?: components["schemas"]["FilterDateRangePreset"] | components["schemas"]["FilterDateRange"] | null;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * @description A date range that rolls with the clock, as a filter's `addedRange` or `createdRange`, matched in any case.
+         * @enum {string}
+         */
+        FilterDateRangePreset: "last7Days" | "last30Days" | "last90Days" | "thisYear";
+        /** @description A custom range of whole days, as a filter's `addedRange` or `createdRange`. */
+        FilterDateRange: {
+            /**
+             * Format: date
+             * @description The range's first day, written YYYY-MM-DD.
+             */
+            from: string;
+            /**
+             * Format: date
+             * @description The range's last day, written YYYY-MM-DD, on or after `from`.
+             */
+            to: string;
         };
         PresetResponse: {
             /** @description The preset's own id, kept across renames, which the preset routes and `presetCatalogChanged` use. */
@@ -1422,7 +1454,7 @@ export interface components {
              * @default Name
              * @enum {string|null}
              */
-            sortMode: "Name" | "LastPlayed" | "PlayCount" | "Duration" | "DateAdded" | "Rating" | null;
+            sortMode: "Name" | "LastPlayed" | "PlayCount" | "Duration" | "DateAdded" | "DateCreated" | "Rating" | null;
             /**
              * @description Direction of the primary sort key only. Filename and item id tie-breaks stay ascending.
              * @default false
@@ -1499,6 +1531,40 @@ export interface components {
              * @description The true peak the loudness scan measured, in dBTP, present when the scan has measured one.
              */
             peakDb?: number;
+            /** @description Why the loudness scan couldn't measure the video, present when its last scan failed. */
+            loudnessError?: string;
+            /**
+             * Format: date-time
+             * @description When the item last played, in UTC, present once it has played.
+             */
+            lastPlayedUtc?: string;
+            /**
+             * Format: date-time
+             * @description When the item's file came into the library, in UTC, present when the catalog has it.
+             */
+            dateAddedUtc?: string;
+            /**
+             * Format: date-time
+             * @description The file's modified time, which the app calls its date created, in UTC, present when the catalog has it.
+             */
+            dateCreatedUtc?: string;
+            /**
+             * Format: int64
+             * @description The file's size in bytes, present when the catalog has it.
+             */
+            fileSizeBytes?: number;
+            /** @description The file's content fingerprint, a SHA-256 hash, present once the fingerprint scan has hashed it. */
+            fingerprint?: string;
+            /**
+             * Format: date-time
+             * @description When the fingerprint scan last hashed the file, in UTC, present once it has.
+             */
+            fingerprintLastUtc?: string;
+            /**
+             * Format: int32
+             * @description The fingerprint's state, present when the catalog has one. 0 is pending, 1 ready, 2 failed, and 3 stale.
+             */
+            fingerprintStatus?: number;
             /** @description True when a generated thumbnail JPEG exists for this item id. */
             hasThumbnail?: boolean;
             /** @description Opaque version of the thumbnail JPEG, present when it exists. It changes whenever the thumbnail is written again. Pass it as `v` to the thumbnail route. */

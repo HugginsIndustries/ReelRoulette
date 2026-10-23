@@ -51,6 +51,13 @@ public sealed class FilterStateModel
     public bool OnlyUnrated { get; set; }
     /// <summary>The minimum rating in half stars, as the catalog keeps a rating, or null for none.</summary>
     public int? MinRatingHalfStars { get; set; }
+
+    /// <summary>The days a file's date added must fall in, or null for no limit.</summary>
+    public FilterDateRange? AddedRange { get; set; }
+
+    /// <summary>The days a file's date created, its modified time, must fall in, or null for no limit.</summary>
+    public FilterDateRange? CreatedRange { get; set; }
+
     public MediaTypeFilterValue MediaTypeFilter { get; set; } = MediaTypeFilterValue.All;
     public List<string> IncludedSourceIds { get; set; } = new();
 }

@@ -250,6 +250,90 @@ public sealed class FilterStateTests : IDisposable
         Assert.False(FilterStateComparison.IsDefault(new FilterStateModel { MinRatingHalfStars = 1 }));
     }
 
+    [Fact]
+    public void Parser_ReadsDateRanges_AsTheSharedFixtureSays()
+    {
+        using var fixture = JsonDocument.Parse(File.ReadAllText(OpenApiSpec.RepoPath("shared", "fixtures", "filter-date-ranges.json")));
+        var cases = fixture.RootElement.EnumerateArray().ToList();
+        Assert.NotEmpty(cases);
+        foreach (var testCase in cases)
+        {
+            var name = testCase.GetProperty("name").GetString();
+            Assert.True(LibraryListFilterParser.TryParse(testCase.GetProperty("filter"), out var parsed, out var error), $"{name}: {error}");
+            Assert.True(ExpectedRange(testCase.GetProperty("addedRange")) == parsed!.AddedRange, $"{name}: read added {parsed.AddedRange}.");
+            Assert.True(ExpectedRange(testCase.GetProperty("createdRange")) == parsed.CreatedRange, $"{name}: read created {parsed.CreatedRange}.");
+        }
+    }
+
+    // The library query, its count, and the random pick, as the routes run them, at 22:00 on 21 October 2030 five hours
+    // behind UTC. Each item's dates sit near a range's edge in that zone, and some fall on another day in UTC.
+    [Fact]
+    public void LibraryQueryAndRandomPick_ApplyDateRanges()
+    {
+        var host = SeedDatedItems();
+        var operations = new LibraryOperationsService(host, NullLogger<LibraryOperationsService>.Instance, _tempDir);
+        var playback = new LibraryPlaybackService(new ServerMediaTokenStore(), NullLogger<LibraryPlaybackService>.Instance, host);
+        (string Filter, string[] Ids)[] cases =
+        [
+            ("""{}""", ["month", "old", "quarter", "undated", "week"]),
+            ("""{"addedRange":null,"createdRange":null}""", ["month", "old", "quarter", "undated", "week"]),
+            ("""{"addedRange":"last7Days"}""", ["week"]),
+            ("""{"addedRange":"last30Days"}""", ["month", "week"]),
+            ("""{"addedRange":"last90Days"}""", ["month", "quarter", "week"]),
+            ("""{"addedRange":"thisYear"}""", ["month", "old", "quarter", "week"]),
+            ("""{"addedRange":{"from":"2030-09-22","to":"2030-10-14"}}""", ["month"]),
+            ("""{"createdRange":"last7Days"}""", ["old"]),
+            ("""{"createdRange":"last30Days"}""", ["old", "quarter"]),
+            ("""{"createdRange":"last90Days"}""", ["old", "quarter"]),
+            ("""{"createdRange":"thisYear"}""", ["month", "old", "quarter"]),
+            ("""{"createdRange":{"from":"2029-12-31","to":"2029-12-31"}}""", ["week"]),
+            ("""{"addedRange":"last30Days","createdRange":"thisYear"}""", ["month"])
+        ];
+
+        foreach (var (filter, ids) in cases)
+        {
+            Assert.Equal(ids, QueryIds(operations, $$"""{"filterState":{{filter}}}"""));
+            Assert.Equal(ids, PickIds(playback, [], $$"""{"filterState":{{filter}}}"""));
+        }
+    }
+
+    // A preset stored before the date filters has no fields for them and picks with no date limit, and one holding a
+    // preset range picks the days up to the server's today.
+    [Fact]
+    public void StoredPresets_PickWithNoDateLimitWithoutTheFields_AndTheirRangesDaysWithThem()
+    {
+        var host = SeedDatedItems(
+        [
+            new SeedPreset("Old", """{"favoritesMode":"off","blacklistedMode":"excluded","onlyBrowserPlayable":false}""", "old-id"),
+            new SeedPreset("Recent", """{"addedRange":"last7Days"}""", "recent-id")
+        ]);
+        var playback = new LibraryPlaybackService(new ServerMediaTokenStore(), NullLogger<LibraryPlaybackService>.Instance, host);
+        var presets = new ServerStateService(catalog: host).GetPresetCatalogSnapshot();
+
+        Assert.Equal(["month", "old", "quarter", "undated", "week"], PickIds(playback, presets, """{"presetId":"old-id"}"""));
+        Assert.Equal(["week"], PickIds(playback, presets, """{"presetId":"recent-id"}"""));
+    }
+
+    [Fact]
+    public void Comparison_TellsFiltersApartByDateRangeChoice()
+    {
+        var last30 = FilterDateRange.Of(FilterDateRangePreset.Last30Days);
+        var sameDays = FilterDateRange.Custom(new DateOnly(2030, 9, 22), new DateOnly(2030, 10, 21));
+        Assert.False(FilterStateComparison.IsDefault(new FilterStateModel { AddedRange = last30 }));
+        Assert.False(FilterStateComparison.IsDefault(new FilterStateModel { CreatedRange = sameDays }));
+        Assert.False(FilterStateComparison.SameFilter(new FilterStateModel { AddedRange = last30 }, new FilterStateModel { AddedRange = sameDays }));
+        Assert.False(FilterStateComparison.SameFilter(new FilterStateModel { AddedRange = last30 }, new FilterStateModel { CreatedRange = last30 }));
+        Assert.False(FilterStateComparison.SameFilter(
+            new FilterStateModel { CreatedRange = sameDays },
+            new FilterStateModel { CreatedRange = FilterDateRange.Custom(new DateOnly(2030, 9, 22), new DateOnly(2030, 10, 22)) }));
+        Assert.False(FilterStateComparison.SameFilter(
+            new FilterStateModel { CreatedRange = sameDays },
+            new FilterStateModel { CreatedRange = FilterDateRange.Custom(new DateOnly(2030, 9, 23), new DateOnly(2030, 10, 21)) }));
+        Assert.True(FilterStateComparison.SameFilter(
+            new FilterStateModel { AddedRange = last30, CreatedRange = sameDays },
+            new FilterStateModel { AddedRange = FilterDateRange.Of(FilterDateRangePreset.Last30Days), CreatedRange = FilterDateRange.Custom(new DateOnly(2030, 9, 22), new DateOnly(2030, 10, 21)) }));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))
@@ -324,6 +408,56 @@ public sealed class FilterStateTests : IDisposable
         CatalogSeed.Write(_tempDir, sources: [new SeedSource("s1", _tempDir)], items: items, presets: presets);
         return CatalogOpen.Host(_tempDir);
     }
+
+    // Items whose dates added and created, written as the local time five hours behind UTC, sit near the ranges' edges
+    // on 21 October 2030, and an item with neither date. The catalog's clock stops at 22:00 that day in that zone.
+    private LibraryCatalogHost SeedDatedItems(IEnumerable<SeedPreset>? presets = null)
+    {
+        Directory.CreateDirectory(_tempDir);
+        static DateTime Local(int year, int month, int day, int hour, int minute) =>
+            new DateTime(year, month, day, hour, minute, 0, DateTimeKind.Utc).AddHours(5);
+        var items = new List<SeedItem>();
+        foreach (var (id, added, created) in new (string Id, DateTime? Added, DateTime? Created)[]
+                 {
+                     ("week", Local(2030, 10, 15, 0, 30), Local(2029, 12, 31, 23, 30)),
+                     ("month", Local(2030, 9, 22, 1, 0), Local(2030, 1, 1, 0, 30)),
+                     ("quarter", Local(2030, 7, 24, 0, 0), Local(2030, 10, 14, 23, 59)),
+                     ("old", Local(2030, 2, 1, 12, 0), Local(2030, 10, 21, 12, 0)),
+                     ("undated", null, null)
+                 })
+        {
+            var path = Path.Combine(_tempDir, id + ".mp4");
+            File.WriteAllBytes(path, [0x01, 0x02]);
+            items.Add(new SeedItem(id, path)
+            {
+                FileName = id + ".mp4",
+                RelativePath = id + ".mp4",
+                SourceId = "s1",
+                DateAddedUtc = added,
+                LastWriteTimeUtc = created
+            });
+        }
+
+        CatalogSeed.Write(_tempDir, sources: [new SeedSource("s1", _tempDir)], items: items, presets: presets);
+        var host = CatalogOpen.Host(_tempDir);
+        host.Session.Time = new FixedTimeProvider(new DateTimeOffset(2030, 10, 22, 3, 0, 0, TimeSpan.Zero), FixedTimeProvider.FiveHoursBehindUtc);
+        return host;
+    }
+
+    // A fixture writes a preset range as its name and a custom range as its days.
+    private static FilterDateRange? ExpectedRange(JsonElement expected) => expected.ValueKind switch
+    {
+        JsonValueKind.Null => null,
+        JsonValueKind.String => FilterDateRange.TryParsePreset(expected.GetString(), out var preset)
+            ? FilterDateRange.Of(preset)
+            : throw new InvalidOperationException($"Unknown expected preset '{expected.GetString()}'."),
+        _ => FilterDateRange.Custom(ExpectedDay(expected, "from"), ExpectedDay(expected, "to"))
+    };
+
+    private static DateOnly ExpectedDay(JsonElement range, string name) =>
+        FilterDateRange.TryParseDay(range.GetProperty(name).GetString(), out var day)
+            ? day
+            : throw new InvalidOperationException($"Expected {name} '{range.GetProperty(name).GetString()}' isn't a day.");
 
     private static string[] QueryIds(LibraryOperationsService operations, string body)
     {

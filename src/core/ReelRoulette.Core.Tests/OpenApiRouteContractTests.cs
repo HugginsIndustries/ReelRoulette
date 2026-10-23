@@ -82,6 +82,15 @@ public sealed class OpenApiRouteContractTests : IDisposable
         Assert.Equal(Enum.GetNames<LibraryListSort>(), OpenApiSpec.ReadSchemaPropertyEnum("LibraryQueryRequest", "sortMode"));
     }
 
+    // The date filters' presets in the spec are the ones the server reads, so the generated WebUI types offer no other.
+    [Fact]
+    public void FilterDateRangePresets_MatchTheServersPresets()
+    {
+        Assert.Equal(
+            Enum.GetValues<FilterDateRangePreset>().Select(FilterDateRange.PresetName),
+            OpenApiSpec.ReadSchemaEnum("FilterDateRangePreset"));
+    }
+
     // Every error code the play route answers is documented on it, so a new code can't go undocumented.
     [Fact]
     public void PlayRoute_DocumentsEveryPlayErrorCode()

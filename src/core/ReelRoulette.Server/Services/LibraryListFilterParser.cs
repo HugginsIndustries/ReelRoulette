@@ -33,6 +33,8 @@ internal static class LibraryListFilterParser
             OnlyBrowserPlayable = Bool(element, "onlyBrowserPlayable", false),
             OnlyUnrated = Bool(element, "onlyUnrated", false),
             MinRatingHalfStars = MinRating(element, "minRating"),
+            AddedRange = DateRange(element, "addedRange"),
+            CreatedRange = DateRange(element, "createdRange"),
             GlobalMatchMode = NullableBool(element, "globalMatchMode"),
             MinDuration = Duration(element, "minDuration"),
             MaxDuration = Duration(element, "maxDuration")
@@ -104,6 +106,38 @@ internal static class LibraryListFilterParser
             property.TryGetDouble(out var stars) &&
             ItemRating.TryFromStars(stars, out var halfStars)
             ? halfStars
+            : null;
+    }
+
+    /// <summary>
+    /// A date range: a preset's name in any case, or an object whose <c>from</c> and <c>to</c> are dates written
+    /// YYYY-MM-DD, with <c>to</c> on or after <c>from</c>. Anything else, such as an unknown preset, a date that isn't
+    /// one, or a range that ends before it starts, counts as missing, which is no limit. Locked to
+    /// shared/fixtures/filter-date-ranges.json.
+    /// </summary>
+    private static FilterDateRange? DateRange(JsonElement element, string name)
+    {
+        if (!element.TryGetProperty(name, out var property))
+        {
+            return null;
+        }
+
+        if (property.ValueKind == JsonValueKind.String)
+        {
+            return FilterDateRange.TryParsePreset(property.GetString(), out var preset) ? FilterDateRange.Of(preset) : null;
+        }
+
+        return property.ValueKind == JsonValueKind.Object && Day(property, "from") is { } from && Day(property, "to") is { } to
+            ? FilterDateRange.Custom(from, to)
+            : null;
+    }
+
+    private static DateOnly? Day(JsonElement range, string name)
+    {
+        return range.TryGetProperty(name, out var property) &&
+            property.ValueKind == JsonValueKind.String &&
+            FilterDateRange.TryParseDay(property.GetString(), out var day)
+            ? day
             : null;
     }
 

@@ -30,6 +30,11 @@ public sealed class LibraryCatalogSession
 
     public Action? AfterSuccessfulWrite { get; set; }
 
+    /// <summary>
+    /// The clock and time zone a filter's date ranges resolve against: the server's own, or one a test sets.
+    /// </summary>
+    internal TimeProvider Time { get; set; } = TimeProvider.System;
+
     public long Revision
     {
         get
@@ -56,16 +61,19 @@ public sealed class LibraryCatalogSession
 
         var revision = ReadRevision(connection);
         var catalogTags = ReadCatalogTags(connection);
+
+        // One reading of the clock, so the counts and the page keep the same days.
+        var clock = FilterClock.From(Time);
         var searchArgs = new LibraryCatalogListSql.SqlArgs();
-        var searchWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: false, catalogTags, searchArgs);
+        var searchWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: false, catalogTags, clock, searchArgs);
         var searchBaselineCount = CachedListCount(connection, revision, searchWhere, searchArgs);
 
         var filterArgs = new LibraryCatalogListSql.SqlArgs();
-        var filterWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, filterArgs);
+        var filterWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, clock, filterArgs);
         var totalCount = CachedListCount(connection, revision, filterWhere, filterArgs);
 
         var pageArgs = new LibraryCatalogListSql.SqlArgs();
-        var pageWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, pageArgs);
+        var pageWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, clock, pageArgs);
         var orderBy = LibraryCatalogListSql.BuildOrderBy(request);
         var limit = pageArgs.Add(request.Limit);
         var offset = pageArgs.Add(request.Offset);
@@ -101,7 +109,7 @@ public sealed class LibraryCatalogSession
         items.is_favorite, items.is_blacklisted, items.play_count, items.last_played_utc, items.media_type, items.fingerprint,
         items.fingerprint_algorithm, items.fingerprint_version, items.file_size_bytes, items.last_write_time_utc,
         items.fingerprint_last_utc, items.fingerprint_status, items.loudness_error,
-        items.thumbnail_revision, items.thumbnail_width, items.thumbnail_height, items.rating
+        items.thumbnail_revision, items.thumbnail_width, items.thumbnail_height, items.rating, items.date_added_utc
         """;
 
     /// <summary>The browse page query.</summary>
@@ -177,7 +185,7 @@ public sealed class LibraryCatalogSession
         var request = new LibraryListRequest { Filter = filter };
         var catalogTags = ReadCatalogTags(connection);
         var args = new LibraryCatalogListSql.SqlArgs();
-        var where = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, args);
+        var where = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, FilterClock.From(Time), args);
         if (requiredMediaType.HasValue)
         {
             where += " AND items.media_type = " + ((int)requiredMediaType.Value).ToString(CultureInfo.InvariantCulture);
@@ -2453,7 +2461,8 @@ public sealed class LibraryCatalogSession
             ThumbnailRevision = reader.IsDBNull(25) ? null : reader.GetString(25),
             ThumbnailWidth = reader.IsDBNull(26) ? null : reader.GetInt32(26),
             ThumbnailHeight = reader.IsDBNull(27) ? null : reader.GetInt32(27),
-            RatingHalfStars = reader.IsDBNull(28) ? null : reader.GetInt32(28)
+            RatingHalfStars = reader.IsDBNull(28) ? null : reader.GetInt32(28),
+            DateAddedUtc = LibraryCatalogStore.ReadUtc(reader, 29)
         };
     }
 
@@ -2562,9 +2571,15 @@ public sealed class LibraryCatalogSession
             node["fileSizeBytes"] = size;
         }
 
+        if (item.DateAddedUtc is DateTime added)
+        {
+            node["dateAddedUtc"] = FormatUtc(added);
+        }
+
+        // The date created is the file's modified time.
         if (item.LastWriteTimeUtc is DateTime written)
         {
-            node["lastWriteTimeUtc"] = FormatUtc(written);
+            node["dateCreatedUtc"] = FormatUtc(written);
         }
 
         if (item.FingerprintLastUtc is DateTime fingerprinted)

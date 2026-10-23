@@ -156,15 +156,13 @@ public sealed class LibraryListQueryTests
         Assert.True(durationIds.IndexOf("zero") < durationIds.IndexOf("none-duration"));
         Assert.True(durationIds.IndexOf("none-duration") < durationIds.IndexOf("short"));
 
-        var written = new DateTime(2020, 5, 1, 0, 0, 0, DateTimeKind.Utc);
-        Add(session, "old", "on", "old.mp4", "old.mp4", written: written);
-        var added = session.QueryList(new LibraryListRequest
+        var dated = new DateTime(2020, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        Add(session, "old", "on", "old.mp4", "old.mp4", written: dated, added: dated);
+        foreach (var sort in new[] { LibraryListSort.DateAdded, LibraryListSort.DateCreated })
         {
-            Sort = LibraryListSort.DateAdded,
-            SortDescending = false,
-            Limit = 1
-        });
-        Assert.NotEqual("old", Assert.Single(added.Items).Id);
+            var oldest = session.QueryList(new LibraryListRequest { Sort = sort, SortDescending = false, Limit = 1 });
+            Assert.NotEqual("old", Assert.Single(oldest.Items).Id);
+        }
     }
 
     [Fact]
@@ -698,21 +696,22 @@ public sealed class LibraryListQueryTests
         LibraryCatalogListSql.RegisterCollation(connection);
         var catalogTags = session.ReadTagEditor(null).Tags;
         var request = new LibraryListRequest { Filter = filter, Sort = sort, SortDescending = descending, Limit = 200 };
+        var clock = FilterClock.From(session.Time);
         var lines = new List<string>();
 
         var countArgs = new LibraryCatalogListSql.SqlArgs();
-        var countWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, countArgs);
+        var countWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, clock, countArgs);
         lines.AddRange(Explain(LibraryCatalogSession.ListCountSql(countWhere), countArgs).Select(line => "count: " + line));
 
         var pageArgs = new LibraryCatalogListSql.SqlArgs();
-        var pageWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, pageArgs);
+        var pageWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, clock, pageArgs);
         var limit = pageArgs.Add(request.Limit);
         var offset = pageArgs.Add(request.Offset);
         var pageSql = LibraryCatalogSession.ListPageSql(pageWhere, LibraryCatalogListSql.BuildOrderBy(request), limit, offset);
         lines.AddRange(Explain(pageSql, pageArgs).Select(line => "page: " + line));
 
         var candidateArgs = new LibraryCatalogListSql.SqlArgs();
-        var candidateWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, candidateArgs);
+        var candidateWhere = LibraryCatalogListSql.BuildWhere(request, includeFilter: true, catalogTags, clock, candidateArgs);
         lines.AddRange(Explain(LibraryCatalogSession.RandomCandidatesSql(candidateWhere), candidateArgs).Select(line => "candidates: " + line));
         return lines;
 
@@ -779,7 +778,7 @@ public sealed class LibraryListQueryTests
             Assert.True(operations.QueryLibrary(new LibraryQueryRequest { Limit = 10_000 }).Accepted);
             var unknownSort = operations.QueryLibrary(new LibraryQueryRequest { SortMode = "Size" });
             Assert.False(unknownSort.Accepted);
-            Assert.Equal("sortMode must be Name, LastPlayed, PlayCount, Duration, DateAdded, or Rating", unknownSort.Error);
+            Assert.Equal("sortMode must be Name, LastPlayed, PlayCount, Duration, DateAdded, DateCreated, or Rating", unknownSort.Error);
             Assert.False(operations.QueryLibrary(new LibraryQueryRequest
             {
                 FilterState = JsonSerializer.SerializeToElement(new[] { 1 })
@@ -1146,6 +1145,40 @@ public sealed class LibraryListQueryTests
         }
     }
 
+    // Each direction of each date sort reads its own index, and a date range reads its date's index rather than
+    // scanning the library, since both are written on the index's expression.
+    [Fact]
+    public void DateSortsAndRanges_ReadTheirIndexes()
+    {
+        using var dir = new TempDirectory();
+        var session = Open(dir);
+        session.InsertSource("on", "/media", "On", true);
+        var start = new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        foreach (var (id, day) in new[] { ("a", 0), ("b", 1), ("c", 2) })
+        {
+            Add(session, id, "on", id + ".mp4", id + ".mp4", written: start.AddDays(day), added: start.AddDays(-day));
+        }
+
+        foreach (var (sort, date) in new[] { (LibraryListSort.DateAdded, "added"), (LibraryListSort.DateCreated, "created") })
+        {
+            foreach (var (descending, direction) in new[] { (false, "asc"), (true, "desc") })
+            {
+                var plans = QueryPlans(session, new FilterStateModel(), sort, descending);
+                Assert.Contains(plans, line => line.StartsWith("page: ", StringComparison.Ordinal) && line.Contains($"USING INDEX idx_items_date_{date}_{direction}", StringComparison.Ordinal));
+            }
+        }
+
+        var lastMonth = FilterDateRange.Of(FilterDateRangePreset.Last30Days);
+        foreach (var (filter, date) in new[] { (new FilterStateModel { AddedRange = lastMonth }, "added"), (new FilterStateModel { CreatedRange = lastMonth }, "created") })
+        {
+            var plans = QueryPlans(session, filter);
+            foreach (var query in new[] { "count: ", "candidates: " })
+            {
+                Assert.Contains(plans, line => line.StartsWith(query, StringComparison.Ordinal) && line.Contains($"USING INDEX idx_items_date_{date}_", StringComparison.Ordinal));
+            }
+        }
+    }
+
     private static readonly FlagFilterModeValue[] FlagModes = [FlagFilterModeValue.Off, FlagFilterModeValue.Only, FlagFilterModeValue.Excluded];
 
     private static readonly (string Id, bool Favorite, bool Blacklisted)[] FlagModeItems =
@@ -1276,7 +1309,8 @@ public sealed class LibraryListQueryTests
         TimeSpan? duration = null,
         int mediaType = 0,
         bool? hasAudio = null,
-        IReadOnlyList<string>? tags = null)
+        IReadOnlyList<string>? tags = null,
+        DateTime? added = null)
     {
         Assert.True(session.InsertItem(new LibraryCatalogItem
         {
@@ -1290,6 +1324,7 @@ public sealed class LibraryListQueryTests
             PlayCount = playCount,
             LastPlayedUtc = lastPlayed,
             LastWriteTimeUtc = written,
+            DateAddedUtc = added,
             DurationTicks = duration?.Ticks,
             MediaType = mediaType,
             HasAudio = hasAudio

@@ -23,7 +23,8 @@ describe("libraryProjectionModel", () => {
           relativePath: "videos/clip.mp4",
           playCount: 2,
           lastPlayedUtc: "2024-01-15T12:00:00Z",
-          lastWriteTimeUtc: "2023-06-01T00:00:00Z",
+          dateAddedUtc: "2023-07-01T00:00:00Z",
+          dateCreatedUtc: "2023-06-01T00:00:00Z",
           duration: "00:02:30",
           durationSeconds: 150.48,
           mediaType: 0,
@@ -45,6 +46,8 @@ describe("libraryProjectionModel", () => {
       durationSeconds: 150.48,
       mediaType: "video",
       isFavorite: true,
+      dateAddedUtcMs: Date.UTC(2023, 6, 1),
+      dateCreatedUtcMs: Date.UTC(2023, 5, 1),
       tags: ["Action"]
     });
     expect(result.catalog.categories).toHaveLength(1);

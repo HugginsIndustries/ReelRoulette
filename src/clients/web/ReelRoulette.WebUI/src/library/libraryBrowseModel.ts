@@ -13,6 +13,7 @@ const LIBRARY_SORTS: Readonly<Record<LibrarySortMode, { label: string; ascending
   PlayCount: { label: "Play count", ascending: "Least Plays → Most Plays", descending: "Most Plays → Least Plays" },
   Duration: { label: "Duration", ascending: "Shortest → Longest", descending: "Longest → Shortest" },
   DateAdded: { label: "Date added", ascending: "Oldest → Newest", descending: "Newest → Oldest" },
+  DateCreated: { label: "Date created", ascending: "Oldest → Newest", descending: "Newest → Oldest" },
   Rating: { label: "Rating", ascending: "Lowest → Highest", descending: "Highest → Lowest" }
 };
 

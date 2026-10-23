@@ -150,7 +150,7 @@ Last milestone completed: M12k4
 - A file already in the catalog when it upgrades takes its modified time as its date added.
 - A file's date created is its modified time (`last_write_time_utc`), which is what "created" usually means for media files.
 - The API, the WebUI, and the fixtures call it `DateCreated`, and the code's comments say it is the modified time.
-- The Library tab's sort offers Date added and Date created: `DateAdded` sorts by the date added, and a new `DateCreated` sorts by the modified time, which `DateAdded` reads today.
+- The Library tab's sort offers Date added and Date created: `DateAdded` sorts by the date added, and a new `DateCreated` sorts by the modified time, which `DateAdded` read before.
 - Two filters, Added and Created, can be used together. Each is Any time, Last 7 days, Last 30 days, Last 90 days, This year, or Custom range, a range of two dates from the device's date picker.
 - Both sit in a Date Filter section at the end of the Filter tab's General section, after Duration Filter, each a dropdown labeled Added or Created.
 - The FilterState fields are `addedRange` and `createdRange`.
@@ -170,8 +170,8 @@ Last milestone completed: M12k4
 | --- | --- | --- |
 | Mockup | ✅ Complete | Added and Created in the Filter tab with the custom range's date picker, their Filters line wording, Date added and Date created in the sort list, and Added and Created in the Stats tab with Show exact times, approved on a desktop browser, the iPad, and an Android phone. |
 | Server | ✅ Complete | The date added column in a new catalog schema step with its sort indexes, the modified-time sort indexes renamed for Date created, and every file the refresh's source stage adds given the time the stage started. |
-| Contract | ⏳ Planned | `addedRange` and `createdRange` in the FilterState schema, applied by the server in the list query, its counts, and random selection, the `DateAdded` and `DateCreated` sorts, the item read's dates, a shared fixture for reading the fields, OpenAPI, the generated WebUI types, and `docs/api.md`. |
-| WebUI | ⏳ Planned | Added and Created in the Filter tab and the Filters line, saved in presets and compared in preset matching, the two date sorts with their direction labels, and the Stats tab's Added and Created rows. |
+| Contract | ✅ Complete | `addedRange` and `createdRange` in the FilterState schema, applied by the server in the list query, its counts, and random selection, and compared by Core's preset comparison, the `DateAdded` and `DateCreated` sorts with Date created in the Library tab's sort list, the item read's dates with every field it sends named in `LibraryProjectionItem`, a shared fixture for reading the fields, OpenAPI, the generated WebUI types, and `docs/api.md`. |
+| WebUI | ⏳ Planned | Added and Created in the Filter tab and the Filters line, saved in presets and compared in preset matching, and the Stats tab's Added and Created rows. |
 
 #### Mockup slice
 
@@ -281,8 +281,12 @@ Last milestone completed: M12k4
 - A date condition is written on `COALESCE({column}, 0)`, the expression its sort index has.
 - `DateAdded` sorts by the date added and `DateCreated` by the modified time, each reading its own index in both directions.
 - The item read (`POST /api/library/item`) and the library query's page send `dateAddedUtc` and `dateCreatedUtc`, the modified time, in place of `lastWriteTimeUtc`, each an ISO UTC string left out for an item without that date, as `lastPlayedUtc` is, and `LibraryProjectionItem` names both.
-- A shared fixture under `shared/fixtures/` locks how the server's filter parser and the WebUI read `addedRange` and `createdRange`: each preset, a custom range, a range that ends before it starts, an unknown preset, a date that isn't one, and null. Core and WebUI tests read it.
+- A shared fixture under `shared/fixtures/` locks how the server's filter parser reads `addedRange` and `createdRange`: each preset, a custom range, a range that ends before it starts, an unknown preset, a date that isn't one, and null. Core tests read it, and the WebUI slice adds the WebUI's reader.
 - OpenAPI, the generated WebUI types, and `docs/api.md`, which describes the fields, the time zone and whole days, both sorts, and the item read's dates.
+- Core's preset comparison compares both ranges by the choice, so the API doesn't refuse a preset whose only setting is a range as the default filter, or one that differs from another only by its range.
+- `LibraryProjectionItem` names every field the item read sends, and its contract test checks an item with every optional value.
+- Date created in the Library tab's sort list, after Date added, with its direction labels, since the WebUI's typecheck needs every sort mode there.
+- `parseQueryItem` reads `dateAddedUtc` and `dateCreatedUtc` in place of `lastWriteTimeUtc`.
 
 **Traps**
 
@@ -320,6 +324,22 @@ Last milestone completed: M12k4
 - OpenAPI and the generated WebUI types carry the fields, the sorts, and the item read's dates, in contract tests, and `docs/api.md` describes them, checked by reading it.
 - `dotnet test ReelRoulette.sln` and `npm run verify` pass.
 
+**Evidence**
+
+- `FilterDateRange` (`Core/Filtering/FilterDateRange.cs`) holds a preset or a custom range, the choice a filter keeps, and resolves it against a `FilterClock`, the time and time zone, to UTC ticks from the start of its first day to the start of the day after its last, each day at its own offset. This year ends on 31 December. `FilterStateModel` has `AddedRange` and `CreatedRange`.
+- `LibraryCatalogSession.Time` is a `TimeProvider`, `TimeProvider.System` unless a test sets it. `QueryList` reads it once for its counts and page, and `QueryRandomCandidates` once for its candidates. `AppendDateRange` writes `COALESCE({column}, 0) >= {from} AND COALESCE({column}, 0) < {to}`.
+- The parser reads both fields through `DateRange(element, …)`, preset names in any case, a custom range's days through `FilterDateRange.TryParseDay`, whose format `ComparisonKey` writes them in too, and anything else as no limit. `shared/fixtures/filter-date-ranges.json` locks that reading in 18 cases, which `Parser_ReadsDateRanges_AsTheSharedFixtureSays` checks.
+- `FilterStateComparison` compares both ranges by the choice: a preset's name or a custom range's days.
+- `LibraryListSort.DateCreated` follows `DateAdded`. `DateAdded` sorts by `date_added_utc` and `DateCreated` by `last_write_time_utc`. `ReadListedItem` reads `date_added_utc`, and `ToItem` sends `dateAddedUtc` and `dateCreatedUtc` in place of `lastWriteTimeUtc`.
+- OpenAPI has both fields as a `FilterDateRangePreset`, a `FilterDateRange`, or null, and `DateCreated` in `sortMode`. `LibraryProjectionItem` names every field the item read sends: the two dates, and `lastPlayedUtc`, `loudnessError`, `fileSizeBytes`, `fingerprint`, `fingerprintLastUtc`, and `fingerprintStatus`, which it left out before. `npm run generate:contracts` regenerated the WebUI's types.
+- The WebUI's `LIBRARY_SORTS` has Date created after Date added, with its direction labels in `sort-direction-labels.json`, the Library screen test's option list, and four snapshot blocks. `parseQueryItem` reads `dateAddedUtc` and `dateCreatedUtc` into `dateAddedUtcMs` and `dateCreatedUtcMs`, in place of `lastWriteTimeUtcMs`, which nothing read.
+- New tests: `FilterDateRangeTests`, in a fixed zone five hours behind UTC and in a zone whose daylight saving time starts within the range; `LibraryQueryAndRandomPick_ApplyDateRanges`, `StoredPresets_PickWithNoDateLimitWithoutTheFields_AndTheirRangesDaysWithThem`, and `Comparison_TellsFiltersApartByDateRangeChoice` (`FilterStateTests`), whose catalog clock stops at 22:00 on 21 October 2030 in that zone, with dates near each range's edge, some on another day in UTC; `DateSortsAndRanges_ReadTheirIndexes`; `LibraryItems_CarryTheirDatesAddedAndCreated_AndLeaveThemOutWhenUnknown`; `FilterDateRangePresets_MatchTheServersPresets`; and the Library screen's Date created test.
+- `LibraryProjectionItem_NamesEveryFieldTheServerSends` replaces the test that checked only the fields the server always sends: an item with every optional value sends exactly the schema's fields, but the page's thumbnail fields. The every-sort test covers `DateCreated`, with dates added that differ from the modified times.
+- Each guarded behavior broken on its own, restored from a copy under `artifacts/scratch/`, failed its tests (measured): Last 7 days covering 8 days, the resolver reading today in UTC, preset names matched only in their own case, the date condition on the plain column, which failed the query plan test, Date added sorting by the modified time, the item JSON without `dateAddedUtc`, the comparison without the ranges, the comparison without a custom range's first day, and the session reading the system clock in place of its own.
+- `dotnet build ReelRoulette.sln` has no warnings, `dotnet test ReelRoulette.sln` passes 593 Core tests and 19 ServerApp tests, `dotnet run --project src/core/ReelRoulette.Core.SystemChecks -- --verbose` passes, and `npm run verify` passes, with 2,022 WebUI tests.
+- `docs/api.md` has a Date filter paragraph, the sorts, the item read's dates, and the comparison of the ranges. CONTEXT.md describes the filters, the sorts, and the item dates, and lists Date created in the Library tab's sorts. `docs/domain-inventory.md` describes the sorts and has an entry for `FilterDateRange.cs`.
+- The mockup already has Date created in the sort list, so it doesn't change.
+
 #### WebUI slice
 
 **Scope**
@@ -328,7 +348,6 @@ Last milestone completed: M12k4
 - With Custom range chosen, an empty date or a range that ends before it starts is flagged with the field validation pattern and holds Apply, Add Preset, and Update, as a duration that isn't valid does.
 - Both are saved in presets and compared in preset matching by the choice, never resolved dates, with cases in `preset-filter-equality.json`.
 - The Filters line names each as the mockup words it.
-- Date added and Date created in the Library tab's sort, each with "Newest → Oldest" and "Oldest → Newest" in `sort-direction-labels.json`.
 - The WebUI reads the fields as the shared fixture says.
 - The Stats tab's Current file section shows Added and Created right after Last played, for photos too, from the item read's `dateAddedUtc` and `dateCreatedUtc`, as the Decisions describe.
 - Show exact times in the Stats tab's header, kept in the device store, and Last played, Added, and Created worded as the Decisions describe, in place of `playedAgo`'s wording.
@@ -336,12 +355,12 @@ Last milestone completed: M12k4
 **Traps**
 
 - `serializeFilterStateForApi`, `filterStateFromApiObject`, and `filterStatesEqualForPresetMatch` in `src/filter/filterStateModel.ts` write, read, and compare FilterState, and a field the serializer writes joins preset matching.
-- Core's filter comparison (`FilterStateComparison.cs`), behind the preset routes' refusal of a filter another preset holds, reads `shared/fixtures/preset-filter-equality.json` too, so the date cases need it to compare the fields.
+- Core's filter comparison (`FilterStateComparison.cs`), behind the preset routes' refusal of a filter another preset holds, already compares the ranges by the choice and reads `shared/fixtures/preset-filter-equality.json` too, so the fixture's date cases check both languages.
+- `shared/fixtures/filter-date-ranges.json` locks the server's reading of the fields, which `FilterStateTests` checks. `filter-min-rating.json`'s WebUI reader in `filterStateModel.test.ts` is the pattern for the WebUI's.
+- The WebUI drops filter fields it doesn't know when it reads a filter and writes only the ones it knows, so until it knows the ranges, updating a preset's filter in the Filter tab drops them.
 - The Filter tab's fields with problems go through `filterFieldProblems` and `FilterField` (`src/filter/filterDialogModel.ts`).
+- The server's range resolution (`FilterDateRange.Resolve`) throws for a custom range that ends on 9999-12-31, or starts on 0001-01-01 on a server ahead of UTC, which fails the library query and every random pick of a preset that holds it, so the custom range's date fields limit the years they accept, and such a date can't be sent or saved (inferred).
 - `filterSummaryParts` (`src/filter/filterSummaryModel.ts`) builds the Filters line in an order its comment documents.
-- The sort modes, each with its name in the sort list and its direction labels, are `LIBRARY_SORTS` in `src/library/libraryBrowseModel.ts`, which the sort list in `src/ui/LibraryOverlay.tsx` renders from.
-- `libraryBrowseModel.test.ts` requires every sort mode in `sort-direction-labels.json` in both directions.
-- The WebUI remembers its sort per device and drops a remembered mode that isn't in its list, falling back to Name ascending (`isRememberedSort` in `src/library/library.ts`).
 - Dates change only in a refresh, and a finished refresh reloads the loaded window once, so the tile effect rule (`library-tile-effect.json`) needs no date change kind (inferred).
 - A rolling range moves with the clock without an event, so a window loaded before midnight keeps its tiles until it next reloads (inferred).
 - `fileRows` (`src/stats/statsModel.ts`) builds the Current file rows, which `src/ui/StatsTab.tsx` renders. `statsModel.test.ts` checks a video's and a photo's full row lists, and `stats.test.ts` a slice of them.
@@ -350,7 +369,7 @@ Last milestone completed: M12k4
 - The player's toggles turn orange with `icon-glyph-toggle`'s `active` class (`src/ui/Player.tsx`, `styles.css`), as the mockup's Show exact times does with `active`.
 - Per-device choices go through `createDeviceStore` (`src/state/deviceStore.ts`).
 - Vitest pins no time zone and CI runs on Windows, so a test builds its times with a local `new Date(year, month, day, hours, minutes, seconds)` rather than writing out a UTC time's local reading.
-- `parseQueryItem` (`src/library/libraryProjectionModel.ts`) reads `lastWriteTimeUtc` into `lastWriteTimeUtcMs`, and literal items in `libraryGridController.ts` and the grid and projection tests carry it, so they take the new names.
+- `parseQueryItem` (`src/library/libraryProjectionModel.ts`) reads `dateAddedUtc` and `dateCreatedUtc` into `dateAddedUtcMs` and `dateCreatedUtcMs`, which nothing reads yet.
 - The Stats tab loads again on `refreshCompleted`, so a date a refresh changes shows with no event of its own (inferred).
 
 **Acceptance**
@@ -358,7 +377,6 @@ Last milestone completed: M12k4
 - Added and Created are saved in presets and compared in preset matching by the choice, so Last 30 days matches Last 30 days and not the same days as a custom range, in tests of `preset-filter-equality.json`.
 - A custom range with an empty date, or one that ends before it starts, is flagged and holds Apply, Add Preset, and Update, in Filter screen tests.
 - The Filters line names each choice as the mockup words it, in Library screen tests.
-- Date added and Date created show their direction labels, in tests of `sort-direction-labels.json`.
 - The WebUI reads the fields as the shared fixture says, in WebUI filter model tests.
 - The Stats tab shows Added and Created after Last played, or Unknown for a file without the date, for photos too, and all three say how long ago through months and years, in Stats model and Stats screen tests.
 - Show exact times shows all three as YYYY-MM-DD HH:MM:SS in local time, starts off, turns orange while on, and is remembered on the device, in Stats screen tests.

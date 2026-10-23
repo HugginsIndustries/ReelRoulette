@@ -32,7 +32,10 @@ export interface LibraryProjectionItem {
   relativePath: string;
   playCount: number;
   lastPlayedUtcMs: number | null;
-  lastWriteTimeUtcMs: number | null;
+  /** When the file came into the library, or null when the server doesn't know. */
+  dateAddedUtcMs: number | null;
+  /** The file's modified time, which the app calls its date created, or null when the server doesn't know. */
+  dateCreatedUtcMs: number | null;
   durationSeconds: number | null;
   mediaType: LibraryMediaType;
   isFavorite: boolean;
@@ -170,7 +173,8 @@ function parseQueryItem(row: Record<string, unknown>): LibraryProjectionItem {
     relativePath: row.relativePath != null ? String(row.relativePath) : "",
     playCount: typeof row.playCount === "number" && Number.isFinite(row.playCount) ? Math.max(0, Math.trunc(row.playCount)) : 0,
     lastPlayedUtcMs: parseUtcMs(row.lastPlayedUtc),
-    lastWriteTimeUtcMs: parseUtcMs(row.lastWriteTimeUtc),
+    dateAddedUtcMs: parseUtcMs(row.dateAddedUtc),
+    dateCreatedUtcMs: parseUtcMs(row.dateCreatedUtc),
     durationSeconds:
       typeof row.durationSeconds === "number" && Number.isFinite(row.durationSeconds) && row.durationSeconds >= 0
         ? row.durationSeconds
